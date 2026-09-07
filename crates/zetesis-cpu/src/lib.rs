@@ -10,10 +10,12 @@ mod static_oracle;
 mod candidates;
 mod batch;
 mod verified;
+pub mod lazy;
 
 pub use batch::{BatchError, BatchOracle};
 pub use candidates::{CandidateLimits, CandidateTermination, Candidates};
 pub use control::{Control, Stop};
+pub use oracle::source;
 pub use oracle::{Check, Limits, Statistics, check};
 pub use static_oracle::{StaticCheck, StaticStatistics, check_static};
 pub use verified::StableInterpretation;

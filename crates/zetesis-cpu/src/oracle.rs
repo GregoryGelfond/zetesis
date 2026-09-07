@@ -9,6 +9,7 @@ use zetesis_core::{
 use crate::{Control, Stop};
 
 mod window;
+pub mod source;
 
 /// Exact checking budgets, applied before the next charged operation/insertion.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -176,26 +177,32 @@ pub fn check(
         let mut delta = BTreeSet::new();
         for template in program.templates() {
             work.tick()?;
-            visit(template, &relations, seed, &mut work, |assignment, work| {
-                work.tick()?;
-                if let Some(head) = template.head() {
-                    let atom = instantiate(head, assignment)?.ok_or(Stop::InvalidProgram)?;
-                    if !closure.contains(&atom) && !delta.contains(&atom) {
-                        if closure
-                            .len()
-                            .checked_add(delta.len())
-                            .ok_or(Stop::DerivedAtomLimit)?
-                            >= limits.max_derived_atoms
-                        {
-                            return Err(Stop::DerivedAtomLimit);
+            visit(
+                template,
+                &relations,
+                Some(seed),
+                &mut work,
+                |assignment, work| {
+                    work.tick()?;
+                    if let Some(head) = template.head() {
+                        let atom = instantiate(head, assignment)?.ok_or(Stop::InvalidProgram)?;
+                        if !closure.contains(&atom) && !delta.contains(&atom) {
+                            if closure
+                                .len()
+                                .checked_add(delta.len())
+                                .ok_or(Stop::DerivedAtomLimit)?
+                                >= limits.max_derived_atoms
+                            {
+                                return Err(Stop::DerivedAtomLimit);
+                            }
+                            delta.insert(atom);
                         }
-                        delta.insert(atom);
+                    } else {
+                        constraint_violated = true;
                     }
-                } else {
-                    constraint_violated = true;
-                }
-                Ok(())
-            })?;
+                    Ok(())
+                },
+            )?;
         }
         work.statistics.rounds += 1;
         if delta.is_empty() {
@@ -228,13 +235,13 @@ pub fn check(
     })
 }
 
-fn visit(
+fn visit<E: From<Stop>>(
     template: &Template,
     relations: &Relations<'_>,
-    seed: &Seed,
+    seed: Option<&Seed>,
     work: &mut Work<'_>,
-    mut emit: impl FnMut(&[Option<Value>], &mut Work<'_>) -> Result<(), Stop>,
-) -> Result<(), Stop> {
+    mut emit: impl FnMut(&[Option<Value>], &mut Work<'_>) -> Result<(), E>,
+) -> Result<(), E> {
     let mut assignment = vec![None; template.variable_count()];
     if !guards(template, &assignment, seed, work)? {
         return Ok(());
@@ -242,7 +249,7 @@ fn visit(
     let count = template.positive().len();
     if count == 0 {
         if !assignment.is_empty() {
-            return Err(Stop::InvalidProgram);
+            return Err(Stop::InvalidProgram.into());
         }
         work.statistics.bindings += 1;
         return emit(&assignment, work);
@@ -256,7 +263,7 @@ fn visit(
         work.tick()?;
         if depth == count {
             if assignment.iter().any(Option::is_none) {
-                return Err(Stop::InvalidProgram);
+                return Err(Stop::InvalidProgram.into());
             }
             work.statistics.bindings += 1;
             emit(&assignment, work)?;
@@ -356,7 +363,7 @@ fn instantiate(pattern: &AtomPattern, assignment: &[Option<Value>]) -> Result<Op
 fn guards(
     template: &Template,
     assignment: &[Option<Value>],
-    seed: &Seed,
+    seed: Option<&Seed>,
     work: &mut Work<'_>,
 ) -> Result<bool, Stop> {
     for filter in template.filters() {
@@ -371,6 +378,9 @@ fn guards(
             }
         }
     }
+    let Some(seed) = seed else {
+        return Ok(true);
+    };
     for (patterns, required) in [(template.gate_true(), true), (template.gate_false(), false)] {
         for pattern in patterns {
             work.tick()?;
