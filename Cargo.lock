@@ -1934,6 +1934,7 @@ dependencies = [
  "zetesis-ferraris",
  "zetesis-objective",
  "zetesis-sat",
+ "zetesis-telemetry",
  "zetesis-themelios",
  "zetesis-wgpu",
 ]
@@ -2003,6 +2004,10 @@ dependencies = [
  "zetesis-cpu",
  "zetesis-ferraris",
 ]
+
+[[package]]
+name = "zetesis-telemetry"
+version = "0.1.0"
 
 [[package]]
 name = "zetesis-themelios"

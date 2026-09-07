@@ -385,6 +385,7 @@ pub(crate) fn report_statistics(
             result.as_ref().map(|progress| &progress.report),
             timings.driver_elapsed,
         )
+        .and_then(|()| crate::stage_timing::write(diagnostics, &timings.stages))
         .and_then(|()| crate::phase_timing::write(diagnostics, &timings));
         if let Err(error) = emitted {
             return Err(match result {
@@ -408,8 +409,9 @@ pub(crate) fn solve_program(
     control: &Control,
     phases: &Recorder,
 ) -> Result<Progress, RunFailure> {
+    let _solving = phases.stage(crate::SolveStage::Solving);
     let mut engine = phases.measure(SolvePhase::ExecutionSetup, || {
-        Engine::new(options, program, diagnostics)
+        Engine::new(options, program, diagnostics, phases)
     })?;
     let mut candidates = phases.measure(SolvePhase::CandidateSetup, || {
         Candidates::new(

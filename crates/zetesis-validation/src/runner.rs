@@ -13,6 +13,7 @@ use crate::execution;
 use crate::normalize;
 use crate::phase;
 use crate::process::{self, Capture};
+use crate::stage;
 
 pub(crate) fn run(options: &Options, loaded: &Loaded) -> (Value, bool) {
     let mut cases = Vec::new();
@@ -56,18 +57,6 @@ pub(crate) fn run(options: &Options, loaded: &Loaded) -> (Value, bool) {
     } else {
         "unqualified"
     };
-    let timing_available = cases
-        .iter()
-        .filter(|case| case["native_phase_timings"].is_object())
-        .count();
-    let timing_complete = cases
-        .iter()
-        .filter(|case| case["native_phase_timings"]["complete"] == true)
-        .count();
-    let timing_malformed = cases
-        .iter()
-        .filter(|case| case["native_phase_timing_error"].is_string())
-        .count();
     (
         json!({
             "schema_version": 1,
@@ -85,7 +74,8 @@ pub(crate) fn run(options: &Options, loaded: &Loaded) -> (Value, bool) {
             "full_physical_formula_route_passed": options.physical_formula() && passed,
             "physical_formula_status": physical_status,
             "formula_execution_cases": { "gpu_exercised": gpu_exercised, "outer_unsat_without_membership": outer_unsat },
-            "phase_timing_cases": { "available": timing_available, "complete": timing_complete, "malformed": timing_malformed },
+            "phase_timing_cases": timing_summary(&cases, "native_phase_timings", "native_phase_timing_error"),
+            "stage_timing_cases": timing_summary(&cases, "native_stage_timings", "native_stage_timing_error"),
             "requested_mode_passed": passed,
             "revision": loaded.manifest.revision,
             "manifest_sha256": loaded.manifest_sha256,
@@ -99,6 +89,29 @@ pub(crate) fn run(options: &Options, loaded: &Loaded) -> (Value, bool) {
         }),
         passed,
     )
+}
+
+fn timing_summary(cases: &[Value], field: &str, error: &str) -> Value {
+    let available = cases.iter().filter(|case| case[field].is_object()).count();
+    let complete = cases
+        .iter()
+        .filter(|case| case[field]["complete"] == true)
+        .count();
+    let malformed = cases.iter().filter(|case| case[error].is_string()).count();
+    json!({ "available": available, "complete": complete, "malformed": malformed })
+}
+
+fn retain_timings(result: &mut Value, stderr: &str) {
+    match phase::parse(stderr) {
+        Ok(Some(timing)) => result["native_phase_timings"] = json!(timing),
+        Ok(None) => {}
+        Err(error) => result["native_phase_timing_error"] = error.into(),
+    }
+    match stage::parse(stderr) {
+        Ok(Some(timing)) => result["native_stage_timings"] = json!(timing),
+        Ok(None) => {}
+        Err(error) => result["native_stage_timing_error"] = error.into(),
+    }
 }
 
 fn check_case(options: &Options, loaded: &Loaded, case: &Case) -> Value {
@@ -179,11 +192,7 @@ fn check_native(
         Err(error) => return failure(result, "native_invocation_error", error),
     };
     result["native_process"] = json!(native);
-    match phase::parse(&native.stderr) {
-        Ok(Some(timing)) => result["native_phase_timings"] = json!(timing),
-        Ok(None) => {}
-        Err(error) => result["native_phase_timing_error"] = error.into(),
-    }
+    retain_timings(&mut result, &native.stderr);
     if native.status != "completed" {
         return failure(
             result,

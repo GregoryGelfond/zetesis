@@ -20,6 +20,7 @@ mod statistics;
 mod formula_execution;
 mod completion_accounting;
 mod phase_timing;
+mod stage_timing;
 mod formula_queue;
 
 #[cfg(test)]
@@ -39,3 +40,5 @@ pub use options::{Backend, Command, Grounder, Options, Oracle};
 pub use process::entry;
 
 pub use phase_timing::{PhaseTimings, SolvePhase};
+
+pub use zetesis_telemetry::{GroundingMode, SolveStage, StageMeasurement, StageTimings};

@@ -7,6 +7,7 @@ mod normalize;
 mod phase;
 mod process;
 mod runner;
+mod stage;
 
 use std::io::{self, Write};
 use std::num::NonZeroUsize;

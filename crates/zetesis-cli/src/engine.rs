@@ -48,11 +48,12 @@ impl Engine {
         options: &Options,
         program: &Program,
         diagnostics: &mut impl Write,
+        phases: &Recorder,
     ) -> Result<Self, RunError> {
         validate_combination(options)?;
         let executor = match options.backend {
             Backend::Auto | Backend::Cpu => {
-                let cpu = Executor::cpu(options, program, None, diagnostics)?;
+                let cpu = Executor::cpu(options, program, None, diagnostics, phases)?;
                 if options.backend == Backend::Auto {
                     if options.grounder == Grounder::Lazy {
                         writeln!(
@@ -73,7 +74,7 @@ impl Engine {
                 }
                 cpu
             }
-            _ => Executor::gpu(options, program, None, diagnostics)?,
+            _ => Executor::gpu(options, program, None, diagnostics, phases)?,
         };
         Ok(Self {
             executor,
@@ -102,7 +103,13 @@ impl Engine {
         if should_probe_gpu(self.automatic, self.attempted_gpu, seeds.len()) {
             self.attempted_gpu = true;
             match phases.measure(SolvePhase::ExecutionSetup, || {
-                Executor::gpu(options, program, self.executor.ground(), diagnostics)
+                Executor::gpu(
+                    options,
+                    program,
+                    self.executor.ground(),
+                    diagnostics,
+                    phases,
+                )
             }) {
                 Ok(gpu) => self.executor = gpu,
                 Err(error @ RunError::Output(_)) => return Err(error),
@@ -132,7 +139,13 @@ impl Engine {
                     cpu_mode(options)
                 )?;
                 self.executor = phases.measure(SolvePhase::ExecutionSetup, || {
-                    Executor::cpu(options, program, self.executor.ground(), diagnostics)
+                    Executor::cpu(
+                        options,
+                        program,
+                        self.executor.ground(),
+                        diagnostics,
+                        phases,
+                    )
                 })?;
                 phases.measure(SolvePhase::ClosureMembership, || {
                     self.executor.check(options, program, seeds, control)
@@ -174,13 +187,14 @@ impl Executor {
         program: &Program,
         cached: Option<Arc<GroundProgram>>,
         diagnostics: &mut impl Write,
+        phases: &Recorder,
     ) -> Result<Self, RunError> {
         let oracle =
             BatchOracle::new(options.workers, options.batch_size).map_err(RunError::Batch)?;
         if options.grounder == Grounder::Eager {
             let ground = match cached {
                 Some(ground) => ground,
-                None => compile_static(options, program, options.max_atoms)?,
+                None => compile_static(options, program, options.max_atoms, phases)?,
             };
             static_diagnostics(options, &ground, diagnostics)?;
             writeln!(
@@ -190,6 +204,7 @@ impl Executor {
             )?;
             Ok(Self::StaticCpu { oracle, ground })
         } else {
+            phases.lazy_grounding();
             writeln!(
                 diagnostics,
                 "Grounding: requested={}, effective=lazy (source joins; no complete ground-rule store)",
@@ -227,6 +242,7 @@ impl Executor {
         _: &Program,
         _: Option<Arc<GroundProgram>>,
         _: &mut impl Write,
+        _: &Recorder,
     ) -> Result<Self, RunError> {
         Err(RunError::BackendUnavailable)
     }
@@ -237,6 +253,7 @@ impl Executor {
         program: &Program,
         cached: Option<Arc<GroundProgram>>,
         diagnostics: &mut impl Write,
+        phases: &Recorder,
     ) -> Result<Self, RunError> {
         use zetesis_wgpu::{GpuOptions, GpuOracle};
 
@@ -256,7 +273,7 @@ impl Executor {
                 }
                 ground
             }
-            None => compile_static(options, program, atom_limit)?,
+            None => compile_static(options, program, atom_limit, phases)?,
         };
         static_diagnostics(options, &ground, diagnostics)?;
         writeln!(
@@ -327,17 +344,19 @@ fn compile_static(
     options: &Options,
     program: &Program,
     max_atoms: usize,
+    phases: &Recorder,
 ) -> Result<Arc<GroundProgram>, RunError> {
-    GroundProgram::compile(
+    let grounding = phases.stage(crate::SolveStage::Grounding);
+    let result = GroundProgram::compile(
         program,
         StaticLimits {
             max_atoms,
             max_ground_rules: options.max_ground_rules,
             max_substitutions: options.max_substitutions,
         },
-    )
-    .map(Arc::new)
-    .map_err(RunError::Static)
+    );
+    drop(grounding);
+    result.map(Arc::new).map_err(RunError::Static)
 }
 
 fn static_diagnostics(

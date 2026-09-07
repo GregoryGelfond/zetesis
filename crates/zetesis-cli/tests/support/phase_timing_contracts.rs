@@ -87,6 +87,7 @@ fn cumulative_search_snapshots_replace_instead_of_double_counting_attempts() {
 fn every_phase_output_prefix_propagates_write_failure_and_incomplete_measurements() {
     let mut timings = PhaseTimings {
         driver_elapsed: Duration::from_nanos(23),
+        stages: zetesis_telemetry::StageTimings::default(),
         measurements: [None; 13],
     };
     timings.measurements[SolvePhase::AdmissionMaterialization as usize] = Some(PhaseMeasurement {

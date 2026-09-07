@@ -173,6 +173,21 @@ nor process RSS. Portable tests establish correctness, not a parallel speedup.
 Device selection and initialization happen during ordinary invocation; no setup
 script, qualification command or stored pass marker is required.
 
+## Grounding and solving time
+
+`--stats` includes a host-millisecond summary and an exact stage record separating
+source preparation, eager grounding, solving and output. Eager grounding measures
+actual finite instance construction; cached program reuse is not charged again.
+Solving includes setup, candidate generation, membership, waits and objective work.
+The detailed phase section remains available to distinguish those costs.
+
+Lazy joins remain interleaved with solving, so their separate grounding duration
+is unavailable. A mixed route reports measured eager spans and labels the remaining
+lazy work. Failed attempts retain time; unentered stages stay unmeasured. Neither
+a complete timing partition nor a nonzero duration proves semantic completion.
+The [measurement contract](../../docs/design/phase-measurements.md) states exact
+scope, and reusable typed snapshots live in `zetesis-telemetry`.
+
 ## Backend and grounder selection
 
 `--backend auto` and `--grounder auto` are the defaults. On the closure path,

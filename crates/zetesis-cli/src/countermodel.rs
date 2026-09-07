@@ -30,6 +30,7 @@ pub(crate) fn run_formula(
     control: &Control,
     phases: &Recorder,
 ) -> Result<Progress, RunFailure> {
+    let _solving = phases.stage(crate::SolveStage::Solving);
     if let Some(report) = check_control(output, diagnostics, control, phases)? {
         return Ok(report);
     }

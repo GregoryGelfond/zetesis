@@ -27,7 +27,13 @@ fn collected_seeds_observe_cancellation_and_deadline_before_any_oracle() {
         ])
         .unwrap();
         let mut diagnostics = Vec::new();
-        let mut engine = Engine::new(&options, program, &mut diagnostics).unwrap();
+        let mut engine = Engine::new(
+            &options,
+            program,
+            &mut diagnostics,
+            &crate::phase_timing::Recorder::new(false),
+        )
+        .unwrap();
         let initial = diagnostics.clone();
         let cancelled = Control::default();
         cancelled.cancel();
@@ -70,4 +76,42 @@ fn collected_seeds_observe_cancellation_and_deadline_before_any_oracle() {
             assert_eq!(model.atoms().iter().next().unwrap().predicate().name(), "p");
         }
     }
+}
+
+#[test]
+fn eager_static_cache_reuse_does_not_record_a_second_materialization() {
+    let admitted = admit("p.".into(), AdmissionOptions::default()).unwrap();
+    let options = Options::try_parse_from([
+        "zetesis",
+        "--backend",
+        "cpu",
+        "--workers",
+        "1",
+        "--grounder",
+        "eager",
+    ])
+    .unwrap();
+    let phases = crate::phase_timing::Recorder::new(true);
+    let first =
+        super::Executor::cpu(&options, admitted.program(), None, &mut Vec::new(), &phases).unwrap();
+    let ground = first.ground().unwrap();
+    let second = super::Executor::cpu(
+        &options,
+        admitted.program(),
+        Some(ground.clone()),
+        &mut Vec::new(),
+        &phases,
+    )
+    .unwrap();
+    assert!(std::sync::Arc::ptr_eq(&ground, &second.ground().unwrap()));
+    assert_eq!(
+        phases
+            .snapshot()
+            .unwrap()
+            .stages
+            .get(crate::SolveStage::Grounding)
+            .unwrap()
+            .calls,
+        1
+    );
 }

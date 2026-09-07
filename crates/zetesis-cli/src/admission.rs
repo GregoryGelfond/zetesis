@@ -63,13 +63,17 @@ pub(crate) fn source(
     {
         return Ok(report);
     }
+    let observer = phases.grounding_observer();
     let admitted = phases
         .measure(SolvePhase::AdmissionMaterialization, || {
-            zetesis_themelios::admit_formula(
+            zetesis_themelios::admit_formula_with_grounding_observer(
                 source,
                 admission,
                 expansion_limits(options),
                 formula_limits(options),
+                observer
+                    .as_ref()
+                    .map(|observer| observer as &dyn zetesis_themelios::GroundingObserver),
             )
         })
         .map_err(RunError::FormulaAdmission)?;
@@ -148,13 +152,17 @@ pub(crate) fn bundle(
     {
         return Ok(report);
     }
+    let observer = phases.grounding_observer();
     let admitted = phases
         .measure(SolvePhase::AdmissionMaterialization, || {
-            zetesis_themelios::admit_bundle_formula(
+            zetesis_themelios::admit_bundle_formula_with_grounding_observer(
                 bundle,
                 BundleAdmissionOptions::default(),
                 expansion_limits(options),
                 formula_limits(options),
+                observer
+                    .as_ref()
+                    .map(|observer| observer as &dyn zetesis_themelios::GroundingObserver),
             )
         })
         .map_err(RunError::FormulaBundleAdmission)?;

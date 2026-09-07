@@ -5,6 +5,7 @@ use std::io::{self, Write};
 use std::time::{Duration, Instant};
 
 use zetesis_sat::{PhaseMeasurement, SearchPhaseTimings};
+use zetesis_telemetry::{SolveStage, StageRecorder, StageSpan, StageTimings};
 
 /// Coarse, nonnested ordinary-solve phases. Counts refer to measured calls,
 /// including failed attempts, rather than candidates, models or instructions.
@@ -83,6 +84,8 @@ impl SolvePhase {
 pub struct PhaseTimings {
     /// Whole driver scope from admission entry through result/output return.
     pub driver_elapsed: Duration,
+    /// Exclusive high-level host stages; accessible without parsing diagnostics.
+    pub stages: StageTimings,
     measurements: [Option<PhaseMeasurement>; 13],
 }
 impl PhaseTimings {
@@ -94,13 +97,13 @@ impl PhaseTimings {
 }
 
 pub(crate) struct Recorder {
-    started: Option<Instant>,
+    stages: StageRecorder,
     measurements: Cell<[Option<PhaseMeasurement>; 13]>,
 }
 impl Recorder {
     pub(crate) fn new(enabled: bool) -> Self {
         Self {
-            started: enabled.then(Instant::now),
+            stages: StageRecorder::new(enabled),
             measurements: Cell::new([None; 13]),
         }
     }
@@ -109,7 +112,14 @@ impl Recorder {
         Span {
             recorder: self,
             phase,
-            started: self.started.map(|_| Instant::now()),
+            started: self.stages.enabled().then(Instant::now),
+            _stage: match phase {
+                SolvePhase::AdmissionMaterialization => {
+                    Some(self.stage(SolveStage::SourcePreparation))
+                }
+                SolvePhase::ObservationOutput => Some(self.stage(SolveStage::ObservationOutput)),
+                _ => None,
+            },
         }
     }
 
@@ -119,7 +129,7 @@ impl Recorder {
     }
 
     pub(crate) fn search(&self, timing: Option<SearchPhaseTimings>) {
-        if let Some(timing) = timing.filter(|_| self.started.is_some()) {
+        if let Some(timing) = timing.filter(|_| self.stages.enabled()) {
             let mut values = self.measurements.get();
             for (phase, value) in [
                 (SolvePhase::CandidateGeneration, timing.candidates),
@@ -133,9 +143,24 @@ impl Recorder {
         }
     }
 
+    pub(crate) fn stage(&self, stage: SolveStage) -> StageSpan<'_> {
+        self.stages.enter(stage)
+    }
+
+    pub(crate) fn lazy_grounding(&self) {
+        self.stages.mark_lazy_grounding();
+    }
+
+    pub(crate) fn grounding_observer(&self) -> Option<crate::stage_timing::Observer<'_>> {
+        self.stages
+            .enabled()
+            .then(|| crate::stage_timing::Observer::new(&self.stages))
+    }
+
     pub(crate) fn snapshot(&self) -> Option<PhaseTimings> {
-        self.started.map(|start| PhaseTimings {
-            driver_elapsed: start.elapsed(),
+        self.stages.snapshot().map(|stages| PhaseTimings {
+            driver_elapsed: stages.driver_elapsed,
+            stages,
             measurements: self.measurements.get(),
         })
     }
@@ -145,6 +170,7 @@ pub(crate) struct Span<'a> {
     recorder: &'a Recorder,
     phase: SolvePhase,
     started: Option<Instant>,
+    _stage: Option<StageSpan<'a>>,
 }
 impl Drop for Span<'_> {
     fn drop(&mut self) {

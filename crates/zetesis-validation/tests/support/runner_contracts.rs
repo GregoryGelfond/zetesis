@@ -13,6 +13,9 @@ use crate::{NativeBackend, NativeOracle, Options};
 const NATIVE: &str = "Answer: 1\na\nSATISFIABLE\nCoverage: exhausted\nModels: 1\n";
 const PHASE_TIMINGS: &str = include_str!("phase_statistics.txt");
 
+#[path = "runner_stage_contracts.rs"]
+mod stage_contracts;
+
 fn reference() -> String {
     json!({
         "Solver": "synthetic protocol fixture",
@@ -276,7 +279,7 @@ fn aggregate_reports_distinguish_reference_only_from_the_full_native_gate() {
         directory.path(),
         "native",
         NATIVE,
-        "Phase timings: truncated\n",
+        "Stage timings: truncated\nPhase timings: truncated\n",
         0,
     );
     let (report, passed) = super::run(&options, &complete_target);
@@ -293,6 +296,10 @@ fn aggregate_reports_distinguish_reference_only_from_the_full_native_gate() {
         report["phase_timing_cases"],
         json!({"available": 0, "complete": 0, "malformed": 94})
     );
+    assert_eq!(
+        report["stage_timing_cases"],
+        json!({"available": 0, "complete": 0, "malformed": 94})
+    );
 
     options.reference_only = true;
     options.zetesis = directory.path().join("must-not-run");
@@ -304,6 +311,10 @@ fn aggregate_reports_distinguish_reference_only_from_the_full_native_gate() {
     assert_eq!(report["full_native_target_passed"], false);
     assert_eq!(
         report["phase_timing_cases"],
+        json!({"available": 0, "complete": 0, "malformed": 0})
+    );
+    assert_eq!(
+        report["stage_timing_cases"],
         json!({"available": 0, "complete": 0, "malformed": 0})
     );
     assert!(

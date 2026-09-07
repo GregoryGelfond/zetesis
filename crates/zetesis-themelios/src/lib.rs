@@ -41,6 +41,7 @@ mod formula_assignment_ir;
 mod formula_assignment;
 mod formula_objective_dependencies;
 mod formula_ground;
+mod grounding_observer;
 mod formula_factor;
 mod formula_guard;
 mod formula_conditional;
@@ -79,8 +80,10 @@ pub use expansion::{ExpansionFailure, ExpansionLimits, ExpansionResource};
 pub use extended::admit_extended;
 pub use formula::{
     AdmittedFormula, AdmittedFormulaBundle, FormulaBundleFailure, FormulaFailure, FormulaLimits,
-    FormulaResource, admit_bundle_formula, admit_formula,
+    FormulaResource, admit_bundle_formula, admit_bundle_formula_with_grounding_observer,
+    admit_formula, admit_formula_with_grounding_observer,
 };
+pub use grounding_observer::GroundingObserver;
 pub use metadata::{LocatedDirective, OutputSelection, SourceDirective, SourceMetadata};
 
 /// Explicit host admission ceilings. Zero means that no resource of that kind

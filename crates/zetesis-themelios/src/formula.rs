@@ -482,6 +482,22 @@ pub fn admit_formula(
     expansion: ExpansionLimits,
     limits: FormulaLimits,
 ) -> Result<AdmittedFormula, FormulaFailure> {
+    admit_formula_with_grounding_observer(text, options, expansion, limits, None)
+}
+
+/// Like [`admit_formula`], with optional observation of actual eager grounding.
+/// Source parsing, raising, analysis and IR preparation precede this boundary.
+/// The caller retains its observer after errors; no clock is read by this API.
+///
+/// # Errors
+/// Returns the same admission failures as [`admit_formula`].
+pub fn admit_formula_with_grounding_observer(
+    text: String,
+    options: AdmissionOptions,
+    expansion: ExpansionLimits,
+    limits: FormulaLimits,
+    observer: Option<&dyn crate::GroundingObserver>,
+) -> Result<AdmittedFormula, FormulaFailure> {
     let start = Location {
         source: options.source_id,
         span: Span::empty(ByteOffset::new(0)),
@@ -525,6 +541,7 @@ pub fn admit_formula(
         limits,
         location,
         &mut metadata,
+        observer,
     )?;
     Ok(AdmittedFormula {
         compiled,
@@ -545,7 +562,22 @@ pub fn admit_bundle_formula(
     expansion: ExpansionLimits,
     limits: FormulaLimits,
 ) -> Result<AdmittedFormulaBundle, FormulaBundleFailure> {
-    match compile_bundle(&bundle, options, expansion, limits) {
+    admit_bundle_formula_with_grounding_observer(bundle, options, expansion, limits, None)
+}
+
+/// Bundle counterpart of [`admit_formula_with_grounding_observer`].
+/// Existing source loading and parsing remain outside this admission boundary.
+///
+/// # Errors
+/// Returns the same located failures and original bundle as [`admit_bundle_formula`].
+pub fn admit_bundle_formula_with_grounding_observer(
+    bundle: SourceBundle,
+    options: BundleAdmissionOptions,
+    expansion: ExpansionLimits,
+    limits: FormulaLimits,
+    observer: Option<&dyn crate::GroundingObserver>,
+) -> Result<AdmittedFormulaBundle, FormulaBundleFailure> {
+    match compile_bundle(&bundle, options, expansion, limits, observer) {
         Ok((compiled, metadata)) => Ok(AdmittedFormulaBundle {
             compiled,
             bundle,
@@ -563,6 +595,7 @@ fn compile_bundle(
     options: BundleAdmissionOptions,
     expansion: ExpansionLimits,
     limits: FormulaLimits,
+    observer: Option<&dyn crate::GroundingObserver>,
 ) -> Result<(Compiled, SourceMetadata), FormulaFailure> {
     bundle_admission::check_include_identity(bundle)
         .map_err(|error| FormulaFailure::Include(Box::new(error)))?;
@@ -618,6 +651,7 @@ fn compile_bundle(
         limits,
         location,
         &mut metadata,
+        observer,
     )?;
     Ok((compiled, metadata.finish()))
 }
@@ -629,12 +663,15 @@ fn compile(
     limits: FormulaLimits,
     location: Location,
     metadata: &mut SourceMetadata,
+    observer: Option<&dyn crate::GroundingObserver>,
 ) -> Result<Compiled, FormulaFailure> {
     let mut budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates);
     metadata.observations =
         crate::observation::compile(source, options, limits.observation, &mut budget, location)?;
     let prepared = formula_ir::prepare(source, options, limits, &mut budget, location)?;
-    formula_ground::ground(prepared, limits, &mut budget, location)
+    crate::grounding_observer::observe(observer, || {
+        formula_ground::ground(prepared, limits, &mut budget, location)
+    })
 }
 
 pub(crate) fn ceiling(
