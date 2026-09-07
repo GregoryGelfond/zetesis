@@ -97,7 +97,11 @@ refusal when that contract cannot be met.
 Broader aggregate dependencies/cycles, dynamic head eligibility, key aliases,
 directive/objective restrictions and exact undefined-arithmetic behavior remain
 explicit inventory items. The six retained recursive-extrema endpoint differences
-require a separate semantic decision and regressions. Theory atoms and embedded
+require [semantic investigation and checked implementation](numeric-semantics.md),
+with the current guard retained until its replacement is justified. An internal
+zetesis refusal does not establish a KR error or remove an intended feature from
+the compatibility target. Keep themelios rejections, internal gaps and explicitly
+agreed exclusions separate in the inventory. Theory atoms and embedded
 Python/Lua scripting remain excluded. First-class Rust functions and future theory
 propagators keep their separate integration designs.
 

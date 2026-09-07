@@ -207,6 +207,13 @@ broader clingo language compatibility remains in development. A reviewed
 clingcon/clingo-dl support open through both direct source admission and the
 themelios Rust API; it adds no runtime theory capability yet.
 
+Admission failures retain an explicit boundary: a themelios syntax, program-raising
+or evaluation error is distinct from an unsupported zetesis operation. Internal
+refusals can identify implementation gaps; they do not establish a modeling error
+or silently narrow the compatibility target. The
+[numeric boundary record](docs/design/numeric-semantics.md) explains this distinction
+for the current min/max endpoint guards and the evidence needed to remove them.
+
 ## Status
 
 zetesis is a working experimental solver with native CPU and Metal execution.
