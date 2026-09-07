@@ -31,7 +31,10 @@ branches and fixed-size fields remain.
 The driver interval starts at admission entry and ends when the operation returns.
 Source loading and statistics emission are excluded. The phase intervals do not
 nest, but do not partition the entire driver: retry preparation, formula-model
-conversion, queue/accounting orchestration and timer overhead are unattributed.
+conversion and queue/accounting orchestration can lie outside them. Timer
+bookkeeping is not separately measured and can occur inside a recorded interval.
+The legacy phase footer retains its historical `timer_overhead=unattributed`
+label for wire compatibility; the new stage footer states `not_separated`.
 Closure membership includes the conversion/collection performed by its existing
 executor, so the two routes do not claim identical internal decompositions.
 The detailed admission phase combines source preparation and materialization.

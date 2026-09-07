@@ -1,8 +1,10 @@
 //! Synthetic subprocesses qualify decisions and evidence, never solver parity.
 
 use std::io::Write;
+use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::{Mutex, MutexGuard};
 
 use clap::Parser;
 use serde_json::{Value, json};
@@ -102,13 +104,48 @@ fn loaded(directory: &Path, count: usize) -> Loaded {
     }
 }
 
-fn options(directory: &Path) -> Options {
+// Bound unrelated synthetic process campaigns before their invocation deadlines
+// begin. The explicit publication regression still runs four workers inside one
+// permit; production capture/drain concurrency is unchanged.
+fn fixture_campaign() -> MutexGuard<'static, ()> {
+    static CAMPAIGN: Mutex<()> = Mutex::new(());
+    // A failed test must still fail, but cannot poison later scheduling: there
+    // is no shared fixture data or application state behind this mutex.
+    CAMPAIGN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+struct FixtureOptions {
+    options: Options,
+    _campaign: MutexGuard<'static, ()>,
+}
+
+impl Deref for FixtureOptions {
+    type Target = Options;
+
+    fn deref(&self) -> &Self::Target {
+        &self.options
+    }
+}
+
+impl DerefMut for FixtureOptions {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.options
+    }
+}
+
+fn options(directory: &Path) -> FixtureOptions {
+    let campaign = fixture_campaign();
     let mut options = Options::try_parse_from(["zetesis-validate"]).unwrap();
     options.clingo = emitting(directory, "reference", &reference(), "", 30);
     options.zetesis = emitting(directory, "native", NATIVE, "", 0);
     options.timeout_ms = 2_000;
     options.max_output_bytes = 4_096;
-    options
+    FixtureOptions {
+        options,
+        _campaign: campaign,
+    }
 }
 
 fn check(options: &Options, loaded: &Loaded, expected: &str) -> Value {
@@ -127,6 +164,7 @@ fn check(options: &Options, loaded: &Loaded, expected: &str) -> Value {
 
 #[test]
 fn concurrent_fixture_publication_preserves_exact_process_results() {
+    let _campaign = fixture_campaign();
     let directory = tempfile::Builder::new()
         .prefix("runner fixture ' ")
         .tempdir()
