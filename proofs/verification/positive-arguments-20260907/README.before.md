@@ -8,7 +8,7 @@ readable before its Lean details. The convention has one deliberately bounded
 pilot so far; it is not a claim of a library-wide rewrite.
 
 
-This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **686 kernel-checked theorems** across fifty semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
+This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **677 kernel-checked theorems** across forty-nine semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
 
 The formalization connects normalized stable-model semantics to candidate seeds, compositional reduct execution, lazy completion, consequence bounds, and completed search certificates. It supplies mathematical contracts for the Rust, wgpu, Rayon, and neuromorphic implementation work. It does not verify those implementations or make Lean a runtime dependency.
 
@@ -21,7 +21,7 @@ lake build
 lake env lean -DautoImplicit=false -DwarningAsError=true Audit.lean
 ```
 
-`lean-toolchain` pins `leanprover/lean4:v4.33.1`. The package has no remote dependencies, so the build itself needs no network once that toolchain exists. `lake build` compiles the umbrella module and all fifty semantic modules. `Audit.lean` requests the transitive axiom dependencies of every project theorem.
+`lean-toolchain` pins `leanprover/lean4:v4.33.1`. The package has no remote dependencies, so the build itself needs no network once that toolchain exists. `lake build` compiles the umbrella module and all forty-nine semantic modules. `Audit.lean` requests the transitive axiom dependencies of every project theorem.
 
 The [verification report](./verification.json) records the checked source hashes and commands. The [axiom audit](./axiom-audit.txt) contains only standard Lean logical axioms where needed: `propext`, `Quot.sound`, and `Classical.choice`. In particular, no theorem depends on `sorryAx` or `Lean.ofReduceBool`.
 
@@ -85,7 +85,6 @@ preserves an earlier inconsistent manifest and explains its repair.
 | [ConstructorPatterns](./Zetesis/ConstructorPatterns.lean) | Exact constructor shape, whole-subtree extraction and transactional binding over explicit paths |
 | [ScalarArithmetic](./Zetesis/ScalarArithmetic.lean) | Checked range/error policies and operation substitution over finite plans preserve first failures |
 | [GateProjection](./Zetesis/GateProjection.lean) | Finite bit-mask gate projection agrees with the Boolean relation under explicit physical-slot aliases |
-| [PositiveArguments](./Zetesis/PositiveArguments.lean) | Independently supplied inputs determine captured-value checks; finite filtering retains complete supporting rows and exact atoms in original/frozen contexts |
 | [Examples](./Zetesis/Examples.lean) | Choices break Gamma antimonotonicity; omitting a constraint gate can lose a stable model |
 
 [theorems.json](./theorems.json) indexes every theorem by qualified name, source file, and line. All theorem assumptions remain explicit in the Lean declarations.
@@ -304,14 +303,10 @@ resource completion and Rust refinement remain separate obligations.
 
 ## Execution laws
 
-The execution tranche adds 40 checked laws in five independently importable
-modules: signed singleton heads, constructor patterns, checked scalar plans,
-finite Boolean gate projection and consuming positive arguments. The complete
-library now has 686 theorems in 50 semantic modules. These are scoped mathematical
-contracts; source compilation,
+The execution tranche adds 31 checked laws in four independently importable
+modules: signed singleton heads, constructor patterns, checked scalar plans and
+finite Boolean gate projection. The complete library now has 677 theorems in
+49 semantic modules. These are scoped mathematical contracts; source compilation,
 Rust execution, memory/resource accounting and physical shader refinement remain
-separate obligations. The [current audit](verification/positive-arguments-20260907/README.md)
-identifies the exact proof sources and commands and preserves the prior
-677-theorem record. Positive argument checks assume independently established
-inputs and complete support rows; they do not prove source binding inference,
-Rust joins, arithmetic inversion or resource refinement.
+separate obligations. The [retained audit](verification/execution-tranche-20260907/README.md)
+identifies the exact proof sources and commands.

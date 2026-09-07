@@ -387,15 +387,6 @@ import Zetesis
 #print axioms Zetesis.Outcomes.completed_unsatisfiable_iff_empty
 #print axioms Zetesis.Outcomes.delivered_values_are_valid
 #print axioms Zetesis.Outcomes.empty_delivery_can_hide_a_valid_model
-#print axioms Zetesis.PositiveArguments.declared_input_agreement
-#print axioms Zetesis.PositiveArguments.empty_plan
-#print axioms Zetesis.PositiveArguments.frozen_atom_preserved
-#print axioms Zetesis.PositiveArguments.original_atom_preserved
-#print axioms Zetesis.PositiveArguments.repeated_selection
-#print axioms Zetesis.PositiveArguments.selected_atom_has_support
-#print axioms Zetesis.PositiveArguments.selected_iff
-#print axioms Zetesis.PositiveArguments.successful_check
-#print axioms Zetesis.PositiveArguments.undefined_check
 #print axioms Zetesis.Propagation.disabled_gate_leaves_inputs_free
 #print axioms Zetesis.Propagation.disabled_implication_must_not_be_enforced
 #print axioms Zetesis.Propagation.empty_candidate_has_no_proper_tested_world

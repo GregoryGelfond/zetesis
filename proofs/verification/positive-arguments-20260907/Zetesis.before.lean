@@ -47,4 +47,3 @@ import Zetesis.SingletonHeads
 import Zetesis.ConstructorPatterns
 import Zetesis.ScalarArithmetic
 import Zetesis.GateProjection
-import Zetesis.PositiveArguments

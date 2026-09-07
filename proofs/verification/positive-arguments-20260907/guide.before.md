@@ -35,9 +35,3 @@ The execution extensions connect these paths to [signed singleton heads](../Zete
 [checked scalar plans](../Zetesis/ScalarArithmetic.lean) and
 [finite gate projection](../Zetesis/GateProjection.lean). Each module states its
 unproved implementation correspondence explicitly.
-
-[Consuming positive arguments](../Zetesis/PositiveArguments.lean) extend the
-finite-value path: exact checks filter supplied support rows without creating
-bindings or atoms. Independent inputs and complete row coverage are premises;
-Rust readiness, source/capture correspondence and resource completion remain
-separate obligations.

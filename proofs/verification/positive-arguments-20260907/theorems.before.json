@@ -1935,51 +1935,6 @@
     "line": 67
   },
   {
-    "name": "Zetesis.PositiveArguments.declared_input_agreement",
-    "file": "Zetesis/PositiveArguments.lean",
-    "line": 33
-  },
-  {
-    "name": "Zetesis.PositiveArguments.empty_plan",
-    "file": "Zetesis/PositiveArguments.lean",
-    "line": 54
-  },
-  {
-    "name": "Zetesis.PositiveArguments.frozen_atom_preserved",
-    "file": "Zetesis/PositiveArguments.lean",
-    "line": 101
-  },
-  {
-    "name": "Zetesis.PositiveArguments.original_atom_preserved",
-    "file": "Zetesis/PositiveArguments.lean",
-    "line": 88
-  },
-  {
-    "name": "Zetesis.PositiveArguments.repeated_selection",
-    "file": "Zetesis/PositiveArguments.lean",
-    "line": 80
-  },
-  {
-    "name": "Zetesis.PositiveArguments.selected_atom_has_support",
-    "file": "Zetesis/PositiveArguments.lean",
-    "line": 73
-  },
-  {
-    "name": "Zetesis.PositiveArguments.selected_iff",
-    "file": "Zetesis/PositiveArguments.lean",
-    "line": 67
-  },
-  {
-    "name": "Zetesis.PositiveArguments.successful_check",
-    "file": "Zetesis/PositiveArguments.lean",
-    "line": 42
-  },
-  {
-    "name": "Zetesis.PositiveArguments.undefined_check",
-    "file": "Zetesis/PositiveArguments.lean",
-    "line": 48
-  },
-  {
     "name": "Zetesis.Propagation.disabled_gate_leaves_inputs_free",
     "file": "Zetesis/Propagation.lean",
     "line": 169

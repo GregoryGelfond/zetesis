@@ -411,15 +411,6 @@
 'Zetesis.Outcomes.completed_unsatisfiable_iff_empty' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Outcomes.delivered_values_are_valid' does not depend on any axioms
 'Zetesis.Outcomes.empty_delivery_can_hide_a_valid_model' depends on axioms: [propext, Quot.sound]
-'Zetesis.PositiveArguments.declared_input_agreement' depends on axioms: [propext]
-'Zetesis.PositiveArguments.empty_plan' depends on axioms: [propext]
-'Zetesis.PositiveArguments.frozen_atom_preserved' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.PositiveArguments.original_atom_preserved' depends on axioms: [propext]
-'Zetesis.PositiveArguments.repeated_selection' depends on axioms: [propext, Quot.sound]
-'Zetesis.PositiveArguments.selected_atom_has_support' depends on axioms: [propext]
-'Zetesis.PositiveArguments.selected_iff' depends on axioms: [propext]
-'Zetesis.PositiveArguments.successful_check' depends on axioms: [propext]
-'Zetesis.PositiveArguments.undefined_check' depends on axioms: [propext]
 'Zetesis.Propagation.disabled_gate_leaves_inputs_free' depends on axioms: [propext]
 'Zetesis.Propagation.disabled_implication_must_not_be_enforced' depends on axioms: [propext]
 'Zetesis.Propagation.empty_candidate_has_no_proper_tested_world' does not depend on any axioms
