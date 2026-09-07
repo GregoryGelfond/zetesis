@@ -1980,6 +1980,7 @@ dependencies = [
  "zetesis-objective",
  "zetesis-sat",
  "zetesis-themelios",
+ "zetesis-validation",
  "zetesis-wgpu",
 ]
 
