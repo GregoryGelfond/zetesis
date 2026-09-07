@@ -53,6 +53,7 @@ mod formula_conditional_projection;
 mod formula_conditional_head_ir;
 mod formula_count_head;
 mod formula_support;
+mod scalar_arithmetic;
 mod formula_binding_plan;
 mod formula_binding_guard;
 mod formula_binding_ir;

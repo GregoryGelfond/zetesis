@@ -4,8 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use themelios_base::span::Location;
 use themelios_program::program::{DefaultNegation, Relation};
-use themelios_program::symbol::Symbol;
-use themelios_program::term::{EvalError, Term};
+use themelios_program::term::EvalError;
 use zetesis_core::{Atom, AtomPattern, Predicate, Value};
 
 use crate::expansion::Budget;
@@ -903,23 +902,20 @@ fn expression_from<'a>(
             }
             Operation::Constant(ref value) => copy(value, budget, location)?,
             Operation::Variable(index) => copy(variable(index), budget, location)?,
-            Operation::Unary(operator, argument) => evaluate(
-                &Term::UnaryOperation {
-                    operator,
-                    argument: Box::new(numeric(&values[argument], location)?),
-                },
+            Operation::Unary(operator, argument) => scalar_value(
+                crate::scalar_arithmetic::unary(operator, numeric(&values[argument], location)?),
                 location,
             )?,
-            Operation::Binary(operator, left, right) => evaluate(
-                &Term::BinaryOperation {
+            Operation::Binary(operator, left, right) => scalar_value(
+                crate::scalar_arithmetic::binary(
                     operator,
-                    left: Box::new(numeric(&values[left], location)?),
-                    right: Box::new(numeric(&values[right], location)?),
-                },
+                    numeric(&values[left], location)?,
+                    numeric(&values[right], location)?,
+                ),
                 location,
             )?,
-            Operation::Absolute(argument) => evaluate(
-                &Term::Absolute(Box::new(numeric(&values[argument], location)?)),
+            Operation::Absolute(argument) => scalar_value(
+                crate::scalar_arithmetic::absolute(numeric(&values[argument], location)?),
                 location,
             )?,
         };
@@ -940,17 +936,18 @@ pub(super) fn copy(
     budget.charge(ExpansionResource::ScalarBytes, value_bytes(value), location)?;
     Ok(value.clone())
 }
-fn numeric(value: &Value, location: Location) -> Result<Term, FormulaFailure> {
+fn numeric(value: &Value, location: Location) -> Result<i32, FormulaFailure> {
     match value {
-        Value::Number(value) => Ok(Term::Symbolic(Symbol::Number(*value))),
+        Value::Number(value) => Ok(*value),
         _ => Err(undefined(location)),
     }
 }
-fn evaluate(term: &Term, location: Location) -> Result<Value, FormulaFailure> {
-    let value = term
-        .evaluate()
-        .map_err(|error| ExpansionFailure::Evaluation { error, location })?;
-    crate::compile::scalar(&value, location).map_err(Into::into)
+fn scalar_value(
+    result: Result<i32, EvalError>,
+    location: Location,
+) -> Result<Value, FormulaFailure> {
+    let value = result.map_err(|error| ExpansionFailure::Evaluation { error, location })?;
+    Ok(Value::Number(value))
 }
 pub(super) fn compare(left: &Value, relation: Relation, right: &Value) -> bool {
     let order = left.compare_terms(right);
