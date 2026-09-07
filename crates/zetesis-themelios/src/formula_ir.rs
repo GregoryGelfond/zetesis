@@ -551,11 +551,28 @@ impl Compiler<'_> {
         // a head variable cannot accidentally become safe inside an aggregate.
         let ordinary = match rule.head().get() {
             Head::Falsum => Some(HeadIr::Normal(None)),
-            Head::Literal(literal) => Some(HeadIr::Normal(Some(self.generated_head(
-                literal,
-                &mut variables,
-                &mut body,
-            )?))),
+            Head::Literal(literal) if literal.negation == DefaultNegation::None => {
+                Some(HeadIr::Normal(Some(self.generated_head(
+                    literal,
+                    &mut variables,
+                    &mut body,
+                )?)))
+            }
+            Head::Literal(literal) => {
+                ceiling(
+                    FormulaResource::DisjunctionElements,
+                    1,
+                    self.limits.max_disjunction_elements as u128,
+                    self.location,
+                )?;
+                // The singleton retains its signed literal in the original
+                // implication. Neither default-negation sign supplies support.
+                Some(HeadIr::Disjunction(vec![self.disjunction_head(
+                    literal,
+                    &mut variables,
+                    &mut body,
+                )?]))
+            }
             Head::Disjunction(disjunction) => {
                 let mut heads = Vec::new();
                 for element in disjunction.elements() {

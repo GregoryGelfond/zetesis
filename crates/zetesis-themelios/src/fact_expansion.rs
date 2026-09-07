@@ -26,7 +26,9 @@ pub(crate) fn facts(
         return Ok(None);
     };
     if literal.negation != DefaultNegation::None {
-        return Err(unsupported(ProfileFeature::NegatedHead, location).into());
+        // A default-negated literal is a formula, not a fact producer. Leave
+        // its admission and reduct meaning to the enclosing source profile.
+        return Ok(None);
     }
     let LiteralInner::Atom(atom) = &literal.inner else {
         return Ok(None);

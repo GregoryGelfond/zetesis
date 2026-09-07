@@ -23,6 +23,9 @@ type Models = BTreeSet<Names>;
 fn cases() -> Vec<Json> {
     serde_json::from_str(include_str!("fixtures/negative-heads.json")).unwrap()
 }
+fn singleton_cases() -> Vec<Json> {
+    serde_json::from_str(include_str!("fixtures/singleton-heads.json")).unwrap()
+}
 fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
     limited(
         source,
@@ -334,22 +337,100 @@ fn fresh_clingo_preserves_every_complete_negative_head_contract() {
 }
 
 #[test]
-fn polarity_never_binds_variables_or_opens_other_head_profiles() {
+fn singleton_heads_preserve_original_formulas() {
+    for case in singleton_cases() {
+        let source = case["source"].as_str().unwrap();
+        let admitted = input(source).unwrap_or_else(|error| panic!("{source}: {error}"));
+        assert_eq!(
+            admitted.atoms().iter().map(name).collect::<Names>(),
+            names(&case["atoms"])
+        );
+        for mask in 0..1_usize << admitted.atoms().len() {
+            let model = selected(&admitted, mask);
+            assert_eq!(
+                holds(admitted.theory(), &values(admitted.theory(), mask, None)),
+                manual_holds(&case, &model, None) && supported(&case, &model),
+                "{source}: M={model:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn singleton_heads_preserve_frozen_formulas() {
+    for case in singleton_cases() {
+        let source = case["source"].as_str().unwrap();
+        let admitted = input(source).unwrap();
+        for mask in 0..1_usize << admitted.atoms().len() {
+            let model = selected(&admitted, mask);
+            // Added double-negated support guards impose only the outer test.
+            if !supported(&case, &model) {
+                continue;
+            }
+            let outer = values(admitted.theory(), mask, None);
+            for inner in 0..1_usize << admitted.atoms().len() {
+                assert_eq!(
+                    holds(
+                        admitted.theory(),
+                        &values(admitted.theory(), inner, Some(&outer))
+                    ),
+                    manual_holds(&case, &selected(&admitted, inner), Some(&model)),
+                    "{source}: M={mask}, J={inner}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn singleton_heads_preserve_complete_models() {
+    let cases = singleton_cases();
+    let mut records = 0;
+    for case in &cases {
+        let source = case["source"].as_str().unwrap();
+        let actual = complete(&input(source).unwrap());
+        assert_eq!(actual, expected(&case["models"]), "{source}");
+        records += actual.len();
+    }
+    assert_eq!((cases.len(), records), (12, 19));
+}
+
+#[test]
+#[ignore = "requires external clingo 5.8; bounded complete captures"]
+fn singleton_references_match_clingo() {
+    for case in singleton_cases() {
+        assert_eq!(
+            clingo(case["source"].as_str().unwrap()),
+            expected(&case["models"]),
+            "{}",
+            case["name"]
+        );
+    }
+}
+
+#[test]
+fn negative_heads_do_not_bind_variables() {
     for source in [
         "not a(X)|b.",
         "not not a(X)|b.",
         "not a(X+1)|b.",
         "not a(2..1,X)|b.",
         "d(1).not a(Y)|b(X):-d(X).",
+        "not a(X).",
+        "not not a(X).",
+        "not a(X+1).",
+        "d(1).not a(Y):-d(X).",
     ] {
         assert!(
             matches!(input(source), Err(FormulaFailure::UnsafeVariable { .. })),
             "{source}"
         );
     }
+}
+
+#[test]
+fn unsupported_head_profiles_remain_explicit() {
     for (source, predicted) in [
-        ("not a.", ProfileFeature::NegatedHead),
-        ("not not a.", ProfileFeature::NegatedHead),
         ("{not a}.", ProfileFeature::NegatedHead),
         ("not a:b|c.", ProfileFeature::ConditionalDisjunction),
         // Finite pools retain head polarity; finite_pools covers the former pool refusal.
@@ -379,6 +460,10 @@ fn negation_nodes_and_occurrences_obey_exact_resource_boundaries() {
         "not a|not not a|a.",
         "d(1).not a(X+1)|b:-d(X).",
         "not not p(1..2)|q.",
+        "not a.",
+        "not not a.",
+        "d(1).not a(X+1):-d(X).",
+        "not not p(1..2).",
     ] {
         let admitted = input(source).unwrap();
         let mut limits = FormulaLimits::default();
@@ -455,6 +540,42 @@ fn negation_nodes_and_occurrences_obey_exact_resource_boundaries() {
             ..
         })
     ));
+}
+
+#[test]
+fn singleton_head_limit_counts_one_literal() {
+    for source in ["not a.", "not not a."] {
+        let limits = FormulaLimits {
+            max_disjunction_elements: 1,
+            ..FormulaLimits::default()
+        };
+        assert!(
+            limited(
+                source,
+                AdmissionOptions::default(),
+                ExpansionLimits::default(),
+                limits
+            )
+            .is_ok()
+        );
+        let limits = FormulaLimits {
+            max_disjunction_elements: 0,
+            ..limits
+        };
+        assert!(matches!(
+            limited(
+                source,
+                AdmissionOptions::default(),
+                ExpansionLimits::default(),
+                limits
+            ),
+            Err(FormulaFailure::Limit {
+                resource: FormulaResource::DisjunctionElements,
+                observed: 1,
+                ..
+            })
+        ));
+    }
 }
 
 #[test]

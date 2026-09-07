@@ -29,6 +29,19 @@ fn negative_disjuncts_preserve_complete_models_through_ordinary_solving() {
         "../../zetesis-themelios/tests/fixtures/negative-heads.json"
     ))
     .unwrap();
+    replay_head_cases(cases, 27, 49);
+}
+
+#[test]
+fn negative_singleton_heads_preserve_complete_models() {
+    let cases: Vec<Value> = serde_json::from_str(include_str!(
+        "../../zetesis-themelios/tests/fixtures/singleton-heads.json"
+    ))
+    .unwrap();
+    replay_head_cases(cases, 12, 19);
+}
+
+fn replay_head_cases(cases: Vec<Value>, expected_cases: usize, expected_models: usize) {
     let mut fixture = String::new();
     for mut case in cases {
         case["native"] = "admit".into();
@@ -36,7 +49,7 @@ fn negative_disjuncts_preserve_complete_models_through_ordinary_solving() {
         fixture.push_str(&serde_json::to_string(&case).unwrap());
         fixture.push('\n');
     }
-    replay(&fixture, 27, 49);
+    replay(&fixture, expected_cases, expected_models);
 }
 
 fn replay(fixtures: &str, expected_cases: usize, expected_records: usize) {

@@ -1,0 +1,67 @@
+[
+  {
+    "name": "negative-fact", "source": "not a.",
+    "atoms": ["a"], "roots": [["imp", "a", false]],
+    "support": {"a": false}, "models": [[]]
+  },
+  {
+    "name": "double-negative-fact", "source": "not not a.",
+    "atoms": ["a"], "roots": [["imp", ["imp", "a", false], false]],
+    "support": {"a": false}, "models": []
+  },
+  {
+    "name": "supported-double-negative-fact", "source": "a. not not a.",
+    "atoms": ["a"], "roots": ["a", ["imp", ["imp", "a", false], false]],
+    "support": {"a": true}, "models": [["a"]]
+  },
+  {
+    "name": "negative-implication", "source": "{a;b}. not a:-b.",
+    "atoms": ["a", "b"],
+    "roots": [["or", "a", ["imp", "a", false]], ["or", "b", ["imp", "b", false]], ["imp", "b", ["imp", "a", false]]],
+    "support": {"a": true, "b": true}, "models": [[], ["a"], ["b"]]
+  },
+  {
+    "name": "double-negative-implication", "source": "{a;b}. not not a:-b.",
+    "atoms": ["a", "b"],
+    "roots": [["or", "a", ["imp", "a", false]], ["or", "b", ["imp", "b", false]], ["imp", "b", ["imp", ["imp", "a", false], false]]],
+    "support": {"a": true, "b": true}, "models": [[], ["a"], ["a", "b"]]
+  },
+  {
+    "name": "unsupported-double-negative-cycle", "source": "not not a:-not a.",
+    "atoms": ["a"], "roots": [["imp", ["imp", "a", false], ["imp", ["imp", "a", false], false]]],
+    "support": {"a": false}, "models": []
+  },
+  {
+    "name": "negative-tautology", "source": "{a}. not a:-not a.",
+    "atoms": ["a"],
+    "roots": [["or", "a", ["imp", "a", false]], ["imp", ["imp", "a", false], ["imp", "a", false]]],
+    "support": {"a": true}, "models": [[], ["a"]]
+  },
+  {
+    "name": "strong-sign-coherence", "source": "{a;-a;b}. not -a:-b.",
+    "atoms": ["a", "-a", "b"],
+    "roots": [["or", "a", ["imp", "a", false]], ["or", "-a", ["imp", "-a", false]], ["or", "b", ["imp", "b", false]], ["imp", "b", ["imp", "-a", false]], ["imp", ["and", "a", "-a"], false]],
+    "support": {"a": true, "-a": true, "b": true}, "models": [[], ["a"], ["-a"], ["b"], ["a", "b"]]
+  },
+  {
+    "name": "evaluated-negative-head", "source": "d(1). {a(2)}. not a(X+1):-d(X).",
+    "atoms": ["d(1)", "a(2)"],
+    "roots": ["d(1)", ["or", "a(2)", ["imp", "a(2)", false]], ["imp", "d(1)", ["imp", "a(2)", false]]],
+    "support": {"d(1)": true, "a(2)": true}, "models": [["d(1)"]]
+  },
+  {
+    "name": "evaluated-double-negative-head", "source": "d(1). {a(2)}. not not a(X+1):-d(X).",
+    "atoms": ["d(1)", "a(2)"],
+    "roots": ["d(1)", ["or", "a(2)", ["imp", "a(2)", false]], ["imp", "d(1)", ["imp", ["imp", "a(2)", false], false]]],
+    "support": {"d(1)": true, "a(2)": true}, "models": [["a(2)", "d(1)"]]
+  },
+  {
+    "name": "negative-interval", "source": "not p(1..2).",
+    "atoms": ["p(1)", "p(2)"], "roots": [["imp", "p(1)", false], ["imp", "p(2)", false]],
+    "support": {"p(1)": false, "p(2)": false}, "models": [[]]
+  },
+  {
+    "name": "empty-double-negative-interval", "source": "not not p(2..1).",
+    "atoms": [], "roots": [], "support": {}, "models": [[]]
+  }
+]
