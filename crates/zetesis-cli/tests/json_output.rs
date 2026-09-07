@@ -43,9 +43,16 @@ fn solve(source: &str, options: &Options) -> (Result<Report, RunFailure>, Json) 
 
 #[test]
 fn closure_and_formula_routes_emit_typed_full_models_with_distinct_hidden_displays() {
-    for oracle in ["auto", "countermodel"] {
-        let (result, value) = solve("{a;b}. #show.", &options(&["--oracle", oracle]));
+    let a = json!({"predicate":"a","sign":"positive","arguments":[]});
+    let b = json!({"predicate":"b","sign":"positive","arguments":[]});
+    let expected = [json!([]), json!([a]), json!([b]), json!([a, b])]
+        .into_iter()
+        .map(|model| model.to_string())
+        .collect::<std::collections::BTreeSet<_>>();
+    for (oracle, formula_route) in [("closure", false), ("countermodel", true)] {
+        let (result, value) = solve("{a}. {b}. #show.", &options(&["--oracle", oracle]));
         let report = result.unwrap();
+        assert_eq!(report.countermodel_statistics.is_some(), formula_route);
         assert_eq!(
             (report.models, report.completion),
             (4, Completion::Exhausted)
@@ -62,7 +69,7 @@ fn closure_and_formula_routes_emit_typed_full_models_with_distinct_hidden_displa
             assert_eq!(model["model"]["shown"]["atom_indices"], json!([]));
             full.insert(model["model"]["full_model"].to_string());
         }
-        assert_eq!(full.len(), 4);
+        assert_eq!(full, expected);
     }
 }
 
@@ -124,12 +131,40 @@ fn interruption_preserves_incumbent_evidence_without_claiming_optimum() {
             "0",
         ]),
     );
-    assert_eq!(result.unwrap().completion, Completion::Interrupted);
+    let report = result.unwrap();
+    assert_eq!(report.completion, Completion::Interrupted);
+    assert_eq!((report.models, report.checked), (1, 1));
     assert_eq!(value["outcome"]["status"], "incomplete");
     assert_eq!(value["outcome"]["coverage"], "partial");
+    assert_eq!(value["outcome"]["verified_models"], 1);
+    assert_eq!(value["outcome"]["published_models"], 1);
+    assert_eq!(value["outcome"]["checked"], 1);
     assert_eq!(value["outcome"]["optimization"]["optimal"], false);
+    assert_eq!(value["outcome"]["optimization"]["tied_models"], 1);
+    assert_eq!(value["outcome"]["optimization"]["scored_models"], 1);
     assert_eq!(value["outcome"]["interruption"]["kind"], "countermodel");
     assert_eq!(value["outcome"]["interruption"]["code"], "candidate_limit");
+    let models = value["models"].as_array().unwrap();
+    assert_eq!(models.len(), 1);
+    assert_eq!(models[0]["number"], 1);
+    let full = models[0]["model"]["full_model"].as_array().unwrap();
+    assert_eq!(full.len(), 1);
+    // Either stable model may be found first; its retained cost must match it.
+    let (name, cost) = match full[0]["predicate"].as_str() {
+        Some("a") => ("a", 1),
+        Some("b") => ("b", 2),
+        other => panic!("unexpected incumbent atom: {other:?}"),
+    };
+    assert_eq!(
+        full[0],
+        json!({"predicate":name,"sign":"positive","arguments":[]})
+    );
+    let costs = json!([{"priority":0,"value":cost}]);
+    assert_eq!(models[0]["model"]["costs"], costs);
+    assert_eq!(value["outcome"]["optimization"]["costs"], costs);
+    let best = report.optimization.unwrap();
+    assert_eq!((best.tied_models, best.scored_models), (1, 1));
+    assert_eq!(best.score.costs(), &[(0, cost)]);
 }
 
 #[test]

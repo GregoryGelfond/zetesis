@@ -408,7 +408,9 @@ those contracts. See the [implementation status](docs/implementation.md) and
 sets the bar for semantic assurance, clear code for an ASP/reduct reader, explicit
 function composition, resource behavior, recovery and operational reliability.
 
-themelios is the minimum engineering floor for the entire stack. The
+themelios provides the reference quality floor for the entire stack. The
+[standards alignment](docs/design/estate-alignment-20260907.md) distinguishes
+the checks enforced here, demonstrated improvements and remaining assurance work. The
 [v1.0 boundary draft](docs/verification/v1-release-boundary-draft-20260906.md)
 sets out the language, execution, interface and qualification decisions to make
 at parity. Mathematical performance, pure Rust `@` functions and competition

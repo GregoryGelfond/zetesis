@@ -107,11 +107,36 @@ pub struct StageTimings {
     measurements: [Option<StageMeasurement>; 4],
 }
 impl StageTimings {
-    /// Whether this snapshot has a valid complete timing partition.
-    /// This does not mean grounding, solving, or output completed successfully.
+    /// Check that current durations partition the driver interval exactly.
+    ///
+    /// Requires available unattributed time, no overflowed measurements and an
+    /// exact checked sum of every measured duration plus unattributed time.
+    /// Public duration fields may be edited; this rechecks their current values.
+    /// It establishes arithmetic consistency, not recorder provenance or
+    /// successful grounding, solving, or output.
+    ///
+    /// Takes constant time and space over the four fixed stage slots; reads no clock.
     #[must_use]
     pub const fn is_complete(&self) -> bool {
-        self.unattributed.is_some()
+        let Some(mut elapsed) = self.unattributed else {
+            return false;
+        };
+        let mut index = 0;
+        // The prefix sum contains unattributed time and exactly the first
+        // `index` stage durations. Each step consumes one of four fixed slots.
+        while index < self.measurements.len() {
+            if let Some(measurement) = self.measurements[index] {
+                if measurement.overflowed {
+                    return false;
+                }
+                let Some(total) = elapsed.checked_add(measurement.elapsed) else {
+                    return false;
+                };
+                elapsed = total;
+            }
+            index += 1;
+        }
+        elapsed.as_nanos() == self.driver_elapsed.as_nanos()
     }
 
     /// `None` means unentered, or unavailable for interleaved lazy grounding.
@@ -122,6 +147,9 @@ impl StageTimings {
 }
 
 #[derive(Clone, Copy, Default)]
+// Closed intervals are charged only to their active stage. `since` starts the
+// remaining open interval; `depth` counts live guards under stack-order use.
+// Taking a snapshot settles a copy, leaving the recorder's open interval intact.
 struct State {
     active: Option<SolveStage>,
     since: Option<Instant>,
@@ -150,6 +178,12 @@ impl State {
 /// Keep guards in stack order. Invalid nesting makes `unattributed` unavailable
 /// rather than affecting application control. This recorder does not spawn work,
 /// impose budgets, inspect candidates, or infer completed grounding or solving.
+///
+/// Construction, stage entry/exit and snapshots take constant time and space:
+/// four stage slots are copied or visited, and each guard stores one parent.
+/// Nested guards use caller stack space proportional to the live nesting depth.
+/// Enabled operations read the host clock; disabled operations do not. No event
+/// trace is retained, so individual interval history cannot be reconstructed.
 pub struct StageRecorder {
     started: Option<Instant>,
     state: Cell<State>,

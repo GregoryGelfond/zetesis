@@ -10,6 +10,13 @@ of those repositories.
 The ASPIF section below includes a read-only protocol follow-up; its proposed
 record profile is not an implemented capability.
 
+**Implementation follow-up.** The bounded typed model view, `--json` document
+adapter and separate eager grounding/solving measurements were subsequently
+delivered in the [library boundaries checkpoint](../verification/estate-boundaries-20260907/README.md).
+The proposal below remains a record of the design at inspection time. A reusable
+solve session and model-event interface, and ASPIF interchange, remain unfinished;
+the delivered JSON adapter still composes CLI-owned execution outcomes.
+
 The existing semantic kernels are already useful libraries. The highest-priority
 gap is the composition layer: the ordinary source-to-optimal-model path can only
 be reused through a CLI-shaped configuration and byte writers. Adding a renamed

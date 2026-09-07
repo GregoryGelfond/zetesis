@@ -8,7 +8,7 @@ rust-version = "1.97"
 license = "MIT"
 version = "0.1.0"
 
-# The estate's authored-code baseline. Exceptions are named and argued at
+# The enforced Rust subset of the estate baseline. Exceptions are named and argued at
 # their point of use; a prototype narrows features, not these checks.
 [workspace.lints.rust]
 unsafe_code = "deny"

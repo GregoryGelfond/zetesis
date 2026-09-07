@@ -9,10 +9,11 @@ outside all stages. Snapshots are typed Rust values; there is no text,
 JSON, solver, frontend, device, scheduler or command-line dependency.
 
 `StageRecorder::new(false)` performs no clock reads. `StageTimings::is_complete`
-reports valid timing arithmetic and nesting, never semantic completion. Lazy
+checks the current arithmetic partition, including after public duration edits;
+it establishes neither recorder provenance nor semantic completion. Lazy
 source joins are marked interleaved; a mixed route retains measured eager spans
 without claiming a separate lazy grounding duration. Guards must drop in stack
-order; misuse makes the partition unavailable rather than changing application
+order; recorder-detected misuse makes unattributed time unavailable rather than changing application
 control. The recorder is single-threaded; wrap coordinator wall intervals to
 include worker waits without summing overlapping worker times.
 

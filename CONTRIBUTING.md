@@ -37,6 +37,38 @@ pure transformations separate from injected execution effects and resource
 accounting; small named operations should make dependencies and parallel work
 visible without excessive abstraction.
 
+## Make represented knowledge inspectable
+
+Name the audience at each boundary: ASP authors need the program's semantics and
+admission limits; Rust consumers need ownership, effects, costs and typed errors;
+maintainers need the invariants connecting the representation to the reduct.
+Document departures from their expected semantics where they encounter them.
+
+A distinction in a type must have a producer and a consumer. A consumer forced
+to infer missing state from a string, sentinel or incidental control flow is
+evidence that the representation needs refinement. Distinguish an arithmetic
+consistency check from provenance, a candidate from an answer set, and recorded
+evidence from a guarantee that the implementation establishes that evidence.
+
+Design an algorithm with its correctness argument: preconditions, postconditions,
+maintained invariants and a decreasing measure or finite bound for termination.
+Name the concepts carrying that argument. Use pure transformations where they
+make the knowledge explicit; keep state and execution effects at named boundaries.
+An explicit cursor over foreign input needs its own frame invariant and resource
+bound. Iterator syntax or structural recursion alone does not establish safety.
+
+A new representation or API must explain the algorithm it serves, its ownership
+and cost model, the resulting complexity, and why a simpler representation would
+lose necessary information or increase that cost. State worst-case work and
+retained space separately. Measure the expensive operation before claiming that
+an optimization matters to ordinary solving.
+
+Keep caller contracts and maintainer invariants self-contained. Design documents
+may explain alternatives and history in the form most useful to their readers;
+identify recommendations that have been implemented or superseded. Preserve raw
+qualification evidence and its provenance. New authored material states results
+and limitations without assistant authorship markers or inaccessible instructions.
+
 ## Carry the semantic contract into Lean and Rust
 
 Use the same mathematical distinctions in the specification, public APIs and
@@ -76,6 +108,14 @@ See [verification instructions](README.md#build-and-check) for the exact scopes
 and prerequisites. Tests should exercise semantics and failure boundaries,
 including property and adversarial cases; do not mirror the implementation or
 weaken gates to accommodate a feature.
+
+Write the proposition before changing its implementation, then demonstrate that
+the assertions detect its violation. Tests claiming multiple execution routes
+must check which route actually ran. A test claiming retained results must inspect
+their identity and evidence. Coverage locates unexercised code; it does not prove
+assertion strength. Selected negative controls, systematic mutation campaigns,
+input fuzzing and mathematical proofs discharge different obligations. Report
+the instrument and scope actually used.
 
 Clingo is an external qualification oracle, never a production solver dependency.
 Preserve original corpus inputs. Retain complete models, optimal ties, objective

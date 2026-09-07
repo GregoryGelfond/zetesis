@@ -147,3 +147,30 @@ fn bad_nesting_and_overflow_make_the_partition_unavailable() {
     duration.add(Duration::from_nanos(1));
     assert!(duration.overflowed);
 }
+
+#[test]
+fn overflowing_duration_partition_is_incomplete() {
+    let start = Instant::now();
+    let recorder = recorder(start);
+    let mut stage = recorder.enter_at(SolveStage::Solving, Some(at(start, 2)));
+    finish(&mut stage, at(start, 7));
+    let mut snapshot = recorder.snapshot_at(start, at(start, 10));
+    assert!(snapshot.is_complete());
+    snapshot.unattributed = Some(Duration::MAX);
+    assert!(!snapshot.is_complete());
+}
+
+#[test]
+fn overflowed_measurement_cannot_establish_a_complete_partition() {
+    let mut snapshot = StageTimings {
+        driver_elapsed: Duration::from_nanos(5),
+        unattributed: Some(Duration::ZERO),
+        ..StageTimings::default()
+    };
+    snapshot.measurements[SolveStage::Solving as usize] = Some(StageMeasurement {
+        calls: u64::MAX,
+        elapsed: Duration::from_nanos(5),
+        overflowed: true,
+    });
+    assert!(!snapshot.is_complete());
+}

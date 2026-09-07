@@ -12,7 +12,9 @@ use crate::OutputSelection;
 
 /// A full supplied model beside its independent observation and objective channels.
 /// Construction evaluates observations only; the caller establishes stability and
-/// the score. No model clone, projection, deduplication or solver call occurs.
+/// the score. It does not clone, project, or deduplicate the supplied model, or
+/// invoke a solver. The evaluated, deduplicated term channel is owned by the view;
+/// the full model, atom selection, and optional score are borrowed.
 pub struct ModelView<'a> {
     model: &'a Model,
     selection: &'a OutputSelection,
@@ -21,6 +23,14 @@ pub struct ModelView<'a> {
 }
 impl ObservationProgram {
     /// Evaluate a view over a supplied full model and optional already computed score.
+    ///
+    /// # Cost
+    /// An empty observation program takes constant time and allocates no term
+    /// storage. Otherwise, construction performs one observation evaluation: its
+    /// relational binding enumeration, term construction, and sorted term
+    /// deduplication determine the cost under `limits`. These operations can cost
+    /// more than a scan of the supplied model. The view retains the evaluated terms
+    /// and their statistics; JSON encoding is a separate, later operation.
     ///
     /// # Errors
     /// Returns the observation evaluator's typed refusal without a partial view.
@@ -56,6 +66,9 @@ impl ModelView<'_> {
     }
 
     /// Selected original atoms in full-model order; no term-channel deduplication.
+    /// Constructing the iterator takes constant time and allocates nothing. A full
+    /// traversal scans all atoms and, for explicit selection, performs a tree-set
+    /// lookup per atom; predicate comparison also inspects name bytes.
     pub fn shown_atoms(&self) -> impl Iterator<Item = &Atom> {
         self.model
             .atoms()
@@ -88,6 +101,22 @@ impl ModelView<'_> {
     /// argument records; shown atom indices address that array and shown terms
     /// form their own channel. This preserves identity without parsing ASP text.
     /// Costs retain descending priority/value pairs, or `null` when absent.
+    ///
+    /// # Cost and space
+    /// Encoding traverses every full-model atom, value node, shown term node, and
+    /// cost entry, together with their emitted UTF-8 bytes. It also scans selected
+    /// signatures separately for each atom: with `A` atoms and `S` signatures there
+    /// are up to `A * S` predicate comparisons, whose cost includes name bytes.
+    /// Observation evaluation has already occurred and is not repeated here.
+    ///
+    /// The returned record retains `B` bytes, bounded by `max_bytes`. Encoding
+    /// additionally holds a cursor of at most `D` frames for one shown term, bounded
+    /// by `max_depth`; auxiliary storage is `O(B + D)`, excluding the already owned
+    /// terms, borrowed inputs, and allocator overhead. Record growth is geometric.
+    /// Cursor growth reserves one frame at a time, so a term reaching depth `D`
+    /// can incur `O(D^2)` cumulative frame copies when allocations move storage.
+    /// That allocation cost is separate from the traversal/byte/comparison work
+    /// charged by `max_work`; the complete operation is not uniformly linear in `B`.
     ///
     /// # Errors
     /// Refuses before exceeding the record, work or traversal-depth ceilings;
@@ -357,9 +386,16 @@ impl<'a> Buffer<'a> {
         self.text("]")
     }
     fn symbol(&mut self, symbol: &Symbol) -> Result<(), ViewError> {
+        // Each frame holds an ancestor's children and the first child not yet
+        // entered. Keeping this continuation on the bounded heap cursor makes
+        // traversal depth independent of the Rust call stack.
         let mut frames: Vec<(&[Symbol], usize)> = Vec::new();
         let mut current = symbol;
         self.text("[")?;
+        // Invariant: current is the next unencoded preorder node; frames are its
+        // ancestors, so its depth is frames.len() + 1. This array's output prefix
+        // contains exactly the preceding nodes. Each iteration encodes one unvisited
+        // node of the finite Symbol tree, or returns a typed refusal.
         loop {
             if frames.len() >= self.limits.max_depth {
                 return Err(ViewError::Depth);
@@ -407,6 +443,10 @@ impl<'a> Buffer<'a> {
                 self.text(",")?;
                 continue;
             }
+            // The current subtree is complete. In the top frame, children before
+            // next are complete. An iteration either selects the next unvisited
+            // child or pops an exhausted ancestor; thus ascent terminates. With
+            // no ancestor left, every node was emitted once and the array closes.
             loop {
                 let Some((arguments, next)) = frames.last_mut() else {
                     return self.text("]");

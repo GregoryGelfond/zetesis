@@ -47,10 +47,16 @@ impl fmt::Display for Interruption {
     }
 }
 
-/// Counts and coverage from the streaming run. Models are written as found.
+/// Publication counts and search coverage from a completed driver invocation.
+/// Without objectives, stable models are written as found. Optimization retains
+/// incumbent ties and publishes the requested optimal ties only after exhaustion
+/// establishes the optimum.
+/// Interrupted optimization may publish retained incumbents without an optimum claim.
 #[derive(Clone, Debug)]
 pub struct Report {
-    /// Number of accepted models written.
+    /// Complete model records accepted by the output sink, including objective costs.
+    /// Partial writes are excluded; sink acceptance does not establish durability.
+    /// This count can be smaller than the number of verified stable models.
     pub models: usize,
     /// Closure candidate results examined, or classical formula candidates
     /// proposed (including explicitly retained pending batch work).
@@ -267,11 +273,16 @@ impl From<io::Error> for RunError {
 /// Enumeration checks the empty seed alone before requesting more gate tuples.
 /// The countermodel oracle checks and blocks complete semantic interpretations.
 /// Both routes preserve distinct full models independently of display selection.
+/// With objectives, requested optimal ties are published only after exhaustion
+/// establishes the optimum.
+/// Interrupted optimization may publish retained incumbents without an optimum claim.
 /// A completed exhaustive run with no models is the only UNSAT outcome.
 ///
 /// # Errors
-/// Returns [`RunError`] for source refusal, backend failure, or output failure.
-/// Logical budgets/cancellation produce an interrupted [`Report`] instead.
+/// Returns [`RunError`] for source, backend, observation/view, or output failures.
+/// Search, objective, and incumbent-retention stops produce an interrupted
+/// [`Report`] unless a later reporting operation fails. Cancellation during
+/// observation evaluation or JSON encoding returns a failure instead.
 pub fn run(
     source: String,
     options: &Options,
@@ -287,8 +298,10 @@ pub fn run(
 /// signature and discards backend diagnostics for callers that do not need them.
 ///
 /// # Errors
-/// Returns [`RunError`] for source, backend, model-output or diagnostics errors.
-/// Logical budgets/cancellation produce an interrupted [`Report`] instead.
+/// Returns [`RunError`] for source, backend, observation/view, model-output, or
+/// diagnostics failures. Search, objective, and incumbent-retention stops produce
+/// an interrupted [`Report`] unless a later reporting operation fails.
+/// Cancellation during observation evaluation or JSON encoding returns a failure.
 pub fn run_with_diagnostics(
     source: String,
     options: &Options,
@@ -305,6 +318,9 @@ pub fn run_with_diagnostics(
 ///
 /// # Errors
 /// Returns the original cause plus any available progress and attempted timings.
+/// Search, objective, and incumbent-retention stops return an interrupted report;
+/// observation/view or output failures, including their control refusals, return
+/// a failure with the evidence retained before that operation failed.
 pub fn run_detailed(
     source: String,
     options: &Options,
@@ -316,10 +332,13 @@ pub fn run_detailed(
 
 /// Stream models with separate diagnostics and retain structured failure evidence.
 /// A failed Answer is excluded from the published count even if its prefix escaped.
-/// Logical interruptions continue to return an ordinary interrupted [`Report`].
+/// Search, objective, and incumbent-retention stops return an interrupted [`Report`]
+/// unless a later observation/view or reporting operation fails.
 ///
 /// # Errors
-/// Returns [`RunFailure`] for source, backend, observation or output failures.
+/// Returns [`RunFailure`] for source, backend, observation/view, or output failures.
+/// Cancellation during observation evaluation or JSON encoding is such a failure,
+/// with any preceding search evidence retained independently.
 /// A secondary statistics-output error does not replace the original cause.
 pub fn run_detailed_with_diagnostics(
     source: String,
@@ -351,8 +370,10 @@ pub fn run_detailed_with_diagnostics(
 /// points never resolve includes from implicit paths.
 ///
 /// # Errors
-/// Returns [`RunError`] for source, backend, model-output or diagnostics errors.
-/// Logical budgets/cancellation produce an interrupted [`Report`] instead.
+/// Returns [`RunError`] for source, backend, observation/view, model-output, or
+/// diagnostics failures. Search, objective, and incumbent-retention stops produce
+/// an interrupted [`Report`] unless a later reporting operation fails.
+/// Cancellation during observation evaluation or JSON encoding returns a failure.
 pub fn run_bundle_with_diagnostics(
     bundle: SourceBundle,
     options: &Options,
@@ -369,6 +390,9 @@ pub fn run_bundle_with_diagnostics(
 ///
 /// # Errors
 /// Returns the original typed failure with any trustworthy execution evidence.
+/// Search, objective, and incumbent-retention stops return an interrupted report;
+/// observation/view or output failures, including their control refusals, return
+/// a failure with the evidence retained before that operation failed.
 pub fn run_bundle_detailed_with_diagnostics(
     bundle: SourceBundle,
     options: &Options,
