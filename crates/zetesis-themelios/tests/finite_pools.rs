@@ -84,7 +84,15 @@ const CASES: &[(&str, &str)] = &[
         "p(X):-X=(f(1);\"s\").n(N):-N=#max{X:p(X)}.",
         "p(f(1)).p(\"s\").n(N):-N=#max{X:p(X)}.",
     ),
-    ("p(1;2):#true;q:#true.", "p(1):#true;q:#true.p(2):#true;q:#true."),
+    (
+        "p(1;2):#true;q:#true.",
+        "p(1):#true;q:#true.p(2):#true;q:#true.",
+    ),
+    (
+        "1#count{X:p(K,X):X=1..2}1:-K=(1;2).",
+        "1{p(1,1);p(1,2)}1.1{p(2,1);p(2,2)}1.",
+    ),
+    ("#count{K:p}:-K=(1;2).", "{p}.{p}."),
 ];
 
 #[test]

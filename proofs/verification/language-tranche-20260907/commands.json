@@ -1,0 +1,85 @@
+[
+  {
+    "command": [
+      "lake",
+      "env",
+      "lean",
+      "--version"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-07T09:15:29.507255+00:00",
+    "exit_code": 0,
+    "result": "PASS",
+    "elapsed_seconds": 0.5317122919950634,
+    "log": "verification/language-tranche-20260907/version.log"
+  },
+  {
+    "command": [
+      "lake",
+      "clean"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-07T09:15:30.039359+00:00",
+    "exit_code": 0,
+    "result": "PASS",
+    "elapsed_seconds": 0.3574338750913739,
+    "log": "verification/language-tranche-20260907/clean.log"
+  },
+  {
+    "command": [
+      "lake",
+      "build"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-07T09:15:30.397130+00:00",
+    "exit_code": 0,
+    "result": "PASS",
+    "elapsed_seconds": 5.25672800000757,
+    "log": "verification/language-tranche-20260907/build.log"
+  },
+  {
+    "command": [
+      "lake",
+      "env",
+      "lean",
+      "-DautoImplicit=false",
+      "-DwarningAsError=true",
+      "Audit.lean"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-07T09:18:44.626848+00:00",
+    "exit_code": 0,
+    "result": "PASS",
+    "elapsed_seconds": 0.7935244999825954,
+    "log": "verification/language-tranche-20260907/audit.log"
+  },
+  {
+    "command": [
+      "python3",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "scripts/tests",
+      "-v"
+    ],
+    "cwd": ".",
+    "started_utc": "2026-09-07T09:15:36.306530+00:00",
+    "exit_code": 0,
+    "result": "PASS",
+    "elapsed_seconds": 17.4463778748177,
+    "log": "verification/language-tranche-20260907/python-regressions.log"
+  },
+  {
+    "command": [
+      "python3",
+      "scripts/proof_record.py"
+    ],
+    "cwd": ".",
+    "started_utc": "2026-09-07T09:19:05.926421+00:00",
+    "exit_code": 0,
+    "result": "PASS",
+    "elapsed_seconds": 0.09690754185430706,
+    "log": "verification/language-tranche-20260907/record-check.log"
+  }
+]

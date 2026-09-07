@@ -63,12 +63,6 @@
 'Zetesis.CandidateCursor.repeated_auxiliary_complete' depends on axioms: [propext]
 'Zetesis.CandidateCursor.stable_outputs_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.CandidateCursor.zero_fuel_keeps_open_tree' depends on axioms: [propext]
-'Zetesis.CertifiedExecution.completed_membership_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.CertifiedExecution.fallback_quota_is_cumulative' depends on axioms: [propext, Quot.sound]
-'Zetesis.CertifiedExecution.interruption_cannot_accept' depends on axioms: [propext]
-'Zetesis.CertifiedExecution.ranked_support_verdict_sound' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.CertifiedExecution.restricted_result_original' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.CertifiedExecution.unsupported_requires_completion' does not depend on any axioms
 'Zetesis.ChoiceIntervals.all_classical' depends on axioms: [propext, Quot.sound]
 'Zetesis.ChoiceIntervals.all_map_equivalent' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ChoiceIntervals.atLeast_classical' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -135,17 +129,6 @@
 'Zetesis.ClauseValidation.scan_work_bound' depends on axioms: [propext, Quot.sound]
 'Zetesis.ClauseValidation.validate_accepts_iff' depends on axioms: [propext, Quot.sound]
 'Zetesis.ClauseValidation.validate_work_bound' depends on axioms: [propext, Quot.sound]
-'Zetesis.CountHeads.activity_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.CountHeads.activity_original' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.CountHeads.alias_directions_are_rejected' does not depend on any axioms
-'Zetesis.CountHeads.bounds_are_candidate_constraints' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.CountHeads.check_exact' depends on axioms: [propext, Quot.sound]
-'Zetesis.CountHeads.distinct_atoms_of_distinct_keys' depends on axioms: [propext, Quot.sound]
-'Zetesis.CountHeads.group_equivalent' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.CountHeads.identical_duplicates_are_compatible' does not depend on any axioms
-'Zetesis.CountHeads.stable_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.CountHeads.table_atoms_nodup' depends on axioms: [propext, Quot.sound]
-'Zetesis.CountHeads.table_covers_atoms' does not depend on any axioms
 'Zetesis.CoverageTree.exhausted_no_valid' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.CoverageTree.mem_outputs_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.CoverageTree.outputs_complete' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -263,14 +246,6 @@
 'Zetesis.FiniteBindings.stable_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.FiniteBindings.strict_endpoints' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.FiniteBindings.tighten_membership' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.FinitePools.duplicate_alternative' depends on axioms: [propext, Quot.sound]
-'Zetesis.FinitePools.empty_occurrence' depends on axioms: [propext]
-'Zetesis.FinitePools.flattening_changes_original_truth' depends on axioms: [propext, Quot.sound]
-'Zetesis.FinitePools.frozen_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.FinitePools.independent_equal_occurrences' depends on axioms: [propext, Quot.sound]
-'Zetesis.FinitePools.original_in_context' depends on axioms: [propext, Quot.sound]
-'Zetesis.FinitePools.product_complete' depends on axioms: [propext, Quot.sound]
-'Zetesis.FinitePools.stable_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.GroundGuards.chain_evaluation' depends on axioms: [propext, Quot.sound]
 'Zetesis.GroundGuards.classical_tautology_is_not_a_guard_replacement' depends on axioms: [propext,
  Classical.choice,
@@ -551,20 +526,6 @@
 'Zetesis.TightPlans.reversed_choice_reduct_guard' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.TightPlans.stable_iff_ranked_support' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.TightPlans.stable_supported' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.TrueHeads.condition_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.TrueHeads.condition_original' depends on axioms: [propext]
-'Zetesis.TrueHeads.empty_range_erases_whole_family' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.TrueHeads.family_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.TrueHeads.family_original' depends on axioms: [propext, Quot.sound]
-'Zetesis.TrueHeads.head_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.TrueHeads.head_original' depends on axioms: [propext]
-'Zetesis.TrueHeads.instances_complete' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.TrueHeads.literal_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.TrueHeads.literal_original' depends on axioms: [propext]
-'Zetesis.TrueHeads.rule_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.TrueHeads.rule_original' depends on axioms: [propext]
-'Zetesis.TrueHeads.stable_has_positive_producer' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.TrueHeads.stable_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.UniversalConditionals.all_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.UniversalConditionals.cross_candidate_reuse_changes_truth' depends on axioms: [propext,
  Classical.choice,
@@ -587,24 +548,6 @@
  Classical.choice,
  Quot.sound]
 'Zetesis.UniversalConditionals.uniform_removal_on_domain' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.ValueExtrema.candidate_length' depends on axioms: [propext]
-'Zetesis.ValueExtrema.choose_is_input' depends on axioms: [propext]
-'Zetesis.ValueExtrema.coalesced_witness_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.ValueExtrema.coalesced_witness_original' depends on axioms: [propext, Quot.sound]
-'Zetesis.ValueExtrema.completed_candidate_coverage' depends on axioms: [propext]
-'Zetesis.ValueExtrema.empty_result' does not depend on any axioms
-'Zetesis.ValueExtrema.empty_witness_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.ValueExtrema.empty_witness_original' depends on axioms: [propext, Quot.sound]
-'Zetesis.ValueExtrema.extreme_none_iff' depends on axioms: [propext]
-'Zetesis.ValueExtrema.extreme_some_mem' depends on axioms: [propext]
-'Zetesis.ValueExtrema.frozen_requires_original' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.ValueExtrema.guard_congruence' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.ValueExtrema.guard_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.ValueExtrema.guard_original' does not depend on any axioms
-'Zetesis.ValueExtrema.selected_or_empty_predicate' depends on axioms: [propext, Quot.sound]
-'Zetesis.ValueExtrema.selected_predicate' depends on axioms: [propext, Quot.sound]
-'Zetesis.ValueExtrema.witness_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.ValueExtrema.witness_original' depends on axioms: [propext, Quot.sound]
 'Zetesis.accepted_sample_does_not_exhaust_region' does not depend on any axioms
 'Zetesis.applyEvents_append' does not depend on any axioms
 'Zetesis.applyEvents_grows' does not depend on any axioms

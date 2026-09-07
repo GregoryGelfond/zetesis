@@ -36,6 +36,9 @@ import Zetesis.NegativeHeads
 import Zetesis.TrueHeads
 import Zetesis.CountHeads
 import Zetesis.TightPlans
+
 import Zetesis.CertifiedExecution
+
 import Zetesis.ValueExtrema
+
 import Zetesis.FinitePools

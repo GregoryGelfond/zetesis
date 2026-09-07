@@ -1,6 +1,6 @@
 # zetesis — Lean semantic specification
 
-This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **613 kernel-checked theorems** across forty-one semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
+This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **556 kernel-checked theorems** across thirty-six semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
 
 The formalization connects normalized stable-model semantics to candidate seeds, compositional reduct execution, lazy completion, consequence bounds, and completed search certificates. It supplies mathematical contracts for the Rust, wgpu, Rayon, and neuromorphic implementation work. It does not verify those implementations or make Lean a runtime dependency.
 
@@ -13,7 +13,7 @@ lake build
 lake env lean -DautoImplicit=false -DwarningAsError=true Audit.lean
 ```
 
-`lean-toolchain` pins `leanprover/lean4:v4.33.1`. The package has no remote dependencies, so the build itself needs no network once that toolchain exists. `lake build` compiles the umbrella module and all forty-one semantic modules. `Audit.lean` requests the transitive axiom dependencies of every project theorem.
+`lean-toolchain` pins `leanprover/lean4:v4.33.1`. The package has no remote dependencies, so the build itself needs no network once that toolchain exists. `lake build` compiles the umbrella module and all thirty-six semantic modules. `Audit.lean` requests the transitive axiom dependencies of every project theorem.
 
 The [verification report](./verification.json) records the checked source hashes and commands. The [axiom audit](./axiom-audit.txt) contains only standard Lean logical axioms where needed: `propext`, `Quot.sound`, and `Classical.choice`. In particular, no theorem depends on `sorryAx` or `Lean.ofReduceBool`.
 
@@ -29,12 +29,6 @@ preserves an earlier inconsistent manifest and explains its repair.
 
 | Module | What is proved |
 |---|---|
-| [BatchAccounting](./Zetesis/BatchAccounting.lean) | Proposal, pending classification and exact prefix commitment preserve finite coverage and occurrence counts; interrupted or delayed failures cannot establish exhaustion |
-| [CertifiedExecution](./Zetesis/CertifiedExecution.lean) | Ranked support soundly precedes exact residual completion over the unchanged original theory; interruption cannot accept and fallback quotas accumulate |
-| [TrueHeads](./Zetesis/TrueHeads.lean) | Atom-free true-condition erasure preserves whole-rule families, every frozen reduct and contextual stability; positive producer necessity is retained |
-| [CountHeads](./Zetesis/CountHeads.lean) | Complete tuple/atom correspondence gives duplicate-free representatives, original/frozen tuple activity equivalence and contextual count-group stability; bounds provide no reduct support |
-| [ValueExtrema](./Zetesis/ValueExtrema.lean) | Complete-value extrema candidate coverage and ordered-selection witness laws, with exact original/frozen guard connectives under an explicit comparator law |
-| [FinitePools](./Zetesis/FinitePools.lean) | Independent occurrence products cover complete formula rows and preserve original/frozen models and contextual stability; disjunction flattening has a counterexample |
 | [FiniteBindings](./Zetesis/FiniteBindings.lean) | Executable closed-bound intersection with retained total guards preserves finite instantiations, original/frozen formulas and stability in context; source safety and runtime refinement remain separate |
 | [NegativeHeads](./Zetesis/NegativeHeads.lean) | Default-negated disjuncts retain frozen truth; stable models have positive producers; double-negated necessary-support guards preserve stability for the ground grammar |
 | [TightPlans](./Zetesis/TightPlans.lean) | Checked complete normal/choice roots and positive ranks make original satisfaction plus support equivalent to reduct stability |
@@ -198,53 +192,3 @@ guards, interrupted enumeration, graph construction and Rust refinement are not
 proved. An empty incomplete prefix does not establish source-level vacuity.
 The [retained proof record](verification/universal-conditionals-20260906/README.md)
 contains fresh commands and the prior 513-theorem records.
-
-## Integrated language and certificate contracts
-
-The [7 September integration record](verification/language-tranche-20260907/README.md)
-adds 57 laws across five modules to the previous 556-theorem inventory. The fresh
-pinned build and strict audit cover all 613 declarations in all 41 modules. The
-prior inventory, audit, umbrella, README and manifest are preserved byte for byte.
-
-`CertifiedExecution.lean` adds six laws connecting a supplied sound ranked-support
-verdict to exact residual completion. Both paths judge the unchanged original
-Ferraris theory. An interrupted attempt returns no membership result, and a
-failed optional attempt still consumes a cumulative natural-number quota before
-fallback. Complete producer coverage, actual work accounting, Rust extraction,
-scheduling, allocation and external output delivery remain separate obligations.
-
-`TrueHeads.lean` adds fourteen laws for conditions that are atom-free and true in
-original truth and every frozen reduct. Erasure preserves each complete rule in
-the supplied interval product and stability in unchanged context. Empty products
-remain empty rule families; negative occurrences retain their polarity, and
-positive-producer necessity is retained. The module does not prove source parser
-recognition, safety, bindings, complete support, generated ranges or Rust lowering.
-It does not justify erasure of arbitrary classical tautologies or dynamic guards.
-
-`CountHeads.lean` adds eleven laws for a completed static-eligibility table of full
-tuple keys and positive derived atoms. The executable correspondence check rejects
-both alias directions. A supplied complete representative table has distinct
-atoms and covers all rows. Tuple activity equals its representative atom in
-original truth and every frozen reduct; the interval choice/constraint group
-therefore preserves stability in unchanged context. Bounds inspect the candidate
-and provide no reduct support. Complete finite eligibility and representative
-coverage are explicit premises. Source safety, the Rust map/cursor/checking and
-resource implementation, dynamic conditions, general aliases, negative derived
-literals, other head functions and objective interactions remain unproved.
-
-`ValueExtrema.lean` adds eighteen laws over an arbitrary complete value carrier.
-Selected values belong to the supplied list; completed carrier coverage includes
-every actual extreme and a separately supplied empty sentinel. Ordered bound
-witnesses require an explicit selection/comparator law. Full-key condition OR
-and guard connectives preserve original truth and every frozen M/J test with
-arbitrary eligibility formulas. The Rust ASP order, finite-width endpoint policy,
-source safety, complete support, key/cache identity and budgets are not verified.
-
-`FinitePools.lean` adds eight laws for independent finite occurrence products and
-an independently specified relational binding relation. Complete row coverage
-preserves original models, all frozen M/J reducts and stability in unchanged
-context. Duplicate alternatives remain in enumeration, and an empty occurrence
-empties the product. Each product row denotes a whole formula; flattening a
-family of disjunctions changes its truth. Source recognition, cursor/provenance,
-choice-group construction, generated bindings, support completion and resources
-remain adapter obligations.

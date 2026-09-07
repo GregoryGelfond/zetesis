@@ -325,36 +325,6 @@
     "line": 320
   },
   {
-    "name": "Zetesis.CertifiedExecution.completed_membership_exact",
-    "file": "Zetesis/CertifiedExecution.lean",
-    "line": 60
-  },
-  {
-    "name": "Zetesis.CertifiedExecution.fallback_quota_is_cumulative",
-    "file": "Zetesis/CertifiedExecution.lean",
-    "line": 86
-  },
-  {
-    "name": "Zetesis.CertifiedExecution.interruption_cannot_accept",
-    "file": "Zetesis/CertifiedExecution.lean",
-    "line": 79
-  },
-  {
-    "name": "Zetesis.CertifiedExecution.ranked_support_verdict_sound",
-    "file": "Zetesis/CertifiedExecution.lean",
-    "line": 42
-  },
-  {
-    "name": "Zetesis.CertifiedExecution.restricted_result_original",
-    "file": "Zetesis/CertifiedExecution.lean",
-    "line": 92
-  },
-  {
-    "name": "Zetesis.CertifiedExecution.unsupported_requires_completion",
-    "file": "Zetesis/CertifiedExecution.lean",
-    "line": 82
-  },
-  {
     "name": "Zetesis.ChoiceIntervals.all_classical",
     "file": "Zetesis/ChoiceIntervals.lean",
     "line": 317
@@ -633,61 +603,6 @@
     "name": "Zetesis.ClauseValidation.validate_work_bound",
     "file": "Zetesis/ClauseValidation.lean",
     "line": 119
-  },
-  {
-    "name": "Zetesis.CountHeads.activity_frozen",
-    "file": "Zetesis/CountHeads.lean",
-    "line": 104
-  },
-  {
-    "name": "Zetesis.CountHeads.activity_original",
-    "file": "Zetesis/CountHeads.lean",
-    "line": 90
-  },
-  {
-    "name": "Zetesis.CountHeads.alias_directions_are_rejected",
-    "file": "Zetesis/CountHeads.lean",
-    "line": 184
-  },
-  {
-    "name": "Zetesis.CountHeads.bounds_are_candidate_constraints",
-    "file": "Zetesis/CountHeads.lean",
-    "line": 171
-  },
-  {
-    "name": "Zetesis.CountHeads.check_exact",
-    "file": "Zetesis/CountHeads.lean",
-    "line": 45
-  },
-  {
-    "name": "Zetesis.CountHeads.distinct_atoms_of_distinct_keys",
-    "file": "Zetesis/CountHeads.lean",
-    "line": 58
-  },
-  {
-    "name": "Zetesis.CountHeads.group_equivalent",
-    "file": "Zetesis/CountHeads.lean",
-    "line": 134
-  },
-  {
-    "name": "Zetesis.CountHeads.identical_duplicates_are_compatible",
-    "file": "Zetesis/CountHeads.lean",
-    "line": 189
-  },
-  {
-    "name": "Zetesis.CountHeads.stable_in_context",
-    "file": "Zetesis/CountHeads.lean",
-    "line": 161
-  },
-  {
-    "name": "Zetesis.CountHeads.table_atoms_nodup",
-    "file": "Zetesis/CountHeads.lean",
-    "line": 73
-  },
-  {
-    "name": "Zetesis.CountHeads.table_covers_atoms",
-    "file": "Zetesis/CountHeads.lean",
-    "line": 78
   },
   {
     "name": "Zetesis.CoverageTree.exhausted_no_valid",
@@ -1273,46 +1188,6 @@
     "name": "Zetesis.FiniteBindings.tighten_membership",
     "file": "Zetesis/FiniteBindings.lean",
     "line": 52
-  },
-  {
-    "name": "Zetesis.FinitePools.duplicate_alternative",
-    "file": "Zetesis/FinitePools.lean",
-    "line": 45
-  },
-  {
-    "name": "Zetesis.FinitePools.empty_occurrence",
-    "file": "Zetesis/FinitePools.lean",
-    "line": 41
-  },
-  {
-    "name": "Zetesis.FinitePools.flattening_changes_original_truth",
-    "file": "Zetesis/FinitePools.lean",
-    "line": 81
-  },
-  {
-    "name": "Zetesis.FinitePools.frozen_in_context",
-    "file": "Zetesis/FinitePools.lean",
-    "line": 65
-  },
-  {
-    "name": "Zetesis.FinitePools.independent_equal_occurrences",
-    "file": "Zetesis/FinitePools.lean",
-    "line": 49
-  },
-  {
-    "name": "Zetesis.FinitePools.original_in_context",
-    "file": "Zetesis/FinitePools.lean",
-    "line": 58
-  },
-  {
-    "name": "Zetesis.FinitePools.product_complete",
-    "file": "Zetesis/FinitePools.lean",
-    "line": 32
-  },
-  {
-    "name": "Zetesis.FinitePools.stable_in_context",
-    "file": "Zetesis/FinitePools.lean",
-    "line": 73
   },
   {
     "name": "Zetesis.GroundGuards.chain_evaluation",
@@ -2585,76 +2460,6 @@
     "line": 235
   },
   {
-    "name": "Zetesis.TrueHeads.condition_frozen",
-    "file": "Zetesis/TrueHeads.lean",
-    "line": 48
-  },
-  {
-    "name": "Zetesis.TrueHeads.condition_original",
-    "file": "Zetesis/TrueHeads.lean",
-    "line": 39
-  },
-  {
-    "name": "Zetesis.TrueHeads.empty_range_erases_whole_family",
-    "file": "Zetesis/TrueHeads.lean",
-    "line": 190
-  },
-  {
-    "name": "Zetesis.TrueHeads.family_frozen",
-    "file": "Zetesis/TrueHeads.lean",
-    "line": 156
-  },
-  {
-    "name": "Zetesis.TrueHeads.family_original",
-    "file": "Zetesis/TrueHeads.lean",
-    "line": 144
-  },
-  {
-    "name": "Zetesis.TrueHeads.head_frozen",
-    "file": "Zetesis/TrueHeads.lean",
-    "line": 105
-  },
-  {
-    "name": "Zetesis.TrueHeads.head_original",
-    "file": "Zetesis/TrueHeads.lean",
-    "line": 93
-  },
-  {
-    "name": "Zetesis.TrueHeads.instances_complete",
-    "file": "Zetesis/TrueHeads.lean",
-    "line": 185
-  },
-  {
-    "name": "Zetesis.TrueHeads.literal_frozen",
-    "file": "Zetesis/TrueHeads.lean",
-    "line": 71
-  },
-  {
-    "name": "Zetesis.TrueHeads.literal_original",
-    "file": "Zetesis/TrueHeads.lean",
-    "line": 63
-  },
-  {
-    "name": "Zetesis.TrueHeads.rule_frozen",
-    "file": "Zetesis/TrueHeads.lean",
-    "line": 124
-  },
-  {
-    "name": "Zetesis.TrueHeads.rule_original",
-    "file": "Zetesis/TrueHeads.lean",
-    "line": 117
-  },
-  {
-    "name": "Zetesis.TrueHeads.stable_has_positive_producer",
-    "file": "Zetesis/TrueHeads.lean",
-    "line": 197
-  },
-  {
-    "name": "Zetesis.TrueHeads.stable_in_context",
-    "file": "Zetesis/TrueHeads.lean",
-    "line": 169
-  },
-  {
     "name": "Zetesis.UniversalConditionals.all_frozen",
     "file": "Zetesis/UniversalConditionals.lean",
     "line": 38
@@ -2723,96 +2528,6 @@
     "name": "Zetesis.UniversalConditionals.uniform_removal_on_domain",
     "file": "Zetesis/UniversalConditionals.lean",
     "line": 167
-  },
-  {
-    "name": "Zetesis.ValueExtrema.candidate_length",
-    "file": "Zetesis/ValueExtrema.lean",
-    "line": 74
-  },
-  {
-    "name": "Zetesis.ValueExtrema.choose_is_input",
-    "file": "Zetesis/ValueExtrema.lean",
-    "line": 35
-  },
-  {
-    "name": "Zetesis.ValueExtrema.coalesced_witness_frozen",
-    "file": "Zetesis/ValueExtrema.lean",
-    "line": 182
-  },
-  {
-    "name": "Zetesis.ValueExtrema.coalesced_witness_original",
-    "file": "Zetesis/ValueExtrema.lean",
-    "line": 163
-  },
-  {
-    "name": "Zetesis.ValueExtrema.completed_candidate_coverage",
-    "file": "Zetesis/ValueExtrema.lean",
-    "line": 63
-  },
-  {
-    "name": "Zetesis.ValueExtrema.empty_result",
-    "file": "Zetesis/ValueExtrema.lean",
-    "line": 71
-  },
-  {
-    "name": "Zetesis.ValueExtrema.empty_witness_frozen",
-    "file": "Zetesis/ValueExtrema.lean",
-    "line": 151
-  },
-  {
-    "name": "Zetesis.ValueExtrema.empty_witness_original",
-    "file": "Zetesis/ValueExtrema.lean",
-    "line": 145
-  },
-  {
-    "name": "Zetesis.ValueExtrema.extreme_none_iff",
-    "file": "Zetesis/ValueExtrema.lean",
-    "line": 40
-  },
-  {
-    "name": "Zetesis.ValueExtrema.extreme_some_mem",
-    "file": "Zetesis/ValueExtrema.lean",
-    "line": 48
-  },
-  {
-    "name": "Zetesis.ValueExtrema.frozen_requires_original",
-    "file": "Zetesis/ValueExtrema.lean",
-    "line": 226
-  },
-  {
-    "name": "Zetesis.ValueExtrema.guard_congruence",
-    "file": "Zetesis/ValueExtrema.lean",
-    "line": 251
-  },
-  {
-    "name": "Zetesis.ValueExtrema.guard_frozen",
-    "file": "Zetesis/ValueExtrema.lean",
-    "line": 237
-  },
-  {
-    "name": "Zetesis.ValueExtrema.guard_original",
-    "file": "Zetesis/ValueExtrema.lean",
-    "line": 221
-  },
-  {
-    "name": "Zetesis.ValueExtrema.selected_or_empty_predicate",
-    "file": "Zetesis/ValueExtrema.lean",
-    "line": 98
-  },
-  {
-    "name": "Zetesis.ValueExtrema.selected_predicate",
-    "file": "Zetesis/ValueExtrema.lean",
-    "line": 79
-  },
-  {
-    "name": "Zetesis.ValueExtrema.witness_frozen",
-    "file": "Zetesis/ValueExtrema.lean",
-    "line": 132
-  },
-  {
-    "name": "Zetesis.ValueExtrema.witness_original",
-    "file": "Zetesis/ValueExtrema.lean",
-    "line": 122
   },
   {
     "name": "Zetesis.accepted_sample_does_not_exhaust_region",

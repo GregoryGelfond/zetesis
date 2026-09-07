@@ -292,7 +292,7 @@ fn dynamic_false_comparison_and_function_head_conditions_remain_located_refusals
         ("1#sum{X:p(X):X=1..4}2.", ProfileFeature::Head),
         ("not a.", ProfileFeature::NegatedHead),
         ("{not a}.", ProfileFeature::NegatedHead),
-        ("p(1;2):#true;q:#true.", ProfileFeature::PooledArguments),
+        // Pooled true heads are now covered positively in finite_pools.rs.
         (
             "p:#true;q:#true.#minimize{1:q}.",
             ProfileFeature::ObjectiveDisjunctionDependency,
