@@ -35,6 +35,38 @@ jobs:
           df -h .
           du -sh target
 
+  proofs:
+    runs-on: ubuntu-latest
+    env:
+      LEAN_TOOLCHAIN: leanprover/lean4:v4.33.1
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: Install pinned Elan
+        # lean-action v1.5.0 installs from elan/master; use the fixed official
+        # release archive and its published SHA-256 instead.
+        run: |
+          elan_setup="$RUNNER_TEMP/elan-4.2.4"
+          mkdir -p "$elan_setup"
+          curl --fail --show-error --silent --location \
+            https://github.com/leanprover/elan/releases/download/v4.2.4/elan-x86_64-unknown-linux-gnu.tar.gz \
+            --output "$elan_setup/elan.tar.gz"
+          printf '%s  %s\n' \
+            42b94d4244e8353142c456ec0e4ca6528fd898a6c604d4059f494e706e431f63 \
+            "$elan_setup/elan.tar.gz" | sha256sum --check --strict
+          tar -xzf "$elan_setup/elan.tar.gz" -C "$elan_setup"
+          "$elan_setup/elan-init" -y --no-modify-path --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Install and verify the proof toolchain
+        working-directory: proofs
+        run: |
+          test "$(cat lean-toolchain)" = "$LEAN_TOOLCHAIN"
+          elan toolchain install "$LEAN_TOOLCHAIN"
+          lean --version
+          lake --version
+      - name: Build the proof library, audit axioms, and verify the proof record
+        # No .lake cache: the pinned kernel checks every proof on a fresh checkout.
+        run: ./scripts/check.sh proofs
+
   coverage:
     runs-on: ubuntu-latest
     steps:
