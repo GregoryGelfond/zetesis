@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import selectors
 import shutil
 import signal
@@ -197,6 +198,32 @@ def terminal_summary(report):
     return summary
 
 
+def capture_configuration(name, binary, execute, evidence):
+    """Retain successful version/help queries through the caller's bounded runner.
+
+    Native short help may advertise a separate full view. Query it only when
+    advertised, retaining the old help protocol for older binaries. At most
+    three queries use the same per-process and cumulative capture allowances.
+    A failed query is retained and propagated; it never falls back to an
+    incomplete defaults record or starts the measured pairs.
+    """
+    def query(option):
+        completed, _ = execute([binary, option])
+        evidence[f"{name} {option}"] = {"stdout": completed.stdout, "stderr": completed.stderr}
+        if completed.returncode != 0:
+            raise ValueError(f"{name} {option} failed")
+        return completed
+
+    query("--version")
+    help_result = query("--help")
+    option = "--help"
+    if name == "zetesis" and any("--help-all" in re.sub(r"\x1b\[[0-9;]*m", "", text).split()
+                                  for text in (help_result.stdout, help_result.stderr)):
+        option = "--help-all"
+        query(option)
+    return option
+
+
 def main():
     args = configuration()
     case, sources, total_bytes = source_catalog(args.manifest, args.corpus_root, args.case)
@@ -229,7 +256,7 @@ def main():
                      "memory": "separate fresh Python parent; child getrusage peak RSS, excluding wrapper; macOS bytes or Linux KiB converted to bytes",
                      "scope": "complete optimal or objective-free displayed model MULTISET, raw full tie count and complete objective vector; one CPU worker/thread",
                      "hidden_atoms": "not reconstructed from #show; original manifest contracts and raw full model counts checked",
-                     "native_limits": "binary defaults captured in native --help output; no limit override",
+                     "native_limits": "native default evidence has not completed; no limit override",
                      "original_contracts": "checked from byte-pinned manifest before and during measured phases"},
         "configuration_evidence": {},
     }
@@ -245,11 +272,9 @@ def main():
         return completed, seconds
     try:
         for name, binary in binaries.items():
-            for option in ("--version", "--help"):
-                result, _ = execute([binary, option])
-                if result.returncode != 0:
-                    raise ValueError(f"{name} {option} failed")
-                report["configuration_evidence"][f"{name} {option}"] = {"stdout": result.stdout, "stderr": result.stderr}
+            option = capture_configuration(name, binary, execute, report["configuration_evidence"])
+            if name == "zetesis":
+                report["protocol"]["native_limits"] = f"binary defaults captured in native {option} output; no limit override"
         def pair(phase, number):
             nonlocal expected
             names = ["zetesis", "clingo"] if number % 2 == 0 else ["clingo", "zetesis"]

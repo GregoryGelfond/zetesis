@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import Mock, call
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
@@ -134,6 +135,65 @@ class ContractTests(unittest.TestCase):
 
 
 class ProcessAndCatalogTests(unittest.TestCase):
+    def test_compact_help_selects_full_native_evidence(self):
+        execute = Mock(side_effect=[(result("version"), 0),
+                                    (result("  --help-all  Show all controls\n"), 0),
+                                    (result("--max-search-work 1048576\n"), 0)])
+        evidence = {}
+        selected = runner.capture_configuration("zetesis", "native", execute, evidence)
+        self.assertEqual(selected, "--help-all")
+        self.assertEqual(execute.call_args_list,
+                         [call(["native", "--version"]), call(["native", "--help"]),
+                          call(["native", "--help-all"])])
+        self.assertEqual(evidence["zetesis --help-all"],
+                         {"stdout": "--max-search-work 1048576\n", "stderr": ""})
+
+    def test_legacy_help_remains_the_native_evidence(self):
+        execute = Mock(side_effect=[(result("version"), 0),
+                                    (result("--max-search-work 1048576\n"), 0)])
+        evidence = {}
+        self.assertEqual(runner.capture_configuration("zetesis", "old-native", execute, evidence), "--help")
+        self.assertEqual(execute.call_args_list,
+                         [call(["old-native", "--version"]), call(["old-native", "--help"])])
+        self.assertEqual(set(evidence), {"zetesis --version", "zetesis --help"})
+
+    def test_styled_stderr_can_advertise_full_help(self):
+        advertised = subprocess.CompletedProcess([], 0, "", "\x1b[1m--help-all\x1b[0m  Full controls\n")
+        execute = Mock(side_effect=[(result("version"), 0), (advertised, 0),
+                                    (result("all defaults"), 0)])
+        evidence = {}
+        self.assertEqual(runner.capture_configuration("zetesis", "native", execute, evidence), "--help-all")
+        self.assertEqual(evidence["zetesis --help"]["stderr"], advertised.stderr)
+        self.assertIn("zetesis --help-all", evidence)
+
+    def test_failed_full_help_cannot_fall_back_to_short_help(self):
+        execute = Mock(side_effect=[(result("version"), 0),
+                                    (result("--help-all\n"), 0),
+                                    (result("failed full view", 2), 0)])
+        evidence = {}
+        with self.assertRaisesRegex(ValueError, "zetesis --help-all failed"):
+            runner.capture_configuration("zetesis", "native", execute, evidence)
+        self.assertEqual(execute.call_count, 3)
+        self.assertEqual(evidence["zetesis --help-all"]["stdout"], "failed full view")
+
+    def test_full_help_propagates_the_capture_bound_failure(self):
+        failure = runner.ProcessFailure("output byte limit", "prefix", "", -9)
+        execute = Mock(side_effect=[(result("version"), 0),
+                                    (result("--help-all\n"), 0), failure])
+        evidence = {}
+        with self.assertRaises(runner.ProcessFailure) as stopped:
+            runner.capture_configuration("zetesis", "native", execute, evidence)
+        self.assertIs(stopped.exception, failure)
+        self.assertEqual(execute.call_count, 3)
+        self.assertNotIn("zetesis --help-all", evidence)
+
+    def test_reference_help_keeps_its_existing_protocol(self):
+        execute = Mock(side_effect=[(result("version"), 0), (result("--help-all\n"), 0)])
+        evidence = {}
+        self.assertEqual(runner.capture_configuration("clingo", "reference", execute, evidence), "--help")
+        self.assertEqual(execute.call_count, 2)
+        self.assertNotIn("clingo --help-all", evidence)
+
     def test_terminal_summary_omits_payloads_without_changing_full_evidence(self):
         report = {"status": "incomplete", "summary": {"zetesis": {"median": 1}},
                   "answer": {"satisfiable": True, "cost": [-2, 0], "model_count": 2,
@@ -195,6 +255,8 @@ class ProcessAndCatalogTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr)
             document = json.loads(report.read_text())
             self.assertEqual(document["status"], "complete")
+            self.assertEqual(document["protocol"]["native_limits"],
+                             "binary defaults captured in native --help output; no limit override")
             self.assertEqual(document["sha256_before"], document["sha256_after"])
             self.assertEqual(len(document["runs"]), 10)
             self.assertEqual(document["answer"]["models"], [])

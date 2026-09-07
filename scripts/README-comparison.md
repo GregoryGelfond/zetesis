@@ -28,6 +28,12 @@ uses CPU, one worker, automatic oracle/materialization, and all displayed models
 clingo uses one thread and `--opt-mode=optN`. Limit defaults and versions are
 captured from each measured executable, and the complete commands and native
 phase/profile diagnostics are retained. Neither process receives input rewrites.
+For native binaries whose successful `--help` advertises `--help-all`, the runner
+also captures the full view and identifies it as the native-default evidence.
+Older binaries retain the `--help` protocol. Every query uses the same timeout,
+per-process byte ceiling and cumulative capture allowance; an advertised full
+help query must succeed before measured pairs begin. No failed full query falls
+back to the compact view.
 
 Every pair checks satisfiability, the complete objective vector and the
 **displayed-model multiset**, including empty or repeated displays. Duplicate
