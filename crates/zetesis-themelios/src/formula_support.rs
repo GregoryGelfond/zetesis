@@ -1,5 +1,7 @@
 //! A finite support upper bound and complete iterative relational joins.
 
+mod evaluation;
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use themelios_base::span::Location;
@@ -12,6 +14,8 @@ use crate::formula::ceiling;
 use crate::formula_ir::{Expression, HeadIr, LiteralIr, Operation, Prepared, value_bytes};
 use crate::grounding_observer::{Event, Work};
 use crate::{ExpansionFailure, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
+
+use evaluation::Evaluation;
 
 #[derive(Default)]
 pub(crate) struct Counters {
@@ -319,13 +323,15 @@ impl PositivePattern<'_> {
     }
 }
 
-/// The cursor owns only its current assignment and undo trails. Negative gates
-/// never restrict this upper relation; the emitted formulas still retain them.
+/// The cursor owns its current assignment, undo trails and bounded expression
+/// storage. Negative gates never restrict this upper relation; the emitted
+/// formulas still retain them.
 pub(crate) struct Join<'a> {
     bindings: Option<&'a crate::formula_assignment_plan::Plan>,
     literals: &'a [LiteralIr],
     generated: bool,
     comparisons: Comparisons,
+    evaluation: Evaluation,
     pending: Option<crate::formula_binding_cursor::Cursor<'a>>,
     patterns: Vec<PositivePattern<'a>>,
     support: &'a Support,
@@ -419,6 +425,7 @@ impl<'a> Join<'a> {
                 .any(|literal| crate::formula_binding_cursor::target(literal).is_some()),
             pending: None,
             comparisons: Comparisons::Deferred,
+            evaluation: Evaluation::default(),
             patterns,
             support,
             values,
@@ -655,6 +662,7 @@ impl<'a> Join<'a> {
         self.comparisons = partial_filters(
             self.literals,
             &self.values,
+            &mut self.evaluation,
             limits,
             budget,
             counters,
@@ -758,6 +766,7 @@ impl<'a> Join<'a> {
 fn partial_filters(
     literals: &[LiteralIr],
     assignment: &[Option<Value>],
+    evaluation: &mut Evaluation,
     limits: FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
@@ -772,12 +781,16 @@ fn partial_filters(
                 result = Comparisons::Deferred;
                 continue;
             }
-            let Some(left) = partial_value(left, assignment, limits, budget, counters, location)?
+            let Some(left) = partial_value(
+                left, assignment, evaluation, limits, budget, counters, location,
+            )?
             else {
                 result = Comparisons::Deferred;
                 continue;
             };
-            let Some(right) = partial_value(right, assignment, limits, budget, counters, location)?
+            let Some(right) = partial_value(
+                right, assignment, evaluation, limits, budget, counters, location,
+            )?
             else {
                 result = Comparisons::Deferred;
                 continue;
@@ -802,12 +815,13 @@ fn comparison(literal: &LiteralIr) -> Option<(&Expression, Relation, &Expression
 fn partial_value(
     expression: &Expression,
     assignment: &[Option<Value>],
+    evaluation: &mut Evaluation,
     limits: FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
     location: Location,
 ) -> Result<Option<Value>, FormulaFailure> {
-    match expression_from(
+    match evaluation.expression(
         expression,
         |variable| assignment[variable].as_ref().expect("ready expression"),
         limits,
@@ -895,7 +909,7 @@ pub(crate) fn expression(
     counters: &mut Counters,
     location: Location,
 ) -> Result<Value, FormulaFailure> {
-    expression_from(
+    Evaluation::default().expression(
         expression,
         |variable| &assignment[variable],
         limits,
@@ -905,51 +919,6 @@ pub(crate) fn expression(
     )
 }
 
-fn expression_from<'a>(
-    expression: &Expression,
-    variable: impl Fn(usize) -> &'a Value,
-    limits: FormulaLimits,
-    budget: &mut Budget,
-    counters: &mut Counters,
-    location: Location,
-) -> Result<Value, FormulaFailure> {
-    counters.record(Event::ExpressionEvaluation);
-    let mut values: Vec<Value> = Vec::new();
-    for node in &expression.nodes {
-        counters.work(limits, location)?;
-        counters.record(Event::ExpressionNode);
-        let value = match *node {
-            Operation::Constructor(ref constructor) => {
-                constructor.evaluate(&values, limits, budget, counters, location)?
-            }
-            Operation::Constant(ref value) => copy(value, budget, location)?,
-            Operation::Variable(index) => copy(variable(index), budget, location)?,
-            Operation::Unary(operator, argument) => scalar_value(
-                crate::scalar_arithmetic::unary(operator, numeric(&values[argument], location)?),
-                location,
-            )?,
-            Operation::Binary(operator, left, right) => scalar_value(
-                crate::scalar_arithmetic::binary(
-                    operator,
-                    numeric(&values[left], location)?,
-                    numeric(&values[right], location)?,
-                ),
-                location,
-            )?,
-            Operation::Absolute(argument) => scalar_value(
-                crate::scalar_arithmetic::absolute(numeric(&values[argument], location)?),
-                location,
-            )?,
-        };
-        if let Value::Structured(structure) = &value {
-            for _ in 0..structure.payload_bytes() {
-                counters.work(limits, location)?;
-            }
-        }
-        values.push(value);
-    }
-    Ok(values.pop().expect("expression has root"))
-}
 pub(super) fn copy(
     value: &Value,
     budget: &mut Budget,
