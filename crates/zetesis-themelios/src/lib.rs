@@ -48,6 +48,8 @@ mod formula_factor;
 mod formula_guard;
 mod formula_conditional;
 mod formula_conditional_ir;
+mod formula_consequent_ir;
+mod formula_conditional_projection;
 mod formula_conditional_head_ir;
 mod formula_count_head;
 mod formula_support;
@@ -92,8 +94,8 @@ pub use diagnostic::{AdmissionFailure, InputLimit, ProfileFeature};
 pub use expansion::{ExpansionFailure, ExpansionLimits, ExpansionResource};
 pub use extended::admit_extended;
 pub use formula::{
-    AdmittedFormula, AdmittedFormulaBundle, FormulaBundleFailure, FormulaFailure, FormulaLimits,
-    FormulaResource, PreparedFormula, PreparedFormulaBundle, admit_bundle_formula,
+    AdmittedFormula, AdmittedFormulaBundle, AnalysisBasis, FormulaBundleFailure, FormulaFailure,
+    FormulaLimits, FormulaResource, PreparedFormula, PreparedFormulaBundle, admit_bundle_formula,
     admit_bundle_formula_with_grounding_observer, admit_formula,
     admit_formula_with_grounding_observer, prepare_bundle_formula, prepare_formula,
 };

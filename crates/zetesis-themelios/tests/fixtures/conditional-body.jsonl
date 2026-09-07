@@ -74,12 +74,12 @@
 {"name":"constraint_missing_consequent","source":"d(1).:-p(X):d(X).","source_sha256":"2769fc1cc91ede341faf5ec6c810e2078f6d5eb272758df0f6102f451e8dad36","valid":true,"native":"admit","models":[["d(1)"]]}
 {"name":"mixed_original_implication","source":"d(1).{a;b}.a:-b:p(X),d(X).p(1):-a.","source_sha256":"38fc9925e47cedd21f014330a57bc71ff7f4cfcbf525ada866e6faf9918a564c","valid":true,"native":"admit","models":[["a","b","d(1)","p(1)"],["a","d(1)","p(1)"]]}
 {"name":"outer_head_unsafe","source":"z(X):-p(X):d(X).","source_sha256":"fdc0158cad3f4027531385da5c62e9e8be49ce2d29b39156859c4bd86901097f","valid":false,"native":"UnsafeVariable","models":[]}
-{"name":"consequent_only_unbound","source":"z:-p(X):a.","source_sha256":"7e83f15e450863ab18938f9fe38aa4b5311fc5c8904c25a1da03a7011c2e6f58","valid":true,"native":"UnsafeVariable","models":[["z"]]}
+{"name":"consequent_only_unbound","source":"z:-p(X):a.","source_sha256":"7e83f15e450863ab18938f9fe38aa4b5311fc5c8904c25a1da03a7011c2e6f58","valid":true,"native":"admit","models":[["z"]]}
 {"name":"negative_local_unsafe","source":"z:-p(X):not d(X).","source_sha256":"2372b4b6fe55efb6edd64ad79086f9d7aae4b70116a5ef47b3ce8d6158aed419","valid":false,"native":"UnsafeVariable","models":[]}
 {"name":"double_local_unsafe","source":"z:-p(X):not not d(X).","source_sha256":"ba6bc01fd6af381eadab725260d435ee83f63d437ca842c1a66338ef8e9abecb","valid":false,"native":"UnsafeVariable","models":[]}
 {"name":"consequent_cannot_bind","source":"z:-p(X):X!=0.","source_sha256":"9dda04e21b9a0507a00539b4b6be4e62968032b9dd7f3476d6d76128ab4ea9a7","valid":false,"native":"UnsafeVariable","models":[]}
-{"name":"consequent_only_cross_conditional","source":"z:-p(X):a;r(X):d(X).","source_sha256":"0a13891d57b386373e1a912423805beed3f5e5d7e233aa6edd0cd27a48c145ee","valid":true,"native":"UnsafeVariable","models":[["z"]]}
-{"name":"positive_anonymous_consequent","source":"d(1).z:-p(_):d(X).","source_sha256":"b8a17d93963d96566000a8f6e1c657ee71faf2f1a6065cfff8f44cb46f2b59a4","valid":true,"native":"UnsafeVariable","models":[["d(1)"]]}
+{"name":"consequent_only_cross_conditional","source":"z:-p(X):a;r(X):d(X).","source_sha256":"0a13891d57b386373e1a912423805beed3f5e5d7e233aa6edd0cd27a48c145ee","valid":true,"native":"admit","models":[["z"]]}
+{"name":"positive_anonymous_consequent","source":"d(1).z:-p(_):d(X).","source_sha256":"b8a17d93963d96566000a8f6e1c657ee71faf2f1a6065cfff8f44cb46f2b59a4","valid":true,"native":"admit","models":[["d(1)"]]}
 {"name":"negative_anonymous_consequent","source":"d(1).z:-not p(_):d(X).","source_sha256":"3ddb2ab334c9ca209a79a85ee14fe215f3bf1663bc393758dd7ba8ca06da6f82","valid":true,"native":"UnsafeVariable","models":[["d(1)","z"]]}
 {"name":"generative_double_condition","source":"z:-p(X):not not X=1.","source_sha256":"5e243c4e6e6c514bfe31d45a8b1f0485c03661197b61b9343010b174ec35a159","valid":true,"native":"admit","models":[[]]}
 {"name":"undefined_consequent","source":"d(0).z:-1/X=1:d(X).","source_sha256":"fe3287e6c5a68214e7733be1a5144dbb56d338e7923eafb05c93513d3a059745","valid":true,"native":"Evaluation","models":[["d(0)"]]}

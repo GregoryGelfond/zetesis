@@ -27,6 +27,7 @@ use crate::{
 
 pub(crate) struct Prepared {
     pub analysis: themelios_analysis::Analysis,
+    pub analysis_basis: crate::AnalysisBasis,
     pub analyzed: SourceProgram,
     pub rules: Vec<RuleIr>,
     pub objectives: Vec<ObjectiveIr>,
@@ -156,6 +157,7 @@ pub(crate) fn prepare(
         budget,
         domain: BTreeSet::new(),
         next_aggregate: 0,
+        dependency_projection: false,
         location: fallback,
     };
     for carrier in source.statements() {
@@ -229,8 +231,14 @@ pub(crate) fn prepare(
         )?;
     }
     validate_objectives(&objectives, limits, fallback)?;
+    let analysis_basis = if compiler.dependency_projection {
+        crate::AnalysisBasis::DependencyProjection
+    } else {
+        crate::AnalysisBasis::NormalizedProgram
+    };
     Ok(Prepared {
         analysis,
+        analysis_basis,
         analyzed,
         rules,
         objectives,
@@ -290,13 +298,21 @@ impl Rewrite for Normalizer<'_> {
                 for subterm in term.subterms() {
                     self.budget
                         .charge(ExpansionResource::TermWork, 1, self.location)?;
-                    variable |= matches!(subterm, Term::Variable(_));
+                    variable |= matches!(
+                        subterm,
+                        Term::Variable(_) | Term::Interval { .. } | Term::Pool(_)
+                    );
                 }
                 if variable {
                     return Ok(term);
                 }
             }
-            if matches!(term, Term::Tuple(_) | Term::Function { .. }) && !term.is_ground() {
+            if matches!(term, Term::Tuple(_) | Term::Function { .. })
+                && (!term.is_ground()
+                    || term
+                        .subterms()
+                        .any(|node| matches!(node, Term::Interval { .. } | Term::Pool(_))))
+            {
                 return Ok(term);
             }
             extended::normalize_node(term, self.constants, self.budget, self.location)
@@ -349,6 +365,7 @@ pub(super) struct Compiler<'a> {
     pub(super) budget: &'a mut Budget,
     domain: BTreeSet<Value>,
     pub(super) next_aggregate: usize,
+    pub(super) dependency_projection: bool,
     pub(super) location: Location,
 }
 impl Compiler<'_> {
@@ -524,7 +541,7 @@ impl Compiler<'_> {
                     self.literal_into(literal, &mut variables, &mut body)?;
                 }
                 BodyElement::Conditional(conditional) => {
-                    self.conditional_globals(conditional, &mut variables)?;
+                    self.conditional_syntax(conditional)?;
                 }
                 BodyElement::Aggregate { .. } => {}
                 _ => return Err(unsupported(ProfileFeature::BodyElement, self.location).into()),

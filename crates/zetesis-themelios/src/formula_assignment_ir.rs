@@ -204,8 +204,15 @@ impl Compiler<'_> {
             }
             LiteralIr::Conditional(conditional) => {
                 let consequent_uses = match &conditional.consequent {
-                    crate::formula_conditional_ir::Consequent::Atom(_, atom) => {
-                        self.pattern_uses(atom, variable)?
+                    crate::formula_conditional_ir::Consequent::Atoms(_, alternatives) => {
+                        let mut uses = false;
+                        for alternative in alternatives {
+                            uses |= self.pattern_uses(&alternative.atom, variable)?;
+                            for literal in &alternative.bindings {
+                                uses |= self.literal_uses(literal, variable)?;
+                            }
+                        }
+                        uses
                     }
                     crate::formula_conditional_ir::Consequent::Guard(guard) => {
                         let mut uses = false;

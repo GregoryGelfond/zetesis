@@ -26,8 +26,10 @@ pub struct ExpansionLimits {
     /// plus finite-pool cursor positions, copied term cells/text, constructor-plan
     /// storage and constructed value node/spelling/frame reservations. Positive
     /// tuple patterns also charge plan/cursor cells, slot names, deltas and
-    /// conservative extracted-value construction payload before allocation. Other
-    /// AST carriers, provenance and allocator overhead are excluded; original
+    /// conservative extracted-value construction payload before allocation.
+    /// Conditional alternatives additionally charge scoped variable payload,
+    /// binding vectors and source atom/body-element carriers. Other
+    /// AST carriers (except conditional alternative plans), provenance and allocator overhead are excluded; original
     /// source storage remains bounded by admission options.
     pub max_scalar_bytes: usize,
     /// Maximum original rule-location copies in the emitted template evidence.

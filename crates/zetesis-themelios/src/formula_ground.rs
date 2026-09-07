@@ -103,6 +103,7 @@ pub(crate) fn ground(
         .map_err(|error| FormulaFailure::Theory { error, location })
     })?;
     Ok(Compiled {
+        analysis_basis: prepared.analysis_basis,
         analysis: prepared.analysis,
         analyzed: prepared.analyzed,
         theory,

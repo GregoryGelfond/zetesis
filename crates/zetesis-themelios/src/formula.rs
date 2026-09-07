@@ -276,15 +276,25 @@ pub struct AdmittedFormula {
     metadata: SourceMetadata,
 }
 impl AdmittedFormula {
-    /// Established upstream structural facts; Unknown never removes runtime ceilings.
+    /// Structural facts about [`Self::analyzed_program`]. Consult
+    /// [`Self::analysis_basis`]: a dependency projection does not certify source
+    /// safety or class membership. Unknown never removes runtime ceilings.
     #[must_use]
     pub fn source_analysis(&self) -> &themelios_analysis::Analysis {
         &self.compiled.analysis
     }
-    /// Bounded, normalized, pool-free owned program retaining original parsed provenance.
+    /// Bounded, pool-free analysis input retaining parsed origins. Consult
+    /// [`Self::analysis_basis`] before interpreting its structural verdicts.
     #[must_use]
     pub fn analyzed_program(&self) -> &SourceProgram {
         &self.compiled.analyzed
+    }
+
+    /// Meaning of the retained analysis input. Dependency projections do not
+    /// certify the original source's safety, class, or execution eligibility.
+    #[must_use]
+    pub fn analysis_basis(&self) -> AnalysisBasis {
+        self.compiled.analysis_basis
     }
 
     /// The admitted general formula theory.
@@ -338,15 +348,25 @@ pub struct AdmittedFormulaBundle {
     metadata: SourceMetadata,
 }
 impl AdmittedFormulaBundle {
-    /// Established upstream structural facts; Unknown never removes runtime ceilings.
+    /// Structural facts about [`Self::analyzed_program`]. Consult
+    /// [`Self::analysis_basis`]: a dependency projection does not certify source
+    /// safety or class membership. Unknown never removes runtime ceilings.
     #[must_use]
     pub fn source_analysis(&self) -> &themelios_analysis::Analysis {
         &self.compiled.analysis
     }
-    /// Bounded, normalized, pool-free owned program retaining original parsed provenance.
+    /// Bounded, pool-free analysis input retaining parsed origins. Consult
+    /// [`Self::analysis_basis`] before interpreting its structural verdicts.
     #[must_use]
     pub fn analyzed_program(&self) -> &SourceProgram {
         &self.compiled.analyzed
+    }
+
+    /// Meaning of the retained analysis input. Dependency projections do not
+    /// certify the original source's safety, class, or execution eligibility.
+    #[must_use]
+    pub fn analysis_basis(&self) -> AnalysisBasis {
+        self.compiled.analysis_basis
     }
 
     /// The admitted general formula theory.
@@ -425,8 +445,19 @@ impl std::error::Error for FormulaBundleFailure {
     }
 }
 
+/// What the retained upstream analysis describes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AnalysisBasis {
+    /// A bounded, pool-free normalization of the admitted source program.
+    NormalizedProgram,
+    /// A pool-free signature/polarity projection. Safety and class verdicts
+    /// describe this projection; they are not conclusions about source semantics.
+    DependencyProjection,
+}
+
 #[derive(Debug)]
 pub(crate) struct Compiled {
+    pub analysis_basis: AnalysisBasis,
     pub analysis: themelios_analysis::Analysis,
     pub analyzed: SourceProgram,
     pub theory: Theory,

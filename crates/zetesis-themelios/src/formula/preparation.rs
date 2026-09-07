@@ -77,16 +77,25 @@ impl PreparedFormula {
 
     /// Structural facts about exactly [`Self::analyzed_program`]. Unknown verdicts
     /// establish neither nonmembership in a class nor a grounder requirement.
+    /// Consult [`Self::analysis_basis`] before interpreting these as source facts.
     #[must_use]
     pub fn source_analysis(&self) -> &themelios_analysis::Analysis {
         &self.preparation.program.analysis
     }
 
-    /// Bounded normalized, pool-free logical projection retaining parsed origins.
+    /// Bounded, pool-free analysis input retaining parsed origins. Its semantic
+    /// status is identified by [`Self::analysis_basis`].
     /// Metadata and subsequently generated support/coherence formulas are separate.
     #[must_use]
     pub fn analyzed_program(&self) -> &Program {
         &self.preparation.program.analyzed
+    }
+
+    /// Meaning of the retained analysis input. A dependency projection is not
+    /// a semantic normalization or a source safety/eligibility certificate.
+    #[must_use]
+    pub fn analysis_basis(&self) -> super::AnalysisBasis {
+        self.preparation.program.analysis_basis
     }
 
     /// Original bytes and source identity.
@@ -162,15 +171,24 @@ impl PreparedFormulaBundle {
 
     /// Structural facts about exactly [`Self::analyzed_program`], not a guarantee
     /// that grounding succeeds or that lazy formula execution is implemented.
+    /// Consult [`Self::analysis_basis`] before interpreting these as source facts.
     #[must_use]
     pub fn source_analysis(&self) -> &themelios_analysis::Analysis {
         &self.preparation.program.analysis
     }
 
-    /// Bounded normalized, pool-free combined program retaining parsed origins.
+    /// Bounded, pool-free combined analysis input retaining parsed origins;
+    /// consult [`Self::analysis_basis`] before interpreting its verdicts.
     #[must_use]
     pub fn analyzed_program(&self) -> &Program {
         &self.preparation.program.analyzed
+    }
+
+    /// Meaning of the retained analysis input. A dependency projection is not
+    /// a semantic normalization or a source safety/eligibility certificate.
+    #[must_use]
+    pub fn analysis_basis(&self) -> super::AnalysisBasis {
+        self.preparation.program.analysis_basis
     }
 
     /// Original source bytes, identities, paths and include occurrences.

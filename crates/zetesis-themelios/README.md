@@ -16,16 +16,20 @@ The CLI chooses an admitted source route automatically. The library APIs remain 
 
 `prepare_formula` and `prepare_bundle_formula` return owned preparation receipts
 before possible-support completion and formula materialization. Callers can read
-the original source catalog, metadata, normalized logical program and pinned
+the original source catalog, metadata, bounded logical analysis input and pinned
 themelios analysis, then consume the receipt with `ground()` or
 `ground_with_observer(...)`. These resume the original budgets. Existing
 `admit_formula` functions compose the same two operations.
 
 Preparation is a checked compiler boundary; later grounding can still refuse
-undefined arithmetic or exhausted resources. Its analysis describes the bounded
-normalized projection, and does not assert that a lazy implementation exists for
-that source. The [grounding-selection contract](../../docs/design/grounding-selection.md)
-separates class facts, implementation availability and strategy preference.
+undefined arithmetic or exhausted resources. `analysis_basis()` identifies a
+`NormalizedProgram` or a `DependencyProjection`. The latter retains every
+conditional alternative's predicate, strong sign, arity and default-negation
+mode in pool-free syntax, but changes its logical connective for analysis.
+Safety and class verdicts describe that projection, not original source
+semantics. Neither basis establishes that a lazy implementation exists. The
+[grounding-selection contract](../../docs/design/grounding-selection.md) separates
+class facts, implementation availability and strategy preference.
 
 ## Structural values and finite construction
 
@@ -171,13 +175,44 @@ Boolean heads, objective conditions and `#show` term conditions retain their sep
 
 ## Universal body conditionals
 
-Formula admission accepts finite body conditionals such as `d(1..2). {p(X)}:-d(X). all:-p(X):d(X).`. The last rule requires every eligible `p(X)` before deriving `all`; if `d` has no possible rows, the universal is true. Each complete local row retains its original implication `condition → consequent`, and the rule body conjoins those implications. Replacing them with classically equivalent disjunctions can change the reduct: `p:-p:p.` has the answer set `{p}`.
+Formula admission accepts finite body conditionals such as
+`d(1..2). {p(X)}:-d(X). all:-p(X):d(X).`. Each complete condition assignment
+retains the original implication from its condition to the disjunction of its
+consequent alternatives. The completed condition rows are conjoined. Thus
+`p(X):X=1..2` requires both atoms, while `p(X):#true` uses positive `p` rows as
+local witnesses and requires at least one. Separate conditionals have separate
+local scopes; consequent witnesses neither bind outer names nor generate support.
+Condition safety must be established before any consequent witness is admitted.
 
-Conditions reuse ordinary/scalar/interval joins and admitted finite comparison generators, signed and default-negated scalar atoms, anonymous condition projections, and ground Boolean/comparison guards. Consequents support signed scalar atoms with named variables and the same nonbinding ground guards. Outer bindings are fixed before each separately scoped local join. This slice reserves consequent-only names in the outer environment and requires an independent admitted binding; clingo also accepts forms such as `z:-p(X):a.` using broader grounding information. Those remain explicit native profile refusals, alongside anonymous consequents and generative consequent expressions, rather than being mislabeled unsafe clingo programs.
+Root argument pools and pooled argument lists select finite alternatives inside
+one condition row. Nested arithmetic intervals use private range slots and the
+same flat expression evaluator as ordinary bindings. `p(X-1;2*(X..X+1)-3):X=2`
+therefore means `p(1) or p(3)`. Each alternative retains its default negation
+before the disjunction: `not p(1..2):#true` means `not p(1) or not p(2)`.
+An empty alternative range is false even under default negation; a successfully
+exhausted empty condition domain is true. Partial enumeration never certifies
+vacuity. Undefined arithmetic and resource exhaustion remain located refusals.
 
-Possible-support construction conservatively ignores universal truth. Final lowering joins conditions against completed support, retains negative eligibility in each implication, and never uses a candidate model to select a shared registry of source instances. Work, substitution, variable, DAG, atom and provenance ceilings apply throughout; an incomplete local join cannot certify vacuity. Existing existential component factorization declines the new literal. Aggregate-target dependencies are checked through both consequent and condition. A conditional producer that can feed an objective receives `ObjectiveConditionalDependency`; unrelated conditionals and conditional constraints remain admissible beside objectives.
+Positive consequent-only whole variables and anonymous arguments obtain finite
+witnesses from completed possible-support rows. Evaluated negative arguments
+consume independently bound inputs. Arithmetic inversion, structured
+consequent-only witness patterns and nested pools remain explicit profile
+boundaries. Original condition formulas are retained; possible support does not
+substitute for their truth. Pooled analysis syntax uses the explicit
+`DependencyProjection` basis described above, without changing runtime reduct
+or certificate premises.
 
-The [dated conditional campaign](../../docs/verification/body-conditionals-20260906/README.md) preserves its original 75-admission result. The current unchanged 91-source fixture additionally admits `z:-p(X):not not X=1.` through the finite comparison plan, giving 76 admissions with 220 full-model records, 11 clingo-valid native refusals and four sources clingo rejects as unsafe. Portable tests independently enumerate stable models and check every original/frozen interpretation pair for nine signed finite universal forms; source origins, exact resource ceilings and the recursive implication distinction have separate regressions. The [Lean module](../../proofs/Zetesis/UniversalConditionals.lean) states finite-domain original/reduct laws with explicit instance-coverage premises; it does not prove this compiler or its source-safety analysis.
+Aggregate-assignment dependency checks still inspect both the condition and
+consequent, including generated value instructions. A conditional producer that
+reaches a lifted objective remains an `ObjectiveConditionalDependency` refusal.
+
+The scoped [ConsequentAlternatives](../../proofs/Zetesis/ConsequentAlternatives.lean)
+and historical [UniversalConditionals](../../proofs/Zetesis/UniversalConditionals.lean)
+laws establish supplied finite formula collections' original and frozen
+semantics. They do not prove source join completeness, compiler correspondence
+or machine resource accounting. The [current evidence](../../docs/verification/conditional-scope-20260907/README.md)
+and [earlier conditional record](../../docs/verification/stocktake-20260906-conditionals-objectives.md)
+retain the executable checks and their scope.
 
 ## Finite aggregate comparisons
 

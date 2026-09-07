@@ -43,7 +43,7 @@ impl Compiler<'_> {
                     unreachable!("pool expansion retains a rule")
                 };
                 rules.push(self.rule(rule, origins.to_vec())?);
-                analyzed.push(statement);
+                analyzed.push(self.conditional_projection(&statement, projection_nodes)?);
             }
         } else {
             self.budget
@@ -57,7 +57,7 @@ impl Compiler<'_> {
                 return Err(unsupported(ProfileFeature::Statement, self.location).into());
             };
             rules.push(self.rule(rule, origins.to_vec())?);
-            analyzed.push(statement.clone());
+            analyzed.push(self.conditional_projection(statement, projection_nodes)?);
         }
         Ok(())
     }
@@ -228,6 +228,11 @@ fn shape(rule: &themelios_program::program::Rule, capacity: usize) -> Shape {
         _ => {}
     }
     for element in rule.body().get().elements() {
+        if let BodyElement::Conditional(conditional) = element.get() {
+            let mut scan = Footprint::default();
+            scan.visit_literal(&conditional.literal);
+            admitted += scan.pools;
+        }
         if let BodyElement::Literal(literal) = element.get()
             && literal.negation == DefaultNegation::None
             && let LiteralInner::Comparison(comparison) = &literal.inner
@@ -275,7 +280,7 @@ fn term_width(term: &Term) -> usize {
     }
 }
 
-fn atom_width(atom: &Atom) -> (u128, usize) {
+pub(super) fn atom_width(atom: &Atom) -> (u128, usize) {
     let mut pools = usize::from(matches!(atom.arguments, Arguments::Pooled(_)));
     let count = atom.alternatives().fold(0_u128, |sum, arguments| {
         let product = arguments.iter().fold(1_u128, |product, term| {
@@ -287,7 +292,7 @@ fn atom_width(atom: &Atom) -> (u128, usize) {
     (count, pools)
 }
 
-fn select_atom(mut atom: Atom, mut position: usize) -> Atom {
+pub(super) fn select_atom(mut atom: Atom, mut position: usize) -> Atom {
     let arguments = atom
         .alternatives()
         .find_map(|arguments| {
@@ -361,7 +366,14 @@ impl Rewrite for Expand<'_, '_> {
         self.selector.tag()
     }
     fn rewrite_body(&mut self, body: Body) -> Body {
-        self.selector.rewrite_body(body)
+        // The conditional compiler owns inner-OR alternatives. Outer pool
+        // positions never select or duplicate a universal consequent.
+        Body::new(body.elements().map(|element| match element.get() {
+            BodyElement::Literal(literal) => {
+                BodyElement::Literal(self.selector.rewrite_literal(literal.clone()))
+            }
+            other => other.clone(),
+        }))
     }
     fn rewrite_head(&mut self, head: Head) -> Head {
         let Head::Choice(choice) = head else {

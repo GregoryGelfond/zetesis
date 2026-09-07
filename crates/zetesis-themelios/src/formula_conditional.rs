@@ -33,15 +33,32 @@ impl Builder<'_> {
             self.work(location)?;
             let condition = self.body(&conditional.condition, &binding, location, support)?;
             let consequent = match &conditional.consequent {
-                Consequent::Atom(negation, atom) => {
-                    let mut value = self.atom(atom, &binding, location)?;
-                    if *negation != DefaultNegation::None {
-                        value = self.neg(value, location)?;
+                Consequent::Atoms(negation, alternatives) => {
+                    let mut disjunction = 0;
+                    for alternative in alternatives {
+                        let mut rows = Join::new(
+                            &alternative.bindings,
+                            &binding,
+                            alternative.variables,
+                            support,
+                            self.budget,
+                            location,
+                        )?;
+                        while let Some(row) =
+                            rows.next(self.limits, self.budget, &mut self.counters, location)?
+                        {
+                            self.work(location)?;
+                            let mut value = self.atom(&alternative.atom, &row, location)?;
+                            if *negation != DefaultNegation::None {
+                                value = self.neg(value, location)?;
+                            }
+                            if *negation == DefaultNegation::NotNot {
+                                value = self.neg(value, location)?;
+                            }
+                            disjunction = self.or(disjunction, value, location)?;
+                        }
                     }
-                    if *negation == DefaultNegation::NotNot {
-                        value = self.neg(value, location)?;
-                    }
-                    value
+                    disjunction
                 }
                 Consequent::Guard(guard) => usize::from(guard.evaluate(
                     &binding,
