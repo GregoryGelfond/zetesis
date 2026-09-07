@@ -30,11 +30,12 @@ pub struct ExpansionLimits {
     /// names, deltas and conservative extracted-value construction payload
     /// before allocation.
     /// Evaluated positive positions reserve copied term cells/text, flat
-    /// operations, check instructions and independently required input slots.
+    /// operations, check instructions and initial distinct required-input slots.
     /// Conditional alternatives additionally charge scoped variable payload,
-    /// binding vectors and source atom/body-element carriers. Other
-    /// AST carriers (except conditional alternative plans), provenance and allocator overhead are excluded; original
-    /// source storage remains bounded by admission options.
+    /// including required-input copies, binding vectors and source atom/body-element
+    /// carriers. Ordinary aggregate, choice and conditional scope clones remain
+    /// excluded, as do other AST carriers, provenance and allocator overhead.
+    /// Original source storage remains bounded by admission options.
     pub max_scalar_bytes: usize,
     /// Maximum original rule-location copies in the emitted template evidence.
     pub max_origin_locations: usize,
