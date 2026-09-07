@@ -3,7 +3,9 @@
 This document maps the broader [design](design/zetesis.md) to the current code.
 The design describes the experiment's target architecture; this file identifies
 the implemented subset and its remaining qualification work. Full clingo language
-and solving semantics, excluding theory terms and Python/Lua scripting, is the target. The
+and solving semantics, excluding theory atoms/terms, Python/Lua scripting,
+`#heuristic` and `#edge`, is the target. Both excluded directives receive explicit
+refusals; they are not unfinished language obligations. The
 original non-clingcon kr-domains cases are a required initial corpus, specified
 in the [corpus contract](verification/kr-domains-compatibility.md). The
 [Ferraris/clingo extension](design/ferraris.md) supplies the semantic basis for the

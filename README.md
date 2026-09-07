@@ -155,7 +155,9 @@ future work. See [execution boundaries](docs/implementation.md) and the
 ## Status
 
 The language target is clingo source and answer-set compatibility **excluding
-theory terms and Python/Lua scripting**. Passing a selected corpus is not a
+theory atoms/terms, Python/Lua scripting, `#heuristic` and `#edge`**. The two
+directives are deliberate project exclusions and receive explicit refusals.
+Passing a selected corpus is not a
 percentage of language compatibility. The source boundary uses the unchanged
 themelios parser and owned program model; admission failures distinguish upstream
 syntax, raising and evaluation errors from zetesis implementation refusals.

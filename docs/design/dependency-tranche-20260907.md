@@ -107,6 +107,31 @@ The following criteria guide technical priorities:
 | GPU hot paths | Useful improvements to batching, residency, transfer or device computation, including the required true lazy-Metal route. |
 | Code and documentation clarity | Inspectable semantic contracts, reusable library boundaries, decomposed control flow and accurate collaborator-facing documentation. |
 
+The next language priorities include general function head aggregates and broader
+choice bounds, alongside the ready aggregate-argument consumer slice. Head
+aggregate work must extend the current restricted count-head profile with exact
+tuple identity, eligibility and head-support semantics; other aggregate functions
+must not be treated as simple atom cardinalities.
+
+Choice bounds are also an optimization candidate because sound propagation can
+exclude candidate extensions before complete model construction. Measure the
+bounds already exploited by the current lowering/search path before attributing
+new benefits: admitted integer bounds already become guarded count constraints
+and threshold formulas used in candidate propagation. Independent aggregate
+assignments supplying integer choice bounds are one possible bounded language
+extension. Any stronger propagation must preserve conditional eligibility,
+partial-assignment completion coverage, complete model sets and optimal ties.
+Bounds can rule out candidates; they do not provide support for selected atoms
+or replace the original-program and frozen-reduct acceptance checks. Record
+candidate/work reductions and whole-solve CPU/GPU costs separately from language
+admission gains. These are priorities and proof obligations, not new implemented
+capabilities or measured speedups.
+
+`#heuristic` and `#edge` are deliberate project exclusions. Earlier optional or
+deferred implementation proposals are superseded; inputs using either directive
+remain explicitly refused. See the current
+[directive scope](../verification/directive-admission.md).
+
 Shared source and ground representations need coherent contracts before dependent
 consumers can use them. Every slice includes relevant proof obligations, resource handling,
 semantic tests and qualification. None may substitute a different acceptance
