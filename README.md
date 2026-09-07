@@ -239,7 +239,7 @@ refusals. Undefined or overflowing arithmetic is currently refused rather than
 implementing clingo's full behavior. A search budget stop produces an explicitly
 incomplete result. These boundaries apply regardless of hardware selection.
 
-The [latest ordinary CPU comparison](docs/verification/first-six-checkpoint-20260907/ordinary-comparison.md)
+The [first-six ordinary CPU comparison](docs/verification/first-six-checkpoint-20260907/ordinary-comparison.md)
 retains 728 complete samples on 13 original inputs. Against the installed baseline,
 checked support certificates reduce the six n-queens median times by about 4–42%.
 SEND + MORE = MONEY stays near 73 ms versus clingo's 13 ms; admission accounts
@@ -247,6 +247,12 @@ for about 76% of its instrumented driver time. Four completion workers do not
 provide a consistent benefit on this set. All model/display/count/optimum
 contracts agree, and separate RSS samples are retained. These observations
 establish neither a general solver advantage nor a GPU speedup.
+
+The subsequent [library views and telemetry comparison](docs/verification/estate-boundaries-20260907/ordinary-comparison.md)
+retains two complete 728-sample campaigns against that first-six release. All
+answer contracts still agree; the small timing differences establish no new
+speedup. The new separate SEND diagnostic places about 49.6 ms in eager grounding
+and 16.3 ms in solving. Human output remains the timed default; JSON is optional.
 
 The [previous seven-input comparison](docs/verification/cpu-performance-20260906-parallel-plans/README.md)
 retains 525 runs, including traveling-salesman and a larger task-allocation input
@@ -407,6 +413,13 @@ themelios is the minimum engineering floor for the entire stack. The
 sets out the language, execution, interface and qualification decisions to make
 at parity. Mathematical performance, pure Rust `@` functions and competition
 readiness are explicit objectives alongside parallel and GPU execution.
+
+The [library boundaries checkpoint](docs/verification/estate-boundaries-20260907/README.md)
+adds bounded typed model/JSON views, separate eager grounding/solving statistics,
+a structured Lean proof pilot and a pinned proof CI job. It passes the 94 original
+corpus contracts and 48 external oracle tests. Its hosted coverage is **91.68%
+workspace** and **92.10% CPU-only CLI**, retaining both independent **91% floors**.
+Broader writer-free solve orchestration and ASPIF remain planned.
 
 The [coverage workflow](docs/verification/coverage.md) complements the semantic
 tests with separate full-workspace and CPU-only measurements, an enforced floor,
