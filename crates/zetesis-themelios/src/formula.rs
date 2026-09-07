@@ -509,13 +509,19 @@ pub(crate) struct Compiled {
 /// Admit the extended scalar profile, finite conditional choices, and body
 /// count/sum comparisons into a Ferraris theory. Choices may have numeric bounds.
 /// Positive ordinary atoms bind variables in global or element-local scopes;
-/// one positive count/sum equality may additionally bind a new named scalar. Ground scalar comparisons use ASP term order; arithmetic expressions
+/// independent positive aggregate equalities may additionally bind named values.
+/// Completed proposals may feed ordinary evaluated arguments or integer choice
+/// bounds while their original equalities remain in every generated rule.
+/// Ground scalar comparisons use ASP term order; arithmetic expressions
 /// require numeric operands. Flat tuple equality/disequality is also supported.
 ///
 /// Eligibility remains a formula even for recursive conditions. Duplicate
 /// grounded head atoms combine eligibility by disjunction and count once.
-/// Choice bounds are constraints, so they do not invent support. Necessary
-/// producer guards are double-negated and therefore leave reduct subsets
+/// Choice bounds are constraints, so they do not invent support. Function-count
+/// heads reuse this path after checking a complete per-group
+/// tuple/atom bijection. Positive element conditions retain their eligibility
+/// formulas; default-negated count-head conditions remain outside this profile.
+/// Necessary producer guards are double-negated and therefore leave reduct subsets
 /// unconstrained whenever the candidate passes them. Grounding uses complete
 /// relational joins over a bounded possible-positive closure. Gates are ignored
 /// only while constructing that support upper bound. Aggregate guards are also

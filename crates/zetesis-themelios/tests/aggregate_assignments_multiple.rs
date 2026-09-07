@@ -237,7 +237,6 @@ fn every_target_is_checked_in_other_tuples_conditions_guards_and_filters() {
         "r(N,M):-N=#count{},M=#count{},K=1..M.",
         "r(N,M):-N=#count{},M=#count{},M<=#count{}.",
         "r(N,M):-N=#count{},M=#count{},M=#sum{}.",
-        "M{p}:-N=#count{},M=#count{}.",
     ] {
         profile(
             &input(source).unwrap_err(),

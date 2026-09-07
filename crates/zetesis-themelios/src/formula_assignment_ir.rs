@@ -94,11 +94,10 @@ impl Compiler<'_> {
                 continue;
             }
             for guard in choice_guards {
-                if self.expression_uses(&guard.bound, target)? {
-                    return Err(
-                        unsupported(ProfileFeature::AggregateAssignment, self.location).into(),
-                    );
-                }
+                // A head bound consumes the completed proposal row. The
+                // original aggregate equality still guards the entire choice;
+                // neither a proposal nor its cardinality establishes support.
+                consumed |= self.expression_uses(&guard.bound, target)?;
             }
             for literal in body {
                 self.scope_work(1)?;
@@ -108,6 +107,7 @@ impl Compiler<'_> {
                     && matches!(
                         literal,
                         LiteralIr::Compare(..)
+                            | LiteralIr::ArgumentCheck { .. }
                             | LiteralIr::TupleCompare(..)
                             | LiteralIr::Guard(_)
                             | LiteralIr::Bind { .. }

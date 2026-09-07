@@ -282,21 +282,11 @@ fn local_inputs_do_not_make_an_outer_head_safe() {
 }
 
 #[test]
-fn aggregate_targets_remain_independent_of_checks() {
-    assert!(matches!(
-        admit_formula(
-            "p(2).q(N):-N=#count{},p(N+1).".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default()
-        ),
-        Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
-            zetesis_themelios::AdmissionFailure::Profile {
-                feature: zetesis_themelios::ProfileFeature::AggregateAssignment,
-                ..
-            }
-        )))
-    ));
+fn aggregate_proposals_must_match_captured_arguments() {
+    assert_eq!(
+        native(&input("p(2).q(N):-N=#count{},p(N+1).")),
+        native(&input("p(2)."))
+    );
 }
 
 #[test]

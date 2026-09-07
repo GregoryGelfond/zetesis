@@ -31,6 +31,86 @@ fn input(source: &str) -> AdmittedFormula {
 // Ground references are authored independently of the runtime schedule. The
 // correlated two-assignment case includes the unrealizable proposal rows.
 const CASES: &[(&str, &str)] = &[
+    ("p(2).q(N):-N=#count{},p(N+1).", "p(2)."),
+    (
+        "M{p}:-N=#count{},M=#count{}.",
+        "0{p}:-0=#count{},0=#count{}.",
+    ),
+    (
+        "d(1).N{a;b}N:-N=#count{X:d(X)}.",
+        "d(1).0{a;b}0:-0=#count{1:d(1)}.1{a;b}1:-1=#count{1:d(1)}.",
+    ),
+    (
+        "{d}.N{p(N)}N:-N=#count{1:d}.",
+        "{d}.0{p(0)}0:-0=#count{1:d}.1{p(1)}1:-1=#count{1:d}.",
+    ),
+    (
+        "{d}.N{a:N=1;b}N:-N=#count{1:d}.",
+        "{d}.0{a:0=1;b}0:-0=#count{1:d}.1{a:1=1;b}1:-1=#count{1:d}.",
+    ),
+    (
+        "{d}.N{a;b}N:-N=#count{1:d}.",
+        "{d}.0{a;b}0:-0=#count{1:d}.1{a;b}1:-1=#count{1:d}.",
+    ),
+    (
+        "{d;e}.N{a:b;b}N:-e,N=#count{1:d}.",
+        "{d;e}.0{a:b;b}0:-e,0=#count{1:d}.1{a:b;b}1:-e,1=#count{1:d}.",
+    ),
+    (
+        "{d;e}.N{a:b;b}N:-N=#count{1:d},e.",
+        "{d;e}.0{a:b;b}0:-e,0=#count{1:d}.1{a:b;b}1:-e,1=#count{1:d}.",
+    ),
+    (
+        "{d}.N+1{a;b}N+1:-N=#count{1:d}.",
+        "{d}.1{a;b}1:-0=#count{1:d}.2{a;b}2:-1=#count{1:d}.",
+    ),
+    (
+        "{d}.N{a;b}M:-N=#count{1:d},M=#sum{2:d}.",
+        "{d}.0{a;b}0:-0=#count{1:d},0=#sum{2:d}.0{a;b}2:-0=#count{1:d},2=#sum{2:d}.1{a;b}0:-1=#count{1:d},0=#sum{2:d}.1{a;b}2:-1=#count{1:d},2=#sum{2:d}.",
+    ),
+    (
+        "{d}.N{a}N:-N=#sum{-1:d}.",
+        "{d}.0{a}0:-0=#sum{-1:d}.-1{a}-1:--1=#sum{-1:d}.",
+    ),
+    (
+        "{d}.N{a;b}N:-N=#sum+{-1:d;2:d}.",
+        "{d}.0{a;b}0:-0=#sum+{-1:d;2:d}.2{a;b}2:-2=#sum+{-1:d;2:d}.",
+    ),
+    ("N{a}N:-N=#count{}.", "0{a}0:-0=#count{}."),
+    ("N{}N:-N=#count{}.", "0{}0:-0=#count{}."),
+    (
+        "N{a}N:-N=#count{1:a}.",
+        "0{a}0:-0=#count{1:a}.1{a}1:-1=#count{1:a}.",
+    ),
+    (
+        "{d}.N#count{1:a;2:b}N:-N=#count{1:d}.",
+        "{d}.0#count{1:a;2:b}0:-0=#count{1:d}.1#count{1:a;2:b}1:-1=#count{1:d}.",
+    ),
+    (
+        "p(1).q(N):-N=#count{},p(N+1).",
+        "p(1).q(0):-0=#count{},p(1).",
+    ),
+    (
+        "{p(1);p(2)}.q(N):-N=#count{1:p(1)},p(N+1).",
+        "{p(1);p(2)}.q(0):-0=#count{1:p(1)},p(1).q(1):-1=#count{1:p(1)},p(2).",
+    ),
+    (
+        "{p(1);p(2)}.q(N):-p(N+1),N=#count{1:p(1)}.",
+        "{p(1);p(2)}.q(0):-0=#count{1:p(1)},p(1).q(1):-1=#count{1:p(1)},p(2).",
+    ),
+    (
+        "{p(f(1));p(f(2))}.q(N):-N=#count{1:p(f(1))},p(f(N+1)).",
+        "{p(f(1));p(f(2))}.q(0):-0=#count{1:p(f(1))},p(f(1)).q(1):-1=#count{1:p(f(1))},p(f(2)).",
+    ),
+    (
+        "{-p(1);-p(2)}.q(N):-N=#count{1: -p(1)},-p(N+1).",
+        "{-p(1);-p(2)}.q(0):-0=#count{1: -p(1)},-p(1).q(1):-1=#count{1: -p(1)},-p(2).",
+    ),
+    (
+        "{p(1);p(2)}.q(Y):-N=#count{1:p(1)},Y=N+1,p(Y+1).",
+        "{p(1);p(2)}.q(1):-0=#count{1:p(1)},p(2).",
+    ),
+    ("q(N):-N=#count{},p(N+1).", ""),
     (
         "p(1). n(N) :- N=#count{X:p(X)}, (N,0)=(1,0).",
         "p(1).n(1):-1=#count{1:p(1)}.",
@@ -225,7 +305,6 @@ fn unsupported_consumers_remain_profile_refusals() {
     for source in [
         "q(N):-N=#count{},not p(N).",
         "q(N):-N=#count{},not p(f(N)).",
-        "q(N):-N=#count{},p(N+1).",
         "q(K):-N=#count{},K=1..N.",
         "q(M):-N=#count{},Y=N+1,M=#count{Y:p}.",
         "q(N):-N=#count{},Y=N+1,p(Y):d.",
@@ -286,6 +365,7 @@ fn captured_arguments_cannot_supply_missing_inputs() {
 #[test]
 fn objective_consumers_keep_their_observer_refusal() {
     for source in [
+        "N{p}N:-N=#count{}.#minimize{1:p}.",
         "n(N):-N=#count{},N>0.#minimize{N:n(N)}.",
         "n(N,Y):-N=#count{},Y=N+1.#minimize{N,Y:n(N,Y)}.",
     ] {
@@ -301,6 +381,29 @@ fn objective_consumers_keep_their_observer_refusal() {
                 error,
                 FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
                     feature: ProfileFeature::ObjectiveAggregateDependency,
+                    ..
+                }))
+            ),
+            "{source}: {error}"
+        );
+    }
+}
+
+#[test]
+fn nonnumeric_choice_proposals_remain_refused() {
+    for source in ["N{p}:-N=#min{}.", "N{p}:-N=#max{}."] {
+        let error = admit_formula(
+            source.into(),
+            options(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(
+                error,
+                FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
+                    feature: ProfileFeature::Aggregate,
                     ..
                 }))
             ),

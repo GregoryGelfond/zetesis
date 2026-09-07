@@ -22,7 +22,13 @@ type Names = BTreeSet<String>;
 type Models = BTreeSet<Names>;
 
 fn cases() -> Vec<Json> {
-    serde_json::from_str(include_str!("fixtures/count-heads.json")).unwrap()
+    let mut cases: Vec<Json> =
+        serde_json::from_str(include_str!("fixtures/count-heads.json")).unwrap();
+    cases.extend(
+        serde_json::from_str::<Vec<Json>>(include_str!("fixtures/count-head-eligibility.json"))
+            .unwrap(),
+    );
+    cases
 }
 fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
     limited(
@@ -131,8 +137,8 @@ fn complete(admitted: &AdmittedFormula) -> Models {
 }
 
 #[test]
-fn complete_count_models_match_checked_choice_expansion_and_reference_data() {
-    assert_eq!(cases().len(), 30);
+fn count_heads_preserve_stable_models() {
+    assert_eq!(cases().len(), 46);
     for case in cases() {
         let source = input(case["source"].as_str().unwrap())
             .unwrap_or_else(|error| panic!("{}: {error}", case["name"]));
@@ -149,6 +155,37 @@ fn complete_count_models_match_checked_choice_expansion_and_reference_data() {
             "{}: choice",
             case["name"]
         );
+    }
+}
+
+#[test]
+fn native_count_search_preserves_full_models() {
+    for case in cases() {
+        let admitted = input(case["source"].as_str().unwrap()).unwrap();
+        let mut search = zetesis_sat::StableModels::new(
+            admitted.theory(),
+            zetesis_sat::Limits::default(),
+            zetesis_cpu::Control::default(),
+        )
+        .unwrap();
+        let mut models = Models::new();
+        for model in search.by_ref() {
+            assert!(
+                models.insert(
+                    model
+                        .unwrap()
+                        .atoms()
+                        .map(|index| name(&admitted.atoms()[index]))
+                        .collect()
+                )
+            );
+        }
+        assert!(
+            search.exhausted(),
+            "{}: incomplete enumeration",
+            case["name"]
+        );
+        assert_eq!(models, expected(&case["models"]), "{}", case["name"]);
     }
 }
 
@@ -205,7 +242,8 @@ fn source_expansions_preserve_every_original_and_frozen_pair() {
             }
         }
     }
-    assert_eq!(pairs, 669);
+    assert_eq!(pairs, 1024);
+    println!("count_sources={} frozen_pairs={pairs}", cases().len());
 }
 // Every M-false subtree becomes falsum, including non-atomic implications.
 // This evaluates JSON trees directly, without a production DAG or compiler.
@@ -236,8 +274,35 @@ fn manual_holds(theory: &Json, tested: &Names, frozen: Option<&Names>) -> bool {
         .all(|root| truth(root, tested, frozen))
 }
 #[test]
-fn count_bounds_match_independent_frozen_choice_and_constraint_formulas() {
+fn count_bounds_preserve_frozen_formulas() {
     for (source, manual) in [
+        (
+            "{q}.1#count{1:p:q}1.",
+            json!({"roots": [
+                ["or","q",["imp","q",false]],
+                ["imp","q",["or","p",["imp","p",false]]],
+                ["imp",["imp",["and","q","p"],false],false]
+            ]}),
+        ),
+        (
+            "{b;c}.1#count{1:a:b;1:a:c}1.",
+            json!({"roots": [
+                ["or","b",["imp","b",false]],
+                ["or","c",["imp","c",false]],
+                ["imp",["or","b","c"],["or","a",["imp","a",false]]],
+                ["imp",["imp",["and","a",["or","b","c"]],false],false]
+            ]}),
+        ),
+        (
+            "{d}.N{a}N:-N=#count{1:d}.",
+            json!({"roots": [
+                ["or","d",["imp","d",false]],
+                ["imp","d",["or","a",["imp","a",false]]],
+                ["imp",["imp","d",false],["or","a",["imp","a",false]]],
+                ["imp",["and","d",["imp","a",false]],false],
+                ["imp",["and",["imp","d",false],"a"],false]
+            ]}),
+        ),
         (
             "1#count{1:p;2:q}1.",
             json!({"roots": [
@@ -286,6 +351,10 @@ fn mismatched_tuple_atom_aliases_fail_before_any_admitted_theory() {
         "1#count{1:p(1..2)}1.",
         "1#count{1:p;1:q;2:r}1.",
         "1#count{1:p;2:q;3:p}1.",
+        "{b;c}.1#count{1:a:b;1:d:c}1.",
+        "{b;c}.1#count{1:a:b;2:a:c}1.",
+        "1#count{1:a:b;1:d:c}1.b.c:-b.",
+        "d(1).d(2).1#count{X:a:d(X)}1.",
     ] {
         let error = input(source).expect_err(source);
         assert!(
@@ -299,8 +368,6 @@ fn mismatched_tuple_atom_aliases_fail_before_any_admitted_theory() {
 #[test]
 fn unsupported_conditions_functions_negative_heads_and_objectives_remain_explicit() {
     for (source, expected) in [
-        ("1#count{1:a:b}1.", ProfileFeature::HeadAggregateCondition),
-        ("b.1#count{1:a:b}1.", ProfileFeature::HeadAggregateCondition),
         (
             "1#count{1:a:not b}1.",
             ProfileFeature::HeadAggregateCondition,
@@ -309,7 +376,6 @@ fn unsupported_conditions_functions_negative_heads_and_objectives_remain_explici
             "1#count{1:a:not not b}1.",
             ProfileFeature::HeadAggregateCondition,
         ),
-        ("1#count{1:a:a}1.", ProfileFeature::HeadAggregateCondition),
         ("1#sum{1:a}1.", ProfileFeature::Head),
         ("1#sum+{1:a}1.", ProfileFeature::Head),
         ("1#min{1:a}1.", ProfileFeature::Head),
@@ -374,7 +440,11 @@ fn first_success(mut attempt: impl FnMut(u64) -> bool) -> u64 {
 #[test]
 fn checked_group_size_and_tuple_storage_obey_inclusive_limits() {
     let source = "1#count{X:p(X):X=1..4}2.";
-    for source in [source, "#count{X:p(X):X=1..4}."] {
+    for source in [
+        source,
+        "#count{X:p(X):X=1..4}.",
+        "d(1..4).1#count{X:p(X):d(X)}2.",
+    ] {
         let mut limits = FormulaLimits::default();
         limits.aggregate.max_elements = 4;
         assert!(
@@ -428,8 +498,16 @@ fn checked_group_size_and_tuple_storage_obey_inclusive_limits() {
 }
 
 #[test]
-fn validation_work_and_substitutions_fail_before_partial_publication() {
-    let source = "1#count{X:p(X):X=1..4}2.";
+fn validation_limits_fail_before_partial_publication() {
+    validation_limits("1#count{X:p(X):X=1..4}2.");
+}
+
+#[test]
+fn eligibility_limits_fail_before_partial_publication() {
+    validation_limits("d(1..2).1#count{X:p(X):d(X)}1.");
+}
+
+fn validation_limits(source: &str) {
     for resource in [FormulaResource::Work, FormulaResource::Substitutions] {
         let attempt = |limit| {
             let mut limits = FormulaLimits::default();
@@ -454,6 +532,7 @@ fn validation_work_and_substitutions_fail_before_partial_publication() {
             complete(&attempt(threshold).unwrap()),
             complete(&input(source).unwrap())
         );
+        println!("source={source} inclusive_{resource:?}={threshold}");
     }
 }
 
@@ -557,7 +636,13 @@ fn clingo(source: &str) -> Models {
     );
     assert!(fs::metadata(&output).unwrap().len() <= 1_048_576);
     assert!(fs::metadata(&errors).unwrap().len() <= 65_536);
-    let raw: Json = serde_json::from_slice(&fs::read(output).unwrap()).unwrap();
+    let stdout = fs::read_to_string(output).unwrap();
+    let stderr = fs::read_to_string(errors).unwrap();
+    println!(
+        "{}",
+        json!({"source":source,"exit":status.code(),"stdout":stdout,"stderr":stderr})
+    );
+    let raw: Json = serde_json::from_str(&stdout).unwrap();
     assert!(
         raw["Solver"]
             .as_str()
@@ -596,8 +681,10 @@ fn clingo(source: &str) -> Models {
 #[test]
 #[ignore = "requires external clingo 5.8; each original and expansion has a bounded complete capture"]
 fn fresh_clingo_original_and_expanded_sources_match_complete_models() {
+    let mut models = 0;
     for case in cases() {
         let predicted = expected(&case["models"]);
+        models += predicted.len();
         for field in ["source", "expanded"] {
             assert_eq!(
                 clingo(case[field].as_str().unwrap()),
@@ -607,4 +694,9 @@ fn fresh_clingo_original_and_expanded_sources_match_complete_models() {
             );
         }
     }
+    println!(
+        "count_sources={} full_models={models} source_and_expansion_runs={}",
+        cases().len(),
+        2 * cases().len()
+    );
 }

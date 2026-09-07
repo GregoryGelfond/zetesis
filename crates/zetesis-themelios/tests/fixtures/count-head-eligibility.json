@@ -1,0 +1,18 @@
+[
+  {"name":"positive-local-witness","source":"q(1).1#count{X:p(X):q(X)}1.","expanded":"q(1).1{p(X):q(X)}1.","models":[["q(1)","p(1)"]]},
+  {"name":"optional-eligibility","source":"{q(1)}.0#count{X:p(X):q(X)}1.","expanded":"{q(1)}.0{p(X):q(X)}1.","models":[[],["q(1)"],["q(1)","p(1)"]]},
+  {"name":"required-eligibility","source":"{q(1)}.1#count{X:p(X):q(X)}1.","expanded":"{q(1)}.1{p(X):q(X)}1.","models":[["q(1)","p(1)"]]},
+  {"name":"inactive-body","source":"{b;q}.1#count{1:p:q}1:-b.","expanded":"{b;q}.1{p:q}1:-b.","models":[[],["q"],["b","q","p"]]},
+  {"name":"coalesced-eligibility","source":"{b;c}.1#count{1:a:b;1:a:c}1.","expanded":"{b;c}.1{a:b;a:c}1.","models":[["a","b"],["a","c"],["a","b","c"]]},
+  {"name":"recursive-required-eligibility","source":"1#count{1:a:a}1.","expanded":"1{a:a}1.","models":[]},
+  {"name":"recursive-optional-eligibility","source":"0#count{1:a:a}1.","expanded":"0{a:a}1.","models":[[]]},
+  {"name":"supported-recursive-eligibility","source":"q:-p.{q}.1#count{1:p:q}1.","expanded":"q:-p.{q}.1{p:q}1.","models":[["q","p"]]},
+  {"name":"duplicate-local-witnesses","source":"q(1,1).q(1,2).1#count{X:p(X):q(X,Y)}1.","expanded":"q(1,1).q(1,2).1{p(X):q(X,Y)}1.","models":[["q(1,1)","q(1,2)","p(1)"]]},
+  {"name":"strongly-negated-eligibility","source":"-q(1).1#count{X: -p(X): -q(X)}1.","expanded":"-q(1).1{-p(X): -q(X)}1.","models":[["-q(1)","-p(1)"]]},
+  {"name":"evaluated-eligibility","source":"q(2).1#count{X:p(X):X=1,q(X+1)}1.","expanded":"q(2).1{p(X):X=1,q(X+1)}1.","models":[["q(2)","p(1)"]]},
+  {"name":"eligibility-source-order","source":"q(2).1#count{X:p(X):q(X+1),X=1}1.","expanded":"q(2).1{p(X):q(X+1),X=1}1.","models":[["q(2)","p(1)"]]},
+  {"name":"structured-eligibility","source":"q(f(1)).1#count{X:p(X):q(f(X))}1.","expanded":"q(f(1)).1{p(X):q(f(X))}1.","models":[["q(f(1))","p(1)"]]},
+  {"name":"absent-eligibility","source":"1#count{1:a:b}1.","expanded":"1{a:b}1.","models":[]},
+  {"name":"present-eligibility","source":"b.1#count{1:a:b}1.","expanded":"b.1{a:b}1.","models":[["a","b"]]},
+  {"name":"aggregate-bound-eligibility","source":"{q}.N#count{1:p:q}N:-N=#count{1:q}.","expanded":"{q}.0{p:q}0:-0=#count{1:q}.1{p:q}1:-1=#count{1:q}.","models":[[],["q","p"]]}
+]
