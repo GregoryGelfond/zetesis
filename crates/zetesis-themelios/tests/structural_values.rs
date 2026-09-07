@@ -182,10 +182,10 @@ fn full_structural_objective_keys_and_candidate_bounds_agree_for_every_model() {
     );
 }
 #[test]
-fn construction_patterns_and_undefined_arithmetic_remain_refused() {
+fn unsupported_structural_sources_remain_refused() {
     for source in [
         "p(a).p(f(X)):-p(X).",
-        "p(f(1)).q(X):-p(f(X)).",
+        // Finite constructor matching is covered positively in function_patterns.rs.
         "p(f(1/0)).",
         "p(f(2147483647+1)).",
         "#const a=f(a).p(a).",
