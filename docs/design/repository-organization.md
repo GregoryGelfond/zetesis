@@ -72,6 +72,15 @@ creating a competing process runner. A small Cargo development-command entry
 point is appropriate for repository maintenance; installed solver use remains
 independent of Cargo.
 
+Tooling is estate code and receives the same standard as the solver. This covers
+development commands, test harnesses, benchmark drivers, fixture importers,
+record validators and retained experiments. Keep domain concepts and error
+outcomes explicit, compose small operations, name meaningful intermediate work,
+and give each test one proposition. Apply the workspace formatting, pedantic
+Clippy, documentation and relevant coverage gates. Review public tooling APIs as
+deliberately as solver APIs. Neither a development-only location nor a mechanical
+Python-to-Rust translation exempts code from these obligations.
+
 Replace Python in this order:
 
 1. Curated-fixture integrity and upstream regression execution.
