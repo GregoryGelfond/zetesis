@@ -1,4 +1,4 @@
-//! Positive tuple patterns match support rows transactionally.
+//! Positive structural patterns match support rows transactionally.
 //!
 //! Whole argument captures retain the original atom in the emitted formula.
 //! Nested variables expose subvalues; anonymous nodes neither equate occurrences
@@ -6,7 +6,7 @@
 
 use themelios_base::span::Location;
 use zetesis_core::{
-    Atom, AtomPattern, ConstructionError, Term, Value, ValueError, ValueLimits, ValueNode,
+    Atom, AtomPattern, ConstructionError, Sign, Term, Value, ValueError, ValueLimits, ValueNode,
 };
 
 use crate::expansion::Budget;
@@ -23,6 +23,11 @@ pub(crate) struct ArgumentPattern {
 }
 pub(crate) enum PatternNode {
     Tuple(usize),
+    Function {
+        name: String,
+        sign: Sign,
+        arity: usize,
+    },
     Constant(Value),
     Slot(usize),
     Wildcard,
@@ -94,8 +99,12 @@ impl PatternAtom {
                 let Some(actual) = value.nodes().get(offset) else {
                     return Ok(None);
                 };
-                if let PatternNode::Tuple(arity) = node {
-                    if !matches!(actual, ValueNode::Tuple { arity: found } if found == arity) {
+                // Shape nodes descend into their children. A leaf consumes one
+                // complete actual subtree. Equal constructor arities preserve
+                // this preorder alignment; validated values bound every offset.
+                // Captured-value work above already charges compared name bytes.
+                if let Some(agrees) = node.shape_matches(actual) {
+                    if !agrees {
                         return Ok(None);
                     }
                     offset += 1;
@@ -107,7 +116,9 @@ impl PatternAtom {
                     PatternNode::Slot(slot) => bind(*slot, subtree, values, &mut delta, context)?,
                     PatternNode::Constant(expected) => subtree.equals(expected),
                     PatternNode::Wildcard => true,
-                    PatternNode::Tuple(_) => unreachable!("tuple consumed above"),
+                    PatternNode::Tuple(_) | PatternNode::Function { .. } => {
+                        unreachable!("shape consumed above")
+                    }
                 };
                 if !agrees {
                     return Ok(None);
@@ -117,6 +128,23 @@ impl PatternAtom {
             debug_assert_eq!(offset, value.nodes().len());
         }
         Ok(Some(delta))
+    }
+}
+
+impl PatternNode {
+    /// None denotes a value leaf, whose complete subtree must be consumed.
+    fn shape_matches(&self, actual: &ValueNode) -> Option<bool> {
+        match self {
+            Self::Tuple(arity) => {
+                Some(matches!(actual, ValueNode::Tuple { arity: found } if found == arity))
+            }
+            Self::Function { name, sign, arity } => Some(matches!(
+                actual,
+                ValueNode::Function { name: found, sign: found_sign, arity: found_arity }
+                    if name == found && sign == found_sign && arity == found_arity
+            )),
+            Self::Constant(_) | Self::Slot(_) | Self::Wildcard => None,
+        }
     }
 }
 
@@ -346,12 +374,40 @@ mod tests {
     #[test]
     fn work_refusals_discard_the_entire_delta() {
         let (pattern, atom, incoming) = fixture();
+        assert_work_boundary(&pattern, &atom, &incoming);
+    }
+    #[test]
+    fn function_matching_obeys_the_work_ceiling() {
+        let (mut pattern, atom, incoming) = fixture();
+        let name = "constructor_name".to_owned();
+        pattern.arguments[0].nodes[0] = PatternNode::Function {
+            name: name.clone(),
+            sign: Sign::Negative,
+            arity: 2,
+        };
+        let Value::Structured(original) = &atom.values()[0] else {
+            panic!("structured fixture");
+        };
+        let mut nodes = original.nodes().to_vec();
+        nodes[0] = ValueNode::Function {
+            name,
+            sign: Sign::Negative,
+            arity: 2,
+        };
+        let atom = Atom::new(
+            atom.predicate().clone(),
+            vec![Value::from_nodes(nodes, ValueLimits::default()).unwrap()],
+        )
+        .unwrap();
+        assert_work_boundary(&pattern, &atom, &incoming);
+    }
+    fn assert_work_boundary(pattern: &PatternAtom, atom: &Atom, incoming: &[Option<Value>]) {
         let mut budget = Budget::new(ExpansionLimits::default(), 100);
         let mut counters = Counters::default();
         let delta = pattern
             .matches(
-                &atom,
-                &incoming,
+                atom,
+                incoming,
                 &mut MatchContext {
                     limits: FormulaLimits::default(),
                     budget: &mut budget,
@@ -368,8 +424,8 @@ mod tests {
             let mut counters = Counters::default();
             let error = pattern
                 .matches(
-                    &atom,
-                    &incoming,
+                    atom,
+                    incoming,
                     &mut MatchContext {
                         limits: FormulaLimits {
                             max_work: limit,
@@ -395,8 +451,8 @@ mod tests {
         assert!(
             pattern
                 .matches(
-                    &atom,
-                    &incoming,
+                    atom,
+                    incoming,
                     &mut MatchContext {
                         limits: FormulaLimits {
                             max_work: exact,

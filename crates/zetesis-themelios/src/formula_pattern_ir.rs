@@ -1,8 +1,8 @@
-//! Compile positive tuple destructuring without enumerating constructor values.
+//! Compile positive structural patterns without enumerating constructor values.
 
 use themelios_program::program::{Arguments, Atom};
-use themelios_program::term::{Term, Variable};
-use zetesis_core::{AtomPattern, Predicate, Term as CoreTerm};
+use themelios_program::term::{Term, UnaryOp, Variable};
+use zetesis_core::{AtomPattern, Predicate, Sign, Term as CoreTerm};
 
 use crate::diagnostic::unsupported;
 use crate::formula::ceiling;
@@ -21,7 +21,7 @@ impl Compiler<'_> {
         let Arguments::Single(arguments) = &atom.arguments else {
             return Ok(None);
         };
-        if !arguments.iter().any(|term| matches!(term, Term::Tuple(_))) {
+        if !arguments.iter().any(pattern_candidate) {
             return Ok(None);
         }
         ceiling(
@@ -45,11 +45,11 @@ impl Compiler<'_> {
                     self.value(&value)?;
                     CoreTerm::Constant(value)
                 }
-                Term::Tuple(_) => {
+                term if pattern_candidate(term) => {
                     // Every structured source argument has its own whole-value
                     // capture. Emission uses that capture, including wildcards.
                     let slot = self.pattern_slot(&Variable::Anonymous, variables)?;
-                    let nodes = self.tuple_pattern(term, variables)?;
+                    let nodes = self.structural_pattern(term, variables)?;
                     push(
                         &mut patterns,
                         ArgumentPattern { position, nodes },
@@ -86,7 +86,11 @@ impl Compiler<'_> {
         }))
     }
 
-    fn tuple_pattern(
+    /// The pending stack contains unvisited source subtrees in reverse preorder.
+    /// Each iteration consumes one root; constructor children partition its
+    /// remaining subtree. Only sign wrappers may disappear, one charged step at
+    /// a time. Work and retained plan/stack cells are bounded by the source tree.
+    fn structural_pattern(
         &mut self,
         term: &Term,
         variables: &mut Variables,
@@ -114,13 +118,57 @@ impl Compiler<'_> {
                     self.value(&value)?;
                     PatternNode::Constant(value)
                 }
-                // Evaluated terms are consumers, not positive binders. Named
-                // nonground constructors remain outside this tuple-only slice.
-                _ => return Err(unsupported(ProfileFeature::Term, self.location).into()),
+                _ => {
+                    let (node, children) = self.function_pattern(term)?;
+                    reserve(&mut pending, children.len(), self.budget, self.location)?;
+                    pending.extend(children.iter().rev());
+                    node
+                }
             };
             push(&mut nodes, node, self.budget, self.location)?;
         }
         Ok(nodes)
+    }
+
+    /// Unary minus changes a function's sign; it never inverts an arithmetic
+    /// expression or extracts a value from a negated variable. Every wrapper is
+    /// consumed before the finite function root is admitted.
+    fn function_pattern<'a>(
+        &mut self,
+        mut term: &'a Term,
+    ) -> Result<(PatternNode, &'a [Term]), FormulaFailure> {
+        let mut sign = Sign::Positive;
+        while let Term::UnaryOperation {
+            operator: UnaryOp::Negate,
+            argument,
+        } = term
+        {
+            self.budget
+                .charge(ExpansionResource::TermWork, 1, self.location)?;
+            self.budget
+                .charge(ExpansionResource::Values, 1, self.location)?;
+            sign = match sign {
+                Sign::Positive => Sign::Negative,
+                Sign::Negative => Sign::Positive,
+            };
+            term = argument;
+        }
+        let Term::Function { name, arguments } = term else {
+            return Err(unsupported(ProfileFeature::Term, self.location).into());
+        };
+        self.budget.charge(
+            ExpansionResource::ScalarBytes,
+            name.as_str().len() as u128,
+            self.location,
+        )?;
+        Ok((
+            PatternNode::Function {
+                name: name.as_str().to_owned(),
+                sign,
+                arity: arguments.len(),
+            },
+            arguments,
+        ))
     }
 
     fn pattern_slot(
@@ -155,4 +203,18 @@ impl Compiler<'_> {
         variables.safe.insert(slot);
         Ok(slot)
     }
+}
+
+// A leading minus may denote a signed function. Compilation validates the
+// complete chain before accepting it as structure; arithmetic remains separate.
+fn pattern_candidate(term: &Term) -> bool {
+    matches!(
+        term,
+        Term::Tuple(_)
+            | Term::Function { .. }
+            | Term::UnaryOperation {
+                operator: UnaryOp::Negate,
+                ..
+            }
+    )
 }

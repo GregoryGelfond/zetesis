@@ -51,15 +51,21 @@ constant cycles are refused. Checked i32 arithmetic keeps its existing undefined
 and overflow refusals; signed function negation is handled separately.
 
 Formula admission evaluates finite constructors from independently bound inputs,
-for example `p(f(X)):-q(X)`. It also extracts components from positive tuple
-patterns, such as `p(A):-q((A,_),_)`, retaining full original atom identities.
+for example `p(f(X)):-q(X)`. It also extracts components from positive function
+and tuple patterns, such as `p(A):-q(f(A),_)` and `p(A):-q((A,_),_)`, retaining
+full original atom identities. Named constructors match exact name, sign and
+arity; nested mixtures use the same flat matcher.
 Matching stages bindings privately and commits them only after the entire pattern
 succeeds; mismatches and resource failures cannot leak partial bindings.
-Positive named-function patterns such as `q(X):-p(f(X))` remain refused.
+Arithmetic within a pattern, such as `q(X):-p(f(X+1))`, remains a refusal;
+extraction does not invert arithmetic or make negative occurrences into binders.
+Structured consequent-only witnesses retain their separate profile restriction.
 Pools/intervals below a constructor remain outside this generation profile.
 The [finite-value](../../docs/verification/finite-values-20260907/README.md) and
 [tuple-binding](../../docs/verification/structural-bindings-20260907/README.md)
-records give exact scope, original-model and frozen-reduct tests.
+records give exact scope, original-model and frozen-reduct tests. The
+[function-pattern record](../../docs/verification/function-patterns-20260907/README.md)
+extends the tuple matcher and states the mathematical shape/extraction boundary.
 Min/max comparisons and independent
 assignments accept closed symbols, strings, structures and genuine #inf/#sup
 sentinels under the ASP term order; numeric extrema endpoints retain the
@@ -100,8 +106,8 @@ atoms and directly negated output constructors render with `-`, including
 create logical atoms. Arithmetic minus in `p(-1)` remains a numeric value.
 Closed signed values such as `p(-a)` and `p(f(1,g(2)))` use the bounded structural
 carrier. Formula admission additionally supports the finite construction and
-positive tuple extraction described above; named-function patterns remain outside
-admission.
+positive structural extraction described above. A function's sign is distinct
+from both predicate strong negation and the literal's default-negation mode.
 
 The [Lean `StrongNegation` module](../../proofs/Zetesis/StrongNegation.lean)
 proves that injective signed-atom renaming preserves exact reduct syntax and

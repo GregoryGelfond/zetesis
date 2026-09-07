@@ -269,15 +269,10 @@ fn an_arithmetic_tuple_pattern_is_not_a_producer() {
     );
 }
 #[test]
-fn a_named_nonground_constructor_remains_outside_the_tuple_profile() {
-    assert!(
-        admit_formula(
-            "q(f(1)).p(X):-q(f(X)).".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default()
-        )
-        .is_err()
+fn a_named_pattern_retains_the_complete_source_atom() {
+    assert_eq!(
+        native(&input("q(f(1)).p(X):-q(f(X)).")),
+        models(&[&["q(f(1))", "p(1)"]])
     );
 }
 #[test]
