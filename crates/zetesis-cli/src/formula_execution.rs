@@ -1,5 +1,6 @@
 //! Ordinary-invocation GPU propagation with exact native residual completion.
 
+use crate::presentation::{Diagnostics, Label};
 use std::io::Write;
 
 use zetesis_ferraris::Interpretation;
@@ -72,7 +73,7 @@ pub(crate) enum Execution {
 impl Execution {
     pub(crate) fn new(
         options: &SolveConfig,
-        diagnostics: &mut impl Write,
+        diagnostics: &mut Diagnostics<impl Write>,
     ) -> Result<Self, RunError> {
         if matches!(options.backend, Backend::Auto | Backend::Cpu) {
             let oracle = if options.oracle == crate::Oracle::Auto {
@@ -80,10 +81,12 @@ impl Execution {
             } else {
                 "Ferraris reduct countermodel"
             };
-            writeln!(
-                diagnostics,
-                "Backend: cpu; oracle: {oracle}; grounder: eager (requested {})",
-                options.grounder.label()
+            diagnostics.metadata(
+                Label::Backend,
+                format_args!(
+                    "cpu; oracle: {oracle}; grounder: eager (requested {})",
+                    options.grounder.label()
+                ),
             )?;
             if options.completion_workers.get() > 1 {
                 writeln!(
@@ -106,7 +109,10 @@ impl Execution {
     }
 
     #[cfg(feature = "gpu")]
-    fn gpu(options: &SolveConfig, diagnostics: &mut impl Write) -> Result<Self, RunError> {
+    fn gpu(
+        options: &SolveConfig,
+        diagnostics: &mut Diagnostics<impl Write>,
+    ) -> Result<Self, RunError> {
         let oracle = zetesis_wgpu::GpuFormulaOracle::new_selected(
             zetesis_wgpu::GpuOptions::default(),
             crate::engine::selection(options.backend),
@@ -118,12 +124,14 @@ impl Execution {
             oracle.info().backend(),
             oracle.info().vendor_id()
         );
-        writeln!(
-            diagnostics,
-            "Backend: hybrid GPU propagation + exact CPU residual search ({adapter}); oracle: Ferraris reduct countermodel; grounder: eager (requested {}); batch={}; CPU completion requested workers={}",
-            options.grounder.label(),
-            options.batch_size,
-            options.completion_workers
+        diagnostics.metadata(
+            Label::Backend,
+            format_args!(
+                "hybrid GPU propagation + exact CPU residual search ({adapter}); oracle: Ferraris reduct countermodel; grounder: eager (requested {}); batch={}; CPU completion requested workers={}",
+                options.grounder.label(),
+                options.batch_size,
+                options.completion_workers
+            ),
         )?;
         Ok(Self::Hybrid {
             oracle: Box::new(oracle),

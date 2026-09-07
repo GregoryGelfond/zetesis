@@ -1,5 +1,6 @@
 use crate::failure::Progress;
 use crate::phase_timing::{Recorder, SolvePhase};
+use crate::presentation::Diagnostics;
 use crate::{Backend, Grounder, Options, RunFailure};
 use std::fmt;
 use std::io::{self, Write};
@@ -394,6 +395,17 @@ pub fn run_finalized_with_diagnostics(
     diagnostics: &mut impl Write,
     control: &Control,
 ) -> Result<crate::SolveReport, crate::SolveFailure> {
+    let mut diagnostics = Diagnostics::new(diagnostics, options.color.human(options.json));
+    run_source_with_writer(source, options, output, &mut diagnostics, control)
+}
+
+pub(crate) fn run_source_with_writer(
+    source: String,
+    options: &Options,
+    output: &mut impl Write,
+    diagnostics: &mut Diagnostics<impl Write>,
+    control: &Control,
+) -> Result<crate::SolveReport, crate::SolveFailure> {
     let mut document = crate::output::Document::new(output, options.json)?;
     let phases = Recorder::new(options.stats);
     let result = crate::admission::source(
@@ -463,6 +475,17 @@ pub fn run_bundle_finalized_with_diagnostics(
     diagnostics: &mut impl Write,
     control: &Control,
 ) -> Result<crate::SolveReport, crate::SolveFailure> {
+    let mut diagnostics = Diagnostics::new(diagnostics, options.color.human(options.json));
+    run_bundle_with_writer(bundle, options, output, &mut diagnostics, control)
+}
+
+pub(crate) fn run_bundle_with_writer(
+    bundle: SourceBundle,
+    options: &Options,
+    output: &mut impl Write,
+    diagnostics: &mut Diagnostics<impl Write>,
+    control: &Control,
+) -> Result<crate::SolveReport, crate::SolveFailure> {
     let mut document = crate::output::Document::new(output, options.json)?;
     let phases = Recorder::new(options.stats);
     let result = crate::admission::bundle(
@@ -527,7 +550,7 @@ pub(crate) fn solve_program(
     selection: &OutputSelection,
     options: &Options,
     output: &mut impl Write,
-    diagnostics: &mut impl Write,
+    diagnostics: &mut Diagnostics<impl Write>,
     control: &Control,
     phases: &Recorder,
 ) -> Result<Progress, crate::SolveFailure> {

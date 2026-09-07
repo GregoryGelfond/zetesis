@@ -8,7 +8,8 @@ use zetesis_cpu::{Control, Stop};
 use zetesis_themelios::{AdmissionOptions, admit};
 
 use super::Engine;
-use crate::Options;
+use crate::presentation::Diagnostics;
+use crate::{ColorMode, Options};
 
 #[test]
 fn collected_seeds_observe_cancellation_and_deadline_before_any_oracle() {
@@ -30,7 +31,7 @@ fn collected_seeds_observe_cancellation_and_deadline_before_any_oracle() {
         let mut engine = Engine::new(
             &(&options).into(),
             program,
-            &mut diagnostics,
+            &mut Diagnostics::new(&mut diagnostics, ColorMode::Never),
             &crate::phase_timing::Recorder::new(false),
         )
         .unwrap();
@@ -46,7 +47,7 @@ fn collected_seeds_observe_cancellation_and_deadline_before_any_oracle() {
                     &(&options).into(),
                     program,
                     &[seed.clone(), seed.clone()],
-                    &mut diagnostics,
+                    &mut Diagnostics::new(&mut diagnostics, ColorMode::Never),
                     &control,
                     &crate::phase_timing::Recorder::new(false),
                 )
@@ -62,7 +63,7 @@ fn collected_seeds_observe_cancellation_and_deadline_before_any_oracle() {
                 &(&options).into(),
                 program,
                 &[seed.clone(), seed.clone()],
-                &mut diagnostics,
+                &mut Diagnostics::new(&mut diagnostics, ColorMode::Never),
                 &Control::default(),
                 &crate::phase_timing::Recorder::new(false),
             )
@@ -96,7 +97,7 @@ fn eager_static_cache_reuse_does_not_record_a_second_materialization() {
         &(&options).into(),
         admitted.program(),
         None,
-        &mut Vec::new(),
+        &mut Diagnostics::new(Vec::new(), ColorMode::Never),
         &phases,
     )
     .unwrap();
@@ -105,7 +106,7 @@ fn eager_static_cache_reuse_does_not_record_a_second_materialization() {
         &(&options).into(),
         admitted.program(),
         Some(ground.clone()),
-        &mut Vec::new(),
+        &mut Diagnostics::new(Vec::new(), ColorMode::Never),
         &phases,
     )
     .unwrap();

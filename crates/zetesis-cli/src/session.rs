@@ -5,6 +5,7 @@
 //! can reuse its immutable owner across sessions; each session owns fresh search
 //! budgets, its worker pools, pending results and incumbent storage.
 
+use crate::presentation::Diagnostics;
 use std::{io, sync::Arc};
 
 use zetesis_core::{GroundProgram, Model, Program};
@@ -294,7 +295,7 @@ impl<'a> Session<'a> {
                 config,
             ));
         }
-        let mut diagnostics = io::sink();
+        let mut diagnostics = Diagnostics::new(io::sink(), crate::ColorMode::Never);
         let state = match input.input {
             Prepared::Relational(program) => State::Closure(Box::new(ClosureSession::new(
                 program,
@@ -361,12 +362,13 @@ impl Iterator for Session<'_> {
     type Item = Result<SessionModel, SolveFailure>;
     fn next(&mut self) -> Option<Self::Item> {
         let solving = self.phases.stage(crate::SolveStage::Solving);
+        let mut diagnostics = Diagnostics::new(io::sink(), crate::ColorMode::Never);
         let next = match &mut self.state {
             State::Closure(state) => state
-                .next(&self.config, &mut io::sink(), &self.control, &self.phases)
+                .next(&self.config, &mut diagnostics, &self.control, &self.phases)
                 .map(|result| result.map(|model| (model, None))),
             State::Formula(state) => {
-                state.next(&self.config, &mut io::sink(), &self.control, &self.phases)
+                state.next(&self.config, &mut diagnostics, &self.control, &self.phases)
             }
             State::Stopped(_) => None,
         };

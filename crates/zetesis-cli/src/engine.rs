@@ -1,5 +1,6 @@
 //! Independent materialization selection and provisional hardware scheduling.
 
+use crate::presentation::{Diagnostics, Label};
 use std::io::Write;
 use std::sync::Arc;
 
@@ -48,7 +49,7 @@ impl Engine {
     pub(crate) fn new(
         options: &SolveConfig,
         program: &Program,
-        diagnostics: &mut impl Write,
+        diagnostics: &mut Diagnostics<impl Write>,
         phases: &Recorder,
     ) -> Result<Self, RunError> {
         Self::with_ground(options, program, None, diagnostics, phases)
@@ -58,7 +59,7 @@ impl Engine {
         options: &SolveConfig,
         program: &Program,
         cached: Option<Arc<GroundProgram>>,
-        diagnostics: &mut impl Write,
+        diagnostics: &mut Diagnostics<impl Write>,
         phases: &Recorder,
     ) -> Result<Self, RunError> {
         validate_combination(options)?;
@@ -67,19 +68,21 @@ impl Engine {
                 let cpu = Executor::cpu(options, program, cached, diagnostics, phases)?;
                 if options.backend == Backend::Auto {
                     if options.grounder == Grounder::Lazy {
-                        writeln!(
-                            diagnostics,
-                            "Auto: --grounder lazy requires source joins; using CPU without device discovery."
+                        diagnostics.metadata(
+                            Label::Auto,
+                            format_args!("--grounder lazy requires source joins; using CPU without device discovery."),
                         )?;
                     } else if cfg!(feature = "gpu") {
-                        writeln!(
-                            diagnostics,
-                            "Auto: GPU discovery deferred; the first seed stays CPU. Later batches of at least {AUTO_GPU_MIN_BATCH} candidates may use a physical GPU with static lowering (provisional heuristic)."
+                        diagnostics.metadata(
+                            Label::Auto,
+                            format_args!("GPU discovery deferred; the first seed stays CPU. Later batches of at least {AUTO_GPU_MIN_BATCH} candidates may use a physical GPU with static lowering (provisional heuristic)."),
                         )?;
                     } else {
-                        writeln!(
-                            diagnostics,
-                            "Auto: GPU support was not compiled; using CPU without device discovery."
+                        diagnostics.metadata(
+                            Label::Auto,
+                            format_args!(
+                                "GPU support was not compiled; using CPU without device discovery."
+                            ),
                         )?;
                     }
                 }
@@ -101,7 +104,7 @@ impl Engine {
         options: &SolveConfig,
         program: &Program,
         seeds: &[Seed],
-        diagnostics: &mut impl Write,
+        diagnostics: &mut Diagnostics<impl Write>,
         control: &Control,
         phases: &Recorder,
     ) -> Result<Vec<Result<Option<Model>, Stop>>, RunError> {
@@ -125,10 +128,12 @@ impl Engine {
                 Ok(gpu) => self.executor = gpu,
                 Err(error @ RunError::Output(_)) => return Err(error),
                 Err(error) => {
-                    writeln!(
-                        diagnostics,
-                        "Auto: retaining {} CPU; GPU unavailable: {error}",
-                        cpu_mode(options)
+                    diagnostics.metadata(
+                        Label::Auto,
+                        format_args!(
+                            "retaining {} CPU; GPU unavailable: {error}",
+                            cpu_mode(options)
+                        ),
                     )?;
                 }
             }
@@ -144,10 +149,12 @@ impl Engine {
             Err(error) if self.automatic && self.executor.is_gpu() => {
                 // No failed-batch result has been published. Eager retains the
                 // same graph; Auto returns to source joins for these same seeds.
-                writeln!(
-                    diagnostics,
-                    "Auto: GPU batch failed; retrying on {} CPU: {error}",
-                    cpu_mode(options)
+                diagnostics.metadata(
+                    Label::Auto,
+                    format_args!(
+                        "GPU batch failed; retrying on {} CPU: {error}",
+                        cpu_mode(options)
+                    ),
                 )?;
                 self.executor = phases.measure(SolvePhase::ExecutionSetup, || {
                     Executor::cpu(
@@ -197,7 +204,7 @@ impl Executor {
         options: &SolveConfig,
         program: &Program,
         cached: Option<Arc<GroundProgram>>,
-        diagnostics: &mut impl Write,
+        diagnostics: &mut Diagnostics<impl Write>,
         phases: &Recorder,
     ) -> Result<Self, RunError> {
         let oracle =
@@ -208,23 +215,26 @@ impl Executor {
                 None => compile_static(options, program, options.max_atoms, phases)?,
             };
             static_diagnostics(options, &ground, diagnostics)?;
-            writeln!(
-                diagnostics,
-                "Backend: cpu (eager static closure scans, {} workers)",
-                options.workers
+            diagnostics.metadata(
+                Label::Backend,
+                format_args!(
+                    "cpu (eager static closure scans, {} workers)",
+                    options.workers
+                ),
             )?;
             Ok(Self::StaticCpu { oracle, ground })
         } else {
             phases.lazy_grounding();
-            writeln!(
-                diagnostics,
-                "Grounding: requested={}, effective=lazy (source joins; no complete ground-rule store)",
-                options.grounder.label()
+            diagnostics.metadata(
+                Label::Grounding,
+                format_args!(
+                    "requested={}, effective=lazy (source joins; no complete ground-rule store)",
+                    options.grounder.label()
+                ),
             )?;
-            writeln!(
-                diagnostics,
-                "Backend: cpu (lazy source joins, {} workers)",
-                options.workers
+            diagnostics.metadata(
+                Label::Backend,
+                format_args!("cpu (lazy source joins, {} workers)", options.workers),
             )?;
             Ok(Self::Cpu(oracle))
         }
@@ -263,7 +273,7 @@ impl Executor {
         options: &SolveConfig,
         program: &Program,
         cached: Option<Arc<GroundProgram>>,
-        diagnostics: &mut impl Write,
+        diagnostics: &mut Diagnostics<impl Write>,
         phases: &Recorder,
     ) -> Result<Self, RunError> {
         use zetesis_wgpu::{GpuOptions, GpuOracle};
@@ -287,14 +297,16 @@ impl Executor {
             None => compile_static(options, program, atom_limit, phases)?,
         };
         static_diagnostics(options, &ground, diagnostics)?;
-        writeln!(
-            diagnostics,
-            "Backend: gpu ({}, {}; vendor=0x{:04x}; static atoms={}, rules={})",
-            oracle.info().name(),
-            oracle.info().backend(),
-            oracle.info().vendor_id(),
-            ground.atom_count(),
-            ground.rules().len()
+        diagnostics.metadata(
+            Label::Backend,
+            format_args!(
+                "gpu ({}, {}; vendor=0x{:04x}; static atoms={}, rules={})",
+                oracle.info().name(),
+                oracle.info().backend(),
+                oracle.info().vendor_id(),
+                ground.atom_count(),
+                ground.rules().len()
+            ),
         )?;
         Ok(Self::Gpu {
             oracle: Box::new(oracle),
@@ -373,17 +385,19 @@ fn compile_static(
 fn static_diagnostics(
     options: &SolveConfig,
     ground: &GroundProgram,
-    diagnostics: &mut impl Write,
+    diagnostics: &mut Diagnostics<impl Write>,
 ) -> Result<(), RunError> {
-    writeln!(
-        diagnostics,
-        "Grounding: requested={}, effective=eager (static atoms={}, rules={}; lowering caps atoms={}, rules={}, substitutions={})",
-        options.grounder.label(),
-        ground.atom_count(),
-        ground.rules().len(),
-        options.max_atoms,
-        options.max_ground_rules,
-        options.max_substitutions
+    diagnostics.metadata(
+        Label::Grounding,
+        format_args!(
+            "requested={}, effective=eager (static atoms={}, rules={}; lowering caps atoms={}, rules={}, substitutions={})",
+            options.grounder.label(),
+            ground.atom_count(),
+            ground.rules().len(),
+            options.max_atoms,
+            options.max_ground_rules,
+            options.max_substitutions
+        ),
     )?;
     Ok(())
 }

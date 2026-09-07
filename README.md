@@ -105,10 +105,16 @@ partial failure evidence. A resource stop is **incomplete**, never an UNSAT proo
 The [CLI guide](crates/zetesis-cli/README.md) describes stream contracts and exit
 codes.
 
+`-h` and `--help` show everyday solving options. Use `--help-all` for the full
+oracle, worker, batch and resource controls; these options remain available in
+ordinary invocations.
+
 On a capable terminal, human answer headings use cyan with a bold `Answer:` label;
-optimization metadata uses italic green. Colors come from your terminal palette.
-`--color auto|always|never` controls styling. Automatic mode respects `NO_COLOR`
-and `TERM=dumb`, and leaves redirected output plain. JSON never contains styling.
+optimization metadata uses italic green. Solve metadata on stderr uses blue
+labels and italic gray values. Colors come from your terminal palette.
+`--color auto|always|never` controls styling. Automatic mode resolves stdout and
+stderr independently, respects a nonempty `NO_COLOR` and `TERM=dumb`, and leaves
+each redirected stream plain. JSON never contains styling.
 
 `--stats` adds host timings and available work counters to stderr. It separates
 source preparation, eager grounding, solving and output. Formula grounding has

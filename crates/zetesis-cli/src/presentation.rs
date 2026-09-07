@@ -2,9 +2,35 @@
 
 use std::io::{self, Write};
 
+mod diagnostics;
+pub(crate) use diagnostics::{Diagnostics, Label};
+
+pub(crate) struct Streams {
+    pub(crate) output: ColorMode,
+    pub(crate) diagnostics: ColorMode,
+}
+impl Streams {
+    // Resolution is pure. The process supplies each stream's actual capability;
+    // neither stream borrows the other's policy or terminal observation.
+    pub(crate) const fn resolve(
+        mode: ColorMode,
+        output_terminal: bool,
+        diagnostics_terminal: bool,
+        disabled: bool,
+    ) -> Self {
+        Self {
+            output: mode.resolve(output_terminal, disabled),
+            diagnostics: mode.resolve(diagnostics_terminal, disabled),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests;
+
 /// Color policy for human output. JSON always ignores this policy.
 ///
-/// The process resolves `Auto` from stdout terminal detection, a nonempty
+/// The process resolves `Auto` independently for each standard stream, a nonempty
 /// `NO_COLOR`, and `TERM=dumb`. Library calls with injected writers keep `Auto`
 /// plain because a generic writer carries no terminal capability. Use `Always`
 /// to request ANSI styling explicitly from a library call.
@@ -13,13 +39,16 @@ pub enum ColorMode {
     /// Style an eligible terminal; leave generic library writers plain.
     #[default]
     Auto,
-    /// Emit ANSI styling in human model headings and objective metadata.
+    /// Emit ANSI styling in human model headings and solve/objective metadata.
     Always,
     /// Emit plain text.
     Never,
 }
 
 impl ColorMode {
+    pub(crate) const fn human(self, json: bool) -> Self {
+        if json { Self::Never } else { self }
+    }
     /// Resolve the process policy from explicit terminal capabilities.
     /// Environment inspection is the caller's responsibility. `disabled` means
     /// automatic color is disabled by terminal/environment conventions; an

@@ -27,7 +27,7 @@ fn stopped_formula_adapter_retains_admitted_subject() {
         admitted.metadata().output(),
         &options,
         &mut std::io::sink(),
-        &mut std::io::sink(),
+        &mut crate::presentation::Diagnostics::new(std::io::sink(), crate::ColorMode::Never),
         &control,
         &crate::phase_timing::Recorder::new(false),
     )

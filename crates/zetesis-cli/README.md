@@ -10,8 +10,14 @@ zetesis encoding.lp instance.lp --models 0
 printf 'a :- not b. b :- not a.\n' | zetesis --models 0
 zetesis devices
 zetesis --help
+zetesis --help-all
 zetesis --version
 ```
+
+`-h` and `--help` show everyday input, model, backend, grounding and output
+options. `--help-all` also describes oracle selection, workers, batching and
+resource ceilings. Advanced options remain parseable in every ordinary solve;
+the two help views do not select different execution modes.
 
 Supported language constructs are available automatically. Every returned answer
 set must satisfy the original program and the exact reduct acceptance criterion.
@@ -26,18 +32,24 @@ distinct answer sets.
 
 Human output defaults to `--color auto`: eligible stdout terminals receive cyan
 answer headings with a bold `Answer:` label and italic green optimization
-metadata. Standard ANSI palette colors inherit the terminal's configured theme;
-atom lines stay plain. `--color always` forces these styles, while `--color never`
-disables them. Automatic mode respects a nonempty `NO_COLOR` and `TERM=dumb`,
-and does not style redirected output. JSON always ignores color selection.
+metadata. Eligible stderr terminals receive blue `Source:`, `Oracle:`,
+`Grounding:`, `Backend:` and `Auto:` labels with italic gray values. Standard ANSI
+palette colors inherit the terminal's configured theme; atom lines, statistics
+and errors stay plain. `--color always` forces the human styles, while
+`--color never` disables them. Automatic mode resolves stdout and stderr
+independently, respects a nonempty `NO_COLOR` and `TERM=dumb`, and leaves each
+redirected stream plain. JSON ignores color selection on both streams.
 
 `ColorMode` is a typed presentation policy; it is absent from semantic
 `SolveConfig`. The process resolves terminal/environment capabilities once.
-Library calls with a generic injected writer keep `Auto` plain and can request
-`Always` explicitly. Styling and reset bytes count toward the complete human
-record ceiling before publication. A partial write remains a publication failure,
+Library calls with generic injected writers keep `Auto` plain and can request
+`Always` explicitly. Solve metadata is streamed through typed actions; arbitrary
+diagnostic writes are passed through without buffering or text classification.
+Styling and reset bytes in an Answer record count toward its complete human
+record ceiling before publication. A partial write remains an output failure,
 including when it interrupts an escape sequence; the writer's retained prefix
-cannot be recalled or guaranteed to have restored terminal styling.
+cannot be recalled or guaranteed to have restored terminal styling. Diagnostic
+styling preserves the original plain metadata text, spacing and newlines.
 
 `SATISFIABLE`, `UNSATISFIABLE`, or `OPTIMUM FOUND` and the separate coverage record
 describe the result. A search or objective resource stop prints `INCOMPLETE` and

@@ -1,5 +1,6 @@
 //! The ordinary closure loop retained across semantic pulls.
 
+use crate::presentation::Diagnostics;
 use std::io::Write;
 use std::sync::Arc;
 
@@ -30,7 +31,7 @@ impl<'a> ClosureSession<'a> {
         program: &'a Program,
         ground: Option<Arc<GroundProgram>>,
         config: &SolveConfig,
-        diagnostics: &mut impl Write,
+        diagnostics: &mut Diagnostics<impl Write>,
         control: &Control,
         phases: &Recorder,
     ) -> Result<Self, RunError> {
@@ -66,7 +67,7 @@ impl<'a> ClosureSession<'a> {
     pub(crate) fn next(
         &mut self,
         config: &SolveConfig,
-        diagnostics: &mut impl Write,
+        diagnostics: &mut Diagnostics<impl Write>,
         control: &Control,
         phases: &Recorder,
     ) -> Option<Result<Model, RunError>> {

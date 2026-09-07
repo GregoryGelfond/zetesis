@@ -1,5 +1,6 @@
 //! Eager finite formula search with scalar CPU or batched hybrid membership.
 
+use crate::presentation::Diagnostics;
 use std::io::Write;
 
 use zetesis_core::Atom;
@@ -26,7 +27,7 @@ pub(crate) fn run_formula(
     selection: &OutputSelection,
     options: &Options,
     output: &mut impl Write,
-    diagnostics: &mut impl Write,
+    diagnostics: &mut Diagnostics<impl Write>,
     control: &Control,
     phases: &Recorder,
 ) -> Result<Progress, SolveFailure> {

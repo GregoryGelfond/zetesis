@@ -1,7 +1,5 @@
-use crate::{
-    Command, Completion, Options, Report, RunError, RunFailure, devices,
-    run_bundle_detailed_with_diagnostics, run_detailed_with_diagnostics,
-};
+use crate::presentation::{Diagnostics, Streams};
+use crate::{Command, Completion, Options, Report, RunError, RunFailure, devices};
 use clap::Parser;
 use std::io::{self, IsTerminal, Read, Write};
 use std::process::ExitCode;
@@ -14,25 +12,33 @@ use zetesis_themelios::{BundleLimits, SourceBundle};
 pub fn entry() -> ExitCode {
     let mut options = Options::parse();
     let mut output = io::stdout().lock();
-    let disabled = std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty())
-        || std::env::var_os("TERM").is_some_and(|value| value == "dumb");
-    options.color = options.color.resolve(output.is_terminal(), disabled);
+    let no_color = std::env::var_os("NO_COLOR");
+    let term = std::env::var_os("TERM");
+    let disabled = color_disabled(no_color.as_deref(), term.as_deref());
+    let diagnostics = io::stderr().lock();
+    let colors = Streams::resolve(
+        options.color.human(options.json),
+        output.is_terminal(),
+        diagnostics.is_terminal(),
+        disabled,
+    );
+    options.color = colors.output;
+    let mut diagnostics = Diagnostics::new(diagnostics, colors.diagnostics);
     if options.command == Some(Command::Devices) {
         return match devices(&mut output) {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
-                let _ = writeln!(io::stderr().lock(), "zetesis: {error}");
+                let _ = writeln!(diagnostics, "zetesis: {error}");
                 ExitCode::from(2)
             }
         };
     }
-    let mut diagnostics = io::stderr().lock();
     let result = run_input(&options, &mut output, &mut diagnostics);
     match result {
         Ok(report) if report.completion == Completion::Interrupted => ExitCode::from(3),
         Ok(_) => ExitCode::SUCCESS,
         Err(error) => {
-            let _ = writeln!(io::stderr().lock(), "zetesis: {error}");
+            let _ = writeln!(diagnostics, "zetesis: {error}");
             ExitCode::from(2)
         }
     }
@@ -41,7 +47,7 @@ pub fn entry() -> ExitCode {
 fn run_input(
     options: &Options,
     output: &mut impl Write,
-    diagnostics: &mut impl Write,
+    diagnostics: &mut Diagnostics<impl Write>,
 ) -> Result<Report, RunFailure> {
     let input = match load_input(options) {
         Ok(input) => input,
@@ -55,19 +61,26 @@ fn run_input(
         }
     };
     let control = zetesis_cpu::Control::default();
-    match input {
+    let result = match input {
         Input::Source(source) => {
-            run_detailed_with_diagnostics(source, options, output, diagnostics, &control)
+            crate::driver::run_source_with_writer(source, options, output, diagnostics, &control)
         }
         Input::Bundle(bundle) => {
-            run_bundle_detailed_with_diagnostics(bundle, options, output, diagnostics, &control)
+            crate::driver::run_bundle_with_writer(bundle, options, output, diagnostics, &control)
         }
-    }
+    };
+    result
+        .map(crate::SolveReport::into_report)
+        .map_err(crate::SolveFailure::into_legacy)
 }
 
 enum Input {
     Source(String),
     Bundle(SourceBundle),
+}
+
+fn color_disabled(no_color: Option<&std::ffi::OsStr>, term: Option<&std::ffi::OsStr>) -> bool {
+    no_color.is_some_and(|value| !value.is_empty()) || term.is_some_and(|value| value == "dumb")
 }
 
 fn load_input(options: &Options) -> Result<Input, RunError> {
@@ -112,4 +125,27 @@ fn read_source(options: &Options) -> io::Result<String> {
         ));
     }
     Ok(source)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::color_disabled;
+    use std::ffi::OsStr;
+
+    #[test]
+    fn terminal_conventions_disable_only_automatic_color() {
+        for (no_color, term, expected) in [
+            (None, None, false),
+            (Some(""), Some("xterm"), false),
+            (Some("0"), Some("xterm"), true),
+            (Some("1"), None, true),
+            (None, Some("dumb"), true),
+            (None, Some("xterm-256color"), false),
+        ] {
+            assert_eq!(
+                color_disabled(no_color.map(OsStr::new), term.map(OsStr::new)),
+                expected
+            );
+        }
+    }
 }

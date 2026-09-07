@@ -1,5 +1,6 @@
 //! Language admission and exact oracle selection for strings and original bundles.
 
+use crate::presentation::{Diagnostics, Label};
 use std::io::Write;
 
 use zetesis_cpu::Control;
@@ -16,7 +17,7 @@ pub(crate) fn source(
     source: String,
     options: &Options,
     output: &mut impl Write,
-    diagnostics: &mut impl Write,
+    diagnostics: &mut Diagnostics<impl Write>,
     control: &Control,
     phases: &Recorder,
 ) -> Result<Progress, SolveFailure> {
@@ -47,7 +48,7 @@ pub(crate) fn source(
             admit_extended(source, admission, expansion_limits(options))
         }) {
             Ok(admitted) => {
-                writeln!(diagnostics, "Oracle: reduct closure")?;
+                diagnostics.metadata(Label::Oracle, format_args!("reduct closure"))?;
                 return crate::driver::solve_program(
                     admitted.program(),
                     admitted.metadata().output(),
@@ -110,7 +111,7 @@ pub(crate) fn bundle(
     bundle: SourceBundle,
     options: &Options,
     output: &mut impl Write,
-    diagnostics: &mut impl Write,
+    diagnostics: &mut Diagnostics<impl Write>,
     control: &Control,
     phases: &Recorder,
 ) -> Result<Progress, SolveFailure> {
@@ -127,11 +128,13 @@ pub(crate) fn bundle(
     {
         return Ok(report);
     }
-    writeln!(
-        diagnostics,
-        "Source: {} original files ({} bytes)",
-        bundle.sources().len(),
-        bundle.total_bytes()
+    diagnostics.metadata(
+        Label::Source,
+        format_args!(
+            "{} original files ({} bytes)",
+            bundle.sources().len(),
+            bundle.total_bytes()
+        ),
     )?;
     let bundle = if options.oracle == Oracle::Countermodel {
         bundle
@@ -144,7 +147,7 @@ pub(crate) fn bundle(
             )
         }) {
             Ok(admitted) => {
-                writeln!(diagnostics, "Oracle: reduct closure")?;
+                diagnostics.metadata(Label::Oracle, format_args!("reduct closure"))?;
                 return crate::driver::solve_program(
                     admitted.program(),
                     admitted.metadata().output(),
