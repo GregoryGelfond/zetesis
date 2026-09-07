@@ -104,6 +104,13 @@ correction over that baseline, not a claim that every historical component has
 been reviewed against every expectation. Exact final check identities and installed
 binary associations belong to the linked evidence record.
 
+## Public API review follow-up
+
+The subsequent [independent public API review](public-api-review-20260907.md)
+traced these representation concerns, reproduced a separate human-output bound
+defect and proposed a bounded hardening checkpoint. Its findings distinguish
+contract defects from composition improvements and retain migration/test obligations.
+
 ## Next useful work
 
 A shared library outcome should preserve verification, successful publication,
