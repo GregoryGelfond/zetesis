@@ -1,11 +1,26 @@
-# Proposed tranche after API hardening
+# Next language tranche after API hardening
 
-This is a plan, not an implementation or parity declaration. The preceding
-[API checkpoint](api-hardening-20260907.md) retains the independent reduct
-architecture, reusable semantic sessions and its qualified source. Resume language
-work through general binding and value operations, with optimization limited to
-preventing regressions during these changes. Dedicated optimization follows the
-agreed intended-language boundary, rather than this selected test milestone alone.
+The reduct is the permanent semantic foundation of zetesis. This applies to every
+tranche and execution backend. Candidate generation proposes interpretations;
+acceptance requires stable-model membership under the applicable reduct semantics.
+General formulas use the Ferraris/clingo-oriented reduct. Normal-rule closure is
+an exact specialization of that same stable-model requirement.
+
+A class certificate can justify a cheaper exact acceptance procedure only while
+its stated premises hold for the actual program. Such a procedure implements the
+reduct criterion for that class; it does not replace zetesis's semantic foundation.
+The general reduct oracle remains the exact path where those premises do not hold.
+Heuristics, propagation, arithmetic plans, source transformations and hardware
+scheduling cannot independently establish an answer set. Changes must preserve
+stable-model correspondence, including any auxiliary-atom projection, and retain
+explicit coverage and interruption obligations. No transition to CDNL or to a
+SAT solver with ASP syntax is proposed.
+
+This document plans the next language work; it declares neither implementation
+nor parity. Build on the reusable semantic sessions from the
+[API checkpoint](api-hardening-20260907.md) through general binding and value
+operations. Dedicated optimization follows the agreed intended-language boundary;
+this tranche measures and controls regressions while adding those mechanisms.
 
 ## Target and evidence
 
