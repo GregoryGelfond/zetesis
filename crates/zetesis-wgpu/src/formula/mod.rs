@@ -2,11 +2,13 @@
 
 mod device;
 mod packing;
+mod projection;
 mod transport;
 
 use std::time::Duration;
 
 pub use device::GpuFormulaOracle;
+pub use projection::GateProjection;
 
 /// Bounds for one resident finite-formula propagation dispatch.
 #[derive(Clone, Copy, Debug)]

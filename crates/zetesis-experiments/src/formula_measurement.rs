@@ -15,11 +15,14 @@ use crate::formula_fixtures::reserve;
 use crate::formula_parallel::FormulaPool;
 use crate::{Backend, FormulaFamily, FormulaFixture};
 
+mod projection;
+pub use projection::run_formula_projection;
+
 /// Resident general-reduct propagation followed by exact CPU residual checking.
 /// This experiment does not enumerate source answer sets or measure a full solve.
 #[derive(Clone, Debug, Args)]
 pub struct FormulaOptions {
-    /// Require physical Metal, or explicitly measure only the CPU membership baselines.
+    /// Physical Metal or CPU-only baselines; formula-projection requires Metal.
     #[arg(long, value_enum, default_value_t)]
     pub backend: Backend,
     /// Semantic atom counts for the synthetic, unrewritten original theories.
@@ -59,6 +62,10 @@ pub struct FormulaOptions {
 /// An experiment failure, distinct from an unresolved GPU query.
 #[derive(Debug)]
 pub enum FormulaBenchmarkError {
+    /// A paired projection experiment requires explicit physical Metal execution.
+    ProjectionRequiresMetal,
+    /// The two selected adapters reported different identifying metadata.
+    AdapterMismatch,
     /// The requested fixture or measurement dimensions were refused.
     Dimensions,
     /// Fallible host storage reservation failed.
@@ -82,6 +89,8 @@ pub enum FormulaBenchmarkError {
 impl fmt::Display for FormulaBenchmarkError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::ProjectionRequiresMetal => f.write_str("formula-projection requires --backend metal"),
+            Self::AdapterMismatch => f.write_str("projection adapters report different metadata"),
             Self::Dimensions => f.write_str(
                 "require nonempty families, 1..4096 atoms/worlds, 1..100 repetitions, and 1..64 CPU workers",
             ),
@@ -106,7 +115,12 @@ impl std::error::Error for FormulaBenchmarkError {
             Self::Incomplete(error) => Some(error),
             Self::Gpu(error) => Some(error),
             Self::Output(error) => Some(error),
-            Self::Dimensions | Self::Allocation | Self::Parity | Self::Residency => None,
+            Self::Dimensions
+            | Self::Allocation
+            | Self::Parity
+            | Self::Residency
+            | Self::ProjectionRequiresMetal
+            | Self::AdapterMismatch => None,
         }
     }
 }
@@ -254,45 +268,56 @@ impl FormulaCase<'_> {
             } else {
                 "warm"
             };
-            let started = Instant::now();
-            let mut expected = reserve(self.batch)?;
-            for candidate in &candidates {
-                expected.push(native(
-                    self.fixture.theory(),
-                    candidate,
-                    self.options.max_work,
-                )?);
-            }
-            self.emit(
-                output,
-                "cpu-native",
-                phase,
-                iteration,
-                [started.elapsed(), Duration::ZERO, Duration::ZERO],
-                0,
-            )?;
-            let started = Instant::now();
-            let parallel = pool.check_batch(
-                self.fixture.theory(),
-                &candidates,
-                self.options.max_work,
-                &Control::default(),
-            )?;
-            let elapsed = started.elapsed();
-            verify(&parallel, &expected)?;
-            self.emit(
-                output,
-                "cpu-rayon",
-                phase,
-                iteration,
-                [elapsed, Duration::ZERO, Duration::ZERO],
-                0,
-            )?;
+            let expected = self.reference(output, pool, &candidates, (phase, iteration))?;
             if let Some(oracle) = gpu {
                 self.hybrid(output, oracle, &candidates, &expected, (phase, iteration))?;
             }
         }
         Ok(())
+    }
+
+    fn reference(
+        &self,
+        output: &mut impl Write,
+        pool: &FormulaPool,
+        candidates: &[Interpretation],
+        sample: (&str, usize),
+    ) -> Result<Vec<Membership>, FormulaBenchmarkError> {
+        let started = Instant::now();
+        let mut expected = reserve(self.batch)?;
+        for candidate in candidates {
+            expected.push(native(
+                self.fixture.theory(),
+                candidate,
+                self.options.max_work,
+            )?);
+        }
+        self.emit(
+            output,
+            "cpu-native",
+            sample.0,
+            sample.1,
+            [started.elapsed(), Duration::ZERO, Duration::ZERO],
+            0,
+        )?;
+        let started = Instant::now();
+        let parallel = pool.check_batch(
+            self.fixture.theory(),
+            candidates,
+            self.options.max_work,
+            &Control::default(),
+        )?;
+        let elapsed = started.elapsed();
+        verify(&parallel, &expected)?;
+        self.emit(
+            output,
+            "cpu-rayon",
+            sample.0,
+            sample.1,
+            [elapsed, Duration::ZERO, Duration::ZERO],
+            0,
+        )?;
+        Ok(expected)
     }
 
     fn hybrid(
@@ -332,7 +357,10 @@ impl FormulaCase<'_> {
         verify(&completed, expected)?;
         self.emit(
             output,
-            "metal-with-cpu-residuals",
+            match oracle.projection() {
+                zetesis_wgpu::GateProjection::Enumerated => "metal-with-cpu-residuals",
+                zetesis_wgpu::GateProjection::Bitwise => "metal-bitwise-with-cpu-residuals",
+            },
             sample.0,
             sample.1,
             [elapsed, device, residual],

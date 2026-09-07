@@ -2,9 +2,9 @@
 
 This crate contains bounded development experiments, with reusable library entry
 points and a `zetesis-bench` command adapter. It does not replace ordinary solver
-qualification. The command has three independent profiles: static reduct oracles
-(the default), `formula` for general reduct checking, and `grounding` for fresh
-original-source formula admission.
+qualification. Profiles are static reduct oracles (the default), `formula` for
+general reduct checking, `formula-projection` for paired opt-in gate comparison,
+and `grounding` for fresh original-source formula admission.
 
 Reproducible measurements of exact static reduct oracles. `zetesis-bench`
 defaults to a physical Metal device and fails if one cannot be used. Select
@@ -70,6 +70,55 @@ records remaining full-GPU work. Ordinary CLI formula solving can explicitly
 select the same GPU primitive; this experiment alone does not qualify that
 end-to-end integration. The dated M4 Pro record predates the Rayon baseline
 and retains its original two-backend measurements.
+
+## Paired gate projections
+
+Build the engineering binary once, then use a quiet physical Metal session:
+
+```sh
+cargo +1.97.1 build -p zetesis-experiments --bin zetesis-bench --release --locked --offline
+target/release/zetesis-bench formula-projection --backend metal \
+  --atoms 3,64,256 --batches 8,64 --repetitions 4 --cpu-workers 4 \
+  > target/gate-projection.tsv
+```
+
+With `CARGO_TARGET_DIR`, use its `release/zetesis-bench`. Record the revision,
+binary SHA-256, toolchain, host and command with the raw output. The command fails
+if physical Metal is unavailable; `--backend cpu` is explicitly refused. The
+existing `formula` command and ordinary solver keep the Enumerated default.
+
+The reusable `run_formula_projection(&FormulaOptions, &mut Write)` entry point
+owns two independently initialized oracles, compares their reported metadata,
+then checks both on the same original Theory instance and owned candidate batch.
+Metadata equality cannot certify unique physical-device identity. Each sample
+first obtains exact scalar and Rayon membership. Projection order is Enumerated,
+Bitwise on even iterations and Bitwise, Enumerated on odd iterations, starting
+with initial-case iteration zero. Both must preserve the exact native result for
+every candidate and reuse their graph/transport during warm samples. The default
+five formula families include shared children and false-masked implications.
+
+TSV rows use `metal-with-cpu-residuals` for Enumerated and
+`metal-bitwise-with-cpu-residuals` for Bitwise. `dispatch_host_ns` measures the full
+host dispatch boundary, including packing, transfer, execution and readback;
+it is not a device timestamp. Hybrid time includes serial native completion of
+every residual. Residual and sweep counts can vary with device scheduling;
+complete native membership must agree. Initial setup and warm rows remain
+separate. Headers give actual numeric limits; residency Debug lines are
+supplemental diagnostics, not the configuration schema.
+
+These CPU quotas are per candidate. This command does not characterize ordinary
+execution's cumulative shared quota, completion worker scheduling, outer
+candidate stream, source grounding, objectives, or complete solve time. Shapes,
+repetitions and per-query work remain bounded as for `formula`; the caller's
+finite lists determine total case count. Any incomplete check, mismatch, device
+failure or writer error stops the experiment without final PASS. A writer may
+retain a prefix. The command retains no sample history itself.
+
+Four warm iterations give each projection equal first/second positions, but do
+not remove cache, thermal or driver effects. No Bitwise physical qualification or
+speedup is established by its portable tests or by adding this command. Run the
+separate explicit `zetesis-wgpu` `hardware_formula` tests to cover exhaustive tiny
+frozen cases, exact resource boundaries, cache replacement and foreign identity.
 
 ## Original-source grounding
 

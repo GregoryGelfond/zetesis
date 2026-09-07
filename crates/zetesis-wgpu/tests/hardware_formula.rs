@@ -4,7 +4,8 @@
 use zetesis_cpu::Control;
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Limits, Node, Theory, Verdict, check};
 use zetesis_wgpu::{
-    FormulaLimits, FormulaVerdict, GpuErrorKind, GpuFormulaOracle, GpuOptions, ResidualReason,
+    FormulaLimits, FormulaVerdict, GateProjection, GpuErrorKind, GpuFormulaOracle, GpuOptions,
+    ResidualReason,
 };
 
 fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
@@ -91,10 +92,22 @@ fn compare(oracle: &mut GpuFormulaOracle, theory: &Theory) -> (usize, usize) {
 #[test]
 #[ignore = "requires an actual Metal GPU; explicit hardware qualification only"]
 fn metal_formula_queries_preserve_exact_frozen_semantics_and_residency() {
-    let mut oracle = GpuFormulaOracle::new_metal(GpuOptions::default()).unwrap();
+    for projection in GateProjection::ALL {
+        qualify_frozen_queries(projection);
+    }
+}
+
+fn qualify_frozen_queries(projection: GateProjection) {
+    let mut oracle =
+        GpuFormulaOracle::new_metal_with_projection(GpuOptions::default(), projection).unwrap();
+    assert_eq!(oracle.projection(), projection);
     assert_eq!(oracle.info().backend(), "Metal");
     assert!(oracle.info().is_hardware_gpu());
-    println!("formula adapter={}", oracle.info().name());
+    println!(
+        "formula projection={} adapter={}",
+        projection.label(),
+        oracle.info().name()
+    );
     let mut totals = (0, 0);
     for graph in [
         theory(0, vec![], vec![]),
@@ -180,7 +193,14 @@ fn metal_formula_queries_preserve_exact_frozen_semantics_and_residency() {
 #[test]
 #[ignore = "requires an actual Metal GPU; explicit hardware qualification only"]
 fn metal_formula_limits_resize_identity_and_word_boundaries_remain_explicit() {
-    let mut oracle = GpuFormulaOracle::new_metal(GpuOptions::default()).unwrap();
+    for projection in GateProjection::ALL {
+        qualify_resources(projection);
+    }
+}
+
+fn qualify_resources(projection: GateProjection) {
+    let mut oracle =
+        GpuFormulaOracle::new_metal_with_projection(GpuOptions::default(), projection).unwrap();
     let graph = theory(1, vec![Node::Atom(0)], vec![0]);
     let inputs = candidates(&graph);
     for (limits, expected) in [

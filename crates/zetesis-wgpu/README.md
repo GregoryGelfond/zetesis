@@ -184,3 +184,29 @@ the lowest warm median; automatic formula selection therefore retains CPU.
 The older static Metal record does not qualify this kernel. See the
 [design and completion obligations](../../docs/design/gpu-formula-propagation.md)
 for semantic premises, resource boundaries and the path to full acceleration.
+
+### Explicit gate projection experiment
+
+`GateProjection::Enumerated` remains the default for all existing constructors
+and ordinary solver calls. `GpuFormulaOracle::new_metal_with_projection` and
+`new_selected_with_projection` permit the opt-in `Bitwise` alternative;
+`projection()` reports the immutable selection. Bitwise replaces only the enabled
+gate's eight-row loop by intersections of eight-bit relation masks. It preserves
+physical aliases, separately observed domain masks, the three atomic loads and
+intersections, frozen-false gate suppression, sweep/work accounting and result
+decoding. Both variants use the original shader scaffold and transport.
+
+The baseline shader is borrowed unchanged. The alternative reserves one fixed
+source buffer fallibly, inserts its gate fragment into that baseline, then passes
+the source to shader creation. This setup cost is outside batch resource limits;
+driver allocations are also outside the authored accounting contract.
+
+Portable tests cover all 960 connective/alias/domain combinations against an
+independent Boolean row definition, mixed stale observations, complete frozen
+query examples and Naga validation. The new Lean finite representation laws are
+not a Rust/WGSL or atomic-execution refinement proof. Both variants are included
+in the explicit `hardware_formula` test above. A paired engineering command is
+`zetesis-bench formula-projection --backend metal`; its exact scope and bounded
+qualification command are in the [experiment guide](../zetesis-experiments/README.md#paired-gate-projections).
+Historical hardware records qualify the retained enumerated implementation;
+they establish neither physical qualification nor performance of Bitwise.

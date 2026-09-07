@@ -10,7 +10,7 @@ pub(crate) struct DeviceProfile {
     pub(crate) device_label: &'static str,
     pub(crate) shader_label: &'static str,
     pub(crate) pipeline_label: &'static str,
-    pub(crate) shader: &'static str,
+    pub(crate) shader: std::borrow::Cow<'static, str>,
     pub(crate) entry_point: &'static str,
     pub(crate) validate_limits: fn(&wgpu::Limits) -> Result<(), GpuError>,
 }
@@ -49,7 +49,7 @@ impl Runtime {
         let scopes = ErrorScopes::new(&device);
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(profile.shader_label),
-            source: wgpu::ShaderSource::Wgsl(profile.shader.into()),
+            source: wgpu::ShaderSource::Wgsl(profile.shader),
         });
         let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some(profile.pipeline_label),

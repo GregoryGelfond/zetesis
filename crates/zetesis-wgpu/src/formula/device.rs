@@ -2,12 +2,10 @@
 
 use super::packing::{Graph, Plan};
 use super::transport::Resident;
-use super::{FormulaBatchStats, FormulaCheck, FormulaLimits};
+use super::{FormulaBatchStats, FormulaCheck, FormulaLimits, GateProjection};
 use crate::runtime::{DeviceProfile, ErrorScopes, Runtime};
 use crate::{GpuBackendPreference, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
 use zetesis_ferraris::{Interpretation, Theory};
-
-const SHADER: &str = include_str!("../formula.wgsl");
 
 /// GPU original-truth evaluation and sound frozen-query propagation.
 ///
@@ -15,6 +13,7 @@ const SHADER: &str = include_str!("../formula.wgsl");
 /// scoring, candidate enumeration or CPU oracle fallback occurs here.
 pub struct GpuFormulaOracle {
     runtime: Runtime,
+    projection: GateProjection,
     resident: Option<Resident>,
     epoch: u32,
     last: Option<FormulaBatchStats>,
@@ -26,12 +25,31 @@ impl GpuFormulaOracle {
     /// Refuses unavailable/refused adapters, insufficient capabilities, device
     /// creation and pipeline validation. No different API or CPU is substituted.
     pub fn new_metal(options: GpuOptions) -> Result<Self, GpuError> {
-        Self::new_selected(
+        Self::new_metal_with_projection(options, GateProjection::default())
+    }
+
+    /// Require physical Metal with an explicitly selected gate implementation.
+    ///
+    /// Owns a new device/pipeline and initially no resident theory or transport.
+    /// Enumerated borrows its shader; Bitwise reserves and assembles one fixed
+    /// source. Device creation and compilation have driver-dependent allocation
+    /// and duration, outside dispatch limits.
+    /// Existing constructors retain [`GateProjection::Enumerated`].
+    ///
+    /// # Errors
+    /// Refuses unavailable adapters, insufficient capabilities, source allocation,
+    /// device creation or validation. It substitutes neither another API nor CPU.
+    pub fn new_metal_with_projection(
+        options: GpuOptions,
+        projection: GateProjection,
+    ) -> Result<Self, GpuError> {
+        Self::new_selected_with_projection(
             options,
             GpuSelection {
                 backend: GpuBackendPreference::Metal,
                 ..GpuSelection::default()
             },
+            projection,
         )
     }
     /// Select a native adapter and create this profile's separate device/pipeline.
@@ -40,6 +58,24 @@ impl GpuFormulaOracle {
     /// Returns typed adapter, capacity, allocation, validation or device failure.
     /// Selection follows the existing hard API/vendor and physical-device policy.
     pub fn new_selected(options: GpuOptions, selection: GpuSelection) -> Result<Self, GpuError> {
+        Self::new_selected_with_projection(options, selection, GateProjection::default())
+    }
+
+    /// Create an independently owned native device/pipeline for this projection.
+    ///
+    /// Uses the same hard API/vendor and physical-device selection policy as
+    /// [`Self::new_selected`]. Construction does not ground, enumerate, or alter
+    /// a theory. Enumerated source is borrowed; Bitwise assembles one fixed-size
+    /// shader with a fallible reservation, then transfers it to shader creation.
+    /// Device/pipeline costs depend on the driver and are outside dispatch limits.
+    ///
+    /// # Errors
+    /// Returns typed adapter, capacity, allocation, validation or device failure.
+    pub fn new_selected_with_projection(
+        options: GpuOptions,
+        selection: GpuSelection,
+        projection: GateProjection,
+    ) -> Result<Self, GpuError> {
         let runtime = pollster::block_on(Runtime::new(
             options,
             selection,
@@ -47,17 +83,24 @@ impl GpuFormulaOracle {
                 device_label: "zetesis frozen formula device",
                 shader_label: "frozen formula propagation",
                 pipeline_label: "cooperative finite-formula query",
-                shader: SHADER,
+                shader: projection.shader()?,
                 entry_point: "propagate",
                 validate_limits: check_limits,
             },
         ))?;
         Ok(Self {
             runtime,
+            projection,
             resident: None,
             epoch: 0,
             last: None,
         })
+    }
+
+    /// Selected gate implementation; constant-time observation without I/O.
+    #[must_use]
+    pub const fn projection(&self) -> GateProjection {
+        self.projection
     }
     /// Identity of the actual selected native adapter.
     #[must_use]

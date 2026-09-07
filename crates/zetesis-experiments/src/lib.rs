@@ -18,7 +18,9 @@ pub mod grounding;
 
 pub use fixtures::{BenchmarkFixture, Family};
 pub use formula_fixtures::{FormulaFamily, FormulaFixture};
-pub use formula_measurement::{FormulaBenchmarkError, FormulaOptions, run_formula};
+pub use formula_measurement::{
+    FormulaBenchmarkError, FormulaOptions, run_formula, run_formula_projection,
+};
 pub use measurement::{Backend, BenchmarkError, Options, run};
 
 /// Standalone experiment selection, retaining the existing static command.
@@ -42,6 +44,11 @@ pub struct CommandOptions {
 pub enum Experiment {
     /// Compare resident GPU reduct propagation plus exact CPU residual search.
     Formula(FormulaOptions),
+    /// Compare exact gate projections with per-candidate CPU quotas.
+    ///
+    /// Requires physical Metal. Hybrid residual checks stay serial; ordinary
+    /// cumulative-budget scheduling, outer search and grounding are excluded.
+    FormulaProjection(FormulaOptions),
     /// Attribute bounded original-source formula admission on CPU.
     Grounding(grounding::Options),
 }

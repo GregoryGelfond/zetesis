@@ -28,7 +28,7 @@ use runtime::{DeviceProfile, ErrorScopes, Runtime};
 
 pub use formula::{
     FormulaBatchStats, FormulaCheck, FormulaLimits, FormulaStatistics, FormulaVerdict,
-    GpuFormulaOracle, ResidualReason,
+    GateProjection, GpuFormulaOracle, ResidualReason,
 };
 
 pub use adapter::{AdapterBackend, AdapterCategory, AdapterMetadata};
@@ -247,7 +247,7 @@ impl GpuOracle {
                 device_label: "zetesis static reduct oracle",
                 shader_label: "zetesis exact integer reduct",
                 pipeline_label: "zetesis static batch",
-                shader: SHADER,
+                shader: SHADER.into(),
                 entry_point: "check",
                 validate_limits: check_adapter_limits,
             },
