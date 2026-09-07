@@ -100,6 +100,59 @@ fn materialization_checks_dynamic_arithmetic() {
 }
 
 #[test]
+fn grounding_resumes_the_expansion_budget() {
+    // This fixture charges 7 selected payload bytes during preparation and 19
+    // during grounding. Resetting the budget at ground() would wrongly admit 25.
+    let source = "p(\"x\").";
+    let exact_bytes = 26;
+    let expansion = ExpansionLimits {
+        max_scalar_bytes: exact_bytes - 1,
+        ..ExpansionLimits::default()
+    };
+    let prepared = prepare_formula(
+        source.into(),
+        AdmissionOptions::default(),
+        expansion,
+        FormulaLimits::default(),
+    )
+    .unwrap();
+    let error = prepared.ground().unwrap_err();
+    let legacy = admit_formula(
+        source.into(),
+        AdmissionOptions::default(),
+        expansion,
+        FormulaLimits::default(),
+    )
+    .unwrap_err();
+    assert_eq!(error.to_string(), legacy.to_string());
+    let FormulaFailure::Expansion(ExpansionFailure::Limit {
+        resource,
+        limit,
+        observed,
+        location,
+    }) = error
+    else {
+        panic!("expected cumulative expansion refusal");
+    };
+    assert_eq!(resource, zetesis_themelios::ExpansionResource::ScalarBytes);
+    assert_eq!(limit, (exact_bytes - 1) as u128);
+    assert_eq!(observed, exact_bytes as u128);
+    assert_eq!(location.source, AdmissionOptions::default().source_id);
+    prepare_formula(
+        source.into(),
+        AdmissionOptions::default(),
+        ExpansionLimits {
+            max_scalar_bytes: exact_bytes,
+            ..expansion
+        },
+        FormulaLimits::default(),
+    )
+    .unwrap()
+    .ground()
+    .unwrap();
+}
+
+#[test]
 fn preparation_enforces_the_analysis_budget() {
     let error = prepare_formula(
         "p.".into(),
