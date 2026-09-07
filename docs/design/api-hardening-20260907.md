@@ -102,3 +102,7 @@ execution, deployment assurance and executable refinement remain open objectives
 The [qualification record](../verification/api-hardening-20260907/README.md)
 distinguishes focused checks, integrated gates, ordinary performance and physical
 device evidence. Historical Metal results retain their original binary identity.
+
+The [next tranche proposal](next-tranche-after-api-20260907.md) resumes general
+language mechanisms, with shared foundations and ordered integration. Dedicated optimization remains a later focus after the intended
+language profile is closed.

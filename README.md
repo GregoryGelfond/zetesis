@@ -424,6 +424,11 @@ workspace** and **92.10% CPU-only CLI**, retaining both independent **91% floors
 The subsequent [API hardening checkpoint](docs/design/api-hardening-20260907.md)
 adds prepared-input sessions, finalized semantic outcomes and subject-bound
 checking receipts, and repairs human-record and observation accounting limits.
+Its [qualification](docs/verification/api-hardening-20260907/README.md) passes all
+four CI jobs, 94 original corpus cases and 48 external oracle tests. Current hosted
+line coverage is **91.69% workspace** and **91.35% CPU-only CLI**, with both 91%
+floors unchanged. Its 728-invocation CPU comparison preserves all original
+contracts; automatic-route median increases are below 2.5% in that campaign.
 ASPIF remains planned; the session currently lives in the existing CLI library package.
 
 The [coverage workflow](docs/verification/coverage.md) complements the semantic
