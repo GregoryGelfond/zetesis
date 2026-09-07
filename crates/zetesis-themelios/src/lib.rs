@@ -34,6 +34,8 @@ mod fact_expansion;
 mod metadata;
 mod formula;
 mod formula_ir;
+mod formula_value;
+mod formula_value_ir;
 mod formula_aggregate_ir;
 mod formula_analysis;
 mod formula_pool;

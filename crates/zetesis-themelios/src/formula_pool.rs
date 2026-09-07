@@ -418,6 +418,9 @@ impl Visit for Footprint {
         self.nodes += 1;
         self.bytes += std::mem::size_of::<Term>() as u128;
         self.pools += usize::from(matches!(term, Term::Pool(_)));
+        if let Term::Function { name, .. } = term {
+            self.bytes += name.as_str().len() as u128;
+        }
         if let Term::Symbolic(symbol) = term {
             self.bytes += crate::structural_value::symbol_bytes(symbol);
         }

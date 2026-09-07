@@ -898,6 +898,9 @@ fn expression_from<'a>(
         counters.work(limits, location)?;
         counters.record(Event::ExpressionNode);
         let value = match *node {
+            Operation::Constructor(ref constructor) => {
+                constructor.evaluate(&values, limits, budget, counters, location)?
+            }
             Operation::Constant(ref value) => copy(value, budget, location)?,
             Operation::Variable(index) => copy(variable(index), budget, location)?,
             Operation::Unary(operator, argument) => evaluate(

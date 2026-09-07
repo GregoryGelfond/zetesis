@@ -51,11 +51,11 @@ impl Compiler<'_> {
         let LiteralInner::Atom(atom) = &literal.inner else {
             return Err(unsupported(ProfileFeature::Head, self.location).into());
         };
-        self.generated_head_atom(atom.get(), variables, body)
+        self.generated_atom(atom.get(), variables, body)
     }
 
     /// Bind arguments independently of the enclosing head literal's polarity.
-    pub(super) fn generated_head_atom(
+    pub(super) fn generated_atom(
         &mut self,
         atom: &themelios_program::program::Atom,
         variables: &mut Variables,
@@ -75,8 +75,13 @@ impl Compiler<'_> {
             if matches!(term, Term::Variable(_) | Term::Symbolic(_)) {
                 terms.push(self.objective_term(term, variables)?);
             } else {
+                crate::formula::ceiling(
+                    crate::FormulaResource::Variables,
+                    variables.count as u128 + 1,
+                    self.options.core_limits.max_variables_per_template as u128,
+                    self.location,
+                )?;
                 let target = variables.slot(&Variable::Anonymous);
-                self.variable_limit(variables)?;
                 let binding = if let Term::Interval { lower, upper } = term {
                     LiteralIr::Range {
                         target,

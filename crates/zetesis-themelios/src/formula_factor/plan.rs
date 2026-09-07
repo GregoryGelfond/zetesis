@@ -188,6 +188,9 @@ fn copy_expression(
             Operation::Constant(ref value) => {
                 Operation::Constant(copy(value, builder.budget, rule.location)?)
             }
+            Operation::Constructor(ref constructor) => {
+                Operation::Constructor(constructor.copy(builder.budget, rule.location)?)
+            }
             Operation::Variable(variable) => Operation::Variable(variable),
             Operation::Unary(operator, value) => Operation::Unary(operator, value),
             Operation::Binary(operator, left, right) => Operation::Binary(operator, left, right),

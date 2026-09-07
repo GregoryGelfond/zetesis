@@ -119,12 +119,22 @@ pub(crate) enum AggregateKey {
 pub(crate) struct Expression {
     pub nodes: Vec<Operation>,
 }
+impl Expression {
+    /// Complete declared input occurrences; unrelated environment slots are never read.
+    pub(crate) fn inputs(&self) -> impl Iterator<Item = usize> + '_ {
+        self.nodes.iter().filter_map(|node| match node {
+            Operation::Variable(slot) => Some(*slot),
+            _ => None,
+        })
+    }
+}
 pub(crate) enum Operation {
     Constant(Value),
     Variable(usize),
     Unary(UnaryOp, usize),
     Binary(BinaryOp, usize, usize),
     Absolute(usize),
+    Constructor(Box<crate::formula_value::Constructor>),
 }
 
 pub(crate) fn prepare(
@@ -286,7 +296,7 @@ impl Rewrite for Normalizer<'_> {
                     return Ok(term);
                 }
             }
-            if matches!(term, Term::Tuple(_)) && !term.is_ground() {
+            if matches!(term, Term::Tuple(_) | Term::Function { .. }) && !term.is_ground() {
                 return Ok(term);
             }
             extended::normalize_node(term, self.constants, self.budget, self.location)
@@ -510,7 +520,9 @@ impl Compiler<'_> {
         let mut body = Vec::new();
         for element in rule.body().get().elements() {
             match element.get() {
-                BodyElement::Literal(literal) => body.push(self.literal(literal, &mut variables)?),
+                BodyElement::Literal(literal) => {
+                    self.literal_into(literal, &mut variables, &mut body)?;
+                }
                 BodyElement::Conditional(conditional) => {
                     self.conditional_globals(conditional, &mut variables)?;
                 }
@@ -738,6 +750,7 @@ impl Compiler<'_> {
         term: &Term,
         variables: &mut Variables,
     ) -> Result<Expression, FormulaFailure> {
+        self.value_plan_preflight(term)?;
         let mut nodes = Vec::new();
         term.clone()
             .try_fold(|parts| -> Result<usize, FormulaFailure> {
@@ -755,7 +768,31 @@ impl Compiler<'_> {
                         Operation::Variable(slot)
                     }
                     TermParts::UnaryOperation { operator, argument } => {
+                        if operator == UnaryOp::Negate
+                            && let Operation::Constructor(constructor) = &mut nodes[argument]
+                            && constructor.name.is_some()
+                        {
+                            constructor.sign = match constructor.sign {
+                                zetesis_core::Sign::Positive => zetesis_core::Sign::Negative,
+                                zetesis_core::Sign::Negative => zetesis_core::Sign::Positive,
+                            };
+                            return Ok(argument);
+                        }
                         Operation::Unary(operator, argument)
+                    }
+                    TermParts::Function { name, arguments } => {
+                        Operation::Constructor(Box::new(crate::formula_value::Constructor {
+                            name: Some(name.as_str().to_owned()),
+                            sign: zetesis_core::Sign::Positive,
+                            arguments,
+                        }))
+                    }
+                    TermParts::Tuple(arguments) => {
+                        Operation::Constructor(Box::new(crate::formula_value::Constructor {
+                            name: None,
+                            sign: zetesis_core::Sign::Positive,
+                            arguments,
+                        }))
                     }
                     TermParts::BinaryOperation {
                         operator,

@@ -225,6 +225,9 @@ impl Compiler<'_> {
                 Operation::Constant(ref value) => {
                     Operation::Constant(copy(value, self.budget, self.location)?)
                 }
+                Operation::Constructor(ref constructor) => {
+                    Operation::Constructor(constructor.copy(self.budget, self.location)?)
+                }
                 Operation::Variable(variable) => Operation::Variable(variable),
                 Operation::Unary(operator, operand) => Operation::Unary(operator, operand),
                 Operation::Binary(operator, left, right) => {

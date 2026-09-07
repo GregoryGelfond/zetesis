@@ -131,10 +131,7 @@ impl Compiler<'_> {
         variable: usize,
     ) -> Result<bool, FormulaFailure> {
         self.scope_work(expression.nodes.len())?;
-        Ok(expression
-            .nodes
-            .iter()
-            .any(|node| matches!(node, Operation::Variable(index) if *index == variable)))
+        Ok(expression.inputs().any(|input| input == variable))
     }
 
     fn pattern_uses(

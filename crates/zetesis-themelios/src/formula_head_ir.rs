@@ -30,8 +30,8 @@ impl Compiler<'_> {
             return Err(unsupported(ProfileFeature::PooledArguments, self.location).into());
         };
         let pattern = if self.needs_head_generation(arguments)? {
-            self.generated_head_arguments(arguments, variables)?;
-            self.generated_head_atom(atom.get(), variables, body)?
+            self.generated_arguments(arguments, variables)?;
+            self.generated_atom(atom.get(), variables, body)?
         } else {
             self.atom(atom.get(), variables, false)?
         };
@@ -64,7 +64,7 @@ impl Compiler<'_> {
     /// Check every synthetic slot and distinct input name before lowering.
     /// This checks storage and syntax, not safety: the shared scheduler alone
     /// establishes whether ordinary outer/local conditions bind each input.
-    pub(super) fn generated_head_arguments(
+    pub(super) fn generated_arguments(
         &mut self,
         arguments: &[Term],
         variables: &Variables,
@@ -126,7 +126,11 @@ impl Compiler<'_> {
                         .charge(ExpansionResource::ScalarBytes, bytes, self.location)?;
                     crate::compile::scalar(symbol, self.location)?;
                 }
-                Term::UnaryOperation { .. } | Term::BinaryOperation { .. } | Term::Absolute(_) => {}
+                Term::UnaryOperation { .. }
+                | Term::BinaryOperation { .. }
+                | Term::Absolute(_)
+                | Term::Function { .. }
+                | Term::Tuple(_) => {}
                 _ => return Err(unsupported(ProfileFeature::Term, self.location).into()),
             }
         }

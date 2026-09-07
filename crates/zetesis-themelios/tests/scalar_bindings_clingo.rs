@@ -1,5 +1,5 @@
 //! Complete scalar/range source regressions, independently recorded with clingo
-//! 5.8.2. Of 118 sources, 87 currently have exact native model parity, 15 valid
+//! 5.8.2. Of 118 sources, 88 currently have exact native model parity, 14 valid
 //! sources have explicit refused boundaries, and 16 sources are unsafe. The
 //! historical integer-maximum singleton-range timeout is deliberately excluded.
 
@@ -185,6 +185,7 @@ fn scalar_and_interval_admissions_match_complete_models_with_explicit_boundaries
                 "head_conditional_choice_arithmetic"
                     | "head_arithmetic_choice_global"
                     | "assign_integer_bounds"
+                    | "head_double_negative_self"
             )
         {
             assert!(case.valid);
@@ -205,7 +206,7 @@ fn scalar_and_interval_admissions_match_complete_models_with_explicit_boundaries
             refused += 1;
         }
     }
-    assert_eq!((admitted, refused), (87, 31));
+    assert_eq!((admitted, refused), (88, 30));
 }
 
 static NEXT: AtomicU64 = AtomicU64::new(0);

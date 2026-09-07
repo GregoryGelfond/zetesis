@@ -23,10 +23,11 @@ pub struct ExpansionLimits {
     /// conservatively counted nodes in finite-pool source alternatives.
     pub max_values: usize,
     /// Maximum scalar payload bytes copied during substitution/fact emission
-    /// plus finite-pool cursor positions and copied term cells/text payload. Other
-    /// AST carriers, provenance and allocator overhead are excluded; positive
+    /// plus finite-pool cursor positions, copied term cells/text, constructor-plan
+    /// storage and constructed value node/spelling/frame reservations. Positive
     /// tuple patterns also charge plan/cursor cells, slot names, deltas and
-    /// conservative extracted-value construction payload before allocation. Original
+    /// conservative extracted-value construction payload before allocation. Other
+    /// AST carriers, provenance and allocator overhead are excluded; original
     /// source storage remains bounded by admission options.
     pub max_scalar_bytes: usize,
     /// Maximum original rule-location copies in the emitted template evidence.
@@ -60,8 +61,8 @@ pub enum ExpansionResource {
     Templates,
     /// Intermediate alternatives, emitted fact arguments and finite-pool source nodes.
     Values,
-    /// Copied scalar payload, finite-pool cells, and positive tuple pattern
-    /// plans, deltas and extracted-value construction payload.
+    /// Copied scalar payload, finite-pool positions, term/plan storage and
+    /// constructed/extracted value reservations, including tuple pattern deltas.
     ScalarBytes,
     /// Copies of original parsed rule locations across emitted templates.
     Origins,

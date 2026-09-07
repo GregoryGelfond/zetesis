@@ -22,22 +22,20 @@ impl Compiler<'_> {
         condition: &Condition,
         variables: &mut Variables,
     ) -> Result<Vec<LiteralIr>, FormulaFailure> {
-        condition
-            .literals()
-            .enumerate()
-            .map(|(index, literal)| {
-                if index >= self.options.max_body_elements {
-                    return Err(AdmissionFailure::Limit {
-                        resource: InputLimit::BodyElements,
-                        limit: self.options.max_body_elements,
-                        observed: index + 1,
-                        location: self.location,
-                    }
-                    .into());
+        let mut result = Vec::new();
+        for (index, literal) in condition.literals().enumerate() {
+            if index >= self.options.max_body_elements {
+                return Err(AdmissionFailure::Limit {
+                    resource: InputLimit::BodyElements,
+                    limit: self.options.max_body_elements,
+                    observed: index + 1,
+                    location: self.location,
                 }
-                self.literal(literal.get(), variables)
-            })
-            .collect()
+                .into());
+            }
+            self.literal_into(literal.get(), variables, &mut result)?;
+        }
+        Ok(result)
     }
     pub(super) fn comparison(
         &mut self,

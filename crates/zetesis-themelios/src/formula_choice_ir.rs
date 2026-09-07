@@ -31,7 +31,7 @@ impl Compiler<'_> {
         if !self.needs_head_generation(arguments)? {
             return self.head(literal, variables);
         }
-        self.generated_head_arguments(arguments, variables)?;
+        self.generated_arguments(arguments, variables)?;
         self.generated_head(literal, variables, condition)
     }
 }

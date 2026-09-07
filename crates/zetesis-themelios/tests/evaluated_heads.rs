@@ -300,7 +300,7 @@ fn excluded_head_forms_and_objective_dependencies_remain_located_refusals() {
             ProfileFeature::ConditionalDisjunction,
         ),
         ("d(1).not a(X+1):-d(X).", ProfileFeature::NegatedHead),
-        ("d(1).{p(f(X)):d(X)}.", ProfileFeature::Term),
+        // Constructor choice heads are covered by finite_values.rs.
         ("{p(a..b)}.", ProfileFeature::Term),
         (
             "d(1).a(2).a(X+1)|b:-d(X).#minimize{1@1:b}.",
