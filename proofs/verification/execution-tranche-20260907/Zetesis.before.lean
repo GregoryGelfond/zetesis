@@ -43,7 +43,3 @@ import Zetesis.Outcomes
 import Zetesis.StructuralBindings
 import Zetesis.FiniteValues
 import Zetesis.ConsequentAlternatives
-import Zetesis.SingletonHeads
-import Zetesis.ConstructorPatterns
-import Zetesis.ScalarArithmetic
-import Zetesis.GateProjection

@@ -60,9 +60,11 @@ Under the checked clingo 5.8.2 source boundary, unsigned `not p(_)` and
 binder. Closed signed constructors and tuples now have bounded logical identity
 through the [structural value carrier](design/closed-structural-values.md).
 Formula admission also supports finite construction from independently bound
-inputs, evaluated safe negative arguments and positive tuple-pattern extraction.
-Named-function patterns remain refused. Matching uses staged binding deltas so
-an unsuccessful tuple row cannot modify the caller's environment. The
+inputs, evaluated safe negative arguments and positive tuple/function-pattern
+extraction. Function patterns retain name, sign and arity, including nested
+constructors, repeated variables and independently anonymous positions. Matching
+uses staged binding deltas so an unsuccessful row cannot modify the caller's
+environment. Whole captures retain the original body atom in the formula. The
 [source API guide](../crates/zetesis-themelios/README.md) gives the exact scope.
 See the [strong-negation record](verification/strong-negation-20260906/README.md)
 for independent full-model/reduct tests and retained reference diagnostics.
@@ -323,7 +325,7 @@ and supply no positive support, including double negation. The ground
 stable-model preservation of its double-negated support guards; this is not a
 verification of the Rust compiler or possible-support grounding.
 Explicitly true head conditions can normalize without changing the rule family;
-broader conditioned heads, negative singleton/choice heads and objective-reachable
+broader conditioned heads, negative choice heads and objective-reachable
 disjunctive producers remain typed refusals. Finite rule/head pools retain their
 whole-rule or choice-group product semantics. Bound constructor arguments use
 the shared finite-value evaluator; nested pool/interval forms keep their own

@@ -290,7 +290,7 @@ fn dynamic_false_comparison_and_function_head_conditions_remain_located_refusals
     }
     for (source, expected) in [
         ("1#sum{X:p(X):X=1..4}2.", ProfileFeature::Head),
-        ("not a.", ProfileFeature::NegatedHead),
+        // Signed singleton heads are covered positively in negative_heads.rs.
         ("{not a}.", ProfileFeature::NegatedHead),
         // Pooled true heads are now covered positively in finite_pools.rs.
         (

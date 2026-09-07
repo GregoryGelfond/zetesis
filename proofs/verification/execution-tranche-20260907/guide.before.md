@@ -29,9 +29,3 @@ The [proof convention](../STYLE.md) explains how substantial arguments should be
 read and written. Small proofs may stay compact. Only the named pilot has been
 explicitly refactored under this convention so far; the library-wide migration is
 future work.
-
-The execution extensions connect these paths to [signed singleton heads](../Zetesis/SingletonHeads.lean),
-[constructor shape and extraction](../Zetesis/ConstructorPatterns.lean),
-[checked scalar plans](../Zetesis/ScalarArithmetic.lean) and
-[finite gate projection](../Zetesis/GateProjection.lean). Each module states its
-unproved implementation correspondence explicitly.

@@ -145,16 +145,6 @@
 'Zetesis.ConsequentAlternatives.frozen_semantics' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ConsequentAlternatives.original_semantics' depends on axioms: [propext, Quot.sound]
 'Zetesis.ConsequentAlternatives.polarity_placement_changes_truth' depends on axioms: [propext]
-'Zetesis.ConstructorPatterns.acceptance_iff_consistent' depends on axioms: [propext, Quot.sound]
-'Zetesis.ConstructorPatterns.binding_sound' depends on axioms: [propext, Quot.sound]
-'Zetesis.ConstructorPatterns.extraction_complete' depends on axioms: [propext, Quot.sound]
-'Zetesis.ConstructorPatterns.extraction_sound' depends on axioms: [propext, Quot.sound]
-'Zetesis.ConstructorPatterns.failure_preserves_binding' depends on axioms: [propext]
-'Zetesis.ConstructorPatterns.function_child' depends on axioms: [propext]
-'Zetesis.ConstructorPatterns.function_shape_exact' depends on axioms: [propext]
-'Zetesis.ConstructorPatterns.root_capture' depends on axioms: [propext]
-'Zetesis.ConstructorPatterns.successful_shapes' depends on axioms: [propext, Quot.sound]
-'Zetesis.ConstructorPatterns.tuple_refuses_function' does not depend on any axioms
 'Zetesis.CountHeads.activity_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.CountHeads.activity_original' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.CountHeads.alias_directions_are_rejected' does not depend on any axioms
@@ -299,9 +289,6 @@
 'Zetesis.FiniteValues.input_agreement' depends on axioms: [propext]
 'Zetesis.FiniteValues.original_literal_identity' does not depend on any axioms
 'Zetesis.FiniteValues.tuple_identity' does not depend on any axioms
-'Zetesis.GateProjection.aliased_intersection_exact' depends on axioms: [propext]
-'Zetesis.GateProjection.bitwise_support_bounded' depends on axioms: [propext]
-'Zetesis.GateProjection.bitwise_support_exact' depends on axioms: [propext]
 'Zetesis.GroundGuards.chain_evaluation' depends on axioms: [propext, Quot.sound]
 'Zetesis.GroundGuards.classical_tautology_is_not_a_guard_replacement' depends on axioms: [propext,
  Classical.choice,
@@ -482,16 +469,6 @@
 'Zetesis.RuleFactorization.reduct_models_pairs' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.RuleFactorization.satisfies_any' depends on axioms: [propext, Quot.sound]
 'Zetesis.RuleFactorization.stable_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.ScalarArithmetic.checked_overflow' depends on axioms: [propext]
-'Zetesis.ScalarArithmetic.checked_success' depends on axioms: [propext]
-'Zetesis.ScalarArithmetic.division_success' depends on axioms: [propext]
-'Zetesis.ScalarArithmetic.exceptional_quotient' depends on axioms: [propext]
-'Zetesis.ScalarArithmetic.first_failure' depends on axioms: [propext]
-'Zetesis.ScalarArithmetic.negative_exponent' depends on axioms: [propext]
-'Zetesis.ScalarArithmetic.operation_agreement' does not depend on any axioms
-'Zetesis.ScalarArithmetic.power_success' depends on axioms: [propext]
-'Zetesis.ScalarArithmetic.successful_step' depends on axioms: [propext]
-'Zetesis.ScalarArithmetic.zero_divisor' depends on axioms: [propext]
 'Zetesis.Semantics.accept_sound' depends on axioms: [propext, Quot.sound]
 'Zetesis.Semantics.accepted_seed_in_carrier' does not depend on any axioms
 'Zetesis.Semantics.accepted_seed_unique' does not depend on any axioms
@@ -538,14 +515,6 @@
 'Zetesis.SignedObjectiveBounds.shifted_le' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.SignedObjectiveBounds.shifted_lt' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.SignedObjectiveBounds.shifted_vector_comparison' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.SingletonHeads.double_negative_singleton_has_no_producer' depends on axioms: [propext, Quot.sound]
-'Zetesis.SingletonHeads.double_negative_singleton_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.SingletonHeads.negative_singleton_has_no_producer' depends on axioms: [propext, Quot.sound]
-'Zetesis.SingletonHeads.negative_singleton_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.SingletonHeads.singleton_head_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.SingletonHeads.singleton_head_truth' depends on axioms: [propext, Quot.sound]
-'Zetesis.SingletonHeads.singleton_rule_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.SingletonHeads.singleton_rule_truth' depends on axioms: [propext, Quot.sound]
 'Zetesis.StrongNegation.bounded_group_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.StrongNegation.bounded_group_stable_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.StrongNegation.coherence_classical' depends on axioms: [propext, Quot.sound]

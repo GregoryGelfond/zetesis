@@ -299,7 +299,7 @@ fn excluded_head_forms_and_objective_dependencies_remain_located_refusals() {
             "d(1).a(X+1):d(X)|b.",
             ProfileFeature::ConditionalDisjunction,
         ),
-        ("d(1).not a(X+1):-d(X).", ProfileFeature::NegatedHead),
+        // Evaluated signed singleton heads have model/reduct tests in negative_heads.rs.
         // Constructor choice heads are covered by finite_values.rs.
         ("{p(a..b)}.", ProfileFeature::Term),
         (
