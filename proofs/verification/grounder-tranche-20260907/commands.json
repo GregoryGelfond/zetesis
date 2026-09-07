@@ -1,0 +1,56 @@
+[
+  {
+    "command": [
+      "lake",
+      "env",
+      "lean",
+      "--version"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-07T17:06:20.886608+00:00",
+    "elapsed_seconds": 3.1132118748500943,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/grounder-tranche-20260907/version.log"
+  },
+  {
+    "command": [
+      "lake",
+      "clean"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-07T17:06:24.000289+00:00",
+    "elapsed_seconds": 0.31725833285599947,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/grounder-tranche-20260907/clean.log"
+  },
+  {
+    "command": [
+      "lake",
+      "build"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-07T17:06:24.317911+00:00",
+    "elapsed_seconds": 5.710430665872991,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/grounder-tranche-20260907/build.log"
+  },
+  {
+    "command": [
+      "lake",
+      "env",
+      "lean",
+      "-DautoImplicit=false",
+      "-DwarningAsError=true",
+      "Audit.lean"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-07T17:06:30.028773+00:00",
+    "elapsed_seconds": 0.5442482500802726,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/grounder-tranche-20260907/audit.log"
+  }
+]

@@ -135,16 +135,6 @@
 'Zetesis.ClauseValidation.scan_work_bound' depends on axioms: [propext, Quot.sound]
 'Zetesis.ClauseValidation.validate_accepts_iff' depends on axioms: [propext, Quot.sound]
 'Zetesis.ClauseValidation.validate_work_bound' depends on axioms: [propext, Quot.sound]
-'Zetesis.ConsequentAlternatives.alternative_collection_keeps_stability' depends on axioms: [propext,
- Classical.choice,
- Quot.sound]
-'Zetesis.ConsequentAlternatives.empty_alternatives_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.ConsequentAlternatives.empty_alternatives_original' depends on axioms: [propext, Quot.sound]
-'Zetesis.ConsequentAlternatives.empty_rows_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.ConsequentAlternatives.empty_rows_original' depends on axioms: [propext, Quot.sound]
-'Zetesis.ConsequentAlternatives.frozen_semantics' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.ConsequentAlternatives.original_semantics' depends on axioms: [propext, Quot.sound]
-'Zetesis.ConsequentAlternatives.polarity_placement_changes_truth' depends on axioms: [propext]
 'Zetesis.CountHeads.activity_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.CountHeads.activity_original' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.CountHeads.alias_directions_are_rejected' does not depend on any axioms
@@ -281,14 +271,6 @@
 'Zetesis.FinitePools.original_in_context' depends on axioms: [propext, Quot.sound]
 'Zetesis.FinitePools.product_complete' depends on axioms: [propext, Quot.sound]
 'Zetesis.FinitePools.stable_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.FiniteValues.constructor_identity' depends on axioms: [propext]
-'Zetesis.FiniteValues.extension_preserves' depends on axioms: [propext]
-'Zetesis.FiniteValues.extension_target' depends on axioms: [propext]
-'Zetesis.FiniteValues.failed_step' depends on axioms: [propext]
-'Zetesis.FiniteValues.frozen_literal_identity' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.FiniteValues.input_agreement' depends on axioms: [propext]
-'Zetesis.FiniteValues.original_literal_identity' does not depend on any axioms
-'Zetesis.FiniteValues.tuple_identity' does not depend on any axioms
 'Zetesis.GroundGuards.chain_evaluation' depends on axioms: [propext, Quot.sound]
 'Zetesis.GroundGuards.classical_tautology_is_not_a_guard_replacement' depends on axioms: [propext,
  Classical.choice,
@@ -557,20 +539,6 @@
 'Zetesis.StrongNegation.stable_target_is_image' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.StrongNegation.strong_is_not_default' depends on axioms: [propext]
 'Zetesis.StrongNegation.subset_image' depends on axioms: [propext, Quot.sound]
-'Zetesis.StructuralBindings.bind_fits' depends on axioms: [propext, Quot.sound]
-'Zetesis.StructuralBindings.bind_sound' depends on axioms: [propext, Quot.sound]
-'Zetesis.StructuralBindings.extends_refl' does not depend on any axioms
-'Zetesis.StructuralBindings.extends_trans' does not depend on any axioms
-'Zetesis.StructuralBindings.failure_rolls_back' does not depend on any axioms
-'Zetesis.StructuralBindings.incompatible_shape_refuses' does not depend on any axioms
-'Zetesis.StructuralBindings.matching_complete' depends on axioms: [propext, Quot.sound]
-'Zetesis.StructuralBindings.matching_iff_consistent' depends on axioms: [propext, Quot.sound]
-'Zetesis.StructuralBindings.matching_sound' depends on axioms: [propext, Quot.sound]
-'Zetesis.StructuralBindings.repeated_name_agreement' depends on axioms: [propext, Quot.sound]
-'Zetesis.StructuralBindings.retained_atom_context' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.StructuralBindings.retained_atom_stability' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.StructuralBindings.selected_row_coverage' depends on axioms: [propext, Quot.sound]
-'Zetesis.StructuralBindings.wildcard_only_preserves_binding' does not depend on any axioms
 'Zetesis.Thresholds.threshold_bound_antitone' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Thresholds.threshold_query_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Thresholds.threshold_sum_monotone' depends on axioms: [propext, Classical.choice, Quot.sound]

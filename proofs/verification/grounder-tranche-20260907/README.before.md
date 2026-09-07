@@ -8,7 +8,7 @@ readable before its Lean details. The convention has one deliberately bounded
 pilot so far; it is not a claim of a library-wide rewrite.
 
 
-This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **646 kernel-checked theorems** across forty-five semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
+This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **616 kernel-checked theorems** across forty-two semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
 
 The formalization connects normalized stable-model semantics to candidate seeds, compositional reduct execution, lazy completion, consequence bounds, and completed search certificates. It supplies mathematical contracts for the Rust, wgpu, Rayon, and neuromorphic implementation work. It does not verify those implementations or make Lean a runtime dependency.
 
@@ -21,7 +21,7 @@ lake build
 lake env lean -DautoImplicit=false -DwarningAsError=true Audit.lean
 ```
 
-`lean-toolchain` pins `leanprover/lean4:v4.33.1`. The package has no remote dependencies, so the build itself needs no network once that toolchain exists. `lake build` compiles the umbrella module and all forty-five semantic modules. `Audit.lean` requests the transitive axiom dependencies of every project theorem.
+`lean-toolchain` pins `leanprover/lean4:v4.33.1`. The package has no remote dependencies, so the build itself needs no network once that toolchain exists. `lake build` compiles the umbrella module and all forty-two semantic modules. `Audit.lean` requests the transitive axiom dependencies of every project theorem.
 
 The [verification report](./verification.json) records the checked source hashes and commands. The [axiom audit](./axiom-audit.txt) contains only standard Lean logical axioms where needed: `propext`, `Quot.sound`, and `Classical.choice`. In particular, no theorem depends on `sorryAx` or `Lean.ofReduceBool`.
 
@@ -37,9 +37,6 @@ preserves an earlier inconsistent manifest and explains its repair.
 
 | Module | What is proved |
 |---|---|
-| [StructuralBindings](./Zetesis/StructuralBindings.lean) | Consistent finite named-slot matching preserves prebound values, rolls back on refusal and selects exactly compatible rows under complete support coverage; retained source atoms preserve contextual original/frozen truth and stability |
-| [FiniteValues](./Zetesis/FiniteValues.lean) | Declared-input agreement preserves deterministic partial evaluation; single-slot extension and complete constructor identity preserve resolved literal meaning, including every frozen reduct |
-| [ConsequentAlternatives](./Zetesis/ConsequentAlternatives.lean) | Universal condition rows retain existential signed alternatives; completed empty domains have distinct meanings, and complete formula collection equality preserves contextual stability |
 | [Outcomes](./Zetesis/Outcomes.lean) | Complete regional UNSAT depends on verified membership, not publication; delivery retains membership validity and empty delivery can hide a model |
 | [BatchAccounting](./Zetesis/BatchAccounting.lean) | Proposal, pending classification and exact prefix commitment preserve finite coverage and occurrence counts; interrupted or delayed failures cannot establish exhaustion |
 | [CertifiedExecution](./Zetesis/CertifiedExecution.lean) | Ranked support soundly precedes exact residual completion over the unchanged original theory; interruption cannot accept and fallback quotas accumulate |
@@ -260,39 +257,3 @@ empties the product. Each product row denotes a whole formula; flattening a
 family of disjunctions changes its truth. Source recognition, cursor/provenance,
 choice-group construction, generated bindings, support completion and resources
 remain adapter obligations.
-
-## Structural binding and finite consequent alternatives
-
-The [grounder tranche record](verification/grounder-tranche-20260907/README.md)
-extends the prior 616-declaration inventory by 30 laws in three modules. The
-complete public inventory now has 646 theorems in 45 semantic modules. Four
-previously private structural extension/single-binding helpers are public laws
-with explicit contracts; their statements and proof bodies are unchanged.
-
-`StructuralBindings.lean` gives 14 laws over partial bindings and finite extracted
-constraints. Successful matching preserves prebound values and makes every named
-occurrence agree; a consistent target witnesses success. Failed row transactions
-publish the incoming binding unchanged. Complete supplied support rows cover
-exactly the compatible matches. Captured source atoms remain logical leaves, so
-their identity preserves original and arbitrary frozen truth and stability in
-unchanged theory context. Tuple traversal, extraction, source scope/safety,
-support completion, machine resource accounting and Rust refinement are separate.
-
-`FiniteValues.lean` gives eight laws over fixed partial operations and declared
-source reads. Agreement on those reads preserves results and failures; a failed
-step cannot publish a shortened success. Single-slot extension preserves every
-other slot, and constructor identity keeps the name, sign and ordered children
-while distinguishing tuples. Literal transport assumes that the resolved source
-atom is unchanged and preserves each negation depth in original and frozen
-contexts. Machine operations, allocation/depth preflight, source safety and
-actual compiler correctness are not proved by these abstract contracts.
-
-`ConsequentAlternatives.lean` gives eight laws for complete finite condition rows
-with a disjunction of signed consequent formulas inside each implication.
-Universal condition rows and existential alternatives have separate scope.
-A completed empty row list is vacuous; a row without alternatives requires its
-condition to be false. Polarity belongs to each alternative, and moving negation
-outside their disjunction has a concrete counterexample. Complete coverage of
-identical consequent formulas permits collection replacement in unchanged theory
-context. Local witness coverage, source joins and scope, projection analysis,
-resource completion and Rust refinement remain separate obligations.

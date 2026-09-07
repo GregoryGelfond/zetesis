@@ -58,23 +58,17 @@ def commit (before : Binding α) (result : Option (Binding α)) : Binding α :=
   result.getD before
 
 omit [DecidableEq α] in
-/-- Every binding is its own value-preserving extension. No equality decision
-    or finite carrier is required for this base case of binding composition. -/
-theorem extends_refl (binding : Binding α) : Extends binding binding := by
+private theorem extends_refl (binding : Binding α) : Extends binding binding := by
   intro slot value bound
   exact bound
 
 omit [DecidableEq α] in
-/-- Two value-preserving extensions compose: every incoming slot value survives
-    both stages. The intermediate binding supplies the common boundary. -/
-theorem extends_trans {first middle last : Binding α}
+private theorem extends_trans {first middle last : Binding α}
     (left : Extends first middle) (right : Extends middle last) : Extends first last := by
   intro slot value bound
   exact right slot value (left slot value bound)
 
-/-- A successful single-slot transaction preserves every prebound value and
-    binds the requested slot to its complete value. -/
-theorem bind_sound (before after : Binding α) (slot : Nat) (value : α)
+private theorem bind_sound (before after : Binding α) (slot : Nat) (value : α)
     (success : bind before (slot, value) = some after) :
     Extends before after ∧ after slot = some value := by
   cases found : before slot with
@@ -124,9 +118,7 @@ theorem matching_sound (before after : Binding α) (constraints : List (Nat × �
           exact tail.1 slot value head.2
         · exact tail.2 slot value later
 
-/-- A target extending the incoming binding and containing the requested value
-    witnesses a successful single-slot transaction still extended by that target. -/
-theorem bind_fits (before target : Binding α) (slot : Nat) (value : α)
+private theorem bind_fits (before target : Binding α) (slot : Nat) (value : α)
     (extension : Extends before target) (agreement : target slot = some value) :
     ∃ after, bind before (slot, value) = some after ∧ Extends after target := by
   cases found : before slot with

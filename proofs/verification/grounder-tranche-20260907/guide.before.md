@@ -17,7 +17,6 @@ and theorem hypotheses are authoritative; prose is a reading aid.
 | How can candidate feedback preserve the original problem? | [Feedback](../Zetesis/Feedback.lean), [ObjectiveBounds](../Zetesis/ObjectiveBounds.lean) and [SignedObjectiveBounds](../Zetesis/SignedObjectiveBounds.lean). |
 | What must source transformations preserve? | [GroundGuards](../Zetesis/GroundGuards.lean), [UniversalConditionals](../Zetesis/UniversalConditionals.lean) and [FinitePools](../Zetesis/FinitePools.lean): original truth and frozen contexts under explicit coverage. |
 | What are the traps in otherwise plausible optimizations? | [Examples](../Zetesis/Examples.lean) and the counterexamples in [Feedback](../Zetesis/Feedback.lean): choices and candidate-relative reasoning matter. |
-| How do finite source values and local alternatives preserve meaning? | [StructuralBindings](../Zetesis/StructuralBindings.lean) and [FiniteValues](../Zetesis/FiniteValues.lean) state matching/construction laws; [ConsequentAlternatives](../Zetesis/ConsequentAlternatives.lean) separates universal condition rows from their existential signed consequents. Compiler coverage and local scope remain explicit unproved bridges. |
 
 The intended layering is: logical definitions → reusable semantic laws → justified
 algorithmic specializations → representation and execution obligations. Existing

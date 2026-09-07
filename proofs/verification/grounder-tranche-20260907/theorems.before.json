@@ -635,46 +635,6 @@
     "line": 119
   },
   {
-    "name": "Zetesis.ConsequentAlternatives.alternative_collection_keeps_stability",
-    "file": "Zetesis/ConsequentAlternatives.lean",
-    "line": 93
-  },
-  {
-    "name": "Zetesis.ConsequentAlternatives.empty_alternatives_frozen",
-    "file": "Zetesis/ConsequentAlternatives.lean",
-    "line": 72
-  },
-  {
-    "name": "Zetesis.ConsequentAlternatives.empty_alternatives_original",
-    "file": "Zetesis/ConsequentAlternatives.lean",
-    "line": 66
-  },
-  {
-    "name": "Zetesis.ConsequentAlternatives.empty_rows_frozen",
-    "file": "Zetesis/ConsequentAlternatives.lean",
-    "line": 61
-  },
-  {
-    "name": "Zetesis.ConsequentAlternatives.empty_rows_original",
-    "file": "Zetesis/ConsequentAlternatives.lean",
-    "line": 56
-  },
-  {
-    "name": "Zetesis.ConsequentAlternatives.frozen_semantics",
-    "file": "Zetesis/ConsequentAlternatives.lean",
-    "line": 45
-  },
-  {
-    "name": "Zetesis.ConsequentAlternatives.original_semantics",
-    "file": "Zetesis/ConsequentAlternatives.lean",
-    "line": 37
-  },
-  {
-    "name": "Zetesis.ConsequentAlternatives.polarity_placement_changes_truth",
-    "file": "Zetesis/ConsequentAlternatives.lean",
-    "line": 83
-  },
-  {
     "name": "Zetesis.CountHeads.activity_frozen",
     "file": "Zetesis/CountHeads.lean",
     "line": 104
@@ -1353,46 +1313,6 @@
     "name": "Zetesis.FinitePools.stable_in_context",
     "file": "Zetesis/FinitePools.lean",
     "line": 73
-  },
-  {
-    "name": "Zetesis.FiniteValues.constructor_identity",
-    "file": "Zetesis/FiniteValues.lean",
-    "line": 90
-  },
-  {
-    "name": "Zetesis.FiniteValues.extension_preserves",
-    "file": "Zetesis/FiniteValues.lean",
-    "line": 79
-  },
-  {
-    "name": "Zetesis.FiniteValues.extension_target",
-    "file": "Zetesis/FiniteValues.lean",
-    "line": 75
-  },
-  {
-    "name": "Zetesis.FiniteValues.failed_step",
-    "file": "Zetesis/FiniteValues.lean",
-    "line": 123
-  },
-  {
-    "name": "Zetesis.FiniteValues.frozen_literal_identity",
-    "file": "Zetesis/FiniteValues.lean",
-    "line": 115
-  },
-  {
-    "name": "Zetesis.FiniteValues.input_agreement",
-    "file": "Zetesis/FiniteValues.lean",
-    "line": 49
-  },
-  {
-    "name": "Zetesis.FiniteValues.original_literal_identity",
-    "file": "Zetesis/FiniteValues.lean",
-    "line": 107
-  },
-  {
-    "name": "Zetesis.FiniteValues.tuple_identity",
-    "file": "Zetesis/FiniteValues.lean",
-    "line": 97
   },
   {
     "name": "Zetesis.GroundGuards.chain_evaluation",
@@ -2603,76 +2523,6 @@
     "name": "Zetesis.StrongNegation.subset_image",
     "file": "Zetesis/StrongNegation.lean",
     "line": 118
-  },
-  {
-    "name": "Zetesis.StructuralBindings.bind_fits",
-    "file": "Zetesis/StructuralBindings.lean",
-    "line": 129
-  },
-  {
-    "name": "Zetesis.StructuralBindings.bind_sound",
-    "file": "Zetesis/StructuralBindings.lean",
-    "line": 77
-  },
-  {
-    "name": "Zetesis.StructuralBindings.extends_refl",
-    "file": "Zetesis/StructuralBindings.lean",
-    "line": 63
-  },
-  {
-    "name": "Zetesis.StructuralBindings.extends_trans",
-    "file": "Zetesis/StructuralBindings.lean",
-    "line": 70
-  },
-  {
-    "name": "Zetesis.StructuralBindings.failure_rolls_back",
-    "file": "Zetesis/StructuralBindings.lean",
-    "line": 178
-  },
-  {
-    "name": "Zetesis.StructuralBindings.incompatible_shape_refuses",
-    "file": "Zetesis/StructuralBindings.lean",
-    "line": 190
-  },
-  {
-    "name": "Zetesis.StructuralBindings.matching_complete",
-    "file": "Zetesis/StructuralBindings.lean",
-    "line": 151
-  },
-  {
-    "name": "Zetesis.StructuralBindings.matching_iff_consistent",
-    "file": "Zetesis/StructuralBindings.lean",
-    "line": 196
-  },
-  {
-    "name": "Zetesis.StructuralBindings.matching_sound",
-    "file": "Zetesis/StructuralBindings.lean",
-    "line": 102
-  },
-  {
-    "name": "Zetesis.StructuralBindings.repeated_name_agreement",
-    "file": "Zetesis/StructuralBindings.lean",
-    "line": 169
-  },
-  {
-    "name": "Zetesis.StructuralBindings.retained_atom_context",
-    "file": "Zetesis/StructuralBindings.lean",
-    "line": 234
-  },
-  {
-    "name": "Zetesis.StructuralBindings.retained_atom_stability",
-    "file": "Zetesis/StructuralBindings.lean",
-    "line": 246
-  },
-  {
-    "name": "Zetesis.StructuralBindings.selected_row_coverage",
-    "file": "Zetesis/StructuralBindings.lean",
-    "line": 217
-  },
-  {
-    "name": "Zetesis.StructuralBindings.wildcard_only_preserves_binding",
-    "file": "Zetesis/StructuralBindings.lean",
-    "line": 185
   },
   {
     "name": "Zetesis.Thresholds.threshold_bound_antitone",

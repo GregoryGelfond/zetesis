@@ -40,6 +40,3 @@ import Zetesis.CertifiedExecution
 import Zetesis.ValueExtrema
 import Zetesis.FinitePools
 import Zetesis.Outcomes
-import Zetesis.StructuralBindings
-import Zetesis.FiniteValues
-import Zetesis.ConsequentAlternatives
