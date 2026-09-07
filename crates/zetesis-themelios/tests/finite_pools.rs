@@ -72,6 +72,19 @@ const CASES: &[(&str, &str)] = &[
         "{d(1);d(2)}.1{p(1):d(1);p(2):d(1);p(2):d(2);p(3):d(2)}1.",
     ),
     ("{p(1;2):p(1)}.", "{p(1):p(1);p(2):p(1)}."),
+    (
+        "p(X):-X=(z;a).m(M):-M=#min{X:p(X)}.",
+        "p(z).p(a).m(M):-M=#min{X:p(X)}.",
+    ),
+    (
+        "m(K,M):-K=(z;a),M=#min{K}.",
+        "m(z,M):-M=#min{z}.m(a,M):-M=#min{a}.",
+    ),
+    (
+        "p(X):-X=(f(1);\"s\").n(N):-N=#max{X:p(X)}.",
+        "p(f(1)).p(\"s\").n(N):-N=#max{X:p(X)}.",
+    ),
+    ("p(1;2):#true;q:#true.", "p(1):#true;q:#true.p(2):#true;q:#true."),
 ];
 
 #[test]
