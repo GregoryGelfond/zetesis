@@ -6,7 +6,7 @@ use zetesis_core::{AtomPattern, Predicate, Sign, Term as CoreTerm};
 
 use crate::diagnostic::unsupported;
 use crate::formula::ceiling;
-use crate::formula_ir::{Compiler, Variables};
+use crate::formula_ir::{Compiler, Expression, LiteralIr, Operation, Variables};
 use crate::formula_pattern::{ArgumentPattern, PatternAtom, PatternNode, push, reserve};
 use crate::{
     AdmissionFailure, ExpansionResource, FormulaFailure, FormulaResource, ProfileFeature, compile,
@@ -18,10 +18,41 @@ impl Compiler<'_> {
         atom: &Atom,
         variables: &mut Variables,
     ) -> Result<Option<PatternAtom>, FormulaFailure> {
+        self.pattern_atom(atom, variables, None)
+    }
+
+    /// Compile a positive body occurrence and its nonbinding expression checks.
+    /// Flat scalar atoms retain the existing path without allocating a plan.
+    pub(super) fn positive_literal(
+        &mut self,
+        atom: &Atom,
+        variables: &mut Variables,
+        body: &mut Vec<LiteralIr>,
+    ) -> Result<bool, FormulaFailure> {
+        let Some(pattern) = self.pattern_atom(atom, variables, Some(body))? else {
+            return Ok(false);
+        };
+        body.push(LiteralIr::PatternAtom(pattern));
+        Ok(true)
+    }
+
+    fn pattern_atom(
+        &mut self,
+        atom: &Atom,
+        variables: &mut Variables,
+        mut checks: Option<&mut Vec<LiteralIr>>,
+    ) -> Result<Option<PatternAtom>, FormulaFailure> {
         let Arguments::Single(arguments) = &atom.arguments else {
             return Ok(None);
         };
-        if !arguments.iter().any(pattern_candidate) {
+        let accepts = |term: &Term| {
+            if checks.is_some() {
+                !matches!(term, Term::Variable(_) | Term::Symbolic(_))
+            } else {
+                pattern_candidate(term)
+            }
+        };
+        if !arguments.iter().any(accepts) {
             return Ok(None);
         }
         ceiling(
@@ -45,17 +76,23 @@ impl Compiler<'_> {
                     self.value(&value)?;
                     CoreTerm::Constant(value)
                 }
-                term if pattern_candidate(term) => {
+                term if checks.is_some() || pattern_candidate(term) => {
                     // Every structured source argument has its own whole-value
                     // capture. Emission uses that capture, including wildcards.
                     let slot = self.pattern_slot(&Variable::Anonymous, variables)?;
-                    let nodes = self.structural_pattern(term, variables)?;
-                    push(
-                        &mut patterns,
-                        ArgumentPattern { position, nodes },
-                        self.budget,
-                        self.location,
-                    )?;
+                    let nodes =
+                        self.structural_pattern(term, slot, variables, checks.as_deref_mut())?;
+                    // A root expression is already captured by the ordinary
+                    // argument slot, including scalar values. Only structure
+                    // needs a subtree traversal of a StructuredValue.
+                    if !matches!(nodes.as_slice(), [PatternNode::Slot(found)] if *found == slot) {
+                        push(
+                            &mut patterns,
+                            ArgumentPattern { position, nodes },
+                            self.budget,
+                            self.location,
+                        )?;
+                    }
                     CoreTerm::Variable(slot)
                 }
                 _ => return Err(unsupported(ProfileFeature::Term, self.location).into()),
@@ -93,7 +130,9 @@ impl Compiler<'_> {
     fn structural_pattern(
         &mut self,
         term: &Term,
+        root_capture: usize,
         variables: &mut Variables,
+        mut checks: Option<&mut Vec<LiteralIr>>,
     ) -> Result<Vec<PatternNode>, FormulaFailure> {
         let mut pending = Vec::new();
         let mut nodes = Vec::new();
@@ -119,10 +158,16 @@ impl Compiler<'_> {
                     PatternNode::Constant(value)
                 }
                 _ => {
-                    let (node, children) = self.function_pattern(term)?;
-                    reserve(&mut pending, children.len(), self.budget, self.location)?;
-                    pending.extend(children.iter().rev());
-                    node
+                    if let Some((node, children)) = self.function_pattern(term)? {
+                        reserve(&mut pending, children.len(), self.budget, self.location)?;
+                        pending.extend(children.iter().rev());
+                        node
+                    } else if let Some(checks) = &mut checks {
+                        let capture = nodes.is_empty().then_some(root_capture);
+                        self.argument_check(term, capture, variables, checks)?
+                    } else {
+                        return Err(unsupported(ProfileFeature::Term, self.location).into());
+                    }
                 }
             };
             push(&mut nodes, node, self.budget, self.location)?;
@@ -136,7 +181,7 @@ impl Compiler<'_> {
     fn function_pattern<'a>(
         &mut self,
         mut term: &'a Term,
-    ) -> Result<(PatternNode, &'a [Term]), FormulaFailure> {
+    ) -> Result<Option<(PatternNode, &'a [Term])>, FormulaFailure> {
         let mut sign = Sign::Positive;
         while let Term::UnaryOperation {
             operator: UnaryOp::Negate,
@@ -154,21 +199,83 @@ impl Compiler<'_> {
             term = argument;
         }
         let Term::Function { name, arguments } = term else {
-            return Err(unsupported(ProfileFeature::Term, self.location).into());
+            return Ok(None);
         };
         self.budget.charge(
             ExpansionResource::ScalarBytes,
             name.as_str().len() as u128,
             self.location,
         )?;
-        Ok((
+        Ok(Some((
             PatternNode::Function {
                 name: name.as_str().to_owned(),
                 sign,
                 arity: arguments.len(),
             },
             arguments,
-        ))
+        )))
+    }
+
+    /// A source expression may read named inputs but cannot name a private
+    /// capture. Keep its equality separate from inferable source comparisons.
+    /// Reuse the whole argument capture at a root, and capture a complete
+    /// subtree when the evaluated position occurs below a constructor.
+    fn argument_check(
+        &mut self,
+        term: &Term,
+        captured: Option<usize>,
+        variables: &mut Variables,
+        checks: &mut Vec<LiteralIr>,
+    ) -> Result<PatternNode, FormulaFailure> {
+        let mut bytes = 0_u128;
+        for node in term.subterms() {
+            self.budget
+                .charge(ExpansionResource::TermWork, 1, self.location)?;
+            if matches!(node, Term::Pool(_) | Term::Interval { .. }) {
+                return Err(unsupported(ProfileFeature::Term, self.location).into());
+            }
+            bytes += (std::mem::size_of::<Term>() + std::mem::size_of::<Operation>()) as u128;
+            bytes += match node {
+                Term::Variable(Variable::Named(name)) => name.as_str().len() as u128,
+                Term::Symbolic(symbol) => crate::structural_value::symbol_bytes(symbol),
+                Term::Function { name, .. } => name.as_str().len() as u128,
+                _ => 0,
+            };
+        }
+        // One captured-variable operation and the scheduler's pending/output
+        // instruction cells accompany the new check. Reserve the actual source
+        // instruction cell separately before pushing it.
+        self.budget.charge(
+            ExpansionResource::ScalarBytes,
+            bytes
+                + (std::mem::size_of::<Operation>() + 2 * std::mem::size_of::<LiteralIr>()) as u128,
+            self.location,
+        )?;
+        reserve(checks, 1, self.budget, self.location)?;
+        let value = self.expression(term, variables)?;
+        for input in value.inputs() {
+            self.budget
+                .charge(ExpansionResource::TermWork, 1, self.location)?;
+            if !variables.argument_inputs.contains(&input) {
+                self.budget.charge(
+                    ExpansionResource::ScalarBytes,
+                    std::mem::size_of::<usize>() as u128,
+                    self.location,
+                )?;
+                variables.argument_inputs.insert(input);
+            }
+        }
+        let captured = match captured {
+            Some(captured) => captured,
+            None => self.pattern_slot(&Variable::Anonymous, variables)?,
+        };
+        checks.push(LiteralIr::ArgumentCheck {
+            captured: Expression {
+                nodes: vec![Operation::Variable(captured)],
+            },
+            value,
+        });
+        Ok(PatternNode::Slot(captured))
     }
 
     fn pattern_slot(

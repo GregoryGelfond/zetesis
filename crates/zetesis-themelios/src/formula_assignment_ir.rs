@@ -183,9 +183,11 @@ impl Compiler<'_> {
                 self.scope_work(projection.terms.len())?;
                 projection.terms.contains(&Some(Term::Variable(variable)))
             }
-            LiteralIr::Compare(left, _, right) => {
-                self.expression_uses(left, variable)? || self.expression_uses(right, variable)?
-            }
+            LiteralIr::Compare(left, _, right)
+            | LiteralIr::ArgumentCheck {
+                captured: left,
+                value: right,
+            } => self.expression_uses(left, variable)? || self.expression_uses(right, variable)?,
             LiteralIr::TupleCompare(left, _, right) => {
                 for term in left.iter().chain(right) {
                     if self.expression_uses(term, variable)? {

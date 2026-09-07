@@ -752,7 +752,7 @@ fn partial_filters(
 ) -> Result<Comparisons, FormulaFailure> {
     let mut result = Comparisons::Verified;
     for literal in literals {
-        if let LiteralIr::Compare(left, relation, right) = literal {
+        if let Some((left, relation, right)) = comparison(literal) {
             if !bound(left, assignment, limits, counters, location)?
                 || !bound(right, assignment, limits, counters, location)?
             {
@@ -769,12 +769,21 @@ fn partial_filters(
                 result = Comparisons::Deferred;
                 continue;
             };
-            if !compare(&left, *relation, &right) {
+            if !compare(&left, relation, &right) {
                 return Ok(Comparisons::Rejected);
             }
         }
     }
     Ok(result)
+}
+
+/// Captured arguments reuse comparison evaluation, never binding inference.
+fn comparison(literal: &LiteralIr) -> Option<(&Expression, Relation, &Expression)> {
+    match literal {
+        LiteralIr::Compare(left, relation, right) => Some((left, *relation, right)),
+        LiteralIr::ArgumentCheck { captured, value } => Some((captured, Relation::Eq, value)),
+        _ => None,
+    }
 }
 
 fn partial_value(
@@ -831,12 +840,12 @@ fn filters(
 ) -> Result<bool, FormulaFailure> {
     let mut passes = true;
     for literal in literals {
-        if let LiteralIr::Compare(left, relation, right) = literal
+        if let Some((left, relation, right)) = comparison(literal)
             && comparisons != Comparisons::Verified
         {
             let left = expression(left, assignment, limits, budget, counters, location)?;
             let right = expression(right, assignment, limits, budget, counters, location)?;
-            passes &= compare(&left, *relation, &right);
+            passes &= compare(&left, relation, &right);
         } else if let LiteralIr::TupleCompare(left, relation, right) = literal {
             let mut equal = left.len() == right.len();
             for (left, right) in left.iter().zip(right) {

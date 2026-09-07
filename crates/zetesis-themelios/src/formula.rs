@@ -171,6 +171,14 @@ pub enum FormulaFailure {
         /// Original rule span.
         location: Location,
     },
+    /// An evaluated positive argument lacks an independently established input.
+    /// This profile does not invert arithmetic to discover source bindings.
+    UnboundArgumentInput {
+        /// Dense source variable index in the rule or local element scope.
+        variable: usize,
+        /// Original enclosing rule span.
+        location: Location,
+    },
     /// A bounded finite aggregate translation was refused.
     Aggregate {
         /// Typed constructor failure with partial accounting.
@@ -223,6 +231,7 @@ impl FormulaFailure {
                 .collect(),
             Self::Limit { location, .. }
             | Self::UnsafeVariable { location, .. }
+            | Self::UnboundArgumentInput { location, .. }
             | Self::Theory { location, .. }
             | Self::Objective { location, .. }
             | Self::Aggregate { location, .. } => vec![crate::diagnostic::diagnostic(
@@ -247,6 +256,10 @@ impl fmt::Display for FormulaFailure {
             Self::UnsafeVariable { variable, .. } => {
                 write!(f, "unsafe formula variable {variable}")
             }
+            Self::UnboundArgumentInput { variable, .. } => write!(
+                f,
+                "evaluated positive argument requires independently bound input {variable}; arithmetic inversion is unsupported"
+            ),
             Self::Theory { error, .. } => error.fmt(f),
             Self::Objective { error, .. } => error.fmt(f),
             Self::Aggregate { error, .. } => error.fmt(f),

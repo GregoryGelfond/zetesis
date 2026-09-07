@@ -295,30 +295,25 @@ fn late_mismatch_leaves_the_next_row_unbound() {
 }
 
 #[test]
-fn evaluated_patterns_remain_typed_refusals() {
-    for source in [
-        "q(f(2)).p(X):-q(f(X+1)).",
-        "q(-1).p(X):-q(-X).",
-        "{p(f(1))}.q:-p(f(X)):#true.",
-    ] {
-        assert!(
-            matches!(
-                admit_formula(
-                    source.into(),
-                    AdmissionOptions::default(),
-                    ExpansionLimits::default(),
-                    FormulaLimits::default()
-                ),
-                Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
-                    zetesis_themelios::AdmissionFailure::Profile {
-                        feature: zetesis_themelios::ProfileFeature::Term,
-                        ..
-                    }
-                )))
+fn structured_consequent_remains_a_typed_refusal() {
+    let source = "{p(f(1))}.q:-p(f(X)):#true.";
+    assert!(
+        matches!(
+            admit_formula(
+                source.into(),
+                AdmissionOptions::default(),
+                ExpansionLimits::default(),
+                FormulaLimits::default()
             ),
-            "{source}"
-        );
-    }
+            Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
+                zetesis_themelios::AdmissionFailure::Profile {
+                    feature: zetesis_themelios::ProfileFeature::Term,
+                    ..
+                }
+            )))
+        ),
+        "{source}"
+    );
 }
 
 #[test]

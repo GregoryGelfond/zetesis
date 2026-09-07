@@ -77,6 +77,12 @@ pub(crate) enum LiteralIr {
     PatternAtom(crate::formula_pattern::PatternAtom),
     ProjectedAtom(DefaultNegation, Projection),
     Compare(Expression, Relation, Expression),
+    /// Equality between a captured positive subterm and its source expression.
+    /// This is always a consumer; neither side supplies a binding instruction.
+    ArgumentCheck {
+        captured: Expression,
+        value: Expression,
+    },
     TupleCompare(Vec<Expression>, Relation, Vec<Expression>),
     Guard(crate::formula_guard::Guard),
     Conditional(crate::formula_conditional_ir::ConditionalIr),
@@ -332,6 +338,8 @@ pub(super) struct Variables {
     pub(super) named: BTreeMap<String, usize>,
     pub(super) count: usize,
     pub(super) safe: BTreeSet<usize>,
+    /// Diagnostic classification only; these reads never establish safety.
+    pub(super) argument_inputs: BTreeSet<usize>,
 }
 impl Variables {
     pub(super) fn slot(&mut self, variable: &Variable) -> usize {
@@ -352,6 +360,9 @@ impl Variables {
     pub(super) fn safety(&self, location: Location) -> Result<(), FormulaFailure> {
         for variable in 0..self.count {
             if !self.safe.contains(&variable) {
+                if self.argument_inputs.contains(&variable) {
+                    return Err(FormulaFailure::UnboundArgumentInput { variable, location });
+                }
                 return Err(FormulaFailure::UnsafeVariable { variable, location });
             }
         }

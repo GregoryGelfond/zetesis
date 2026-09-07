@@ -57,8 +57,13 @@ full original atom identities. Named constructors match exact name, sign and
 arity; nested mixtures use the same flat matcher.
 Matching stages bindings privately and commits them only after the entire pattern
 succeeds; mismatches and resource failures cannot leak partial bindings.
-Arithmetic within a pattern, such as `q(X):-p(f(X+1))`, remains a refusal;
-extraction does not invert arithmetic or make negative occurrences into binders.
+Evaluated positions consume independently established inputs: `q(X):-d(X),p(X+1)`
+and `q(X):-p(f(X,X+1))` retain the actual supporting `p` atom when the captured
+argument equals the evaluated value. Structural positions may bind inputs in
+the same atom, independent of traversal and literal order. These equality checks
+never infer bindings. `q(X):-p(f(X+1))` without another binder receives
+`UnboundArgumentInput`: arithmetic inversion is unsupported by this profile,
+which is distinct from declaring the source unsafe in ASP.
 Structured consequent-only witnesses retain their separate profile restriction.
 Pools/intervals below a constructor remain outside this generation profile.
 The [finite-value](../../docs/verification/finite-values-20260907/README.md) and
@@ -66,6 +71,8 @@ The [finite-value](../../docs/verification/finite-values-20260907/README.md) and
 records give exact scope, original-model and frozen-reduct tests. The
 [function-pattern record](../../docs/verification/function-patterns-20260907/README.md)
 extends the tuple matcher and states the mathematical shape/extraction boundary.
+The [positive-argument record](../../docs/verification/positive-arguments-20260907/README.md)
+describes the consuming checks, explicit input boundary and scoped proof laws.
 Min/max comparisons and independent
 assignments accept closed symbols, strings, structures and genuine #inf/#sup
 sentinels under the ASP term order; numeric extrema endpoints retain the
@@ -155,7 +162,7 @@ Positive equality can bind a whole otherwise-unbound variable from an independen
 
 `X=L..U` and its reversed form stream a separate inclusive integer cursor after both endpoints are bound. A bound `X` uses membership testing; it never binds an endpoint. Descending ranges and evaluated nonnumeric endpoints emit no rows, matching clingo's interval expansion behavior; this applies equally to symbols and real infinity values. Undefined arithmetic while computing an endpoint remains a separate typed refusal. Every cursor has a bounded range width, and every generated value, operation, substitution, support atom, and support round remains under its existing independent ceiling. Backtracking resets dependent cursors before advancing an earlier range or relational row. Values are not drawn from a global source-domain Cartesian product.
 
-Normal-head scalar expressions and intervals lower to fresh internal value slots feeding the original atom. Distinct head intervals produce independent argument products without introducing semantic auxiliary predicates. For example, `end(S+D) :- start(S), duration(D).` can derive `end(4)` from two values of 2 even when 4 never occurs in the source. This generated value participates in later constraints and recursive joins. Evaluated choice and disjunctive heads use the same binding machinery with their distinct group/rule expansion contracts. Already-safe default-negated body arguments can also evaluate scalar expressions and finite constructors. They consume existing bindings rather than supplying new ones. Evaluated positive body arguments retain their separate pattern boundary. Local choice and aggregate conditions have their own binding plans; generated local variables cannot make an outer head safe.
+Normal-head scalar expressions and intervals lower to fresh internal value slots feeding the original atom. Distinct head intervals produce independent argument products without introducing semantic auxiliary predicates. For example, `end(S+D) :- start(S), duration(D).` can derive `end(4)` from two values of 2 even when 4 never occurs in the source. This generated value participates in later constraints and recursive joins. Evaluated choice and disjunctive heads use the same binding machinery with their distinct group/rule expansion contracts. Already-safe default-negated body arguments can also evaluate scalar expressions and finite constructors. They consume existing bindings rather than supplying new ones. Evaluated positive body arguments compare captured support values with expressions after their inputs are ready; no private capture can establish those inputs. Local choice and aggregate conditions have their own binding plans; generated local variables cannot make an outer head safe.
 
 Undefined or overflowing arithmetic refuses the whole source instead of dropping a substitution. Generative recursion must complete the possible-support fixed point; a default-negated producer can therefore reach a bounded refusal even when clingo's stronger grounding simplification terminates it. Existing aggregate-target dependency restrictions are separate from these scalar instructions. The planner and streamed cursor are tested implementations, not a claimed Lean refinement.
 

@@ -27,7 +27,10 @@ impl Compiler<'_> {
         let work = arguments.iter().flat_map(Term::subterms).count() as u128;
         self.budget.charge(
             ExpansionResource::TermWork,
-            work * 2 + condition.named.len() as u128 + condition.safe.len() as u128,
+            work * 2
+                + condition.named.len() as u128
+                + condition.safe.len() as u128
+                + condition.argument_inputs.len() as u128,
             self.location,
         )?;
         // Each alternative owns its scope and binding plan. Reserve selected
@@ -39,7 +42,8 @@ impl Compiler<'_> {
             .keys()
             .map(|name| name.len() as u128 + std::mem::size_of::<(String, usize)>() as u128)
             .sum::<u128>()
-            + condition.safe.len() as u128 * std::mem::size_of::<usize>() as u128;
+            + (condition.safe.len() + condition.argument_inputs.len()) as u128
+                * std::mem::size_of::<usize>() as u128;
         self.budget.charge(
             ExpansionResource::ScalarBytes,
             scope_bytes

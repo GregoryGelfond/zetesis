@@ -8,14 +8,21 @@ use crate::formula_ir::{Compiler, LiteralIr, Operation, Variables};
 use crate::{ExpansionResource, FormulaFailure, ProfileFeature};
 
 impl Compiler<'_> {
-    /// Negative atoms consume independently established bindings. Their fresh
-    /// value slots never turn their input variables into relational producers.
+    /// Positive atoms may capture evaluated positions for a later equality check.
+    /// Negative atoms consume independently established bindings. Neither check
+    /// nor fresh data slot turns an expression input into a relational producer.
     pub(super) fn literal_into(
         &mut self,
         literal: &Literal,
         variables: &mut Variables,
         body: &mut Vec<LiteralIr>,
     ) -> Result<(), FormulaFailure> {
+        if literal.negation == DefaultNegation::None
+            && let LiteralInner::Atom(atom) = &literal.inner
+            && self.positive_literal(atom.get(), variables, body)?
+        {
+            return Ok(());
+        }
         if literal.negation != DefaultNegation::None
             && let LiteralInner::Atom(atom) = &literal.inner
             && let Arguments::Single(arguments) = &atom.get().arguments
