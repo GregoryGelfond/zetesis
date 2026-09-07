@@ -67,19 +67,18 @@ impl BatchQueue {
                 max_candidates: options.batch_size,
                 max_pending_bytes: options.max_batch_bytes,
             };
-            // A checker failure never enters completion. Do not count a previous
-            // attempt's last statistics again when proposals remain pending.
-            let mut entered_completion = false;
+            // Membership certification can stop after the injected checker.
+            // The stream's explicit completion-attempt count prevents counting
+            // a previous executor snapshot again when proposals remain pending.
+            let prior_completion = models.batch_statistics().completion_calls;
             let result = models.next_batch_with_completion(
                 limits,
                 &mut self.completion,
-                |theory, candidates| {
-                    let verdicts = checker(theory, candidates)?;
-                    entered_completion = verdicts.len() == candidates.len();
-                    Ok(verdicts)
-                },
+                |theory, candidates| checker(theory, candidates),
             );
-            if entered_completion && let Some(progress) = self.completion.last_statistics() {
+            if models.batch_statistics().completion_calls != prior_completion
+                && let Some(progress) = self.completion.last_statistics()
+            {
                 self.accounting.record(progress);
             }
             match result {

@@ -16,6 +16,10 @@ pub enum SolvePhase {
     ExecutionSetup,
     /// Candidate generator initialization or initial classical formula encoding.
     CandidateSetup,
+    /// Complete original-theory certificate construction, including refusals.
+    CertificateSetup,
+    /// Ranked-support membership checking, including interrupted attempts.
+    CertifiedMembership,
     /// Candidate generation/projection and exact semantic blocking.
     CandidateGeneration,
     /// Independent original-formula validation, including residual prechecks.
@@ -34,10 +38,12 @@ pub enum SolvePhase {
     ObservationOutput,
 }
 impl SolvePhase {
-    const ALL: [Self; 11] = [
+    const ALL: [Self; 13] = [
         Self::AdmissionMaterialization,
         Self::ExecutionSetup,
         Self::CandidateSetup,
+        Self::CertificateSetup,
+        Self::CertifiedMembership,
         Self::CandidateGeneration,
         Self::OriginalValidation,
         Self::GpuHostOracle,
@@ -55,6 +61,8 @@ impl SolvePhase {
             Self::AdmissionMaterialization => "admission_materialization",
             Self::ExecutionSetup => "execution_setup",
             Self::CandidateSetup => "candidate_setup",
+            Self::CertificateSetup => "certificate_setup",
+            Self::CertifiedMembership => "certified_membership",
             Self::CandidateGeneration => "candidate_generation",
             Self::OriginalValidation => "original_validation",
             Self::GpuHostOracle => "gpu_host_oracle",
@@ -75,7 +83,7 @@ impl SolvePhase {
 pub struct PhaseTimings {
     /// Whole driver scope from admission entry through result/output return.
     pub driver_elapsed: Duration,
-    measurements: [Option<PhaseMeasurement>; 11],
+    measurements: [Option<PhaseMeasurement>; 13],
 }
 impl PhaseTimings {
     /// An entered phase's attempted time; `None` means unentered or inapplicable.
@@ -87,13 +95,13 @@ impl PhaseTimings {
 
 pub(crate) struct Recorder {
     started: Option<Instant>,
-    measurements: Cell<[Option<PhaseMeasurement>; 11]>,
+    measurements: Cell<[Option<PhaseMeasurement>; 13]>,
 }
 impl Recorder {
     pub(crate) fn new(enabled: bool) -> Self {
         Self {
             started: enabled.then(Instant::now),
-            measurements: Cell::new([None; 11]),
+            measurements: Cell::new([None; 13]),
         }
     }
 
@@ -117,6 +125,7 @@ impl Recorder {
                 (SolvePhase::CandidateGeneration, timing.candidates),
                 (SolvePhase::OriginalValidation, timing.original_validation),
                 (SolvePhase::ExactReductMembership, timing.reduct),
+                (SolvePhase::CertifiedMembership, timing.certified),
             ] {
                 values[phase as usize] = (value.calls != 0 || value.overflowed).then_some(value);
             }

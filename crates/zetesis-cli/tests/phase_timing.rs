@@ -70,10 +70,15 @@ fn optional_timing_preserves_complete_closure_and_formula_results() {
             false,
             false,
         ),
-        ("a|b. a:-b. b:-a.", vec![], true, false),
+        (
+            "a|b. a:-b. b:-a.",
+            vec!["--oracle", "countermodel"],
+            true,
+            false,
+        ),
         (
             "1{p(1);p(2)}1. {hidden}. #minimize{X:p(X)}. #show. #show seen(X):p(X).",
-            vec![],
+            vec!["--oracle", "countermodel"],
             true,
             true,
         ),

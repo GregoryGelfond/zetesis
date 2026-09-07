@@ -71,7 +71,7 @@ fn explicit_formula_route_admits_source_before_device_failure_and_still_refuses_
 }
 
 #[test]
-fn automatic_formula_route_retains_the_scalar_cpu_baseline() {
+fn automatic_formula_route_reports_the_checked_cpu_specialization() {
     let mut output = Vec::new();
     let mut diagnostics = Vec::new();
     let report = run_with_diagnostics(
@@ -86,7 +86,7 @@ fn automatic_formula_route_retains_the_scalar_cpu_baseline() {
     assert_eq!(report.models, 2);
     assert!(report.formula_execution.is_none());
     let text = String::from_utf8(diagnostics).unwrap();
-    assert!(text.contains("backend=cpu; oracle=countermodel"));
+    assert!(text.contains("backend=cpu; oracle=tight-support"));
     assert!(!text.contains("hybrid GPU"));
 }
 

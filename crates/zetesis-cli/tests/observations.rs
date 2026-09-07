@@ -28,7 +28,7 @@ fn auto_observation_uses_original_models_and_separate_output_channels() {
     let (result, output, diagnostics) = solve("a. #show a.", &[]);
     assert_eq!(result.unwrap().models, 1);
     assert!(output.starts_with("Answer: 1\na a\n"), "{output}");
-    assert!(diagnostics.contains("oracle: Ferraris reduct countermodel"));
+    assert!(diagnostics.contains("oracle: Ferraris reduct membership"));
     let (result, output, _) = solve(
         "p(1;2). #show. #show f(g(X),(X,)):p(X).",
         &["--models", "0"],

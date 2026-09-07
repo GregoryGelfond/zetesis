@@ -34,3 +34,5 @@ import Zetesis.UniversalConditionals
 import Zetesis.FiniteBindings
 import Zetesis.NegativeHeads
 import Zetesis.TightPlans
+
+import Zetesis.CertifiedExecution

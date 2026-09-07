@@ -1,8 +1,8 @@
 use std::mem::size_of;
 
 use super::{
-    TightError, TightPlan, TightPlanLimits, TightPlanStatistics, TightProducer, TightProducerKind,
-    TightResource, Work, bytes, filled, reserve,
+    TightAttempt, TightError, TightPlan, TightPlanLimits, TightPlanStatistics, TightProducer,
+    TightProducerKind, TightResource, Work, bytes, filled, reserve,
 };
 use crate::{Node, Theory};
 use zetesis_cpu::Control;
@@ -41,7 +41,27 @@ impl TightPlan {
         limits: TightPlanLimits,
         control: &Control,
     ) -> Result<Self, TightError> {
-        build(theory, None, limits, control)
+        Self::compile_accounted(theory, limits, control).result
+    }
+
+    /// Derive the same certificate as [`Self::compile`], retaining charged work
+    /// on every result, including shape refusal, cancellation and work limits.
+    #[must_use]
+    pub fn compile_accounted(
+        theory: &Theory,
+        limits: TightPlanLimits,
+        control: &Control,
+    ) -> TightAttempt<Self> {
+        let mut work = Work {
+            used: 0,
+            max: limits.max_work,
+            control,
+        };
+        let result = build(theory, None, limits, &mut work);
+        TightAttempt {
+            result,
+            work: work.used,
+        }
     }
 
     /// Check an externally proposed atom rank against the same complete root
@@ -56,7 +76,12 @@ impl TightPlan {
         limits: TightPlanLimits,
         control: &Control,
     ) -> Result<Self, TightError> {
-        build(theory, Some(ranks), limits, control)
+        let mut work = Work {
+            used: 0,
+            max: limits.max_work,
+            control,
+        };
+        build(theory, Some(ranks), limits, &mut work)
     }
 }
 
@@ -197,22 +222,17 @@ fn build(
     theory: &Theory,
     proposed: Option<&[usize]>,
     limits: TightPlanLimits,
-    control: &Control,
+    work: &mut Work<'_>,
 ) -> Result<TightPlan, TightError> {
-    control.poll()?;
-    let mut work = Work {
-        used: 0,
-        max: limits.max_work,
-        control,
-    };
+    work.control.poll()?;
     bytes(
         theory.nodes().len() as u128 * size_of::<Body>() as u128,
         limits.max_bytes,
     )?;
-    let classes = classify(theory, &mut work)?;
-    let producers = extract(theory, &classes, limits, &mut work)?;
+    let classes = classify(theory, work)?;
+    let producers = extract(theory, &classes, limits, work)?;
     let mut dependencies = 0usize;
-    each_dependency(theory, &classes, &producers, &mut work, |_, _, _| {
+    each_dependency(theory, &classes, &producers, work, |_, _, _| {
         if dependencies == limits.max_dependencies {
             return Err(TightError::Limit(TightResource::Dependencies));
         }
@@ -241,19 +261,12 @@ fn build(
         limits.max_bytes,
     )?;
     let ranks = if let Some(ranks) = proposed {
-        validate_ranks(theory, &classes, &producers, ranks, &mut work)?;
+        validate_ranks(theory, &classes, &producers, ranks, work)?;
         let mut owned = reserve(ranks.len())?;
         owned.extend_from_slice(ranks);
         owned
     } else {
-        derive_ranks(
-            theory,
-            &classes,
-            &producers,
-            vertices,
-            dependencies,
-            &mut work,
-        )?
+        derive_ranks(theory, &classes, &producers, vertices, dependencies, work)?
     };
     Ok(TightPlan {
         theory: theory.clone(),

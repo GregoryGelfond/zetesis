@@ -39,6 +39,10 @@ pub enum Incomplete {
     },
     /// A fused iterator cannot restart after exhaustion or terminal failure.
     ClosedEnumerator,
+    /// A certificate cannot be configured after candidate generation has begun.
+    LateCertificate,
+    /// Optional candidate certification stopped without establishing membership.
+    Certificate(zetesis_ferraris::TightError),
     /// Independent formula evaluation stopped without validating a witness.
     Verification(Stop),
     /// An internal SAT witness failed independent semantic validation.
@@ -82,6 +86,10 @@ impl fmt::Display for Incomplete {
                 "candidate restriction declares {actual} atoms; expected {expected}"
             ),
             Self::ClosedEnumerator => f.write_str("candidate enumeration is already closed"),
+            Self::LateCertificate => {
+                f.write_str("certificate configuration requires an unstarted candidate stream")
+            }
+            Self::Certificate(error) => write!(f, "certified membership: {error}"),
             Self::Verification(error) => write!(f, "independent verification: {error}"),
             Self::InvalidWitness => f.write_str("SAT witness failed independent verification"),
             Self::CounterOverflow => f.write_str("SAT accounting counter overflow"),
@@ -93,6 +101,7 @@ impl std::error::Error for Incomplete {
         match self {
             Self::Admission(error) => Some(error),
             Self::Verification(error) => Some(error),
+            Self::Certificate(error) => Some(error),
             _ => None,
         }
     }

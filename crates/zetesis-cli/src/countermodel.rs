@@ -128,6 +128,10 @@ impl FormulaRun<'_> {
             models.enable_phase_timing();
         }
         let result = (|| {
+            if let Some(error) = prepare_certificate(&mut models, options, diagnostics, phases)? {
+                report.interruption = Some(Interruption::Countermodel(error));
+                return Ok(Completion::Interrupted);
+            }
             let mut bounds =
                 if input.objectives.is_present() && options.max_objective_bound_work != 0 {
                     phases.measure(SolvePhase::ObjectiveFeedback, || {
@@ -189,6 +193,44 @@ impl FormulaRun<'_> {
         report.formula_execution = execution.statistics(&models);
         result
     }
+}
+
+/// An optional setup interruption is retained by the same search report. A
+/// diagnostic failure propagates separately and never erases the owned stream.
+fn prepare_certificate(
+    models: &mut zetesis_sat::StableModels,
+    options: &Options,
+    diagnostics: &mut impl Write,
+    phases: &Recorder,
+) -> Result<Option<zetesis_sat::Incomplete>, RunError> {
+    if options.oracle != crate::Oracle::Auto
+        || !matches!(options.backend, crate::Backend::Auto | crate::Backend::Cpu)
+    {
+        return Ok(None);
+    }
+    let eligibility = phases.measure(SolvePhase::CertificateSetup, || {
+        models.enable_certified_checking(zetesis_ferraris::TightPlanLimits {
+            max_bytes: options.max_completion_scratch_bytes,
+            ..Default::default()
+        })
+    });
+    match eligibility {
+        Ok(true) => writeln!(
+            diagnostics,
+            "Membership: checked tight support certificate; exact reduct residual completion"
+        )?,
+        Ok(false) => writeln!(
+            diagnostics,
+            "Membership: general reduct; tight certificate refused: {}",
+            models
+                .statistics()
+                .certified
+                .and_then(|s| s.refusal)
+                .expect("refused certificate records its reason")
+        )?,
+        Err(error) => return Ok(Some(error)),
+    }
+    Ok(None)
 }
 
 pub(crate) fn check_control(

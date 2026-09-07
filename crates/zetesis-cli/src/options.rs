@@ -51,7 +51,7 @@ impl Grounder {
 /// Exact stable-model oracle selection, independent of language support.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum Oracle {
-    /// Select reduct closure when applicable, otherwise reduct countermodel search.
+    /// Select reduct closure, checked tight support, or general reduct checking.
     #[default]
     Auto,
     /// Require reduct closure with sparse gate candidates on CPU or static GPU batches.
@@ -103,7 +103,7 @@ pub struct Options {
     /// elapsed time on stderr. Answer-set output on stdout is unchanged.
     #[arg(long)]
     pub stats: bool,
-    /// Cumulative encoding and search operations for the countermodel oracle.
+    /// Cumulative encoding, certificate and search operations for the formula oracle.
     #[arg(long, default_value_t = 100_000_000)]
     pub max_search_work: u64,
     /// Cumulative branch decisions for the countermodel oracle.

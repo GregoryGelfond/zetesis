@@ -18,8 +18,9 @@ mod timing;
 pub use cnf::{AdmissionError, AdmissionLimits, Assignment, Cnf, Literal, Resource};
 pub use error::Incomplete;
 pub use ferraris::{
-    BatchError, BatchLimits, BatchStatistics, BatchVerdict, Check, CompletionExecutor,
-    CompletionScratch, CompletionStatistics, Limits, StableModels, Statistics, check,
+    BatchError, BatchLimits, BatchStatistics, BatchVerdict, CertifiedStatistics, Check,
+    CompletionExecutor, CompletionScratch, CompletionStatistics, Limits, StableModels, Statistics,
+    check,
 };
 pub use search::{SearchLimits, SearchStatistics, Solve, solve, solve_with_statistics};
 pub use zetesis_cpu::Control;

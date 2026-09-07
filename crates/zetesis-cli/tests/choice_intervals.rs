@@ -71,7 +71,7 @@ fn automatic_interval_choices_keep_group_bounds_products_costs_and_hidden_ties()
         assert_eq!(report.completion, Completion::Exhausted, "{source}");
         assert_eq!(report.models, expected.len(), "{source}");
         assert_eq!(displays(&output), expected, "{source}");
-        assert!(diagnostics.contains("oracle: Ferraris reduct countermodel"));
+        assert!(diagnostics.contains("oracle: Ferraris reduct membership"));
         assert!(output.contains("Coverage: exhausted"));
         assert!(!output.contains("INCOMPLETE"));
         if let Some(cost) = cost {

@@ -1,4 +1,4 @@
-use zetesis_ferraris::{Interpretation, Theory, models, models_reduct};
+use zetesis_ferraris::{Interpretation, Theory, TightVerdict, models, models_reduct};
 
 use crate::encoding;
 use crate::search::{Budget, Cursor, Quota, increment, query};
@@ -13,12 +13,16 @@ pub use batch::{BatchError, BatchLimits, BatchStatistics, BatchVerdict};
 mod completion;
 pub use completion::{CompletionExecutor, CompletionScratch, CompletionStatistics};
 
+#[path = "certified.rs"]
+mod certified;
+pub use certified::CertifiedStatistics;
+
 /// Whole-operation ceilings for a membership check or stable-model enumeration.
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {
     /// Each candidate/reduct CNF, including accumulated candidate blocking clauses.
     pub admission: AdmissionLimits,
-    /// Cumulative encoding and SAT work/decisions across all queries in a run.
+    /// Cumulative encoding, certificate and search work/decisions across a run.
     pub search: SearchLimits,
     /// Maximum classical candidates checked during enumeration; not model count.
     pub max_candidates: u64,
@@ -59,7 +63,7 @@ impl Check {
 /// Cumulative accounting across candidate and countermodel search.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Statistics {
-    /// Encoding operations and SAT-kernel work, including incomplete queries.
+    /// Encoding, certificate and Boolean-kernel work, including incomplete attempts.
     pub search: SearchStatistics,
     /// Outer classical SAT queries started, including a final UNSAT query.
     pub candidate_queries: u64,
@@ -78,6 +82,8 @@ pub struct Statistics {
     /// Coarse host timings, absent unless explicitly enabled after construction.
     /// These are separate from deterministic semantic work counters.
     pub phase_timings: Option<crate::SearchPhaseTimings>,
+    /// Optional complete-theory certificate attempt and checks.
+    pub certified: Option<CertifiedStatistics>,
 }
 
 fn verification(limits: Limits) -> zetesis_ferraris::Limits {
@@ -198,6 +204,7 @@ pub struct StableModels {
     exhausted: bool,
     pending_error: Option<Incomplete>,
     batch: batch::State,
+    certification: Option<certified::Certification>,
 }
 impl StableModels {
     /// Encode the original theory once, retaining its immutable instance identity.
@@ -227,6 +234,7 @@ impl StableModels {
             exhausted: false,
             pending_error: None,
             batch: batch::State::default(),
+            certification: None,
         })
     }
     /// Enable coarse host timing from this point onward. Repeated calls retain
@@ -309,10 +317,13 @@ impl StableModels {
             statistics: self.statistics.search,
         };
         let result = advance(
-            &self.theory,
+            Membership {
+                theory: &self.theory,
+                limits: self.limits,
+                certificate: self.certification.as_ref(),
+            },
             &mut self.candidate_cnf,
             &mut self.candidate_cursor,
-            self.limits,
             &mut budget,
             &mut self.statistics,
             &mut self.pending_error,
@@ -352,15 +363,26 @@ impl Iterator for StableModels {
 }
 impl std::iter::FusedIterator for StableModels {}
 
+#[derive(Clone, Copy)]
+struct Membership<'a> {
+    theory: &'a Theory,
+    limits: Limits,
+    certificate: Option<&'a certified::Certification>,
+}
+
 fn advance(
-    theory: &Theory,
+    membership_input: Membership<'_>,
     cnf: &mut Cnf,
     cursor: &mut Cursor,
-    limits: Limits,
     budget: &mut Budget<'_>,
     statistics: &mut Statistics,
     pending_error: &mut Option<Incomplete>,
 ) -> Result<Option<Interpretation>, Incomplete> {
+    let Membership {
+        theory,
+        limits,
+        certificate,
+    } = membership_input;
     loop {
         let started = timing::start(statistics.phase_timings.as_ref());
         let proposal = (|| {
@@ -380,7 +402,24 @@ fn advance(
         let Some(candidate) = proposal? else {
             return Ok(None);
         };
-        let result = membership(theory, &candidate, limits, budget, statistics)?;
+        let result = if let Some(certificate) = certificate {
+            match certified::classify(
+                certificate,
+                &candidate,
+                limits,
+                budget.control,
+                statistics,
+                &mut budget.statistics,
+            )? {
+                TightVerdict::Stable => Check::Stable,
+                TightVerdict::NotModel { .. } => Check::NotModel,
+                TightVerdict::Residual { .. } => {
+                    membership(theory, &candidate, limits, budget, statistics)?
+                }
+            }
+        } else {
+            membership(theory, &candidate, limits, budget, statistics)?
+        };
         if matches!(result, Check::NotModel | Check::Inconclusive(_)) {
             return Err(Incomplete::InvalidWitness);
         }

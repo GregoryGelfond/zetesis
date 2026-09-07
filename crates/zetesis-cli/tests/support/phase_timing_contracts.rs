@@ -87,7 +87,7 @@ fn cumulative_search_snapshots_replace_instead_of_double_counting_attempts() {
 fn every_phase_output_prefix_propagates_write_failure_and_incomplete_measurements() {
     let mut timings = PhaseTimings {
         driver_elapsed: Duration::from_nanos(23),
-        measurements: [None; 11],
+        measurements: [None; 13],
     };
     timings.measurements[SolvePhase::AdmissionMaterialization as usize] = Some(PhaseMeasurement {
         calls: 2,
@@ -107,7 +107,7 @@ fn every_phase_output_prefix_propagates_write_failure_and_incomplete_measurement
         text.contains("phase admission_materialization: calls=2; elapsed_ns=7; complete=true\n")
     );
     assert!(text.contains("phase objective_feedback: calls=1; elapsed_ns=3; complete=false\n"));
-    assert_eq!(text.matches(": unmeasured\n").count(), 9);
+    assert_eq!(text.matches(": unmeasured\n").count(), 11);
     assert!(text.ends_with("kernel_time=unmeasured\n"));
     for capacity in 0..reference.len() {
         let mut output = BoundedWriter::new(capacity);

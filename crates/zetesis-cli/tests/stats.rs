@@ -76,7 +76,7 @@ fn statistics_flag_is_opt_in_and_preserves_each_supported_cpu_answer_path() {
         (
             "{a;b}. #maximize{2,a:a;1,b:b}.",
             vec![],
-            "oracle=countermodel; grounder=eager",
+            "oracle=tight-support; grounder=eager",
         ),
     ] {
         let mut configured = options(&arguments);

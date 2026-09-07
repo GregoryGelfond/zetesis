@@ -79,7 +79,7 @@ pub(crate) fn write_detailed(
 fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
     writeln!(
         sink,
-        "  search limits: candidates={}; countermodel work={}; decisions={}; per-candidate oracle work={}",
+        "  search limits: candidates={}; formula work={}; decisions={}; per-candidate oracle work={}",
         o.max_candidates, o.max_search_work, o.max_search_decisions, o.max_work
     )?;
     writeln!(
@@ -162,6 +162,27 @@ fn details(sink: &mut impl Write, options: &Options, report: &Report) -> io::Res
             stats.candidate_queries,
             stats.stable_models
         )?;
+        if let Some(certified) = stats.certified {
+            writeln!(
+                sink,
+                "  tight certificate: eligible={}; refusal={:?}; construction work={}; checks={}; stable decisions before commit={}; residuals={}; failed={}; checking work={}",
+                certified.plan.is_some(),
+                certified.refusal,
+                certified.construction_work,
+                certified.checks,
+                certified.stable,
+                certified.residuals,
+                certified.failed,
+                certified.checking_work
+            )?;
+            if let Some(plan) = certified.plan {
+                writeln!(
+                    sink,
+                    "  tight certificate storage: construction logical bytes={}; resident logical bytes={}; dependencies={}",
+                    plan.construction_bytes, plan.resident_bytes, plan.dependencies
+                )?;
+            }
+        }
         writeln!(
             sink,
             "  discovered gate tuples: inapplicable (complete semantic candidates)"
@@ -203,6 +224,15 @@ fn details(sink: &mut impl Write, options: &Options, report: &Report) -> io::Res
 }
 
 fn formula(sink: &mut impl Write, options: &Options, report: &Report) -> io::Result<()> {
+    let oracle = if report
+        .countermodel_statistics
+        .and_then(|s| s.certified)
+        .is_some_and(|s| s.plan.is_some())
+    {
+        "tight-support"
+    } else {
+        "countermodel"
+    };
     if let Some(execution) = &report.formula_execution {
         let backend = if execution.adapter.is_empty() {
             "cpu batched exact completion"
@@ -211,7 +241,7 @@ fn formula(sink: &mut impl Write, options: &Options, report: &Report) -> io::Res
         };
         writeln!(
             sink,
-            "  effective execution: backend={backend}; oracle=countermodel; grounder=eager; CPU completion requested workers={}; peak effective workers={}; adapter={}",
+            "  effective execution: backend={backend}; oracle={oracle}; grounder=eager; CPU completion requested workers={}; peak effective workers={}; adapter={}",
             options.completion_workers, execution.completion.effective_workers, execution.adapter
         )?;
         writeln!(
@@ -265,7 +295,7 @@ fn formula(sink: &mut impl Write, options: &Options, report: &Report) -> io::Res
     } else {
         writeln!(
             sink,
-            "  effective execution: backend=cpu; oracle=countermodel; grounder=eager; search workers=1; completion scratch limit=inapplicable (scalar cursor)"
+            "  effective execution: backend=cpu; oracle={oracle}; grounder=eager; search workers=1; completion scratch limit=inapplicable (scalar cursor)"
         )
     }
 }

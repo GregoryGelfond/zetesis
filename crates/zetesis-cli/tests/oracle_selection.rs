@@ -99,7 +99,7 @@ fn auto_uses_closure_for_supported_scalar_normal_programs() {
 }
 
 #[test]
-fn auto_uses_countermodels_for_choices_and_variable_arithmetic() {
+fn auto_uses_formula_membership_for_choices_and_variable_arithmetic() {
     for (source, count) in [
         ("1 {a;b} 1.", 2),
         ("d(1;2). {p(X):d(X)}.", 4),
@@ -117,7 +117,7 @@ fn auto_uses_countermodels_for_choices_and_variable_arithmetic() {
             answers(&auto_output).into_iter().collect::<BTreeSet<_>>(),
             answers(&explicit_output).into_iter().collect()
         );
-        assert!(diagnostics.contains("oracle: Ferraris reduct countermodel"));
+        assert!(diagnostics.contains("oracle: Ferraris reduct membership"));
         assert!(!diagnostics.contains("Oracle: reduct closure"));
         assert!(automatic.countermodel_statistics.is_some());
         assert!(matches!(

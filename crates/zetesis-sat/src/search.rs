@@ -18,6 +18,7 @@ use crate::{Assignment, Cnf, Control, Incomplete, Literal};
 #[derive(Clone, Copy, Debug)]
 pub struct SearchLimits {
     /// Initialization, watch visits, literal tests, branching scans and undo steps.
+    /// Stable-model enumeration also charges optional certificate work here.
     pub max_work: u64,
     /// Maximum fresh decision frames; flipping an existing frame is backtracking.
     pub max_decisions: u64,
@@ -31,7 +32,7 @@ impl Default for SearchLimits {
     }
 }
 
-/// Exact accounting for charged SAT operations; includes failed query work.
+/// Exact accounting for charged search and certificate operations, including failures.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SearchStatistics {
     /// Charged primitive operations.

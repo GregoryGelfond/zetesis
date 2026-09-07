@@ -1,5 +1,6 @@
 use super::{
-    TightCheck, TightCheckLimits, TightError, TightPlan, TightVerdict, Work, bytes, filled, reserve,
+    TightAttempt, TightCheck, TightCheckLimits, TightError, TightPlan, TightVerdict, Work, bytes,
+    filled, reserve,
 };
 use crate::{Interpretation, Node};
 use zetesis_cpu::{Control, Stop};
@@ -19,21 +20,46 @@ impl TightPlan {
         limits: TightCheckLimits,
         control: &Control,
     ) -> Result<TightCheck, TightError> {
+        self.check_accounted(candidate, limits, control).result
+    }
+
+    /// Check the same membership conditions as [`Self::check`], retaining all
+    /// charged work when evaluation stops before producing a verdict.
+    #[must_use]
+    pub fn check_accounted(
+        &self,
+        candidate: &Interpretation,
+        limits: TightCheckLimits,
+        control: &Control,
+    ) -> TightAttempt<TightCheck> {
+        let mut work = Work {
+            used: 0,
+            max: limits.max_work,
+            control,
+        };
+        let result = self.evaluate(candidate, limits, &mut work);
+        TightAttempt {
+            result,
+            work: work.used,
+        }
+    }
+
+    fn evaluate(
+        &self,
+        candidate: &Interpretation,
+        limits: TightCheckLimits,
+        work: &mut Work<'_>,
+    ) -> Result<TightCheck, TightError> {
         if !self.theory.same_instance(candidate.theory()) {
             return Err(Stop::WrongProgram.into());
         }
-        control.poll()?;
+        work.control.poll()?;
         let logical_bytes = bytes(
             u128::from(self.statistics.resident_bytes)
                 + self.theory.nodes().len() as u128
                 + self.theory.atom_count() as u128,
             limits.max_bytes,
         )?;
-        let mut work = Work {
-            used: 0,
-            max: limits.max_work,
-            control,
-        };
         // Byte cells, rather than implementation-dependent packed Vec<bool>,
         // give this primitive and future candidate tiles a clear payload bound.
         let mut values = reserve::<u8>(self.theory.nodes().len())?;

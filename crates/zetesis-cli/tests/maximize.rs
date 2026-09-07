@@ -234,7 +234,7 @@ fn automatic_admission_and_bounds_preserve_complete_costs_and_display_multisets(
             let report = report.unwrap_or_else(|error| panic!("{}: {error}", case.source));
             assert_complete(&report, &text, case);
             assert!(
-                diagnostics.contains("oracle: Ferraris reduct countermodel"),
+                diagnostics.contains("oracle: Ferraris reduct membership"),
                 "{diagnostics}"
             );
             let restrictions = report

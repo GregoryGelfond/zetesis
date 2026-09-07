@@ -72,9 +72,14 @@ pub(crate) enum Execution {
 impl Execution {
     pub(crate) fn new(options: &Options, diagnostics: &mut impl Write) -> Result<Self, RunError> {
         if matches!(options.backend, Backend::Auto | Backend::Cpu) {
+            let oracle = if options.oracle == crate::Oracle::Auto {
+                "Ferraris reduct membership"
+            } else {
+                "Ferraris reduct countermodel"
+            };
             writeln!(
                 diagnostics,
-                "Backend: cpu; oracle: Ferraris reduct countermodel; grounder: eager (requested {})",
+                "Backend: cpu; oracle: {oracle}; grounder: eager (requested {})",
                 options.grounder.label()
             )?;
             if options.completion_workers.get() > 1 {

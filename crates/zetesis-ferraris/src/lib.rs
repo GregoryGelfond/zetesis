@@ -27,6 +27,6 @@ pub use oracle::{Check, Limits, Statistics, Verdict, check, models, models_reduc
 pub use theory::{AdmissionError, AdmissionLimits, Interpretation, Node, Theory};
 
 pub use tight::{
-    TightCheck, TightCheckLimits, TightError, TightPlan, TightPlanLimits, TightPlanStatistics,
-    TightProducer, TightProducerKind, TightResource, TightVerdict,
+    TightAttempt, TightCheck, TightCheckLimits, TightError, TightPlan, TightPlanLimits,
+    TightPlanStatistics, TightProducer, TightProducerKind, TightResource, TightVerdict,
 };

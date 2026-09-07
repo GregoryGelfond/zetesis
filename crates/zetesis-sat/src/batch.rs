@@ -36,6 +36,8 @@ pub struct BatchLimits {
 pub struct BatchStatistics {
     /// Calls made to the injected checker, including failed calls.
     pub checker_calls: u64,
+    /// Exact completion attempts entered, including scratch refusals.
+    pub completion_calls: u64,
     /// Candidates with completed membership and committed results.
     pub committed: u64,
     /// Committed candidates decided by the injected no-proper-subset verdict.
@@ -202,13 +204,16 @@ impl StableModels {
             return Err(BatchError::Limits(Incomplete::PendingBytes));
         }
         increment(&mut self.batch.statistics.checker_calls).map_err(BatchError::Search)?;
-        let verdicts = checker(&self.theory, &self.batch.pending).map_err(BatchError::Checker)?;
+        let mut verdicts =
+            checker(&self.theory, &self.batch.pending).map_err(BatchError::Checker)?;
         if verdicts.len() != self.batch.pending.len() {
             return Err(BatchError::Shape {
                 expected: self.batch.pending.len(),
                 actual: verdicts.len(),
             });
         }
+        self.certify_pending(&mut verdicts)
+            .map_err(BatchError::Search)?;
         self.commit(&verdicts, completion).map_err(|error| {
             if error == Incomplete::CompletionScratch {
                 BatchError::Limits(error)
@@ -216,6 +221,35 @@ impl StableModels {
                 BatchError::Search(error)
             }
         })
+    }
+
+    fn certify_pending(&mut self, verdicts: &mut [BatchVerdict]) -> Result<(), Incomplete> {
+        let Some(certificate) = &self.certification else {
+            return Ok(());
+        };
+        let mut search = self.statistics.search;
+        let result = (|| {
+            for (candidate, verdict) in self.batch.pending.iter().zip(verdicts) {
+                if *verdict != BatchVerdict::Residual {
+                    continue;
+                }
+                *verdict = match super::certified::classify(
+                    certificate,
+                    candidate,
+                    self.limits,
+                    &self.control,
+                    &mut self.statistics,
+                    &mut search,
+                )? {
+                    zetesis_ferraris::TightVerdict::Stable => BatchVerdict::NoProperSubset,
+                    zetesis_ferraris::TightVerdict::NotModel { .. } => BatchVerdict::NotModel,
+                    zetesis_ferraris::TightVerdict::Residual { .. } => BatchVerdict::Residual,
+                };
+            }
+            Ok(())
+        })();
+        self.statistics.search = search;
+        result
     }
 
     fn propose(&mut self, limits: BatchLimits) -> Result<(), Incomplete> {
@@ -294,6 +328,7 @@ impl StableModels {
             control: &self.control,
             statistics: self.statistics.search,
         };
+        increment(&mut self.batch.statistics.completion_calls)?;
         let result = completion.complete(
             super::completion::Input {
                 theory: &self.theory,

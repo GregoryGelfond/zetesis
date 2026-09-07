@@ -242,6 +242,17 @@ pub struct TightCheck {
     pub logical_bytes: u64,
 }
 
+/// A certificate operation with work retained even when the result is refused.
+/// The result alone cannot establish membership when it is an error. Callers
+/// composing algorithms must charge `work` before selecting a fallback.
+#[derive(Debug)]
+pub struct TightAttempt<T> {
+    /// Completed value or the exact reason the operation stopped.
+    pub result: Result<T, TightError>,
+    /// Charged primitive operations, including work preceding failure.
+    pub work: u64,
+}
+
 struct Work<'a> {
     used: u64,
     max: u64,
