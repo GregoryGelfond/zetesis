@@ -8,7 +8,7 @@ The library keeps three explicit admission contracts:
 |---|---|---|
 | `admit` | Relational `Program` | Strict S0 normal rules, constraints, singleton unconditioned choices, scalar/closed structural terms, ordinary positive/default-negated literals, scalar equality/disequality |
 | `admit_extended` / `admit_bundle_extended` | Relational `Program` and source evidence | S0 plus acyclic closed constants, checked ground scalar arithmetic, finite fact-head pools/intervals, `#defined`, signature/empty `#show`, and original include graphs for the bundle API |
-| `admit_formula` / `admit_bundle_formula` | Ferraris `Theory`, dense original `Atom` identities, lifted objectives, and source evidence | Extended closed-value forms plus evaluated signed disjunctive heads with empty/explicitly true Boolean conditions, finite conditional choices, numeric choice bounds, top-level numeric/dependent intervals in positive disjunctive and choice heads, body count/sum/sum+ and numeric min/max comparisons and independent finite equality assignments, finite comparison-generated bindings, bounded universal body conditionals, and the bounded `#minimize`/`#maximize`/positive weak-constraint profile below |
+| `admit_formula` / `admit_bundle_formula` | Ferraris `Theory`, dense original `Atom` identities, lifted objectives, and source evidence | Extended closed-value forms plus evaluated signed disjunctive heads with empty/explicitly true Boolean conditions, finite conditional choices, numeric choice bounds, top-level numeric/dependent intervals in positive disjunctive and choice heads, body count/sum/sum+ and complete-value min/max comparisons and independent finite equality assignments, finite comparison-generated bindings, bounded universal body conditionals, and the bounded `#minimize`/`#maximize`/positive weak-constraint profile below |
 
 The CLI chooses an admitted source route automatically. The library APIs remain explicit so callers can require a relational or formula result. `ExpansionFailure::needs_formula_admission()` permits a formula retry only for an unsupported profile or a scalar operation that stopped at a variable. Syntax errors, arithmetic undefinedness/overflow, exceeded budgets, and independent core failures are not profile retries.
 
@@ -33,7 +33,10 @@ and overflow refusals; signed function negation is handled separately.
 
 This slice does not introduce constructor generation or pattern unification:
 `p(f(X)):-q(X)` and `q(X):-p(f(X))` remain refused. Pools/intervals below a
-constructor and nonnumeric min/max aggregates remain outside the profile.
+constructor remain outside the profile. Min/max comparisons and independent
+assignments accept closed symbols, strings, structures and genuine #inf/#sup
+sentinels under the ASP term order; numeric extrema endpoints retain their
+separately documented source refusals.
 Original sources, signs, coherence, Ferraris roots and frozen-reduct acceptance
 are unchanged by copying a value. The semantic kernels and GPU transports still
 operate on complete original atom IDs. Source admission and these Rust consumer

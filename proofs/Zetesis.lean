@@ -37,3 +37,5 @@ import Zetesis.TrueHeads
 import Zetesis.TightPlans
 
 import Zetesis.CertifiedExecution
+
+import Zetesis.ValueExtrema

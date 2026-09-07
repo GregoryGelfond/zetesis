@@ -7,9 +7,12 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 
-const HEADER: &str = "Phase timings: clock=host-monotonic; scope=driver; failed_attempts=included";
+const HEADER: &str =
+    "Phase timings: clock=host-monotonic; scope=driver; failed_attempts=included; schema=2";
+const LEGACY_HEADER: &str =
+    "Phase timings: clock=host-monotonic; scope=driver; failed_attempts=included";
 const FOOTER: &str = "  phase scope: source_loading=excluded; statistics_output=excluded; timer_overhead=unattributed; kernel_time=unmeasured";
-const LABELS: [&str; 11] = [
+const LEGACY_LABELS: [&str; 11] = [
     "admission_materialization",
     "execution_setup",
     "candidate_setup",
@@ -23,8 +26,26 @@ const LABELS: [&str; 11] = [
     "observation_output",
 ];
 
+const LABELS: [&str; 13] = [
+    "admission_materialization",
+    "execution_setup",
+    "candidate_setup",
+    "certificate_setup",
+    "certified_membership",
+    "candidate_generation",
+    "original_validation",
+    "gpu_host_oracle",
+    "exact_reduct_membership",
+    "closure_membership",
+    "objective_scoring_retention",
+    "objective_feedback",
+    "observation_output",
+];
+
 #[derive(Debug, Serialize)]
 pub(crate) struct PhaseTimings {
+    /// Exact recognized timing schema; legacy records have no certificate phases.
+    pub(crate) schema_version: u8,
     /// Driver host interval; source loading and statistics output are excluded.
     pub(crate) driver_elapsed_ns: u64,
     /// False if any attempted measurement reports counter overflow.
@@ -52,7 +73,12 @@ pub(crate) fn parse(stderr: &str) -> Result<Option<PhaseTimings>, String> {
     if lines.is_empty() {
         return Ok(None);
     }
-    if lines.len() != LABELS.len() + 3 || lines[0] != HEADER || lines[LABELS.len() + 2] != FOOTER {
+    let (schema_version, labels): (u8, &[&'static str]) = match lines[0] {
+        HEADER => (2, &LABELS),
+        LEGACY_HEADER => (1, &LEGACY_LABELS),
+        _ => return Err("unsupported phase timing schema".into()),
+    };
+    if lines.len() != labels.len() + 3 || lines[labels.len() + 2] != FOOTER {
         return Err("missing, duplicate or unsupported phase timing section".into());
     }
     let driver_elapsed_ns = lines[1]
@@ -62,7 +88,7 @@ pub(crate) fn parse(stderr: &str) -> Result<Option<PhaseTimings>, String> {
         .map_err(str::to_owned)?;
     let mut phases = BTreeMap::new();
     let mut complete = true;
-    for (label, line) in LABELS.into_iter().zip(&lines[2..LABELS.len() + 2]) {
+    for (&label, line) in labels.iter().zip(&lines[2..labels.len() + 2]) {
         let prefix = format!("  phase {label}: ");
         let value = line
             .strip_prefix(&prefix)
@@ -78,6 +104,7 @@ pub(crate) fn parse(stderr: &str) -> Result<Option<PhaseTimings>, String> {
         phases.insert(label, measured);
     }
     Ok(Some(PhaseTimings {
+        schema_version,
         driver_elapsed_ns,
         complete,
         phases,

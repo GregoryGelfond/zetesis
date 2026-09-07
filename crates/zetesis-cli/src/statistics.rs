@@ -165,9 +165,10 @@ fn details(sink: &mut impl Write, options: &Options, report: &Report) -> io::Res
         if let Some(certified) = stats.certified {
             writeln!(
                 sink,
-                "  tight certificate: eligible={}; refusal={:?}; construction work={}; checks={}; stable decisions before commit={}; residuals={}; failed={}; checking work={}",
+                "  tight certificate: eligible={}; refusal={:?}; storage limit={}; construction work={}; checks={}; stable decisions before commit={}; residuals={}; failed={}; checking work={}",
                 certified.plan.is_some(),
                 certified.refusal,
+                options.max_completion_scratch_bytes,
                 certified.construction_work,
                 certified.checks,
                 certified.stable,

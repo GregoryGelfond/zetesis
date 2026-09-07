@@ -68,6 +68,7 @@ fn ordinary_certified_models_optimum_ties_and_hidden_displays_match_explicit_red
             assert_eq!(c.failed, 0);
             assert!(diag.contains("Membership: checked tight support certificate"));
             assert!(diag.contains("tight certificate: eligible=true"));
+            assert!(diag.contains("storage limit=268435456"));
             let timing = r.phase_timings.unwrap();
             assert_eq!(timing.get(SolvePhase::CertificateSetup).unwrap().calls, 1);
             assert_eq!(
@@ -109,6 +110,7 @@ fn unsupported_class_falls_back_and_explicit_general_oracle_keeps_comparison_pat
     assert_eq!(r.completion, Completion::Exhausted);
     assert!(r.countermodel_statistics.unwrap().countermodel_queries > 0);
     assert!(diag.contains("tight certificate refused"));
+    assert!(diag.contains("storage limit=0"));
 }
 struct Broken;
 impl io::Write for Broken {

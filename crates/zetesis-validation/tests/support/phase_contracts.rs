@@ -74,3 +74,35 @@ fn malformed_duplicate_truncated_and_out_of_range_records_are_refused() {
         assert!(parse(&text).is_err(), "{record}");
     }
 }
+
+#[test]
+fn certificate_schema_is_distinct_and_legacy_evidence_remains_readable() {
+    let legacy = include_str!("phase_statistics.txt");
+    let old = parse(legacy).unwrap().unwrap();
+    assert_eq!(old.schema_version, 1);
+    assert!(!old.phases.contains_key("certificate_setup"));
+    let current = section().replace(
+        "phase certified_membership: unmeasured",
+        "phase certified_membership: calls=4; elapsed_ns=12; complete=true",
+    );
+    let new = parse(&current).unwrap().unwrap();
+    assert_eq!(new.schema_version, 2);
+    assert_eq!(
+        new.phases["certified_membership"].as_ref().unwrap().calls,
+        4
+    );
+    for malformed in [
+        current.replace("; schema=2", ""),
+        current.replace("; schema=2", "; schema=3"),
+        current
+            .lines()
+            .filter(|line| {
+                !line.contains("phase certificate_setup:")
+                    && !line.contains("phase certified_membership:")
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+    ] {
+        assert!(parse(&malformed).is_err());
+    }
+}
