@@ -1,6 +1,8 @@
 //! Universal rows and existential consequent alternatives have separate scopes.
 #[path = "support/finite_bindings.rs"]
 mod reference;
+#[path = "support/upstream.rs"]
+mod upstream;
 use reference::{Models, atom_text, exhaustive, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -25,28 +27,21 @@ fn input(source: &str) -> AdmittedFormula {
     limited(source, ExpansionLimits::default(), FormulaLimits::default())
         .unwrap_or_else(|error| panic!("{source}: {error}"))
 }
-fn corpus_case() -> serde_json::Value {
-    include_str!("../../../validation/upstream/clingo-5.8.2/cases.jsonl")
-        .lines()
-        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
-        .find(|case| case["id"] == "lparse/conjunction/07")
+fn corpus_case() -> &'static zetesis_validation::curated::Case {
+    upstream::corpus()
+        .cases()
+        .iter()
+        .find(|case| case.id() == "lparse/conjunction/07")
         .unwrap()
 }
-fn json_models(value: &serde_json::Value) -> Models {
-    value
-        .as_array()
-        .unwrap()
+fn corpus_models() -> Models {
+    corpus_case()
+        .contract()
+        .full_models()
         .iter()
-        .map(|row| {
-            row.as_array()
-                .unwrap()
-                .iter()
-                .map(|atom| atom.as_str().unwrap().to_owned())
-                .collect()
-        })
+        .map(|model| model.iter().cloned().collect())
         .collect()
 }
-
 // Independent finite substitutions. OR consequents distribute into the complete
 // rule family below; conditions retain their own universal rows.
 const CASES: &[(&str, &str)] = &[
@@ -112,10 +107,10 @@ const CASES: &[(&str, &str)] = &[
 #[test]
 fn conjunction_case_matches_retained_models() {
     let case = corpus_case();
-    let source = case["source"].as_str().unwrap();
+    let source = case.source();
     let actual = native(&input(source));
     assert_eq!(actual.len(), 4);
-    assert_eq!(actual, json_models(&case["models"]));
+    assert_eq!(actual, corpus_models());
 }
 
 #[test]
@@ -385,7 +380,7 @@ fn preparation_identifies_dependency_projection() {
 fn complete_sources_match_clingo() {
     let case = corpus_case();
     let mut sources: Vec<_> = CASES.iter().map(|(source, _)| *source).collect();
-    sources.push(case["source"].as_str().unwrap());
+    sources.push(case.source());
     let mut total = 0;
     for source in sources {
         let output = reference::external(source, true);
@@ -722,8 +717,8 @@ fn conjunction_matches_bounded_completion() {
         BatchLimits, BatchVerdict, CompletionExecutor, Control, Limits, StableModels,
     };
     let case = corpus_case();
-    let admitted = input(case["source"].as_str().unwrap());
-    let expected = json_models(&case["models"]);
+    let admitted = input(case.source());
+    let expected = corpus_models();
     assert_eq!(expected.len(), 4);
     for workers in [1, 2] {
         let mut executor = CompletionExecutor::new(NonZeroUsize::new(workers).unwrap()).unwrap();

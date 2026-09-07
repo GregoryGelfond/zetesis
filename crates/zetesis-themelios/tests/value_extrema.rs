@@ -1,6 +1,8 @@
 //! Complete-value extrema against full source models and an independent reduct.
 #[path = "support/finite_bindings.rs"]
 mod reference;
+#[path = "support/upstream.rs"]
+mod upstream;
 
 use reference::{Models, exhaustive, native};
 use serde_json::Value as Json;
@@ -29,26 +31,65 @@ fn models(value: &Json) -> Models {
 }
 
 #[test]
-fn retained_upstream_bytes_and_both_full_model_contracts_are_preserved() {
+fn retained_upstream_sources_are_unchanged() {
+    for (fixture, case) in upstream_cases() {
+        assert_eq!(fixture["source"].as_str().unwrap(), case.source());
+    }
+}
+
+#[test]
+fn retained_upstream_models_preserve_the_full_contract() {
+    for (fixture, case) in upstream_cases() {
+        assert_eq!(
+            model_records(&fixture["models"]),
+            sorted_records(case.contract().full_models().to_vec())
+        );
+    }
+}
+
+#[test]
+fn retained_upstream_models_preserve_the_helper_contract() {
+    for (fixture, case) in upstream_cases() {
+        assert_eq!(
+            model_records(&fixture["models"]),
+            sorted_records(case.contract().helper_models().to_vec())
+        );
+    }
+}
+
+fn upstream_cases() -> Vec<(Json, &'static zetesis_validation::curated::Case)> {
     let fixtures = cases();
-    for line in include_str!("../../../validation/upstream/clingo-5.8.2/cases.jsonl").lines() {
-        let row: Json = serde_json::from_str(line).unwrap();
-        let name = match row["id"].as_str().unwrap() {
-            "lparse/assign/04" => "upstream-assign-min",
-            "lparse/assign/05" => "upstream-assign-max",
-            _ => continue,
-        };
+    [
+        ("lparse/assign/04", "upstream-assign-min"),
+        ("lparse/assign/05", "upstream-assign-max"),
+    ]
+    .into_iter()
+    .map(|(id, name)| {
         let fixture = fixtures
             .iter()
             .find(|fixture| fixture["name"] == name)
+            .unwrap()
+            .clone();
+        let case = upstream::corpus()
+            .cases()
+            .iter()
+            .find(|case| case.id() == id)
             .unwrap();
-        assert_eq!(fixture["source"], row["source"]);
-        assert_eq!(models(&fixture["models"]), models(&row["models"]));
-        assert_eq!(
-            models(&fixture["models"]),
-            models(&row["expected_helper_models"])
-        );
+        (fixture, case)
+    })
+    .collect()
+}
+
+fn model_records(value: &Json) -> Vec<Vec<String>> {
+    sorted_records(serde_json::from_value(value.clone()).unwrap())
+}
+
+fn sorted_records(mut records: Vec<Vec<String>>) -> Vec<Vec<String>> {
+    for record in &mut records {
+        record.sort_unstable();
     }
+    records.sort_unstable();
+    records
 }
 
 #[test]

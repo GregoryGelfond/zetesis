@@ -1,6 +1,8 @@
 //! Constructed values remain data in original and frozen source interpretations.
 #[path = "support/finite_bindings.rs"]
 mod reference;
+#[path = "support/upstream.rs"]
+mod upstream;
 use reference::{Models, atom_text, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -9,15 +11,15 @@ use zetesis_themelios::{
     FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
 };
 
-fn competition_case() -> serde_json::Value {
-    include_str!("../../../validation/upstream/clingo-5.8.2/cases.jsonl")
-        .lines()
-        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
-        .find(|case| case["id"] == "aspcomp13/aspcomp2013_05/01")
+fn competition_case() -> &'static zetesis_validation::curated::Case {
+    upstream::corpus()
+        .cases()
+        .iter()
+        .find(|case| case.id() == "aspcomp13/aspcomp2013_05/01")
         .unwrap()
 }
 fn competition() -> String {
-    competition_case()["source"].as_str().unwrap().to_owned()
+    competition_case().source().to_owned()
 }
 
 fn limited(
@@ -177,18 +179,11 @@ fn competition_models_match_retained_reference() {
     let models = native(&input(&competition()));
     assert_eq!(models.len(), 12);
     assert!(models.iter().all(|model| model.len() == 17));
-    let expected: Models = competition_case()["models"]
-        .as_array()
-        .unwrap()
+    let expected: Models = competition_case()
+        .contract()
+        .full_models()
         .iter()
-        .map(|model| {
-            model
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|atom| atom.as_str().unwrap().to_owned())
-                .collect()
-        })
+        .map(|model| model.iter().cloned().collect())
         .collect();
     assert_eq!(models, expected);
 }

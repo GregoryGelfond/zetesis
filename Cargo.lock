@@ -1936,6 +1936,7 @@ dependencies = [
  "zetesis-sat",
  "zetesis-telemetry",
  "zetesis-themelios",
+ "zetesis-validation",
  "zetesis-wgpu",
 ]
 
@@ -2031,6 +2032,7 @@ dependencies = [
  "zetesis-ferraris",
  "zetesis-objective",
  "zetesis-sat",
+ "zetesis-validation",
 ]
 
 [[package]]
