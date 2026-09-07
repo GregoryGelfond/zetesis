@@ -1,7 +1,8 @@
 //! Synthetic subprocesses qualify decisions and evidence, never solver parity.
 
-use std::os::unix::fs::PermissionsExt;
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 use clap::Parser;
 use serde_json::{Value, json};
@@ -23,8 +24,33 @@ fn reference() -> String {
 
 fn script(directory: &Path, name: &str, body: &str) -> PathBuf {
     let path = directory.join(name);
-    std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+    // A concurrent test's fork can briefly inherit a writable descriptor even
+    // with CLOEXEC, making Linux refuse this fixture's exec with ETXTBSY. Keep
+    // executable writes in a child and wait for its exit: the test process
+    // never owns a writable descriptor that another test's fork can inherit.
+    let mut writer = Command::new("/bin/sh")
+        .args([
+            "-c",
+            "umask 077; /bin/cat > \"$1\" && /bin/chmod 700 \"$1\"",
+            "fixture-writer",
+        ])
+        .arg(&path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut input = writer.stdin.take().unwrap();
+    input
+        .write_all(format!("#!/bin/sh\n{body}\n").as_bytes())
+        .unwrap();
+    drop(input);
+    let output = writer.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "fixture writer failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     path
 }
 
@@ -94,6 +120,49 @@ fn check(options: &Options, loaded: &Loaded, expected: &str) -> Value {
         );
     }
     result
+}
+
+#[test]
+fn concurrent_fixture_publication_preserves_exact_process_results() {
+    let directory = tempfile::Builder::new()
+        .prefix("runner fixture ' ")
+        .tempdir()
+        .unwrap();
+    let directories: Vec<_> = (0..4)
+        .map(|worker| {
+            let path = directory.path().join(format!("worker {worker}"));
+            std::fs::create_dir(&path).unwrap();
+            path
+        })
+        .collect();
+    let start = std::sync::Barrier::new(directories.len());
+    std::thread::scope(|scope| {
+        for (worker, path) in directories.iter().enumerate() {
+            let start = &start;
+            scope.spawn(move || {
+                start.wait();
+                for round in 0..4 {
+                    let stdout = format!(
+                        "worker={worker}; round={round}; single ' double \" dollar $HOME backtick `literal`\n"
+                    );
+                    let stderr = format!("stderr '{worker}/{round}'\n");
+                    let executable = emitting(path, "solver ' name", &stdout, &stderr, 17);
+                    let captured = crate::process::invoke(
+                        &executable,
+                        &[],
+                        path,
+                        std::time::Duration::from_secs(2),
+                        4_096,
+                    )
+                    .unwrap();
+                    assert_eq!(captured.status, "completed");
+                    assert_eq!(captured.exit_code, Some(17));
+                    assert_eq!(captured.stdout, stdout);
+                    assert_eq!(captured.stderr, stderr);
+                }
+            });
+        }
+    });
 }
 
 #[test]
