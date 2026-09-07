@@ -312,6 +312,21 @@ enum Comparisons {
     Verified,
 }
 
+// The same whole-argument index serves flat atoms and structural captures.
+#[derive(Clone, Copy)]
+enum PositivePattern<'a> {
+    Flat(&'a AtomPattern),
+    Structural(&'a crate::formula_pattern::PatternAtom),
+}
+impl PositivePattern<'_> {
+    fn atom(&self) -> &AtomPattern {
+        match self {
+            Self::Flat(atom) => atom,
+            Self::Structural(pattern) => &pattern.atom,
+        }
+    }
+}
+
 /// The cursor owns only its current assignment and undo trails. Negative gates
 /// never restrict this upper relation; the emitted formulas still retain them.
 pub(crate) struct Join<'a> {
@@ -319,7 +334,7 @@ pub(crate) struct Join<'a> {
     generated: bool,
     comparisons: Comparisons,
     pending: Option<crate::formula_binding_cursor::Cursor<'a>>,
-    patterns: Vec<&'a AtomPattern>,
+    patterns: Vec<PositivePattern<'a>>,
     support: &'a Support,
     values: Vec<Option<Value>>,
     generated_slots: Vec<bool>,
@@ -368,11 +383,12 @@ impl<'a> Join<'a> {
         let mut patterns: Vec<_> = literals
             .iter()
             .filter_map(|literal| match literal {
-                LiteralIr::Atom(DefaultNegation::None, atom) => Some(atom),
+                LiteralIr::Atom(DefaultNegation::None, atom) => Some(PositivePattern::Flat(atom)),
+                LiteralIr::PatternAtom(pattern) => Some(PositivePattern::Structural(pattern)),
                 _ => None,
             })
             .collect();
-        patterns.sort_by_key(|pattern| support.rows(pattern.predicate()).len());
+        patterns.sort_by_key(|pattern| support.rows(pattern.atom().predicate()).len());
         let count = patterns.len();
         let mut values = vec![None; variables];
         let mut generated_slots = vec![false; variables];
@@ -527,13 +543,13 @@ impl<'a> Join<'a> {
             if !self.probed[self.depth] {
                 self.probes[self.depth] =
                     self.support
-                        .probe(pattern, &self.values, limits, counters, location)?;
+                        .probe(pattern.atom(), &self.values, limits, counters, location)?;
                 self.probed[self.depth] = true;
             }
             let position = self.positions[self.depth];
             let row =
                 self.probes[self.depth].map_or(Some(position), |rows| rows.get(position).copied());
-            let atom = row.and_then(|row| self.support.rows(pattern.predicate()).get(row));
+            let atom = row.and_then(|row| self.support.rows(pattern.atom().predicate()).get(row));
             let Some(atom) = atom else {
                 self.positions[self.depth] = 0;
                 self.probed[self.depth] = false;
@@ -548,8 +564,51 @@ impl<'a> Join<'a> {
             };
             self.positions[self.depth] += 1;
             counters.record(Event::JoinRow);
-            let mut matches = true;
-            for (term, value) in pattern.terms().iter().zip(atom.values()) {
+            let matches = self.match_row(pattern, atom, limits, budget, counters, location)?;
+            if matches && self.filter_prefix(limits, budget, counters, location)? {
+                self.depth += 1;
+            } else {
+                self.undo();
+            }
+        }
+    }
+    fn match_row(
+        &mut self,
+        pattern: PositivePattern<'_>,
+        atom: &Atom,
+        limits: FormulaLimits,
+        budget: &mut Budget,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<bool, FormulaFailure> {
+        let mut matches = true;
+        if let PositivePattern::Structural(pattern) = pattern {
+            let delta = pattern.matches(
+                atom,
+                &self.values,
+                &mut crate::formula_pattern::MatchContext {
+                    limits,
+                    budget,
+                    counters,
+                    location,
+                },
+            )?;
+            if let Some(delta) = delta {
+                crate::formula_pattern::reserve(
+                    &mut self.changes[self.depth],
+                    delta.len(),
+                    budget,
+                    location,
+                )?;
+                for (slot, value) in delta {
+                    self.values[slot] = Some(value);
+                    self.changes[self.depth].push(slot);
+                }
+            } else {
+                matches = false;
+            }
+        } else {
+            for (term, value) in pattern.atom().terms().iter().zip(atom.values()) {
                 counters.work(limits, location)?;
                 if let Value::Structured(value) = value {
                     for _ in 0..value.payload_bytes() {
@@ -571,12 +630,8 @@ impl<'a> Join<'a> {
                     break;
                 }
             }
-            if matches && self.filter_prefix(limits, budget, counters, location)? {
-                self.depth += 1;
-            } else {
-                self.undo();
-            }
         }
+        Ok(matches)
     }
     fn filter_prefix(
         &mut self,

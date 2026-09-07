@@ -73,6 +73,7 @@ pub(crate) struct Element {
 }
 pub(crate) enum LiteralIr {
     Atom(DefaultNegation, AtomPattern),
+    PatternAtom(crate::formula_pattern::PatternAtom),
     ProjectedAtom(DefaultNegation, Projection),
     Compare(Expression, Relation, Expression),
     TupleCompare(Vec<Expression>, Relation, Vec<Expression>),
@@ -642,6 +643,11 @@ impl Compiler<'_> {
     ) -> Result<LiteralIr, FormulaFailure> {
         match &literal.inner {
             LiteralInner::Atom(atom) => {
+                if literal.negation == DefaultNegation::None
+                    && let Some(pattern) = self.positive_pattern(atom.get(), variables)?
+                {
+                    return Ok(LiteralIr::PatternAtom(pattern));
+                }
                 if let Some(projected) =
                     self.projected_atom(atom.get(), literal.negation, variables)?
                 {

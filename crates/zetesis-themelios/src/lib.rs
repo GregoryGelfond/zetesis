@@ -56,6 +56,8 @@ mod formula_choice_ir;
 mod formula_head_ir;
 mod formula_binding_cursor;
 mod formula_projection_ir;
+mod formula_pattern;
+mod formula_pattern_ir;
 mod formula_weak;
 pub mod objective_bound;
 pub mod observation;

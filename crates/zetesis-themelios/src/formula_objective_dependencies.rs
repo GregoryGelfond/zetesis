@@ -177,6 +177,11 @@ fn total_dependency(
                 LiteralIr::Atom(_, atom) if signature(atom.predicate()) == *dependency => {
                     return false;
                 }
+                LiteralIr::PatternAtom(pattern)
+                    if signature(pattern.atom.predicate()) == *dependency =>
+                {
+                    return false;
+                }
                 LiteralIr::ProjectedAtom(_, projection)
                     if signature(&projection.predicate) == *dependency =>
                 {
@@ -184,10 +189,14 @@ fn total_dependency(
                 }
                 LiteralIr::Aggregate(aggregate) => {
                     for element in &aggregate.elements {
-                        if element.condition.iter().any(|literal| {
-                            matches!(literal,
-                            LiteralIr::ProjectedAtom(_, projection)
-                                if signature(&projection.predicate) == *dependency)
+                        if element.condition.iter().any(|literal| match literal {
+                            LiteralIr::PatternAtom(pattern) => {
+                                signature(pattern.atom.predicate()) == *dependency
+                            }
+                            LiteralIr::ProjectedAtom(_, projection) => {
+                                signature(&projection.predicate) == *dependency
+                            }
+                            _ => false,
                         }) {
                             return false;
                         }

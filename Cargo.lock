@@ -2013,6 +2013,7 @@ version = "0.1.0"
 name = "zetesis-themelios"
 version = "0.1.0"
 dependencies = [
+ "proptest",
  "serde_json",
  "tempfile",
  "themelios-analysis",

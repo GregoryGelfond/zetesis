@@ -414,6 +414,9 @@ impl Builder<'_> {
                     atom = self.neg(atom, location)?;
                 }
                 result = self.and(result, atom, location)?;
+            } else if let LiteralIr::PatternAtom(pattern) = literal {
+                let atom = self.atom(&pattern.atom, assignment, location)?;
+                result = self.and(result, atom, location)?;
             } else if let LiteralIr::Aggregate(aggregate) = literal {
                 let aggregate = self.aggregate(aggregate, assignment, support, location)?;
                 result = self.and(result, aggregate, location)?;

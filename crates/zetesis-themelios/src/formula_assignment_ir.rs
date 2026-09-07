@@ -178,6 +178,10 @@ impl Compiler<'_> {
         self.scope_work(1)?;
         Ok(match literal {
             LiteralIr::Atom(_, atom) => self.pattern_uses(atom, variable)?,
+            LiteralIr::PatternAtom(pattern) => {
+                self.scope_work(pattern.node_count())?;
+                pattern.slots().any(|slot| slot == variable)
+            }
             LiteralIr::ProjectedAtom(_, projection) => {
                 self.scope_work(projection.terms.len())?;
                 projection.terms.contains(&Some(Term::Variable(variable)))
