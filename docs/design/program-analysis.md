@@ -35,6 +35,12 @@ These are source-level facts. They are not a ground program, a grounding-size
 prediction, a countermodel certificate or a stable-model witness. In particular,
 failure to prove a property does not establish its negation.
 
+The [grounding-selection plan](grounding-selection.md) maps these exact pinned
+APIs to grounder eligibility, implementation availability and cost preference.
+There is no upstream lazy/eager class. In particular, source normality, tightness
+or stratification alone does not establish an implemented materialization route.
+The plan also records the required public preparation boundary before grounding.
+
 The pinned safety implementation explicitly describes its binding rules as
 ASP-Core-2 safety. Its `collect_guards`/`require_guard` routines place aggregate
 guard variables in the required set; they do not make those variables aggregate
