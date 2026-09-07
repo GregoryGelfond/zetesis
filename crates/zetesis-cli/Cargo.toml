@@ -17,8 +17,6 @@ zetesis-sat.workspace = true
 zetesis-objective.workspace = true
 zetesis-wgpu = { workspace = true, optional = true }
 clap.workspace = true
-
-[dev-dependencies]
 serde_json = "=1.0.151"
 
 [lints]

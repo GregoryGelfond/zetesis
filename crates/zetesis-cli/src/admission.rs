@@ -23,7 +23,7 @@ pub(crate) fn source(
     crate::engine::validate_combination(options)?;
     if options.oracle == Oracle::Countermodel
         && let Some(report) =
-            crate::countermodel::check_control(output, diagnostics, control, phases)?
+            crate::countermodel::check_control(output, diagnostics, control, phases, options.json)?
     {
         return Ok(report);
     }
@@ -59,7 +59,8 @@ pub(crate) fn source(
         }
     };
     crate::engine::validate_countermodel(options)?;
-    if let Some(report) = crate::countermodel::check_control(output, diagnostics, control, phases)?
+    if let Some(report) =
+        crate::countermodel::check_control(output, diagnostics, control, phases, options.json)?
     {
         return Ok(report);
     }
@@ -105,7 +106,7 @@ pub(crate) fn bundle(
     crate::engine::validate_combination(options)?;
     if options.oracle == Oracle::Countermodel
         && let Some(report) =
-            crate::countermodel::check_control(output, diagnostics, control, phases)?
+            crate::countermodel::check_control(output, diagnostics, control, phases, options.json)?
     {
         return Ok(report);
     }
@@ -148,7 +149,8 @@ pub(crate) fn bundle(
         }
     };
     crate::engine::validate_countermodel(options)?;
-    if let Some(report) = crate::countermodel::check_control(output, diagnostics, control, phases)?
+    if let Some(report) =
+        crate::countermodel::check_control(output, diagnostics, control, phases, options.json)?
     {
         return Ok(report);
     }

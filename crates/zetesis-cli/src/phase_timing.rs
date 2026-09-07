@@ -39,7 +39,7 @@ pub enum SolvePhase {
     ObservationOutput,
 }
 impl SolvePhase {
-    const ALL: [Self; 13] = [
+    pub(crate) const ALL: [Self; 13] = [
         Self::AdmissionMaterialization,
         Self::ExecutionSetup,
         Self::CandidateSetup,

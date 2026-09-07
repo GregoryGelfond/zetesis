@@ -183,11 +183,13 @@ impl Incumbents {
                 display.write(output, report.models + 1, model, Some(&best.score))?;
                 report.models += 1;
             }
-            writeln!(
-                output,
-                "Incumbent ties: {}; stable models scored: {}; objective work: {}",
-                best.tied_models, best.scored_models, best.work
-            )?;
+            if !display.options.json {
+                writeln!(
+                    output,
+                    "Incumbent ties: {}; stable models scored: {}; objective work: {}",
+                    best.tied_models, best.scored_models, best.work
+                )?;
+            }
         }
         Ok(())
     }

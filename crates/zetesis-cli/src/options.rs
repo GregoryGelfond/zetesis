@@ -103,6 +103,12 @@ pub struct Options {
     /// elapsed time on stderr. Answer-set output on stdout is unchanged.
     #[arg(long)]
     pub stats: bool,
+    /// Stream a versioned JSON document with full models, shown channels and coverage.
+    #[arg(long)]
+    pub json: bool,
+    /// Maximum JSON bytes per model record or terminal outcome; not an all-model buffer.
+    #[arg(long, default_value_t = 8_388_608)]
+    pub max_json_record_bytes: usize,
     /// Cumulative encoding, certificate and search operations for the formula oracle.
     #[arg(long, default_value_t = 100_000_000)]
     pub max_search_work: u64,

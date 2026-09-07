@@ -82,6 +82,8 @@ pub enum RunError {
     Input(io::Error),
     /// A complete observation could not be evaluated or rendered.
     Observation(zetesis_themelios::observation::Error),
+    /// A bounded JSON model or terminal record could not be constructed.
+    JsonRecord(zetesis_themelios::observation::ViewError),
     /// A complete buffered Answer would exceed its byte ceiling.
     ObservationOutputLimit {
         /// Required record bytes.
@@ -184,6 +186,7 @@ impl fmt::Display for RunError {
             Self::FormulaBundleAdmission(error) => error.fmt(f),
             Self::Output(error) => write!(f, "output: {error}"),
             Self::Observation(error) => error.fmt(f),
+            Self::JsonRecord(error) => error.fmt(f),
             Self::ObservationOutputLimit { observed, limit } => write!(f, "observation Answer bytes {observed} exceed limit {limit}"),
             Self::Static(error) => error.fmt(f),
             #[cfg(feature = "gpu")]
@@ -237,6 +240,7 @@ impl std::error::Error for RunError {
             Self::CompletionPool(error) => Some(error),
             Self::Output(error) => Some(error),
             Self::Observation(error) => Some(error),
+            Self::JsonRecord(error) => Some(error),
             Self::ObservationOutputLimit { .. } => None,
             Self::MixedStandardInput
             | Self::BackendUnavailable
@@ -324,9 +328,18 @@ pub fn run_detailed_with_diagnostics(
     diagnostics: &mut impl Write,
     control: &Control,
 ) -> Result<Report, RunFailure> {
+    let mut document = crate::output::Document::new(output, options.json)?;
     let phases = Recorder::new(options.stats);
-    let result = crate::admission::source(source, options, output, diagnostics, control, &phases);
-    report_statistics(result, diagnostics, options, &phases)
+    let result = crate::admission::source(
+        source,
+        options,
+        &mut document,
+        diagnostics,
+        control,
+        &phases,
+    );
+    let result = report_progress_statistics(result, diagnostics, options, &phases);
+    document.finish(result, options)
 }
 
 /// Admit an original include graph through the extended source profile, then
@@ -363,17 +376,36 @@ pub fn run_bundle_detailed_with_diagnostics(
     diagnostics: &mut impl Write,
     control: &Control,
 ) -> Result<Report, RunFailure> {
+    let mut document = crate::output::Document::new(output, options.json)?;
     let phases = Recorder::new(options.stats);
-    let result = crate::admission::bundle(bundle, options, output, diagnostics, control, &phases);
-    report_statistics(result, diagnostics, options, &phases)
+    let result = crate::admission::bundle(
+        bundle,
+        options,
+        &mut document,
+        diagnostics,
+        control,
+        &phases,
+    );
+    let result = report_progress_statistics(result, diagnostics, options, &phases);
+    document.finish(result, options)
 }
 
+#[cfg(test)]
 pub(crate) fn report_statistics(
-    mut result: Result<Progress, RunFailure>,
+    result: Result<Progress, RunFailure>,
     diagnostics: &mut impl Write,
     options: &Options,
     phases: &Recorder,
 ) -> Result<Report, RunFailure> {
+    report_progress_statistics(result, diagnostics, options, phases).map(|progress| progress.report)
+}
+
+fn report_progress_statistics(
+    mut result: Result<Progress, RunFailure>,
+    diagnostics: &mut impl Write,
+    options: &Options,
+    phases: &Recorder,
+) -> Result<Progress, RunFailure> {
     if let Some(timings) = phases.snapshot() {
         match &mut result {
             Ok(progress) => progress.report.phase_timings = Some(timings),
@@ -397,7 +429,7 @@ pub(crate) fn report_statistics(
             });
         }
     }
-    result.map(|progress| progress.report)
+    result
 }
 
 pub(crate) fn solve_program(
@@ -424,6 +456,13 @@ pub(crate) fn solve_program(
         )
     });
     let mut progress = Progress::new(0);
+    let observations = zetesis_themelios::observation::ObservationProgram::default();
+    let display = crate::display::Display {
+        selection,
+        observations: &observations,
+        options,
+        control,
+    };
     let report = &mut progress.report;
     let result = (|| {
         loop {
@@ -463,7 +502,7 @@ pub(crate) fn solve_program(
                 match result {
                     Ok(Some(model)) => {
                         phases.measure(SolvePhase::ObservationOutput, || {
-                            write_model(output, report.models + 1, &model, selection)
+                            display.write(output, report.models + 1, &model, None)
                         })?;
                         report.models += 1;
                         if options.models != 0 && report.models >= options.models {
@@ -494,11 +533,11 @@ pub(crate) fn solve_program(
     progress.completion = Some(completion);
     progress.report.completion = completion;
     let finished = phases.measure(SolvePhase::ObservationOutput, || {
-        finish(output, &progress.report)
+        finish(output, &progress.report, options.json)
     });
     match finished {
         Ok(()) => {
-            progress.summary_published = true;
+            progress.summary_published = !options.json;
             Ok(progress)
         }
         Err(error) => Err(progress.fail(error)),
@@ -562,7 +601,11 @@ fn write_string(output: &mut impl Write, value: &str) -> io::Result<()> {
     write!(output, "\"")
 }
 
-pub(crate) fn finish(output: &mut impl Write, report: &Report) -> Result<(), RunError> {
+pub(crate) fn finish(output: &mut impl Write, report: &Report, json: bool) -> Result<(), RunError> {
+    // JSON emits one final outcome after statistics and failure accounting.
+    if json {
+        return Ok(());
+    }
     match report.completion {
         Completion::Exhausted => {
             writeln!(

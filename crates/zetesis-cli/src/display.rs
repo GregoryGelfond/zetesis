@@ -23,6 +23,13 @@ impl Display<'_> {
         model: &Model,
         score: Option<&Score>,
     ) -> Result<(), RunError> {
+        if self.options.json {
+            let view = self
+                .observations
+                .view(model, self.selection, score, self.limits(), self.control)
+                .map_err(RunError::Observation)?;
+            return crate::output::model(output, number, &view, self.options, self.control);
+        }
         if self.observations.is_empty() {
             crate::driver::write_model(output, number, model, self.selection)?;
             if let Some(score) = score {
@@ -81,5 +88,15 @@ impl Display<'_> {
             .map_err(|error| RunError::Output(std::io::Error::other(error)))?;
         output.write_all(&record)?;
         Ok(())
+    }
+
+    fn limits(&self) -> zetesis_themelios::observation::Limits {
+        zetesis_themelios::observation::Limits {
+            max_work: self.options.max_observation_work,
+            max_bindings: self.options.max_observation_bindings,
+            max_terms: self.options.max_observation_terms,
+            max_output_bytes: self.options.max_observation_bytes,
+            ..Default::default()
+        }
     }
 }

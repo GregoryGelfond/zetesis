@@ -31,7 +31,7 @@ pub(crate) fn run_formula(
     phases: &Recorder,
 ) -> Result<Progress, RunFailure> {
     let _solving = phases.stage(crate::SolveStage::Solving);
-    if let Some(report) = check_control(output, diagnostics, control, phases)? {
+    if let Some(report) = check_control(output, diagnostics, control, phases, options.json)? {
         return Ok(report);
     }
     let display = crate::display::Display {
@@ -92,7 +92,13 @@ impl FormulaRun<'_> {
         if let Err(error) = written {
             return Err(progress.fail(error));
         }
-        complete(output, diagnostics, progress, phases)
+        complete(
+            output,
+            diagnostics,
+            progress,
+            phases,
+            self.display.options.json,
+        )
     }
 
     /// Always snapshot the still-owned candidate stream after the fallible loop,
@@ -239,6 +245,7 @@ pub(crate) fn check_control(
     diagnostics: &mut impl Write,
     control: &Control,
     phases: &Recorder,
+    json: bool,
 ) -> Result<Option<Progress>, RunFailure> {
     match control.poll() {
         Ok(()) => Ok(None),
@@ -247,7 +254,7 @@ pub(crate) fn check_control(
             progress.completion = Some(Completion::Interrupted);
             progress.report.completion = Completion::Interrupted;
             progress.report.interruption = Some(Interruption::Countermodel(error.into()));
-            complete(output, diagnostics, progress, phases).map(Some)
+            complete(output, diagnostics, progress, phases, json).map(Some)
         }
     }
 }
@@ -269,6 +276,7 @@ fn complete(
     diagnostics: &mut impl Write,
     mut progress: Progress,
     phases: &Recorder,
+    json: bool,
 ) -> Result<Progress, RunFailure> {
     let _output = phases.start(SolvePhase::ObservationOutput);
     let result = (|| {
@@ -283,11 +291,11 @@ fn complete(
                 statistics.countermodels
             )?;
         }
-        finish(output, &progress.report)
+        finish(output, &progress.report, json)
     })();
     match result {
         Ok(()) => {
-            progress.summary_published = true;
+            progress.summary_published = !json;
             Ok(progress)
         }
         Err(error) => Err(progress.fail(error)),

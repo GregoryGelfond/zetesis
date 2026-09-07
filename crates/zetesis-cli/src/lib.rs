@@ -22,6 +22,7 @@ mod completion_accounting;
 mod phase_timing;
 mod stage_timing;
 mod formula_queue;
+mod output;
 
 #[cfg(test)]
 #[path = "../tests/support/bounded_writer.rs"]

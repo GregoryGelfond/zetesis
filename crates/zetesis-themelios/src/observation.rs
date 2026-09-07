@@ -7,12 +7,16 @@
 mod compile;
 mod evaluate;
 mod render;
+pub mod view;
+
+pub use view::{ModelView, ViewError, ViewLimits};
 
 use std::fmt;
 
 use themelios_base::span::Location;
 use themelios_program::program::{DefaultNegation, Relation};
-use themelios_program::symbol::{Name, Symbol};
+/// Shared logical symbol vocabulary, nameable without another pinned dependency.
+pub use themelios_program::symbol::{Name, Sign as SymbolSign, Symbol};
 use zetesis_core::{Model, Predicate, Value};
 use zetesis_cpu::{Control, Stop};
 

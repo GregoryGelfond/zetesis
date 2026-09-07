@@ -40,18 +40,45 @@ fn run_input(
     output: &mut impl Write,
     diagnostics: &mut impl Write,
 ) -> Result<Report, RunFailure> {
+    let input = match load_input(options) {
+        Ok(input) => input,
+        Err(error) => {
+            let failure = error.into();
+            return Err(if options.json {
+                crate::output::input_failure(output, failure, options)
+            } else {
+                failure
+            });
+        }
+    };
+    let control = zetesis_cpu::Control::default();
+    match input {
+        Input::Source(source) => {
+            run_detailed_with_diagnostics(source, options, output, diagnostics, &control)
+        }
+        Input::Bundle(bundle) => {
+            run_bundle_detailed_with_diagnostics(bundle, options, output, diagnostics, &control)
+        }
+    }
+}
+
+enum Input {
+    Source(String),
+    Bundle(SourceBundle),
+}
+
+fn load_input(options: &Options) -> Result<Input, RunError> {
     if !options.additional_inputs.is_empty()
         && std::iter::once(&options.input)
             .chain(&options.additional_inputs)
             .any(|path| path.as_os_str() == "-")
     {
-        return Err(RunError::MixedStandardInput.into());
+        return Err(RunError::MixedStandardInput);
     }
     crate::engine::validate_combination(options)?;
-    let control = zetesis_cpu::Control::default();
     if options.input.as_os_str() == "-" {
         let source = read_source(options).map_err(RunError::Input)?;
-        run_detailed_with_diagnostics(source, options, output, diagnostics, &control)
+        Ok(Input::Source(source))
     } else {
         let bundle = SourceBundle::load_many(
             std::iter::once(&options.input).chain(&options.additional_inputs),
@@ -64,7 +91,7 @@ fn run_input(
             },
         )
         .map_err(RunError::BundleLoad)?;
-        run_bundle_detailed_with_diagnostics(bundle, options, output, diagnostics, &control)
+        Ok(Input::Bundle(bundle))
     }
 }
 
