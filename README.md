@@ -325,9 +325,11 @@ The intended authored implementation is Rust, Lean and WGSL. Repository cleanup
 is in progress. The first reusable Rust process/answer boundary now serves the
 existing 94-case validator on Linux/macOS. It separates direct-child completion,
 cleanup ownership and reported display evidence; it does not certify solver
-correctness or hidden full models. The selected-upstream Rust solver campaign
-remains pending. Existing Python qualification tools and historical upstream C++
-provenance remain until Rust replacements and curated evidence are verified.
+correctness or hidden full models. The selected-upstream Rust campaign compares
+typed native full models against all 24 pinned contracts and clingo, retaining
+bounded failure evidence and primary-input seals. Its Python predecessor is
+retired. Other Python qualification tools and C++ import provenance remain
+until their replacements and independent evidence are verified.
 Corpus expectation annotations are consumed only by separate validation tools;
 they are ordinary comments to the solver and never guide its answers.
 The [organization plan](docs/design/repository-organization.md) records the

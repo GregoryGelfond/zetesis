@@ -1,7 +1,7 @@
 # Validation tooling
 
 This package has two commands and reusable corpus, process-capture and reported-answer libraries. `zetesis-corpus`
-checks the selected clingo fixture's integrity without running a solver.
+verifies the selected clingo fixture or compares its complete solver results.
 `zetesis-validate` runs the separate 94-case kr-domains solver campaign described
 below. Neither command is invoked by the production solver.
 
@@ -44,8 +44,8 @@ The older Rust validator retains its previous backend on other platforms; that
 backend has weaker direct-child and pipe-thread cleanup guarantees. It has not
 been newly qualified by this change. The stronger reusable operation returns
 `UnsupportedPlatform` there. This platform distinction does not silently remove
-the older command's path, and is separate from the existing Python upstream
-campaign's POSIX requirement.
+the older command's path. The selected Rust campaign requires the stronger
+Linux/macOS process backend.
 
 `zetesis_validation::answers::clingo_json` and `native_text` return immutable
 `ReportedAnswers` under explicit input, witness, symbol-occurrence and objective
@@ -87,9 +87,43 @@ handling rather than JavaScript floating-point coercion.
 The current 94-case command uses these shared implementations on Linux/macOS and
 keeps its historical report fields through adapters. Invalid UTF-8 cannot become
 completed text: a failed record labels its lossy legacy view and retains the
-original bytes. The selected 24-case Rust solver campaign remains follow-on work.
-The old Python comparison and retained C++ import
-fixtures are still required by their existing callers.
+original bytes. The selected 24-case campaign composes the same process boundary
+with native typed JSON. Its predecessor Python campaign and decoder are retired;
+retained C++ provenance still supports the explicit Rust import operation and
+its independent integrity tests.
+
+## Selected solver campaign
+
+`selected::run(&Request)` returns immutable evidence for all 24 original cases.
+The library accepts explicit executable paths, execution requests and logical
+resource ceilings; it performs no PATH lookup or global output. Its report exposes
+typed case decisions, invocation arguments, raw output, failures and primary-file
+identities. `Report::publish` is a separate effect that refuses existing paths,
+input aliases and reports exceeding their byte ceiling. Its parent directory
+must remain under the caller's exclusive control; this is not a filesystem lease.
+
+```sh
+zetesis-corpus compare validation/upstream/clingo-5.8.2/curated \
+  --clingo /path/to/clingo --zetesis /path/to/zetesis \
+  --report target/upstream-parity.json
+```
+
+`passed()` requires every case to complete and agree with the pinned full-model
+multiset, every input seal to remain unchanged, and all child/input cleanup to
+succeed. The selected sources have no output projection or objectives, which
+justifies treating clingo's complete shown atoms as full identities. That
+implication does not extend to arbitrary programs. The native view always comes
+from typed full atoms. Original helper prefix-selection contracts are checked
+separately. A refusal, timeout, stopped enumeration or malformed report never
+counts as a pass.
+
+The CLI publishes both passing and failed campaign evidence, then exits 0 or 1
+respectively; setup/publication errors exit 2. Reports record authored limits,
+requested execution and exact stdout/stderr bytes as JSON byte arrays. Seals
+cover primary executables, manifest, license and sources, not dynamic libraries,
+the inherited environment or modifications restored between checks. Captured
+timings are diagnostic and are not a controlled performance experiment. A
+requested Metal backend alone does not qualify device execution.
 
 ## Selected clingo corpus
 
@@ -168,19 +202,19 @@ allocated from the bounded serialized document before contract validation.
 Import retains the three bounded original texts while checking assertions.
 These are input and retained-source measures, not heap or RSS accounting.
 
-Both commands emit machine-readable reports. `zetesis-corpus` writes one JSON
+Both commands provide machine-readable evidence. `zetesis-corpus verify` writes one JSON
 record only after successful verification, with `semantic_solver_run: false`.
 It exits 0 on integrity success and 2 on argument, integrity, filesystem or output
 failure. Diagnostics go to stderr. A stdout write failure can leave a partial
 record; consumers must check successful process completion before accepting it.
 
-The five Rust source/ordinary-solver regression consumers now read this owned
-curated corpus directly. The existing Python comparison/gate still reads
-`cases.jsonl`; the explicit import tests still read the retained C++ originals.
-Those legacy inputs remain until their callers and independent checks are migrated.
+The Rust source/ordinary-solver regressions and selected campaign read this owned
+curated corpus directly. The explicit import tests still read `cases.jsonl` and
+the retained C++ originals; their independent provenance checks remain active.
 See the [migration record](../../docs/verification/corpus-curation-20260907/README.md)
-for the exact remaining work. This first slice does not replace the solver
-campaign or claim repository cleanup is complete.
+for the historical first-slice boundary. The selected Python comparator and
+decoder are now retired; other Python qualification tools remain, so repository
+cleanup is not complete.
 
 ## Full kr-domains regression gate
 

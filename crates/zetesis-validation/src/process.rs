@@ -100,7 +100,8 @@ impl From<ExitStatus> for Exit {
 }
 
 /// Failed operation; error text is diagnostic rather than a classification.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Operation {
     /// Making a child pipe nonblocking.
     ConfigurePipe,

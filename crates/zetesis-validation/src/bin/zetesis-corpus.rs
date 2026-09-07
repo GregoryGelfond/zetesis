@@ -1,14 +1,15 @@
-//! Thin command for exact curated-data verification and explicit legacy import.
+//! Thin views of curated verification, legacy import and selected comparisons.
 use clap::{Parser, Subcommand};
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 use zetesis_validation::curated::{self, Limits};
+use zetesis_validation::selected;
 
 #[derive(Parser)]
 #[command(
     version,
-    about = "Verify curated clingo data without a solver or C++ runtime"
+    about = "Verify curated clingo data and compare complete solver results"
 )]
 struct Options {
     #[command(subcommand)]
@@ -16,6 +17,20 @@ struct Options {
 }
 #[derive(Subcommand)]
 enum Action {
+    /// Compare all 24 selected sources against clingo and pinned full-model contracts.
+    Compare {
+        /// Curated directory containing manifest.json and programs/.
+        root: PathBuf,
+        /// Independent clingo executable path.
+        #[arg(long)]
+        clingo: PathBuf,
+        /// Native zetesis executable path.
+        #[arg(long)]
+        zetesis: PathBuf,
+        /// New evidence file; existing paths are never replaced.
+        #[arg(long)]
+        report: PathBuf,
+    },
     /// Verify exact source bytes, provenance, license and model contracts.
     Verify {
         /// Curated directory containing manifest.json and programs/.
@@ -29,8 +44,38 @@ enum Action {
         destination: PathBuf,
     },
 }
-fn execute(options: Options) -> Result<(), Box<dyn std::error::Error>> {
+fn execute(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let corpus = match options.command {
+        Action::Compare {
+            root,
+            clingo,
+            zetesis,
+            report,
+        } => {
+            let reference = std::path::absolute(clingo)?;
+            let native = std::path::absolute(zetesis)?;
+            let result = selected::run(&selected::Request {
+                corpus: &root,
+                reference: &reference,
+                native: &native,
+                report: &report,
+                execution: selected::NativeExecution::default(),
+                limits: selected::Limits::default(),
+            })?;
+            result.publish()?;
+            writeln!(
+                io::stdout().lock(),
+                "{}: {} selected cases; evidence {}",
+                if result.passed() { "pass" } else { "fail" },
+                result.cases().len(),
+                report.display()
+            )?;
+            return Ok(if result.passed() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            });
+        }
         Action::Verify { root } => curated::open(&root, Limits::default())?,
         Action::Import {
             legacy,
@@ -42,11 +87,11 @@ fn execute(options: Options) -> Result<(), Box<dyn std::error::Error>> {
     let mut output = stdout.lock();
     serde_json::to_writer(&mut output, &report)?;
     output.write_all(b"\n")?;
-    Ok(())
+    Ok(ExitCode::SUCCESS)
 }
 fn main() -> ExitCode {
     match execute(Options::parse()) {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(code) => code,
         Err(error) => {
             let _ = writeln!(io::stderr().lock(), "zetesis-corpus: {error}");
             ExitCode::from(2)

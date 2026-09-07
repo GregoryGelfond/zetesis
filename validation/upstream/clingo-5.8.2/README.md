@@ -10,8 +10,8 @@ zetesis-corpus verify validation/upstream/clingo-5.8.2/curated
 This verifies 24 exact ASP files, the sealed provenance/license and 73 recorded
 full-model occurrences without reading C++ or running a solver. The
 [curation record](../../../docs/verification/corpus-curation-20260907/README.md)
-describes the independent import/verification checks. The legacy consumers below
-remain active during migration; fixture integrity alone is not model parity.
+describes the independent import/verification checks. Fixture integrity alone
+is not model parity; the Rust comparison campaign below checks live solvers.
 
 These 24 objective-free semantic assertions come from clingo v5.8.2, commit
 `a99ffb2a58293c68b28fcc283a1d1c9ccad900fe`. The original C++ files and solver
@@ -22,9 +22,11 @@ under archeion. They are third-party material, not newly authored zetesis tests.
 `cases.jsonl` retains the assertion identity, original byte/line span, exact C++
 assertion, decoded ASP bytes, source hashes, helper arguments, expected helper
 output and a separately captured complete clingo model reference. Source literal
-concatenation preserves every space and newline. `scripts/upstream_assertions.py`
-reconstructs that metadata from the preserved originals; its small decoder
-explicitly refuses unsupported C++ forms and escape sequences.
+concatenation preserves every space and newline. The Rust
+`zetesis_validation::curated::import_legacy` operation reconstructs that metadata
+from the preserved originals; its bounded literal decoder explicitly refuses
+unsupported C++ forms and escape sequences. Normal verification and comparison
+read only the independently curated data.
 
 The upstream helper enumerates all models, then filters printed atoms by a list
 of string prefixes and sorts models without deduplication. This collection
@@ -45,13 +47,19 @@ admission requires updating this expectation after external verification.
 Run the external semantic campaign from the repository:
 
 ```sh
-python3 scripts/compare-upstream.py --zetesis zetesis --clingo clingo \
+zetesis-corpus compare validation/upstream/clingo-5.8.2/curated \
+  --zetesis /path/to/zetesis --clingo /path/to/clingo \
   --report target/upstream-parity.json
 ```
 
 Each subprocess has a five-second deadline and a combined 1,114,112-byte capture
-ceiling. Native resource limits stay at CLI defaults. The report retains partial
-process output, explicit incomplete/failure classifications and source/binary
-hashes. Passing means the recorded admission/refusal boundary was reproduced;
-it does not mean all 24 cases were admitted or that full clingo compatibility
-has been achieved. This campaign is a regression/discovery tool, not a benchmark.
+ceiling, with a separate one-second cleanup interval and a combined campaign
+capture ceiling. Native CPU/eager/automatic-oracle requests are explicit in the
+report; other solver budgets retain the sealed executable's defaults.
+The report retains raw byte prefixes, typed failure classifications, requested
+limits and source/binary seals checked before and after execution. Publication
+never replaces an existing path. Passing requires all 24 cases to complete and
+match every full-model occurrence and original helper contract; an admission
+refusal cannot pass. Native JSON supplies full atom identities independently of
+shown output. This is a regression campaign, not a benchmark or a claim of full
+clingo language compatibility. It does not qualify physical GPU execution.

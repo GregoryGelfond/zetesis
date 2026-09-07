@@ -4,6 +4,7 @@
 pub mod answers;
 pub mod curated;
 pub mod process;
+pub mod selected;
 
 /// Canonical native atoms and closed values used by structured report views.
 pub use zetesis_core as core;

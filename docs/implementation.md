@@ -50,9 +50,11 @@ reconciling reported completion and counts. Its ASP comparison view validates
 names through pinned themelios before rendering; it cannot infer full models
 from a display. The existing 94-case
 validator uses these APIs through compatibility adapters; its older platform
-fallback remains separately scoped. The selected-upstream Rust solver campaign
-is still pending. Existing Python qualification tools and retained C++ import
-provenance have not been retired. See the [validation contract](../crates/zetesis-validation/README.md#reusable-process-and-reported-answer-boundaries).
+fallback remains separately scoped. The selected Rust campaign now composes
+bounded capture, typed native full models and all 24 immutable corpus contracts.
+It retains failed runs and protects evidence publication. Its Python comparator
+and decoder are retired; other Python tools and C++ import provenance remain.
+See the [validation contract](../crates/zetesis-validation/README.md#selected-solver-campaign).
 
 ## Signed identity and source coherence
 
