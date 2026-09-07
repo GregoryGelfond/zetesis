@@ -1,5 +1,12 @@
 //! Optional boundary observation; ordinary admission never reads a clock.
 
+mod profile;
+
+use themelios_base::span::Location;
+
+pub(crate) use profile::{Event, Profile, Work};
+pub use profile::{GroundingOutcome, GroundingPhase, GroundingWork};
+
 /// Observe only complete formula materialization after source preparation.
 ///
 /// Every `enter` has a matching `exit`, including a failed or unwinding attempt.
@@ -11,6 +18,40 @@ pub trait GroundingObserver {
     fn enter(&self);
     /// End the attempted materialization, whether it succeeded or failed.
     fn exit(&self);
+
+    /// Opt into bounded work counters and coarse phase callbacks for this attempt.
+    ///
+    /// Called once after `enter`. The default retains boundary-only observation.
+    /// No clock is read by the frontend. Detailed observation allocates one fixed
+    /// counter bank; callback implementations own any further storage or timing.
+    fn details_enabled(&self) -> bool {
+        false
+    }
+
+    /// Begin one coarse phase after its counter bank has been reset.
+    ///
+    /// Within one grounding attempt, phases are sequential and do not nest.
+    /// Rule instantiation emits one
+    /// pair per prepared IR rule; the location identifies original source context,
+    /// but need not be unique after source expansion. Joins, filtering and formula
+    /// emission remain interleaved inside that phase.
+    /// Whole-program phases use `None` rather than claiming one source location.
+    fn phase_enter(&self, _phase: GroundingPhase, _location: Option<Location>) {}
+
+    /// End a phase with work performed before success, failure or unwind.
+    ///
+    /// Counts belong only to this phase, including its failed attempt. Counter
+    /// overflow makes that field unavailable and never changes admission or its
+    /// resource limits. Callback overhead is not removed from observed durations.
+    /// A completed phase does not establish completed grounding or stable models.
+    fn phase_exit(
+        &self,
+        _phase: GroundingPhase,
+        _location: Option<Location>,
+        _outcome: GroundingOutcome,
+        _work: GroundingWork,
+    ) {
+    }
 }
 
 pub(crate) fn observe<T>(

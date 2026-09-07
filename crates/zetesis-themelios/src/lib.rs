@@ -93,7 +93,7 @@ pub use formula::{
     admit_bundle_formula_with_grounding_observer, admit_formula,
     admit_formula_with_grounding_observer, prepare_bundle_formula, prepare_formula,
 };
-pub use grounding_observer::GroundingObserver;
+pub use grounding_observer::{GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork};
 pub use metadata::{
     AtomSelection, AtomSelectionError, AtomSelectionLimits, LocatedDirective, MetadataError,
     MetadataFeature, MetadataLimits, MetadataResource, OutputSelection, SourceDirective,

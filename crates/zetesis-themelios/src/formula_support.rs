@@ -11,6 +11,7 @@ use zetesis_core::{Atom, AtomPattern, Predicate, Value};
 use crate::expansion::Budget;
 use crate::formula::ceiling;
 use crate::formula_ir::{Expression, HeadIr, LiteralIr, Operation, Prepared, value_bytes};
+use crate::grounding_observer::{Event, Work};
 use crate::{ExpansionFailure, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
 
 #[derive(Default)]
@@ -18,8 +19,18 @@ pub(crate) struct Counters {
     pub work: u64,
     pub substitutions: u64,
     generated_values: BTreeSet<Value>,
+    observed: Work,
 }
 impl Counters {
+    pub(super) fn observed(observed: Work) -> Self {
+        Self {
+            observed,
+            ..Self::default()
+        }
+    }
+    pub(super) fn record(&self, event: Event) {
+        self.observed.record(event);
+    }
     pub fn work(
         &mut self,
         limits: FormulaLimits,
@@ -110,10 +121,12 @@ impl Support {
                 column.insert(copy(value, budget, location)?, Vec::new());
             }
             column.get_mut(value).expect("index key inserted").push(row);
+            counters.record(Event::SupportIndexEntry);
         }
         self.indexed_entries += atom.values().len();
         relation.atoms.push(atom.clone());
         self.present.insert(atom);
+        counters.record(Event::SupportAtom);
         Ok(())
     }
     fn probe(
@@ -124,6 +137,7 @@ impl Support {
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<&[usize]>, FormulaFailure> {
+        counters.record(Event::JoinProbe);
         let Some(relation) = self.rows.get(pattern.predicate()) else {
             return Ok(Some(&[]));
         };
@@ -162,6 +176,7 @@ pub(crate) fn build(
             fallback,
         )?;
         rounds += 1;
+        counters.record(Event::SupportRound);
         let mut delta = BTreeSet::new();
         for rule in &prepared.rules {
             if matches!(rule.head, HeadIr::Normal(None)) {
@@ -532,6 +547,7 @@ impl<'a> Join<'a> {
                 continue;
             };
             self.positions[self.depth] += 1;
+            counters.record(Event::JoinRow);
             let mut matches = true;
             for (term, value) in pattern.terms().iter().zip(atom.values()) {
                 counters.work(limits, location)?;
@@ -667,6 +683,7 @@ impl<'a> Join<'a> {
                 }
             })
             .collect::<Result<Vec<_>, _>>()?;
+        counters.record(Event::BindingSnapshot);
         Ok(Some(values))
     }
 }
@@ -739,6 +756,7 @@ fn bound(
 ) -> Result<bool, FormulaFailure> {
     for operation in &expression.nodes {
         counters.work(limits, location)?;
+        counters.record(Event::ReadinessNode);
         if let Operation::Variable(variable) = operation
             && assignment[*variable].is_none()
         {
@@ -819,9 +837,11 @@ fn expression_from<'a>(
     counters: &mut Counters,
     location: Location,
 ) -> Result<Value, FormulaFailure> {
+    counters.record(Event::ExpressionEvaluation);
     let mut values: Vec<Value> = Vec::new();
     for node in &expression.nodes {
         counters.work(limits, location)?;
+        counters.record(Event::ExpressionNode);
         let value = match *node {
             Operation::Constant(ref value) => copy(value, budget, location)?,
             Operation::Variable(index) => copy(variable(index), budget, location)?,

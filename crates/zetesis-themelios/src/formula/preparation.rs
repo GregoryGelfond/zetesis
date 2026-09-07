@@ -37,7 +37,13 @@ impl Preparation {
         observer: Option<&dyn GroundingObserver>,
     ) -> Result<Compiled, FormulaFailure> {
         grounding_observer::observe(observer, || {
-            formula_ground::ground(self.program, self.limits, &mut self.budget, self.location)
+            formula_ground::ground(
+                self.program,
+                self.limits,
+                &mut self.budget,
+                self.location,
+                observer,
+            )
         })
     }
 }

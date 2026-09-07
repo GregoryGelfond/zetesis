@@ -19,6 +19,7 @@ use crate::formula_ir::{
     Projection, RuleIr, value_bytes,
 };
 use crate::formula_support::{self, Counters, Join, Support};
+use crate::grounding_observer::Event;
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
 
 pub(crate) fn ground(
@@ -26,13 +27,105 @@ pub(crate) fn ground(
     limits: FormulaLimits,
     budget: &mut Budget,
     location: Location,
+    observer: Option<&dyn crate::GroundingObserver>,
 ) -> Result<Compiled, FormulaFailure> {
-    let mut counters = Counters::default();
-    let support = formula_support::build(&prepared, limits, budget, &mut counters, location)?;
+    use crate::GroundingPhase;
+
+    let profile = crate::grounding_observer::Profile::new(observer);
+    let mut counters = Counters::observed(profile.work());
+    let support = profile.phase(GroundingPhase::SupportCompletion, None, || {
+        formula_support::build(&prepared, limits, budget, &mut counters, location)
+    })?;
+    let (objectives, objective_origins) =
+        profile.phase(GroundingPhase::ObjectiveActivation, None, || {
+            activate_objectives(&prepared, &support, limits, budget, &mut counters, location)
+        })?;
+    let mut builder = profile.phase(GroundingPhase::FormulaInitialization, None, || {
+        let mut builder = Builder {
+            limits,
+            budget,
+            atoms: Vec::new(),
+            atom_indices: BTreeMap::new(),
+            producers: Vec::new(),
+            producer_origins: Vec::new(),
+            atom_locations: Vec::new(),
+            nodes: Vec::new(),
+            node_indices: BTreeMap::new(),
+            roots: Vec::new(),
+            origins: Vec::new(),
+            counters,
+            origin_count: 0,
+            aggregate_cache: BTreeMap::new(),
+            cached_elements: 0,
+            cached_key_bytes: 0,
+            cached_roots: 0,
+        };
+        builder.node(Node::False, location)?;
+        builder.node(Node::Implies(0, 0), location)?;
+        Ok::<_, FormulaFailure>(builder)
+    })?;
+    for rule in &prepared.rules {
+        profile.phase(
+            GroundingPhase::RuleInstantiation,
+            Some(rule.location),
+            || {
+                if crate::formula_factor::rule(&mut builder, rule, &support)? {
+                    return Ok(());
+                }
+                let mut outer = Join::new(
+                    &rule.body,
+                    &[],
+                    rule.variables,
+                    &support,
+                    builder.budget,
+                    rule.location,
+                )?;
+                while let Some(binding) =
+                    outer.next(limits, builder.budget, &mut builder.counters, rule.location)?
+                {
+                    builder.rule(rule, &binding, &support)?;
+                }
+                Ok::<_, FormulaFailure>(())
+            },
+        )?;
+    }
+    profile.phase(GroundingPhase::Coherence, None, || builder.coherence())?;
+    profile.phase(GroundingPhase::SupportGuards, None, || {
+        builder.support_guards()
+    })?;
+    let theory = profile.phase(GroundingPhase::TheoryValidation, None, || {
+        Theory::new(
+            builder.atoms.len(),
+            builder.nodes,
+            builder.roots,
+            limits.theory,
+        )
+        .map_err(|error| FormulaFailure::Theory { error, location })
+    })?;
+    Ok(Compiled {
+        analysis: prepared.analysis,
+        analyzed: prepared.analyzed,
+        theory,
+        atoms: builder.atoms,
+        origins: builder.origins,
+        objectives,
+        objective_origins,
+        objective_declarations: prepared.objective_declarations.clone(),
+    })
+}
+
+fn activate_objectives(
+    prepared: &Prepared,
+    support: &Support,
+    limits: FormulaLimits,
+    budget: &mut Budget,
+    counters: &mut Counters,
+    location: Location,
+) -> Result<(zetesis_objective::ObjectiveProgram, Vec<Vec<Location>>), FormulaFailure> {
     let mut active = Vec::new();
     let mut objective_origins = Vec::new();
     for objective in &prepared.objectives {
-        if objective_active(objective, &support, limits, budget, &mut counters)? {
+        if objective_active(objective, support, limits, budget, counters)? {
             budget.charge(
                 ExpansionResource::Origins,
                 objective.origins.len() as u128,
@@ -48,64 +141,7 @@ pub(crate) fn ground(
         zetesis_objective::ObjectiveProgram::new(active, limits.objective)
             .map_err(|error| FormulaFailure::Objective { error, location })?
     };
-    let mut builder = Builder {
-        limits,
-        budget,
-        atoms: Vec::new(),
-        atom_indices: BTreeMap::new(),
-        producers: Vec::new(),
-        producer_origins: Vec::new(),
-        atom_locations: Vec::new(),
-        nodes: Vec::new(),
-        node_indices: BTreeMap::new(),
-        roots: Vec::new(),
-        origins: Vec::new(),
-        counters,
-        origin_count: 0,
-        aggregate_cache: BTreeMap::new(),
-        cached_elements: 0,
-        cached_key_bytes: 0,
-        cached_roots: 0,
-    };
-    builder.node(Node::False, location)?;
-    builder.node(Node::Implies(0, 0), location)?;
-    for rule in &prepared.rules {
-        if crate::formula_factor::rule(&mut builder, rule, &support)? {
-            continue;
-        }
-        let mut outer = Join::new(
-            &rule.body,
-            &[],
-            rule.variables,
-            &support,
-            builder.budget,
-            rule.location,
-        )?;
-        while let Some(binding) =
-            outer.next(limits, builder.budget, &mut builder.counters, rule.location)?
-        {
-            builder.rule(rule, &binding, &support)?;
-        }
-    }
-    builder.coherence()?;
-    builder.support_guards()?;
-    let theory = Theory::new(
-        builder.atoms.len(),
-        builder.nodes,
-        builder.roots,
-        limits.theory,
-    )
-    .map_err(|error| FormulaFailure::Theory { error, location })?;
-    Ok(Compiled {
-        analysis: prepared.analysis,
-        analyzed: prepared.analyzed,
-        theory,
-        atoms: builder.atoms,
-        origins: builder.origins,
-        objectives,
-        objective_origins,
-        objective_declarations: prepared.objective_declarations.clone(),
-    })
+    Ok::<_, FormulaFailure>((objectives, objective_origins))
 }
 
 fn objective_active(
@@ -230,6 +266,7 @@ impl Builder<'_> {
     }
     pub(super) fn node(&mut self, node: Node, location: Location) -> Result<usize, FormulaFailure> {
         self.work(location)?;
+        self.counters.record(Event::NodeLookup);
         let key = node_key(node);
         if let Some(index) = self.node_indices.get(&key) {
             return Ok(*index);
@@ -243,6 +280,7 @@ impl Builder<'_> {
         let index = self.nodes.len();
         self.nodes.push(node);
         self.node_indices.insert(key, index);
+        self.counters.record(Event::NodeInserted);
         Ok(index)
     }
     pub(super) fn and(
@@ -309,6 +347,7 @@ impl Builder<'_> {
         self.origin_count += evidence.len();
         self.roots.push(formula);
         self.origins.push(evidence.to_vec());
+        self.counters.record(Event::Root);
         Ok(())
     }
     pub(super) fn atom(
@@ -334,6 +373,7 @@ impl Builder<'_> {
         let atom = pattern
             .instantiate(assignment)
             .expect("all scoped variables assigned");
+        self.counters.record(Event::AtomLookup);
         let index = if let Some(index) = self.atom_indices.get(&atom) {
             *index
         } else {
@@ -351,6 +391,7 @@ impl Builder<'_> {
             self.producer_origins.push(BTreeSet::from([location]));
             self.atom_locations.push(location);
             self.atom_indices.insert(atom, index);
+            self.counters.record(Event::AtomInserted);
             index
         };
         self.node(Node::Atom(index), location)
