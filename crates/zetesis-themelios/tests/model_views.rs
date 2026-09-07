@@ -4,7 +4,7 @@ use serde_json::{Value as Json, json};
 use zetesis_core::{Atom, Model, Predicate, Sign, Value, ValueLimits, ValueNode};
 use zetesis_cpu::Control;
 use zetesis_themelios::observation::{
-    Limits, ObservationProgram, Symbol, SymbolSign, ViewError, ViewLimits,
+    Limits, ModelView, ObservationProgram, Symbol, SymbolSign, ViewError, ViewLimits,
 };
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaLimits, OutputSelection, admit_formula,
@@ -14,12 +14,69 @@ fn atom(name: &str, values: Vec<Value>) -> Atom {
     Atom::new(Predicate::new(name, values.len()).unwrap(), values).unwrap()
 }
 
-#[test]
-fn typed_json_preserves_every_value_class_and_all_json_control_characters() {
+struct ObservationFixture {
+    model: Model,
+    program: ObservationProgram,
+    selection: OutputSelection,
+    control: Control,
+}
+impl ObservationFixture {
+    fn plain(model: Model) -> Self {
+        Self {
+            model,
+            program: ObservationProgram::default(),
+            selection: OutputSelection::default(),
+            control: Control::default(),
+        }
+    }
+
+    fn with_directives(model: Model, source: &str) -> Self {
+        let admitted = admit_formula(
+            source.into(),
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        )
+        .unwrap();
+        Self {
+            model,
+            program: admitted.metadata().observations().clone(),
+            selection: admitted.metadata().output().clone(),
+            control: Control::default(),
+        }
+    }
+
+    fn view(&self) -> ModelView<'_> {
+        self.program
+            .view(
+                &self.model,
+                &self.selection,
+                None,
+                Limits::default(),
+                &self.control,
+            )
+            .unwrap()
+    }
+
+    fn json(&self) -> Json {
+        serde_json::from_str(
+            &self
+                .view()
+                .json(ViewLimits::default(), &self.control)
+                .unwrap(),
+        )
+        .unwrap()
+    }
+}
+
+fn json_string_sample() -> String {
     let text: String = (0..32)
         .map(|value| char::from_u32(value).unwrap())
         .collect();
-    let text = format!("{text}\"\\λ🦀");
+    format!("{text}\"\\λ🦀")
+}
+
+fn value_model() -> Model {
     let structured = Value::from_nodes(
         vec![
             ValueNode::Function {
@@ -34,29 +91,42 @@ fn typed_json_preserves_every_value_class_and_all_json_control_characters() {
         ValueLimits::default(),
     )
     .unwrap();
-    let model = Model::new([Atom::new(
+    Model::new([Atom::new(
         Predicate::with_sign("p", 6, Sign::Negative).unwrap(),
         vec![
             Value::Infimum,
             Value::Supremum,
             Value::Number(i32::MIN),
             Value::Symbol("#inf".into()),
-            Value::String(text.clone()),
+            Value::String(json_string_sample()),
             structured,
         ],
     )
-    .unwrap()]);
-    let program = ObservationProgram::default();
-    let selection = OutputSelection::default();
-    let control = Control::default();
-    let view = program
-        .view(&model, &selection, None, Limits::default(), &control)
-        .unwrap();
-    assert!(std::ptr::eq(view.model(), std::ptr::from_ref(&model)));
-    assert_eq!(view.shown_atoms().count(), 1);
-    assert!(view.shown_terms().is_empty());
-    let value: Json =
-        serde_json::from_str(&view.json(ViewLimits::default(), &control).unwrap()).unwrap();
+    .unwrap()])
+}
+
+fn string_observation() -> ObservationFixture {
+    ObservationFixture::plain(Model::new([atom("p", vec![Value::String("\n\"λ".into())])]))
+}
+
+fn nested_observation() -> ObservationFixture {
+    ObservationFixture::with_directives(Model::new([]), "#show f(g(1),(2,)).")
+}
+
+#[test]
+fn model_view_borrows_full_identity() {
+    let fixture = ObservationFixture::plain(value_model());
+    let view = fixture.view();
+    assert!(std::ptr::eq(
+        view.model(),
+        std::ptr::from_ref(&fixture.model)
+    ));
+}
+
+#[test]
+fn full_atoms_preserve_term_identity() {
+    let fixture = ObservationFixture::plain(value_model());
+    let value = fixture.json();
     let atom = &value["full_model"][0];
     assert_eq!(atom["sign"], "negative");
     assert_eq!(atom["arguments"][0][0], json!({"kind":"infimum"}));
@@ -67,44 +137,49 @@ fn typed_json_preserves_every_value_class_and_all_json_control_characters() {
         json!({"kind":"symbol","value":"#inf"})
     );
     assert_eq!(
-        atom["arguments"][4][0],
-        json!({"kind":"string","value":text})
-    );
-    assert_eq!(
         atom["arguments"][5],
         json!([
             {"kind":"function","name":"f","sign":"negative","arity":2},
             {"kind":"tuple","arity":1},{"kind":"number","value":7},{"kind":"tuple","arity":0}
         ])
     );
-    assert!(value["costs"].is_null());
-    assert_eq!(value["shown"]["atom_indices"], json!([0]));
 }
 
 #[test]
-fn model_and_two_shown_channels_remain_separate_typed_values() {
-    let admitted = admit_formula(
-        "a. #show a. #show f((1,),()).".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
-    let model = Model::new([atom("a", vec![]), atom("hidden", vec![])]);
-    let control = Control::default();
-    let view = admitted
-        .metadata()
-        .observations()
-        .view(
-            &model,
-            admitted.metadata().output(),
-            None,
-            Limits::default(),
-            &control,
-        )
-        .unwrap();
-    let value: Json =
-        serde_json::from_str(&view.json(ViewLimits::default(), &control).unwrap()).unwrap();
+fn json_strings_preserve_control_characters() {
+    let fixture = ObservationFixture::plain(value_model());
+    assert_eq!(
+        fixture.json()["full_model"][0]["arguments"][4][0],
+        json!({"kind":"string","value":json_string_sample()})
+    );
+}
+
+#[test]
+fn default_selection_shows_all_atoms() {
+    let fixture = ObservationFixture::plain(value_model());
+    assert_eq!(fixture.view().shown_atoms().count(), 1);
+    assert_eq!(fixture.json()["shown"]["atom_indices"], json!([0]));
+}
+
+#[test]
+fn empty_observation_yields_no_terms() {
+    let fixture = ObservationFixture::plain(value_model());
+    assert!(fixture.view().shown_terms().is_empty());
+}
+
+#[test]
+fn absent_score_has_no_cost_vector() {
+    let fixture = ObservationFixture::plain(value_model());
+    assert!(fixture.json()["costs"].is_null());
+}
+
+#[test]
+fn shown_channels_retain_independent_identity() {
+    let fixture = ObservationFixture::with_directives(
+        Model::new([atom("a", vec![]), atom("hidden", vec![])]),
+        "a. #show a. #show f((1,),()).",
+    );
+    let view = fixture.view();
     assert_eq!(view.model().atoms().len(), 2);
     assert_eq!(view.shown_atoms().count(), 2);
     assert_eq!(view.shown_terms().len(), 2);
@@ -112,41 +187,27 @@ fn model_and_two_shown_channels_remain_separate_typed_values() {
         matches!(&view.shown_terms()[0], Symbol::Function { name, sign: SymbolSign::Positive, .. } if name.as_str() == "a")
     );
     assert_eq!(
-        value["shown"]["terms"][0],
+        fixture.json()["shown"]["terms"][0],
         json!([{"kind":"symbol","value":"a"}])
     );
-    let hidden = admit_formula(
-        "#show.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
-    let hidden_view = hidden
-        .metadata()
-        .observations()
-        .view(
-            &model,
-            hidden.metadata().output(),
-            None,
-            Limits::default(),
-            &control,
-        )
-        .unwrap();
-    assert_eq!(hidden_view.model().atoms(), model.atoms());
-    assert_eq!(hidden_view.shown_atoms().count(), 0);
 }
 
 #[test]
-fn record_ceiling_is_inclusive_and_control_work_depth_refusals_return_no_value() {
-    let model = Model::new([atom("p", vec![Value::String("\n\"λ".into())])]);
-    let program = ObservationProgram::default();
-    let selection = OutputSelection::default();
-    let control = Control::default();
-    let view = program
-        .view(&model, &selection, None, Limits::default(), &control)
-        .unwrap();
-    let expected = view.json(ViewLimits::default(), &control).unwrap();
+fn hidden_selection_preserves_full_identity() {
+    let fixture = ObservationFixture::with_directives(
+        Model::new([atom("a", vec![]), atom("hidden", vec![])]),
+        "#show.",
+    );
+    let view = fixture.view();
+    assert_eq!(view.model().atoms(), fixture.model.atoms());
+    assert_eq!(view.shown_atoms().count(), 0);
+}
+
+#[test]
+fn record_byte_limit_is_inclusive() {
+    let fixture = string_observation();
+    let view = fixture.view();
+    let expected = view.json(ViewLimits::default(), &fixture.control).unwrap();
     for maximum in [0, expected.len() - 1] {
         assert_eq!(
             view.json(
@@ -154,7 +215,7 @@ fn record_ceiling_is_inclusive_and_control_work_depth_refusals_return_no_value()
                     max_bytes: maximum,
                     ..Default::default()
                 },
-                &control
+                &fixture.control
             ),
             Err(ViewError::Bytes)
         );
@@ -165,67 +226,78 @@ fn record_ceiling_is_inclusive_and_control_work_depth_refusals_return_no_value()
                 max_bytes: expected.len(),
                 ..Default::default()
             },
-            &control
+            &fixture.control
         )
         .unwrap(),
         expected
     );
+}
+
+#[test]
+fn encoding_work_limit_refuses() {
+    let fixture = string_observation();
     assert_eq!(
-        view.json(
+        fixture.view().json(
             ViewLimits {
                 max_work: 0,
                 ..Default::default()
             },
-            &control
+            &fixture.control
         ),
         Err(ViewError::Work)
     );
+}
+
+#[test]
+fn encoding_depth_limit_refuses() {
+    let fixture = string_observation();
     assert_eq!(
-        view.json(
+        fixture.view().json(
             ViewLimits {
                 max_depth: 0,
                 ..Default::default()
             },
-            &control
+            &fixture.control
         ),
         Err(ViewError::Depth)
     );
-    control.cancel();
+}
+
+#[test]
+fn cancelled_encoding_refuses() {
+    let fixture = string_observation();
+    let view = fixture.view();
+    fixture.control.cancel();
     assert_eq!(
-        view.json(ViewLimits::default(), &control),
+        view.json(ViewLimits::default(), &fixture.control),
         Err(ViewError::Stopped(zetesis_cpu::Stop::Cancelled))
     );
 }
 
 #[test]
-fn observation_constructor_cursor_is_preorder_and_bounded_before_descent() {
-    let admitted = admit_formula(
-        "#show f(g(1),(2,)).".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
-    let model = Model::new([]);
-    let control = Control::default();
-    let view = admitted
-        .metadata()
-        .observations()
-        .view(
-            &model,
-            admitted.metadata().output(),
-            None,
-            Limits::default(),
-            &control,
-        )
-        .unwrap();
+fn shown_terms_use_preorder_nodes() {
+    let fixture = nested_observation();
+    assert_eq!(
+        fixture.json()["shown"]["terms"][0],
+        json!([
+            {"kind":"function","name":"f","sign":"positive","arity":2},
+            {"kind":"function","name":"g","sign":"positive","arity":1},
+            {"kind":"number","value":1},{"kind":"tuple","arity":1},{"kind":"number","value":2}
+        ])
+    );
+}
+
+#[test]
+fn shown_term_depth_limit_is_inclusive() {
+    let fixture = nested_observation();
+    let view = fixture.view();
     assert_eq!(
         view.json(
             ViewLimits {
                 max_depth: 2,
                 ..Default::default()
             },
-            &control
+            &fixture.control
         ),
         Err(ViewError::Depth)
     );
@@ -236,17 +308,10 @@ fn observation_constructor_cursor_is_preorder_and_bounded_before_descent() {
                     max_depth: 3,
                     ..Default::default()
                 },
-                &control,
+                &fixture.control,
             )
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(
-        value["shown"]["terms"][0],
-        json!([
-            {"kind":"function","name":"f","sign":"positive","arity":2},
-            {"kind":"function","name":"g","sign":"positive","arity":1},
-            {"kind":"number","value":1},{"kind":"tuple","arity":1},{"kind":"number","value":2}
-        ])
-    );
+    assert_eq!(value, fixture.json());
 }

@@ -15,7 +15,7 @@ fn at(start: Instant, nanos: u64) -> Instant {
 }
 
 #[test]
-fn nested_stages_and_repeated_active_snapshots_have_an_exact_partition() {
+fn nested_stages_partition_elapsed_time() {
     let start = Instant::now();
     let recorder = recorder(start);
     let mut outer = recorder.enter_at(SolveStage::Solving, Some(at(start, 2)));
@@ -29,7 +29,6 @@ fn nested_stages_and_repeated_active_snapshots_have_an_exact_partition() {
         first.get(SolveStage::Grounding).unwrap().elapsed,
         Duration::from_nanos(3)
     );
-    assert_eq!(first, recorder.snapshot_at(start, at(start, 10)));
     finish(&mut inner, at(start, 12));
     finish(&mut outer, at(start, 20));
     let result = recorder.snapshot_at(start, at(start, 22));
@@ -43,12 +42,64 @@ fn nested_stages_and_repeated_active_snapshots_have_an_exact_partition() {
     );
     assert_eq!(result.unattributed, Some(Duration::from_nanos(4)));
     assert!(result.is_complete());
-    assert_eq!(result.get(SolveStage::Solving).unwrap().calls, 1);
-    assert_eq!(result.grounding_mode, GroundingMode::Eager);
 }
 
 #[test]
-fn same_stage_children_count_calls_without_double_charging_their_parent() {
+fn active_snapshots_do_not_charge_time_twice() {
+    let start = Instant::now();
+    let recorder = recorder(start);
+    let mut outer = recorder.enter_at(SolveStage::Solving, Some(at(start, 2)));
+    let mut inner = recorder.enter_at(SolveStage::Grounding, Some(at(start, 7)));
+    let first = recorder.snapshot_at(start, at(start, 10));
+    assert_eq!(first, recorder.snapshot_at(start, at(start, 10)));
+    finish(&mut inner, at(start, 12));
+    finish(&mut outer, at(start, 20));
+    // Later accounting must still contain the active prefix exactly once.
+    let result = recorder.snapshot_at(start, at(start, 22));
+    assert_eq!(
+        result.get(SolveStage::Solving).unwrap().elapsed,
+        Duration::from_nanos(13)
+    );
+    assert_eq!(
+        result.get(SolveStage::Grounding).unwrap().elapsed,
+        Duration::from_nanos(5)
+    );
+    assert_eq!(result.unattributed, Some(Duration::from_nanos(4)));
+    assert!(result.is_complete());
+}
+
+#[test]
+fn entering_grounding_records_eager_mode() {
+    let recorder = StageRecorder::new(true);
+    drop(recorder.enter(SolveStage::Grounding));
+    assert_eq!(
+        recorder.snapshot().unwrap().grounding_mode,
+        GroundingMode::Eager
+    );
+}
+
+#[test]
+fn span_entries_are_counted() {
+    for (child, expected_calls) in [(SolveStage::Grounding, 1), (SolveStage::Solving, 2)] {
+        let start = Instant::now();
+        let recorder = recorder(start);
+        let mut outer = recorder.enter_at(SolveStage::Solving, Some(at(start, 1)));
+        let mut inner = recorder.enter_at(child, Some(at(start, 3)));
+        finish(&mut inner, at(start, 8));
+        finish(&mut outer, at(start, 10));
+        assert_eq!(
+            recorder
+                .snapshot_at(start, at(start, 11))
+                .get(SolveStage::Solving)
+                .unwrap()
+                .calls,
+            expected_calls
+        );
+    }
+}
+
+#[test]
+fn same_stage_nesting_partitions_elapsed_time() {
     let start = Instant::now();
     let recorder = recorder(start);
     let mut first = recorder.enter_at(SolveStage::Solving, Some(at(start, 1)));
@@ -56,26 +107,28 @@ fn same_stage_children_count_calls_without_double_charging_their_parent() {
     finish(&mut second, at(start, 8));
     finish(&mut first, at(start, 10));
     let snapshot = recorder.snapshot_at(start, at(start, 11));
-    assert_eq!(
-        snapshot.get(SolveStage::Solving),
-        Some(StageMeasurement {
-            calls: 2,
-            elapsed: Duration::from_nanos(9),
-            overflowed: false,
-        })
-    );
+    let measurement = snapshot.get(SolveStage::Solving).unwrap();
+    assert_eq!(measurement.elapsed, Duration::from_nanos(9));
+    assert!(!measurement.overflowed);
     assert_eq!(snapshot.unattributed, Some(Duration::from_nanos(2)));
 }
 
 #[test]
-fn lazy_and_mixed_modes_never_invent_standalone_lazy_duration() {
+fn lazy_grounding_has_no_separate_duration() {
+    let recorder = StageRecorder::new(true);
+    recorder.mark_lazy_grounding();
+    let lazy = recorder.snapshot().unwrap();
+    assert_eq!(lazy.grounding_mode, GroundingMode::LazyInterleaved);
+    assert!(lazy.get(SolveStage::Grounding).is_none());
+}
+
+#[test]
+fn mixed_grounding_retains_eager_measurements() {
+    // Both encounter orders describe the same mixed route.
     for lazy_first in [true, false] {
         let recorder = StageRecorder::new(true);
         if lazy_first {
             recorder.mark_lazy_grounding();
-            let lazy = recorder.snapshot().unwrap();
-            assert_eq!(lazy.grounding_mode, GroundingMode::LazyInterleaved);
-            assert!(lazy.get(SolveStage::Grounding).is_none());
         }
         drop(recorder.enter(SolveStage::Grounding));
         recorder.mark_lazy_grounding();
@@ -87,7 +140,7 @@ fn lazy_and_mixed_modes_never_invent_standalone_lazy_duration() {
 }
 
 #[test]
-fn disabled_error_and_unwind_paths_preserve_application_results() {
+fn disabled_recording_has_no_measurements() {
     let disabled = StageRecorder::new(false);
     let _span = disabled.enter(SolveStage::Grounding);
     disabled.mark_lazy_grounding();
@@ -101,12 +154,25 @@ fn disabled_error_and_unwind_paths_preserve_application_results() {
             .iter()
             .all(Option::is_none)
     );
+}
+
+#[test]
+fn error_exit_restores_recording() {
     let enabled = StageRecorder::new(true);
     let failure = || {
         let _span = enabled.enter(SolveStage::Solving);
         Err::<(), _>(7)
     };
     assert_eq!(failure(), Err(7));
+    let result = enabled.snapshot().unwrap();
+    assert!(result.is_complete());
+    assert_eq!(result.get(SolveStage::Solving).unwrap().calls, 1);
+    assert_eq!(enabled.state.get().active, None);
+}
+
+#[test]
+fn unwind_restores_recording() {
+    let enabled = StageRecorder::new(true);
     let unwind = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let _outer = enabled.enter(SolveStage::Solving);
         let _inner = enabled.enter(SolveStage::Grounding);
@@ -115,20 +181,24 @@ fn disabled_error_and_unwind_paths_preserve_application_results() {
     assert!(unwind.is_err());
     let result = enabled.snapshot().unwrap();
     assert!(result.is_complete());
-    assert_eq!(result.get(SolveStage::Solving).unwrap().calls, 2);
+    assert_eq!(result.get(SolveStage::Solving).unwrap().calls, 1);
     assert_eq!(enabled.state.get().active, None);
 }
 
 #[test]
-fn bad_nesting_and_overflow_make_the_partition_unavailable() {
+fn out_of_order_drop_invalidates_partition() {
     let recorder = StageRecorder::new(true);
     let outer = recorder.enter(SolveStage::Solving);
     let inner = recorder.enter(SolveStage::Grounding);
     drop(outer);
     drop(inner);
     assert!(!recorder.snapshot().unwrap().is_complete());
+}
+
+#[test]
+fn call_overflow_invalidates_partition() {
     let start = Instant::now();
-    let recorder = super::tests::recorder(start);
+    let recorder = recorder(start);
     let mut state = recorder.state.get();
     state.measurements[SolveStage::Solving as usize] = Some(StageMeasurement {
         calls: u64::MAX,
@@ -140,6 +210,10 @@ fn bad_nesting_and_overflow_make_the_partition_unavailable() {
     let result = recorder.snapshot().unwrap();
     assert!(!result.is_complete());
     assert!(result.get(SolveStage::Solving).unwrap().overflowed);
+}
+
+#[test]
+fn duration_overflow_is_recorded() {
     let mut duration = StageMeasurement {
         elapsed: Duration::MAX,
         ..StageMeasurement::default()
@@ -161,7 +235,7 @@ fn overflowing_duration_partition_is_incomplete() {
 }
 
 #[test]
-fn overflowed_measurement_cannot_establish_a_complete_partition() {
+fn overflowed_measurement_is_incomplete() {
     let mut snapshot = StageTimings {
         driver_elapsed: Duration::from_nanos(5),
         unattributed: Some(Duration::ZERO),

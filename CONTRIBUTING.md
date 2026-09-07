@@ -50,6 +50,14 @@ evidence that the representation needs refinement. Distinguish an arithmetic
 consistency check from provenance, a candidate from an answer set, and recorded
 evidence from a guarantee that the implementation establishes that evidence.
 
+A name locates a concept in the domain's taxonomy; its full contract belongs in
+documentation. Naming carries truth, including whether an operation computes a
+value or writes to an external sink. Difficulty naming a function is evidence to
+revisit its concepts and decomposition. Give meaningful steps and constants names
+when the name adds knowledge; avoid aliases for literals that already express
+their meaning. Represent absence explicitly rather than borrowing a valid value
+as an undocumented sentinel.
+
 Design an algorithm with its correctness argument: preconditions, postconditions,
 maintained invariants and a decreasing measure or finite bound for termination.
 Name the concepts carrying that argument. Use pure transformations where they
@@ -116,6 +124,15 @@ their identity and evidence. Coverage locates unexercised code; it does not prov
 assertion strength. Selected negative controls, systematic mutation campaigns,
 input fuzzing and mathematical proofs discharge different obligations. Report
 the instrument and scope actually used.
+
+A test name states one proposition. Split independent claims joined by a
+conjunction into separate tests, with meaningful shared setup where useful.
+Rationale belongs in a comment, not in the identifier. Names over fifty characters
+trigger a reading for hidden conjunctions or appended rationale; fifty is not a
+length ceiling. A longer name is appropriate when it states one coherent claim.
+Multiple assertions may jointly establish one invariant, and multiple inputs may
+exercise that same proposition; neither test count nor identifier length measures
+assertion strength.
 
 Clingo is an external qualification oracle, never a production solver dependency.
 Preserve original corpus inputs. Retain complete models, optimal ties, objective

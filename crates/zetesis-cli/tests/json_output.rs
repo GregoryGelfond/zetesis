@@ -41,31 +41,39 @@ fn solve(source: &str, options: &Options) -> (Result<Report, RunFailure>, Json) 
     (result, value)
 }
 
+fn hidden_choices(oracle: &str) -> (Report, Json) {
+    let (result, value) = solve("{a}. {b}. #show.", &options(&["--oracle", oracle]));
+    (result.unwrap(), value)
+}
+
 #[test]
-fn closure_and_formula_routes_emit_typed_full_models_with_distinct_hidden_displays() {
+fn explicit_oracles_select_distinct_routes() {
+    for (oracle, formula_route) in [("closure", false), ("countermodel", true)] {
+        let (report, _) = hidden_choices(oracle);
+        assert_eq!(report.countermodel_statistics.is_some(), formula_route);
+    }
+}
+
+#[test]
+fn hidden_display_preserves_full_model_identity() {
     let a = json!({"predicate":"a","sign":"positive","arguments":[]});
     let b = json!({"predicate":"b","sign":"positive","arguments":[]});
     let expected = [json!([]), json!([a]), json!([b]), json!([a, b])]
         .into_iter()
         .map(|model| model.to_string())
         .collect::<std::collections::BTreeSet<_>>();
-    for (oracle, formula_route) in [("closure", false), ("countermodel", true)] {
-        let (result, value) = solve("{a}. {b}. #show.", &options(&["--oracle", oracle]));
-        let report = result.unwrap();
-        assert_eq!(report.countermodel_statistics.is_some(), formula_route);
+    for oracle in ["closure", "countermodel"] {
+        let (report, value) = hidden_choices(oracle);
         assert_eq!(
             (report.models, report.completion),
             (4, Completion::Exhausted)
         );
-        assert_eq!(value["schema"], 1);
         assert_eq!(value["outcome"]["published_models"], 4);
         assert_eq!(value["outcome"]["verified_models"], 4);
         assert_eq!(value["outcome"]["coverage"], "exhausted");
-        assert!(value["statistics"].is_null());
         let models = value["models"].as_array().unwrap();
         let mut full = std::collections::BTreeSet::new();
-        for (index, model) in models.iter().enumerate() {
-            assert_eq!(model["number"], index + 1);
+        for model in models {
             assert_eq!(model["model"]["shown"]["atom_indices"], json!([]));
             full.insert(model["model"]["full_model"].to_string());
         }
@@ -74,13 +82,46 @@ fn closure_and_formula_routes_emit_typed_full_models_with_distinct_hidden_displa
 }
 
 #[test]
-fn observations_and_objective_ties_retain_channels_and_priorities() {
+fn model_numbers_follow_publication_order() {
+    for oracle in ["closure", "countermodel"] {
+        let (_, value) = hidden_choices(oracle);
+        let models = value["models"].as_array().unwrap();
+        assert_eq!(models.len(), 4);
+        for (index, model) in models.iter().enumerate() {
+            assert_eq!(model["number"], index + 1);
+        }
+    }
+}
+
+#[test]
+fn json_documents_identify_the_schema() {
+    for oracle in ["closure", "countermodel"] {
+        let (_, value) = hidden_choices(oracle);
+        assert_eq!(value["schema"], 1);
+    }
+}
+
+#[test]
+fn statistics_are_absent_without_opt_in() {
+    for oracle in ["closure", "countermodel"] {
+        let (_, value) = hidden_choices(oracle);
+        assert!(value["statistics"].is_null());
+    }
+}
+
+fn priority_ties(bounds: &str) -> (Report, Json) {
+    let (result, value) = solve(
+        "a. {b;c}. #show a. #minimize{0@2,k:a;0@-1,j:b}.",
+        &options(&["--max-objective-bound-work", bounds]),
+    );
+    (result.unwrap(), value)
+}
+
+#[test]
+fn optimal_ties_retain_priority_cost_vectors() {
     for bounds in ["0", "10000000"] {
-        let (result, value) = solve(
-            "a. {b;c}. #show a. #minimize{0@2,k:a;0@-1,j:b}.",
-            &options(&["--max-objective-bound-work", bounds]),
-        );
-        assert_eq!(result.unwrap().models, 4);
+        let (report, value) = priority_ties(bounds);
+        assert_eq!(report.models, 4);
         assert_eq!(value["outcome"]["optimization"]["optimal"], true);
         assert_eq!(value["outcome"]["optimization"]["tied_models"], 4);
         for model in value["models"].as_array().unwrap() {
@@ -88,6 +129,16 @@ fn observations_and_objective_ties_retain_channels_and_priorities() {
                 model["model"]["costs"],
                 json!([{"priority":2,"value":0},{"priority":-1,"value":0}])
             );
+        }
+    }
+}
+
+#[test]
+fn observations_retain_both_output_channels() {
+    for bounds in ["0", "10000000"] {
+        let (report, value) = priority_ties(bounds);
+        assert_eq!(report.models, 4);
+        for model in value["models"].as_array().unwrap() {
             assert_eq!(
                 model["model"]["shown"]["terms"],
                 json!([[{"kind":"symbol","value":"a"}]])
@@ -103,13 +154,17 @@ fn observations_and_objective_ties_retain_channels_and_priorities() {
 }
 
 #[test]
-fn empty_model_unsat_and_requested_coverage_are_different_outcomes() {
+fn empty_model_differs_from_unsatisfiability() {
     for (source, expected_status, models) in [("", "satisfiable", 1), (":-.", "unsatisfiable", 0)] {
         let (result, value) = solve(source, &options(&[]));
         assert_eq!(result.unwrap().models, models);
         assert_eq!(value["outcome"]["status"], expected_status);
         assert_eq!(value["outcome"]["completion"], "exhausted");
     }
+}
+
+#[test]
+fn model_caps_leave_coverage_partial() {
     let mut limited = options(&[]);
     limited.models = 1;
     let (result, value) = solve("{a}.", &limited);
@@ -119,7 +174,8 @@ fn empty_model_unsat_and_requested_coverage_are_different_outcomes() {
 }
 
 #[test]
-fn interruption_preserves_incumbent_evidence_without_claiming_optimum() {
+fn interruption_retains_an_unproved_incumbent() {
+    // The incumbent records established evidence while its optimality remains open.
     let (result, value) = solve(
         "1 {a;b} 1. #minimize{1,a:a;2,b:b}.",
         &options(&[
@@ -168,56 +224,69 @@ fn interruption_preserves_incumbent_evidence_without_claiming_optimum() {
 }
 
 #[test]
-fn source_and_observation_failures_complete_error_documents_with_partial_evidence() {
-    for (source, args, expected) in [
-        ("p(.", vec![], "expansion"),
-        (
-            "a. #show a.",
-            vec!["--max-observation-work", "0"],
-            "observation",
-        ),
-    ] {
-        let (result, value) = solve(source, &options(&args));
-        assert!(result.is_err());
-        assert_eq!(value["outcome"]["status"], "failed");
-        assert_eq!(value["outcome"]["error"]["kind"], expected);
-        assert!(value["outcome"]["completion"].is_null());
-        assert_eq!(value["models"], json!([]));
-        if expected == "observation" {
-            assert_eq!(value["outcome"]["verified_models"], 1);
-            assert!(
-                result
-                    .unwrap_err()
-                    .partial_report
-                    .unwrap()
-                    .summary_published
-            );
-        }
-    }
+fn admission_failures_publish_error_documents() {
+    let (result, value) = solve("p(.", &options(&[]));
+    assert!(result.is_err());
+    assert_eq!(value["outcome"]["status"], "failed");
+    assert_eq!(value["outcome"]["error"]["kind"], "expansion");
+    assert!(value["outcome"]["completion"].is_null());
+    assert_eq!(value["models"], json!([]));
 }
 
 #[test]
-fn typed_statistics_are_opt_in_and_do_not_reparse_phase_prose() {
+fn observation_refusals_retain_verified_evidence() {
+    let (result, value) = solve("a. #show a.", &options(&["--max-observation-work", "0"]));
+    assert!(result.is_err());
+    assert_eq!(value["outcome"]["status"], "failed");
+    assert_eq!(value["outcome"]["error"]["kind"], "observation");
+    assert!(value["outcome"]["completion"].is_null());
+    assert_eq!(value["models"], json!([]));
+    assert_eq!(value["outcome"]["verified_models"], 1);
+    assert!(
+        result
+            .unwrap_err()
+            .partial_report
+            .unwrap()
+            .summary_published
+    );
+}
+
+fn formula_statistics() -> (Report, Json) {
     let (result, value) = solve(
         "a | b.",
         &options(&["--stats", "--completion-workers", "2"]),
     );
-    let report = result.unwrap();
-    assert!(report.phase_timings.is_some());
+    (result.unwrap(), value)
+}
+
+#[test]
+fn search_statistics_count_stable_models() {
+    let (_, value) = formula_statistics();
     assert_eq!(value["statistics"]["search"]["stable_models"], 2);
+}
+
+#[test]
+fn formula_phases_exclude_closure_measurements() {
+    let (report, value) = formula_statistics();
+    assert!(report.phase_timings.is_some());
     assert_eq!(value["statistics"]["phase_timings"]["schema"], 2);
     assert!(value["statistics"]["phase_timings"]["measurements"]["closure_membership"].is_null());
+}
+
+#[test]
+fn completion_statistics_retain_worker_request() {
+    let (_, value) = formula_statistics();
     assert_eq!(
         value["statistics"]["execution"]["completion"]["requested_workers"],
         2
     );
 }
 
-struct Cut {
+struct PrefixWriter {
     capacity: usize,
     bytes: Vec<u8>,
 }
-impl Write for Cut {
+impl Write for PrefixWriter {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         let count = bytes
             .len()
@@ -234,7 +303,8 @@ impl Write for Cut {
 }
 
 #[test]
-fn every_output_prefix_preserves_publication_counts_and_never_repairs_a_broken_record() {
+fn write_failure_preserves_the_committed_prefix() {
+    // Only complete model records commit; a footer cannot repair an incomplete prefix.
     let options = options(&[]);
     let mut reference = Vec::new();
     run_detailed_with_diagnostics(
@@ -247,7 +317,7 @@ fn every_output_prefix_preserves_publication_counts_and_never_repairs_a_broken_r
     .unwrap();
     let model_end = reference.iter().position(|byte| *byte == b'\n').unwrap() + 1;
     for capacity in 0..reference.len() {
-        let mut output = Cut {
+        let mut output = PrefixWriter {
             capacity,
             bytes: Vec::new(),
         };
@@ -277,7 +347,7 @@ fn every_output_prefix_preserves_publication_counts_and_never_repairs_a_broken_r
 }
 
 #[test]
-fn model_record_limit_precedes_any_model_prefix_and_terminal_limit_stays_incomplete() {
+fn model_ceiling_precedes_publication() {
     let source = format!("p(\"{}\").", "x".repeat(1500));
     let (result, value) = solve(&source, &options(&["--max-json-record-bytes", "1000"]));
     assert!(matches!(
@@ -287,6 +357,10 @@ fn model_record_limit_precedes_any_model_prefix_and_terminal_limit_stays_incompl
     assert_eq!(value["models"], json!([]));
     assert_eq!(value["outcome"]["published_models"], 0);
     assert_eq!(value["outcome"]["verified_models"], 1);
+}
+
+#[test]
+fn zero_ceiling_prevents_document_completion() {
     let mut output = Vec::new();
     let failure = run_detailed_with_diagnostics(
         "a.".into(),
@@ -302,7 +376,7 @@ fn model_record_limit_precedes_any_model_prefix_and_terminal_limit_stays_incompl
 }
 
 #[test]
-fn process_input_refusal_is_json_and_human_output_remains_default() {
+fn input_refusals_use_json_error_envelopes() {
     let result = Command::new(env!("CARGO_BIN_EXE_zetesis"))
         .args(["--json", "/does/not/exist/zetesis-json-input.lp"])
         .output()
@@ -310,8 +384,21 @@ fn process_input_refusal_is_json_and_human_output_remains_default() {
     assert_eq!(result.status.code(), Some(2));
     let value: Json = serde_json::from_slice(&result.stdout).unwrap();
     assert_eq!(value["outcome"]["error"]["kind"], "bundle_load");
-    let mut human = options(&[]);
-    human.json = false;
+}
+
+#[test]
+fn human_output_remains_the_default() {
+    let human = Options::try_parse_from([
+        "zetesis",
+        "--backend",
+        "cpu",
+        "--workers",
+        "1",
+        "--models",
+        "0",
+    ])
+    .unwrap();
+    assert!(!human.json);
     let mut output = Vec::new();
     run_detailed_with_diagnostics(
         "a.".into(),
@@ -329,7 +416,7 @@ fn process_input_refusal_is_json_and_human_output_remains_default() {
 }
 
 #[test]
-fn retryable_interrupted_write_does_not_poison_document_completion() {
+fn interrupted_writes_remain_retryable() {
     struct Interrupted {
         bytes: Vec<u8>,
         first: bool,
@@ -366,7 +453,8 @@ fn retryable_interrupted_write_does_not_poison_document_completion() {
 }
 
 #[test]
-fn failed_second_optimal_tie_keeps_proved_coverage_and_first_publication() {
+fn tie_write_failure_preserves_semantic_coverage() {
+    // Delivery may stop partway through a tie without undoing completed search.
     let source = "a. {b}. #minimize{0@1,k:a}.";
     let options = options(&[]);
     let mut reference = Vec::new();
@@ -390,7 +478,7 @@ fn failed_second_optimal_tie_keeps_proved_coverage_and_first_publication() {
         usize::midpoint(endings[0], endings[1]),
         endings[1] - 1,
     ] {
-        let mut output = Cut {
+        let mut output = PrefixWriter {
             capacity,
             bytes: Vec::new(),
         };
@@ -412,7 +500,7 @@ fn failed_second_optimal_tie_keeps_proved_coverage_and_first_publication() {
 }
 
 #[test]
-fn view_refusal_after_optimization_keeps_exhaustion_without_claiming_unsat() {
+fn view_refusal_preserves_proved_optimality() {
     let source = format!("p(\"{}\"). #minimize{{0@1,k:p(X)}}.", "x".repeat(1500));
     let (result, value) = solve(&source, &options(&["--max-json-record-bytes", "1000"]));
     let partial = result.unwrap_err().partial_report.unwrap();
@@ -427,7 +515,7 @@ fn view_refusal_after_optimization_keeps_exhaustion_without_claiming_unsat() {
 }
 
 #[test]
-fn eager_and_lazy_stage_views_match_the_typed_partition() {
+fn stage_views_preserve_the_typed_partition() {
     for (source, extra, mode) in [
         ("{a}.", vec!["--stats", "--grounder", "eager"], "eager"),
         (
@@ -471,7 +559,7 @@ fn eager_and_lazy_stage_views_match_the_typed_partition() {
 }
 
 #[test]
-fn resource_interruptions_have_stable_codes_and_never_claim_unsatisfiability() {
+fn resource_stops_encode_partial_coverage() {
     let cases: &[(&str, &[&str], &str, &str)] = &[
         (
             "{a}.",
@@ -546,12 +634,41 @@ fn resource_interruptions_have_stable_codes_and_never_claim_unsatisfiability() {
 }
 
 #[test]
-fn objective_and_incumbent_refusals_retain_typed_partial_evidence() {
+fn objective_refusals_publish_no_incumbent() {
     for (flag, code) in [
         ("--max-objective-work", "work_limit"),
         ("--max-objective-bindings", "binding_limit"),
         ("--max-objective-keys", "key_limit"),
         ("--max-objective-key-bytes", "key_bytes_limit"),
+    ] {
+        let (result, value) = solve(
+            "a. #minimize{1@0,k:a}.",
+            &options(&[flag, "0", "--max-objective-bound-work", "0"]),
+        );
+        let report = result.unwrap();
+        assert_eq!(report.completion, Completion::Interrupted, "{flag}");
+        assert_eq!(value["outcome"]["status"], "incomplete");
+        assert_eq!(value["outcome"]["verified_models"], 1);
+        assert_eq!(value["outcome"]["published_models"], 0);
+        assert_eq!(value["models"], json!([]));
+        assert!(value["outcome"]["optimization"].is_null());
+        assert_eq!(value["outcome"]["interruption"]["code"], code);
+        assert_eq!(value["outcome"]["interruption"]["kind"], "objective");
+        match report.interruption.unwrap() {
+            zetesis_cli::Interruption::Objective(error) => {
+                assert!(matches!(
+                    error.kind(),
+                    zetesis_objective::ErrorKind::Stopped(_)
+                ));
+            }
+            other => panic!("unexpected interruption: {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn incumbent_refusals_publish_no_model() {
+    for (flag, code) in [
         ("--max-optimal-models", "models"),
         ("--max-optimal-atoms", "atoms"),
         ("--max-optimal-bytes", "bytes"),
@@ -568,24 +685,16 @@ fn objective_and_incumbent_refusals_retain_typed_partial_evidence() {
         assert_eq!(value["models"], json!([]));
         assert!(value["outcome"]["optimization"].is_null());
         assert_eq!(value["outcome"]["interruption"]["code"], code);
-        let kind = if flag.starts_with("--max-objective") {
-            "objective"
-        } else {
-            "incumbent"
-        };
-        assert_eq!(value["outcome"]["interruption"]["kind"], kind);
-        match report.interruption.unwrap() {
-            zetesis_cli::Interruption::Objective(error) => {
-                assert!(matches!(
-                    error.kind(),
-                    zetesis_objective::ErrorKind::Stopped(_)
-                ));
-            }
-            zetesis_cli::Interruption::Incumbent(_) => assert_eq!(kind, "incumbent"),
-            other => panic!("unexpected interruption: {other:?}"),
-        }
+        assert_eq!(value["outcome"]["interruption"]["kind"], "incumbent");
+        assert!(matches!(
+            report.interruption.unwrap(),
+            zetesis_cli::Interruption::Incumbent(_)
+        ));
     }
+}
 
+#[test]
+fn unretained_ties_remain_in_score_counts() {
     // A fully scored tie that could not be retained still belongs in the score
     // count. Published models are only the earlier retained, valid incumbent.
     let (result, value) = solve(
@@ -607,7 +716,7 @@ fn objective_and_incumbent_refusals_retain_typed_partial_evidence() {
 }
 
 #[test]
-fn cancelled_and_expired_requests_are_complete_json_without_fabricated_models() {
+fn stopped_requests_publish_no_models() {
     for oracle in ["closure", "countermodel", "auto"] {
         for expired in [false, true] {
             let control = if expired {
@@ -654,7 +763,7 @@ fn cancelled_and_expired_requests_are_complete_json_without_fabricated_models() 
 }
 
 #[test]
-fn source_setup_refusals_emit_typed_error_envelopes_without_semantic_coverage() {
+fn setup_refusals_have_unavailable_coverage() {
     for (source, extra, kind) in [
         (
             "a.",
@@ -691,74 +800,82 @@ fn source_setup_refusals_emit_typed_error_envelopes_without_semantic_coverage() 
     }
 }
 
-#[test]
-fn statistics_writer_failure_preserves_exhaustion_and_original_view_refusals() {
-    for refuse_view in [false, true] {
-        let source = if refuse_view {
-            format!(
-                "p(\"{}\"). #show shown:p(X). #minimize{{0@1,k:p(X)}}.",
-                "x".repeat(1500)
-            )
-        } else {
-            "a. {b}. #minimize{0@1,k:a}.".to_owned()
-        };
-        let mut configured = options(&["--stats"]);
-        if refuse_view {
-            configured.max_observation_work = 0;
-        }
-        // Stop diagnostics at the statistics boundary, after solving and model
-        // rendering have already succeeded or established their original error.
-        let mut reference = Vec::new();
-        let _ = run_detailed_with_diagnostics(
-            source.clone(),
-            &configured,
-            &mut io::sink(),
-            &mut reference,
-            &Control::default(),
-        );
-        let text = std::str::from_utf8(&reference).unwrap();
-        let capacity = text.find("Statistics:").unwrap();
-        let mut diagnostics = Cut {
-            capacity,
-            bytes: Vec::new(),
-        };
-        let mut bytes = Vec::new();
-        let failure = run_detailed_with_diagnostics(
-            source,
-            &configured,
-            &mut bytes,
-            &mut diagnostics,
-            &Control::default(),
-        )
-        .unwrap_err();
-        let value: Json = serde_json::from_slice(&bytes).unwrap();
-        let partial = failure.partial_report.unwrap();
-        assert!(partial.summary_published);
-        assert_eq!(partial.completion, Some(Completion::Exhausted));
-        assert_eq!(value["outcome"]["status"], "failed");
-        assert_eq!(value["outcome"]["coverage"], "exhausted");
-        assert_eq!(value["outcome"]["optimization"]["optimal"], true);
-        assert!(value["statistics"]["stage_timings"].is_object());
-        assert_eq!(
-            value["outcome"]["error"]["secondary_output_failure"],
-            refuse_view
-        );
-        if refuse_view {
-            assert!(matches!(*failure.cause, RunError::Observation(_)));
-            assert!(failure.secondary_output.is_some());
-            assert_eq!(value["outcome"]["error"]["kind"], "observation");
-            assert_eq!((partial.published_models, partial.verified_models), (0, 1));
-        } else {
-            assert!(matches!(*failure.cause, RunError::Output(_)));
-            assert!(failure.secondary_output.is_none());
-            assert_eq!(value["outcome"]["error"]["kind"], "output");
-            assert_eq!((partial.published_models, partial.verified_models), (2, 2));
-        }
-    }
+fn statistics_write_failure(source: String, configured: &Options) -> (RunFailure, Json) {
+    // Stop diagnostics at the statistics boundary, after solving and model
+    // rendering have already succeeded or established their original error.
+    let mut reference = Vec::new();
+    let _ = run_detailed_with_diagnostics(
+        source.clone(),
+        configured,
+        &mut io::sink(),
+        &mut reference,
+        &Control::default(),
+    );
+    let text = std::str::from_utf8(&reference).unwrap();
+    let capacity = text.find("Statistics:").unwrap();
+    let mut diagnostics = PrefixWriter {
+        capacity,
+        bytes: Vec::new(),
+    };
+    let mut bytes = Vec::new();
+    let failure = run_detailed_with_diagnostics(
+        source,
+        configured,
+        &mut bytes,
+        &mut diagnostics,
+        &Control::default(),
+    )
+    .unwrap_err();
+    let value = serde_json::from_slice(&bytes).unwrap();
+    (failure, value)
 }
 
 #[test]
-fn failed_error_footer_keeps_the_source_cause_and_exact_written_prefix() {
+fn statistics_failure_preserves_exhaustion() {
+    let (failure, value) = statistics_write_failure(
+        "a. {b}. #minimize{0@1,k:a}.".to_owned(),
+        &options(&["--stats"]),
+    );
+    let partial = failure.partial_report.unwrap();
+    assert!(partial.summary_published);
+    assert_eq!(partial.completion, Some(Completion::Exhausted));
+    assert_eq!(value["outcome"]["status"], "failed");
+    assert_eq!(value["outcome"]["coverage"], "exhausted");
+    assert_eq!(value["outcome"]["optimization"]["optimal"], true);
+    assert!(value["statistics"]["stage_timings"].is_object());
+    assert_eq!(value["outcome"]["error"]["secondary_output_failure"], false);
+    assert!(matches!(*failure.cause, RunError::Output(_)));
+    assert!(failure.secondary_output.is_none());
+    assert_eq!(value["outcome"]["error"]["kind"], "output");
+    assert_eq!((partial.published_models, partial.verified_models), (2, 2));
+}
+
+#[test]
+fn statistics_failure_preserves_observation_cause() {
+    let source = format!(
+        "p(\"{}\"). #show shown:p(X). #minimize{{0@1,k:p(X)}}.",
+        "x".repeat(1500)
+    );
+    let mut configured = options(&["--stats"]);
+    configured.max_observation_work = 0;
+    let (failure, value) = statistics_write_failure(source, &configured);
+    let partial = failure.partial_report.unwrap();
+    assert!(partial.summary_published);
+    assert_eq!(partial.completion, Some(Completion::Exhausted));
+    assert_eq!(value["outcome"]["status"], "failed");
+    assert_eq!(value["outcome"]["coverage"], "exhausted");
+    assert_eq!(value["outcome"]["optimization"]["optimal"], true);
+    assert!(value["statistics"]["stage_timings"].is_object());
+    assert_eq!(value["outcome"]["error"]["secondary_output_failure"], true);
+    assert!(matches!(*failure.cause, RunError::Observation(_)));
+    assert!(failure.secondary_output.is_some());
+    assert_eq!(value["outcome"]["error"]["kind"], "observation");
+    assert_eq!((partial.published_models, partial.verified_models), (0, 1));
+}
+
+#[test]
+fn footer_write_failure_is_secondary() {
+    // The original source refusal remains authoritative after any footer prefix.
     let configured = options(&[]);
     let mut reference = Vec::new();
     let failure = run_detailed_with_diagnostics(
@@ -772,7 +889,7 @@ fn failed_error_footer_keeps_the_source_cause_and_exact_written_prefix() {
     assert!(matches!(*failure.cause, RunError::Expansion(_)));
     let header_end = reference.iter().position(|byte| *byte == b'[').unwrap() + 1;
     for capacity in header_end..reference.len() {
-        let mut output = Cut {
+        let mut output = PrefixWriter {
             capacity,
             bytes: Vec::new(),
         };
@@ -798,22 +915,27 @@ fn failed_error_footer_keeps_the_source_cause_and_exact_written_prefix() {
     }
 }
 
-#[test]
-fn terminal_record_ceiling_is_inclusive_and_cannot_erase_published_models() {
+fn empty_model_document() -> (Vec<u8>, usize) {
     let mut reference = Vec::new();
-    let mut configured = options(&[]);
     run_detailed_with_diagnostics(
         String::new(),
-        &configured,
+        &options(&[]),
         &mut reference,
         &mut io::sink(),
         &Control::default(),
     )
     .unwrap();
     let model_end = reference.iter().position(|byte| *byte == b'\n').unwrap() + 1;
+    (reference, model_end)
+}
+
+#[test]
+fn terminal_ceiling_is_inclusive() {
+    let (reference, model_end) = empty_model_document();
     let footer_bytes = reference.len() - model_end;
     assert!(footer_bytes > model_end);
     for maximum in [footer_bytes - 1, footer_bytes, footer_bytes + 1] {
+        let mut configured = options(&[]);
         configured.max_json_record_bytes = maximum;
         let mut bytes = Vec::new();
         let result = run_detailed_with_diagnostics(
@@ -824,17 +946,10 @@ fn terminal_record_ceiling_is_inclusive_and_cannot_erase_published_models() {
             &Control::default(),
         );
         if maximum < footer_bytes {
-            let failure = result.unwrap_err();
             assert!(matches!(
-                *failure.cause,
+                *result.unwrap_err().cause,
                 RunError::JsonRecord(zetesis_themelios::observation::ViewError::Bytes)
             ));
-            assert!(failure.secondary_output.is_none());
-            let partial = failure.partial_report.unwrap();
-            assert_eq!((partial.published_models, partial.verified_models), (1, 1));
-            assert_eq!(partial.completion, Some(Completion::Exhausted));
-            assert!(!partial.summary_published);
-            assert_eq!(bytes, reference[..model_end]);
         } else {
             assert_eq!(result.unwrap().models, 1);
             assert_eq!(bytes, reference);
@@ -842,4 +957,32 @@ fn terminal_record_ceiling_is_inclusive_and_cannot_erase_published_models() {
             assert_eq!(value["outcome"]["status"], "satisfiable");
         }
     }
+}
+
+#[test]
+fn terminal_refusal_preserves_published_models() {
+    let (reference, model_end) = empty_model_document();
+    let footer_bytes = reference.len() - model_end;
+    assert!(footer_bytes > model_end);
+    let mut configured = options(&[]);
+    configured.max_json_record_bytes = footer_bytes - 1;
+    let mut bytes = Vec::new();
+    let failure = run_detailed_with_diagnostics(
+        String::new(),
+        &configured,
+        &mut bytes,
+        &mut io::sink(),
+        &Control::default(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        *failure.cause,
+        RunError::JsonRecord(zetesis_themelios::observation::ViewError::Bytes)
+    ));
+    assert!(failure.secondary_output.is_none());
+    let partial = failure.partial_report.unwrap();
+    assert_eq!((partial.published_models, partial.verified_models), (1, 1));
+    assert_eq!(partial.completion, Some(Completion::Exhausted));
+    assert!(!partial.summary_published);
+    assert_eq!(bytes, reference[..model_end]);
 }

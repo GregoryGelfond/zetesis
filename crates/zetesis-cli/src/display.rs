@@ -28,7 +28,13 @@ impl Display<'_> {
                 .observations
                 .view(model, self.selection, score, self.limits(), self.control)
                 .map_err(RunError::Observation)?;
-            return crate::output::model(output, number, &view, self.options, self.control);
+            return crate::output::write_model_record(
+                output,
+                number,
+                &view,
+                self.options,
+                self.control,
+            );
         }
         if self.observations.is_empty() {
             crate::driver::write_model(output, number, model, self.selection)?;

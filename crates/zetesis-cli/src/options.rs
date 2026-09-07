@@ -125,8 +125,8 @@ pub struct Options {
     #[arg(long, default_value_t = 1_000_000)]
     pub max_expansion_values: usize,
     /// Maximum models to display; 0 requests all. Without objectives this stops
-    /// search early; optimization always searches to exhaustion and displays
-    /// this many tied optimal models only after proving the optimum.
+    /// search early. Optimization seeks exhaustion and then displays this many
+    /// tied optima; interrupted runs may display incumbents without proving an optimum.
     #[arg(long, default_value_t = 1)]
     pub models: usize,
     /// Cumulative objective evaluation work across all verified stable models.

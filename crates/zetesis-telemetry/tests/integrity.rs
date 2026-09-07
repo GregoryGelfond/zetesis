@@ -12,7 +12,7 @@ fn contradictory_unattributed_duration_is_incomplete() {
 }
 
 #[test]
-fn completeness_rechecks_the_current_driver_duration() {
+fn driver_duration_is_rechecked() {
     let mut snapshot = StageRecorder::new(true).snapshot().unwrap();
     assert!(snapshot.is_complete());
     let recorded = snapshot.driver_elapsed;
@@ -23,7 +23,7 @@ fn completeness_rechecks_the_current_driver_duration() {
 }
 
 #[test]
-fn completeness_rechecks_the_current_unattributed_duration() {
+fn unattributed_duration_is_rechecked() {
     let mut snapshot = StageRecorder::new(true).snapshot().unwrap();
     let recorded = snapshot.unattributed.unwrap();
     snapshot.unattributed = Some(recorded + Duration::from_nanos(1));

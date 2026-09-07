@@ -17,8 +17,9 @@ test runners require a separate technical assessment.
 | `StageTimings::is_complete` treated the presence of unattributed time as sufficient. Public duration edits could make a contradictory partition report complete. | The predicate rechecks the exact checked sum of current measured and unattributed durations, including overflow markers. It remains usable in const contexts and specifies arithmetic consistency separately from provenance. | Three public regressions failed against the old predicate. The corrected predicate passes them, existing recorder tests and explicit overflow cases. |
 | A JSON test claimed closure/formula coverage, but its multi-element choice made the automatic route fall back to formulas. | Separate singleton choices with explicit closure/countermodel selection; assert actual execution evidence and the exact four full interpretations. | Substituting the formula route for the closure case now fails the expected assertion. |
 | An interrupted-optimization test described retained incumbent evidence but checked only status. | Assert verified/published counts, full retained model identity, matching typed/model/summary cost, scored models and tied models. | Erasing the serialized incumbent now fails the expected assertion. The test permits either valid first candidate, avoiding a dependency on search order. |
-| Driver documentation promised publication as models were found and described cancellation too broadly as an interrupted report. | Describe optimization retention and distinguish search interruption from view/publication failure. | The implementation is unchanged; the public contract now matches the actual outcome paths. |
+| Driver documentation promised publication as models were found and described cancellation too broadly as an interrupted report; `--models` help promised optimization always exhausts search. | Describe optimization retention and distinguish search interruption from view/publication failure. | The search implementation is unchanged; public documentation and generated help now match the actual outcome paths. |
 | The bounded model view and telemetry primitives lacked explicit cost profiles and some local invariants. | Document ownership, fixed recorder costs, observation evaluation costs, selection comparisons, cursor work/space and decreasing traversal measures. | The implementation is unchanged; its costs and correctness argument can be assessed without reconstructing them from control flow. |
+| Recent JSON, telemetry and model-view tests combined independently falsifiable claims; a private output operation was named `model`. | Separate the test propositions, preserve their assertions and name the effectful operation `write_model_record`. | Assertion mappings retain the prior cases; the two selected JSON controls still fail their intended assertions after decomposition. |
 | The dated library audit still presented delivered JSON/timing work as prospective. | Add an explicit implementation follow-up while preserving the original design and remaining API/ASPIF work. | Current readers can distinguish implemented views from unfinished orchestration. |
 
 The runtime correction concerns timing evidence, not answer-set membership,
@@ -38,6 +39,31 @@ The two intentional test failures are selected negative controls. They demonstra
 that these particular defects are detected; they are not a systematic mutation
 campaign. The pre-fix timing failures, corrected tests, controls and validation
 records are retained in [the alignment evidence](../verification/estate-alignment-20260907/README.md).
+
+## Naming as representation
+
+The contribution guide now states the naming principles explicitly. Domain names
+identify concepts; documentation carries their full contract. Meaningful steps and
+constants need names when those names add knowledge. Absence must not masquerade
+as an ordinary value. A difficult name prompts a decomposition review.
+
+The bounded test review separated the recent suites into individually reported
+propositions: JSON 20 to 35, telemetry 10 to 18, and model views 4 to 14. The
+[inventory and assertion mappings](../verification/estate-alignment-20260907/naming/README.md)
+record what moved and which relational invariants remain together. More tests do
+not imply proportionally more coverage. The practical improvement is that a
+failure identifies a narrower claim, with setup shared through named fixtures.
+The human-output test additionally checks the actual parsed default, instead of
+assigning the desired value before testing it.
+
+Fifty characters is a review prompt, not a ceiling. The fixed-baseline lexical
+inventory flags 831 of 932 test declarations for reading on length alone; it does
+not establish 831 defects or completion of a repository-wide naming audit. Older
+suites need review by semantic area. Public vocabulary issues also remain:
+`Model::new` constructs a canonical interpretation without establishing modelhood,
+and `OutputSelection` selects the atom channel rather than all output. Those
+boundaries should be refined deliberately with the library outcome, preserving
+compatibility and requiring evidence for any proof-bearing result type.
 
 ## What the cost review exposed
 

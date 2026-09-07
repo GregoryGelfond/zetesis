@@ -82,8 +82,8 @@ impl<W: Write> Write for Document<'_, W> {
     }
 }
 
-/// Bounded UTF-8 view supplied before any part of a model record is emitted.
-pub(crate) fn model(
+/// Preflight the bounded UTF-8 record, then write it to the supplied sink.
+pub(crate) fn write_model_record(
     output: &mut impl Write,
     number: usize,
     view: &zetesis_themelios::observation::ModelView<'_>,
