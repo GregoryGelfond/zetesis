@@ -228,7 +228,7 @@ full clingo language compatibility or a GPU performance advantage.
 | Optimization | Admitted `#minimize`, `#maximize` and weak constraints on verified stable models; normalized global tuple keys, priorities, bounded incumbent retention and exact candidate cost bounds retaining all optimal ties. Signed candidate bounds can use nonnegative threshold normalization without changing the original reduct. Total aggregate observers use explicit dependency checks. |
 | CPU execution | Lazy relational joins or explicit eager lowering; bounded Rayon closure batches and exhaustive candidate coverage. Ordinary formula solving and GPU residual checking can use a reusable shared-budget Rayon completion executor with explicit worker and logical-scratch limits. Scalar formula completion remains the default. |
 | Certified class checking | A checked producer/rank certificate permits exact support-based membership on eligible completed normal/choice theories. Ordinary CPU formula solving with `--oracle auto` uses this certificate when available; setup and checking share the cumulative work budget. Cyclic or opaque theories and uncompleted certificate checks retain exact reduct completion; explicit `--oracle countermodel` retains the general route. |
-| GPU execution | Static integer oracle physically qualified on Metal, with resident reuse and a 4,096-atom limit. General Ferraris propagation integrates into ordinary explicit GPU solving with exact CPU residuals; the current installed M4 Pro Metal build passes all 94 original corpus cases with both one and four completion workers, plus four focused integration/device tests ([requalification](docs/verification/metal-requalification-20260907/README.md)). Other compiled wgpu APIs have no local hardware qualification. |
+| GPU execution | Static integer oracle physically qualified on Metal, with resident reuse and a 4,096-atom limit. General Ferraris propagation integrates into ordinary explicit GPU solving with exact CPU residuals; the retained 7 September M4 Pro Metal build passed all 94 original corpus cases with both one and four completion workers, plus four focused integration/device tests ([qualified binary and evidence](docs/verification/metal-requalification-20260907/README.md)). Other compiled wgpu APIs have no local hardware qualification. |
 | General reduct semantics | Finite Ferraris formula checker and native candidate/countermodel search; normal-rule source translation is connected through explicit eager lowering. |
 | Remaining language/search work | Broader disjunctive heads and objective-dependent disjunction, broader assignments/conditions, constructor patterns and variable-containing construction, broader directives, exact undefined-arithmetic behavior, further search and GPU acceleration. |
 
@@ -274,11 +274,13 @@ coalescing; the original theory and reduct checks are unchanged. The
 and [clause-scan ablation](docs/verification/clause-validation-20260906/README.md)
 remain separate historical measurements.
 
-The [current Metal requalification](docs/verification/metal-requalification-20260907/README.md)
-passes 94 cases with one completion worker and 94 with four. Each campaign
+The [retained Metal requalification](docs/verification/metal-requalification-20260907/README.md)
+for solver SHA-256 `ae58cd1eaf4324126ae4106b36a9d8b5edb56502728e470d2c19d2681d8e6ddc`
+passed 94 cases with one completion worker and 94 with four. Each campaign
 executes 105 GPU batches over 2,358 candidates; every residual completes
 exactly and no candidates remain pending. All four focused physical tests
-also pass. These correctness runs provide no new performance comparison.
+also passed. These correctness runs provide no new performance comparison.
+The subsequent views/timing build has no new physical Metal qualification.
 
 The recorded [ordinary Metal campaign](docs/verification/metal-batched-formula/20260906-corpus/README.md)
 passes all 94 original cases: 79 exercise GPU membership and 15 prove UNSAT in
@@ -318,8 +320,10 @@ The implementation includes:
 - Incremental exhaustive candidate enumeration with explicit partial coverage.
 - Compositional exact batch completion with a reusable shared-budget Rayon executor,
   preserving proposal order and all-or-nothing batch commitment. Its library API
-  is tested; shared scratch admission and ordinary CLI wiring remain subsequent
-  work. See the [completion boundary](docs/verification/completion-executor-20260906/README.md).
+  includes bounded scratch admission and ordinary CLI controls through
+  `--completion-workers` and `--max-completion-scratch-bytes`. See the
+  [original completion boundary](docs/verification/completion-executor-20260906/README.md)
+  for the historical library-only checkpoint.
 - Additive detailed Rust failure APIs retain the original typed cause, optional
   semantic progress, attempted timings and secondary diagnostic failures. Verified
   models, complete publications and established coverage remain distinct.
@@ -413,7 +417,8 @@ each independently required to pass a **91% floor**, with no additional exclusio
 Qualification records 994 passing Rust test executions across both feature
 configurations, 48 external clingo comparison tests and 51 Python regression
 methods. Per-crate figures remain explicit; line coverage
-does not measure shader or physical-device execution. The current installed build also passes [physical Metal requalification](docs/verification/metal-requalification-20260907/README.md):
+does not measure shader or physical-device execution. The separately retained
+7 September build passed [physical Metal requalification](docs/verification/metal-requalification-20260907/README.md):
 94 corpus cases per completion-worker setting (one and four), plus four focused
 device/integration tests. The [overall checkpoint assessment](docs/verification/stocktake-20260907-first-six.md)
 compares every objective with implemented, tested and planned boundaries.
@@ -448,7 +453,7 @@ The [proofs](proofs/README.md) pin Lean 4.33.1 and require no external Lean
 packages. With that toolchain installed:
 
 ```sh
-(cd proofs && lake build && lake env lean -DautoImplicit=false Audit.lean)
+./scripts/check.sh proofs
 ```
 
 The independent historical [reference interpreter](validation/reference/README.md)

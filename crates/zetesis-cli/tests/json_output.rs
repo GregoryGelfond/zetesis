@@ -434,3 +434,377 @@ fn eager_and_lazy_stage_views_match_the_typed_partition() {
         }
     }
 }
+
+#[test]
+fn resource_interruptions_have_stable_codes_and_never_claim_unsatisfiability() {
+    let cases: &[(&str, &[&str], &str, &str)] = &[
+        (
+            "{a}.",
+            &["--oracle", "closure", "--max-work", "0"],
+            "oracle",
+            "work_limit",
+        ),
+        (
+            "a.",
+            &[
+                "--oracle",
+                "closure",
+                "--grounder",
+                "lazy",
+                "--max-atoms",
+                "0",
+            ],
+            "oracle",
+            "derived_atom_limit",
+        ),
+        (
+            "{a}.",
+            &["--oracle", "closure", "--max-candidates", "0"],
+            "oracle",
+            "candidate_limit",
+        ),
+        (
+            "{a}.",
+            &["--oracle", "closure", "--max-carrier-atoms", "0"],
+            "oracle",
+            "carrier_limit",
+        ),
+        (
+            "{a;b}.",
+            &["--oracle", "countermodel", "--max-search-work", "0"],
+            "countermodel",
+            "work_limit",
+        ),
+        (
+            "{a;b}.",
+            &["--oracle", "countermodel", "--max-search-decisions", "0"],
+            "countermodel",
+            "decision_limit",
+        ),
+        (
+            "a | b.",
+            &[
+                "--oracle",
+                "countermodel",
+                "--completion-workers",
+                "2",
+                "--max-completion-scratch-bytes",
+                "0",
+            ],
+            "countermodel",
+            "completion_scratch",
+        ),
+    ];
+    for &(source, extra, kind, code) in cases {
+        let (result, value) = solve(source, &options(extra));
+        let report = result.unwrap();
+        assert_eq!(report.completion, Completion::Interrupted, "{extra:?}");
+        assert!(report.interruption.is_some());
+        assert_eq!(value["outcome"]["status"], "incomplete", "{extra:?}");
+        assert_eq!(value["outcome"]["coverage"], "partial");
+        assert_eq!(value["outcome"]["interruption"]["kind"], kind);
+        assert_eq!(value["outcome"]["interruption"]["code"], code, "{extra:?}");
+        assert_eq!(value["outcome"]["published_models"], report.models);
+        assert_eq!(value["models"].as_array().unwrap().len(), report.models);
+        assert!(value["outcome"]["error"].is_null());
+    }
+}
+
+#[test]
+fn objective_and_incumbent_refusals_retain_typed_partial_evidence() {
+    for (flag, code) in [
+        ("--max-objective-work", "work_limit"),
+        ("--max-objective-bindings", "binding_limit"),
+        ("--max-objective-keys", "key_limit"),
+        ("--max-objective-key-bytes", "key_bytes_limit"),
+        ("--max-optimal-models", "models"),
+        ("--max-optimal-atoms", "atoms"),
+        ("--max-optimal-bytes", "bytes"),
+    ] {
+        let (result, value) = solve(
+            "a. #minimize{1@0,k:a}.",
+            &options(&[flag, "0", "--max-objective-bound-work", "0"]),
+        );
+        let report = result.unwrap();
+        assert_eq!(report.completion, Completion::Interrupted, "{flag}");
+        assert_eq!(value["outcome"]["status"], "incomplete");
+        assert_eq!(value["outcome"]["verified_models"], 1);
+        assert_eq!(value["outcome"]["published_models"], 0);
+        assert_eq!(value["models"], json!([]));
+        assert!(value["outcome"]["optimization"].is_null());
+        assert_eq!(value["outcome"]["interruption"]["code"], code);
+        let kind = if flag.starts_with("--max-objective") {
+            "objective"
+        } else {
+            "incumbent"
+        };
+        assert_eq!(value["outcome"]["interruption"]["kind"], kind);
+        match report.interruption.unwrap() {
+            zetesis_cli::Interruption::Objective(error) => {
+                assert!(matches!(
+                    error.kind(),
+                    zetesis_objective::ErrorKind::Stopped(_)
+                ));
+            }
+            zetesis_cli::Interruption::Incumbent(_) => assert_eq!(kind, "incumbent"),
+            other => panic!("unexpected interruption: {other:?}"),
+        }
+    }
+
+    // A fully scored tie that could not be retained still belongs in the score
+    // count. Published models are only the earlier retained, valid incumbent.
+    let (result, value) = solve(
+        "{a}. #minimize{0@0,k:a}.",
+        &options(&[
+            "--max-optimal-models",
+            "1",
+            "--max-objective-bound-work",
+            "0",
+        ]),
+    );
+    let best = result.unwrap().optimization.unwrap();
+    assert_eq!((best.tied_models, best.scored_models), (2, 2));
+    assert_eq!(value["outcome"]["optimization"]["optimal"], false);
+    assert_eq!(value["outcome"]["optimization"]["tied_models"], 2);
+    assert_eq!(value["outcome"]["published_models"], 1);
+    assert_eq!(value["outcome"]["verified_models"], 2);
+    assert_eq!(value["models"].as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn cancelled_and_expired_requests_are_complete_json_without_fabricated_models() {
+    for oracle in ["closure", "countermodel", "auto"] {
+        for expired in [false, true] {
+            let control = if expired {
+                Control::with_deadline(std::time::Instant::now())
+            } else {
+                let control = Control::default();
+                control.cancel();
+                control
+            };
+            // Auto must retry the formula route before observing this control;
+            // closure and explicit countermodel exercise their own boundaries.
+            let source = if oracle == "auto" { "a | b." } else { "a." };
+            let mut bytes = Vec::new();
+            let report = run_detailed_with_diagnostics(
+                source.into(),
+                &options(&["--oracle", oracle, "--stats"]),
+                &mut bytes,
+                &mut io::sink(),
+                &control,
+            )
+            .unwrap();
+            let value: Json = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!((report.models, report.checked), (0, 0));
+            assert_eq!(report.completion, Completion::Interrupted);
+            assert_eq!(value["models"], json!([]));
+            assert_eq!(value["outcome"]["status"], "incomplete");
+            assert_eq!(
+                value["outcome"]["interruption"]["kind"],
+                if oracle == "closure" {
+                    "oracle"
+                } else {
+                    "countermodel"
+                }
+            );
+            assert_eq!(
+                value["outcome"]["interruption"]["code"],
+                if expired { "deadline" } else { "cancelled" }
+            );
+            assert!(value["statistics"]["search"].is_null());
+            assert!(value["statistics"]["execution"].is_null());
+            assert!(value["statistics"]["stage_timings"].is_object());
+        }
+    }
+}
+
+#[test]
+fn source_setup_refusals_emit_typed_error_envelopes_without_semantic_coverage() {
+    for (source, extra, kind) in [
+        (
+            "a.",
+            vec!["--oracle", "countermodel", "--grounder", "lazy"],
+            "unsupported_oracle",
+        ),
+        ("a.", vec!["--grounder", "lazy"], "unsupported_combination"),
+        ("p(.", vec!["--oracle", "countermodel"], "formula_admission"),
+        (
+            "a.",
+            vec![
+                "--oracle",
+                "closure",
+                "--grounder",
+                "eager",
+                "--max-ground-rules",
+                "0",
+            ],
+            "static",
+        ),
+    ] {
+        let mut configured = options(&extra);
+        if kind == "unsupported_combination" {
+            configured.backend = zetesis_cli::Backend::Nvidia;
+        }
+        let (result, value) = solve(source, &configured);
+        let failure = result.unwrap_err();
+        assert!(failure.partial_report.is_none(), "{extra:?}: {failure:?}");
+        assert_eq!(value["outcome"]["error"]["kind"], kind);
+        assert_eq!(value["outcome"]["status"], "failed");
+        assert_eq!(value["outcome"]["coverage"], "unavailable");
+        assert!(value["outcome"]["verified_models"].is_null());
+        assert_eq!(value["models"], json!([]));
+    }
+}
+
+#[test]
+fn statistics_writer_failure_preserves_exhaustion_and_original_view_refusals() {
+    for refuse_view in [false, true] {
+        let source = if refuse_view {
+            format!(
+                "p(\"{}\"). #show shown:p(X). #minimize{{0@1,k:p(X)}}.",
+                "x".repeat(1500)
+            )
+        } else {
+            "a. {b}. #minimize{0@1,k:a}.".to_owned()
+        };
+        let mut configured = options(&["--stats"]);
+        if refuse_view {
+            configured.max_observation_work = 0;
+        }
+        // Stop diagnostics at the statistics boundary, after solving and model
+        // rendering have already succeeded or established their original error.
+        let mut reference = Vec::new();
+        let _ = run_detailed_with_diagnostics(
+            source.clone(),
+            &configured,
+            &mut io::sink(),
+            &mut reference,
+            &Control::default(),
+        );
+        let text = std::str::from_utf8(&reference).unwrap();
+        let capacity = text.find("Statistics:").unwrap();
+        let mut diagnostics = Cut {
+            capacity,
+            bytes: Vec::new(),
+        };
+        let mut bytes = Vec::new();
+        let failure = run_detailed_with_diagnostics(
+            source,
+            &configured,
+            &mut bytes,
+            &mut diagnostics,
+            &Control::default(),
+        )
+        .unwrap_err();
+        let value: Json = serde_json::from_slice(&bytes).unwrap();
+        let partial = failure.partial_report.unwrap();
+        assert!(partial.summary_published);
+        assert_eq!(partial.completion, Some(Completion::Exhausted));
+        assert_eq!(value["outcome"]["status"], "failed");
+        assert_eq!(value["outcome"]["coverage"], "exhausted");
+        assert_eq!(value["outcome"]["optimization"]["optimal"], true);
+        assert!(value["statistics"]["stage_timings"].is_object());
+        assert_eq!(
+            value["outcome"]["error"]["secondary_output_failure"],
+            refuse_view
+        );
+        if refuse_view {
+            assert!(matches!(*failure.cause, RunError::Observation(_)));
+            assert!(failure.secondary_output.is_some());
+            assert_eq!(value["outcome"]["error"]["kind"], "observation");
+            assert_eq!((partial.published_models, partial.verified_models), (0, 1));
+        } else {
+            assert!(matches!(*failure.cause, RunError::Output(_)));
+            assert!(failure.secondary_output.is_none());
+            assert_eq!(value["outcome"]["error"]["kind"], "output");
+            assert_eq!((partial.published_models, partial.verified_models), (2, 2));
+        }
+    }
+}
+
+#[test]
+fn failed_error_footer_keeps_the_source_cause_and_exact_written_prefix() {
+    let configured = options(&[]);
+    let mut reference = Vec::new();
+    let failure = run_detailed_with_diagnostics(
+        "p(.".into(),
+        &configured,
+        &mut reference,
+        &mut io::sink(),
+        &Control::default(),
+    )
+    .unwrap_err();
+    assert!(matches!(*failure.cause, RunError::Expansion(_)));
+    let header_end = reference.iter().position(|byte| *byte == b'[').unwrap() + 1;
+    for capacity in header_end..reference.len() {
+        let mut output = Cut {
+            capacity,
+            bytes: Vec::new(),
+        };
+        let failure = run_detailed_with_diagnostics(
+            "p(.".into(),
+            &configured,
+            &mut output,
+            &mut io::sink(),
+            &Control::default(),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(*failure.cause, RunError::Expansion(_)),
+            "cut {capacity}"
+        );
+        assert_eq!(
+            failure.secondary_output.unwrap().kind(),
+            io::ErrorKind::BrokenPipe
+        );
+        assert!(failure.partial_report.is_none());
+        assert_eq!(output.bytes, reference[..capacity]);
+        assert!(serde_json::from_slice::<Json>(&output.bytes).is_err());
+    }
+}
+
+#[test]
+fn terminal_record_ceiling_is_inclusive_and_cannot_erase_published_models() {
+    let mut reference = Vec::new();
+    let mut configured = options(&[]);
+    run_detailed_with_diagnostics(
+        String::new(),
+        &configured,
+        &mut reference,
+        &mut io::sink(),
+        &Control::default(),
+    )
+    .unwrap();
+    let model_end = reference.iter().position(|byte| *byte == b'\n').unwrap() + 1;
+    let footer_bytes = reference.len() - model_end;
+    assert!(footer_bytes > model_end);
+    for maximum in [footer_bytes - 1, footer_bytes, footer_bytes + 1] {
+        configured.max_json_record_bytes = maximum;
+        let mut bytes = Vec::new();
+        let result = run_detailed_with_diagnostics(
+            String::new(),
+            &configured,
+            &mut bytes,
+            &mut io::sink(),
+            &Control::default(),
+        );
+        if maximum < footer_bytes {
+            let failure = result.unwrap_err();
+            assert!(matches!(
+                *failure.cause,
+                RunError::JsonRecord(zetesis_themelios::observation::ViewError::Bytes)
+            ));
+            assert!(failure.secondary_output.is_none());
+            let partial = failure.partial_report.unwrap();
+            assert_eq!((partial.published_models, partial.verified_models), (1, 1));
+            assert_eq!(partial.completion, Some(Completion::Exhausted));
+            assert!(!partial.summary_published);
+            assert_eq!(bytes, reference[..model_end]);
+        } else {
+            assert_eq!(result.unwrap().models, 1);
+            assert_eq!(bytes, reference);
+            let value: Json = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(value["outcome"]["status"], "satisfiable");
+        }
+    }
+}
