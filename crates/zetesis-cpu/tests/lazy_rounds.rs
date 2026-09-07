@@ -359,17 +359,258 @@ fn union_truth_mutation_changes_the_expected_models() {
 #[test]
 fn instance_scratch_is_reserved_before_catalog_growth() {
     let a = nullary("a");
-    let program = program(vec![rule(None, vec![], vec![a.clone()], vec![]), rule(None, vec![], vec![a.clone(), a], vec![])]);
+    let program = program(vec![
+        rule(None, vec![], vec![a.clone()], vec![]),
+        rule(None, vec![], vec![a.clone(), a], vec![]),
+    ]);
     let seeds = [Seed::new(&program, []).unwrap()];
     let atom_bytes = size_of::<Atom>() + 1;
-    let fixed_bytes = (5 + 2 + 11 + 2) * size_of::<u32>();
-    let limits = lazy::Limits { max_atoms: 1, max_chunk_rules: 2, max_chunk_words: 11, max_instance_bytes: 2 * atom_bytes, max_host_bytes: fixed_bytes + 6 * atom_bytes, ..Default::default() };
-    let completed = lazy::check_with(&program, &seeds, limits, &Control::default(), lazy::evaluate).unwrap();
+    let fixed_bytes = (5 + 2 + 11 + 2) * size_of::<u32>() + size_of::<lazy::Check>();
+    let limits = lazy::Limits {
+        max_atoms: 1,
+        max_chunk_rules: 2,
+        max_chunk_words: 11,
+        max_instance_bytes: 2 * atom_bytes,
+        max_host_bytes: fixed_bytes + 6 * atom_bytes,
+        ..Default::default()
+    };
+    let completed = lazy::check_with(
+        &program,
+        &seeds,
+        limits,
+        &Control::default(),
+        lazy::evaluate,
+    )
+    .unwrap();
     assert_eq!(completed.progress.instances, 2);
     assert_eq!(completed.progress.catalog_atoms, 1);
-    let below = lazy::Limits { max_host_bytes: limits.max_host_bytes - 1, ..limits };
-    let failure = lazy::check_with(&program, &seeds, below, &Control::default(), |_| panic!("catalog admission must fail before dispatch")).unwrap_err();
-    assert!(matches!(failure.cause, lazy::Cause::<Stop>::Source(Stop::Allocation)));
+    let below = lazy::Limits {
+        max_host_bytes: limits.max_host_bytes - 1,
+        ..limits
+    };
+    let failure = lazy::check_with(&program, &seeds, below, &Control::default(), |_| {
+        panic!("catalog admission must fail before dispatch")
+    })
+    .unwrap_err();
+    assert!(matches!(
+        failure.cause,
+        lazy::Cause::<Stop>::Source(Stop::Allocation)
+    ));
     assert_eq!(failure.progress.instances, 1);
     assert_eq!(failure.progress.chunks, 0);
+}
+
+#[test]
+fn failed_instance_copy_is_not_an_offered_binding() {
+    let program = program(vec![rule(Some(nullary("a")), vec![], vec![], vec![])]);
+    let failure = source::scan(
+        &program,
+        &Model::default(),
+        source::ScanLimits {
+            max_instance_atoms: 0,
+            ..Default::default()
+        },
+        &Control::default(),
+        |_| panic!("copy failed before a callback could be offered"),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        failure.cause,
+        source::ScanCause::<Stop>::Source(Stop::CarrierLimit)
+    ));
+    assert_eq!(failure.statistics.bindings, 0);
+}
+
+#[test]
+fn final_check_metadata_is_reserved_before_execution() {
+    let program = program(vec![]);
+    let seeds = vec![Seed::new(&program, []).unwrap(); 16];
+    let fixed_bytes = (5 * 16 + 2 * 16 + 4 + 1) * size_of::<u32>() + 16 * size_of::<lazy::Check>();
+    let limits = lazy::Limits {
+        max_atoms: 1,
+        max_chunk_rules: 1,
+        max_chunk_words: 4,
+        max_instance_bytes: 0,
+        max_host_bytes: fixed_bytes,
+        ..Default::default()
+    };
+    let complete = lazy::check_with(
+        &program,
+        &seeds,
+        limits,
+        &Control::default(),
+        lazy::evaluate,
+    )
+    .unwrap();
+    assert_eq!(complete.checks.len(), 16);
+    let failure = lazy::check_with(
+        &program,
+        &seeds,
+        lazy::Limits {
+            max_host_bytes: fixed_bytes - 1,
+            ..limits
+        },
+        &Control::default(),
+        lazy::evaluate,
+    )
+    .unwrap_err();
+    assert!(matches!(
+        failure.cause,
+        lazy::Cause::Source(Stop::Allocation)
+    ));
+    assert_eq!(failure.progress, lazy::Progress::default());
+}
+
+#[test]
+fn catalog_growth_preserves_each_world_interpretation() {
+    let (base, _) = separated_worlds();
+    let mut rules = base.templates().to_vec();
+    rules.extend((0..65).map(|n| {
+        rule(
+            Some(pattern("fact", vec![Term::Constant(Value::Number(n))])),
+            vec![],
+            vec![],
+            vec![],
+        )
+    }));
+    let program = program(rules);
+    let seeds = [
+        Seed::new(&program, [atom("a")]).unwrap(),
+        Seed::new(&program, [atom("b")]).unwrap(),
+    ];
+    let mut widths = std::collections::BTreeSet::new();
+    let result = lazy::check_with(
+        &program,
+        &seeds,
+        lazy::Limits {
+            max_chunk_rules: 7,
+            ..Default::default()
+        },
+        &Control::default(),
+        |chunk| {
+            widths.insert(chunk.words());
+            lazy::evaluate(chunk)
+        },
+    )
+    .unwrap();
+    assert_eq!(widths, [1, 2, 4].into_iter().collect());
+    for (actual, seed) in result.checks.iter().zip(&seeds) {
+        let expected = check(&program, seed, Limits::default(), &Control::default()).unwrap();
+        assert_eq!(actual.closure(), expected.closure());
+        assert_eq!(actual.accepted(), expected.accepted());
+    }
+}
+
+#[test]
+fn a_large_catalog_ceiling_does_not_allocate_its_carrier() {
+    let program = program(vec![rule(Some(nullary("a")), vec![], vec![], vec![])]);
+    let seeds = vec![Seed::new(&program, []).unwrap(); 64];
+    let result = lazy::check_with(
+        &program,
+        &seeds,
+        lazy::Limits {
+            max_atoms: 1_000_000,
+            max_host_bytes: 32 * 1024 * 1024,
+            ..Default::default()
+        },
+        &Control::default(),
+        |chunk| {
+            assert_eq!(chunk.words(), 1);
+            lazy::evaluate(chunk)
+        },
+    )
+    .unwrap();
+    assert_eq!(result.checks.len(), 64);
+    assert_eq!(result.progress.catalog_atoms, 1);
+}
+
+#[test]
+fn demanded_ids_preserve_closure_across_word_boundaries() {
+    for count in [31, 32, 33, 63, 64, 65] {
+        let program = program(
+            (0..count)
+                .map(|n| {
+                    rule(
+                        Some(pattern("p", vec![Term::Constant(Value::Number(n))])),
+                        if n == 0 {
+                            vec![]
+                        } else {
+                            vec![pattern("p", vec![Term::Constant(Value::Number(n - 1))])]
+                        },
+                        vec![],
+                        vec![],
+                    )
+                })
+                .collect(),
+        );
+        let seeds = vec![Seed::new(&program, []).unwrap(); 3];
+        let result = lazy::check_with(
+            &program,
+            &seeds,
+            lazy::Limits {
+                max_chunk_rules: 1,
+                ..Default::default()
+            },
+            &Control::default(),
+            lazy::evaluate,
+        )
+        .unwrap();
+        assert_eq!(
+            result.progress.catalog_atoms,
+            usize::try_from(count).unwrap()
+        );
+        for (actual, seed) in result.checks.iter().zip(&seeds) {
+            let expected = check(&program, seed, Limits::default(), &Control::default()).unwrap();
+            assert_eq!(actual.closure(), expected.closure());
+        }
+    }
+}
+
+#[test]
+fn failed_growth_discards_already_evaluated_deltas() {
+    let program = program(
+        (0..33)
+            .map(|n| rule(Some(nullary(&format!("a{n:02}"))), vec![], vec![], vec![]))
+            .collect(),
+    );
+    let seeds = [Seed::new(&program, []).unwrap()];
+    let atom_bytes = size_of::<Atom>() + 3;
+    // At the first 32-to-64-bit growth, three old and three new vectors
+    // coexist. The conservative six-new-vector preflight is an explicit cap.
+    let base = (2 + 4 + 1) * size_of::<u32>() + size_of::<lazy::Check>() + atom_bytes;
+    let peak = base + 6 * 2 * size_of::<u32>() + 33 * 4 * atom_bytes;
+    let limits = lazy::Limits {
+        max_chunk_rules: 1,
+        max_chunk_words: 4,
+        max_instance_bytes: atom_bytes,
+        max_host_bytes: peak,
+        ..Default::default()
+    };
+    let completed = lazy::check_with(
+        &program,
+        &seeds,
+        limits,
+        &Control::default(),
+        lazy::evaluate,
+    )
+    .unwrap();
+    assert_eq!(completed.checks[0].closure().atoms().len(), 33);
+    let failure = lazy::check_with(
+        &program,
+        &seeds,
+        lazy::Limits {
+            max_host_bytes: peak - 1,
+            ..limits
+        },
+        &Control::default(),
+        lazy::evaluate,
+    )
+    .unwrap_err();
+    assert!(matches!(
+        failure.cause,
+        lazy::Cause::Source(Stop::Allocation)
+    ));
+    assert_eq!(failure.progress.rounds, 0);
+    assert_eq!(failure.progress.catalog_atoms, 32);
+    assert!(failure.progress.chunks > 0);
 }

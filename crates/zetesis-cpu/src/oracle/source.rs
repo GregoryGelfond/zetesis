@@ -160,10 +160,18 @@ pub fn scan<E>(
         },
         statistics: Statistics::default(),
     };
-    let result = scan_inner(program, snapshot, limits, &mut work, &mut consume);
+    let mut offered = 0;
+    let result = scan_inner(
+        program,
+        snapshot,
+        limits,
+        &mut work,
+        &mut offered,
+        &mut consume,
+    );
     let statistics = ScanStatistics {
         work: work.statistics.work,
-        bindings: work.statistics.bindings,
+        bindings: offered,
     };
     result
         .map(|()| statistics)
@@ -175,6 +183,7 @@ fn scan_inner<E>(
     snapshot: &Model,
     limits: ScanLimits,
     work: &mut Work<'_>,
+    offered: &mut u64,
     consume: &mut impl FnMut(Instance) -> Result<(), E>,
 ) -> Result<(), ScanCause<E>> {
     work.control.poll()?;
@@ -213,6 +222,7 @@ fn scan_inner<E>(
                 .iter()
                 .map(&mut copy)
                 .collect::<Result<_, Stop>>()?;
+            *offered += 1;
             consume(Instance {
                 head,
                 positive,

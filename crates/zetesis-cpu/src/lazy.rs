@@ -18,6 +18,11 @@ pub const RECORD_HEADER_WORDS: usize = 4;
 /// A head tag of zero denotes a constraint; atom IDs are encoded plus one.
 pub const CONSTRAINT_HEAD: u32 = 0;
 
+// Snapshots, frozen seeds, pending deltas, one result and offered-head validation.
+const ROUND_MASK_VECTORS: usize = 5;
+// Three old masks can coexist with three replacement masks during stride growth.
+const GROWTH_MASK_VECTORS: usize = 6;
+
 /// Explicit batch, source, catalog and transport limits for lazy rounds.
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {
@@ -198,7 +203,7 @@ pub struct Chunk<'a> {
 }
 
 impl Chunk<'_> {
-    /// Fixed bitset width per world, selected from the admitted catalog ceiling.
+    /// Current bitset width per world, grown only as catalog IDs are demanded.
     #[must_use]
     pub const fn words(&self) -> usize {
         self.words
@@ -207,6 +212,16 @@ impl Chunk<'_> {
     #[must_use]
     pub const fn worlds(&self) -> usize {
         self.worlds
+    }
+    /// Words per returned world record: derived-head delta and violation flag.
+    #[must_use]
+    pub const fn result_words(&self) -> usize {
+        self.words + 1
+    }
+    /// Constraint-violation offset within one returned world record.
+    #[must_use]
+    pub const fn violation_offset(&self) -> usize {
+        self.words
     }
     /// Number of currently assigned stable atom IDs.
     #[must_use]
@@ -244,7 +259,7 @@ impl Chunk<'_> {
 /// # Errors
 /// Returns allocation failure before output construction.
 pub fn evaluate(chunk: &Chunk<'_>) -> Result<Vec<u32>, Stop> {
-    let mut output = zeros(chunk.worlds * (chunk.words + 1))?;
+    let mut output = zeros(chunk.worlds * chunk.result_words())?;
     for world in 0..chunk.worlds {
         let snapshot = &chunk.snapshots[world * chunk.words..][..chunk.words];
         let seed = &chunk.seeds[world * chunk.words..][..chunk.words];
@@ -264,9 +279,9 @@ pub fn evaluate(chunk: &Chunk<'_>) -> Result<Vec<u32>, Stop> {
                 start += count;
             }
             if enabled {
-                let result = &mut output[world * (chunk.words + 1)..][..=chunk.words];
+                let result = &mut output[world * chunk.result_words()..][..chunk.result_words()];
                 if record[0] == CONSTRAINT_HEAD {
-                    result[chunk.words] = 1;
+                    result[chunk.violation_offset()] = 1;
                 } else {
                     let head = (record[0] - 1) as usize;
                     if !contains(snapshot, head) {
@@ -456,16 +471,21 @@ impl State {
         {
             return Err(Stop::CarrierLimit);
         }
-        let words = limits.max_atoms.div_ceil(32);
+        let words = 1usize;
         let bits = words.checked_mul(candidates).ok_or(Stop::Allocation)?;
         let fixed_words = bits
-            .checked_mul(5)
+            .checked_mul(ROUND_MASK_VECTORS)
             .and_then(|n| candidates.checked_mul(2).and_then(|m| n.checked_add(m)))
             .and_then(|n| n.checked_add(limits.max_chunk_words))
             .and_then(|n| n.checked_add(limits.max_chunk_rules))
             .ok_or(Stop::Allocation)?;
         let fixed_bytes = fixed_words
             .checked_mul(size_of::<u32>())
+            .and_then(|bytes| {
+                candidates
+                    .checked_mul(size_of::<Check>())
+                    .and_then(|checks| bytes.checked_add(checks))
+            })
             .and_then(|bytes| bytes.checked_add(limits.max_instance_bytes))
             .ok_or(Stop::Allocation)?;
         if fixed_bytes > limits.max_host_bytes {
@@ -512,6 +532,7 @@ impl State {
             .payload_bytes
             .checked_add(bytes)
             .ok_or(Stop::Allocation)?;
+        self.grow(self.atoms.len(), total, limits)?;
         if self
             .fixed_bytes
             .checked_add(total)
@@ -526,6 +547,54 @@ impl State {
         self.atoms.push(atom.clone());
         self.payload_bytes = total;
         Ok(id)
+    }
+
+    fn grow(&mut self, atom: usize, payload_bytes: usize, limits: Limits) -> Result<(), Stop> {
+        let needed = atom / 32 + 1;
+        if needed <= self.words {
+            return Ok(());
+        }
+        let width = needed
+            .checked_next_power_of_two()
+            .ok_or(Stop::Allocation)?
+            .min(limits.max_atoms.div_ceil(32));
+        let candidates = self.violated.len();
+        let current_bits = self.words.checked_mul(candidates).ok_or(Stop::Allocation)?;
+        let next_bits = width.checked_mul(candidates).ok_or(Stop::Allocation)?;
+        let current_bytes = current_bits
+            .checked_mul(ROUND_MASK_VECTORS * size_of::<u32>())
+            .ok_or(Stop::Allocation)?;
+        let base = self
+            .fixed_bytes
+            .checked_sub(current_bytes)
+            .ok_or(Stop::InvalidProgram)?;
+        // All three new vectors coexist with their old counterparts. Since the
+        // width grows, six new-width vectors bound that temporary ownership.
+        let peak = next_bits
+            .checked_mul(GROWTH_MASK_VECTORS * size_of::<u32>())
+            .and_then(|n| n.checked_add(base))
+            .and_then(|n| n.checked_add(payload_bytes))
+            .ok_or(Stop::Allocation)?;
+        if peak > limits.max_host_bytes {
+            return Err(Stop::Allocation);
+        }
+        let mut snapshots = zeros(next_bits)?;
+        let mut seeds = zeros(next_bits)?;
+        let mut pending = zeros(next_bits)?;
+        for world in 0..candidates {
+            let old = world * self.words;
+            let next = world * width;
+            snapshots[next..next + self.words]
+                .copy_from_slice(&self.snapshots[old..old + self.words]);
+            seeds[next..next + self.words].copy_from_slice(&self.seeds[old..old + self.words]);
+            pending[next..next + self.words].copy_from_slice(&self.pending[old..old + self.words]);
+        }
+        self.snapshots = snapshots;
+        self.seeds = seeds;
+        self.pending = pending;
+        self.words = width;
+        self.fixed_bytes = base + next_bits * ROUND_MASK_VECTORS * size_of::<u32>();
+        Ok(())
     }
 
     fn offer<E>(
