@@ -1,8 +1,11 @@
 //! Automatic routing preserves choice groups, observed ties and objective slots.
 
 use clap::Parser;
-use zetesis_cli::{Completion, Options, Report, RunError, run_with_diagnostics};
+use zetesis_cli::{Backend, Completion, Grounder, Options, Report, RunError, run_with_diagnostics};
 use zetesis_cpu::Control;
+use zetesis_themelios::{
+    AdmissionFailure, ExpansionFailure, FormulaFailure, FormulaResource, ProfileFeature,
+};
 
 fn solve(source: &str, arguments: &[&str]) -> (Result<Report, RunError>, String, String) {
     let options = Options::try_parse_from(
@@ -96,18 +99,77 @@ fn automatic_interval_choices_keep_group_bounds_products_costs_and_hidden_ties()
 }
 
 #[test]
-fn explicit_unsupported_routes_and_exhausted_admission_never_emit_answers() {
-    let source = "1 {p(1..4)} 1.";
-    for arguments in [
-        vec!["--oracle", "closure"],
-        vec!["--grounder", "lazy"],
-        vec!["--backend", "metal"],
-        vec!["--backend", "nvidia"],
-        vec!["--max-atoms", "1"],
-        vec!["--max-substitutions", "1"],
+fn explicit_closure_refuses_interval_choices_without_emitting_answers() {
+    let (result, output, _) = solve("1 {p(1..4)} 1.", &["--oracle", "closure"]);
+    assert!(matches!(
+        result,
+        Err(RunError::Expansion(ExpansionFailure::Admission(
+            AdmissionFailure::Profile {
+                feature: ProfileFeature::BoundedChoice,
+                ..
+            }
+        )))
+    ));
+    assert!(output.is_empty(), "{output}");
+}
+
+#[test]
+fn explicit_lazy_choice_routes_are_refused_before_device_discovery() {
+    for (arguments, backend) in [
+        (vec!["--grounder", "lazy"], Backend::Auto),
+        (
+            vec!["--backend", "metal", "--grounder", "lazy"],
+            Backend::Metal,
+        ),
+        (
+            vec!["--backend", "nvidia", "--grounder", "lazy"],
+            Backend::Nvidia,
+        ),
     ] {
-        let (result, output, _) = solve(source, &arguments);
-        assert!(result.is_err(), "{arguments:?}");
+        // Ordinary eager formula solving supports explicit GPU requests. The
+        // unsupported combination is lazy grounding, regardless of hardware.
+        let (result, output, diagnostics) = solve("1 {p(1..4)} 1.", &arguments);
+        let error = result.expect_err("lazy choice route must be refused");
+        if backend == Backend::Auto {
+            assert!(matches!(
+                error,
+                RunError::UnsupportedOracle {
+                    backend: Backend::Auto,
+                    grounder: Grounder::Lazy,
+                }
+            ));
+        } else {
+            assert!(matches!(
+                error,
+                RunError::UnsupportedCombination {
+                    backend: requested,
+                    grounder: Grounder::Lazy,
+                } if requested == backend
+            ));
+        }
         assert!(output.is_empty(), "{arguments:?}: {output}");
+        assert!(diagnostics.is_empty(), "{arguments:?}: {diagnostics}");
+    }
+}
+
+#[test]
+fn exhausted_choice_admission_never_emits_answers() {
+    for (flag, resource) in [
+        ("--max-atoms", FormulaResource::Atoms),
+        ("--max-substitutions", FormulaResource::Substitutions),
+    ] {
+        let (result, output, _) = solve("1 {p(1..4)} 1.", &[flag, "1"]);
+        assert!(
+            matches!(
+                result,
+                Err(RunError::FormulaAdmission(FormulaFailure::Limit {
+                    resource: actual,
+                    limit: 1,
+                    ..
+                })) if actual == resource
+            ),
+            "{flag}"
+        );
+        assert!(output.is_empty(), "{flag}: {output}");
     }
 }

@@ -8,10 +8,16 @@ permissions:
 
 env:
   RUST_TOOLCHAIN: "1.97.1"
+  # Fresh hosted jobs do not reuse incremental caches. Keep source/line
+  # backtraces without replicating full type-level debug data into every test.
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  CARGO_PROFILE_TEST_DEBUG: line-tables-only
 
 jobs:
   gate:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
@@ -20,7 +26,14 @@ jobs:
       - run: |
           rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal \
             --component rustfmt,clippy
+      - name: Initial runner disk usage
+        run: df -h .
       - run: ./scripts/check.sh portable
+      - name: Final runner disk usage
+        if: always()
+        run: |
+          df -h .
+          du -sh target
 
   coverage:
     runs-on: ubuntu-latest
@@ -63,7 +76,14 @@ jobs:
                   if exists.stdout:
                       raise SystemExit("Could not read the previous coverage floor.")
           PY
+      - name: Initial runner disk usage
+        run: df -h .
       - run: ./scripts/coverage.sh gate
+      - name: Final runner disk usage
+        if: always()
+        run: |
+          df -h .
+          du -sh target
       - name: Retain coverage reports and gate diagnostics
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
