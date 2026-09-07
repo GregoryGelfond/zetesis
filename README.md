@@ -220,21 +220,26 @@ full clingo language compatibility or a GPU performance advantage.
 | General reduct semantics | Finite Ferraris formula checker and native candidate/countermodel search; normal-rule source translation is connected through explicit eager lowering. |
 | Remaining language/search work | Broader disjunctive heads and objective-dependent disjunction, broader assignments/conditions, constructor patterns and variable-containing construction, broader directives, exact undefined-arithmetic behavior, further search and GPU acceleration. |
 
-The checked source boundary also has an [exact upstream regression collection](validation/upstream/clingo-5.8.2/README.md), with original clingo assertions and complete model references. All 24 selected inputs parse and raise with the unchanged themelios pin; remaining refusals concern native admission and semantic lowering. A [finite GPU gate experiment](experiments/gate-transfer/README.md) compares exact transfer alternatives; its proposed shader is validated independently and remains unapplied.
+The checked source boundary also has an [exact upstream regression collection](validation/upstream/clingo-5.8.2/README.md), with original clingo assertions and complete model references. All 24 selected inputs parse and raise with the unchanged themelios pin; 21 now pass complete model parity and three retain explicit native-admission refusals. This selected set is not a percentage of language compatibility. A [finite GPU gate experiment](experiments/gate-transfer/README.md) compares exact transfer alternatives; its proposed shader is validated independently and remains unapplied.
 
 Unsupported constructs and exhausted admission budgets produce located
 refusals. Undefined or overflowing arithmetic is currently refused rather than
 implementing clingo's full behavior. A search budget stop produces an explicitly
 incomplete result. These boundaries apply regardless of hardware selection.
 
-The [current matched CPU comparison](docs/verification/cpu-performance-20260906-parallel-plans/README.md)
-checks the previous solver, this reviewed release and clingo on seven unchanged
-original encodings. All 525 complete runs agree. Current/previous median ratios
-span 0.997–1.048; the larger task-allocation case is about 4.8% slower than the
-previous release in this campaign. Current medians are 72.96 ms versus clingo's
-13.04 ms for SEND + MORE = MONEY, 228.82 ms versus 194.76 ms for the larger
-task-allocation case, and 123.04 ms versus 125.14 ms for eight queens. The full table retains four traveling-salesman cases;
-these measurements establish no general solver or GPU advantage.
+The [latest ordinary CPU comparison](docs/verification/first-six-checkpoint-20260907/ordinary-comparison.md)
+retains 728 complete samples on 13 original inputs. Against the installed baseline,
+checked support certificates reduce the six n-queens median times by about 4–42%.
+SEND + MORE = MONEY stays near 73 ms versus clingo's 13 ms; admission accounts
+for about 76% of its instrumented driver time. Four completion workers do not
+provide a consistent benefit on this set. All model/display/count/optimum
+contracts agree, and separate RSS samples are retained. These observations
+establish neither a general solver advantage nor a GPU speedup.
+
+The [previous seven-input comparison](docs/verification/cpu-performance-20260906-parallel-plans/README.md)
+retains 525 runs, including traveling-salesman and a larger task-allocation input
+outside the new thirteen-input set. The two case sets and tested releases remain
+explicit; their results should not be substituted for one another.
 
 A [matched quota specialization](docs/verification/scalar-quota-specialization-20260906/README.md)
 restores scalar performance after shared completion introduced a per-operation
@@ -323,7 +328,7 @@ The implementation includes:
   membership pool separately from scalar CPU and hybrid execution. Ordinary
   solving now exposes optional host phase measurements; demonstrating a useful
   full-solve GPU crossover and deployment stress qualification remain targets.
-- A Lean specification with **556 checked theorems**, including the reduct
+- A Lean specification with **613 checked theorems**, including the reduct
   acceptance criterion, lazy final coverage, finite aggregate-assignment coverage,
   exact structural DAG sharing, signed coherence, first-true witness scanning
   and completion-preserving frozen-query propagation, plus batch coverage and
@@ -389,14 +394,16 @@ readiness are explicit objectives alongside parallel and GPU execution.
 
 The [coverage workflow](docs/verification/coverage.md) complements the semantic
 tests with separate full-workspace and CPU-only measurements, an enforced floor,
-and inspectable uncovered-code reports. The integrated structural-value/parallel-plan
-checkpoint passes **91.61% workspace line coverage** and **93.45% CPU-only CLI line coverage**,
-each independently required to pass a **91% floor**. The complete fresh campaign
-executes 761 workspace tests and 174 CPU-only CLI tests, 44 external clingo comparison
-functions and 51 Python methods. Per-crate figures remain explicit; line coverage
+and inspectable uncovered-code reports. The
+[first six language-target checkpoint](docs/verification/first-six-checkpoint-20260907/README.md)
+passes **91.70% workspace line coverage** and **93.39% CPU-only CLI line coverage**,
+each independently required to pass a **91% floor**, with no additional exclusions.
+Qualification records 994 passing Rust test executions across both feature
+configurations, 48 external clingo comparison tests and 51 Python regression
+methods. Per-crate figures remain explicit; line coverage
 does not measure shader or physical-device execution. The current installed build also passes [physical Metal requalification](docs/verification/metal-requalification-20260907/README.md):
 94 corpus cases per completion-worker setting (one and four), plus four focused
-device/integration tests. The [overall checkpoint assessment](docs/verification/stocktake-20260906-parallel-plans.md)
+device/integration tests. The [overall checkpoint assessment](docs/verification/stocktake-20260907-first-six.md)
 compares every objective with implemented, tested and planned boundaries.
 
 Formatting, pedantic Clippy and strict
