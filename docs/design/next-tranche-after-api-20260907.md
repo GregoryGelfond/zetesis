@@ -66,9 +66,11 @@ consumers must preserve those foundations. Shared analysis projections and exact
 original/frozen semantics require parity, resource, coverage and runtime checks.
 Consumers of a new primitive depend on its established contract.
 
-No packaging overhaul, ASPIF implementation or theory extension is part of this
-tranche. The existing prepared/session doors should be exercised by the new
-regressions.
+The [repository organization plan](repository-organization.md) calls for curated
+ASP fixtures, Rust validation tooling and preserved raw evidence. Shared gate
+changes require verified replacements. No solver packaging overhaul, ASPIF
+implementation or theory extension is part of this tranche. The existing
+prepared/session doors should be exercised by the new regressions.
 
 ## Semantic obligations
 
