@@ -169,3 +169,138 @@ fn native_hardware_options_are_user_visible_and_reject_invalid_values() {
     assert_eq!(report["full_physical_formula_route_passed"], false);
     assert_eq!(report["full_native_answer_parity_passed"], false);
 }
+
+fn corpus_command() -> Command {
+    Command::new(env!("CARGO_BIN_EXE_zetesis-corpus"))
+}
+
+fn repository() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+#[test]
+fn default_campaign_reports_clean_source_provenance() {
+    let output = failed_campaign(true, None);
+    assert_eq!(output.status.code(), Some(1));
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["corpus_view"], "annotation_cleaned");
+    assert_eq!(
+        report["manifest_sha256"],
+        zetesis_validation::examples::MANIFEST_SHA256
+    );
+    let expected = zetesis_validation::examples::load(
+        &repository().join("examples/kr-domains"),
+        zetesis_validation::examples::Limits::default(),
+    )
+    .unwrap();
+    for (actual, case) in report["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .zip(expected.cases())
+    {
+        assert_eq!(actual["sha256"], case.source_sha256());
+        assert_eq!(actual["original_sha256"], case.original_sha256());
+        assert_eq!(
+            actual["example_contract"],
+            serde_json::to_value(case.contract()).unwrap()
+        );
+        assert!(actual.get("reference_answer").is_none());
+    }
+}
+
+#[test]
+fn historical_override_reports_original_source_provenance() {
+    let directory = tempfile::tempdir().unwrap();
+    let output = command()
+        .arg("--corpus")
+        .arg(repository().join("validation/corpus/kr-domains"))
+        .arg("--clingo")
+        .arg(directory.path().join("absent-reference"))
+        .arg("--reference-only")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["corpus_view"], "original");
+    assert_eq!(
+        report["manifest_sha256"],
+        "a99dafc272fb0047c01f984e27bf22943f2aa5f9c8acf04e4ed1de6ac1a3fe88"
+    );
+    for case in report["cases"].as_array().unwrap() {
+        assert!(case.get("original_sha256").is_none());
+        assert!(case.get("example_contract").is_none());
+    }
+}
+
+#[test]
+fn example_verification_does_not_claim_solver_execution() {
+    let output = corpus_command()
+        .arg("verify-examples")
+        .arg(repository().join("examples/kr-domains"))
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["integrity"], "verified");
+    assert_eq!(report["semantic_solver_run"], false);
+    assert_eq!(report["originals_verified"], false);
+    assert_eq!(report["files"], 108);
+    assert_eq!(report["cases"], 94);
+    assert_eq!(
+        report["manifest_sha256"],
+        zetesis_validation::examples::MANIFEST_SHA256
+    );
+}
+
+#[test]
+fn original_audit_is_explicit_in_the_integrity_report() {
+    let output = corpus_command()
+        .arg("verify-examples")
+        .arg(repository().join("examples/kr-domains"))
+        .arg("--originals")
+        .arg(repository().join("validation/corpus/kr-domains"))
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["originals_verified"], true);
+    assert_eq!(report["semantic_solver_run"], false);
+}
+
+#[test]
+fn failed_original_audit_emits_no_verified_report() {
+    let directory = tempfile::tempdir().unwrap();
+    let output = corpus_command()
+        .arg("verify-examples")
+        .arg(repository().join("examples/kr-domains"))
+        .arg("--originals")
+        .arg(directory.path())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert!(
+        String::from_utf8(output.stderr)
+            .unwrap()
+            .contains("LICENSE")
+    );
+}
+
+#[test]
+fn changed_example_manifest_emits_no_verified_report() {
+    let directory = tempfile::tempdir().unwrap();
+    std::fs::write(directory.path().join("manifest.json"), b"{}").unwrap();
+    let output = corpus_command()
+        .arg("verify-examples")
+        .arg(directory.path())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert!(
+        String::from_utf8(output.stderr)
+            .unwrap()
+            .contains("SHA-256")
+    );
+}

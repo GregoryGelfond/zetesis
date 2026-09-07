@@ -88,6 +88,8 @@ fn case() -> Case {
             },
         ],
         expected_satisfiability: "sat".into(),
+        original_sha256: None,
+        example_contract: None,
     }
 }
 
@@ -101,6 +103,7 @@ fn loaded(directory: &Path, count: usize) -> Loaded {
             cases: (0..count).map(|_| case()).collect(),
         },
         manifest_sha256: "synthetic runner fixture".into(),
+        view: crate::corpus::SourceView::Original,
     }
 }
 
@@ -815,4 +818,154 @@ fn completion_requests_are_forwarded_captured_and_checked_without_losing_answer_
     assert_eq!(report["effective_native_stats"], true);
     assert_eq!(report["physical_formula_route_required"], false);
     assert_eq!(report["status_counts"]["native_incomplete"], 1);
+}
+
+fn typed_loaded(directory: &Path) -> Loaded {
+    let mut loaded = loaded(directory, 1);
+    loaded.view = crate::corpus::SourceView::AnnotationCleaned;
+    let case = &mut loaded.manifest.cases[0];
+    case.original_sha256 = Some("synthetic original identity; not a pinned corpus hash".into());
+    case.contracts.clear();
+    case.example_contract = Some(
+        serde_json::from_value(json!({
+            "satisfiability":"sat", "family":"all", "model_count":1, "cost":null,
+            "witnesses":[["a"]], "required_symbols":[], "notes":["synthetic protocol fixture"],
+        }))
+        .unwrap(),
+    );
+    loaded
+}
+
+#[test]
+fn typed_reference_contract_requires_successful_exit() {
+    let directory = tempfile::tempdir().unwrap();
+    let loaded = typed_loaded(directory.path());
+    let mut options = options(directory.path());
+    options.clingo = emitting(directory.path(), "reference", &reference(), "", 1);
+    options.zetesis = directory.path().join("must-not-run");
+    let result = check(&options, &loaded, "reference_error");
+    assert!(result.get("reference_answer").is_none());
+    assert!(result.get("native_process").is_none());
+}
+
+#[test]
+fn typed_native_contract_requires_successful_exit() {
+    let directory = tempfile::tempdir().unwrap();
+    let loaded = typed_loaded(directory.path());
+    let mut options = options(directory.path());
+    options.zetesis = emitting(directory.path(), "native", NATIVE, "", 1);
+    let result = check(&options, &loaded, "native_error");
+    assert!(result.get("native_answer").is_none());
+    assert!(result.get("native_answer_parity_passed").is_none());
+}
+
+fn delayed(directory: &Path, name: &str, stdout: &str) -> PathBuf {
+    script(
+        directory,
+        name,
+        &format!(
+            "printf '%s' '{}'\nexec sleep 2",
+            stdout.replace('\'', "'\\''")
+        ),
+    )
+}
+
+#[test]
+fn typed_reference_contract_requires_complete_capture() {
+    let directory = tempfile::tempdir().unwrap();
+    let loaded = typed_loaded(directory.path());
+    let mut options = options(directory.path());
+    options.timeout_ms = 400;
+    options.clingo = delayed(directory.path(), "reference", &reference());
+    options.zetesis = directory.path().join("must-not-run");
+    let result = check(&options, &loaded, "reference_timeout");
+    assert_eq!(result["reference_process"]["stdout"], reference());
+    assert!(result.get("reference_answer").is_none());
+    assert!(result.get("native_process").is_none());
+}
+
+#[test]
+fn typed_native_contract_requires_complete_capture() {
+    let directory = tempfile::tempdir().unwrap();
+    let loaded = typed_loaded(directory.path());
+    let mut options = options(directory.path());
+    options.timeout_ms = 400;
+    options.zetesis = delayed(directory.path(), "native", NATIVE);
+    let result = check(&options, &loaded, "native_timeout");
+    assert_eq!(result["native_process"]["stdout"], NATIVE);
+    assert!(result.get("native_answer").is_none());
+    assert!(result.get("native_answer_parity_passed").is_none());
+}
+
+#[test]
+fn typed_contract_failure_prevents_native_invocation() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut loaded = typed_loaded(directory.path());
+    let case = &mut loaded.manifest.cases[0];
+    let mut contract = serde_json::to_value(case.example_contract.as_ref().unwrap()).unwrap();
+    contract["witnesses"] = json!([["b"]]);
+    case.example_contract = Some(serde_json::from_value(contract).unwrap());
+    let mut options = options(directory.path());
+    options.zetesis = directory.path().join("must-not-run");
+    let result = check(&options, &loaded, "reference_contract_mismatch");
+    assert!(result["detail"].as_str().unwrap().contains("Witness"));
+    assert!(result.get("native_process").is_none());
+}
+
+#[test]
+fn typed_adaptation_preserves_equal_display_counts() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut loaded = typed_loaded(directory.path());
+    let case = &mut loaded.manifest.cases[0];
+    let mut contract = serde_json::to_value(case.example_contract.as_ref().unwrap()).unwrap();
+    contract["model_count"] = json!(2);
+    case.example_contract = Some(serde_json::from_value(contract).unwrap());
+    let answer = super::normalize::native(
+        "Answer: 1\na\nAnswer: 2\na\nSATISFIABLE\nCoverage: exhausted\nModels: 2\n",
+        false,
+    )
+    .unwrap();
+    assert_eq!(answer.models.len(), 1);
+    super::normalize::contracts(case, &answer).unwrap();
+    let fewer = super::normalize::native(NATIVE, false).unwrap();
+    assert!(
+        super::normalize::contracts(case, &fewer)
+            .unwrap_err()
+            .contains("Count")
+    );
+}
+
+#[test]
+fn typed_adaptation_preserves_repeated_printed_symbols() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut loaded = typed_loaded(directory.path());
+    let case = &mut loaded.manifest.cases[0];
+    let mut contract = serde_json::to_value(case.example_contract.as_ref().unwrap()).unwrap();
+    contract["witnesses"] = json!([["a", "a"]]);
+    case.example_contract = Some(serde_json::from_value(contract).unwrap());
+    let answer = super::normalize::native(
+        "Answer: 1\na a\nSATISFIABLE\nCoverage: exhausted\nModels: 1\n",
+        false,
+    )
+    .unwrap();
+    super::normalize::contracts(case, &answer).unwrap();
+    let fewer = super::normalize::native(NATIVE, false).unwrap();
+    assert!(
+        super::normalize::contracts(case, &fewer)
+            .unwrap_err()
+            .contains("Witness")
+    );
+}
+
+#[test]
+fn clean_source_metadata_survives_failed_capture() {
+    let directory = tempfile::tempdir().unwrap();
+    let loaded = typed_loaded(directory.path());
+    let mut options = options(directory.path());
+    options.clingo = directory.path().join("missing-reference");
+    let result = check(&options, &loaded, "reference_invocation_error");
+    let case = &loaded.manifest.cases[0];
+    assert_eq!(result["sha256"], case.sha256);
+    assert_eq!(result["original_sha256"], json!(case.original_sha256));
+    assert_eq!(result["example_contract"], json!(case.example_contract));
 }

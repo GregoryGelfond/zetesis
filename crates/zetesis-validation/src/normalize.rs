@@ -19,6 +19,8 @@ pub(crate) struct Answer {
     pub(crate) model_multiplicities: Vec<(Model, u64)>,
     pub(crate) model_count: u64,
     pub(crate) solver: String,
+    #[serde(skip)]
+    reported: zetesis_validation::answers::ReportedAnswers,
 }
 
 pub(crate) fn reference(text: &str) -> Result<Answer, String> {
@@ -26,7 +28,7 @@ pub(crate) fn reference(text: &str) -> Result<Answer, String> {
         text.as_bytes(),
         zetesis_validation::answers::Limits::for_bytes(text.len()),
     )
-    .map(|answer| adapt(&answer))
+    .map(adapt)
     .map_err(|error| error.to_string())
 }
 
@@ -36,11 +38,11 @@ pub(crate) fn native(text: &str, optimized: bool) -> Result<Answer, String> {
         optimized,
         zetesis_validation::answers::Limits::for_bytes(text.len()),
     )
-    .map(|answer| adapt(&answer))
+    .map(adapt)
     .map_err(|error| error.to_string())
 }
 
-fn adapt(answer: &zetesis_validation::answers::ReportedAnswers) -> Answer {
+fn adapt(answer: zetesis_validation::answers::ReportedAnswers) -> Answer {
     Answer {
         satisfiable: answer.satisfiable(),
         cost: answer.cost().map(<[i64]>::to_vec),
@@ -52,6 +54,7 @@ fn adapt(answer: &zetesis_validation::answers::ReportedAnswers) -> Answer {
         model_multiplicities: answer.displays().to_vec(),
         model_count: answer.model_count(),
         solver: answer.solver().to_owned(),
+        reported: answer,
     }
 }
 
@@ -80,6 +83,11 @@ fn split_atoms(text: &str, comma_separated: bool) -> Result<Vec<String>, String>
 }
 
 pub(crate) fn contracts(case: &Case, answer: &Answer) -> Result<(), String> {
+    if let Some(contract) = &case.example_contract {
+        return contract
+            .check(&answer.reported)
+            .map_err(|error| error.to_string());
+    }
     if answer.satisfiable != (case.expected_satisfiability == "sat") {
         return Err("@expect mismatch".into());
     }

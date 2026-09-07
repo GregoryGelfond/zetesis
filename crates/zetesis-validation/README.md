@@ -219,11 +219,23 @@ cleanup is not complete.
 ## Full kr-domains regression gate
 
 `zetesis-validate` is an independent validation executable. It is not linked to
-or invoked by the production solver. The default target contains all 94 original
-non-clingcon cases and their 14 schema dependencies at revision
-`38f0660ded448ed268c5a68759ceb0e2840dd497`. It reads the vendored corpus and its
-manifest from the selected repository; no network access or estate checkout is
-needed.
+or invoked by the production solver. The default target is the self-contained
+`examples/kr-domains` collection: all 94 non-clingcon cases and their 14 schema
+dependencies at revision `38f0660ded448ed268c5a68759ceb0e2840dd497`, with elenctic
+annotation comments removed. No network access or estate checkout is needed.
+The pinned manifest preserves typed contracts, original and cleaned hashes,
+and exact annotation deletion provenance.
+
+```sh
+zetesis-corpus verify-examples examples/kr-domains
+zetesis-corpus verify-examples examples/kr-domains --originals validation/corpus/kr-domains
+```
+
+The first command uses only the clean collection. The second independently
+verifies its derivation from preserved originals. Both report integrity,
+not fresh solver execution. Library clients compose `examples::load`,
+`examples::verify_originals` and `Contract::check` directly; the last operation
+requires the caller to establish successful process capture and producer completion.
 
 ```sh
 zetesis-validate --repo /path/to/zetesis --report validation-report.json
@@ -232,8 +244,9 @@ zetesis-validate --repo /path/to/zetesis --native-backend metal --native-oracle 
 zetesis-validate --repo /path/to/zetesis --native-backend cpu --native-completion-workers 4 --native-max-completion-scratch-bytes 268435456 --report cpu-batched.json
 ```
 
-The installed validator and solver run directly through PATH. `--corpus` and
-`--manifest` override those paths. `--clingo` and `--zetesis` select executable
+The installed validator and solver run directly through PATH. Supplying
+`--corpus` or `--manifest` explicitly selects the historical original-source
+manifest mode, permitting reproduction of earlier campaigns. `--clingo` and `--zetesis` select executable
 paths or names resolved through PATH. A relative executable path is resolved
 relative to the caller's working directory, not the corpus. `--help` lists
 resource limits. Omitting `--report` writes the JSON report to stdout; progress
@@ -256,10 +269,10 @@ count. Equal display sets and equal total counts alone are insufficient.
 Raw witness counts must reconcile with the JSON summary. The supported clingo
 5.8 optN format has exactly one final-cost incumbent replay in addition to its
 declared optimal enumeration; incompatible output is refused explicitly.
-The elenctic test expectations `@expect`, `@cost`, `@count`, `@model`, `@optimal`
-and `@cautious optimal` are checked by the validator; unknown expectation tags
-fail explicitly. They are ASP comments to the solver, not native source-language
-semantics. Notes are prose.
+The clean manifest translates historical elenctic expectations into typed
+satisfiability, count, cost, witness and required-display-symbol contracts.
+The historical mode retains its annotation contract adapter and refuses unknown
+expectation tags. The solver receives ordinary ASP source only. Notes are prose.
 Strings with spaces, commas and escaped quotes remain whole atom values.
 Within one display, symbols are sorted and every occurrence is retained: an atom
 and a shown term can print the same symbol twice. Hidden atom identities
@@ -269,9 +282,10 @@ symbols within each display.
 
 Native runs default to `zetesis --backend cpu --oracle auto --models 0 --batch-size 64
 --completion-workers 1 --max-completion-scratch-bytes 268435456` on each complete
-original source graph. The current full campaign passes all 94 cases under the
-default limits. These results cover the pinned non-clingcon corpus and its
-original contracts; broader clingo language coverage is a separate target. Optimized
+source graph. The previously qualified full campaign passes all 94 original cases
+under the default limits; the clean-source native campaign is a separate
+integration obligation. These results cover the pinned non-clingcon corpus and
+its original contracts; broader clingo language coverage is a separate target. Optimized
 answers require per-model cost vectors and exhausted search coverage; comparison
 preserves full optimal model counts, repeated displays and repeated symbols within
 each display.

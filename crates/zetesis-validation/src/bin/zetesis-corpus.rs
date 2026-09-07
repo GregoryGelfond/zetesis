@@ -4,12 +4,12 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 use zetesis_validation::curated::{self, Limits};
-use zetesis_validation::selected;
+use zetesis_validation::{examples, selected};
 
 #[derive(Parser)]
 #[command(
     version,
-    about = "Verify curated clingo data and compare complete solver results"
+    about = "Verify ASP corpus provenance and compare complete solver results"
 )]
 struct Options {
     #[command(subcommand)]
@@ -17,6 +17,14 @@ struct Options {
 }
 #[derive(Subcommand)]
 enum Action {
+    /// Verify the self-contained kr-domains examples and typed contracts.
+    VerifyExamples {
+        /// Clean example directory containing manifest.json and ASP sources.
+        root: PathBuf,
+        /// Also verify the exact annotation deletions against preserved originals.
+        #[arg(long)]
+        originals: Option<PathBuf>,
+    },
     /// Compare all 24 selected sources against clingo and pinned full-model contracts.
     Compare {
         /// Curated directory containing manifest.json and programs/.
@@ -46,6 +54,24 @@ enum Action {
 }
 fn execute(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let corpus = match options.command {
+        Action::VerifyExamples { root, originals } => {
+            let corpus = examples::load(&root, examples::Limits::default())?;
+            if let Some(originals) = &originals {
+                examples::verify_originals(&corpus, originals, examples::Limits::default())?;
+            }
+            let report = serde_json::json!({
+                "schema": 1,
+                "integrity": "verified",
+                "semantic_solver_run": false,
+                "manifest_sha256": corpus.manifest_sha256(),
+                "revision": corpus.revision(),
+                "files": corpus.files().len(),
+                "cases": corpus.cases().len(),
+                "originals_verified": originals.is_some(),
+            });
+            write_json(&report)?;
+            return Ok(ExitCode::SUCCESS);
+        }
         Action::Compare {
             root,
             clingo,
@@ -83,11 +109,15 @@ fn execute(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
         } => curated::import_legacy(&legacy, &destination, Limits::default())?,
     };
     let report = serde_json::json!({"schema":1,"integrity":"verified","semantic_solver_run":false,"manifest_sha256":curated::MANIFEST_SHA256,"cases":corpus.cases().len(),"full_model_occurrences":corpus.cases().iter().map(|case|case.contract().full_models().len()).sum::<usize>()});
+    write_json(&report)?;
+    Ok(ExitCode::SUCCESS)
+}
+
+fn write_json(report: &serde_json::Value) -> io::Result<()> {
     let stdout = io::stdout();
     let mut output = stdout.lock();
-    serde_json::to_writer(&mut output, &report)?;
-    output.write_all(b"\n")?;
-    Ok(ExitCode::SUCCESS)
+    serde_json::to_writer(&mut output, report)?;
+    output.write_all(b"\n")
 }
 fn main() -> ExitCode {
     match execute(Options::parse()) {

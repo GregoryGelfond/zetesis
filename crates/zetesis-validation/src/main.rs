@@ -79,13 +79,13 @@ impl NativeOracle {
     about = "Validate the complete pinned non-clingcon kr-domains target"
 )]
 struct Options {
-    /// Repository containing validation/corpus and the target manifest.
+    /// Repository containing the self-contained examples/kr-domains collection.
     #[arg(long, default_value = ".")]
     repo: PathBuf,
-    /// Override the corpus directory while retaining original relative paths.
+    /// Select an original-source corpus directory using historical manifest mode.
     #[arg(long)]
     corpus: Option<PathBuf>,
-    /// Override the machine-readable target manifest.
+    /// Select a historical original-source manifest instead of clean examples.
     #[arg(long)]
     manifest: Option<PathBuf>,
     /// Independent clingo executable, resolved through PATH if not absolute.

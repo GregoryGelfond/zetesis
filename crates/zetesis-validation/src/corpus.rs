@@ -1,10 +1,12 @@
 //! Pinned target and read-only source-integrity validation.
 
+mod examples;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::Options;
@@ -35,6 +37,9 @@ pub(crate) struct Case {
     pub(crate) includes: Vec<FileEntry>,
     pub(crate) contracts: Vec<Contract>,
     pub(crate) expected_satisfiability: String,
+    pub(crate) original_sha256: Option<String>,
+    #[serde(skip)]
+    pub(crate) example_contract: Option<zetesis_validation::examples::Contract>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -47,9 +52,20 @@ pub(crate) struct Loaded {
     pub(crate) root: PathBuf,
     pub(crate) manifest: Manifest,
     pub(crate) manifest_sha256: String,
+    pub(crate) view: SourceView,
+}
+
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum SourceView {
+    Original,
+    AnnotationCleaned,
 }
 
 pub(crate) fn load(options: &Options) -> Result<Loaded, String> {
+    if options.corpus.is_none() && options.manifest.is_none() {
+        return examples::load(&options.repo);
+    }
     let root = options
         .corpus
         .clone()
@@ -108,6 +124,7 @@ pub(crate) fn load(options: &Options) -> Result<Loaded, String> {
         root,
         manifest,
         manifest_sha256: hash(&bytes),
+        view: SourceView::Original,
     })
 }
 
@@ -222,5 +239,132 @@ mod tests {
         options.manifest = Some(edited.path().to_owned());
         let result = load(&options);
         assert!(matches!(result, Err(error) if error.contains("manifest identity")));
+    }
+
+    fn repository_options() -> Options {
+        let mut options = Options::try_parse_from(["zetesis-validate"]).unwrap();
+        options.repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        options
+    }
+
+    #[test]
+    fn default_loading_preserves_clean_case_metadata() {
+        let options = repository_options();
+        let loaded = load(&options).unwrap();
+        let expected = zetesis_validation::examples::load(
+            &options.repo.join("examples/kr-domains"),
+            zetesis_validation::examples::Limits::default(),
+        )
+        .unwrap();
+        assert!(matches!(loaded.view, super::SourceView::AnnotationCleaned));
+        assert_eq!(loaded.root, expected.root());
+        assert_eq!(loaded.manifest_sha256, expected.manifest_sha256());
+        assert_eq!(
+            loaded.manifest.reference_toolchain,
+            serde_json::to_value(expected.reference_toolchain()).unwrap()
+        );
+        for (actual, source) in loaded.manifest.cases.iter().zip(expected.cases()) {
+            assert_eq!(actual.path, source.path());
+            assert_eq!(actual.sha256, source.source_sha256());
+            assert_eq!(
+                actual.original_sha256.as_deref(),
+                Some(source.original_sha256())
+            );
+            assert_eq!(actual.example_contract.as_ref(), Some(source.contract()));
+            assert!(actual.contracts.is_empty());
+        }
+    }
+
+    #[test]
+    fn clean_dependency_records_keep_the_complete_closure() {
+        let options = repository_options();
+        let loaded = load(&options).unwrap();
+        let expected = zetesis_validation::examples::load(
+            &options.repo.join("examples/kr-domains"),
+            zetesis_validation::examples::Limits::default(),
+        )
+        .unwrap();
+        for (actual, source) in loaded.manifest.cases.iter().zip(expected.cases()) {
+            let expected_paths: Vec<_> = source
+                .transitive_source_paths()
+                .iter()
+                .filter(|path| path.as_str() != source.path())
+                .collect();
+            assert_eq!(actual.includes.len(), expected_paths.len());
+            for (include, path) in actual.includes.iter().zip(expected_paths) {
+                assert_eq!(&include.path, path);
+                let file = expected
+                    .files()
+                    .iter()
+                    .find(|file| file.path() == path)
+                    .unwrap();
+                assert_eq!(include.sha256, file.source_sha256());
+            }
+        }
+    }
+
+    fn assert_original(loaded: &super::Loaded) {
+        assert!(matches!(loaded.view, super::SourceView::Original));
+        assert_eq!(loaded.manifest_sha256, super::MANIFEST_SHA256);
+        for case in &loaded.manifest.cases {
+            assert!(case.original_sha256.is_none());
+            assert!(case.example_contract.is_none());
+            assert!(!case.contracts.is_empty());
+        }
+    }
+
+    #[test]
+    fn explicit_corpus_override_preserves_original_mode() {
+        let mut options = repository_options();
+        options.corpus = Some(options.repo.join("validation/corpus/kr-domains"));
+        assert_original(&load(&options).unwrap());
+    }
+
+    #[test]
+    fn explicit_manifest_override_preserves_original_mode() {
+        let mut options = repository_options();
+        options.manifest = Some(
+            options
+                .repo
+                .join("docs/verification/kr-domains-target-manifest.json"),
+        );
+        assert_original(&load(&options).unwrap());
+    }
+
+    #[test]
+    fn clean_manifest_is_not_a_historical_manifest() {
+        let mut options = repository_options();
+        options.manifest = Some(options.repo.join("examples/kr-domains/manifest.json"));
+        assert!(matches!(load(&options), Err(error) if error.contains("manifest identity")));
+    }
+
+    #[test]
+    fn missing_clean_examples_do_not_fall_back_to_originals() {
+        let mut source_options = repository_options();
+        source_options.corpus = Some(source_options.repo.join("validation/corpus/kr-domains"));
+        let historical = load(&source_options).unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let original_root = directory.path().join("validation/corpus/kr-domains");
+        for path in historical
+            .manifest
+            .open_encodings
+            .iter()
+            .map(|source| &source.path)
+            .chain(historical.manifest.cases.iter().map(|case| &case.path))
+        {
+            let destination = original_root.join(path);
+            std::fs::create_dir_all(destination.parent().unwrap()).unwrap();
+            std::fs::copy(historical.root.join(path), destination).unwrap();
+        }
+        let manifest = "docs/verification/kr-domains-target-manifest.json";
+        let destination = directory.path().join(manifest);
+        std::fs::create_dir_all(destination.parent().unwrap()).unwrap();
+        std::fs::copy(source_options.repo.join(manifest), destination).unwrap();
+        let mut options = repository_options();
+        options.repo = directory.path().to_owned();
+        options.corpus = Some(original_root);
+        assert_original(&load(&options).unwrap());
+        options.corpus = None;
+        assert!(matches!(load(&options), Err(error) if error.contains("examples/kr-domains")));
     }
 }

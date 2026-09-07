@@ -65,6 +65,22 @@ comment deletion and confirms the typed translation of every original contract.
 
 ## Reproduce the checks
 
+The installed integrity command verifies the clean collection independently:
+
+```sh
+zetesis-corpus verify-examples examples/kr-domains
+zetesis-corpus verify-examples examples/kr-domains --originals validation/corpus/kr-domains
+```
+
+The second command also verifies the exact deletion against preserved originals.
+Neither integrity command runs a solver. For the full native/clingo comparison:
+
+```sh
+zetesis-validate --repo . --report target/kr-domains-parity.json
+```
+
+The validator loads these examples by default. The Rust regression suite is:
+
 ```sh
 cargo test --locked -p zetesis-validation --test example_corpus
 ```

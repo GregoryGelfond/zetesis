@@ -95,6 +95,7 @@ pub(crate) fn run(options: &Options, loaded: &Loaded) -> (Value, bool) {
             "manifest_sha256": loaded.manifest_sha256,
             "manifest_reference_toolchain": loaded.manifest.reference_toolchain,
             "corpus_root": loaded.root,
+            "corpus_view": loaded.view,
             "case_count": cases.len(),
             "status_counts": counts,
             "limits": { "timeout_ms": options.timeout_ms, "combined_output_bytes": options.max_output_bytes },
@@ -142,6 +143,10 @@ fn check_case(
         input.as_os_str().to_owned(),
     ];
     let mut result = json!({ "path": case.path, "sha256": case.sha256 });
+    if let Some(original) = &case.original_sha256 {
+        result["original_sha256"] = original.clone().into();
+        result["example_contract"] = json!(case.example_contract);
+    }
     let reference = match invoke(options, &options.clingo, &reference_args, &loaded.root) {
         Ok(capture) => capture,
         Err(error) => return failure(result, "reference_invocation_error", error),
