@@ -86,6 +86,8 @@ pub struct PhaseTimings {
     pub driver_elapsed: Duration,
     /// Exclusive high-level host stages; accessible without parsing diagnostics.
     pub stages: StageTimings,
+    /// Optional attribution within eager formula grounding. Other grounders remain unmeasured here.
+    pub grounding: crate::GroundingTimings,
     measurements: [Option<PhaseMeasurement>; 13],
 }
 impl PhaseTimings {
@@ -98,12 +100,14 @@ impl PhaseTimings {
 
 pub(crate) struct Recorder {
     stages: StageRecorder,
+    grounding: crate::grounding_timing::Recorder,
     measurements: Cell<[Option<PhaseMeasurement>; 13]>,
 }
 impl Recorder {
     pub(crate) fn new(enabled: bool) -> Self {
         Self {
             stages: StageRecorder::new(enabled),
+            grounding: crate::grounding_timing::Recorder::default(),
             measurements: Cell::new([None; 13]),
         }
     }
@@ -154,13 +158,14 @@ impl Recorder {
     pub(crate) fn grounding_observer(&self) -> Option<crate::stage_timing::Observer<'_>> {
         self.stages
             .enabled()
-            .then(|| crate::stage_timing::Observer::new(&self.stages))
+            .then(|| crate::stage_timing::Observer::new(&self.stages, &self.grounding))
     }
 
     pub(crate) fn snapshot(&self) -> Option<PhaseTimings> {
         self.stages.snapshot().map(|stages| PhaseTimings {
             driver_elapsed: stages.driver_elapsed,
             stages,
+            grounding: self.grounding.snapshot(),
             measurements: self.measurements.get(),
         })
     }

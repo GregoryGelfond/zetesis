@@ -8,12 +8,17 @@ use zetesis_telemetry::{GroundingMode, SolveStage, StageRecorder, StageSpan, Sta
 // boundaries would require retaining a stack of stage guards.
 pub(crate) struct Observer<'a> {
     recorder: &'a StageRecorder,
+    grounding: &'a crate::grounding_timing::Recorder,
     span: RefCell<Option<StageSpan<'a>>>,
 }
 impl<'a> Observer<'a> {
-    pub(crate) const fn new(recorder: &'a StageRecorder) -> Self {
+    pub(crate) const fn new(
+        recorder: &'a StageRecorder,
+        grounding: &'a crate::grounding_timing::Recorder,
+    ) -> Self {
         Self {
             recorder,
+            grounding,
             span: RefCell::new(None),
         }
     }
@@ -24,6 +29,25 @@ impl zetesis_themelios::GroundingObserver for Observer<'_> {
     }
     fn exit(&self) {
         self.span.borrow_mut().take();
+    }
+    fn details_enabled(&self) -> bool {
+        true
+    }
+    fn phase_enter(
+        &self,
+        phase: crate::GroundingPhase,
+        _location: Option<zetesis_themelios::base::span::Location>,
+    ) {
+        self.grounding.enter(phase);
+    }
+    fn phase_exit(
+        &self,
+        phase: crate::GroundingPhase,
+        _location: Option<zetesis_themelios::base::span::Location>,
+        outcome: crate::GroundingOutcome,
+        work: crate::GroundingWork,
+    ) {
+        self.grounding.exit(phase, outcome, work);
     }
 }
 

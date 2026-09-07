@@ -48,7 +48,10 @@ pub use process::entry;
 pub use semantic_outcome::SemanticOutcome;
 pub use solve_config::SolveConfig;
 
+mod grounding_timing;
+pub use grounding_timing::{GroundingMeasurement, GroundingTimings};
 pub use phase_timing::{PhaseTimings, SolvePhase};
+pub use zetesis_themelios::{GroundingOutcome, GroundingPhase, GroundingWork};
 
 pub use zetesis_telemetry::{GroundingMode, SolveStage, StageMeasurement, StageTimings};
 

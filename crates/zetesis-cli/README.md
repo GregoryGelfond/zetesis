@@ -202,6 +202,23 @@ a complete timing partition nor a nonzero duration proves semantic completion.
 The [measurement contract](../../docs/design/phase-measurements.md) states exact
 scope, and reusable typed snapshots live in `zetesis-telemetry`.
 
+For eager formula materialization, statistics additionally expose
+`PhaseTimings::grounding` as a fixed-size `GroundingTimings` value. It aggregates
+host intervals, completion/failure/unwind outcomes and selected work populations
+for support completion, objective activation, formula initialization, rule
+instantiation, coherence, support guards and theory validation. Per-rule callback
+locations remain available through the frontend observer API; the CLI does not
+retain an unbounded event history.
+
+The human `Grounding attribution` section and JSON `grounding_attribution`
+schema-1 object are views of that same snapshot. A missing phase is unmeasured;
+counter or duration overflow is unavailable rather than zero. Counters include
+failed attempts and instrumentation overhead. Join, filter and formula emission
+work can be interleaved, so these populations do not claim independent kernel
+times. Relational eager and lazy work have no detailed attribution in this view;
+their existing coarse stage measurements remain available. The no-statistics
+path does not enable the detailed observer.
+
 ## Backend and grounder selection
 
 `--backend auto` and `--grounder auto` are the defaults. On the closure path,

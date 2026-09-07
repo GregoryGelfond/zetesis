@@ -507,7 +507,8 @@ fn report_progress_statistics(
             timings.driver_elapsed,
         )
         .and_then(|()| crate::stage_timing::write(diagnostics, &timings.stages))
-        .and_then(|()| crate::phase_timing::write(diagnostics, &timings));
+        .and_then(|()| crate::phase_timing::write(diagnostics, &timings))
+        .and_then(|()| crate::grounding_timing::write(diagnostics, &timings.grounding));
         if let Err(error) = emitted {
             return Err(match result {
                 Ok(progress) => progress.fail(RunError::Output(error)),

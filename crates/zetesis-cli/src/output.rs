@@ -485,11 +485,65 @@ fn statistics(
         phases(out, timings)?;
         out.text(",\"stage_timings\":")?;
         stages(out, timings.map(|timing| &timing.stages))?;
+        out.text(",\"grounding_attribution\":")?;
+        grounding(out, timings.map(|timing| &timing.grounding))?;
         out.text("}")?;
     } else {
         out.text("null")?;
     }
     Ok(())
+}
+
+fn grounding(out: &mut Buffer, timings: Option<&crate::GroundingTimings>) -> Result<(), RunError> {
+    let Some(timings) = timings else {
+        return out.text("null");
+    };
+    out.text(
+        "{\"schema\":1,\"clock\":\"host_monotonic\",\"scope\":\"eager_formula\",\"measurements\":{",
+    )?;
+    for (index, phase) in crate::GroundingPhase::ALL.into_iter().enumerate() {
+        if index != 0 {
+            out.text(",")?;
+        }
+        out.string(phase.label())?;
+        out.text(":")?;
+        if let Some(value) = timings.get(phase) {
+            out.text("{\"elapsed_ns\":")?;
+            optional_number(out, value.elapsed.map(|duration| duration.as_nanos()))?;
+            out.text(",\"outcomes\":{")?;
+            for (index, outcome) in crate::GroundingOutcome::ALL.into_iter().enumerate() {
+                if index != 0 {
+                    out.text(",")?;
+                }
+                out.string(outcome.label())?;
+                out.text(":")?;
+                optional_number(out, value.count(outcome).map(u128::from))?;
+            }
+            out.text("},\"work\":{")?;
+            for (index, (name, count)) in crate::grounding_timing::work_fields(&value.work)
+                .into_iter()
+                .enumerate()
+            {
+                if index != 0 {
+                    out.text(",")?;
+                }
+                out.string(name)?;
+                out.text(":")?;
+                optional_number(out, count.map(u128::from))?;
+            }
+            out.text("}}")?;
+        } else {
+            out.text("null")?;
+        }
+    }
+    out.text("},\"overhead\":\"included\",\"relational_grounding\":null,\"kernel_time\":null}")
+}
+
+fn optional_number(out: &mut Buffer, value: Option<u128>) -> Result<(), RunError> {
+    match value {
+        Some(value) => out.text(&value.to_string()),
+        None => out.text("null"),
+    }
 }
 
 fn write_optimization(
