@@ -3,6 +3,7 @@
 
 pub mod answers;
 pub mod curated;
+pub mod examples;
 pub mod process;
 pub mod selected;
 
