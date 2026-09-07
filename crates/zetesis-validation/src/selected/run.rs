@@ -58,13 +58,13 @@ impl InvocationFailure {
     pub fn detail(&self) -> &str {
         &self.detail
     }
-    fn capture(failure: &process::Failure) -> Self {
+    pub(crate) fn capture(failure: &process::Failure) -> Self {
         Self {
             kind: InvocationFault::Capture(failure.operation()),
             detail: failure.to_string(),
         }
     }
-    fn start(failure: &process::StartError) -> Self {
+    pub(crate) fn start(failure: &process::StartError) -> Self {
         let kind = match failure {
             process::StartError::UnsupportedPlatform => InvocationFault::UnsupportedPlatform,
             process::StartError::RelativePath => InvocationFault::RelativePath,

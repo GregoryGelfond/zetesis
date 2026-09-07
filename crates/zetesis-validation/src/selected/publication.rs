@@ -2,16 +2,16 @@
 use std::io::{self, Write};
 use std::path::{Component, Path, PathBuf};
 
-use super::{Error, FileSeal, Report, identity};
+use super::{Error, FileSeal, identity};
 
 #[derive(Debug)]
-pub(super) struct Destination {
+pub(crate) struct Destination {
     path: PathBuf,
     root: PathBuf,
     protected: Vec<PathBuf>,
 }
 
-pub(super) fn prepare(path: &Path, root: &Path, inputs: &[FileSeal]) -> Result<Destination, Error> {
+pub(crate) fn prepare(path: &Path, root: &Path, inputs: &[FileSeal]) -> Result<Destination, Error> {
     let requested = identity::absolute(path)?;
     let mut lexical = PathBuf::new();
     for component in requested.components() {
@@ -97,12 +97,8 @@ impl Write for Counter {
     }
 }
 
-pub(super) fn write(report: &Report, destination: &Destination, limit: usize) -> Result<(), Error> {
+pub(crate) fn write(report: &impl serde::Serialize, destination: &Destination, limit: usize) -> Result<(), Error> {
     validate(destination)?;
-    let report = super::view::Published {
-        passed: report.passed(),
-        report,
-    };
     let mut size = Counter {
         bytes: 0,
         limit,

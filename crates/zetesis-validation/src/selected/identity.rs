@@ -69,7 +69,7 @@ impl Change {
     }
 }
 
-pub(super) fn absolute(path: &Path) -> Result<PathBuf, Error> {
+pub(crate) fn absolute(path: &Path) -> Result<PathBuf, Error> {
     let path = std::path::absolute(path).map_err(|source| io(path, source))?;
     if path.to_str().is_none() {
         return Err(Error::Path {
@@ -80,7 +80,7 @@ pub(super) fn absolute(path: &Path) -> Result<PathBuf, Error> {
     Ok(path)
 }
 
-pub(super) fn seal(path: &Path, limit: usize) -> Result<FileSeal, Error> {
+pub(crate) fn seal(path: &Path, limit: usize) -> Result<FileSeal, Error> {
     let requested = absolute(path)?;
     let canonical = std::fs::canonicalize(&requested).map_err(|source| io(&requested, source))?;
     if canonical.to_str().is_none() {
@@ -150,7 +150,7 @@ pub(super) fn seal(path: &Path, limit: usize) -> Result<FileSeal, Error> {
     })
 }
 
-pub(super) fn recheck(before: &FileSeal) -> Change {
+pub(crate) fn recheck(before: &FileSeal) -> Change {
     match seal(&before.requested, before.limit) {
         Ok(after) => Change {
             path: before.requested.clone(),
@@ -167,12 +167,12 @@ pub(super) fn recheck(before: &FileSeal) -> Change {
     }
 }
 
-pub(super) fn aliases(left: &FileSeal, right: &FileSeal) -> bool {
+pub(crate) fn aliases(left: &FileSeal, right: &FileSeal) -> bool {
     left.canonical == right.canonical
         || (left.device.is_some() && left.device == right.device && left.inode == right.inode)
 }
 
-pub(super) fn io(path: &Path, source: std::io::Error) -> Error {
+pub(crate) fn io(path: &Path, source: std::io::Error) -> Error {
     Error::Io {
         path: path.to_owned(),
         source,

@@ -12,8 +12,8 @@
 //! changes that are restored between checks. Completed children do not establish
 //! descendant termination or system quiescence. Solvers must be trusted.
 
-mod identity;
-mod publication;
+pub(crate) mod identity;
+pub(crate) mod publication;
 mod run;
 mod view;
 
@@ -338,7 +338,11 @@ impl Report {
     /// Refuses report aliases, existing destinations, serialization/byte ceilings
     /// and filesystem failures. Temporary cleanup failures retain the primary cause.
     pub fn publish(&self) -> Result<(), Error> {
-        publication::write(self, &self.destination, self.max_report_bytes)
+        publication::write(
+            &view::Published { passed: self.passed(), report: self },
+            &self.destination,
+            self.max_report_bytes,
+        )
     }
 }
 
