@@ -1,0 +1,370 @@
+[
+  {
+    "name": "retained-count",
+    "source": "1#count{X:p(X):X=1..4}2.",
+    "expanded": "1{p(X):X=1..4}2.",
+    "models": [
+      [
+        "p(1)"
+      ],
+      [
+        "p(2)"
+      ],
+      [
+        "p(3)"
+      ],
+      [
+        "p(4)"
+      ],
+      [
+        "p(1)",
+        "p(2)"
+      ],
+      [
+        "p(1)",
+        "p(3)"
+      ],
+      [
+        "p(1)",
+        "p(4)"
+      ],
+      [
+        "p(2)",
+        "p(3)"
+      ],
+      [
+        "p(2)",
+        "p(4)"
+      ],
+      [
+        "p(3)",
+        "p(4)"
+      ]
+    ]
+  },
+  {
+    "name": "two-keys",
+    "source": "1#count{7:a;9:b}1.",
+    "expanded": "1{a;b}1.",
+    "models": [
+      [
+        "a"
+      ],
+      [
+        "b"
+      ]
+    ]
+  },
+  {
+    "name": "full-tuple-keys",
+    "source": "1#count{0,1:a;0,2:b}1.",
+    "expanded": "1{a;b}1.",
+    "models": [
+      [
+        "a"
+      ],
+      [
+        "b"
+      ]
+    ]
+  },
+  {
+    "name": "symbolic-keys",
+    "source": "1#count{f(a):p;g(a):q}1.",
+    "expanded": "1{p;q}1.",
+    "models": [
+      [
+        "p"
+      ],
+      [
+        "q"
+      ]
+    ]
+  },
+  {
+    "name": "string-symbol-keys",
+    "source": "1#count{\"x\":p;x:q}1.",
+    "expanded": "1{p;q}1.",
+    "models": [
+      [
+        "p"
+      ],
+      [
+        "q"
+      ]
+    ]
+  },
+  {
+    "name": "empty-group-zero",
+    "source": "0#count{}0.",
+    "expanded": "0{}0.",
+    "models": [
+      []
+    ]
+  },
+  {
+    "name": "empty-group-positive",
+    "source": "1#count{}1.",
+    "expanded": "1{}1.",
+    "models": []
+  },
+  {
+    "name": "empty-range-zero",
+    "source": "0#count{X:p(X):X=2..1}0.",
+    "expanded": "0{p(X):X=2..1}0.",
+    "models": [
+      []
+    ]
+  },
+  {
+    "name": "empty-range-positive",
+    "source": "1#count{X:p(X):X=2..1}1.",
+    "expanded": "1{p(X):X=2..1}1.",
+    "models": []
+  },
+  {
+    "name": "false-eligibility",
+    "source": "1#count{1:a;1:b:#false}1.",
+    "expanded": "1{a;b:#false}1.",
+    "models": [
+      [
+        "a"
+      ]
+    ]
+  },
+  {
+    "name": "duplicates-identical",
+    "source": "1#count{1:a;1:a}1.",
+    "expanded": "1{a;a}1.",
+    "models": [
+      [
+        "a"
+      ]
+    ]
+  },
+  {
+    "name": "duplicate-local-witness",
+    "source": "1#count{X:a:X=1;Y:a:Y=1}1.",
+    "expanded": "1{a:X=1;a:Y=1}1.",
+    "models": [
+      [
+        "a"
+      ]
+    ]
+  },
+  {
+    "name": "static-filter",
+    "source": "1#count{X:p(X):X=1..3,X!=2}1.",
+    "expanded": "1{p(X):X=1..3,X!=2}1.",
+    "models": [
+      [
+        "p(1)"
+      ],
+      [
+        "p(3)"
+      ]
+    ]
+  },
+  {
+    "name": "negated-static-filter",
+    "source": "1#count{X:p(X):X=1..3,not X=2}1.",
+    "expanded": "1{p(X):X=1..3,not X=2}1.",
+    "models": [
+      [
+        "p(1)"
+      ],
+      [
+        "p(3)"
+      ]
+    ]
+  },
+  {
+    "name": "signed-atoms",
+    "source": "1#count{1:p;2: -p}1.",
+    "expanded": "1{p;-p}1.",
+    "models": [
+      [
+        "p"
+      ],
+      [
+        "-p"
+      ]
+    ]
+  },
+  {
+    "name": "outer-optional-body",
+    "source": "{b}.1#count{1:p;2:q}1:-b.",
+    "expanded": "{b}.1{p;q}1:-b.",
+    "models": [
+      [],
+      [
+        "b",
+        "p"
+      ],
+      [
+        "b",
+        "q"
+      ]
+    ]
+  },
+  {
+    "name": "outer-bound",
+    "source": "d(2).N#count{X:p(X):X=1..2}N:-d(N).",
+    "expanded": "d(2).N{p(X):X=1..2}N:-d(N).",
+    "models": [
+      [
+        "d(2)",
+        "p(1)",
+        "p(2)"
+      ]
+    ]
+  },
+  {
+    "name": "outer-generated-bound",
+    "source": "N#count{X:p(X):X=1..N}N:-N=1..2.",
+    "expanded": "N{p(X):X=1..N}N:-N=1..2.",
+    "models": [
+      [
+        "p(1)",
+        "p(2)"
+      ]
+    ]
+  },
+  {
+    "name": "recursive-body",
+    "source": "1#count{1:a}1:-a.",
+    "expanded": "1{a}1:-a.",
+    "models": [
+      []
+    ]
+  },
+  {
+    "name": "recursive-body-supported",
+    "source": "a.1#count{1:a}1:-a.",
+    "expanded": "a.1{a}1:-a.",
+    "models": [
+      [
+        "a"
+      ]
+    ]
+  },
+  {
+    "name": "arithmetic-head",
+    "source": "1#count{X:p(X+1):X=1..2}1.",
+    "expanded": "1{p(X+1):X=1..2}1.",
+    "models": [
+      [
+        "p(2)"
+      ],
+      [
+        "p(3)"
+      ]
+    ]
+  },
+  {
+    "name": "strict-guards",
+    "source": "0<#count{1:p;2:q}<2.",
+    "expanded": "0<{p;q}<2.",
+    "models": [
+      [
+        "p"
+      ],
+      [
+        "q"
+      ]
+    ]
+  },
+  {
+    "name": "not-equal-guard",
+    "source": "1!=#count{1:p;2:q}.",
+    "expanded": "1!={p;q}.",
+    "models": [
+      [],
+      [
+        "p",
+        "q"
+      ]
+    ]
+  },
+  {
+    "name": "at-least-two",
+    "source": "2<=#count{1:p;2:q}.",
+    "expanded": "2<={p;q}.",
+    "models": [
+      [
+        "p",
+        "q"
+      ]
+    ]
+  },
+  {
+    "name": "equals-zero",
+    "source": "#count{1:p;2:q}=0.",
+    "expanded": "{p;q}=0.",
+    "models": [
+      []
+    ]
+  },
+  {
+    "name": "unguarded-group",
+    "source": "#count{1:p;2:q}.",
+    "expanded": "{p;q}.",
+    "models": [
+      [],
+      [
+        "p"
+      ],
+      [
+        "q"
+      ],
+      [
+        "p",
+        "q"
+      ]
+    ]
+  },
+  {
+    "name": "empty-tuple-key",
+    "source": "1#count{:p}1.",
+    "expanded": "1{p}1.",
+    "models": [
+      [
+        "p"
+      ]
+    ]
+  },
+  {
+    "name": "multiple-static-true-conditions",
+    "source": "1#count{1:p:#true,not #false;2:q:not not #true}1.",
+    "expanded": "1{p:#true,not #false;q:not not #true}1.",
+    "models": [
+      [
+        "p"
+      ],
+      [
+        "q"
+      ]
+    ]
+  },
+  {
+    "name": "distinct tuples for one atom across outer groups",
+    "source": "1#count{X:p}1:-X=1..2.",
+    "expanded": "1{p}1:-X=1..2.",
+    "models": [
+      [
+        "p"
+      ]
+    ]
+  },
+  {
+    "name": "one tuple for distinct atoms across outer groups",
+    "source": "1#count{1:p(X)}1:-X=1..2.",
+    "expanded": "1{p(X)}1:-X=1..2.",
+    "models": [
+      [
+        "p(1)",
+        "p(2)"
+      ]
+    ]
+  }
+]

@@ -94,9 +94,7 @@ fn check_profile(
             match rule.head() {
                 None
                 | Some(
-                    ast::Head::Literal(_)
-                    | ast::Head::Aggregate(ast::Aggregate::Set(_))
-                    | ast::Head::Disjunction(_),
+                    ast::Head::Literal(_) | ast::Head::Aggregate(_) | ast::Head::Disjunction(_),
                 ) => {}
                 Some(head) => {
                     return Err(unsupported(

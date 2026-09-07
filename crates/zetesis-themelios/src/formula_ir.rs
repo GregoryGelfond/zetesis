@@ -4,8 +4,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use themelios_base::span::Location;
 use themelios_program::program::{
-    Arguments, BodyElement, Choice, DefaultNegation, Direction, Head, Literal, LiteralInner,
-    Optimize, OptimizeElement, Program as SourceProgram, Relation, Rule, Statement,
+    Arguments, BodyElement, Choice, DefaultNegation, Direction, HasGuards, Head, Literal,
+    LiteralInner, Optimize, OptimizeElement, Program as SourceProgram, Relation, Rule, Statement,
 };
 use themelios_program::provenance::{Origin, TransformTag};
 use themelios_program::symbol::Symbol;
@@ -65,6 +65,8 @@ impl DisjunctIr {
     }
 }
 pub(crate) struct Element {
+    /// Function-count groups carry a full tuple on every element; ordinary choices carry none.
+    pub count_tuple: Option<Vec<CoreTerm>>,
     pub head: AtomPattern,
     pub condition: Vec<LiteralIr>,
     pub variables: usize,
@@ -544,14 +546,22 @@ impl Compiler<'_> {
                 }
                 Some(HeadIr::Disjunction(heads))
             }
-            Head::Choice(_) => None,
+            Head::Choice(_) | Head::Aggregate(_) => None,
             _ => return Err(unsupported(ProfileFeature::Head, self.location).into()),
         };
         let aggregate_guards = self.body_guards(rule, &mut variables)?;
-        let choice_guards = if let Head::Choice(choice) = rule.head().get() {
-            self.choice_guards(choice, &mut variables)?
-        } else {
-            Vec::new()
+        let choice_guards = match rule.head().get() {
+            Head::Choice(choice) => self.choice_guards(choice, &mut variables)?,
+            Head::Aggregate(aggregate) => self.guards(
+                aggregate
+                    .left_guard()
+                    .map(themelios_program::provenance::WithProvenance::get),
+                aggregate
+                    .right_guard()
+                    .map(themelios_program::provenance::WithProvenance::get),
+                &mut variables,
+            )?,
+            _ => Vec::new(),
         };
         let assignments = self.assignment_targets(rule, &aggregate_guards, &mut variables)?;
         self.bindings(&mut body, &mut variables)?;
@@ -562,12 +572,14 @@ impl Compiler<'_> {
         let head = if let Some(head) = ordinary {
             head
         } else {
-            let Head::Choice(choice) = rule.head().get() else {
-                unreachable!("head classified")
+            let elements = match rule.head().get() {
+                Head::Choice(choice) => self.choice_elements(choice, &variables)?,
+                Head::Aggregate(aggregate) => self.count_head_elements(aggregate, &variables)?,
+                _ => unreachable!("head classified"),
             };
             HeadIr::Choice {
                 guards: choice_guards,
-                elements: self.choice_elements(choice, &variables)?,
+                elements,
             }
         };
         self.variable_limit(&variables)?;
@@ -594,6 +606,7 @@ impl Compiler<'_> {
             self.variable_limit(&local)?;
             local.safety(self.location)?;
             elements.push(Element {
+                count_tuple: None,
                 head,
                 condition,
                 variables: local.count,

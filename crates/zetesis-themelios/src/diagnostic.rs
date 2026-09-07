@@ -44,6 +44,10 @@ pub enum ProfileFeature {
     Head,
     /// A disjunction element with its own condition, including an explicit empty one.
     ConditionalDisjunction,
+    /// A function head has conditions outside finite static eligibility.
+    HeadAggregateCondition,
+    /// A finite count-head group aliases complete tuple and atom identities.
+    HeadAggregateAlias,
     /// A choice with a lower or upper bound.
     BoundedChoice,
     /// A choice containing other than one source element.
@@ -101,6 +105,8 @@ impl fmt::Display for ProfileFeature {
             Self::ProgramPart => "program part",
             Self::Head => "head form",
             Self::ConditionalDisjunction => "conditional disjunction element",
+            Self::HeadAggregateCondition => "nonstatic function aggregate head condition",
+            Self::HeadAggregateAlias => "aliased function aggregate head tuple and atom",
             Self::BoundedChoice => "bounded choice",
             Self::ChoiceCardinality => "choice with other than one element",
             Self::ConditionalChoice => "conditional choice element",

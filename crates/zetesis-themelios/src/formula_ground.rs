@@ -545,6 +545,15 @@ impl Builder<'_> {
         assignment: &[Value],
         support: &Support,
     ) -> Result<(), FormulaFailure> {
+        crate::formula_count_head::validate_group(
+            elements,
+            assignment,
+            support,
+            self.limits,
+            self.budget,
+            &mut self.counters,
+            rule.location,
+        )?;
         let mut eligible = BTreeMap::new();
         for element in elements {
             let mut local = Join::new(

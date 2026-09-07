@@ -1,4 +1,4 @@
-//! Explicitly true/empty conditions retain signed whole-rule expansion semantics.
+//! Checked finite tuple/atom count heads preserve complete models and frozen reducts.
 
 use std::collections::BTreeSet;
 use std::fs::{self, File};
@@ -14,15 +14,15 @@ use zetesis_ferraris::{Node, Theory};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
     ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
-    FormulaResource, InputLimit, ProfileFeature, SourceBundle, admit_bundle_formula,
-    admit_extended, admit_formula,
+    FormulaResource, ProfileFeature, SourceBundle, admit_bundle_formula, admit_extended,
+    admit_formula,
 };
 
 type Names = BTreeSet<String>;
 type Models = BTreeSet<Names>;
 
 fn cases() -> Vec<Json> {
-    serde_json::from_str(include_str!("fixtures/true-heads.json")).unwrap()
+    serde_json::from_str(include_str!("fixtures/count-heads.json")).unwrap()
 }
 fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
     limited(
@@ -131,15 +131,24 @@ fn complete(admitted: &AdmittedFormula) -> Models {
 }
 
 #[test]
-fn complete_models_match_explicit_families_and_recorded_reference_expectations() {
-    let cases = cases();
-    assert_eq!(cases.len(), 25);
-    for case in cases {
-        let source = input(case["source"].as_str().unwrap()).unwrap();
+fn complete_count_models_match_checked_choice_expansion_and_reference_data() {
+    assert_eq!(cases().len(), 30);
+    for case in cases() {
+        let source = input(case["source"].as_str().unwrap())
+            .unwrap_or_else(|error| panic!("{}: {error}", case["name"]));
         let expanded = input(case["expanded"].as_str().unwrap()).unwrap();
-        let predicted = expected(&case["models"]);
-        assert_eq!(complete(&source), predicted, "{}: source", case["name"]);
-        assert_eq!(complete(&expanded), predicted, "{}: expanded", case["name"]);
+        assert_eq!(
+            complete(&source),
+            expected(&case["models"]),
+            "{}: source",
+            case["name"]
+        );
+        assert_eq!(
+            complete(&expanded),
+            expected(&case["models"]),
+            "{}: choice",
+            case["name"]
+        );
     }
 }
 
@@ -196,7 +205,7 @@ fn source_expansions_preserve_every_original_and_frozen_pair() {
             }
         }
     }
-    assert!(pairs > 1_000);
+    assert_eq!(pairs, 669);
 }
 // Every M-false subtree becomes falsum, including non-atomic implications.
 // This evaluates JSON trees directly, without a production DAG or compiler.
@@ -227,18 +236,18 @@ fn manual_holds(theory: &Json, tested: &Names, frozen: Option<&Names>) -> bool {
         .all(|root| truth(root, tested, frozen))
 }
 #[test]
-fn true_head_range_products_match_handwritten_frozen_formulas() {
+fn count_bounds_match_independent_frozen_choice_and_constraint_formulas() {
     for (source, manual) in [
         (
-            "p(1..2):#true;q:#true.",
-            json!({"roots": [["or", ["and", "p(1)", "p(2)"], "q"]]}),
+            "1#count{1:p;2:q}1.",
+            json!({"roots": [
+                ["or","p",["imp","p",false]], ["or","q",["imp","q",false]],
+                ["imp",["imp",["or","p","q"],false],false], ["imp",["and","p","q"],false]
+            ]}),
         ),
-        (
-            "p(1..2):#true;q(1..2):#true.",
-            json!({"roots": [["or", ["and", "p(1)", "p(2)"], ["and", "q(1)", "q(2)"]]]}),
-        ),
-        ("p(2..1):#true;q:#true.", json!({"roots": []})),
-        ("a|b:.", json!({"roots": [["or", "a", "b"]]})),
+        ("1#count{}1.", json!({"roots": [false]})),
+        ("0#count{}0.", json!({"roots": []})),
+        ("1#count{1:a}1:-a.", json!({"roots": []})),
     ] {
         let admitted = input(source).unwrap();
         for outer in 0..1_usize << admitted.atoms().len() {
@@ -255,7 +264,7 @@ fn true_head_range_products_match_handwritten_frozen_formulas() {
                         &values(admitted.theory(), inner, Some(&frozen))
                     ),
                     manual_holds(&manual, &selected(&admitted, inner), Some(&candidate)),
-                    "{source}: M={outer}, J={inner}",
+                    "{source}: M={outer}, J={inner}"
                 );
             }
         }
@@ -269,33 +278,48 @@ fn profile(error: &FormulaFailure, expected: ProfileFeature) -> bool {
 }
 
 #[test]
-fn dynamic_false_comparison_and_function_head_conditions_remain_located_refusals() {
+fn mismatched_tuple_atom_aliases_fail_before_any_admitted_theory() {
     for source in [
-        "p:#false;q:#true.",
-        "p:not #true;q:#true.",
-        "p:not not #false;q:#true.",
-        "p:a;q:#true.",
-        "p:not a;q:#true.",
-        "p:not not a;q:#true.",
-        "p:1=1;q:#true.",
-        "p:#true,a;q:#true.",
-        "p(X):X=1..2;q:#true.",
+        "1#count{1:a;1:b}1.",
+        "1#count{1:a;2:a}1.",
+        "1#count{X:p:X=1..2}1.",
+        "1#count{1:p(1..2)}1.",
+        "1#count{1:p;1:q;2:r}1.",
+        "1#count{1:p;2:q;3:p}1.",
     ] {
         let error = input(source).expect_err(source);
         assert!(
-            profile(&error, ProfileFeature::ConditionalDisjunction),
+            profile(&error, ProfileFeature::HeadAggregateAlias),
             "{source}: {error}"
         );
         assert!(!error.diagnostics().is_empty());
     }
+}
+
+#[test]
+fn unsupported_conditions_functions_negative_heads_and_objectives_remain_explicit() {
     for (source, expected) in [
-        ("1#sum{X:p(X):X=1..4}2.", ProfileFeature::Head),
-        ("not a.", ProfileFeature::NegatedHead),
-        ("{not a}.", ProfileFeature::NegatedHead),
-        ("p(1;2):#true;q:#true.", ProfileFeature::PooledArguments),
+        ("1#count{1:a:b}1.", ProfileFeature::HeadAggregateCondition),
+        ("b.1#count{1:a:b}1.", ProfileFeature::HeadAggregateCondition),
         (
-            "p:#true;q:#true.#minimize{1:q}.",
-            ProfileFeature::ObjectiveDisjunctionDependency,
+            "1#count{1:a:not b}1.",
+            ProfileFeature::HeadAggregateCondition,
+        ),
+        (
+            "1#count{1:a:not not b}1.",
+            ProfileFeature::HeadAggregateCondition,
+        ),
+        ("1#count{1:a:a}1.", ProfileFeature::HeadAggregateCondition),
+        ("1#sum{1:a}1.", ProfileFeature::Head),
+        ("1#sum+{1:a}1.", ProfileFeature::Head),
+        ("1#min{1:a}1.", ProfileFeature::Head),
+        ("1#max{1:a}1.", ProfileFeature::Head),
+        ("1#count{1:not a}1.", ProfileFeature::NegatedHead),
+        ("1#count{1:not not a}1.", ProfileFeature::NegatedHead),
+        ("1#count{1:#true}1.", ProfileFeature::Head),
+        (
+            "1#count{1:a}1.#minimize{1:a}.",
+            ProfileFeature::ObjectiveAggregateDependency,
         ),
     ] {
         let error = input(source).expect_err(source);
@@ -304,7 +328,7 @@ fn dynamic_false_comparison_and_function_head_conditions_remain_located_refusals
     }
     assert!(
         admit_extended(
-            "p:#true;q:#true.".into(),
+            "1#count{X:p(X):X=1..4}2.".into(),
             AdmissionOptions::default(),
             ExpansionLimits::default()
         )
@@ -313,15 +337,18 @@ fn dynamic_false_comparison_and_function_head_conditions_remain_located_refusals
 }
 
 #[test]
-fn erased_conditions_do_not_bind_or_hide_unsafe_head_arguments() {
+fn tuples_and_derived_atoms_never_supply_safety() {
     for source in [
-        "p(X):#true;q:#true.",
-        "p(_):#true;q:#true.",
-        "p(2..1,X):#true;q:#true.",
+        "1#count{X:p(X)}1.",
+        "1#count{X:p:X=X}1.",
+        "1#count{_:p}1.",
+        "N#count{X:p(X):X=1..4}N.",
+        "1#count{X:p(X):X=2..1,Y=Y}1.",
     ] {
+        let error = input(source).expect_err(source);
         assert!(
-            matches!(input(source), Err(FormulaFailure::UnsafeVariable { .. })),
-            "{source}"
+            matches!(error, FormulaFailure::UnsafeVariable { .. }),
+            "{source}: {error}"
         );
     }
 }
@@ -345,104 +372,64 @@ fn first_success(mut attempt: impl FnMut(u64) -> bool) -> u64 {
 }
 
 #[test]
-fn condition_and_head_counts_have_inclusive_limits() {
-    let source = "p:#true,#true;q:#true.";
-    let mut options = AdmissionOptions {
-        max_body_elements: 2,
-        ..AdmissionOptions::default()
-    };
-    assert!(
-        limited(
-            source,
-            options,
-            ExpansionLimits::default(),
-            FormulaLimits::default()
-        )
-        .is_ok()
-    );
-    options.max_body_elements = 1;
-    assert!(matches!(
-        limited(
-            source,
-            options,
-            ExpansionLimits::default(),
-            FormulaLimits::default()
-        ),
-        Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
-            AdmissionFailure::Limit {
-                resource: InputLimit::BodyElements,
-                limit: 1,
-                observed: 2,
+fn checked_group_size_and_tuple_storage_obey_inclusive_limits() {
+    let source = "1#count{X:p(X):X=1..4}2.";
+    for source in [source, "#count{X:p(X):X=1..4}."] {
+        let mut limits = FormulaLimits::default();
+        limits.aggregate.max_elements = 4;
+        assert!(
+            limited(
+                source,
+                AdmissionOptions::default(),
+                ExpansionLimits::default(),
+                limits
+            )
+            .is_ok()
+        );
+        limits.aggregate.max_elements = 3;
+        assert!(matches!(
+            limited(
+                source,
+                AdmissionOptions::default(),
+                ExpansionLimits::default(),
+                limits
+            ),
+            Err(FormulaFailure::Limit {
+                resource: FormulaResource::AggregateElements,
+                limit: 3,
+                observed: 4,
                 ..
-            }
-        )))
-    ));
-    let limits = FormulaLimits {
-        max_disjunction_elements: 2,
-        ..FormulaLimits::default()
+            })
+        ));
+    }
+    let attempt = |limit| {
+        limited(
+            source,
+            AdmissionOptions::default(),
+            ExpansionLimits {
+                max_scalar_bytes: usize::try_from(limit).unwrap(),
+                ..ExpansionLimits::default()
+            },
+            FormulaLimits::default(),
+        )
     };
-    assert!(
-        limited(
-            source,
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits
-        )
-        .is_ok()
-    );
+    let threshold = first_success(|limit| attempt(limit).is_ok());
     assert!(matches!(
-        limited(
-            source,
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits {
-                max_disjunction_elements: 1,
-                ..limits
-            }
-        ),
-        Err(FormulaFailure::Limit {
-            resource: FormulaResource::DisjunctionElements,
-            limit: 1,
-            observed: 2,
+        attempt(threshold - 1),
+        Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
+            resource: ExpansionResource::ScalarBytes,
             ..
-        })
+        }))
     ));
+    assert_eq!(
+        complete(&attempt(threshold).unwrap()),
+        complete(&input(source).unwrap())
+    );
 }
 
 #[test]
-fn erased_conditions_do_not_consume_synthetic_variable_slots() {
-    let source = "d(1).p(X+1):#true;q:#true:-d(X).";
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_variables_per_template = 2;
-    assert!(
-        limited(
-            source,
-            options,
-            ExpansionLimits::default(),
-            FormulaLimits::default()
-        )
-        .is_ok()
-    );
-    options.core_limits.max_variables_per_template = 1;
-    assert!(matches!(
-        limited(
-            source,
-            options,
-            ExpansionLimits::default(),
-            FormulaLimits::default()
-        ),
-        Err(FormulaFailure::Limit {
-            resource: FormulaResource::Variables,
-            limit: 1,
-            observed: 2,
-            ..
-        })
-    ));
-}
-
-#[test]
-fn construction_work_substitutions_and_nodes_fail_at_exact_boundaries() {
-    let source = "d(1).p(X+1):#true;q:#true:-d(X).";
+fn validation_work_and_substitutions_fail_before_partial_publication() {
+    let source = "1#count{X:p(X):X=1..4}2.";
     for resource in [FormulaResource::Work, FormulaResource::Substitutions] {
         let attempt = |limit| {
             let mut limits = FormulaLimits::default();
@@ -468,50 +455,6 @@ fn construction_work_substitutions_and_nodes_fail_at_exact_boundaries() {
             complete(&input(source).unwrap())
         );
     }
-    let attempt = |limit| {
-        limited(
-            source,
-            AdmissionOptions::default(),
-            ExpansionLimits {
-                max_term_work: usize::try_from(limit).unwrap(),
-                ..ExpansionLimits::default()
-            },
-            FormulaLimits::default(),
-        )
-    };
-    let threshold = first_success(|limit| attempt(limit).is_ok());
-    assert!(matches!(
-        attempt(threshold - 1),
-        Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
-            resource: ExpansionResource::TermWork,
-            ..
-        }))
-    ));
-    let admitted = input(source).unwrap();
-    let mut limits = FormulaLimits::default();
-    limits.theory.max_nodes = admitted.theory().nodes().len();
-    assert!(
-        limited(
-            source,
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits
-        )
-        .is_ok()
-    );
-    limits.theory.max_nodes -= 1;
-    assert!(matches!(
-        limited(
-            source,
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits
-        ),
-        Err(FormulaFailure::Limit {
-            resource: FormulaResource::Nodes,
-            ..
-        })
-    ));
 }
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -519,7 +462,7 @@ struct Directory(PathBuf);
 impl Directory {
     fn new() -> Self {
         let path = std::env::temp_dir().join(format!(
-            "zetesis-true-heads-{}-{}",
+            "zetesis-count-heads-{}-{}",
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
@@ -533,9 +476,9 @@ impl Drop for Directory {
     }
 }
 #[test]
-fn duplicate_included_true_heads_retain_each_source_origin() {
+fn duplicate_included_count_groups_retain_each_source_origin() {
     let directory = Directory::new();
-    let rule = "p(1..2):#true;q:#true.";
+    let rule = "1#count{X:p(X):X=1..4}2.";
     fs::write(
         directory.0.join("entry.lp"),
         format!("#include \"other.lp\".\n{rule}"),

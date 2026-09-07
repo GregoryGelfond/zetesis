@@ -56,13 +56,7 @@ pub(crate) fn check(
             )
             .into());
         }
-        if matches!(rule.head, HeadIr::Disjunction(_)) {
-            return Err(unsupported(
-                ProfileFeature::ObjectiveDisjunctionDependency,
-                rule.location,
-            )
-            .into());
-        }
+        head_profile(rule)?;
         let aggregates: Vec<_> = rule
             .body
             .iter()
@@ -121,6 +115,21 @@ pub(crate) fn check(
     }
     for objective in objectives {
         observer(objective, &generated)?;
+    }
+    Ok(())
+}
+fn head_profile(rule: &RuleIr) -> Result<(), FormulaFailure> {
+    if matches!(rule.head, HeadIr::Disjunction(_)) {
+        return Err(unsupported(
+            ProfileFeature::ObjectiveDisjunctionDependency,
+            rule.location,
+        )
+        .into());
+    }
+    if let HeadIr::Choice { elements, .. } = &rule.head
+        && elements.iter().any(|element| element.count_tuple.is_some())
+    {
+        return Err(refusal(rule.location));
     }
     Ok(())
 }

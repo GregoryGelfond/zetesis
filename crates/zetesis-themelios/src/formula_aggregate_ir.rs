@@ -93,7 +93,7 @@ impl Compiler<'_> {
             variables,
         )
     }
-    fn guards(
+    pub(super) fn guards(
         &mut self,
         left: Option<&Guard>,
         right: Option<&Guard>,
@@ -180,7 +180,7 @@ impl Compiler<'_> {
         }
         Ok(())
     }
-    fn aggregate_term(
+    pub(super) fn aggregate_term(
         &mut self,
         term: &Term,
         variables: &mut Variables,
