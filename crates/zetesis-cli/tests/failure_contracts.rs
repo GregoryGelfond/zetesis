@@ -320,47 +320,36 @@ fn lower_layer_failures_preserve_typed_causes_at_the_public_cli_boundary() {
 }
 
 #[test]
-fn unsupported_routes_explain_how_to_select_an_available_oracle_before_parsing() {
-    for (oracle, grounder, expected) in [
-        (
-            "closure",
-            "lazy",
-            "lazy source joins currently require --backend cpu or auto",
-        ),
-        (
-            "countermodel",
-            "lazy",
-            "the countermodel oracle requires --grounder eager or auto",
-        ),
-    ] {
-        let mut options = options(&["--oracle", oracle, "--grounder", grounder]);
-        options.backend = zetesis_cli::Backend::Metal;
-        let mut output = Vec::new();
-        let mut diagnostics = Vec::new();
-        let error = run_with_diagnostics(
-            "this source cannot parse".into(),
-            &options,
-            &mut output,
-            &mut diagnostics,
-            &Control::default(),
-        )
-        .unwrap_err();
-        match &error {
-            RunError::UnsupportedCombination { backend, grounder }
-            | RunError::UnsupportedOracle { backend, grounder } => {
-                assert_eq!(*backend, options.backend);
-                assert_eq!(*grounder, options.grounder);
-            }
-            _ => panic!("route validation must precede source admission: {error}"),
+fn lazy_countermodel_requests_are_refused_before_parsing() {
+    let mut options = options(&["--oracle", "countermodel", "--grounder", "lazy"]);
+    options.backend = zetesis_cli::Backend::Metal;
+    let mut output = Vec::new();
+    let mut diagnostics = Vec::new();
+    let error = run_with_diagnostics(
+        "this source cannot parse".into(),
+        &options,
+        &mut output,
+        &mut diagnostics,
+        &Control::default(),
+    )
+    .unwrap_err();
+    match &error {
+        RunError::UnsupportedOracle { backend, grounder } => {
+            assert_eq!(*backend, options.backend);
+            assert_eq!(*grounder, options.grounder);
         }
-        let message = error.to_string();
-        assert!(message.contains(expected), "{message}");
-        assert!(message.contains("Metal"), "{message}");
-        assert!(message.contains(grounder), "{message}");
-        assert!(error.source().is_none());
-        assert!(output.is_empty());
-        assert!(diagnostics.is_empty(), "no backend may be initialized");
+        _ => panic!("route validation must precede source admission: {error}"),
     }
+    let message = error.to_string();
+    assert!(
+        message.contains("the countermodel oracle requires --grounder eager or auto"),
+        "{message}"
+    );
+    assert!(message.contains("Metal"), "{message}");
+    assert!(message.contains("lazy"), "{message}");
+    assert!(error.source().is_none());
+    assert!(output.is_empty());
+    assert!(diagnostics.is_empty(), "no backend may be initialized");
 }
 
 #[test]

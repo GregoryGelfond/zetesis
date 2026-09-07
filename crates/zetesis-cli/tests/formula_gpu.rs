@@ -66,7 +66,7 @@ fn explicit_formula_route_admits_source_before_device_failure_and_still_refuses_
         &Control::default(),
     )
     .unwrap_err();
-    assert!(matches!(error, RunError::UnsupportedCombination { .. }));
+    assert!(matches!(error, RunError::UnsupportedOracle { .. }));
     assert!(output.is_empty());
 }
 

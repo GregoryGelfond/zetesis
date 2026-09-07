@@ -51,15 +51,18 @@ pub struct SolveConfig {
     pub max_candidates: u64,
     /// Maximum incrementally retained gate atoms.
     pub max_carrier_atoms: usize,
-    /// Maximum charged exact-oracle work per candidate.
+    /// Maximum charged CPU oracle work per candidate, or shared host source
+    /// work per lazy GPU batch. The source and device units are distinct.
     pub max_work: u64,
-    /// Maximum derived or eagerly materialized atoms.
+    /// Maximum derived CPU atoms, demanded lazy GPU catalog atoms or eager atoms.
     pub max_atoms: usize,
     /// Maximum substitutions in explicit static lowering.
     pub max_substitutions: usize,
     /// Maximum rules in explicit static lowering.
     pub max_ground_rules: usize,
-    /// Maximum accounted pending/GPU batch payload bytes.
+    /// Maximum accounted pending/GPU batch payload bytes. Lazy GPU splits this
+    /// allowance equally between source coordination and transient transport;
+    /// allocator, tree and driver overhead are outside the payload bound.
     pub max_batch_bytes: u64,
 }
 

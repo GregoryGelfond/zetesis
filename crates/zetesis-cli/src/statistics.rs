@@ -61,6 +61,7 @@ pub(crate) fn write_detailed(
                     discovered_gate_atoms: partial.discovered_gate_atoms,
                     countermodel_statistics: partial.countermodel_statistics,
                     formula_execution: partial.formula_execution.clone(),
+                    lazy_execution: partial.lazy_execution.clone(),
                     optimization: partial.optimization.clone(),
                     phase_timings: failure.phase_timings.as_deref().copied(),
                 };
@@ -79,7 +80,7 @@ pub(crate) fn write_detailed(
 fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
     writeln!(
         sink,
-        "  search limits: candidates={}; formula work={}; decisions={}; per-candidate oracle work={}",
+        "  search limits: candidates={}; formula work={}; decisions={}; CPU candidate/lazy GPU batch source work={}",
         o.max_candidates, o.max_search_work, o.max_search_decisions, o.max_work
     )?;
     writeln!(
@@ -140,6 +141,9 @@ fn completed(sink: &mut impl Write, options: &Options, report: &Report) -> io::R
 }
 
 fn details(sink: &mut impl Write, options: &Options, report: &Report) -> io::Result<()> {
+    if let Some(stats) = &report.lazy_execution {
+        lazy(sink, stats)?;
+    }
     writeln!(
         sink,
         "  results: displayed models={}; candidates examined={}",
@@ -222,6 +226,42 @@ fn details(sink: &mut impl Write, options: &Options, report: &Report) -> io::Res
         )?;
     }
     Ok(())
+}
+
+fn lazy(sink: &mut impl Write, stats: &crate::LazyExecutionStatistics) -> io::Result<()> {
+    writeln!(
+        sink,
+        "  lazy device: requested={}; observed={}; adapter={}",
+        stats.requested_backend.label(),
+        stats.backend,
+        stats.adapter
+    )?;
+    writeln!(
+        sink,
+        "  lazy candidates: submitted={}; completed={}; stopped={}; queued results={}",
+        stats.submitted_candidates,
+        stats.completed_candidates,
+        stats.stopped_candidates,
+        stats.queued_results
+    )?;
+    writeln!(
+        sink,
+        "  lazy source: batches={}; completed rounds={}; shared work={}; offered instances={}; peak catalog atoms={}",
+        stats.batches,
+        stats.source_rounds,
+        stats.source_work,
+        stats.source_instances,
+        stats.peak_catalog_atoms
+    )?;
+    writeln!(
+        sink,
+        "  lazy GPU: dispatches={}; instance/world checks={}; uploaded bytes={}; decoded bytes={}; host wait={:.3} ms (kernel time unmeasured)",
+        stats.dispatches,
+        stats.world_instances,
+        stats.uploaded_bytes,
+        stats.downloaded_bytes,
+        stats.host_wait.as_secs_f64() * 1000.0
+    )
 }
 
 fn formula(sink: &mut impl Write, options: &Options, report: &Report) -> io::Result<()> {

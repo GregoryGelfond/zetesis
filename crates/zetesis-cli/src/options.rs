@@ -11,7 +11,7 @@ pub enum Backend {
     Auto,
     /// Source joins or static closure scans on an owned Rayon pool.
     Cpu,
-    /// Exact integer GPU batches; currently requires eager static lowering.
+    /// Exact integer GPU batches, including explicit lazy relational execution.
     Gpu,
     /// Require a physical GPU using Metal.
     Metal,
@@ -25,6 +25,23 @@ pub enum Backend {
     Nvidia,
 }
 
+impl Backend {
+    /// Stable spelling for configuration and machine-readable execution reports.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Cpu => "cpu",
+            Self::Gpu => "gpu",
+            Self::Metal => "metal",
+            Self::Vulkan => "vulkan",
+            Self::Dx12 => "dx12",
+            Self::Gl => "gl",
+            Self::Nvidia => "nvidia",
+        }
+    }
+}
+
 /// Materialization policy, independent of execution hardware.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum Grounder {
@@ -32,7 +49,7 @@ pub enum Grounder {
     #[default]
     Auto,
     /// Require source joins without materializing a complete ground rule store.
-    /// Currently supported on CPU only; automatic hardware stays on CPU.
+    /// Explicit GPU requests use immutable relational rounds; Auto stays on CPU.
     Lazy,
     /// Materialize a bounded static program before checking on CPU or GPU.
     Eager,
@@ -204,11 +221,11 @@ pub struct Options {
     /// Maximum gate tuples retained by the incremental candidate cursor.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_carrier_atoms, hide_short_help = true)]
     pub max_carrier_atoms: usize,
-    /// Maximum charged oracle operations per CPU candidate; lazy joins and eager
-    /// scans charge different operations.
+    /// Maximum charged oracle operations per CPU candidate, or shared source
+    /// operations per lazy GPU batch. Join/copy and eager scan units differ.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_work, hide_short_help = true)]
     pub max_work: u64,
-    /// Maximum derived CPU atoms and materialized eager atoms.
+    /// Maximum derived CPU atoms, demanded lazy GPU catalog atoms or eager atoms.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_atoms, hide_short_help = true)]
     pub max_atoms: usize,
     /// Maximum bytes in each original file or standard input before parsing.
@@ -232,7 +249,8 @@ pub struct Options {
     /// Maximum rules retained during eager CPU/GPU lowering.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_ground_rules, hide_short_help = true)]
     pub max_ground_rules: usize,
-    /// Maximum accounted GPU batch transport bytes, excluding driver overhead.
+    /// Maximum accounted GPU batch bytes, excluding allocator/driver overhead.
+    /// Lazy GPU reserves half for source state and half for transient transport.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_batch_bytes, hide_short_help = true)]
     pub max_batch_bytes: u64,
 }

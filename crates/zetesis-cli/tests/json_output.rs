@@ -792,7 +792,7 @@ fn setup_refusals_have_unavailable_coverage() {
             vec!["--oracle", "countermodel", "--grounder", "lazy"],
             "unsupported_oracle",
         ),
-        ("a.", vec!["--grounder", "lazy"], "unsupported_combination"),
+        ("p(.", vec!["--grounder", "lazy"], "expansion"),
         ("p(.", vec!["--oracle", "countermodel"], "formula_admission"),
         (
             "a.",
@@ -808,7 +808,7 @@ fn setup_refusals_have_unavailable_coverage() {
         ),
     ] {
         let mut configured = options(&extra);
-        if kind == "unsupported_combination" {
+        if kind == "expansion" {
             configured.backend = zetesis_cli::Backend::Nvidia;
         }
         let (result, value) = solve(source, &configured);

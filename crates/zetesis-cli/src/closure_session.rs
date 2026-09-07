@@ -14,7 +14,7 @@ use crate::{Completion, Interruption, RunError, SemanticOutcome, SolveConfig};
 pub(crate) struct ClosureSession<'a> {
     program: &'a Program,
     candidates: Candidates<'a>,
-    engine: Engine,
+    engine: Result<Engine, Stop>,
     ready: std::vec::IntoIter<Result<Option<Model>, Stop>>,
     finished_batch: bool,
     pending_stop: Option<Stop>,
@@ -35,9 +35,12 @@ impl<'a> ClosureSession<'a> {
         control: &Control,
         phases: &Recorder,
     ) -> Result<Self, RunError> {
-        let engine = phases.measure(SolvePhase::ExecutionSetup, || {
-            Engine::with_ground(config, program, ground, diagnostics, phases)
-        })?;
+        let engine = match control.poll() {
+            Ok(()) => Ok(phases.measure(SolvePhase::ExecutionSetup, || {
+                Engine::with_ground(config, program, ground, diagnostics, phases)
+            })?),
+            Err(stop) => Err(stop),
+        };
         let candidates = phases.measure(SolvePhase::CandidateSetup, || {
             Candidates::new(
                 program,
@@ -124,10 +127,14 @@ impl<'a> ClosureSession<'a> {
                 }
             }
             drop(generation);
-            match self
-                .engine
-                .check(config, self.program, &seeds, diagnostics, control, phases)
-            {
+            let results = match &mut self.engine {
+                Ok(engine) => {
+                    engine.check(config, self.program, &seeds, diagnostics, control, phases)
+                }
+                Err(_) if seeds.is_empty() => Ok(Vec::new()),
+                Err(stop) => Ok(vec![Err(*stop)]),
+            };
+            match results {
                 Ok(results) => {
                     self.verified +=
                         results.iter().filter(|r| matches!(r, Ok(Some(_)))).count() as u64;
@@ -170,6 +177,15 @@ impl<'a> ClosureSession<'a> {
             gate_atoms: self.candidates.discovered_atoms(),
             countermodel_statistics: None,
             formula_execution: None,
+            lazy_execution: self
+                .engine
+                .as_ref()
+                .ok()
+                .and_then(Engine::lazy_statistics)
+                .map(|mut statistics| {
+                    statistics.queued_results = self.ready.len();
+                    statistics
+                }),
         }
     }
 }

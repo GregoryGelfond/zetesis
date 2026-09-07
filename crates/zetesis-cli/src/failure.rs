@@ -30,6 +30,8 @@ pub struct PartialReport {
     pub countermodel_statistics: Option<zetesis_sat::Statistics>,
     /// Actual hybrid accounting, including uncommitted candidates and queued models.
     pub formula_execution: Option<crate::FormulaExecutionStatistics>,
+    /// Actual lazy device work, including incomplete batch progress.
+    pub lazy_execution: Option<crate::LazyExecutionStatistics>,
     /// Retained incumbent metadata, independent of how many ties were published.
     pub optimization: Option<Optimization>,
 }
@@ -107,6 +109,7 @@ impl Progress {
                 discovered_gate_atoms: gate_atoms,
                 countermodel_statistics: None,
                 formula_execution: None,
+                lazy_execution: None,
                 optimization: None,
                 phase_timings: None,
             },
@@ -130,6 +133,7 @@ impl Progress {
         self.report.discovered_gate_atoms = semantic.discovered_gate_atoms();
         self.report.countermodel_statistics = semantic.countermodel_statistics().copied();
         self.report.formula_execution = semantic.formula_execution().cloned();
+        self.report.lazy_execution = semantic.lazy_execution().cloned();
         self.report.optimization = semantic.incumbent().cloned();
         self.semantic = Some(semantic);
     }
@@ -166,6 +170,7 @@ impl Progress {
                 discovered_gate_atoms: report.discovered_gate_atoms,
                 countermodel_statistics: report.countermodel_statistics,
                 formula_execution: report.formula_execution,
+                lazy_execution: report.lazy_execution,
                 optimization: report.optimization,
             })),
             secondary_output: None,

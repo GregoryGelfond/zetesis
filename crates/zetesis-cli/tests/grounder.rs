@@ -157,7 +157,15 @@ fn eager_auto_never_silently_substitutes_lazy_when_lowering_is_refused() {
 }
 
 #[test]
-fn explicit_gpu_and_lazy_is_refused_before_source_admission_or_device_discovery() {
+fn lazy_device_selection_preserves_source_diagnostics() {
+    let baseline = run_with_diagnostics(
+        "invalid source!!!".into(),
+        &options(&["--backend", "cpu", "--grounder", "lazy"]),
+        &mut Vec::new(),
+        &mut Vec::new(),
+        &Control::default(),
+    )
+    .unwrap_err();
     for name in ["gpu", "metal", "vulkan", "dx12", "gl", "nvidia"] {
         let mut output = Vec::new();
         let mut diagnostics = Vec::new();
@@ -170,9 +178,11 @@ fn explicit_gpu_and_lazy_is_refused_before_source_admission_or_device_discovery(
             &Control::default(),
         )
         .unwrap_err();
-        assert!(
-            matches!(error, RunError::UnsupportedCombination { backend, grounder: Grounder::Lazy } if backend == selected.backend)
+        assert_eq!(
+            std::mem::discriminant(&error),
+            std::mem::discriminant(&baseline)
         );
+        assert_eq!(error.to_string(), baseline.to_string());
         assert!(output.is_empty());
         assert!(diagnostics.is_empty());
     }

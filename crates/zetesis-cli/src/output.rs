@@ -191,7 +191,13 @@ fn summary(result: &Result<Progress, SolveFailure>, maximum: usize) -> Result<Ve
         out.text("null")?;
     }
     out.text("},\"statistics\":")?;
-    statistics(&mut out, view.search, view.execution, view.timings)?;
+    statistics(
+        &mut out,
+        view.search,
+        view.execution,
+        view.lazy_execution,
+        view.timings,
+    )?;
     out.text("}")?;
     Ok(out.bytes)
 }
@@ -292,6 +298,9 @@ fn error_kind(error: &RunError) -> &'static str {
         RunError::FormulaBatchShape { .. } => "formula_batch_shape",
         #[cfg(feature = "gpu")]
         RunError::Gpu(_) => "gpu",
+        #[cfg(feature = "gpu")]
+        RunError::LazyGpu(_) => "lazy_gpu",
+        RunError::LazyStatisticsOverflow => "lazy_statistics_overflow",
     }
 }
 
@@ -472,6 +481,7 @@ fn statistics(
     out: &mut Buffer,
     search: Option<&zetesis_sat::Statistics>,
     execution: Option<&crate::FormulaExecutionStatistics>,
+    lazy_execution: Option<&crate::LazyExecutionStatistics>,
     timings: Option<&PhaseTimings>,
 ) -> Result<(), RunError> {
     // Counts are typed and optional; this is a bounded fixed-shape view, not a
@@ -481,6 +491,8 @@ fn statistics(
         search_statistics(out, search)?;
         out.text(",\"execution\":")?;
         execution_statistics(out, execution)?;
+        out.text(",\"lazy_execution\":")?;
+        lazy_statistics(out, lazy_execution)?;
         out.text(",\"phase_timings\":")?;
         phases(out, timings)?;
         out.text(",\"stage_timings\":")?;
@@ -582,6 +594,7 @@ struct SummaryView<'a> {
     optimization: Option<&'a crate::Optimization>,
     search: Option<&'a zetesis_sat::Statistics>,
     execution: Option<&'a crate::FormulaExecutionStatistics>,
+    lazy_execution: Option<&'a crate::LazyExecutionStatistics>,
     timings: Option<&'a PhaseTimings>,
 }
 impl<'a> SummaryView<'a> {
@@ -598,6 +611,7 @@ impl<'a> SummaryView<'a> {
                     optimization: report.optimization.as_ref(),
                     search: report.countermodel_statistics.as_ref(),
                     execution: report.formula_execution.as_ref(),
+                    lazy_execution: report.lazy_execution.as_ref(),
                     timings: report.phase_timings.as_ref(),
                 }
             }
@@ -612,6 +626,7 @@ impl<'a> SummaryView<'a> {
                     optimization: partial.and_then(|p| p.optimization.as_ref()),
                     search: partial.and_then(|p| p.countermodel_statistics.as_ref()),
                     execution: partial.and_then(|p| p.formula_execution.as_ref()),
+                    lazy_execution: partial.and_then(|p| p.lazy_execution.as_ref()),
                     timings: failure.phase_timings.as_deref(),
                 }
             }
@@ -669,4 +684,67 @@ fn execution_statistics(
     out.text(",\"complete\":")?;
     out.text(if stats.overflowed { "false" } else { "true" })?;
     out.text("}}")
+}
+
+fn lazy_statistics(
+    out: &mut Buffer,
+    statistics: Option<&crate::LazyExecutionStatistics>,
+) -> Result<(), RunError> {
+    let Some(stats) = statistics else {
+        return out.text("null");
+    };
+    out.text("{\"requested_backend\":")?;
+    out.string(stats.requested_backend.label())?;
+    out.text(",\"adapter\":")?;
+    out.string(&stats.adapter)?;
+    out.text(",\"backend\":")?;
+    out.string(&stats.backend)?;
+    out.number_field("batches", stats.batches)?;
+    out.number_field("submitted_candidates", stats.submitted_candidates)?;
+    out.number_field("completed_candidates", stats.completed_candidates)?;
+    out.number_field("stopped_candidates", stats.stopped_candidates)?;
+    out.number_field("queued_results", stats.queued_results)?;
+    out.number_field("source_rounds", stats.source_rounds)?;
+    out.number_field("source_work", stats.source_work)?;
+    out.number_field("source_instances", stats.source_instances)?;
+    out.number_field("peak_catalog_atoms", stats.peak_catalog_atoms)?;
+    out.number_field("dispatches", stats.dispatches)?;
+    out.number_field("world_instances", stats.world_instances)?;
+    out.number_field("uploaded_bytes", stats.uploaded_bytes)?;
+    out.number_field("downloaded_bytes", stats.downloaded_bytes)?;
+    out.number_field("host_wait_ns", stats.host_wait.as_nanos())?;
+    out.text("}")
+}
+
+#[cfg(test)]
+mod lazy_tests {
+    use super::{Buffer, lazy_statistics};
+
+    #[test]
+    fn lazy_json_retains_requested_and_observed_execution() {
+        let fixture = crate::lazy_execution::tests::fixture();
+        let mut out = Buffer::new(4096);
+        lazy_statistics(&mut out, Some(&fixture)).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
+        assert_eq!(value["requested_backend"], "metal");
+        assert_eq!(value["backend"], "Metal");
+        assert_eq!(value["adapter"], fixture.adapter);
+        assert_eq!(value["submitted_candidates"], 7);
+        assert_eq!(value["completed_candidates"], 4);
+        assert_eq!(value["stopped_candidates"], 3);
+        assert_eq!(value["queued_results"], 2);
+        assert_eq!(value["host_wait_ns"], 123);
+    }
+
+    #[test]
+    fn lazy_json_obeys_the_record_byte_limit() {
+        let fixture = crate::lazy_execution::tests::fixture();
+        let mut out = Buffer::new(4096);
+        lazy_statistics(&mut out, Some(&fixture)).unwrap();
+        for capacity in 0..out.bytes.len() {
+            let mut bounded = Buffer::new(capacity);
+            assert!(lazy_statistics(&mut bounded, Some(&fixture)).is_err());
+            assert!(bounded.bytes.len() <= capacity);
+        }
+    }
 }

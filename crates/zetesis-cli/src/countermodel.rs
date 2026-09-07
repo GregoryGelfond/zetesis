@@ -189,6 +189,7 @@ pub(crate) fn check_control(
                 gate_atoms: 0,
                 countermodel_statistics: None,
                 formula_execution: None,
+                lazy_execution: None,
             });
             complete(output, diagnostics, progress, phases, json).map(Some)
         }

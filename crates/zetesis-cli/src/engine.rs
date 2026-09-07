@@ -17,14 +17,6 @@ pub(crate) fn validate_combination(options: &SolveConfig) -> Result<(), RunError
     if options.oracle == Oracle::Countermodel {
         validate_countermodel(options)?;
     }
-    if options.grounder == Grounder::Lazy
-        && !matches!(options.backend, Backend::Auto | Backend::Cpu)
-    {
-        return Err(RunError::UnsupportedCombination {
-            backend: options.backend,
-            grounder: options.grounder,
-        });
-    }
     Ok(())
 }
 
@@ -45,6 +37,13 @@ pub(crate) struct Engine {
 }
 
 impl Engine {
+    pub(crate) fn lazy_statistics(&self) -> Option<crate::LazyExecutionStatistics> {
+        #[cfg(feature = "gpu")]
+        if let Executor::LazyGpu { statistics, .. } = &self.executor {
+            return Some(statistics.clone());
+        }
+        None
+    }
     #[cfg(test)]
     pub(crate) fn new(
         options: &SolveConfig,
@@ -197,6 +196,11 @@ enum Executor {
         oracle: Box<zetesis_wgpu::GpuOracle>,
         ground: Arc<GroundProgram>,
     },
+    #[cfg(feature = "gpu")]
+    LazyGpu {
+        oracle: Box<zetesis_wgpu::GpuLazyOracle>,
+        statistics: crate::LazyExecutionStatistics,
+    },
 }
 
 impl Executor {
@@ -246,6 +250,8 @@ impl Executor {
             Self::StaticCpu { ground, .. } => Some(Arc::clone(ground)),
             #[cfg(feature = "gpu")]
             Self::Gpu { ground, .. } => Some(Arc::clone(ground)),
+            #[cfg(feature = "gpu")]
+            Self::LazyGpu { .. } => None,
         }
     }
 
@@ -253,7 +259,7 @@ impl Executor {
         match self {
             Self::Cpu(_) | Self::StaticCpu { .. } => false,
             #[cfg(feature = "gpu")]
-            Self::Gpu { .. } => true,
+            Self::Gpu { .. } | Self::LazyGpu { .. } => true,
         }
     }
 
@@ -277,6 +283,30 @@ impl Executor {
         phases: &Recorder,
     ) -> Result<Self, RunError> {
         use zetesis_wgpu::{GpuOptions, GpuOracle};
+
+        if options.grounder == Grounder::Lazy {
+            let oracle = zetesis_wgpu::GpuLazyOracle::new_selected(
+                GpuOptions::default(),
+                selection(options.backend),
+            )
+            .map_err(RunError::Gpu)?;
+            let statistics = crate::LazyExecutionStatistics::new(options.backend, oracle.info());
+            phases.lazy_grounding();
+            diagnostics.metadata(Label::Grounding, format_args!("requested=lazy, effective=lazy (host source joins; per-world device consequences; no complete ground-rule store)"))?;
+            diagnostics.metadata(
+                Label::Backend,
+                format_args!(
+                    "gpu ({}, {}; vendor=0x{:04x}; lazy immutable reduct rounds)",
+                    oracle.info().name(),
+                    oracle.info().backend(),
+                    oracle.info().vendor_id()
+                ),
+            )?;
+            return Ok(Self::LazyGpu {
+                oracle: Box::new(oracle),
+                statistics,
+            });
+        }
 
         // Discover hardware before any new static materialization. Eager CPU
         // attempts already own a graph, shared through Arc without expansion.
@@ -326,6 +356,43 @@ impl Executor {
             max_derived_atoms: options.max_atoms,
         };
         match self {
+            #[cfg(feature = "gpu")]
+            Self::LazyGpu { oracle, statistics } => {
+                let bytes = usize::try_from(options.max_batch_bytes / 2).unwrap_or(usize::MAX);
+                let source_limits = zetesis_cpu::lazy::Limits {
+                    max_candidates: options.batch_size.get(),
+                    max_atoms: options.max_atoms,
+                    max_source_work: options.max_work,
+                    max_rounds: u64::try_from(options.max_atoms)
+                        .unwrap_or(u64::MAX)
+                        .saturating_add(1),
+                    max_host_bytes: bytes,
+                    ..Default::default()
+                };
+                let device_limits = zetesis_wgpu::GpuLimits {
+                    max_candidates: options.batch_size.get(),
+                    max_batch_bytes: options.max_batch_bytes / 2,
+                    ..Default::default()
+                };
+                let result =
+                    oracle.check_batch(program, seeds, source_limits, device_limits, control);
+                let progress = match &result {
+                    Ok(batch) => batch.progress,
+                    Err(failure) => failure.progress,
+                };
+                statistics.record(seeds.len(), result.is_ok(), progress, oracle.statistics())?;
+                match result {
+                    Ok(batch) => Ok(batch
+                        .checks
+                        .into_iter()
+                        .map(|check| Ok(check.accepted().then(|| check.closure().clone())))
+                        .collect()),
+                    Err(failure) => match failure.cause {
+                        zetesis_cpu::lazy::Cause::Source(stop) => Ok(vec![Err(stop)]),
+                        _ => Err(RunError::LazyGpu(failure)),
+                    },
+                }
+            }
             Self::Cpu(oracle) => Ok(oracle
                 .check_batch(program, seeds, limits, control)
                 .map_err(RunError::Batch)?

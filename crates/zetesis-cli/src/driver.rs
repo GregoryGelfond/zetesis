@@ -74,6 +74,9 @@ pub struct Report {
     /// Actual batched formula execution and pending-result accounting; absent
     /// when the scalar CPU route was used or initialization did not finish.
     pub formula_execution: Option<crate::FormulaExecutionStatistics>,
+    /// Actual lazy device execution, including shared source work and failed
+    /// batch progress. Absent when no lazy device executor was initialized.
+    pub lazy_execution: Option<crate::LazyExecutionStatistics>,
     /// Best retained objective score and tied models found so far.
     /// Only exhausted coverage establishes that this incumbent is optimal.
     pub optimization: Option<crate::Optimization>,
@@ -152,6 +155,11 @@ pub enum RunError {
     /// GPU capability, submission, or result transport failed.
     #[cfg(feature = "gpu")]
     Gpu(zetesis_wgpu::GpuError),
+    /// Lazy device or protocol failure with retained shared source progress.
+    #[cfg(feature = "gpu")]
+    LazyGpu(zetesis_cpu::lazy::Failure<zetesis_wgpu::GpuError>),
+    /// Cumulative lazy execution counters could not represent another batch.
+    LazyStatisticsOverflow,
     /// A static oracle returned an invalid dense closure representation.
     Words(zetesis_core::WordError),
     /// An injected batch checker violated its ordered result-count contract.
@@ -191,7 +199,7 @@ impl fmt::Display for RunError {
             ),
             Self::UnsupportedCombination { backend, grounder } => write!(
                 f,
-                "unsupported backend/grounding combination: {backend:?} with {}; lazy source joins currently require --backend cpu or auto; GPU execution requires --grounder auto or eager",
+                "unsupported backend/grounding profile: {backend:?} with {}",
                 grounder.label()
             ),
             Self::UnsupportedOracle { backend, grounder } => write!(
@@ -212,6 +220,9 @@ impl fmt::Display for RunError {
             Self::Static(error) => error.fmt(f),
             #[cfg(feature = "gpu")]
             Self::Gpu(error) => error.fmt(f),
+            #[cfg(feature = "gpu")]
+            Self::LazyGpu(error) => error.fmt(f),
+            Self::LazyStatisticsOverflow => f.write_str("lazy execution statistics overflow"),
             Self::Words(error) => error.fmt(f),
             Self::FormulaBatchShape { expected, actual } => write!(f, "formula checker returned {actual} results for {expected} candidates"),
         }?;
@@ -268,6 +279,7 @@ impl std::error::Error for RunError {
             | Self::BackendUnavailable
             | Self::UnsupportedCombination { .. }
             | Self::UnsupportedOracle { .. }
+            | Self::LazyStatisticsOverflow
             | Self::FormulaBatchShape { .. } => None,
             Self::Formula(error) => Some(error),
             Self::FormulaAdmission(error) => Some(error),
@@ -275,6 +287,8 @@ impl std::error::Error for RunError {
             Self::Static(error) => Some(error),
             #[cfg(feature = "gpu")]
             Self::Gpu(error) => Some(error),
+            #[cfg(feature = "gpu")]
+            Self::LazyGpu(error) => Some(error),
             Self::Words(error) => Some(error),
             Self::PreparedInput { .. } => None,
         }

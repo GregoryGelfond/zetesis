@@ -18,6 +18,7 @@ pub struct SemanticOutcome {
     pub(crate) gate_atoms: usize,
     pub(crate) countermodel_statistics: Option<zetesis_sat::Statistics>,
     pub(crate) formula_execution: Option<crate::FormulaExecutionStatistics>,
+    pub(crate) lazy_execution: Option<crate::LazyExecutionStatistics>,
 }
 
 impl SemanticOutcome {
@@ -50,6 +51,11 @@ impl SemanticOutcome {
     #[must_use]
     pub const fn formula_execution(&self) -> Option<&crate::FormulaExecutionStatistics> {
         self.formula_execution.as_ref()
+    }
+    /// Lazy device accounting, including completed but unconsumed results.
+    #[must_use]
+    pub const fn lazy_execution(&self) -> Option<&crate::LazyExecutionStatistics> {
+        self.lazy_execution.as_ref()
     }
     /// Completed exact stable-model memberships, including still-queued results.
     #[must_use]

@@ -291,6 +291,7 @@ impl<'a> Session<'a> {
                     gate_atoms: 0,
                     countermodel_statistics: None,
                     formula_execution: None,
+                    lazy_execution: None,
                 })),
                 config,
             ));

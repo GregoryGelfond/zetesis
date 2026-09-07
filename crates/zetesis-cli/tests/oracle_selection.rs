@@ -253,7 +253,7 @@ fn automatic_formula_selection_preserves_explicit_hardware_and_grounder_requests
         configured.grounder = Grounder::Lazy;
         assert!(matches!(
             assert_refused_without_output("1 {a;b} 1.", &configured),
-            RunError::UnsupportedCombination { backend: requested, .. } if requested == backend
+            RunError::UnsupportedOracle { backend: requested, .. } if requested == backend
         ));
     }
     for oracle in [Oracle::Auto, Oracle::Countermodel] {

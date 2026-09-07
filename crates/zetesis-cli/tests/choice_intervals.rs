@@ -126,27 +126,13 @@ fn explicit_lazy_choice_routes_are_refused_before_device_discovery() {
             Backend::Nvidia,
         ),
     ] {
-        // Ordinary eager formula solving supports explicit GPU requests. The
-        // unsupported combination is lazy grounding, regardless of hardware.
+        // This formula profile still requires eager grounding, independently of
+        // the relational lazy device capability.
         let (result, output, diagnostics) = solve("1 {p(1..4)} 1.", &arguments);
         let error = result.expect_err("lazy choice route must be refused");
-        if backend == Backend::Auto {
-            assert!(matches!(
-                error,
-                RunError::UnsupportedOracle {
-                    backend: Backend::Auto,
-                    grounder: Grounder::Lazy,
-                }
-            ));
-        } else {
-            assert!(matches!(
-                error,
-                RunError::UnsupportedCombination {
-                    backend: requested,
-                    grounder: Grounder::Lazy,
-                } if requested == backend
-            ));
-        }
+        assert!(
+            matches!(error, RunError::UnsupportedOracle { backend: requested, grounder: Grounder::Lazy } if requested == backend)
+        );
         assert!(output.is_empty(), "{arguments:?}: {output}");
         assert!(diagnostics.is_empty(), "{arguments:?}: {diagnostics}");
     }

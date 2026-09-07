@@ -104,6 +104,18 @@ fn every_completed_cpu_statistics_prefix_is_fallible_without_losing_bytes() {
 }
 
 #[test]
+fn lazy_metadata_rendering_preserves_every_writer_failure() {
+    let options = options(&["--grounder", "lazy"]);
+    let mut report = actual("p.", &options, &Control::default()).unwrap();
+    report.lazy_execution = Some(crate::lazy_execution::tests::fixture());
+    let text = every_prefix(&options, &Ok(report));
+    assert!(text.contains("requested=metal; observed=Metal"));
+    assert!(text.contains("submitted=7; completed=4; stopped=3; queued results=2"));
+    assert!(text.contains("kernel time unmeasured"));
+    assert!(text.contains("FORMAT FIXTURE: no physical execution"));
+}
+
+#[test]
 fn every_partial_or_cancelled_statistics_prefix_preserves_incomplete_qualification() {
     let mut requested = options(&[]);
     requested.models = 1;

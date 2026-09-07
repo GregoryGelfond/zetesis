@@ -256,6 +256,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             checked: statistics.map_or(0, |s| s.candidates),
             gate_atoms: self.input.gate_atoms,
             countermodel_statistics: statistics,
+            lazy_execution: None,
             formula_execution: self
                 .models
                 .as_ref()
