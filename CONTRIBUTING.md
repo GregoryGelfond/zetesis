@@ -1,5 +1,8 @@
 # Contributing to zetesis
 
+Start with the [development guide](docs/development.md) for setup, repository
+navigation, focused tests and qualification prerequisites.
+
 zetesis is a native member of the themelios, keryx and morphe estate. Its own
 purpose is exact answer-set solving through the reduct, with composable parallel
 and device execution. A research milestone narrows supported features; it does

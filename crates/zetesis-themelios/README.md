@@ -27,7 +27,7 @@ normalized projection, and does not assert that a lazy implementation exists for
 that source. The [grounding-selection contract](../../docs/design/grounding-selection.md)
 separates class facts, implementation availability and strategy preference.
 
-## Closed structural values
+## Structural values and finite construction
 
 Bounded closed functions and tuples are logical values, including `f(1,g(2))`,
 `-f(1)`, `()`, `(1,)` and `(1,2)`. `f()` normalizes to `f`; a negative constructor
@@ -46,9 +46,17 @@ constant dependencies inside constructors are resolved before use, and nested
 constant cycles are refused. Checked i32 arithmetic keeps its existing undefined
 and overflow refusals; signed function negation is handled separately.
 
-This slice does not introduce constructor generation or pattern unification:
-`p(f(X)):-q(X)` and `q(X):-p(f(X))` remain refused. Pools/intervals below a
-constructor remain outside the profile. Min/max comparisons and independent
+Formula admission evaluates finite constructors from independently bound inputs,
+for example `p(f(X)):-q(X)`. It also extracts components from positive tuple
+patterns, such as `p(A):-q((A,_),_)`, retaining full original atom identities.
+Matching stages bindings privately and commits them only after the entire pattern
+succeeds; mismatches and resource failures cannot leak partial bindings.
+Positive named-function patterns such as `q(X):-p(f(X))` remain refused.
+Pools/intervals below a constructor remain outside this generation profile.
+The [finite-value](../../docs/verification/finite-values-20260907/README.md) and
+[tuple-binding](../../docs/verification/structural-bindings-20260907/README.md)
+records give exact scope, original-model and frozen-reduct tests.
+Min/max comparisons and independent
 assignments accept closed symbols, strings, structures and genuine #inf/#sup
 sentinels under the ASP term order; numeric extrema endpoints retain the
 [current source guard](../../docs/design/numeric-semantics.md). This internal
@@ -87,8 +95,9 @@ atoms and directly negated output constructors render with `-`, including
 `#show -seen(X) : -p(X).`. Output constructors remain observations; they never
 create logical atoms. Arithmetic minus in `p(-1)` remains a numeric value.
 Closed signed values such as `p(-a)` and `p(f(1,g(2)))` use the bounded structural
-carrier. Constructor pattern extraction and variable-containing construction
-remain outside admission.
+carrier. Formula admission additionally supports the finite construction and
+positive tuple extraction described above; named-function patterns remain outside
+admission.
 
 The [Lean `StrongNegation` module](../../proofs/Zetesis/StrongNegation.lean)
 proves that injective signed-atom renaming preserves exact reduct syntax and
@@ -115,7 +124,7 @@ This is bounded eager formula grounding. The relational admission APIs still pro
 
 ## Signed disjunctions and explicitly true conditions
 
-Formula admission accepts `a(X) | b(X) :- d(X).` as one implication from the original body to the disjunction of its grounded heads. Every head variable belongs to the outer rule scope and must be safe there before aggregate-local scopes are considered. Head arguments admit closed values, whole variables and checked scalar arithmetic, plus top-level numeric intervals whose inputs have admitted outer bindings. Each interval expands a Cartesian family of whole rule instances retaining the original disjunction: `p(1..2) | q.` becomes `p(1) | q.` and `p(2) | q.`, not a flat three-atom disjunction. Each disjunct retains its own `not`/`not not` polarity. An empty colon or a conjunction of explicitly true Boolean literals (`#true`, `not #false`, `not not #true`) is erased without changing that rule family: `p(1..2):#true; q:#true.` has exactly the models `{p(1),p(2)}` and `{q}`. The same law covers a singleton conditioned head, retaining its polarity. False conditions, comparisons, atom-dependent conditions, pools, nested intervals and variable-containing constructors remain explicit refusals. The [true-head record](../../docs/verification/true-heads-20260907/README.md) states the bounded slice and its model/reduct evidence. Ordinary default-negated singleton heads and negative choice heads remain outside this slice. `FormulaLimits::max_disjunction_elements` bounds each owned head before IR collection; its default is 1,024, duplicates are already coalesced by the upstream owned representation, and zero allows no disjunctive element. Parsing retains the separate source/syntax ceilings.
+Formula admission accepts `a(X) | b(X) :- d(X).` as one implication from the original body to the disjunction of its grounded heads. Every head variable belongs to the outer rule scope and must be safe there before aggregate-local scopes are considered. Head arguments admit closed values, whole variables and checked scalar arithmetic, plus top-level numeric intervals whose inputs have admitted outer bindings. Each interval expands a Cartesian family of whole rule instances retaining the original disjunction: `p(1..2) | q.` becomes `p(1) | q.` and `p(2) | q.`, not a flat three-atom disjunction. Each disjunct retains its own `not`/`not not` polarity. An empty colon or a conjunction of explicitly true Boolean literals (`#true`, `not #false`, `not not #true`) is erased without changing that rule family: `p(1..2):#true; q:#true.` has exactly the models `{p(1),p(2)}` and `{q}`. The same law covers a singleton conditioned head, retaining its polarity. False conditions, comparisons and atom-dependent head conditions remain explicit refusals. Finite constructor arguments with independently bound inputs use the shared construction plan; pools and intervals below constructors remain outside that plan. The [true-head record](../../docs/verification/true-heads-20260907/README.md) states the bounded slice and its model/reduct evidence. Ordinary default-negated singleton heads and negative choice heads remain outside this slice. `FormulaLimits::max_disjunction_elements` bounds each owned head before IR collection; its default is 1,024, duplicates are already coalesced by the upstream owned representation, and zero allows no disjunctive element. Parsing retains the separate source/syntax ceilings.
 
 The possible-support relation includes only positive disjuncts of each completed body binding. It does not use the single-head support shortcut, because an existing sibling cannot justify skipping another possible head. Final lowering retains one `body → OR(literals)` formula, coalesces identical literal nodes without merging polarities, and records the body as necessary producer evidence only for positive heads. Negative occurrences contribute source provenance. The original rule `a | not a` has both the empty and singleton answer sets; adding `not not a` as a third disjunct removes the singleton, so polarity cannot be replaced by classical equivalence. The separate [negative-head laws](../../proofs/Zetesis/NegativeHeads.lean) justify positive-only necessary support in the stated ground grammar, without proving this compiler. It never shifts a disjunction into normal rules or treats its heads as a choice: `a | b. a :- b. b :- a.` has the stable model `{a,b}`. The current normal-rule component factorization remains disabled for this new head form. The source-to-formula/compiler correspondence is tested, not a new Lean refinement claim.
 
@@ -136,11 +145,11 @@ Positive equality can bind a whole otherwise-unbound variable from an independen
 
 `X=L..U` and its reversed form stream a separate inclusive integer cursor after both endpoints are bound. A bound `X` uses membership testing; it never binds an endpoint. Descending ranges and evaluated nonnumeric endpoints emit no rows, matching clingo's interval expansion behavior; this applies equally to symbols and real infinity values. Undefined arithmetic while computing an endpoint remains a separate typed refusal. Every cursor has a bounded range width, and every generated value, operation, substitution, support atom, and support round remains under its existing independent ceiling. Backtracking resets dependent cursors before advancing an earlier range or relational row. Values are not drawn from a global source-domain Cartesian product.
 
-Normal-head scalar expressions and intervals lower to fresh internal value slots feeding the original atom. Distinct head intervals produce independent argument products without introducing semantic auxiliary predicates. For example, `end(S+D) :- start(S), duration(D).` can derive `end(4)` from two values of 2 even when 4 never occurs in the source. This generated value participates in later constraints and recursive joins. Evaluated choice and disjunctive heads use the same binding machinery with their distinct group/rule expansion contracts. Evaluated body-atom arguments remain outside this slice. Local choice and aggregate conditions have their own binding plans; generated local variables cannot make an outer head safe.
+Normal-head scalar expressions and intervals lower to fresh internal value slots feeding the original atom. Distinct head intervals produce independent argument products without introducing semantic auxiliary predicates. For example, `end(S+D) :- start(S), duration(D).` can derive `end(4)` from two values of 2 even when 4 never occurs in the source. This generated value participates in later constraints and recursive joins. Evaluated choice and disjunctive heads use the same binding machinery with their distinct group/rule expansion contracts. Already-safe default-negated body arguments can also evaluate scalar expressions and finite constructors. They consume existing bindings rather than supplying new ones. Evaluated positive body arguments retain their separate pattern boundary. Local choice and aggregate conditions have their own binding plans; generated local variables cannot make an outer head safe.
 
 Undefined or overflowing arithmetic refuses the whole source instead of dropping a substitution. Generative recursion must complete the possible-support fixed point; a default-negated producer can therefore reach a bounded refusal even when clingo's stronger grounding simplification terminates it. Existing aggregate-target dependency restrictions are separate from these scalar instructions. The planner and streamed cursor are tested implementations, not a claimed Lean refinement.
 
-Anonymous arguments under default negation of an **unsigned** predicate have an existential projection contract. For `not q(X,_)`, every named argument must already be safe, while anonymous positions allocate no binding slots. Final formula construction disjoins every matching atom from the completed possible-support relation, then applies the original default or double default negation. It preserves recursive eligibility rather than freezing that disjunction to a truth value. No semantic auxiliary predicate is introduced. Ordinary positive-body anonymous atoms of either classical sign retain their independent binding behavior; body-atom arithmetic remains unsupported.
+Anonymous arguments under default negation of an **unsigned** predicate have an existential projection contract. For `not q(X,_)`, every named argument must already be safe, while anonymous positions allocate no binding slots. Final formula construction disjoins every matching atom from the completed possible-support relation, then applies the original default or double default negation. It preserves recursive eligibility rather than freezing that disjunction to a truth value. No semantic auxiliary predicate is introduced. Ordinary positive-body anonymous atoms of either classical sign retain their independent binding behavior; already-safe negative arguments can evaluate arithmetic without supplying bindings.
 
 Clingo 5.8.2 treats `not -p(_)` and `not not -p(_)` differently: their anonymous variables are unsafe. The formula and observation source boundaries preserve that refusal, including choice and aggregate conditions. Ordinary positive-body `-p(_)` remains a valid binder. This distinction is a source-safety rule, not a change to the formula reduct or a reason to collapse the two predicate signs. The [strong-negation record](../../docs/verification/strong-negation-20260906/README.md) retains the exact source probes and diagnostics.
 

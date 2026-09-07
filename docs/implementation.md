@@ -1,4 +1,4 @@
-# Prototype implementation
+# Implementation map
 
 This document maps the broader [design](design/zetesis.md) to the current code.
 The design describes the experiment's target architecture; this file identifies
@@ -9,6 +9,11 @@ in the [corpus contract](verification/kr-domains-compatibility.md). The
 [Ferraris/clingo extension](design/ferraris.md) supplies the semantic basis for the
 implemented finite formula profile.
 S0 is an initial slice and does not satisfy that full target.
+
+For a first checkout, use the [development guide](development.md). The
+[verification index](verification/status.md) distinguishes current source changes
+from the last fully qualified binary. The reduct remains the foundation across
+all source profiles and execution plans.
 
 ## Workspace
 
@@ -22,7 +27,8 @@ S0 is an initial slice and does not satisfy that full target.
 | `zetesis-objective` | Lifted positive objective joins, global tuple coalescing, checked costs and explicit per-model limits |
 | `zetesis-sat` | Native bounded candidate and frozen-reduct countermodel search with independent witness validation |
 | `zetesis-wgpu` | Bounded static integer oracle and general Ferraris propagation primitive, native adapter selection, resident buffers and GPU result transport |
-| `zetesis-cli` | Streaming input/output, backend selection and explicit search coverage |
+| `zetesis-cli` | Prepared-input sessions, typed solve configuration/outcomes, bounded human/JSON views and process adaptation |
+| `zetesis-telemetry` | Optional typed host stage measurements, independent of rendered diagnostics |
 | `zetesis-experiments` | Standalone static and general-formula membership qualifications, explicit CPU residual measurements and Criterion regression benchmarks |
 | `zetesis-validation` | External-oracle corpus comparisons; separate from every solver execution path |
 
@@ -52,8 +58,12 @@ Under the checked clingo 5.8.2 source boundary, unsigned `not p(_)` and
 `not not p(_)` use the admitted existential projection. Signed `not -p(_)` and
 `not not -p(_)` are unsafe and refused; ordinary positive-body `-p(_)` is a valid
 binder. Closed signed constructors and tuples now have bounded logical identity
-through the [structural value carrier](design/closed-structural-values.md);
-constructor pattern extraction and variable-containing construction remain refused.
+through the [structural value carrier](design/closed-structural-values.md).
+Formula admission also supports finite construction from independently bound
+inputs, evaluated safe negative arguments and positive tuple-pattern extraction.
+Named-function patterns remain refused. Matching uses staged binding deltas so
+an unsuccessful tuple row cannot modify the caller's environment. The
+[source API guide](../crates/zetesis-themelios/README.md) gives the exact scope.
 See the [strong-negation record](verification/strong-negation-20260906/README.md)
 for independent full-model/reduct tests and retained reference diagnostics.
 
@@ -77,8 +87,10 @@ present atom proves stable membership. `TightPlan::check` therefore returns
 `Stable` without an inner subset search. A missing producer returns `Residual`,
 leaving witness-based rejection to the general checker. Unrecognized syntax,
 cycles, incomplete work and exhausted plan limits cannot produce a certificate.
-The Rust API and complete corpus experiment exercise this composition; ordinary
-CLI policy does not yet select it. The [Lean laws](../proofs/Zetesis/TightPlans.lean)
+The Rust API and complete corpus experiment exercise this composition. Ordinary
+CPU formula solving selects it under `--oracle auto` when the completed theory
+receives the required certificate; explicit countermodel selection keeps the
+general reduct path. The [Lean laws](../proofs/Zetesis/TightPlans.lean)
 establish the restricted formula theorem, without claiming refinement of the
 Rust extraction, ranks, memory accounting or source compiler.
 
@@ -304,8 +316,12 @@ and supply no positive support, including double negation. The ground
 `NegativeHeads.lean` grammar proves the necessary positive-support law and
 stable-model preservation of its double-negated support guards; this is not a
 verification of the Rust compiler or possible-support grounding.
-Conditional heads, negative singleton/choice heads, pools, non-ground constructor arguments and
-objective-reachable disjunctive producers remain typed refusals. A dedicated
+Explicitly true head conditions can normalize without changing the rule family;
+broader conditioned heads, negative singleton/choice heads and objective-reachable
+disjunctive producers remain typed refusals. Finite rule/head pools retain their
+whole-rule or choice-group product semantics. Bound constructor arguments use
+the shared finite-value evaluator; nested pool/interval forms keep their own
+admission limits. A dedicated
 head-element ceiling bounds this source profile.
 An assignment introduces one fresh named target, absent from its own tuple and
 conditions; other outer variables require ordinary positive bindings. Finite
