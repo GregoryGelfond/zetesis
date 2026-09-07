@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 
-use crate::phase::Measurement;
+use super::phase::Measurement;
 
 const HEADER: &str = "Stage timings: clock=host-monotonic; scope=driver; schema=1";
 const FOOTER: &str = "  stage scope: solving=setup_search_waits_scoring; source_loading=excluded; statistics_output=excluded; timer_overhead=not_separated; lazy_grounding=interleaved; kernel_time=unmeasured";

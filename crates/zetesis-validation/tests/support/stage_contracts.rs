@@ -24,7 +24,7 @@ fn stage_absence_preserves_both_phase_schemas_and_diagnostics() {
         assert_eq!(stages.unattributed_elapsed_ns, Some(160));
         assert_eq!(stages.grounding_mode, "eager");
         assert_eq!(
-            crate::phase::parse(&combined)
+            super::super::phase::parse(&combined)
                 .unwrap()
                 .unwrap()
                 .driver_elapsed_ns,

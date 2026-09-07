@@ -5,6 +5,7 @@ pub mod answers;
 pub mod curated;
 #[path = "example_corpus/mod.rs"]
 pub mod examples;
+pub mod performance;
 pub mod process;
 pub mod selected;
 
