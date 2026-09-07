@@ -1,0 +1,8 @@
+{
+  "status": "PASS",
+  "cases": 960,
+  "raw": "evidence/vectors.tsv",
+  "bytes": 22902,
+  "sha256": "35def8cb4d97ff503c38f26d2d0a417c0e68aff13bc4e8f113b4b923954f45a3",
+  "scope": "finite transfer equality; no shader/device/performance claim"
+}

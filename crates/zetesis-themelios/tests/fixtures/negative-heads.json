@@ -1,0 +1,1156 @@
+[
+  {
+    "name": "negative-only-occurrence",
+    "source": "not a | b.",
+    "roots": [
+      [
+        "or",
+        [
+          "imp",
+          "a",
+          false
+        ],
+        "b"
+      ]
+    ],
+    "support": {
+      "b": true
+    },
+    "expanded": "not a | b.",
+    "atoms": [
+      "a",
+      "b"
+    ],
+    "models": [
+      []
+    ]
+  },
+  {
+    "name": "excluded-middle-is-choice",
+    "source": "a | not a.",
+    "roots": [
+      [
+        "or",
+        "a",
+        [
+          "imp",
+          "a",
+          false
+        ]
+      ]
+    ],
+    "support": {
+      "a": true
+    },
+    "expanded": "a | not a.",
+    "atoms": [
+      "a"
+    ],
+    "models": [
+      [],
+      [
+        "a"
+      ]
+    ]
+  },
+  {
+    "name": "double-negation-is-not-support",
+    "source": "not not a | b.",
+    "roots": [
+      [
+        "or",
+        [
+          "imp",
+          [
+            "imp",
+            "a",
+            false
+          ],
+          false
+        ],
+        "b"
+      ]
+    ],
+    "support": {
+      "b": true
+    },
+    "expanded": "not not a | b.",
+    "atoms": [
+      "a",
+      "b"
+    ],
+    "models": [
+      [
+        "b"
+      ]
+    ]
+  },
+  {
+    "name": "negative-tautology-has-no-producer",
+    "source": "not a | not not a.",
+    "roots": [
+      [
+        "or",
+        [
+          "imp",
+          "a",
+          false
+        ],
+        [
+          "imp",
+          [
+            "imp",
+            "a",
+            false
+          ],
+          false
+        ]
+      ]
+    ],
+    "support": {},
+    "expanded": "not a | not not a.",
+    "atoms": [
+      "a"
+    ],
+    "models": [
+      []
+    ]
+  },
+  {
+    "name": "negative-choice",
+    "source": "{a}. not a | b.",
+    "roots": [
+      [
+        "or",
+        "a",
+        [
+          "imp",
+          "a",
+          false
+        ]
+      ],
+      [
+        "or",
+        [
+          "imp",
+          "a",
+          false
+        ],
+        "b"
+      ]
+    ],
+    "support": {
+      "a": true,
+      "b": true
+    },
+    "expanded": "{a}. not a | b.",
+    "atoms": [
+      "a",
+      "b"
+    ],
+    "models": [
+      [],
+      [
+        "a",
+        "b"
+      ]
+    ]
+  },
+  {
+    "name": "double-negative-choice",
+    "source": "{a}. not not a | b.",
+    "roots": [
+      [
+        "or",
+        "a",
+        [
+          "imp",
+          "a",
+          false
+        ]
+      ],
+      [
+        "or",
+        [
+          "imp",
+          [
+            "imp",
+            "a",
+            false
+          ],
+          false
+        ],
+        "b"
+      ]
+    ],
+    "support": {
+      "a": true,
+      "b": true
+    },
+    "expanded": "{a}. not not a | b.",
+    "atoms": [
+      "a",
+      "b"
+    ],
+    "models": [
+      [
+        "a"
+      ],
+      [
+        "b"
+      ]
+    ]
+  },
+  {
+    "name": "cycle-cannot-use-double-negation",
+    "source": "a:-a. not not a|b.",
+    "roots": [
+      [
+        "imp",
+        "a",
+        "a"
+      ],
+      [
+        "or",
+        [
+          "imp",
+          [
+            "imp",
+            "a",
+            false
+          ],
+          false
+        ],
+        "b"
+      ]
+    ],
+    "support": {
+      "b": true
+    },
+    "expanded": "a:-a. not not a|b.",
+    "atoms": [
+      "a",
+      "b"
+    ],
+    "models": [
+      [
+        "b"
+      ]
+    ]
+  },
+  {
+    "name": "all-negative-unsat",
+    "source": "a. b. not a|not b.",
+    "roots": [
+      "a",
+      "b",
+      [
+        "or",
+        [
+          "imp",
+          "a",
+          false
+        ],
+        [
+          "imp",
+          "b",
+          false
+        ]
+      ]
+    ],
+    "support": {
+      "a": true,
+      "b": true
+    },
+    "expanded": "a. b. not a|not b.",
+    "atoms": [
+      "a",
+      "b"
+    ],
+    "models": []
+  },
+  {
+    "name": "unshiftable-positive-cycle",
+    "source": "a|b. a:-b. b:-a.",
+    "roots": [
+      [
+        "or",
+        "a",
+        "b"
+      ],
+      [
+        "imp",
+        "b",
+        "a"
+      ],
+      [
+        "imp",
+        "a",
+        "b"
+      ]
+    ],
+    "support": {
+      "a": true,
+      "b": true
+    },
+    "expanded": "a|b. a:-b. b:-a.",
+    "atoms": [
+      "a",
+      "b"
+    ],
+    "models": [
+      [
+        "a",
+        "b"
+      ]
+    ]
+  },
+  {
+    "name": "duplicate-polarities",
+    "source": "not a|a|not not a|a.",
+    "roots": [
+      [
+        "or",
+        [
+          "or",
+          [
+            "imp",
+            "a",
+            false
+          ],
+          "a"
+        ],
+        [
+          "imp",
+          [
+            "imp",
+            "a",
+            false
+          ],
+          false
+        ]
+      ]
+    ],
+    "support": {
+      "a": true
+    },
+    "expanded": "not a|a|not not a|a.",
+    "atoms": [
+      "a"
+    ],
+    "models": [
+      []
+    ]
+  },
+  {
+    "name": "signed-negative-occurrence",
+    "source": "not -a | b.",
+    "roots": [
+      [
+        "or",
+        [
+          "imp",
+          "-a",
+          false
+        ],
+        "b"
+      ]
+    ],
+    "support": {
+      "b": true
+    },
+    "expanded": "not -a | b.",
+    "atoms": [
+      "-a",
+      "b"
+    ],
+    "models": [
+      []
+    ]
+  },
+  {
+    "name": "signed-excluded-middle",
+    "source": "-a | not -a.",
+    "roots": [
+      [
+        "or",
+        "-a",
+        [
+          "imp",
+          "-a",
+          false
+        ]
+      ]
+    ],
+    "support": {
+      "-a": true
+    },
+    "expanded": "-a | not -a.",
+    "atoms": [
+      "-a"
+    ],
+    "models": [
+      [],
+      [
+        "-a"
+      ]
+    ]
+  },
+  {
+    "name": "signed-double-negative-choice",
+    "source": "{-a}. not not -a | b.",
+    "roots": [
+      [
+        "or",
+        "-a",
+        [
+          "imp",
+          "-a",
+          false
+        ]
+      ],
+      [
+        "or",
+        [
+          "imp",
+          [
+            "imp",
+            "-a",
+            false
+          ],
+          false
+        ],
+        "b"
+      ]
+    ],
+    "support": {
+      "-a": true,
+      "b": true
+    },
+    "expanded": "{-a}. not not -a | b.",
+    "atoms": [
+      "-a",
+      "b"
+    ],
+    "models": [
+      [
+        "-a"
+      ],
+      [
+        "b"
+      ]
+    ]
+  },
+  {
+    "name": "strong-coherence",
+    "source": "a. -a|not -a.",
+    "roots": [
+      "a",
+      [
+        "or",
+        "-a",
+        [
+          "imp",
+          "-a",
+          false
+        ]
+      ],
+      [
+        "imp",
+        [
+          "and",
+          "a",
+          "-a"
+        ],
+        false
+      ]
+    ],
+    "support": {
+      "a": true,
+      "-a": true
+    },
+    "expanded": "a. -a|not -a.",
+    "atoms": [
+      "-a",
+      "a"
+    ],
+    "models": [
+      [
+        "a"
+      ]
+    ]
+  },
+  {
+    "name": "false-body",
+    "source": "{a}. not a|b:-a,not a.",
+    "roots": [
+      [
+        "or",
+        "a",
+        [
+          "imp",
+          "a",
+          false
+        ]
+      ],
+      [
+        "imp",
+        [
+          "and",
+          "a",
+          [
+            "imp",
+            "a",
+            false
+          ]
+        ],
+        [
+          "or",
+          [
+            "imp",
+            "a",
+            false
+          ],
+          "b"
+        ]
+      ]
+    ],
+    "support": {
+      "a": true,
+      "b": [
+        "and",
+        "a",
+        [
+          "imp",
+          "a",
+          false
+        ]
+      ]
+    },
+    "expanded": "{a}. not a|b:-a,not a.",
+    "atoms": [
+      "a",
+      "b"
+    ],
+    "models": [
+      [],
+      [
+        "a"
+      ]
+    ]
+  },
+  {
+    "name": "recursive-body",
+    "source": "not a|b:-b.",
+    "roots": [
+      [
+        "imp",
+        "b",
+        [
+          "or",
+          [
+            "imp",
+            "a",
+            false
+          ],
+          "b"
+        ]
+      ]
+    ],
+    "support": {
+      "b": "b"
+    },
+    "expanded": "not a|b:-b.",
+    "atoms": [
+      "a",
+      "b"
+    ],
+    "models": [
+      []
+    ]
+  },
+  {
+    "name": "negative-body",
+    "source": "{c}. not a|b:-not c.",
+    "roots": [
+      [
+        "or",
+        "c",
+        [
+          "imp",
+          "c",
+          false
+        ]
+      ],
+      [
+        "imp",
+        [
+          "imp",
+          "c",
+          false
+        ],
+        [
+          "or",
+          [
+            "imp",
+            "a",
+            false
+          ],
+          "b"
+        ]
+      ]
+    ],
+    "support": {
+      "c": true,
+      "b": [
+        "imp",
+        "c",
+        false
+      ]
+    },
+    "expanded": "{c}. not a|b:-not c.",
+    "atoms": [
+      "a",
+      "b",
+      "c"
+    ],
+    "models": [
+      [],
+      [
+        "c"
+      ]
+    ]
+  },
+  {
+    "name": "all-negative-restricts-choice",
+    "source": "{a;b}. not a|not b.",
+    "roots": [
+      [
+        "or",
+        "a",
+        [
+          "imp",
+          "a",
+          false
+        ]
+      ],
+      [
+        "or",
+        "b",
+        [
+          "imp",
+          "b",
+          false
+        ]
+      ],
+      [
+        "or",
+        [
+          "imp",
+          "a",
+          false
+        ],
+        [
+          "imp",
+          "b",
+          false
+        ]
+      ]
+    ],
+    "support": {
+      "a": true,
+      "b": true
+    },
+    "expanded": "{a;b}. not a|not b.",
+    "atoms": [
+      "a",
+      "b"
+    ],
+    "models": [
+      [],
+      [
+        "a"
+      ],
+      [
+        "b"
+      ]
+    ]
+  },
+  {
+    "name": "safe-body-binding",
+    "source": "d(1..2). p(X)|not p(X):-d(X).",
+    "roots": [
+      "d(1)",
+      "d(2)",
+      [
+        "imp",
+        "d(1)",
+        [
+          "or",
+          "p(1)",
+          [
+            "imp",
+            "p(1)",
+            false
+          ]
+        ]
+      ],
+      [
+        "imp",
+        "d(2)",
+        [
+          "or",
+          "p(2)",
+          [
+            "imp",
+            "p(2)",
+            false
+          ]
+        ]
+      ]
+    ],
+    "support": {
+      "d(1)": true,
+      "d(2)": true,
+      "p(1)": "d(1)",
+      "p(2)": "d(2)"
+    },
+    "expanded": "d(1).d(2).p(1)|not p(1):-d(1).p(2)|not p(2):-d(2).",
+    "atoms": [
+      "d(1)",
+      "d(2)",
+      "p(1)",
+      "p(2)"
+    ],
+    "models": [
+      [
+        "d(1)",
+        "d(2)"
+      ],
+      [
+        "d(1)",
+        "d(2)",
+        "p(1)"
+      ],
+      [
+        "d(1)",
+        "d(2)",
+        "p(1)",
+        "p(2)"
+      ],
+      [
+        "d(1)",
+        "d(2)",
+        "p(2)"
+      ]
+    ]
+  },
+  {
+    "name": "evaluated-negative",
+    "source": "d(1).not a(X+1)|b:-d(X).",
+    "roots": [
+      "d(1)",
+      [
+        "imp",
+        "d(1)",
+        [
+          "or",
+          [
+            "imp",
+            "a(2)",
+            false
+          ],
+          "b"
+        ]
+      ]
+    ],
+    "support": {
+      "d(1)": true,
+      "b": "d(1)"
+    },
+    "expanded": "d(1).not a(2)|b:-d(1).",
+    "atoms": [
+      "a(2)",
+      "b",
+      "d(1)"
+    ],
+    "models": [
+      [
+        "d(1)"
+      ]
+    ]
+  },
+  {
+    "name": "evaluated-double-negative",
+    "source": "d(1).{a(2)}.not not a(X+1)|b:-d(X).",
+    "roots": [
+      "d(1)",
+      [
+        "or",
+        "a(2)",
+        [
+          "imp",
+          "a(2)",
+          false
+        ]
+      ],
+      [
+        "imp",
+        "d(1)",
+        [
+          "or",
+          [
+            "imp",
+            [
+              "imp",
+              "a(2)",
+              false
+            ],
+            false
+          ],
+          "b"
+        ]
+      ]
+    ],
+    "support": {
+      "d(1)": true,
+      "a(2)": true,
+      "b": "d(1)"
+    },
+    "expanded": "d(1).{a(2)}.not not a(2)|b:-d(1).",
+    "atoms": [
+      "a(2)",
+      "b",
+      "d(1)"
+    ],
+    "models": [
+      [
+        "a(2)",
+        "d(1)"
+      ],
+      [
+        "b",
+        "d(1)"
+      ]
+    ]
+  },
+  {
+    "name": "negative-interval",
+    "source": "not p(1..2)|q.{p(1)}.{p(2)}.",
+    "roots": [
+      [
+        "or",
+        [
+          "imp",
+          "p(1)",
+          false
+        ],
+        "q"
+      ],
+      [
+        "or",
+        [
+          "imp",
+          "p(2)",
+          false
+        ],
+        "q"
+      ],
+      [
+        "or",
+        "p(1)",
+        [
+          "imp",
+          "p(1)",
+          false
+        ]
+      ],
+      [
+        "or",
+        "p(2)",
+        [
+          "imp",
+          "p(2)",
+          false
+        ]
+      ]
+    ],
+    "support": {
+      "p(1)": true,
+      "p(2)": true,
+      "q": true
+    },
+    "expanded": "not p(1)|q.not p(2)|q.{p(1)}.{p(2)}.",
+    "atoms": [
+      "p(1)",
+      "p(2)",
+      "q"
+    ],
+    "models": [
+      [],
+      [
+        "p(1)",
+        "p(2)",
+        "q"
+      ],
+      [
+        "p(1)",
+        "q"
+      ],
+      [
+        "p(2)",
+        "q"
+      ]
+    ]
+  },
+  {
+    "name": "negative-empty-interval",
+    "source": "not p(2..1)|q.",
+    "roots": [],
+    "support": {},
+    "expanded": "% Empty Cartesian rule family.\n",
+    "atoms": [],
+    "models": [
+      []
+    ]
+  },
+  {
+    "name": "double-negative-interval",
+    "source": "not not p(1..2)|q.{p(1)}.{p(2)}.",
+    "roots": [
+      [
+        "or",
+        [
+          "imp",
+          [
+            "imp",
+            "p(1)",
+            false
+          ],
+          false
+        ],
+        "q"
+      ],
+      [
+        "or",
+        [
+          "imp",
+          [
+            "imp",
+            "p(2)",
+            false
+          ],
+          false
+        ],
+        "q"
+      ],
+      [
+        "or",
+        "p(1)",
+        [
+          "imp",
+          "p(1)",
+          false
+        ]
+      ],
+      [
+        "or",
+        "p(2)",
+        [
+          "imp",
+          "p(2)",
+          false
+        ]
+      ]
+    ],
+    "support": {
+      "p(1)": true,
+      "p(2)": true,
+      "q": true
+    },
+    "expanded": "not not p(1)|q.not not p(2)|q.{p(1)}.{p(2)}.",
+    "atoms": [
+      "p(1)",
+      "p(2)",
+      "q"
+    ],
+    "models": [
+      [
+        "p(1)",
+        "p(2)"
+      ],
+      [
+        "p(1)",
+        "q"
+      ],
+      [
+        "p(2)",
+        "q"
+      ],
+      [
+        "q"
+      ]
+    ]
+  },
+  {
+    "name": "double-negative-empty-interval",
+    "source": "not not p(2..1)|q.",
+    "roots": [],
+    "support": {},
+    "expanded": "% Empty Cartesian rule family.\n",
+    "atoms": [],
+    "models": [
+      []
+    ]
+  },
+  {
+    "name": "cartesian-negative-intervals",
+    "source": "not p(1..2)|q(1..2).{p(1..2)}.",
+    "roots": [
+      [
+        "or",
+        [
+          "imp",
+          "p(1)",
+          false
+        ],
+        "q(1)"
+      ],
+      [
+        "or",
+        [
+          "imp",
+          "p(1)",
+          false
+        ],
+        "q(2)"
+      ],
+      [
+        "or",
+        [
+          "imp",
+          "p(2)",
+          false
+        ],
+        "q(1)"
+      ],
+      [
+        "or",
+        [
+          "imp",
+          "p(2)",
+          false
+        ],
+        "q(2)"
+      ],
+      [
+        "or",
+        "p(1)",
+        [
+          "imp",
+          "p(1)",
+          false
+        ]
+      ],
+      [
+        "or",
+        "p(2)",
+        [
+          "imp",
+          "p(2)",
+          false
+        ]
+      ]
+    ],
+    "support": {
+      "p(1)": true,
+      "p(2)": true,
+      "q(1)": true,
+      "q(2)": true
+    },
+    "expanded": "not p(1)|q(1).not p(1)|q(2).not p(2)|q(1).not p(2)|q(2).{p(1)}.{p(2)}.",
+    "atoms": [
+      "p(1)",
+      "p(2)",
+      "q(1)",
+      "q(2)"
+    ],
+    "models": [
+      [],
+      [
+        "p(1)",
+        "p(2)",
+        "q(1)",
+        "q(2)"
+      ],
+      [
+        "p(1)",
+        "q(1)",
+        "q(2)"
+      ],
+      [
+        "p(2)",
+        "q(1)",
+        "q(2)"
+      ]
+    ]
+  },
+  {
+    "name": "opposed-independent-intervals",
+    "source": "p(1..2)|not p(1..2).",
+    "roots": [
+      [
+        "or",
+        "p(1)",
+        [
+          "imp",
+          "p(1)",
+          false
+        ]
+      ],
+      [
+        "or",
+        "p(1)",
+        [
+          "imp",
+          "p(2)",
+          false
+        ]
+      ],
+      [
+        "or",
+        "p(2)",
+        [
+          "imp",
+          "p(1)",
+          false
+        ]
+      ],
+      [
+        "or",
+        "p(2)",
+        [
+          "imp",
+          "p(2)",
+          false
+        ]
+      ]
+    ],
+    "support": {
+      "p(1)": true,
+      "p(2)": true
+    },
+    "expanded": "p(1)|not p(1).p(1)|not p(2).p(2)|not p(1).p(2)|not p(2).",
+    "atoms": [
+      "p(1)",
+      "p(2)"
+    ],
+    "models": [
+      [],
+      [
+        "p(1)",
+        "p(2)"
+      ]
+    ]
+  }
+]

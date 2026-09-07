@@ -1,0 +1,36 @@
+{
+  "source_hashes_checked": 35,
+  "unchanged_existing_log_hashes_checked": 6,
+  "top_level_theorems": 484,
+  "current_index_count": 484,
+  "current_audit_equals_retained_batch_accounting_audit": true,
+  "stale_nested_audit_consistency": {
+    "source_theorem_declarations": 467,
+    "indexed_theorems": 467,
+    "printed_axiom_entries": 467,
+    "unique_qualified_names": 467,
+    "source_index_line_check": "PASS",
+    "allowed_transitive_axioms_only": "PASS"
+  },
+  "artifact_mismatches": {
+    "README.md": {
+      "recorded": "d7968da0dec0fcaffdde354adae0385c9ab4956a6229ae709deb967595ac8c57",
+      "actual": "d1c2ad65cd05de6b68b9d236f11c66b92e1045e4f91e6bdca4f67af1d704b67d"
+    },
+    "theorems.json": {
+      "recorded": "f59d2a42dcaac6a7eed03640e9b1d5961c726b89cfb61f8cb11bb7647e028d18",
+      "actual": "aa02b45445e8567d8a047109cae98632ccd3bf098ad1c1253266a652521ff714"
+    },
+    "axiom-audit.txt": {
+      "recorded": "b1f81d72abc36d781b01c4c402a1c0da92839f85769803a6bc10ce7570544644",
+      "actual": "7615ddd6b06c49663fd23564d573b0971f32276cd820a3d77d841de707961d51"
+    }
+  },
+  "missing_current_command_log_hashes": [
+    "verification/batch-accounting-20260906/module.log",
+    "verification/batch-accounting-20260906/clean.log",
+    "verification/batch-accounting-20260906/build.log",
+    "verification/batch-accounting-20260906/audit.log",
+    "verification/batch-accounting-20260906/version.log"
+  ]
+}

@@ -1,0 +1,32 @@
+[package]
+name = "zetesis-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+rayon.workspace = true
+zetesis-core.workspace = true
+zetesis-themelios.workspace = true
+zetesis-cpu.workspace = true
+zetesis-ferraris.workspace = true
+zetesis-sat.workspace = true
+zetesis-objective.workspace = true
+zetesis-wgpu = { workspace = true, optional = true }
+clap.workspace = true
+
+[dev-dependencies]
+serde_json = "=1.0.151"
+
+[lints]
+workspace = true
+
+[features]
+default = ["gpu"]
+gpu = ["dep:zetesis-wgpu"]
+
+[[bin]]
+name = "zetesis"
+path = "src/main.rs"

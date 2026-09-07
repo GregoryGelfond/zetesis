@@ -1,0 +1,14 @@
+Phase timings: clock=host-monotonic; scope=driver; failed_attempts=included
+  phase driver: elapsed_ns=1000
+  phase admission_materialization: calls=1; elapsed_ns=40; complete=true
+  phase execution_setup: unmeasured
+  phase candidate_setup: unmeasured
+  phase candidate_generation: unmeasured
+  phase original_validation: unmeasured
+  phase gpu_host_oracle: unmeasured
+  phase exact_reduct_membership: unmeasured
+  phase closure_membership: unmeasured
+  phase objective_scoring_retention: unmeasured
+  phase objective_feedback: unmeasured
+  phase observation_output: unmeasured
+  phase scope: source_loading=excluded; statistics_output=excluded; timer_overhead=unattributed; kernel_time=unmeasured

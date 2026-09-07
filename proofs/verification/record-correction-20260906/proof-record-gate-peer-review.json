@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "reviewed_utc": "2026-09-06T17:11:25.559561+00:00",
+  "status": "complete",
+  "assessment": "No unresolved concrete defect found within the documented narrow metadata-consistency scope.",
+  "method": "Independent read-only code/test/hook review and byte hashing. Reviewer did not execute the gate, tests, Lean or Cargo. Author-run raw results are referenced separately.",
+  "files_sha256": {
+    "scripts/proof_record.py": "eaee2f634b32dcf9fb67f7643d359d65f891bdae25627bd248d966268e471ee7",
+    "scripts/tests/test_proof_record.py": "b36cc94dcd825f9be9435cfade6c28cae58877008079ac3a4396caafbe8b0237",
+    "scripts/check.sh": "19899caf4f4fd11e52aa0d1de61084605f4636b69ff71aa9f60749aef05951a7",
+    "proofs/verification.json": "23861e9d4aecc0fc88eeffc1aa2df002a647cc216335ce621eb4d712ed912f77",
+    "proofs/README.md": "a85e1af2c9b1ee25adbdc8ec9566b542612e761c738c237cad703e636f7efd37",
+    "proofs/theorems.json": "aa02b45445e8567d8a047109cae98632ccd3bf098ad1c1253266a652521ff714",
+    "proofs/Audit.lean": "e04a1e345408f25f911cdb1c218c752a7dc3ba765445dc84187a8750d845d2b6",
+    "proofs/axiom-audit.txt": "7615ddd6b06c49663fd23564d573b0971f32276cd820a3d77d841de707961d51",
+    "proofs/verification/record-correction-20260906/README.md": "ce49540d888390489846fbde89be4d69524eb00702d1c27febadaf4e16353d13",
+    "proofs/verification/record-correction-20260906/verification.before.json": "676f7dfa0c43077a8b64fd8236c986c0b7f48c4efafa01e845d1f14cb817b053",
+    "proofs/verification/record-correction-20260906/detected-inconsistency.json": "e2d926b5bd88cfffa77506ede51172e9ba2b4aa4a1c0cde2f1a6a3112bdf4bfc",
+    "proofs/verification/record-correction-20260906/commands.json": "60c77acfc1f7a202e7af81f118a9f10ddfcb4447fce07407a26e839849bd98df"
+  },
+  "author_frozen_source_matches": true,
+  "current_record_hash_reconciliation": {
+    "source_sha256": {
+      "count": 35,
+      "mismatches": {}
+    },
+    "generated_artifact_sha256": {
+      "count": 3,
+      "mismatches": {}
+    },
+    "verification_log_sha256": {
+      "count": 15,
+      "mismatches": {}
+    }
+  },
+  "proof_source_registry_unchanged_from_detected_record": true,
+  "counts": {
+    "semantic_modules": 30,
+    "theorems_audited": 484,
+    "batch_accounting_laws": 17,
+    "audit_consistency": {
+      "source_theorem_declarations": 484,
+      "indexed_theorems": 484,
+      "printed_axiom_entries": 484,
+      "unique_qualified_names": 484,
+      "source_index_line_check": "PASS",
+      "allowed_transitive_axioms_only": "PASS"
+    }
+  },
+  "current_audit_matches_retained_batch_log": true,
+  "current_audit_matches_fresh_correction_log": true,
+  "original_detection_record_preserved": true,
+  "resolved_during_review": [
+    {
+      "issue": "Boolean schema_version accepted as integer 1",
+      "resolution": "Exact int type check at proof_record.py:241; regression in test_duplicate_json_keys_and_escaping_paths_are_rejected."
+    },
+    {
+      "issue": "Separate-line source attributes accepted despite declared refusal convention",
+      "resolution": "Source attribute-prefix lines now rejected at proof_record.py:128; both same-line and separate-line tests retained."
+    }
+  ],
+  "author_validation_reference": "work/proof-record-gate-validation/commands.json",
+  "author_validation_summary": "15 targeted methods and all 42 Python methods passed. Current actual record passed 484/30/35; preserved pre-correction record failed on generated artifact hash. These runs were performed by the author, not this reviewer.",
+  "limitations": [
+    "Not a Lean parser or kernel verifier; admitted source convention is deliberately narrower than Lean.",
+    "Hashes and successful-looking retained command records establish internal consistency, not authenticity or execution provenance.",
+    "No Rust/WGSL refinement, compiler identity, source-to-binary relationship, hardware execution, or solver correctness follows from gate success.",
+    "Additional descriptive verification fields and arbitrary imports are not semantically validated; the claim is the checked inventories, counts, locations, axioms, command records and retained log identities."
+  ],
+  "prior_review": "report.md and metadata-inconsistency.json remain unchanged, recording the metadata defect as unresolved at detection."
+}

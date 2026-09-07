@@ -1,0 +1,17 @@
+[package]
+name = "zetesis-objective"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+zetesis-core.workspace = true
+zetesis-cpu.workspace = true
+
+[dev-dependencies]
+proptest = "1.11"
+
+[lints]
+workspace = true

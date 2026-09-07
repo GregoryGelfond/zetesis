@@ -1,0 +1,19 @@
+[package]
+name = "zetesis-domain"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Conservative argument domains over borrowed themelios programs."
+publish = false
+
+[dependencies]
+themelios-program.workspace = true
+
+[dev-dependencies]
+themelios-base.workspace = true
+themelios-syntax.workspace = true
+proptest = "1.11"
+
+[lints]
+workspace = true

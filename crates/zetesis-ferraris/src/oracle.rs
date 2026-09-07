@@ -1,0 +1,267 @@
+use crate::{Interpretation, Node, Theory};
+use zetesis_cpu::{Control, Stop};
+
+/// Per-call bounds for exact finite checking. Exceeding a bound is incomplete,
+/// never a proof of stability or nonminimality.
+#[derive(Clone, Copy, Debug)]
+pub struct Limits {
+    /// Charged node evaluations, root tests, atom scans and subset-bit operations.
+    pub max_work: u64,
+    /// Maximum number of proper subsets checked against a frozen reduct.
+    pub max_subsets: u64,
+}
+impl Default for Limits {
+    fn default() -> Self {
+        Self {
+            max_work: 100_000_000,
+            max_subsets: 1_048_576,
+        }
+    }
+}
+
+/// Logical work performed before a completed decision.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Statistics {
+    /// Charged primitive operations, including classical candidate evaluation.
+    pub work: u64,
+    /// Proper subsets evaluated; the original candidate is never counted.
+    pub subsets: u64,
+}
+
+/// A complete candidate decision with a checkable rejection witness.
+#[derive(Clone, Debug)]
+pub enum Verdict {
+    /// No proper subset satisfies the candidate's frozen formula reduct.
+    Stable,
+    /// The original interpretation fails this asserted root node.
+    NotModel {
+        /// Circuit node index of a false asserted formula.
+        root: usize,
+    },
+    /// This proper subset models the frozen reduct.
+    NonMinimal {
+        /// Program-bound counterexample to subset minimality.
+        witness: Interpretation,
+    },
+}
+
+/// Completed decision and exact logical-work accounting.
+#[derive(Clone, Debug)]
+pub struct Check {
+    verdict: Verdict,
+    statistics: Statistics,
+}
+impl Check {
+    /// Stable-model membership decision, or the reason for rejection.
+    #[must_use]
+    pub fn verdict(&self) -> &Verdict {
+        &self.verdict
+    }
+    /// True only for a completed minimality proof.
+    #[must_use]
+    pub fn accepted(&self) -> bool {
+        matches!(self.verdict, Verdict::Stable)
+    }
+    /// Work consumed by this completed call.
+    #[must_use]
+    pub fn statistics(&self) -> Statistics {
+        self.statistics
+    }
+}
+
+struct Work<'a> {
+    limits: Limits,
+    control: &'a Control,
+    statistics: Statistics,
+}
+impl Work<'_> {
+    fn tick(&mut self) -> Result<(), Stop> {
+        self.control.poll()?;
+        if self.statistics.work >= self.limits.max_work {
+            return Err(Stop::WorkLimit);
+        }
+        self.statistics.work += 1;
+        Ok(())
+    }
+}
+
+fn identities(theory: &Theory, interpretation: &Interpretation) -> Result<(), Stop> {
+    if theory.same_instance(interpretation.theory()) {
+        Ok(())
+    } else {
+        Err(Stop::WrongProgram)
+    }
+}
+
+fn reserve<T>(count: usize) -> Result<Vec<T>, Stop> {
+    let mut vector = Vec::new();
+    vector
+        .try_reserve_exact(count)
+        .map_err(|_| Stop::Allocation)?;
+    Ok(vector)
+}
+
+fn evaluate(
+    theory: &Theory,
+    interpretation: &Interpretation,
+    frozen: Option<&[bool]>,
+    output: &mut Vec<bool>,
+    work: &mut Work<'_>,
+) -> Result<(), Stop> {
+    output.clear();
+    for (index, node) in theory.nodes().iter().enumerate() {
+        work.tick()?;
+        let value = match *node {
+            Node::Atom(atom) => interpretation.contains(atom),
+            Node::False => false,
+            Node::And(a, b) => output[a] && output[b],
+            Node::Or(a, b) => output[a] || output[b],
+            Node::Implies(a, b) => !output[a] || output[b],
+        };
+        // A maximal M-false subformula becomes falsum. Masking every M-false
+        // node has the same root meaning and avoids materializing a new DAG.
+        output.push(value && frozen.is_none_or(|mask| mask[index]));
+    }
+    Ok(())
+}
+
+fn failed_root(
+    theory: &Theory,
+    values: &[bool],
+    work: &mut Work<'_>,
+) -> Result<Option<usize>, Stop> {
+    for root in theory.roots() {
+        work.tick()?;
+        if !values[*root] {
+            return Ok(Some(*root));
+        }
+    }
+    Ok(None)
+}
+
+/// Classical satisfaction of a finite theory.
+///
+/// # Errors
+/// Refuses foreign interpretations, cancellation, deadlines, allocation, or work limits.
+pub fn models(
+    theory: &Theory,
+    interpretation: &Interpretation,
+    limits: Limits,
+    control: &Control,
+) -> Result<bool, Stop> {
+    identities(theory, interpretation)?;
+    control.poll()?;
+    let mut work = Work {
+        limits,
+        control,
+        statistics: Statistics::default(),
+    };
+    let mut values = reserve(theory.nodes().len())?;
+    evaluate(theory, interpretation, None, &mut values, &mut work)?;
+    Ok(failed_root(theory, &values, &mut work)?.is_none())
+}
+
+/// Satisfaction in `tested` of the formula reduct frozen in `candidate`.
+/// No subset relation is required; minimality search imposes that separately.
+///
+/// # Errors
+/// Refuses foreign interpretations, cancellation, deadlines, allocation, or work limits.
+pub fn models_reduct(
+    theory: &Theory,
+    candidate: &Interpretation,
+    tested: &Interpretation,
+    limits: Limits,
+    control: &Control,
+) -> Result<bool, Stop> {
+    identities(theory, candidate)?;
+    identities(theory, tested)?;
+    control.poll()?;
+    let mut work = Work {
+        limits,
+        control,
+        statistics: Statistics::default(),
+    };
+    let mut frozen = reserve(theory.nodes().len())?;
+    let mut values = reserve(theory.nodes().len())?;
+    evaluate(theory, candidate, None, &mut frozen, &mut work)?;
+    evaluate(theory, tested, Some(&frozen), &mut values, &mut work)?;
+    Ok(failed_root(theory, &values, &mut work)?.is_none())
+}
+
+/// Decide stable-model membership by classical satisfaction and exhaustive
+/// proper-subset checking of the Ferraris formula reduct. This reference kernel
+/// is exponential in the candidate size and does not assume a least reduct model.
+///
+/// # Errors
+/// Refuses foreign candidates, cancellation, deadlines, allocation, or exhausted
+/// work/subset bounds. A subset bound uses `Stop::CandidateLimit` because it
+/// bounds candidate countermodels; no partial search returns `Stable`.
+pub fn check(
+    theory: &Theory,
+    candidate: &Interpretation,
+    limits: Limits,
+    control: &Control,
+) -> Result<Check, Stop> {
+    identities(theory, candidate)?;
+    control.poll()?;
+    let mut work = Work {
+        limits,
+        control,
+        statistics: Statistics::default(),
+    };
+    let mut frozen = reserve(theory.nodes().len())?;
+    evaluate(theory, candidate, None, &mut frozen, &mut work)?;
+    if let Some(root) = failed_root(theory, &frozen, &mut work)? {
+        return Ok(Check {
+            verdict: Verdict::NotModel { root },
+            statistics: work.statistics,
+        });
+    }
+    let mut selected = reserve(theory.atom_count())?;
+    for atom in 0..theory.atom_count() {
+        work.tick()?;
+        if candidate.contains(atom) {
+            selected.push(atom);
+        }
+    }
+    let mut words = reserve(candidate.words.len())?;
+    words.resize(candidate.words.len(), 0);
+    let mut subset = Interpretation {
+        theory: theory.clone(),
+        words,
+    };
+    let mut values = reserve(theory.nodes().len())?;
+    // Empty is the first proper subset unless M itself is empty. Incrementing
+    // over selected atom indices avoids machine-word cardinality restrictions.
+    let mut present = 0;
+    while present < selected.len() {
+        control.poll()?;
+        if work.statistics.subsets >= limits.max_subsets {
+            return Err(Stop::CandidateLimit);
+        }
+        work.statistics.subsets += 1;
+        evaluate(theory, &subset, Some(&frozen), &mut values, &mut work)?;
+        if failed_root(theory, &values, &mut work)?.is_none() {
+            return Ok(Check {
+                verdict: Verdict::NonMinimal { witness: subset },
+                statistics: work.statistics,
+            });
+        }
+        for atom in &selected {
+            work.tick()?;
+            let packed = &mut subset.words[*atom / 64];
+            let bit = 1 << (*atom % 64);
+            if *packed & bit == 0 {
+                *packed |= bit;
+                present += 1;
+                break;
+            }
+            *packed &= !bit;
+            present -= 1;
+        }
+    }
+    Ok(Check {
+        verdict: Verdict::Stable,
+        statistics: work.statistics,
+    })
+}

@@ -1,0 +1,49 @@
+{"name": "global_same_key", "source": "{a;b}. :~ a. [2@1,k] :~ b. [2@1,k]", "records": [[["a", "b"], [2]], [["a"], [2]], [["b"], [2]], [[], [0]]]}
+{"name": "minimize_cross_key", "source": "{a;b}. :~ a. [2@1,k] #minimize{2@1,k:b}.", "records": [[["a", "b"], [2]], [["a"], [2]], [["b"], [2]], [[], [0]]]}
+{"name": "different_tuple", "source": "{a;b}. :~ a. [2@1,k] :~ b. [2@1,l]", "records": [[["a", "b"], [4]], [["a"], [2]], [["b"], [2]], [[], [0]]]}
+{"name": "different_weight", "source": "{a;b}. :~ a. [2@1,k] :~ b. [3@1,k]", "records": [[["a", "b"], [5]], [["a"], [2]], [["b"], [3]], [[], [0]]]}
+{"name": "different_priority", "source": "{a;b}. :~ a. [2@1,k] :~ b. [2@0,k]", "records": [[["a", "b"], [2, 2]], [["a"], [2, 0]], [["b"], [0, 2]], [[], [0, 0]]]}
+{"name": "default_priority", "source": "{a}. :~ a. [2,k]", "records": [[["a"], [2]], [[], [0]]]}
+{"name": "negative_weight", "source": "{a;b}. :~ a. [-2@1,k] :~ b. [1@1,k]", "records": [[["a", "b"], [-1]], [["a"], [-2]], [["b"], [1]], [[], [0]]]}
+{"name": "cancellation", "source": "{a}. :~ a. [-2@1,k] :~ a. [2@1,k]", "records": [[["a"], [0]], [[], [0]]]}
+{"name": "zero_slot", "source": "{a}. :~ a. [0@7,k]", "records": [[["a"], [0]], [[], [0]]]}
+{"name": "constant_body", "source": " :~ . [3@2,k]", "records": [[[], [3]]]}
+{"name": "empty_tuple", "source": "{a;b}. :~ a. [2] :~ b. [2]", "records": [[["a", "b"], [2]], [["a"], [2]], [["b"], [2]], [[], [0]]]}
+{"name": "false_filter", "source": "a. :~ a,1=2. [4@9,k]", "records": [[["a"], null]]}
+{"name": "negative_filter", "source": "{p(1);p(2)}. :~ p(X),X!=1. [X@2,X]", "records": [[["p(1)", "p(2)"], [2]], [["p(1)"], [0]], [["p(2)"], [2]], [[], [0]]]}
+{"name": "equality_filter", "source": "{p(1);p(2)}. :~ p(X),X=1. [X@2,X]", "records": [[["p(1)", "p(2)"], [1]], [["p(1)"], [1]], [["p(2)"], [0]], [[], [0]]]}
+{"name": "shared_join", "source": "{p(1);p(2);q(1);q(2)}. :~ p(X),q(X). [X@2,X]", "records": [[["p(1)", "p(2)", "q(1)", "q(2)"], [3]], [["p(1)", "p(2)", "q(1)"], [1]], [["p(1)", "p(2)", "q(2)"], [2]], [["p(1)", "p(2)"], [0]], [["p(1)", "q(1)", "q(2)"], [1]], [["p(1)", "q(1)"], [1]], [["p(1)", "q(2)"], [0]], [["p(1)"], [0]], [["p(2)", "q(1)", "q(2)"], [2]], [["p(2)", "q(1)"], [0]], [["p(2)", "q(2)"], [2]], [["p(2)"], [0]], [["q(1)", "q(2)"], [0]], [["q(1)"], [0]], [["q(2)"], [0]], [[], [0]]]}
+{"name": "repeated_variable", "source": "{p(1,2);p(1,1);p(2,2)}. :~ p(X,X). [1@0,X]", "records": [[["p(1,1)", "p(1,2)", "p(2,2)"], [2]], [["p(1,1)", "p(1,2)"], [1]], [["p(1,1)", "p(2,2)"], [2]], [["p(1,1)"], [1]], [["p(1,2)", "p(2,2)"], [1]], [["p(1,2)"], [0]], [["p(2,2)"], [1]], [[], [0]]]}
+{"name": "constants_arithmetic", "source": "#const n=3. {p(1);p(2)}. :~ p(X). [n+2@1+1,X]", "records": [[["p(1)", "p(2)"], [10]], [["p(1)"], [5]], [["p(2)"], [5]], [[], [0]]]}
+{"name": "forced_false_slot", "source": "{a}. :- a. :~ a. [2@7,k]", "records": [[[], [0]]]}
+{"name": "unsupported_cycle", "source": "a:-a. :~ a. [2@7,k]", "records": [[[], null]]}
+{"name": "nonnumeric_weight", "source": "{p(a);p(2)}. :~ p(X). [X@1,k]", "records": [[["p(2)", "p(a)"], [2]], [["p(2)"], [2]], [["p(a)"], [0]], [[], [0]]]}
+{"name": "numeric_strings", "source": "{p(\"two words\");p(\"another\")}. :~ p(X). [2@1,X]", "records": [[["p(\"another\")", "p(\"two words\")"], [4]], [["p(\"another\")"], [2]], [["p(\"two words\")"], [2]], [[], [0]]]}
+{"name": "unsatisfiable", "source": "a. :-a. :~ a. [2@1,k]", "records": []}
+{"name": "duplicate_source", "source": "{a}. :~ a. [2@1,k] :~ a. [2@1,k]", "records": [[["a"], [2]], [[], [0]]]}
+{"name": "weak_norm_duplicate", "source": "{a}. :~ a. [2@1,k] #minimize{2@1,k:a}.", "records": [[["a"], [2]], [[], [0]]]}
+{"name": "generated_-2_-2", "source": "{a;b}. :~ a. [-2@1,k] :~ b. [-2@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [-2, 1]], [["a"], [-2, 1]], [["b"], [-2, 0]], [[], [0, 0]]]}
+{"name": "generated_-2_-1", "source": "{a;b}. :~ a. [-2@1,k] :~ b. [-1@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [-3, 1]], [["a"], [-2, 1]], [["b"], [-1, 0]], [[], [0, 0]]]}
+{"name": "generated_-2_0", "source": "{a;b}. :~ a. [-2@1,k] :~ b. [0@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [-2, 1]], [["a"], [-2, 1]], [["b"], [0, 0]], [[], [0, 0]]]}
+{"name": "generated_-2_1", "source": "{a;b}. :~ a. [-2@1,k] :~ b. [1@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [-1, 1]], [["a"], [-2, 1]], [["b"], [1, 0]], [[], [0, 0]]]}
+{"name": "generated_-2_2", "source": "{a;b}. :~ a. [-2@1,k] :~ b. [2@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [0, 1]], [["a"], [-2, 1]], [["b"], [2, 0]], [[], [0, 0]]]}
+{"name": "generated_-1_-2", "source": "{a;b}. :~ a. [-1@1,k] :~ b. [-2@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [-3, 1]], [["a"], [-1, 1]], [["b"], [-2, 0]], [[], [0, 0]]]}
+{"name": "generated_-1_-1", "source": "{a;b}. :~ a. [-1@1,k] :~ b. [-1@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [-1, 1]], [["a"], [-1, 1]], [["b"], [-1, 0]], [[], [0, 0]]]}
+{"name": "generated_-1_0", "source": "{a;b}. :~ a. [-1@1,k] :~ b. [0@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [-1, 1]], [["a"], [-1, 1]], [["b"], [0, 0]], [[], [0, 0]]]}
+{"name": "generated_-1_1", "source": "{a;b}. :~ a. [-1@1,k] :~ b. [1@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [0, 1]], [["a"], [-1, 1]], [["b"], [1, 0]], [[], [0, 0]]]}
+{"name": "generated_-1_2", "source": "{a;b}. :~ a. [-1@1,k] :~ b. [2@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [1, 1]], [["a"], [-1, 1]], [["b"], [2, 0]], [[], [0, 0]]]}
+{"name": "generated_0_-2", "source": "{a;b}. :~ a. [0@1,k] :~ b. [-2@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [-2, 1]], [["a"], [0, 1]], [["b"], [-2, 0]], [[], [0, 0]]]}
+{"name": "generated_0_-1", "source": "{a;b}. :~ a. [0@1,k] :~ b. [-1@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [-1, 1]], [["a"], [0, 1]], [["b"], [-1, 0]], [[], [0, 0]]]}
+{"name": "generated_0_0", "source": "{a;b}. :~ a. [0@1,k] :~ b. [0@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [0, 1]], [["a"], [0, 1]], [["b"], [0, 0]], [[], [0, 0]]]}
+{"name": "generated_0_1", "source": "{a;b}. :~ a. [0@1,k] :~ b. [1@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [1, 1]], [["a"], [0, 1]], [["b"], [1, 0]], [[], [0, 0]]]}
+{"name": "generated_0_2", "source": "{a;b}. :~ a. [0@1,k] :~ b. [2@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [2, 1]], [["a"], [0, 1]], [["b"], [2, 0]], [[], [0, 0]]]}
+{"name": "generated_1_-2", "source": "{a;b}. :~ a. [1@1,k] :~ b. [-2@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [-1, 1]], [["a"], [1, 1]], [["b"], [-2, 0]], [[], [0, 0]]]}
+{"name": "generated_1_-1", "source": "{a;b}. :~ a. [1@1,k] :~ b. [-1@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [0, 1]], [["a"], [1, 1]], [["b"], [-1, 0]], [[], [0, 0]]]}
+{"name": "generated_1_0", "source": "{a;b}. :~ a. [1@1,k] :~ b. [0@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [1, 1]], [["a"], [1, 1]], [["b"], [0, 0]], [[], [0, 0]]]}
+{"name": "generated_1_1", "source": "{a;b}. :~ a. [1@1,k] :~ b. [1@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [1, 1]], [["a"], [1, 1]], [["b"], [1, 0]], [[], [0, 0]]]}
+{"name": "generated_1_2", "source": "{a;b}. :~ a. [1@1,k] :~ b. [2@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [3, 1]], [["a"], [1, 1]], [["b"], [2, 0]], [[], [0, 0]]]}
+{"name": "generated_2_-2", "source": "{a;b}. :~ a. [2@1,k] :~ b. [-2@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [0, 1]], [["a"], [2, 1]], [["b"], [-2, 0]], [[], [0, 0]]]}
+{"name": "generated_2_-1", "source": "{a;b}. :~ a. [2@1,k] :~ b. [-1@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [1, 1]], [["a"], [2, 1]], [["b"], [-1, 0]], [[], [0, 0]]]}
+{"name": "generated_2_0", "source": "{a;b}. :~ a. [2@1,k] :~ b. [0@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [2, 1]], [["a"], [2, 1]], [["b"], [0, 0]], [[], [0, 0]]]}
+{"name": "generated_2_1", "source": "{a;b}. :~ a. [2@1,k] :~ b. [1@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [3, 1]], [["a"], [2, 1]], [["b"], [1, 0]], [[], [0, 0]]]}
+{"name": "generated_2_2", "source": "{a;b}. :~ a. [2@1,k] :~ b. [2@1,k] #minimize{1@0,l:a}.", "records": [[["a", "b"], [2, 1]], [["a"], [2, 1]], [["b"], [2, 0]], [[], [0, 0]]]}

@@ -1,0 +1,20 @@
+test_gate_runs_after_lean_in_proofs_and_full_and_propagates_failures (test_proof_record.CheckShellTests.test_gate_runs_after_lean_in_proofs_and_full_and_propagates_failures) ... ok
+test_all_recorded_historical_log_hashes_are_also_checked (test_proof_record.ProofRecordTests.test_all_recorded_historical_log_hashes_are_also_checked) ... ok
+test_audit_requests_missing_duplicate_and_unknown_after_rehash (test_proof_record.ProofRecordTests.test_audit_requests_missing_duplicate_and_unknown_after_rehash) ... ok
+test_cli_pass_failure_and_retained_alternative_record (test_proof_record.ProofRecordTests.test_cli_pass_failure_and_retained_alternative_record) ... ok
+test_current_logs_need_hashes_success_and_exact_audit_bytes (test_proof_record.ProofRecordTests.test_current_logs_need_hashes_success_and_exact_audit_bytes) ... ok
+test_disallowed_or_duplicate_axioms_cannot_be_laundered_by_rehashing (test_proof_record.ProofRecordTests.test_disallowed_or_duplicate_axioms_cannot_be_laundered_by_rehashing) ... ok
+test_duplicate_json_keys_and_escaping_paths_are_rejected (test_proof_record.ProofRecordTests.test_duplicate_json_keys_and_escaping_paths_are_rejected) ... ok
+test_index_missing_duplicate_wrong_name_file_and_line_after_rehash (test_proof_record.ProofRecordTests.test_index_missing_duplicate_wrong_name_file_and_line_after_rehash) ... ok
+test_nested_modules_comments_strings_sections_and_multiline_axioms (test_proof_record.ProofRecordTests.test_nested_modules_comments_strings_sections_and_multiline_axioms) ... ok
+test_optional_module_theorem_count_is_derived (test_proof_record.ProofRecordTests.test_optional_module_theorem_count_is_derived) ... ok
+test_output_missing_duplicate_extra_reordered_and_garbage_after_rehash (test_proof_record.ProofRecordTests.test_output_missing_duplicate_extra_reordered_and_garbage_after_rehash) ... ok
+test_source_inventory_and_hashes_are_exact (test_proof_record.ProofRecordTests.test_source_inventory_and_hashes_are_exact) ... ok
+test_stale_generated_artifact_hashes (test_proof_record.ProofRecordTests.test_stale_generated_artifact_hashes) ... ok
+test_top_nested_and_module_counts_reject_staleness_and_boolean_counts (test_proof_record.ProofRecordTests.test_top_nested_and_module_counts_reject_staleness_and_boolean_counts) ... ok
+test_unsupported_source_conventions_fail_closed (test_proof_record.ProofRecordTests.test_unsupported_source_conventions_fail_closed) ... ok
+
+----------------------------------------------------------------------
+Ran 15 tests in 2.283s
+
+OK

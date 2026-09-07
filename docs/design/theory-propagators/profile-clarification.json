@@ -1,0 +1,21 @@
+{
+  "status": "Design-only scope clarification requested by parent review; no runtime change or theorem claim.",
+  "change": "Explicitly exclude founded-body occurrences from the 2023 source profile; classify founded-cycle example as generic internal counterexample, not admitted clingcon source.",
+  "files": [
+    {
+      "path": "theory-propagators.md",
+      "before_sha256": "55a6decef32f0768b217b8a5c23642871c25f80d9352937be279be627f2f8306",
+      "after_sha256": "1039c17b38094d87e7280247bfb6625d339c578dc59490eb6874170d31327f61"
+    },
+    {
+      "path": "theory-propagator-api.md",
+      "before_sha256": "0fe955b0273ae52bcf13302d185f828875e4ab497a6452b53d48f90a4eec262d",
+      "after_sha256": "3b4cc72062634d7db618d83c45811d4eb2bb3658cdbc869644a8906cd09e0a1d"
+    },
+    {
+      "path": "sources.md",
+      "before_sha256": "8f4ccb7d318574e333d7538e60be4152af47d4c1b8a97466912d3037ad27b4d2",
+      "after_sha256": "cad7dba5388f98467c693299febc06321f204dc843e0120e371644d19cadf03d"
+    }
+  ]
+}

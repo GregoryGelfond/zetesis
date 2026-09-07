@@ -1,0 +1,30 @@
+{
+  "status": "PASS",
+  "implementation": "finite CPU semantic reference",
+  "random_seed": 20260905,
+  "random_atoms_at_most": 5,
+  "random_rules_at_most": 20,
+  "event_orders_per_seed": 3,
+  "seconds": 0.231,
+  "time_scope": "ground_kernel_campaign",
+  "counts": {
+    "exhaustive_one_atom_programs": 12951,
+    "exhaustive_two_atom_programs": 51361,
+    "random_programs": 1000,
+    "programs": 65312,
+    "full_candidates": 244380,
+    "seeds": 234811,
+    "event_schedules": 704433,
+    "cubes": 545136,
+    "enclosure_checks": 1083461,
+    "stable_seed_survival_checks": 233361,
+    "ledger_nodes": 87622,
+    "models": 63265
+  },
+  "lifted_sparse_fixtures": [
+    {"fixture": "diagonal_carrier_laziness", "domain_size": 32, "symbolic_seed_atoms": 2048, "true_seed_atoms": 0, "target_rule_source_substitutions": 32, "derived_atoms": 64, "rounds": 3, "tuple_probes": 128, "complete_bindings": 160, "carrier_tuples_enumerated": 0, "ground_rows_materialized": 0},
+    {"fixture": "candidate_gated_pair_join", "domain_size": 32, "symbolic_seed_atoms": 32, "true_seed_atoms": 1, "target_rule_source_substitutions": 1024, "derived_atoms": 34, "rounds": 3, "tuple_probes": 192, "complete_bindings": 100, "carrier_tuples_enumerated": 0, "ground_rows_materialized": 0},
+    {"fixture": "diagonal_carrier_laziness", "domain_size": 128, "symbolic_seed_atoms": 32768, "true_seed_atoms": 0, "target_rule_source_substitutions": 128, "derived_atoms": 256, "rounds": 3, "tuple_probes": 512, "complete_bindings": 640, "carrier_tuples_enumerated": 0, "ground_rows_materialized": 0},
+    {"fixture": "candidate_gated_pair_join", "domain_size": 128, "symbolic_seed_atoms": 128, "true_seed_atoms": 1, "target_rule_source_substitutions": 16384, "derived_atoms": 130, "rounds": 3, "tuple_probes": 768, "complete_bindings": 388, "carrier_tuples_enumerated": 0, "ground_rows_materialized": 0}
+  ]
+}

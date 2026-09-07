@@ -1,0 +1,80 @@
+name: checks
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  RUST_TOOLCHAIN: "1.97.1"
+
+jobs:
+  gate:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal \
+            --component rustfmt,clippy
+      - run: ./scripts/check.sh portable
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          # The previous committed floor is checked for push and PR histories.
+          fetch-depth: 0
+      - run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal \
+            --component llvm-tools
+      - uses: taiki-e/install-action@51c9d223e46ef0189fd65bfe00a28e0de249282c
+        with:
+          tool: cargo-llvm-cov@0.8.7
+      - name: Preserve the committed floor
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          import os
+          import re
+          import subprocess
+
+          event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
+          previous = event.get("pull_request", {}).get("base", {}).get("sha") or event.get("before")
+          if previous and previous != "0" * 40:
+              if not re.fullmatch(r"[0-9a-f]{40}", previous):
+                  raise SystemExit("Invalid previous revision for coverage floor comparison.")
+              path = "scripts/coverage-floor.txt"
+              old = subprocess.run(["git", "show", f"{previous}:{path}"], text=True, capture_output=True)
+              if old.returncode == 0 and old.stdout.strip() != "UNMEASURED":
+                  before = int(old.stdout.strip())
+                  after = int(Path(path).read_text().strip())
+                  if after < before:
+                      raise SystemExit(f"Coverage floor cannot decrease: {before} -> {after}")
+              elif old.returncode != 0:
+                  # Only absence at the prior revision permits initial adoption.
+                  exists = subprocess.run(["git", "ls-tree", previous, "--", path], check=True,
+                                          text=True, capture_output=True)
+                  if exists.stdout:
+                      raise SystemExit("Could not read the previous coverage floor.")
+          PY
+      - run: ./scripts/coverage.sh gate
+      - name: Retain coverage reports and gate diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux-coverage-${{ github.sha }}
+          path: |
+            target/coverage/status.txt
+            target/coverage/toolchain.json
+            target/coverage/workspace/coverage.json
+            target/coverage/workspace/html/
+            target/coverage/cli-cpu/coverage.json
+            target/coverage/cli-cpu/html/
+          if-no-files-found: warn
+          retention-days: 14

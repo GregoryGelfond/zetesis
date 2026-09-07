@@ -1,0 +1,612 @@
+{
+  "schema_version": 1,
+  "oracle": "clingo 5.8.2",
+  "scope": "Observed boundary characterization, not passed clingo compatibility. Exact models use finite failing-subset semantics, min(empty)=#sup and max(empty)=#inf.",
+  "cases": [
+    {
+      "source": "p :- #min {-2147483648,k:not p} = -2147483648.",
+      "function": "min",
+      "weight": -2147483648,
+      "comparison": "=",
+      "guard": -2147483648,
+      "exact_models": [],
+      "observed_models": [],
+      "classification": "equivalent_probe",
+      "solve": {
+        "exit_code": 20,
+        "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"UNSATISFIABLE\",\n  \"Models\": {\n    \"Number\": 0,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+        "stderr": ""
+      },
+      "ground_text": {
+        "exit_code": 0,
+        "stdout": "p:-#delayed(1).\n#delayed(1) <=> -2147483648>=#min{-2147483648,k:not p}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "source": "p :- #min {-2147483648,k:not p} != -2147483648.",
+      "function": "min",
+      "weight": -2147483648,
+      "comparison": "!=",
+      "guard": -2147483648,
+      "exact_models": [
+        [],
+        [
+          "p"
+        ]
+      ],
+      "observed_models": [
+        [
+          "p"
+        ]
+      ],
+      "classification": "known_mismatch",
+      "solve": {
+        "exit_code": 30,
+        "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"p\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+        "stderr": ""
+      },
+      "ground_text": {
+        "exit_code": 0,
+        "stdout": "p:-#delayed(1).\n#delayed(1) <=> -2147483648!=#min{-2147483648,k:not p}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "source": "p :- #min {-2147483648,k:not p} < -2147483648.",
+      "function": "min",
+      "weight": -2147483648,
+      "comparison": "<",
+      "guard": -2147483648,
+      "exact_models": [
+        []
+      ],
+      "observed_models": [
+        []
+      ],
+      "classification": "equivalent_probe",
+      "solve": {
+        "exit_code": 30,
+        "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+        "stderr": ""
+      },
+      "ground_text": {
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "source": "p :- #min {-2147483648,k:not p} <= -2147483648.",
+      "function": "min",
+      "weight": -2147483648,
+      "comparison": "<=",
+      "guard": -2147483648,
+      "exact_models": [],
+      "observed_models": [],
+      "classification": "equivalent_probe",
+      "solve": {
+        "exit_code": 20,
+        "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"UNSATISFIABLE\",\n  \"Models\": {\n    \"Number\": 0,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+        "stderr": ""
+      },
+      "ground_text": {
+        "exit_code": 0,
+        "stdout": "p:-#delayed(1).\n#delayed(1) <=> -2147483648>=#min{-2147483648,k:not p}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "source": "p :- #min {-2147483648,k:not p} > -2147483648.",
+      "function": "min",
+      "weight": -2147483648,
+      "comparison": ">",
+      "guard": -2147483648,
+      "exact_models": [
+        [],
+        [
+          "p"
+        ]
+      ],
+      "observed_models": [
+        [],
+        [
+          "p"
+        ]
+      ],
+      "classification": "equivalent_probe",
+      "solve": {
+        "exit_code": 30,
+        "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"p\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+        "stderr": ""
+      },
+      "ground_text": {
+        "exit_code": 0,
+        "stdout": "p:-#delayed(1).\n#delayed(1) <=> -2147483648<#min{-2147483648,k:not p}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "source": "p :- #min {-2147483648,k:not p} >= -2147483648.",
+      "function": "min",
+      "weight": -2147483648,
+      "comparison": ">=",
+      "guard": -2147483648,
+      "exact_models": [
+        [
+          "p"
+        ]
+      ],
+      "observed_models": [
+        [
+          "p"
+        ]
+      ],
+      "classification": "equivalent_probe",
+      "solve": {
+        "exit_code": 30,
+        "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"p\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+        "stderr": ""
+      },
+      "ground_text": {
+        "exit_code": 0,
+        "stdout": "p:-#delayed(1).\n#delayed(1) <=> #min{-2147483648,k:not p}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "source": "p :- #min {2147483647,k:not p} = 2147483647.",
+      "function": "min",
+      "weight": 2147483647,
+      "comparison": "=",
+      "guard": 2147483647,
+      "exact_models": [],
+      "observed_models": [],
+      "classification": "equivalent_probe",
+      "solve": {
+        "exit_code": 20,
+        "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"UNSATISFIABLE\",\n  \"Models\": {\n    \"Number\": 0,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+        "stderr": ""
+      },
+      "ground_text": {
+        "exit_code": 0,
+        "stdout": "p:-#delayed(1).\n#delayed(1) <=> 2147483647>=#min{2147483647,k:not p}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "source": "p :- #min {2147483647,k:not p} != 2147483647.",
+      "function": "min",
+      "weight": 2147483647,
+      "comparison": "!=",
+      "guard": 2147483647,
+      "exact_models": [
+        [],
+        [
+          "p"
+        ]
+      ],
+      "observed_models": [
+        [
+          "p"
+        ]
+      ],
+      "classification": "known_mismatch",
+      "solve": {
+        "exit_code": 30,
+        "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"p\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+        "stderr": ""
+      },
+      "ground_text": {
+        "exit_code": 0,
+        "stdout": "p:-#delayed(1).\n#delayed(1) <=> 2147483647!=#min{2147483647,k:not p}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "source": "p :- #min {2147483647,k:not p} < 2147483647.",
+      "function": "min",
+      "weight": 2147483647,
+      "comparison": "<",
+      "guard": 2147483647,
+      "exact_models": [
+        []
+      ],
+      "observed_models": [
+        []
+      ],
+      "classification": "equivalent_probe",
+      "solve": {
+        "exit_code": 30,
+        "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+        "stderr": ""
+      },
+      "ground_text": {
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "source": "p :- #min {2147483647,k:not p} <= 2147483647.",
+      "function": "min",
+      "weight": 2147483647,
+      "comparison": "<=",
+      "guard": 2147483647,
+      "exact_models": [],
+      "observed_models": [],
+      "classification": "equivalent_probe",
+      "solve": {
+        "exit_code": 20,
+        "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"UNSATISFIABLE\",\n  \"Models\": {\n    \"Number\": 0,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+        "stderr": ""
+      },
+      "ground_text": {
+        "exit_code": 0,
+        "stdout": "p:-#delayed(1).\n#delayed(1) <=> 2147483647>=#min{2147483647,k:not p}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "source": "p :- #min {2147483647,k:not p} > 2147483647.",
+      "function": "min",
+      "weight": 2147483647,
+      "comparison": ">",
+      "guard": 2147483647,
+      "exact_models": [
+        [],
+        [
+          "p"
+        ]
+      ],
+      "observed_models": [
+        [
+          "p"
+        ]
+      ],
+      "classification": "known_mismatch",
+      "solve": {
+        "exit_code": 30,
+        "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"p\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+        "stderr": ""
+      },
+      "ground_text": {
+        "exit_code": 0,
+        "stdout": "p:-#delayed(1).\n#delayed(1) <=> 2147483647<#min{2147483647,k:not p}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "source": "p :- #min {2147483647,k:not p} >= 2147483647.",
+      "function": "min",
+      "weight": 2147483647,
+      "comparison": ">=",
+      "guard": 2147483647,
+      "exact_models": [
+        [
+          "p"
+        ]
+      ],
+      "observed_models": [
+        [
+          "p"
+        ]
+      ],
+      "classification": "equivalent_probe",
+      "solve": {
+        "exit_code": 30,
+        "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"p\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+        "stderr": ""
+      },
+      "ground_text": {
+        "exit_code": 0,
+        "stdout": "p:-#delayed(1).\n#delayed(1) <=> #min{2147483647,k:not p}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "source": "p :- #max {-2147483648,k:not p} = -2147483648.",
+      "function": "max",
+      "weight": -2147483648,
+      "comparison": "=",
+      "guard": -2147483648,
+      "exact_models": [],
+      "observed_models": [],
+      "classification": "equivalent_probe",
+      "solve": {
+        "exit_code": 20,
+        "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"UNSATISFIABLE\",\n  \"Models\": {\n    \"Number\": 0,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+        "stderr": ""
+      },
+      "ground_text": {
+        "exit_code": 0,
+        "stdout": "p:-#delayed(1).\n#delayed(1) <=> -2147483648<=#max{-2147483648,k:not p}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "source": "p :- #max {-2147483648,k:not p} != -2147483648.",
+      "function": "max",
+      "weight": -2147483648,
+      "comparison": "!=",
+      "guard": -2147483648,
+      "exact_models": [
+        [],
+        [
+          "p"
+        ]
+      ],
+      "observed_models": [
+        [
+          "p"
+        ]
+      ],
+      "classification": "known_mismatch",
+      "solve": {
+        "exit_code": 30,
+        "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"p\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+        "stderr": ""
+      },
+      "ground_text": {
+        "exit_code": 0,
+        "stdout": "p:-#delayed(1).\n#delayed(1) <=> -2147483648!=#max{-2147483648,k:not p}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "source": "p :- #max {-2147483648,k:not p} < -2147483648.",
+      "function": "max",
+      "weight": -2147483648,
+      "comparison": "<",
+      "guard": -2147483648,
+      "exact_models": [
+        [],
+        [
+          "p"
+        ]
+      ],
+      "observed_models": [
+        [
+          "p"
+        ]
+      ],
+      "classification": "known_mismatch",
+      "solve": {
+        "exit_code": 30,
+        "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"p\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+        "stderr": ""
+      },
+      "ground_text": {
+        "exit_code": 0,
+        "stdout": "p:-#delayed(1).\n#delayed(1) <=> -2147483648>#max{-2147483648,k:not p}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "source": "p :- #max {-2147483648,k:not p} <= -2147483648.",
+      "function": "max",
+      "weight": -2147483648,
+      "comparison": "<=",
+      "guard": -2147483648,
+      "exact_models": [
+        [
+          "p"
+        ]
+      ],
+      "observed_models": [
+        [
+          "p"
+        ]
+      ],
+      "classification": "equivalent_probe",
+      "solve": {
+        "exit_code": 30,
+        "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"p\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+        "stderr": ""
+      },
+      "ground_text": {
+        "exit_code": 0,
+        "stdout": "p:-#delayed(1).\n#delayed(1) <=> #max{-2147483648,k:not p}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "source": "p :- #max {-2147483648,k:not p} > -2147483648.",
+      "function": "max",
+      "weight": -2147483648,
+      "comparison": ">",
+      "guard": -2147483648,
+      "exact_models": [
+        []
+      ],
+      "observed_models": [
+        []
+      ],
+      "classification": "equivalent_probe",
+      "solve": {
+        "exit_code": 30,
+        "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+        "stderr": ""
+      },
+      "ground_text": {
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "source": "p :- #max {-2147483648,k:not p} >= -2147483648.",
+      "function": "max",
+      "weight": -2147483648,
+      "comparison": ">=",
+      "guard": -2147483648,
+      "exact_models": [],
+      "observed_models": [],
+      "classification": "equivalent_probe",
+      "solve": {
+        "exit_code": 20,
+        "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"UNSATISFIABLE\",\n  \"Models\": {\n    \"Number\": 0,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+        "stderr": ""
+      },
+      "ground_text": {
+        "exit_code": 0,
+        "stdout": "p:-#delayed(1).\n#delayed(1) <=> -2147483648<=#max{-2147483648,k:not p}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "source": "p :- #max {2147483647,k:not p} = 2147483647.",
+      "function": "max",
+      "weight": 2147483647,
+      "comparison": "=",
+      "guard": 2147483647,
+      "exact_models": [],
+      "observed_models": [],
+      "classification": "equivalent_probe",
+      "solve": {
+        "exit_code": 20,
+        "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"UNSATISFIABLE\",\n  \"Models\": {\n    \"Number\": 0,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+        "stderr": ""
+      },
+      "ground_text": {
+        "exit_code": 0,
+        "stdout": "p:-#delayed(1).\n#delayed(1) <=> 2147483647<=#max{2147483647,k:not p}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "source": "p :- #max {2147483647,k:not p} != 2147483647.",
+      "function": "max",
+      "weight": 2147483647,
+      "comparison": "!=",
+      "guard": 2147483647,
+      "exact_models": [
+        [],
+        [
+          "p"
+        ]
+      ],
+      "observed_models": [
+        [
+          "p"
+        ]
+      ],
+      "classification": "known_mismatch",
+      "solve": {
+        "exit_code": 30,
+        "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"p\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+        "stderr": ""
+      },
+      "ground_text": {
+        "exit_code": 0,
+        "stdout": "p:-#delayed(1).\n#delayed(1) <=> 2147483647!=#max{2147483647,k:not p}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "source": "p :- #max {2147483647,k:not p} < 2147483647.",
+      "function": "max",
+      "weight": 2147483647,
+      "comparison": "<",
+      "guard": 2147483647,
+      "exact_models": [
+        [],
+        [
+          "p"
+        ]
+      ],
+      "observed_models": [
+        [],
+        [
+          "p"
+        ]
+      ],
+      "classification": "equivalent_probe",
+      "solve": {
+        "exit_code": 30,
+        "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"p\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+        "stderr": ""
+      },
+      "ground_text": {
+        "exit_code": 0,
+        "stdout": "p:-#delayed(1).\n#delayed(1) <=> 2147483647>#max{2147483647,k:not p}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "source": "p :- #max {2147483647,k:not p} <= 2147483647.",
+      "function": "max",
+      "weight": 2147483647,
+      "comparison": "<=",
+      "guard": 2147483647,
+      "exact_models": [
+        [
+          "p"
+        ]
+      ],
+      "observed_models": [
+        [
+          "p"
+        ]
+      ],
+      "classification": "equivalent_probe",
+      "solve": {
+        "exit_code": 30,
+        "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"p\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+        "stderr": ""
+      },
+      "ground_text": {
+        "exit_code": 0,
+        "stdout": "p:-#delayed(1).\n#delayed(1) <=> #max{2147483647,k:not p}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "source": "p :- #max {2147483647,k:not p} > 2147483647.",
+      "function": "max",
+      "weight": 2147483647,
+      "comparison": ">",
+      "guard": 2147483647,
+      "exact_models": [
+        []
+      ],
+      "observed_models": [
+        []
+      ],
+      "classification": "equivalent_probe",
+      "solve": {
+        "exit_code": 30,
+        "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+        "stderr": ""
+      },
+      "ground_text": {
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    },
+    {
+      "source": "p :- #max {2147483647,k:not p} >= 2147483647.",
+      "function": "max",
+      "weight": 2147483647,
+      "comparison": ">=",
+      "guard": 2147483647,
+      "exact_models": [],
+      "observed_models": [],
+      "classification": "equivalent_probe",
+      "solve": {
+        "exit_code": 20,
+        "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"UNSATISFIABLE\",\n  \"Models\": {\n    \"Number\": 0,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+        "stderr": ""
+      },
+      "ground_text": {
+        "exit_code": 0,
+        "stdout": "p:-#delayed(1).\n#delayed(1) <=> 2147483647<=#max{2147483647,k:not p}\n",
+        "stderr": ""
+      }
+    }
+  ],
+  "total": 24,
+  "known_mismatches": 6,
+  "compatibility_policy": "Source frontend must refuse numeric #min/#max guards at i32::MIN or i32::MAX until an explicit compatibility policy is implemented. Direct formula kernel retains exact finite integer semantics."
+}

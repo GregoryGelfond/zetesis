@@ -1,0 +1,225 @@
+//! Bound-column probes restrict work without replacing full relational matching.
+
+use std::fmt::Write;
+
+use zetesis_core::Value;
+use zetesis_cpu::Control;
+use zetesis_sat::{Limits, StableModels};
+use zetesis_themelios::{
+    AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
+    admit_formula,
+};
+
+#[test]
+fn selective_shared_arguments_complete_under_a_fixed_work_ceiling() {
+    let mut source = String::new();
+    for value in 0..200 {
+        write!(source, "p({value},{value}).q({value},{}).", value + 1).expect("write to String");
+    }
+    source.push_str("r(X,Z):-p(X,Y),q(Y,Z).");
+    let input = admit_formula(
+        source,
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits {
+            max_work: 30_000,
+            ..FormulaLimits::default()
+        },
+    )
+    .expect("selective lookup avoids unrelated relation pairs");
+    let mut search = StableModels::new(input.theory(), Limits::default(), Control::default())
+        .expect("finite theory");
+    let model = search.next().expect("one model").expect("verified model");
+    let joined: Vec<_> = model
+        .atoms()
+        .map(|index| &input.atoms()[index])
+        .filter(|atom| atom.predicate().name() == "r")
+        .collect();
+    assert_eq!(joined.len(), 200);
+    for atom in joined {
+        let [Value::Number(left), Value::Number(right)] = atom.values() else {
+            panic!("numeric relation")
+        };
+        assert_eq!(*right, *left + 1);
+    }
+    assert!(search.next().is_none());
+    assert!(search.exhausted());
+}
+
+#[test]
+fn indexed_candidates_still_validate_repeated_variables_and_every_constant() {
+    let input = admit_formula(
+        "p(1;2).q(1,2,a).q(1,1,b).q(2,2,b).q(2,2,a).r(X):-p(X),q(X,X,a).".to_owned(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .expect("full row match");
+    let mut search = StableModels::new(input.theory(), Limits::default(), Control::default())
+        .expect("finite theory");
+    let model = search.next().expect("one model").expect("verified model");
+    let joined: Vec<_> = model
+        .atoms()
+        .map(|index| &input.atoms()[index])
+        .filter(|atom| atom.predicate().name() == "r")
+        .collect();
+    assert_eq!(joined.len(), 1);
+    assert_eq!(joined[0].values(), &[Value::Number(2)]);
+    assert!(search.next().is_none());
+    assert!(search.exhausted());
+}
+
+#[test]
+fn retained_index_entries_have_an_independent_inclusive_ceiling() {
+    for maximum in [0, 1, 2] {
+        let result = admit_formula(
+            "p(1,2).".to_owned(),
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits {
+                max_support_index_entries: maximum,
+                ..FormulaLimits::default()
+            },
+        );
+        if maximum == 2 {
+            assert!(result.is_ok());
+        } else {
+            assert!(matches!(
+                result,
+                Err(FormulaFailure::Limit {
+                    resource: FormulaResource::SupportIndexEntries,
+                    observed: 2,
+                    ..
+                })
+            ));
+        }
+    }
+    assert!(
+        admit_formula(
+            "p.".to_owned(),
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits {
+                max_support_index_entries: 0,
+                ..FormulaLimits::default()
+            }
+        )
+        .is_ok()
+    );
+}
+
+#[test]
+fn ready_filters_prune_before_later_relations_without_reading_generated_slots() {
+    let input = admit_formula(
+        "left(1..30).right(1..30).tail(1..30).p(X):-left(X),right(Y),tail(Z),X=Y.".to_owned(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits {
+            max_substitutions: 5_000,
+            ..FormulaLimits::default()
+        },
+    )
+    .expect("ready equality removes incompatible partial rows before tail expansion");
+    let mut search =
+        StableModels::new(input.theory(), Limits::default(), Control::default()).expect("theory");
+    let model = search.next().expect("one model").expect("verified model");
+    assert_eq!(
+        model
+            .atoms()
+            .map(|index| &input.atoms()[index])
+            .filter(|atom| atom.predicate().name() == "p")
+            .count(),
+        30
+    );
+    assert!(search.next().is_none());
+    assert!(search.exhausted());
+
+    let input = admit_formula(
+        "d(5).p(Y):-d(X),Y=X+1,Y>5.".to_owned(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .expect("generated comparison waits for binding");
+    let mut search =
+        StableModels::new(input.theory(), Limits::default(), Control::default()).expect("theory");
+    let model = search.next().expect("one model").expect("verified model");
+    assert!(
+        model
+            .atoms()
+            .map(|index| &input.atoms()[index])
+            .any(|atom| atom.predicate().name() == "p" && atom.values() == [Value::Number(6)])
+    );
+    assert!(search.next().is_none());
+    assert!(search.exhausted());
+}
+
+#[test]
+fn invalid_arithmetic_on_unextendable_prefixes_does_not_refuse_the_source() {
+    for source in [
+        "a(0;1).b(1;2).p(X):-a(X),b(X),1/X>0.",
+        "a(1;2147483647).b(1;2).p(X):-a(X),b(X),X+1>0.",
+    ] {
+        let input = admit_formula(
+            source.to_owned(),
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        )
+        .expect("dead relational prefix cannot justify scalar refusal");
+        let mut search = StableModels::new(input.theory(), Limits::default(), Control::default())
+            .expect("theory");
+        let model = search.next().expect("one model").expect("verified model");
+        let outputs: Vec<_> = model
+            .atoms()
+            .map(|index| &input.atoms()[index])
+            .filter(|atom| atom.predicate().name() == "p")
+            .collect();
+        assert_eq!(outputs.len(), 1);
+        assert_eq!(outputs[0].values(), &[Value::Number(1)]);
+        assert!(search.next().is_none());
+        assert!(search.exhausted());
+    }
+}
+
+#[test]
+fn duplicate_support_heads_do_not_remove_alternative_final_reduct_witnesses() {
+    let input = admit_formula(
+        "d(1;2).{q(1);q(2)}.p:-d(X),q(X).".to_owned(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .expect("support projection preserves full final body disjunction");
+    let mut search =
+        StableModels::new(input.theory(), Limits::default(), Control::default()).expect("theory");
+    let mut count = 0;
+    for model in search.by_ref() {
+        let model = model.expect("verified model");
+        let names: Vec<_> = model
+            .atoms()
+            .map(|index| input.atoms()[index].predicate().name())
+            .collect();
+        assert_eq!(names.contains(&"p"), names.contains(&"q"));
+        count += 1;
+    }
+    assert_eq!(count, 4);
+    assert!(search.exhausted());
+}
+
+#[test]
+fn false_bound_filters_do_not_start_an_unneeded_value_generator() {
+    let input = admit_formula(
+        "a.b.p(N):-N=#sum{2147483647:a;1:b},1=2.".to_owned(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .expect("constant false body has no generator input row");
+    let mut search =
+        StableModels::new(input.theory(), Limits::default(), Control::default()).expect("theory");
+    let model = search.next().expect("one model").expect("verified model");
+    assert_eq!(model.atoms().count(), 2);
+    assert!(search.next().is_none());
+    assert!(search.exhausted());
+}

@@ -1,0 +1,92 @@
+{"name":"empty_count","source":"n(N):-N=#count{}. #minimize{N@7:n(N)}.","refusal":null,"models":[[["n(0)"],[0]]]}
+{"name":"empty_sum","source":"n(N):-N=#sum{}. #minimize{N@7:n(N)}.","refusal":null,"models":[[["n(0)"],[0]]]}
+{"name":"mandatory_count","source":"a.b.n(N):-N=#count{1:a;2:b}.#minimize{N@7:n(N)}.","refusal":null,"models":[[["a","b","n(2)"],[2]]]}
+{"name":"mandatory_sum","source":"a.b.n(N):-N=#sum{2,k:a;3,l:b}.#minimize{N@7:n(N)}.","refusal":null,"models":[[["a","b","n(5)"],[5]]]}
+{"name":"shared_eligibility","source":"{a}.n(N):-N=#sum{2,k:a;3,l:a}.#minimize{N@7:n(N)}.","refusal":null,"models":[[["a","n(5)"],[5]],[["n(0)"],[0]]]}
+{"name":"two_generated_positions","source":"{a}.p(N,7):-N=#sum{2:a}.p(5,N):-N=#count{1:a}.#minimize{X@1,Y:p(X,Y)}.","refusal":null,"models":[[["a","p(2,7)","p(5,1)"],[7]],[["p(0,7)","p(5,0)"],[5]]]}
+{"name":"generated_diagonal","source":"{a}.p(N,N):-N=#count{1:a}.#minimize{X@1,Y:p(X,Y)}.","refusal":null,"models":[[["a","p(1,1)"],[1]],[["p(0,0)"],[0]]]}
+{"name":"ordinary_fact_mixture","source":"{a}.n(N):-N=#sum{2:a}.n(9).#minimize{N@7:n(N)}.","refusal":null,"models":[[["a","n(2)","n(9)"],[11]],[["n(0)","n(9)"],[9]]]}
+{"name":"choice_mixture","source":"{a}.n(N):-N=#sum{2:a}.{n(9)}.#minimize{N@7:n(N)}.","refusal":null,"models":[[["a","n(2)"],[2]],[["a","n(2)","n(9)"],[11]],[["n(0)"],[0]],[["n(0)","n(9)"],[9]]]}
+{"name":"ordinary_producer_mixture","source":"{a;b}.n(N):-N=#sum{2:a}.n(9):-b.#minimize{N@7:n(N)}.","refusal":null,"models":[[["a","b","n(2)","n(9)"],[11]],[["a","n(2)"],[2]],[["b","n(0)","n(9)"],[9]],[["n(0)"],[0]]]}
+{"name":"overlapping_fact_mixture","source":"{a}.n(N):-N=#sum{2:a}.n(2).#minimize{N@7:n(N)}.","refusal":null,"models":[[["a","n(2)"],[2]],[["n(0)","n(2)"],[2]]]}
+{"name":"overlapping_choice_mixture","source":"{a}.n(N):-N=#sum{2:a}.{n(2)}.#minimize{N@7:n(N)}.","refusal":null,"models":[[["a","n(2)"],[2]],[["n(0)"],[0]],[["n(0)","n(2)"],[2]]]}
+{"name":"both_producer_positions_mixture","source":"{a}.p(N,7):-N=#sum{2:a}.p(5,N):-N=#count{1:a}.p(9,9).{p(8,8)}.#minimize{X@1,Y:p(X,Y)}.","refusal":null,"models":[[["a","p(2,7)","p(5,1)","p(8,8)","p(9,9)"],[24]],[["a","p(2,7)","p(5,1)","p(9,9)"],[16]],[["p(0,7)","p(5,0)","p(8,8)","p(9,9)"],[22]],[["p(0,7)","p(5,0)","p(9,9)"],[14]]]}
+{"name":"absent_outer_binding","source":"n(G,N):-g(G),N=#sum{}. #minimize{N@7,G:n(G,N)}.","refusal":null,"models":[[[],null]]}
+{"name":"present_other_priority","source":"n(G,N):-g(G),N=#sum{}. p. #minimize{N@7,G:n(G,N);0@3:p}.","refusal":null,"models":[[["p"],[0]]]}
+{"name":"unsupported_positive_outer_cycle","source":"g(a):-h(a).h(a):-g(a).n(G,N):-g(G),N=#sum{}. #minimize{N@7,G:n(G,N)}.","refusal":null,"models":[[[],null]]}
+{"name":"choice_outer_binding","source":"{g(a)}.n(G,N):-g(G),N=#sum{}. #minimize{N@7,G:n(G,N)}.","refusal":null,"models":[[[],[0]],[["g(a)","n(a,0)"],[0]]]}
+{"name":"constraint_false_outer","source":"{g(a)}.:-g(a).n(G,N):-g(G),N=#sum{}. #minimize{N@7,G:n(G,N)}.","refusal":null,"models":[[[],[0]]]}
+{"name":"fixed_zero_observer","source":"{a}.n(N):-N=#count{1:a}. #minimize{0@7,N:n(N)}.","refusal":null,"models":[[["a","n(1)"],[0]],[["n(0)"],[0]]]}
+{"name":"fixed_negative_observer","source":"{a}.n(N):-N=#count{1:a}. #minimize{-3@7,N:n(N)}.","refusal":null,"models":[[["a","n(1)"],[-3]],[["n(0)"],[-3]]]}
+{"name":"duplicate_tuple_templates","source":"{a}.n(N):-N=#count{1:a}. #minimize{N@7,k:n(N);N@7,k:n(N)}.","refusal":null,"models":[[["a","n(1)"],[1]],[["n(0)"],[0]]]}
+{"name":"duplicate_tuple_statements","source":"{a}.n(N):-N=#count{1:a}. #minimize{N@7,k:n(N)}. #minimize{N@7,k:n(N)}.","refusal":null,"models":[[["a","n(1)"],[1]],[["n(0)"],[0]]]}
+{"name":"cancelled_weight_pair","source":"{a}.n(N):-N=#count{1:a}. #minimize{3@7,N:n(N);-3@7,N:n(N)}.","refusal":null,"models":[[["a","n(1)"],[0]],[["n(0)"],[0]]]}
+{"name":"duplicate_constant_key_across_rows","source":"g(a;b).n(G,N):-g(G),N=#count{}. #minimize{1@7,k:n(G,N)}.","refusal":null,"models":[[["g(a)","g(b)","n(a,0)","n(b,0)"],[1]]]}
+{"name":"distinct_key_across_rows","source":"g(a;b).n(G,N):-g(G),N=#count{}. #minimize{1@7,G:n(G,N)}.","refusal":null,"models":[[["g(a)","g(b)","n(a,0)","n(b,0)"],[2]]]}
+{"name":"two_observer_atoms_fresh","source":"{a}.n(N):-N=#count{1:a}.#minimize{1@7,X,Y:n(X),n(Y)}.","refusal":null,"models":[[["a","n(1)"],[1]],[["n(0)"],[1]]]}
+{"name":"nongenerated_join","source":"g(a;b).d(a).n(G,N):-g(G),N=#count{}. #minimize{N@7,G:n(G,N),d(G)}.","refusal":null,"models":[[["d(a)","g(a)","g(b)","n(a,0)","n(b,0)"],[0]]]}
+{"name":"nongenerated_false_filter","source":"g(a).n(G,N):-g(G),N=#count{}. #minimize{N@7,G:n(G,N),G!=a}.","refusal":null,"models":[[["g(a)","n(a,0)"],null]]}
+{"name":"nongenerated_true_filter","source":"g(a).n(G,N):-g(G),N=#count{}. #minimize{N@7,G:n(G,N),G=a}.","refusal":null,"models":[[["g(a)","n(a,0)"],[0]]]}
+{"name":"negative_sum_and_multiple_levels","source":"{a;b}.n(N):-N=#sum{-2,k:a;3,l:b}.#minimize{N@7:n(N);0@3:n(N);-1@1,N:n(N)}.","refusal":null,"models":[[["a","b","n(1)"],[1,0,-1]],[["a","n(-2)"],[-2,0,-1]],[["b","n(3)"],[3,0,-1]],[["n(0)"],[0,0,-1]]]}
+{"name":"priority_only_nonoptimal_model","source":"{g(a)}.n(G,N):-g(G),N=#sum{}. #minimize{2@9,G:n(G,N);1@1:g(a)}.","refusal":null,"models":[[[],[0,0]],[["g(a)","n(a,0)"],[2,1]]]}
+{"name":"empty_objective_tuple","source":"n(N):-N=#sum{}. #minimize{1@7:n(N)}.","refusal":null,"models":[[["n(0)"],[1]]]}
+{"name":"unsupported_choice_eligibility","source":"{g(a):h(a)}.n(G,N):-g(G),N=#sum{}. #minimize{N@7,G:n(G,N)}.","refusal":null,"models":[[[],null]]}
+{"name":"literal_output","source":"{a}.n(N):-N=#count{1:a}.#minimize{1@7:n(0)}.","refusal":"ObjectiveAggregateDependency","models":[[["a","n(1)"],[0]],[["n(0)"],[1]]]}
+{"name":"output_filter","source":"{a}.n(N):-N=#count{1:a}.#minimize{N@7:n(N),N!=0}.","refusal":"ObjectiveAggregateDependency","models":[[["a","n(1)"],[1]],[["n(0)"],[0]]]}
+{"name":"output_same_atom_repeated","source":"{a}.p(N,N):-N=#count{1:a}.#minimize{X@7:p(X,X)}.","refusal":"ObjectiveAggregateDependency","models":[[["a","p(1,1)"],[1]],[["p(0,0)"],[0]]]}
+{"name":"output_shared_predicate","source":"{a}.n(N):-N=#count{1:a}.#minimize{X@7:n(X),n(X)}.","refusal":"ObjectiveAggregateDependency","models":[[["a","n(1)"],[1]],[["n(0)"],[0]]]}
+{"name":"output_join","source":"{a}.d(0).n(N):-N=#count{1:a}.#minimize{X@7:n(X),d(X)}.","refusal":"ObjectiveAggregateDependency","models":[[["a","d(0)","n(1)"],[0]],[["d(0)","n(0)"],[0]]]}
+{"name":"union_generated_literal","source":"{a}.p(N,7):-N=#sum{2:a}.p(5,N):-N=#count{1:a}.#minimize{X@1:p(X,7)}.","refusal":"ObjectiveAggregateDependency","models":[[["a","p(2,7)","p(5,1)"],[2]],[["p(0,7)","p(5,0)"],[0]]]}
+{"name":"union_generated_filtered","source":"{a}.p(N,7):-N=#sum{2:a}.p(5,N):-N=#count{1:a}.#minimize{X@1,Y:p(X,Y),Y!=0}.","refusal":"ObjectiveAggregateDependency","models":[[["a","p(2,7)","p(5,1)"],[7]],[["p(0,7)","p(5,0)"],[0]]]}
+{"name":"ordinary_downstream","source":"n(N):-N=#count{}.p(X):-n(X).#minimize{X@7:p(X)}.","refusal":"ObjectiveAggregateDependency","models":[[["n(0)","p(0)"],[0]]]}
+{"name":"choice_downstream","source":"n(N):-N=#count{}.{p(X):n(X)}.#minimize{X@7:p(X)}.","refusal":"ObjectiveAggregateDependency","models":[[["n(0)"],[0]],[["n(0)","p(0)"],[0]]]}
+{"name":"negative_producer","source":"{a}.b:-not a.n(N):-N=#count{1:b}.#minimize{N@7:n(N)}.","refusal":"ObjectiveNegativeDependency","models":[[["a","n(0)"],[0]],[["b","n(1)"],[1]]]}
+{"name":"negative_element","source":"{a}.n(N):-N=#count{1:not a}.#minimize{N@7:n(N)}.","refusal":"ObjectiveNegativeDependency","models":[[["a","n(0)"],[0]],[["n(1)"],[1]]]}
+{"name":"relevant_projected_negative","source":"{p(1)}.n(N):-N=#count{1:not p(_)}.#minimize{N@7:n(N)}.","refusal":"ObjectiveNegativeDependency","models":[[["n(0)","p(1)"],[0]],[["n(1)"],[1]]]}
+{"name":"relevant_projected_double_negative","source":"{p(1)}.n(N):-N=#count{1:not not p(_)}.#minimize{N@7:n(N)}.","refusal":"ObjectiveNegativeDependency","models":[[["n(0)"],[0]],[["n(1)","p(1)"],[1]]]}
+{"name":"unrelated_projected_negative","source":"q.{p(1)}.z:-not p(_).#minimize{1@7:q}.","refusal":null,"models":[[["p(1)","q"],[1]],[["q","z"],[1]]]}
+{"name":"unrelated_projected_double_negative","source":"q.p(1):-not not p(_).#minimize{1@7:q}.","refusal":null,"models":[[["p(1)","q"],[1]],[["q"],[1]]]}
+{"name":"sum_max_mandatory","source":"p.n(N):-N=#sum{2:p}.m(M):-M=#max{N:n(N)}.#minimize{M@7:m(M)}.","refusal":null,"models":[[["m(2)","n(2)","p"],[2]]]}
+{"name":"sum_max_choice","source":"{p}.n(N):-N=#sum{2:p}.m(M):-M=#max{N:n(N)}.#minimize{M@7:m(M)}.","refusal":null,"models":[[["m(0)","n(0)"],[0]],[["m(2)","n(2)","p"],[2]]]}
+{"name":"sum_min_choice","source":"{p}.n(N):-N=#sum{2:p}.m(M):-M=#min{N:n(N)}.#minimize{M@7:m(M)}.","refusal":null,"models":[[["m(0)","n(0)"],[0]],[["m(2)","n(2)","p"],[2]]]}
+{"name":"sum_count_zero","source":"{p}.n(N):-N=#sum{2:p}.m(M):-M=#count{N:n(N)}.#minimize{M@7:m(M)}.","refusal":null,"models":[[["m(1)","n(0)"],[1]],[["m(1)","n(2)","p"],[1]]]}
+{"name":"count_sum_correlated","source":"{p}.n(N):-N=#count{1:p;2:p}.m(M):-M=#sum{N:n(N)}.#minimize{M@7:m(M)}.","refusal":null,"models":[[["m(0)","n(0)"],[0]],[["m(2)","n(2)","p"],[2]]]}
+{"name":"sum_max_filtered_output","source":"{p}.n(N):-N=#sum{2:p}.m(M):-M=#max{N:n(N)}.#minimize{1@7:m(1)}.","refusal":"ObjectiveAggregateDependency","models":[[["m(0)","n(0)"],null],[["m(2)","n(2)","p"],null]]}
+{"name":"sum_max_ordinary_generated_join","source":"{p}.n(N):-N=#sum{2:p}.m(M):-n(N),M=#max{1:p}.#minimize{M@7:m(M)}.","refusal":"ObjectiveAggregateDependency","models":[[["m(#inf)","n(0)"],[0]],[["m(1)","n(2)","p"],[1]]]}
+{"name":"sum_max_filtered_input","source":"{p}.n(N):-N=#sum{2:p}.m(M):-M=#max{N:n(N),N!=0}.#minimize{1@7,M:m(M)}.","refusal":"ObjectiveAggregateDependency","models":[[["m(#inf)","n(0)"],[1]],[["m(2)","n(2)","p"],[1]]]}
+{"name":"sum_max_shared_input_variable","source":"{p}.n(N,N):-N=#count{1:p}.m(M):-M=#max{N:n(N,N)}.#minimize{1@7,M:m(M)}.","refusal":"ObjectiveAggregateDependency","models":[[["m(0)","n(0,0)"],[1]],[["m(1)","n(1,1)","p"],[1]]]}
+{"name":"sum_max_fresh_input_variables","source":"{p}.n(N,N):-N=#count{1:p}.m(M):-M=#max{X:n(X,Y)}.#minimize{M@7:m(M)}.","refusal":null,"models":[[["m(0)","n(0,0)"],[0]],[["m(1)","n(1,1)","p"],[1]]]}
+{"name":"sum_max_outer_shared_input","source":"{p}.d(0).n(N):-N=#count{1:p}.m(D,M):-d(D),M=#max{1:n(D)}.#minimize{1@7,D,M:m(D,M)}.","refusal":null,"models":[[["d(0)","m(0,#inf)","n(1)","p"],[1]],[["d(0)","m(0,1)","n(0)"],[1]]]}
+{"name":"sum_max_missing_source_fixed_weight","source":"n(G,N):-g(G),N=#sum{}.m(M):-M=#max{N,G:n(G,N)}.#minimize{1@7,M:m(M)}.","refusal":null,"models":[[["m(#inf)"],[1]]]}
+{"name":"sum_max_missing_source_numeric_weight","source":"n(G,N):-g(G),N=#sum{}.m(M):-M=#max{N,G:n(G,N)}.#minimize{M@7:m(M)}.","refusal":null,"models":[[["m(#inf)"],null]]}
+{"name":"sum_max_optional_outer_fixed_weight","source":"{g(a)}.n(G,N):-g(G),N=#sum{}.m(M):-M=#max{N,G:n(G,N)}.#minimize{1@7,M:m(M)}.","refusal":null,"models":[[["g(a)","m(0)","n(a,0)"],[1]],[["m(#inf)"],[1]]]}
+{"name":"sum_max_optional_outer_numeric_weight","source":"{g(a)}.n(G,N):-g(G),N=#sum{}.m(M):-M=#max{N,G:n(G,N)}.#minimize{M@7:m(M)}.","refusal":null,"models":[[["g(a)","m(0)","n(a,0)"],[0]],[["m(#inf)"],[0]]]}
+{"name":"sum_max_zero_slot","source":"{p}.n(N):-N=#sum{2:p}.m(M):-M=#max{N:n(N)}.#minimize{0@7,M:m(M)}.","refusal":null,"models":[[["m(0)","n(0)"],[0]],[["m(2)","n(2)","p"],[0]]]}
+{"name":"sum_max_cancelled_slot","source":"{p}.n(N):-N=#sum{2:p}.m(M):-M=#max{N:n(N)}.#minimize{2@7,M:m(M);-2@7,M:m(M)}.","refusal":null,"models":[[["m(0)","n(0)"],[0]],[["m(2)","n(2)","p"],[0]]]}
+{"name":"sum_max_duplicate_key","source":"{p}.n(N):-N=#sum{2:p}.m(M):-M=#max{N:n(N)}.#minimize{M@7,k:m(M);M@7,k:m(M)}.","refusal":null,"models":[[["m(0)","n(0)"],[0]],[["m(2)","n(2)","p"],[2]]]}
+{"name":"sum_max_ordinary_fact_mixture","source":"{p}.n(N):-N=#sum{2:p}.n(3).m(M):-M=#max{N:n(N)}.#minimize{M@7:m(M)}.","refusal":null,"models":[[["m(3)","n(0)","n(3)"],[3]],[["m(3)","n(2)","n(3)","p"],[3]]]}
+{"name":"sum_max_choice_mixture","source":"{p}.n(N):-N=#sum{2:p}.{n(3)}.m(M):-M=#max{N:n(N)}.#minimize{M@7:m(M)}.","refusal":null,"models":[[["m(0)","n(0)"],[0]],[["m(2)","n(2)","p"],[2]],[["m(3)","n(0)","n(3)"],[3]],[["m(3)","n(2)","n(3)","p"],[3]]]}
+{"name":"sum_max_choice_output_mixture","source":"{p}.n(N):-N=#sum{2:p}.m(M):-M=#max{N:n(N)}.{m(3)}.#minimize{M@7:m(M)}.","refusal":"ObjectiveAggregateDependency","models":[[["m(0)","m(3)","n(0)"],[3]],[["m(0)","n(0)"],[0]],[["m(2)","m(3)","n(2)","p"],[5]],[["m(2)","n(2)","p"],[2]]]}
+{"name":"zero_sum_self_cycle","source":"n(N):-N=#sum{0,k:n(X)}.#minimize{N@7:n(N)}.","refusal":null,"models":[[["n(0)"],[0]]]}
+{"name":"zero_sum_mutual_cycle","source":"n(N):-N=#sum{0,k:m(X)}.m(M):-M=#sum{0,k:n(X)}.#minimize{N@7:n(N)}.","refusal":null,"models":[[["m(0)","n(0)"],[0]]]}
+{"name":"count_self_cycle_dedup","source":"n(N):-N=#count{k:n(X)}.#minimize{N@7:n(N)}.","refusal":null,"models":[]}
+{"name":"count_mutual_cycle_dedup","source":"n(N):-N=#count{k:m(X)}.m(M):-M=#count{k:n(X)}.#minimize{N@7:n(N)}.","refusal":null,"models":[]}
+{"name":"unrelated_negative_producer","source":"{p}.q:-not p.n(N):-N=#count{1:p}.#minimize{N@7:n(N)}.","refusal":null,"models":[[["n(0)","q"],[0]],[["n(1)","p"],[1]]]}
+{"name":"unrelated_generated_join","source":"{p}.n(N):-N=#count{1:p}.x:-n(0).#minimize{1@7:p}.","refusal":null,"models":[[["n(0)","x"],[0]],[["n(1)","p"],[1]]]}
+{"name":"unrelated_generated_cycle","source":"n(N):-N=#count{k:n(X)}.p.#minimize{1@7:p}.","refusal":null,"models":[]}
+{"name":"relevant_negative_transitive","source":"{p}.q:-not p.n(N):-N=#count{1:q}.m(M):-M=#sum{N:n(N)}.#minimize{M@7:m(M)}.","refusal":"ObjectiveNegativeDependency","models":[[["m(0)","n(0)","p"],[0]],[["m(1)","n(1)","q"],[1]]]}
+{"name":"relevant_choice_condition_transitive","source":"n(N):-N=#count{}.{p:n(0)}.#minimize{1@7:p}.","refusal":"ObjectiveAggregateDependency","models":[[["n(0)"],[0]],[["n(0)","p"],[1]]]}
+{"name":"unrelated_global_constraint","source":"{p}.n(N):-N=#count{1:p}.:-n(1).#minimize{1@7:p}.","refusal":null,"models":[[["n(0)"],[0]]]}
+{"name":"sum_max_source_unsupported_cycle","source":"g(a):-h(a).h(a):-g(a).n(G,N):-g(G),N=#sum{}.m(M):-M=#max{N,G:n(G,N)}.#minimize{1@7,M:m(M)}.","refusal":null,"models":[[["m(#inf)"],[1]]]}
+{"name":"symbol_only_weight","source":"p(foo).#minimize{X@7:p(X)}.","refusal":null,"models":[[["p(foo)"],null]]}
+{"name":"string_only_weight","source":"p(\"foo\").#minimize{X@7:p(X)}.","refusal":null,"models":[[["p(\"foo\")"],null]]}
+{"name":"mixed_zero_symbol_weight","source":"p(0;foo).#minimize{X@7:p(X)}.","refusal":null,"models":[[["p(0)","p(foo)"],[0]]]}
+{"name":"mixed_positive_string_weight","source":"p(2;\"foo\").#minimize{X@7:p(X)}.","refusal":null,"models":[[["p(\"foo\")","p(2)"],[2]]]}
+{"name":"optional_numeric_symbol_weight","source":"p(foo).{p(2)}.#minimize{X@7:p(X)}.","refusal":null,"models":[[["p(2)","p(foo)"],[2]],[["p(foo)"],[0]]]}
+{"name":"optional_numeric_string_weight","source":"p(\"foo\").{p(-2)}.#minimize{X@7:p(X)}.","refusal":null,"models":[[["p(\"foo\")"],[0]],[["p(\"foo\")","p(-2)"],[-2]]]}
+{"name":"all_nonnumeric_priority_omitted","source":"p(foo).q.#minimize{X@7:p(X);1@3:q}.","refusal":null,"models":[[["p(foo)","q"],[1]]]}
+{"name":"all_nonnumeric_priorities_absent","source":"p(foo;\"bar\").#minimize{X@7:p(X);X@3:p(X)}.","refusal":null,"models":[[["p(\"bar\")","p(foo)"],null]]}
+{"name":"cancelled_numeric_ignores_symbol","source":"p(-2;2;foo).#minimize{X@7:p(X)}.","refusal":null,"models":[[["p(-2)","p(2)","p(foo)"],[0]]]}
+{"name":"tuple_symbol_does_not_disable_numeric_weight","source":"p(foo).#minimize{1@7,X:p(X)}.","refusal":null,"models":[[["p(foo)"],[1]]]}
+{"name":"nonnumeric_global_duplicate_key","source":"p(foo).#minimize{X@7,k:p(X);X@7,k:p(X)}.","refusal":null,"models":[[["p(foo)"],null]]}
+{"name":"nonoptimal_only_numeric_priority","source":"{p(2)}.#minimize{X@7:p(X);1@1:p(2)}.","refusal":null,"models":[[[],[0,0]],[["p(2)"],[2,1]]]}

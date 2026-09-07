@@ -1,0 +1,40 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.97"
+license = "MIT"
+version = "0.1.0"
+
+# The estate's authored-code baseline. Exceptions are named and argued at
+# their point of use; a prototype narrows features, not these checks.
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_docs = "deny"
+unused = { level = "deny", priority = -1 }
+unused_must_use = "deny"
+dead_code = "deny"
+
+[workspace.lints.clippy]
+pedantic = { level = "deny", priority = -1 }
+
+[workspace.dependencies]
+zetesis-core = { path = "crates/zetesis-core" }
+zetesis-themelios = { path = "crates/zetesis-themelios" }
+zetesis-cpu = { path = "crates/zetesis-cpu" }
+zetesis-wgpu = { path = "crates/zetesis-wgpu" }
+zetesis-ferraris = { path = "crates/zetesis-ferraris" }
+zetesis-sat = { path = "crates/zetesis-sat" }
+zetesis-objective = { path = "crates/zetesis-objective" }
+# Matches morphe's reviewed source tier; never builds against estate worktrees.
+themelios-base = { git = "https://github.com/GregoryGelfond/themelios.git", rev = "87c11a3", package = "themelios-base" }
+themelios-syntax = { git = "https://github.com/GregoryGelfond/themelios.git", rev = "87c11a3", package = "themelios-syntax" }
+themelios-program = { git = "https://github.com/GregoryGelfond/themelios.git", rev = "87c11a3", package = "themelios-program" }
+themelios-analysis = { git = "https://github.com/GregoryGelfond/themelios.git", rev = "87c11a3", package = "themelios-analysis", default-features = false }
+rayon = "1.12"
+wgpu = "30.0.1"
+bytemuck = "1.25"
+pollster = "0.4"
+clap = { version = "4.6", features = ["derive"] }

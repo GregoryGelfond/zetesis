@@ -1,0 +1,6 @@
+{"id": "bound-disjunction", "native": "admit", "source": "p(X+1);q(X):-0<X,X<3.", "models": [["p(2)", "p(3)"], ["p(2)", "q(2)"], ["p(3)", "q(1)"], ["q(1)", "q(2)"]]}
+{"id": "bound-choice", "native": "admit", "source": "{p(X+1)}:-X>0,X<3.", "models": [[], ["p(2)"], ["p(2)", "p(3)"], ["p(3)"]]}
+{"id": "local-double-range", "native": "admit", "source": "1{p(X+Y):not not Y=1..2}1:-0<X,X<3.", "models": [["p(2)", "p(4)"], ["p(3)"]]}
+{"id": "tuple-disjunction", "native": "admit", "source": "p(X+1);q(X):-not not (X,2)=(1,2).", "models": [["p(2)"], ["q(1)"]]}
+{"id": "bound-choice-interval", "native": "admit", "source": "1{p(X..X+1)}1:-X>=1,X<=2.", "models": [["p(1)", "p(3)"], ["p(2)"]]}
+{"id": "bound-coherence", "native": "admit", "source": "-p(X+1);q(X):-0<X,X<2. p(2).", "models": [["p(2)", "q(1)"]]}

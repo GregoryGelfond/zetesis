@@ -1,0 +1,198 @@
+{"name":"min-=--3-positive","source":"{p;q}. r :- #min{-2,a:p;3,b:q;3,b:p} = -3.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-=--3-not ","source":"{p;q}. r :- not #min{-2,a:p;3,b:q;3,b:p} = -3.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-=--3-not not ","source":"{p;q}. r :- not not #min{-2,a:p;3,b:q;3,b:p} = -3.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-=-0-positive","source":"{p;q}. r :- #min{-2,a:p;3,b:q;3,b:p} = 0.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-=-0-not ","source":"{p;q}. r :- not #min{-2,a:p;3,b:q;3,b:p} = 0.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-=-0-not not ","source":"{p;q}. r :- not not #min{-2,a:p;3,b:q;3,b:p} = 0.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-=-2-positive","source":"{p;q}. r :- #min{-2,a:p;3,b:q;3,b:p} = 2.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-=-2-not ","source":"{p;q}. r :- not #min{-2,a:p;3,b:q;3,b:p} = 2.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-=-2-not not ","source":"{p;q}. r :- not not #min{-2,a:p;3,b:q;3,b:p} = 2.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-=-4-positive","source":"{p;q}. r :- #min{-2,a:p;3,b:q;3,b:p} = 4.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-=-4-not ","source":"{p;q}. r :- not #min{-2,a:p;3,b:q;3,b:p} = 4.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-=-4-not not ","source":"{p;q}. r :- not not #min{-2,a:p;3,b:q;3,b:p} = 4.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-!=--3-positive","source":"{p;q}. r :- #min{-2,a:p;3,b:q;3,b:p} != -3.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-!=--3-not ","source":"{p;q}. r :- not #min{-2,a:p;3,b:q;3,b:p} != -3.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-!=--3-not not ","source":"{p;q}. r :- not not #min{-2,a:p;3,b:q;3,b:p} != -3.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-!=-0-positive","source":"{p;q}. r :- #min{-2,a:p;3,b:q;3,b:p} != 0.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-!=-0-not ","source":"{p;q}. r :- not #min{-2,a:p;3,b:q;3,b:p} != 0.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-!=-0-not not ","source":"{p;q}. r :- not not #min{-2,a:p;3,b:q;3,b:p} != 0.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-!=-2-positive","source":"{p;q}. r :- #min{-2,a:p;3,b:q;3,b:p} != 2.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-!=-2-not ","source":"{p;q}. r :- not #min{-2,a:p;3,b:q;3,b:p} != 2.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-!=-2-not not ","source":"{p;q}. r :- not not #min{-2,a:p;3,b:q;3,b:p} != 2.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-!=-4-positive","source":"{p;q}. r :- #min{-2,a:p;3,b:q;3,b:p} != 4.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-!=-4-not ","source":"{p;q}. r :- not #min{-2,a:p;3,b:q;3,b:p} != 4.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-!=-4-not not ","source":"{p;q}. r :- not not #min{-2,a:p;3,b:q;3,b:p} != 4.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-<--3-positive","source":"{p;q}. r :- #min{-2,a:p;3,b:q;3,b:p} < -3.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-<--3-not ","source":"{p;q}. r :- not #min{-2,a:p;3,b:q;3,b:p} < -3.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-<--3-not not ","source":"{p;q}. r :- not not #min{-2,a:p;3,b:q;3,b:p} < -3.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-<-0-positive","source":"{p;q}. r :- #min{-2,a:p;3,b:q;3,b:p} < 0.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-<-0-not ","source":"{p;q}. r :- not #min{-2,a:p;3,b:q;3,b:p} < 0.","records":[[["p"],null],[["p","q"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-<-0-not not ","source":"{p;q}. r :- not not #min{-2,a:p;3,b:q;3,b:p} < 0.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-<-2-positive","source":"{p;q}. r :- #min{-2,a:p;3,b:q;3,b:p} < 2.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-<-2-not ","source":"{p;q}. r :- not #min{-2,a:p;3,b:q;3,b:p} < 2.","records":[[["p"],null],[["p","q"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-<-2-not not ","source":"{p;q}. r :- not not #min{-2,a:p;3,b:q;3,b:p} < 2.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-<-4-positive","source":"{p;q}. r :- #min{-2,a:p;3,b:q;3,b:p} < 4.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q","r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-<-4-not ","source":"{p;q}. r :- not #min{-2,a:p;3,b:q;3,b:p} < 4.","records":[[["p"],null],[["p","q"],null],[["q"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-<-4-not not ","source":"{p;q}. r :- not not #min{-2,a:p;3,b:q;3,b:p} < 4.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q","r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-<=--3-positive","source":"{p;q}. r :- #min{-2,a:p;3,b:q;3,b:p} <= -3.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-<=--3-not ","source":"{p;q}. r :- not #min{-2,a:p;3,b:q;3,b:p} <= -3.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-<=--3-not not ","source":"{p;q}. r :- not not #min{-2,a:p;3,b:q;3,b:p} <= -3.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-<=-0-positive","source":"{p;q}. r :- #min{-2,a:p;3,b:q;3,b:p} <= 0.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-<=-0-not ","source":"{p;q}. r :- not #min{-2,a:p;3,b:q;3,b:p} <= 0.","records":[[["p"],null],[["p","q"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-<=-0-not not ","source":"{p;q}. r :- not not #min{-2,a:p;3,b:q;3,b:p} <= 0.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-<=-2-positive","source":"{p;q}. r :- #min{-2,a:p;3,b:q;3,b:p} <= 2.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-<=-2-not ","source":"{p;q}. r :- not #min{-2,a:p;3,b:q;3,b:p} <= 2.","records":[[["p"],null],[["p","q"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-<=-2-not not ","source":"{p;q}. r :- not not #min{-2,a:p;3,b:q;3,b:p} <= 2.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-<=-4-positive","source":"{p;q}. r :- #min{-2,a:p;3,b:q;3,b:p} <= 4.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q","r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-<=-4-not ","source":"{p;q}. r :- not #min{-2,a:p;3,b:q;3,b:p} <= 4.","records":[[["p"],null],[["p","q"],null],[["q"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-<=-4-not not ","source":"{p;q}. r :- not not #min{-2,a:p;3,b:q;3,b:p} <= 4.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q","r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min->--3-positive","source":"{p;q}. r :- #min{-2,a:p;3,b:q;3,b:p} > -3.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min->--3-not ","source":"{p;q}. r :- not #min{-2,a:p;3,b:q;3,b:p} > -3.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min->--3-not not ","source":"{p;q}. r :- not not #min{-2,a:p;3,b:q;3,b:p} > -3.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min->-0-positive","source":"{p;q}. r :- #min{-2,a:p;3,b:q;3,b:p} > 0.","records":[[["p"],null],[["p","q"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min->-0-not ","source":"{p;q}. r :- not #min{-2,a:p;3,b:q;3,b:p} > 0.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min->-0-not not ","source":"{p;q}. r :- not not #min{-2,a:p;3,b:q;3,b:p} > 0.","records":[[["p"],null],[["p","q"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min->-2-positive","source":"{p;q}. r :- #min{-2,a:p;3,b:q;3,b:p} > 2.","records":[[["p"],null],[["p","q"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min->-2-not ","source":"{p;q}. r :- not #min{-2,a:p;3,b:q;3,b:p} > 2.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min->-2-not not ","source":"{p;q}. r :- not not #min{-2,a:p;3,b:q;3,b:p} > 2.","records":[[["p"],null],[["p","q"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min->-4-positive","source":"{p;q}. r :- #min{-2,a:p;3,b:q;3,b:p} > 4.","records":[[["p"],null],[["p","q"],null],[["q"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min->-4-not ","source":"{p;q}. r :- not #min{-2,a:p;3,b:q;3,b:p} > 4.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q","r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min->-4-not not ","source":"{p;q}. r :- not not #min{-2,a:p;3,b:q;3,b:p} > 4.","records":[[["p"],null],[["p","q"],null],[["q"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min->=--3-positive","source":"{p;q}. r :- #min{-2,a:p;3,b:q;3,b:p} >= -3.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min->=--3-not ","source":"{p;q}. r :- not #min{-2,a:p;3,b:q;3,b:p} >= -3.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min->=--3-not not ","source":"{p;q}. r :- not not #min{-2,a:p;3,b:q;3,b:p} >= -3.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min->=-0-positive","source":"{p;q}. r :- #min{-2,a:p;3,b:q;3,b:p} >= 0.","records":[[["p"],null],[["p","q"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min->=-0-not ","source":"{p;q}. r :- not #min{-2,a:p;3,b:q;3,b:p} >= 0.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min->=-0-not not ","source":"{p;q}. r :- not not #min{-2,a:p;3,b:q;3,b:p} >= 0.","records":[[["p"],null],[["p","q"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min->=-2-positive","source":"{p;q}. r :- #min{-2,a:p;3,b:q;3,b:p} >= 2.","records":[[["p"],null],[["p","q"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min->=-2-not ","source":"{p;q}. r :- not #min{-2,a:p;3,b:q;3,b:p} >= 2.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min->=-2-not not ","source":"{p;q}. r :- not not #min{-2,a:p;3,b:q;3,b:p} >= 2.","records":[[["p"],null],[["p","q"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min->=-4-positive","source":"{p;q}. r :- #min{-2,a:p;3,b:q;3,b:p} >= 4.","records":[[["p"],null],[["p","q"],null],[["q"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min->=-4-not ","source":"{p;q}. r :- not #min{-2,a:p;3,b:q;3,b:p} >= 4.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q","r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min->=-4-not not ","source":"{p;q}. r :- not not #min{-2,a:p;3,b:q;3,b:p} >= 4.","records":[[["p"],null],[["p","q"],null],[["q"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-assignment-72","source":" r(N) :- N = #min{}.","records":[[["r(#sup)"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-assignment-73","source":"{p;q}. r(N) :- N = #min{2,k:p}.","records":[[["p","q","r(2)"],null],[["p","r(2)"],null],[["q","r(#sup)"],null],[["r(#sup)"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-assignment-74","source":"{p;q}. r(N) :- N = #min{-2,a:p;3,b:q}.","records":[[["p","q","r(-2)"],null],[["p","r(-2)"],null],[["q","r(3)"],null],[["r(#sup)"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-assignment-75","source":"{p;q}. r(N) :- N = #min{2,k:p;2,k:q}.","records":[[["p","q","r(2)"],null],[["p","r(2)"],null],[["q","r(2)"],null],[["r(#sup)"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-assignment-76","source":"{p;q}. r(N) :- N = #min{0,a:p;3,b:p}.","records":[[["p","q","r(0)"],null],[["p","r(0)"],null],[["q","r(#sup)"],null],[["r(#sup)"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-assignment-77","source":" r(N) :- N = #min{1,k:r(1)}.","records":[[["r(#sup)"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-recursive-p-=","source":"p :- #min{2,k:p} = 2.","records":[[[],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-recursive-p-!=","source":"p :- #min{2,k:p} != 2.","records":[],"reference_version":"clingo5.8.2"}
+{"name":"min-recursive-p-<","source":"p :- #min{2,k:p} < 2.","records":[[[],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-recursive-p-<=","source":"p :- #min{2,k:p} <= 2.","records":[[[],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-recursive-p->","source":"p :- #min{2,k:p} > 2.","records":[],"reference_version":"clingo5.8.2"}
+{"name":"min-recursive-p->=","source":"p :- #min{2,k:p} >= 2.","records":[[["p"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-recursive-not p-=","source":"p :- #min{2,k:not p} = 2.","records":[],"reference_version":"clingo5.8.2"}
+{"name":"min-recursive-not p-!=","source":"p :- #min{2,k:not p} != 2.","records":[[[],null],[["p"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-recursive-not p-<","source":"p :- #min{2,k:not p} < 2.","records":[[[],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-recursive-not p-<=","source":"p :- #min{2,k:not p} <= 2.","records":[],"reference_version":"clingo5.8.2"}
+{"name":"min-recursive-not p->","source":"p :- #min{2,k:not p} > 2.","records":[[[],null],[["p"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-recursive-not p->=","source":"p :- #min{2,k:not p} >= 2.","records":[[["p"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-recursive-not not p-=","source":"p :- #min{2,k:not not p} = 2.","records":[[[],null],[["p"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-recursive-not not p-!=","source":"p :- #min{2,k:not not p} != 2.","records":[],"reference_version":"clingo5.8.2"}
+{"name":"min-recursive-not not p-<","source":"p :- #min{2,k:not not p} < 2.","records":[[[],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-recursive-not not p-<=","source":"p :- #min{2,k:not not p} <= 2.","records":[[[],null],[["p"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-recursive-not not p->","source":"p :- #min{2,k:not not p} > 2.","records":[],"reference_version":"clingo5.8.2"}
+{"name":"min-recursive-not not p->=","source":"p :- #min{2,k:not not p} >= 2.","records":[[["p"],null]],"reference_version":"clingo5.8.2"}
+{"name":"min-chain-96","source":"{p}. n(N) :- N = #sum{2,k:p}. m(M) :- M = #min{N,k:n(N)}. #minimize{M:m(M)}.","records":[[["m(0)","n(0)"],[0]],[["m(2)","n(2)","p"],[2]]],"reference_version":"clingo5.8.2"}
+{"name":"min-chain-97","source":"p. n(N) :- N = #sum{2,k:p}. m(M) :- M = #min{N,k:n(N)}. #minimize{M:m(M)}.","records":[[["m(2)","n(2)","p"],[2]]],"reference_version":"clingo5.8.2"}
+{"name":"min-chain-98","source":"{p}. n(4). n(N) :- N = #sum{2,k:p}. m(M) :- M = #min{N,k:n(N)}. #minimize{M:m(M)}.","records":[[["m(0)","n(0)","n(4)"],[0]],[["m(2)","n(2)","n(4)","p"],[2]]],"reference_version":"clingo5.8.2"}
+{"name":"max-=--3-positive","source":"{p;q}. r :- #max{-2,a:p;3,b:q;3,b:p} = -3.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-=--3-not ","source":"{p;q}. r :- not #max{-2,a:p;3,b:q;3,b:p} = -3.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-=--3-not not ","source":"{p;q}. r :- not not #max{-2,a:p;3,b:q;3,b:p} = -3.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-=-0-positive","source":"{p;q}. r :- #max{-2,a:p;3,b:q;3,b:p} = 0.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-=-0-not ","source":"{p;q}. r :- not #max{-2,a:p;3,b:q;3,b:p} = 0.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-=-0-not not ","source":"{p;q}. r :- not not #max{-2,a:p;3,b:q;3,b:p} = 0.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-=-2-positive","source":"{p;q}. r :- #max{-2,a:p;3,b:q;3,b:p} = 2.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-=-2-not ","source":"{p;q}. r :- not #max{-2,a:p;3,b:q;3,b:p} = 2.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-=-2-not not ","source":"{p;q}. r :- not not #max{-2,a:p;3,b:q;3,b:p} = 2.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-=-4-positive","source":"{p;q}. r :- #max{-2,a:p;3,b:q;3,b:p} = 4.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-=-4-not ","source":"{p;q}. r :- not #max{-2,a:p;3,b:q;3,b:p} = 4.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-=-4-not not ","source":"{p;q}. r :- not not #max{-2,a:p;3,b:q;3,b:p} = 4.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-!=--3-positive","source":"{p;q}. r :- #max{-2,a:p;3,b:q;3,b:p} != -3.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-!=--3-not ","source":"{p;q}. r :- not #max{-2,a:p;3,b:q;3,b:p} != -3.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-!=--3-not not ","source":"{p;q}. r :- not not #max{-2,a:p;3,b:q;3,b:p} != -3.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-!=-0-positive","source":"{p;q}. r :- #max{-2,a:p;3,b:q;3,b:p} != 0.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-!=-0-not ","source":"{p;q}. r :- not #max{-2,a:p;3,b:q;3,b:p} != 0.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-!=-0-not not ","source":"{p;q}. r :- not not #max{-2,a:p;3,b:q;3,b:p} != 0.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-!=-2-positive","source":"{p;q}. r :- #max{-2,a:p;3,b:q;3,b:p} != 2.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-!=-2-not ","source":"{p;q}. r :- not #max{-2,a:p;3,b:q;3,b:p} != 2.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-!=-2-not not ","source":"{p;q}. r :- not not #max{-2,a:p;3,b:q;3,b:p} != 2.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-!=-4-positive","source":"{p;q}. r :- #max{-2,a:p;3,b:q;3,b:p} != 4.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-!=-4-not ","source":"{p;q}. r :- not #max{-2,a:p;3,b:q;3,b:p} != 4.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-!=-4-not not ","source":"{p;q}. r :- not not #max{-2,a:p;3,b:q;3,b:p} != 4.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-<--3-positive","source":"{p;q}. r :- #max{-2,a:p;3,b:q;3,b:p} < -3.","records":[[["p"],null],[["p","q"],null],[["q"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-<--3-not ","source":"{p;q}. r :- not #max{-2,a:p;3,b:q;3,b:p} < -3.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q","r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-<--3-not not ","source":"{p;q}. r :- not not #max{-2,a:p;3,b:q;3,b:p} < -3.","records":[[["p"],null],[["p","q"],null],[["q"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-<-0-positive","source":"{p;q}. r :- #max{-2,a:p;3,b:q;3,b:p} < 0.","records":[[["p"],null],[["p","q"],null],[["q"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-<-0-not ","source":"{p;q}. r :- not #max{-2,a:p;3,b:q;3,b:p} < 0.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q","r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-<-0-not not ","source":"{p;q}. r :- not not #max{-2,a:p;3,b:q;3,b:p} < 0.","records":[[["p"],null],[["p","q"],null],[["q"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-<-2-positive","source":"{p;q}. r :- #max{-2,a:p;3,b:q;3,b:p} < 2.","records":[[["p"],null],[["p","q"],null],[["q"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-<-2-not ","source":"{p;q}. r :- not #max{-2,a:p;3,b:q;3,b:p} < 2.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q","r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-<-2-not not ","source":"{p;q}. r :- not not #max{-2,a:p;3,b:q;3,b:p} < 2.","records":[[["p"],null],[["p","q"],null],[["q"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-<-4-positive","source":"{p;q}. r :- #max{-2,a:p;3,b:q;3,b:p} < 4.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-<-4-not ","source":"{p;q}. r :- not #max{-2,a:p;3,b:q;3,b:p} < 4.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-<-4-not not ","source":"{p;q}. r :- not not #max{-2,a:p;3,b:q;3,b:p} < 4.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-<=--3-positive","source":"{p;q}. r :- #max{-2,a:p;3,b:q;3,b:p} <= -3.","records":[[["p"],null],[["p","q"],null],[["q"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-<=--3-not ","source":"{p;q}. r :- not #max{-2,a:p;3,b:q;3,b:p} <= -3.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q","r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-<=--3-not not ","source":"{p;q}. r :- not not #max{-2,a:p;3,b:q;3,b:p} <= -3.","records":[[["p"],null],[["p","q"],null],[["q"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-<=-0-positive","source":"{p;q}. r :- #max{-2,a:p;3,b:q;3,b:p} <= 0.","records":[[["p"],null],[["p","q"],null],[["q"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-<=-0-not ","source":"{p;q}. r :- not #max{-2,a:p;3,b:q;3,b:p} <= 0.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q","r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-<=-0-not not ","source":"{p;q}. r :- not not #max{-2,a:p;3,b:q;3,b:p} <= 0.","records":[[["p"],null],[["p","q"],null],[["q"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-<=-2-positive","source":"{p;q}. r :- #max{-2,a:p;3,b:q;3,b:p} <= 2.","records":[[["p"],null],[["p","q"],null],[["q"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-<=-2-not ","source":"{p;q}. r :- not #max{-2,a:p;3,b:q;3,b:p} <= 2.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q","r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-<=-2-not not ","source":"{p;q}. r :- not not #max{-2,a:p;3,b:q;3,b:p} <= 2.","records":[[["p"],null],[["p","q"],null],[["q"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-<=-4-positive","source":"{p;q}. r :- #max{-2,a:p;3,b:q;3,b:p} <= 4.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-<=-4-not ","source":"{p;q}. r :- not #max{-2,a:p;3,b:q;3,b:p} <= 4.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-<=-4-not not ","source":"{p;q}. r :- not not #max{-2,a:p;3,b:q;3,b:p} <= 4.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max->--3-positive","source":"{p;q}. r :- #max{-2,a:p;3,b:q;3,b:p} > -3.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q","r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max->--3-not ","source":"{p;q}. r :- not #max{-2,a:p;3,b:q;3,b:p} > -3.","records":[[["p"],null],[["p","q"],null],[["q"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max->--3-not not ","source":"{p;q}. r :- not not #max{-2,a:p;3,b:q;3,b:p} > -3.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q","r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max->-0-positive","source":"{p;q}. r :- #max{-2,a:p;3,b:q;3,b:p} > 0.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q","r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max->-0-not ","source":"{p;q}. r :- not #max{-2,a:p;3,b:q;3,b:p} > 0.","records":[[["p"],null],[["p","q"],null],[["q"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max->-0-not not ","source":"{p;q}. r :- not not #max{-2,a:p;3,b:q;3,b:p} > 0.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q","r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max->-2-positive","source":"{p;q}. r :- #max{-2,a:p;3,b:q;3,b:p} > 2.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q","r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max->-2-not ","source":"{p;q}. r :- not #max{-2,a:p;3,b:q;3,b:p} > 2.","records":[[["p"],null],[["p","q"],null],[["q"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max->-2-not not ","source":"{p;q}. r :- not not #max{-2,a:p;3,b:q;3,b:p} > 2.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q","r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max->-4-positive","source":"{p;q}. r :- #max{-2,a:p;3,b:q;3,b:p} > 4.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max->-4-not ","source":"{p;q}. r :- not #max{-2,a:p;3,b:q;3,b:p} > 4.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max->-4-not not ","source":"{p;q}. r :- not not #max{-2,a:p;3,b:q;3,b:p} > 4.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max->=--3-positive","source":"{p;q}. r :- #max{-2,a:p;3,b:q;3,b:p} >= -3.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q","r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max->=--3-not ","source":"{p;q}. r :- not #max{-2,a:p;3,b:q;3,b:p} >= -3.","records":[[["p"],null],[["p","q"],null],[["q"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max->=--3-not not ","source":"{p;q}. r :- not not #max{-2,a:p;3,b:q;3,b:p} >= -3.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q","r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max->=-0-positive","source":"{p;q}. r :- #max{-2,a:p;3,b:q;3,b:p} >= 0.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q","r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max->=-0-not ","source":"{p;q}. r :- not #max{-2,a:p;3,b:q;3,b:p} >= 0.","records":[[["p"],null],[["p","q"],null],[["q"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max->=-0-not not ","source":"{p;q}. r :- not not #max{-2,a:p;3,b:q;3,b:p} >= 0.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q","r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max->=-2-positive","source":"{p;q}. r :- #max{-2,a:p;3,b:q;3,b:p} >= 2.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q","r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max->=-2-not ","source":"{p;q}. r :- not #max{-2,a:p;3,b:q;3,b:p} >= 2.","records":[[["p"],null],[["p","q"],null],[["q"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max->=-2-not not ","source":"{p;q}. r :- not not #max{-2,a:p;3,b:q;3,b:p} >= 2.","records":[[[],null],[["p","q","r"],null],[["p","r"],null],[["q","r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max->=-4-positive","source":"{p;q}. r :- #max{-2,a:p;3,b:q;3,b:p} >= 4.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max->=-4-not ","source":"{p;q}. r :- not #max{-2,a:p;3,b:q;3,b:p} >= 4.","records":[[["p","q","r"],null],[["p","r"],null],[["q","r"],null],[["r"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max->=-4-not not ","source":"{p;q}. r :- not not #max{-2,a:p;3,b:q;3,b:p} >= 4.","records":[[[],null],[["p"],null],[["p","q"],null],[["q"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-assignment-171","source":" r(N) :- N = #max{}.","records":[[["r(#inf)"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-assignment-172","source":"{p;q}. r(N) :- N = #max{2,k:p}.","records":[[["p","q","r(2)"],null],[["p","r(2)"],null],[["q","r(#inf)"],null],[["r(#inf)"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-assignment-173","source":"{p;q}. r(N) :- N = #max{-2,a:p;3,b:q}.","records":[[["p","q","r(3)"],null],[["p","r(-2)"],null],[["q","r(3)"],null],[["r(#inf)"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-assignment-174","source":"{p;q}. r(N) :- N = #max{2,k:p;2,k:q}.","records":[[["p","q","r(2)"],null],[["p","r(2)"],null],[["q","r(2)"],null],[["r(#inf)"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-assignment-175","source":"{p;q}. r(N) :- N = #max{0,a:p;3,b:p}.","records":[[["p","q","r(3)"],null],[["p","r(3)"],null],[["q","r(#inf)"],null],[["r(#inf)"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-assignment-176","source":" r(N) :- N = #max{1,k:r(1)}.","records":[[["r(#inf)"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-recursive-p-=","source":"p :- #max{2,k:p} = 2.","records":[[[],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-recursive-p-!=","source":"p :- #max{2,k:p} != 2.","records":[],"reference_version":"clingo5.8.2"}
+{"name":"max-recursive-p-<","source":"p :- #max{2,k:p} < 2.","records":[],"reference_version":"clingo5.8.2"}
+{"name":"max-recursive-p-<=","source":"p :- #max{2,k:p} <= 2.","records":[[["p"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-recursive-p->","source":"p :- #max{2,k:p} > 2.","records":[[[],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-recursive-p->=","source":"p :- #max{2,k:p} >= 2.","records":[[[],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-recursive-not p-=","source":"p :- #max{2,k:not p} = 2.","records":[],"reference_version":"clingo5.8.2"}
+{"name":"max-recursive-not p-!=","source":"p :- #max{2,k:not p} != 2.","records":[[[],null],[["p"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-recursive-not p-<","source":"p :- #max{2,k:not p} < 2.","records":[[[],null],[["p"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-recursive-not p-<=","source":"p :- #max{2,k:not p} <= 2.","records":[[["p"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-recursive-not p->","source":"p :- #max{2,k:not p} > 2.","records":[[[],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-recursive-not p->=","source":"p :- #max{2,k:not p} >= 2.","records":[],"reference_version":"clingo5.8.2"}
+{"name":"max-recursive-not not p-=","source":"p :- #max{2,k:not not p} = 2.","records":[[[],null],[["p"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-recursive-not not p-!=","source":"p :- #max{2,k:not not p} != 2.","records":[],"reference_version":"clingo5.8.2"}
+{"name":"max-recursive-not not p-<","source":"p :- #max{2,k:not not p} < 2.","records":[],"reference_version":"clingo5.8.2"}
+{"name":"max-recursive-not not p-<=","source":"p :- #max{2,k:not not p} <= 2.","records":[[["p"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-recursive-not not p->","source":"p :- #max{2,k:not not p} > 2.","records":[[[],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-recursive-not not p->=","source":"p :- #max{2,k:not not p} >= 2.","records":[[[],null],[["p"],null]],"reference_version":"clingo5.8.2"}
+{"name":"max-chain-195","source":"{p}. n(N) :- N = #sum{2,k:p}. m(M) :- M = #max{N,k:n(N)}. #minimize{M:m(M)}.","records":[[["m(0)","n(0)"],[0]],[["m(2)","n(2)","p"],[2]]],"reference_version":"clingo5.8.2"}
+{"name":"max-chain-196","source":"p. n(N) :- N = #sum{2,k:p}. m(M) :- M = #max{N,k:n(N)}. #minimize{M:m(M)}.","records":[[["m(2)","n(2)","p"],[2]]],"reference_version":"clingo5.8.2"}
+{"name":"max-chain-197","source":"{p}. n(4). n(N) :- N = #sum{2,k:p}. m(M) :- M = #max{N,k:n(N)}. #minimize{M:m(M)}.","records":[[["m(4)","n(0)","n(4)"],[4]],[["m(4)","n(2)","n(4)","p"],[4]]],"reference_version":"clingo5.8.2"}

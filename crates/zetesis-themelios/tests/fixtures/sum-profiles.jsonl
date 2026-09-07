@@ -1,0 +1,274 @@
+{"name":"sum-profile-000","source":"{a;b}. ok :- #sum{-2,k:a;3,l:b} = 0.","records":[[["a"],null],[["ok"],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-001","source":"{a;b}. ok :- #sum{-2,k:a;3,l:b} = 2.","records":[[["b"],null],[[],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-002","source":"{a;b}. ok :- #sum{-2,k:a;3,l:b} = 3.","records":[[["b","ok"],null],[[],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-003","source":"{a;b}. ok :- not #sum{-2,k:a;3,l:b} = 0.","records":[[["a","ok"],null],[[],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-004","source":"{a;b}. ok :- not #sum{-2,k:a;3,l:b} = 2.","records":[[["b","ok"],null],[["ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-005","source":"{a;b}. ok :- not #sum{-2,k:a;3,l:b} = 3.","records":[[["b"],null],[["ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-006","source":"{a;b}. ok :- not not #sum{-2,k:a;3,l:b} = 0.","records":[[["a"],null],[["ok"],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-007","source":"{a;b}. ok :- not not #sum{-2,k:a;3,l:b} = 2.","records":[[["b"],null],[[],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-008","source":"{a;b}. ok :- not not #sum{-2,k:a;3,l:b} = 3.","records":[[["b","ok"],null],[[],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-009","source":"{a;b}. ok :- #sum{-2,k:a;3,l:b} != 0.","records":[[["a","ok"],null],[[],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-010","source":"{a;b}. ok :- #sum{-2,k:a;3,l:b} != 2.","records":[[["b","ok"],null],[["ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-011","source":"{a;b}. ok :- #sum{-2,k:a;3,l:b} != 3.","records":[[["b"],null],[["ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-012","source":"{a;b}. ok :- not #sum{-2,k:a;3,l:b} != 0.","records":[[["a"],null],[["ok"],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-013","source":"{a;b}. ok :- not #sum{-2,k:a;3,l:b} != 2.","records":[[["b"],null],[[],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-014","source":"{a;b}. ok :- not #sum{-2,k:a;3,l:b} != 3.","records":[[["b","ok"],null],[[],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-015","source":"{a;b}. ok :- not not #sum{-2,k:a;3,l:b} != 0.","records":[[["a","ok"],null],[[],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-016","source":"{a;b}. ok :- not not #sum{-2,k:a;3,l:b} != 2.","records":[[["b","ok"],null],[["ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-017","source":"{a;b}. ok :- not not #sum{-2,k:a;3,l:b} != 3.","records":[[["b"],null],[["ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-018","source":"{a;b}. ok :- #sum{-2,k:a;3,l:b} < 0.","records":[[["a","ok"],null],[[],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-019","source":"{a;b}. ok :- #sum{-2,k:a;3,l:b} < 2.","records":[[["b"],null],[["ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-020","source":"{a;b}. ok :- #sum{-2,k:a;3,l:b} < 3.","records":[[["b"],null],[["ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-021","source":"{a;b}. ok :- not #sum{-2,k:a;3,l:b} < 0.","records":[[["a"],null],[["ok"],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-022","source":"{a;b}. ok :- not #sum{-2,k:a;3,l:b} < 2.","records":[[["b","ok"],null],[[],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-023","source":"{a;b}. ok :- not #sum{-2,k:a;3,l:b} < 3.","records":[[["b","ok"],null],[[],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-024","source":"{a;b}. ok :- not not #sum{-2,k:a;3,l:b} < 0.","records":[[["a","ok"],null],[[],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-025","source":"{a;b}. ok :- not not #sum{-2,k:a;3,l:b} < 2.","records":[[["b"],null],[["ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-026","source":"{a;b}. ok :- not not #sum{-2,k:a;3,l:b} < 3.","records":[[["b"],null],[["ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-027","source":"{a;b}. ok :- #sum{-2,k:a;3,l:b} <= 0.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-028","source":"{a;b}. ok :- #sum{-2,k:a;3,l:b} <= 2.","records":[[["b"],null],[["ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-029","source":"{a;b}. ok :- #sum{-2,k:a;3,l:b} <= 3.","records":[[["ok"],null],[["b","ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-030","source":"{a;b}. ok :- not #sum{-2,k:a;3,l:b} <= 0.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-031","source":"{a;b}. ok :- not #sum{-2,k:a;3,l:b} <= 2.","records":[[["b","ok"],null],[[],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-032","source":"{a;b}. ok :- not #sum{-2,k:a;3,l:b} <= 3.","records":[[[],null],[["b"],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-033","source":"{a;b}. ok :- not not #sum{-2,k:a;3,l:b} <= 0.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-034","source":"{a;b}. ok :- not not #sum{-2,k:a;3,l:b} <= 2.","records":[[["b"],null],[["ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-035","source":"{a;b}. ok :- not not #sum{-2,k:a;3,l:b} <= 3.","records":[[["ok"],null],[["b","ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-036","source":"{a;b}. ok :- #sum{-2,k:a;3,l:b} > 0.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-037","source":"{a;b}. ok :- #sum{-2,k:a;3,l:b} > 2.","records":[[["b","ok"],null],[[],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-038","source":"{a;b}. ok :- #sum{-2,k:a;3,l:b} > 3.","records":[[[],null],[["b"],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-039","source":"{a;b}. ok :- not #sum{-2,k:a;3,l:b} > 0.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-040","source":"{a;b}. ok :- not #sum{-2,k:a;3,l:b} > 2.","records":[[["b"],null],[["ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-041","source":"{a;b}. ok :- not #sum{-2,k:a;3,l:b} > 3.","records":[[["ok"],null],[["b","ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-042","source":"{a;b}. ok :- not not #sum{-2,k:a;3,l:b} > 0.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-043","source":"{a;b}. ok :- not not #sum{-2,k:a;3,l:b} > 2.","records":[[["b","ok"],null],[[],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-044","source":"{a;b}. ok :- not not #sum{-2,k:a;3,l:b} > 3.","records":[[[],null],[["b"],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-045","source":"{a;b}. ok :- #sum{-2,k:a;3,l:b} >= 0.","records":[[["a"],null],[["ok"],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-046","source":"{a;b}. ok :- #sum{-2,k:a;3,l:b} >= 2.","records":[[["b","ok"],null],[[],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-047","source":"{a;b}. ok :- #sum{-2,k:a;3,l:b} >= 3.","records":[[["b","ok"],null],[[],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-048","source":"{a;b}. ok :- not #sum{-2,k:a;3,l:b} >= 0.","records":[[["a","ok"],null],[[],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-049","source":"{a;b}. ok :- not #sum{-2,k:a;3,l:b} >= 2.","records":[[["b"],null],[["ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-050","source":"{a;b}. ok :- not #sum{-2,k:a;3,l:b} >= 3.","records":[[["b"],null],[["ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-051","source":"{a;b}. ok :- not not #sum{-2,k:a;3,l:b} >= 0.","records":[[["a"],null],[["ok"],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-052","source":"{a;b}. ok :- not not #sum{-2,k:a;3,l:b} >= 2.","records":[[["b","ok"],null],[[],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-053","source":"{a;b}. ok :- not not #sum{-2,k:a;3,l:b} >= 3.","records":[[["b","ok"],null],[[],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-054","source":"{a;b}. ok :- #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} = 0.","records":[[["a"],null],[["ok"],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-055","source":"{a;b}. ok :- #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} = 2.","records":[[[],null],[["a"],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-056","source":"{a;b}. ok :- #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} = 3.","records":[[[],null],[["a"],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-057","source":"{a;b}. ok :- not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} = 0.","records":[[["a","ok"],null],[[],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-058","source":"{a;b}. ok :- not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} = 2.","records":[[["ok"],null],[["a","ok"],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-059","source":"{a;b}. ok :- not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} = 3.","records":[[["ok"],null],[["a","ok"],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-060","source":"{a;b}. ok :- not not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} = 0.","records":[[["a"],null],[["ok"],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-061","source":"{a;b}. ok :- not not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} = 2.","records":[[[],null],[["a"],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-062","source":"{a;b}. ok :- not not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} = 3.","records":[[[],null],[["a"],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-063","source":"{a;b}. ok :- #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} != 0.","records":[[["a","ok"],null],[[],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-064","source":"{a;b}. ok :- #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} != 2.","records":[[["ok"],null],[["a","ok"],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-065","source":"{a;b}. ok :- #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} != 3.","records":[[["ok"],null],[["a","ok"],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-066","source":"{a;b}. ok :- not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} != 0.","records":[[["a"],null],[["ok"],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-067","source":"{a;b}. ok :- not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} != 2.","records":[[[],null],[["a"],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-068","source":"{a;b}. ok :- not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} != 3.","records":[[[],null],[["a"],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-069","source":"{a;b}. ok :- not not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} != 0.","records":[[["a","ok"],null],[[],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-070","source":"{a;b}. ok :- not not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} != 2.","records":[[["ok"],null],[["a","ok"],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-071","source":"{a;b}. ok :- not not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} != 3.","records":[[["ok"],null],[["a","ok"],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-072","source":"{a;b}. ok :- #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} < 0.","records":[[[],null],[["a","ok"],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-073","source":"{a;b}. ok :- #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} < 2.","records":[[["ok"],null],[["a","ok"],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-074","source":"{a;b}. ok :- #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} < 3.","records":[[["ok"],null],[["a","ok"],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-075","source":"{a;b}. ok :- not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} < 0.","records":[[["ok"],null],[["a"],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-076","source":"{a;b}. ok :- not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} < 2.","records":[[[],null],[["a"],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-077","source":"{a;b}. ok :- not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} < 3.","records":[[[],null],[["a"],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-078","source":"{a;b}. ok :- not not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} < 0.","records":[[[],null],[["a","ok"],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-079","source":"{a;b}. ok :- not not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} < 2.","records":[[["ok"],null],[["a","ok"],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-080","source":"{a;b}. ok :- not not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} < 3.","records":[[["ok"],null],[["a","ok"],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-081","source":"{a;b}. ok :- #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} <= 0.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-082","source":"{a;b}. ok :- #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} <= 2.","records":[[["ok"],null],[["a","ok"],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-083","source":"{a;b}. ok :- #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} <= 3.","records":[[["ok"],null],[["b","ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-084","source":"{a;b}. ok :- not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} <= 0.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-085","source":"{a;b}. ok :- not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} <= 2.","records":[[[],null],[["a"],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-086","source":"{a;b}. ok :- not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} <= 3.","records":[[[],null],[["b"],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-087","source":"{a;b}. ok :- not not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} <= 0.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-088","source":"{a;b}. ok :- not not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} <= 2.","records":[[["ok"],null],[["a","ok"],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-089","source":"{a;b}. ok :- not not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} <= 3.","records":[[["ok"],null],[["b","ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-090","source":"{a;b}. ok :- #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} > 0.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-091","source":"{a;b}. ok :- #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} > 2.","records":[[[],null],[["a"],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-092","source":"{a;b}. ok :- #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} > 3.","records":[[[],null],[["b"],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-093","source":"{a;b}. ok :- not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} > 0.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-094","source":"{a;b}. ok :- not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} > 2.","records":[[["ok"],null],[["a","ok"],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-095","source":"{a;b}. ok :- not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} > 3.","records":[[["ok"],null],[["b","ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-096","source":"{a;b}. ok :- not not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} > 0.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-097","source":"{a;b}. ok :- not not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} > 2.","records":[[[],null],[["a"],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-098","source":"{a;b}. ok :- not not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} > 3.","records":[[[],null],[["b"],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-099","source":"{a;b}. ok :- #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} >= 0.","records":[[["ok"],null],[["a"],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-100","source":"{a;b}. ok :- #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} >= 2.","records":[[[],null],[["a"],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-101","source":"{a;b}. ok :- #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} >= 3.","records":[[[],null],[["a"],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-102","source":"{a;b}. ok :- not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} >= 0.","records":[[[],null],[["a","ok"],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-103","source":"{a;b}. ok :- not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} >= 2.","records":[[["ok"],null],[["a","ok"],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-104","source":"{a;b}. ok :- not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} >= 3.","records":[[["ok"],null],[["a","ok"],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-105","source":"{a;b}. ok :- not not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} >= 0.","records":[[["ok"],null],[["a"],null],[["b","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-106","source":"{a;b}. ok :- not not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} >= 2.","records":[[[],null],[["a"],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-107","source":"{a;b}. ok :- not not #sum{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} >= 3.","records":[[[],null],[["a"],null],[["b"],null],[["a","b"],null]]}
+{"name":"sum-profile-108","source":"{a}. p :- #sum{-2,k:a;3,l:p} = 2.","records":[[[],null],[["a"],null]]}
+{"name":"sum-profile-109","source":"{a}. p :- not #sum{-2,k:a;3,l:p} = 2.","records":[[["p"],null],[["a","p"],null]]}
+{"name":"sum-profile-110","source":"{a}. p :- not not #sum{-2,k:a;3,l:p} = 2.","records":[[[],null],[["a"],null]]}
+{"name":"sum-profile-111","source":"{a}. p :- #sum{-2,k:a;3,l:p} != 2.","records":[[["p"],null],[["a","p"],null]]}
+{"name":"sum-profile-112","source":"{a}. p :- not #sum{-2,k:a;3,l:p} != 2.","records":[[[],null],[["a"],null]]}
+{"name":"sum-profile-113","source":"{a}. p :- not not #sum{-2,k:a;3,l:p} != 2.","records":[[["p"],null],[["a","p"],null]]}
+{"name":"sum-profile-114","source":"{a}. p :- #sum{-2,k:a;3,l:p} < 2.","records":[[["a","p"],null]]}
+{"name":"sum-profile-115","source":"{a}. p :- not #sum{-2,k:a;3,l:p} < 2.","records":[[["p"],null],[[],null],[["a"],null]]}
+{"name":"sum-profile-116","source":"{a}. p :- not not #sum{-2,k:a;3,l:p} < 2.","records":[[["a","p"],null]]}
+{"name":"sum-profile-117","source":"{a}. p :- #sum{-2,k:a;3,l:p} <= 2.","records":[[["a","p"],null]]}
+{"name":"sum-profile-118","source":"{a}. p :- not #sum{-2,k:a;3,l:p} <= 2.","records":[[["p"],null],[[],null],[["a"],null]]}
+{"name":"sum-profile-119","source":"{a}. p :- not not #sum{-2,k:a;3,l:p} <= 2.","records":[[["a","p"],null]]}
+{"name":"sum-profile-120","source":"{a}. p :- #sum{-2,k:a;3,l:p} > 2.","records":[[[],null],[["a"],null]]}
+{"name":"sum-profile-121","source":"{a}. p :- not #sum{-2,k:a;3,l:p} > 2.","records":[[["a","p"],null]]}
+{"name":"sum-profile-122","source":"{a}. p :- not not #sum{-2,k:a;3,l:p} > 2.","records":[[["p"],null],[[],null],[["a"],null]]}
+{"name":"sum-profile-123","source":"{a}. p :- #sum{-2,k:a;3,l:p} >= 2.","records":[[[],null],[["a"],null]]}
+{"name":"sum-profile-124","source":"{a}. p :- not #sum{-2,k:a;3,l:p} >= 2.","records":[[["a","p"],null]]}
+{"name":"sum-profile-125","source":"{a}. p :- not not #sum{-2,k:a;3,l:p} >= 2.","records":[[["p"],null],[[],null],[["a"],null]]}
+{"name":"sum-profile-126","source":"{a;b}. n(N) :- N = #sum{}.","records":[[["n(0)"],null],[["b","n(0)"],null],[["a","n(0)"],null],[["a","b","n(0)"],null]]}
+{"name":"sum-profile-127","source":"{a;b}. n(N) :- N = #sum{foo,k:a}.","records":[[["n(0)"],null],[["b","n(0)"],null],[["a","n(0)"],null],[["a","b","n(0)"],null]]}
+{"name":"sum-profile-128","source":"{a;b}. n(N) :- N = #sum{\"x\",k:a}.","records":[[["n(0)"],null],[["b","n(0)"],null],[["a","n(0)"],null],[["a","b","n(0)"],null]]}
+{"name":"sum-profile-129","source":"{a;b}. n(N) :- N = #sum{-2,k:a;3,l:b}.","records":[[["n(0)"],null],[["a","n(-2)"],null],[["b","n(3)"],null],[["a","b","n(1)"],null]]}
+{"name":"sum-profile-130","source":"{a;b}. n(N) :- N = #sum{0,k:a;-2,l:b}.","records":[[["n(0)"],null],[["b","n(-2)"],null],[["a","n(0)"],null],[["a","b","n(-2)"],null]]}
+{"name":"sum-profile-131","source":"{a;b}. n(N) :- N = #sum{2,k:a;2,k:b}.","records":[[["n(0)"],null],[["b","n(2)"],null],[["a","n(2)"],null],[["a","b","n(2)"],null]]}
+{"name":"sum-profile-132","source":"{a;b}. n(N) :- N = #sum{2,k:a;2,j:b;foo,k:a}.","records":[[["n(0)"],null],[["b","n(2)"],null],[["a","n(2)"],null],[["a","b","n(4)"],null]]}
+{"name":"sum-profile-133","source":"{a;b}. n(N) :- N = #sum{:a;2,k:b}.","records":[[["n(0)"],null],[["b","n(2)"],null],[["a","n(0)"],null],[["a","b","n(2)"],null]]}
+{"name":"sum-profile-134","source":"{a;b}. n(N) :- N = #sum{-2,k:a;3,l:b}. #minimize{N@2,k:n(N)}.","records":[[["n(0)"],[0]],[["a","n(-2)"],[-2]],[["b","n(3)"],[3]],[["a","b","n(1)"],[1]]]}
+{"name":"sum-profile-135","source":"{a;b}. n(N) :- N = #sum{foo,k:a;2,k:b}. #minimize{N@2,k:n(N)}.","records":[[["n(0)"],[0]],[["a","n(0)"],[0]],[["b","n(2)"],[2]],[["a","b","n(2)"],[2]]]}
+{"name":"sum-profile-136","source":"{a;b}. n(N) :- N = #sum{0,k:a;-2,l:b}. #minimize{N@2,k:n(N)}.","records":[[["n(0)"],[0]],[["a","n(0)"],[0]],[["b","n(-2)"],[-2]],[["a","b","n(-2)"],[-2]]]}
+{"name":"sum-profile-137","source":"{a;b}. ok :- #sum+{-2,k:a;3,l:b} = 0.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-138","source":"{a;b}. ok :- #sum+{-2,k:a;3,l:b} = 2.","records":[[[],null],[["b"],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-139","source":"{a;b}. ok :- #sum+{-2,k:a;3,l:b} = 3.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-140","source":"{a;b}. ok :- not #sum+{-2,k:a;3,l:b} = 0.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-141","source":"{a;b}. ok :- not #sum+{-2,k:a;3,l:b} = 2.","records":[[["ok"],null],[["b","ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-142","source":"{a;b}. ok :- not #sum+{-2,k:a;3,l:b} = 3.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-143","source":"{a;b}. ok :- not not #sum+{-2,k:a;3,l:b} = 0.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-144","source":"{a;b}. ok :- not not #sum+{-2,k:a;3,l:b} = 2.","records":[[[],null],[["b"],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-145","source":"{a;b}. ok :- not not #sum+{-2,k:a;3,l:b} = 3.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-146","source":"{a;b}. ok :- #sum+{-2,k:a;3,l:b} != 0.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-147","source":"{a;b}. ok :- #sum+{-2,k:a;3,l:b} != 2.","records":[[["ok"],null],[["b","ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-148","source":"{a;b}. ok :- #sum+{-2,k:a;3,l:b} != 3.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-149","source":"{a;b}. ok :- not #sum+{-2,k:a;3,l:b} != 0.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-150","source":"{a;b}. ok :- not #sum+{-2,k:a;3,l:b} != 2.","records":[[[],null],[["b"],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-151","source":"{a;b}. ok :- not #sum+{-2,k:a;3,l:b} != 3.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-152","source":"{a;b}. ok :- not not #sum+{-2,k:a;3,l:b} != 0.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-153","source":"{a;b}. ok :- not not #sum+{-2,k:a;3,l:b} != 2.","records":[[["ok"],null],[["b","ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-154","source":"{a;b}. ok :- not not #sum+{-2,k:a;3,l:b} != 3.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-155","source":"{a;b}. ok :- #sum+{-2,k:a;3,l:b} < 0.","records":[[[],null],[["b"],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-156","source":"{a;b}. ok :- #sum+{-2,k:a;3,l:b} < 2.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-157","source":"{a;b}. ok :- #sum+{-2,k:a;3,l:b} < 3.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-158","source":"{a;b}. ok :- not #sum+{-2,k:a;3,l:b} < 0.","records":[[["ok"],null],[["b","ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-159","source":"{a;b}. ok :- not #sum+{-2,k:a;3,l:b} < 2.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-160","source":"{a;b}. ok :- not #sum+{-2,k:a;3,l:b} < 3.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-161","source":"{a;b}. ok :- not not #sum+{-2,k:a;3,l:b} < 0.","records":[[[],null],[["b"],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-162","source":"{a;b}. ok :- not not #sum+{-2,k:a;3,l:b} < 2.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-163","source":"{a;b}. ok :- not not #sum+{-2,k:a;3,l:b} < 3.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-164","source":"{a;b}. ok :- #sum+{-2,k:a;3,l:b} <= 0.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-165","source":"{a;b}. ok :- #sum+{-2,k:a;3,l:b} <= 2.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-166","source":"{a;b}. ok :- #sum+{-2,k:a;3,l:b} <= 3.","records":[[["ok"],null],[["b","ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-167","source":"{a;b}. ok :- not #sum+{-2,k:a;3,l:b} <= 0.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-168","source":"{a;b}. ok :- not #sum+{-2,k:a;3,l:b} <= 2.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-169","source":"{a;b}. ok :- not #sum+{-2,k:a;3,l:b} <= 3.","records":[[[],null],[["b"],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-170","source":"{a;b}. ok :- not not #sum+{-2,k:a;3,l:b} <= 0.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-171","source":"{a;b}. ok :- not not #sum+{-2,k:a;3,l:b} <= 2.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-172","source":"{a;b}. ok :- not not #sum+{-2,k:a;3,l:b} <= 3.","records":[[["ok"],null],[["b","ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-173","source":"{a;b}. ok :- #sum+{-2,k:a;3,l:b} > 0.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-174","source":"{a;b}. ok :- #sum+{-2,k:a;3,l:b} > 2.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-175","source":"{a;b}. ok :- #sum+{-2,k:a;3,l:b} > 3.","records":[[[],null],[["b"],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-176","source":"{a;b}. ok :- not #sum+{-2,k:a;3,l:b} > 0.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-177","source":"{a;b}. ok :- not #sum+{-2,k:a;3,l:b} > 2.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-178","source":"{a;b}. ok :- not #sum+{-2,k:a;3,l:b} > 3.","records":[[["ok"],null],[["b","ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-179","source":"{a;b}. ok :- not not #sum+{-2,k:a;3,l:b} > 0.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-180","source":"{a;b}. ok :- not not #sum+{-2,k:a;3,l:b} > 2.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-181","source":"{a;b}. ok :- not not #sum+{-2,k:a;3,l:b} > 3.","records":[[[],null],[["b"],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-182","source":"{a;b}. ok :- #sum+{-2,k:a;3,l:b} >= 0.","records":[[["ok"],null],[["b","ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-183","source":"{a;b}. ok :- #sum+{-2,k:a;3,l:b} >= 2.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-184","source":"{a;b}. ok :- #sum+{-2,k:a;3,l:b} >= 3.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-185","source":"{a;b}. ok :- not #sum+{-2,k:a;3,l:b} >= 0.","records":[[[],null],[["b"],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-186","source":"{a;b}. ok :- not #sum+{-2,k:a;3,l:b} >= 2.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-187","source":"{a;b}. ok :- not #sum+{-2,k:a;3,l:b} >= 3.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-188","source":"{a;b}. ok :- not not #sum+{-2,k:a;3,l:b} >= 0.","records":[[["ok"],null],[["b","ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-189","source":"{a;b}. ok :- not not #sum+{-2,k:a;3,l:b} >= 2.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-190","source":"{a;b}. ok :- not not #sum+{-2,k:a;3,l:b} >= 3.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-191","source":"{a;b}. ok :- #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} = 0.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-192","source":"{a;b}. ok :- #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} = 2.","records":[[[],null],[["b"],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-193","source":"{a;b}. ok :- #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} = 3.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-194","source":"{a;b}. ok :- not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} = 0.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-195","source":"{a;b}. ok :- not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} = 2.","records":[[["ok"],null],[["b","ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-196","source":"{a;b}. ok :- not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} = 3.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-197","source":"{a;b}. ok :- not not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} = 0.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-198","source":"{a;b}. ok :- not not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} = 2.","records":[[[],null],[["b"],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-199","source":"{a;b}. ok :- not not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} = 3.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-200","source":"{a;b}. ok :- #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} != 0.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-201","source":"{a;b}. ok :- #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} != 2.","records":[[["ok"],null],[["b","ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-202","source":"{a;b}. ok :- #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} != 3.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-203","source":"{a;b}. ok :- not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} != 0.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-204","source":"{a;b}. ok :- not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} != 2.","records":[[[],null],[["b"],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-205","source":"{a;b}. ok :- not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} != 3.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-206","source":"{a;b}. ok :- not not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} != 0.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-207","source":"{a;b}. ok :- not not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} != 2.","records":[[["ok"],null],[["b","ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-208","source":"{a;b}. ok :- not not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} != 3.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-209","source":"{a;b}. ok :- #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} < 0.","records":[[[],null],[["b"],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-210","source":"{a;b}. ok :- #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} < 2.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-211","source":"{a;b}. ok :- #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} < 3.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-212","source":"{a;b}. ok :- not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} < 0.","records":[[["ok"],null],[["b","ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-213","source":"{a;b}. ok :- not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} < 2.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-214","source":"{a;b}. ok :- not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} < 3.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-215","source":"{a;b}. ok :- not not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} < 0.","records":[[[],null],[["b"],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-216","source":"{a;b}. ok :- not not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} < 2.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-217","source":"{a;b}. ok :- not not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} < 3.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-218","source":"{a;b}. ok :- #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} <= 0.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-219","source":"{a;b}. ok :- #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} <= 2.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-220","source":"{a;b}. ok :- #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} <= 3.","records":[[["ok"],null],[["b","ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-221","source":"{a;b}. ok :- not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} <= 0.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-222","source":"{a;b}. ok :- not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} <= 2.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-223","source":"{a;b}. ok :- not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} <= 3.","records":[[[],null],[["b"],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-224","source":"{a;b}. ok :- not not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} <= 0.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-225","source":"{a;b}. ok :- not not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} <= 2.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-226","source":"{a;b}. ok :- not not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} <= 3.","records":[[["ok"],null],[["b","ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-227","source":"{a;b}. ok :- #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} > 0.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-228","source":"{a;b}. ok :- #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} > 2.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-229","source":"{a;b}. ok :- #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} > 3.","records":[[[],null],[["b"],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-230","source":"{a;b}. ok :- not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} > 0.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-231","source":"{a;b}. ok :- not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} > 2.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-232","source":"{a;b}. ok :- not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} > 3.","records":[[["ok"],null],[["b","ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-233","source":"{a;b}. ok :- not not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} > 0.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-234","source":"{a;b}. ok :- not not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} > 2.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-235","source":"{a;b}. ok :- not not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} > 3.","records":[[[],null],[["b"],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-236","source":"{a;b}. ok :- #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} >= 0.","records":[[["ok"],null],[["b","ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-237","source":"{a;b}. ok :- #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} >= 2.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-238","source":"{a;b}. ok :- #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} >= 3.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-239","source":"{a;b}. ok :- not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} >= 0.","records":[[[],null],[["b"],null],[["a"],null],[["a","b"],null]]}
+{"name":"sum-profile-240","source":"{a;b}. ok :- not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} >= 2.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-241","source":"{a;b}. ok :- not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} >= 3.","records":[[["ok"],null],[["b"],null],[["a","ok"],null],[["a","b"],null]]}
+{"name":"sum-profile-242","source":"{a;b}. ok :- not not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} >= 0.","records":[[["ok"],null],[["b","ok"],null],[["a","ok"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-243","source":"{a;b}. ok :- not not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} >= 2.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-244","source":"{a;b}. ok :- not not #sum+{-2,k:a;-2,k:b;3,j:b;foo,x:a;0,z:b} >= 3.","records":[[[],null],[["b","ok"],null],[["a"],null],[["a","b","ok"],null]]}
+{"name":"sum-profile-245","source":"{a}. p :- #sum+{-2,k:a;3,l:p} = 2.","records":[[[],null],[["a"],null]]}
+{"name":"sum-profile-246","source":"{a}. p :- not #sum+{-2,k:a;3,l:p} = 2.","records":[[["p"],null],[["a","p"],null]]}
+{"name":"sum-profile-247","source":"{a}. p :- not not #sum+{-2,k:a;3,l:p} = 2.","records":[[[],null],[["a"],null]]}
+{"name":"sum-profile-248","source":"{a}. p :- #sum+{-2,k:a;3,l:p} != 2.","records":[[["p"],null],[["a","p"],null]]}
+{"name":"sum-profile-249","source":"{a}. p :- not #sum+{-2,k:a;3,l:p} != 2.","records":[[[],null],[["a"],null]]}
+{"name":"sum-profile-250","source":"{a}. p :- not not #sum+{-2,k:a;3,l:p} != 2.","records":[[["p"],null],[["a","p"],null]]}
+{"name":"sum-profile-251","source":"{a}. p :- #sum+{-2,k:a;3,l:p} < 2.","records":[]}
+{"name":"sum-profile-252","source":"{a}. p :- not #sum+{-2,k:a;3,l:p} < 2.","records":[[[],null],[["p"],null],[["a"],null],[["a","p"],null]]}
+{"name":"sum-profile-253","source":"{a}. p :- not not #sum+{-2,k:a;3,l:p} < 2.","records":[]}
+{"name":"sum-profile-254","source":"{a}. p :- #sum+{-2,k:a;3,l:p} <= 2.","records":[]}
+{"name":"sum-profile-255","source":"{a}. p :- not #sum+{-2,k:a;3,l:p} <= 2.","records":[[[],null],[["p"],null],[["a"],null],[["a","p"],null]]}
+{"name":"sum-profile-256","source":"{a}. p :- not not #sum+{-2,k:a;3,l:p} <= 2.","records":[]}
+{"name":"sum-profile-257","source":"{a}. p :- #sum+{-2,k:a;3,l:p} > 2.","records":[[[],null],[["a"],null]]}
+{"name":"sum-profile-258","source":"{a}. p :- not #sum+{-2,k:a;3,l:p} > 2.","records":[]}
+{"name":"sum-profile-259","source":"{a}. p :- not not #sum+{-2,k:a;3,l:p} > 2.","records":[[[],null],[["p"],null],[["a"],null],[["a","p"],null]]}
+{"name":"sum-profile-260","source":"{a}. p :- #sum+{-2,k:a;3,l:p} >= 2.","records":[[[],null],[["a"],null]]}
+{"name":"sum-profile-261","source":"{a}. p :- not #sum+{-2,k:a;3,l:p} >= 2.","records":[]}
+{"name":"sum-profile-262","source":"{a}. p :- not not #sum+{-2,k:a;3,l:p} >= 2.","records":[[[],null],[["p"],null],[["a"],null],[["a","p"],null]]}
+{"name":"sum-profile-263","source":"{a;b}. n(N) :- N = #sum+{}.","records":[[["n(0)"],null],[["b","n(0)"],null],[["a","n(0)"],null],[["a","b","n(0)"],null]]}
+{"name":"sum-profile-264","source":"{a;b}. n(N) :- N = #sum+{foo,k:a}.","records":[[["n(0)"],null],[["b","n(0)"],null],[["a","n(0)"],null],[["a","b","n(0)"],null]]}
+{"name":"sum-profile-265","source":"{a;b}. n(N) :- N = #sum+{\"x\",k:a}.","records":[[["n(0)"],null],[["b","n(0)"],null],[["a","n(0)"],null],[["a","b","n(0)"],null]]}
+{"name":"sum-profile-266","source":"{a;b}. n(N) :- N = #sum+{-2,k:a;3,l:b}.","records":[[["n(0)"],null],[["b","n(3)"],null],[["a","n(0)"],null],[["a","b","n(3)"],null]]}
+{"name":"sum-profile-267","source":"{a;b}. n(N) :- N = #sum+{0,k:a;-2,l:b}.","records":[[["n(0)"],null],[["b","n(0)"],null],[["a","n(0)"],null],[["a","b","n(0)"],null]]}
+{"name":"sum-profile-268","source":"{a;b}. n(N) :- N = #sum+{2,k:a;2,k:b}.","records":[[["n(0)"],null],[["b","n(2)"],null],[["a","n(2)"],null],[["a","b","n(2)"],null]]}
+{"name":"sum-profile-269","source":"{a;b}. n(N) :- N = #sum+{2,k:a;2,j:b;foo,k:a}.","records":[[["n(0)"],null],[["b","n(2)"],null],[["a","n(2)"],null],[["a","b","n(4)"],null]]}
+{"name":"sum-profile-270","source":"{a;b}. n(N) :- N = #sum+{:a;2,k:b}.","records":[[["n(0)"],null],[["b","n(2)"],null],[["a","n(0)"],null],[["a","b","n(2)"],null]]}
+{"name":"sum-profile-271","source":"{a;b}. n(N) :- N = #sum+{-2,k:a;3,l:b}. #minimize{N@2,k:n(N)}.","records":[[["n(0)"],[0]],[["a","n(0)"],[0]],[["b","n(3)"],[3]],[["a","b","n(3)"],[3]]]}
+{"name":"sum-profile-272","source":"{a;b}. n(N) :- N = #sum+{foo,k:a;2,k:b}. #minimize{N@2,k:n(N)}.","records":[[["n(0)"],[0]],[["a","n(0)"],[0]],[["b","n(2)"],[2]],[["a","b","n(2)"],[2]]]}
+{"name":"sum-profile-273","source":"{a;b}. n(N) :- N = #sum+{0,k:a;-2,l:b}. #minimize{N@2,k:n(N)}.","records":[[["n(0)"],[0]],[["b","n(0)"],[0]],[["a","n(0)"],[0]],[["a","b","n(0)"],[0]]]}

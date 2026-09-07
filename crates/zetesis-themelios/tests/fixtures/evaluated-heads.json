@@ -1,0 +1,528 @@
+[
+  {
+    "name": "scalar_disjunction",
+    "source": "d(1).a(X+1)|b:-d(X).",
+    "expanded": "d(1).a(2)|b:-d(1).",
+    "models": [
+      [
+        "a(2)",
+        "d(1)"
+      ],
+      [
+        "b",
+        "d(1)"
+      ]
+    ]
+  },
+  {
+    "name": "two_evaluated_disjuncts",
+    "source": "d(1).a(X+1)|b(X*2):-d(X).",
+    "expanded": "d(1).a(2)|b(2):-d(1).",
+    "models": [
+      [
+        "a(2)",
+        "d(1)"
+      ],
+      [
+        "b(2)",
+        "d(1)"
+      ]
+    ]
+  },
+  {
+    "name": "evaluated_duplicate_head",
+    "source": "d(1).p(X+1)|p(2):-d(X).",
+    "expanded": "d(1).p(2):-d(1).",
+    "models": [
+      [
+        "d(1)",
+        "p(2)"
+      ]
+    ]
+  },
+  {
+    "name": "signed_disjunction",
+    "source": "d(1).-p(X+1)|p(X+1):-d(X).",
+    "expanded": "d(1).-p(2)|p(2):-d(1).",
+    "models": [
+      [
+        "-p(2)",
+        "d(1)"
+      ],
+      [
+        "d(1)",
+        "p(2)"
+      ]
+    ]
+  },
+  {
+    "name": "unshiftable_evaluated_cycle",
+    "source": "d(1).a(X+1)|b(X+1):-d(X).a(2):-b(2).b(2):-a(2).",
+    "expanded": "d(1).a(2)|b(2):-d(1).a(2):-b(2).b(2):-a(2).",
+    "models": [
+      [
+        "a(2)",
+        "b(2)",
+        "d(1)"
+      ]
+    ]
+  },
+  {
+    "name": "unshiftable_baseline_cycle",
+    "source": "a|b.a:-b.b:-a.",
+    "expanded": "a|b.a:-b.b:-a.",
+    "models": [
+      [
+        "a",
+        "b"
+      ]
+    ]
+  },
+  {
+    "name": "negative_outer_body",
+    "source": "d(1).{s}.a(X+1)|b:-d(X),not s.",
+    "expanded": "d(1).{s}.a(2)|b:-d(1),not s.",
+    "models": [
+      [
+        "d(1)",
+        "s"
+      ],
+      [
+        "a(2)",
+        "d(1)"
+      ],
+      [
+        "b",
+        "d(1)"
+      ]
+    ]
+  },
+  {
+    "name": "unfounded_generated_disjunction",
+    "source": "p(X+1)|q:-p(X),X<2.",
+    "expanded": "",
+    "models": [
+      []
+    ]
+  },
+  {
+    "name": "scalar_choice_outer",
+    "source": "d(1..2).{p(X+1)}:-d(X).",
+    "expanded": "d(1..2).{p(2)}:-d(1).{p(3)}:-d(2).",
+    "models": [
+      [
+        "d(1)",
+        "d(2)"
+      ],
+      [
+        "d(1)",
+        "d(2)",
+        "p(2)"
+      ],
+      [
+        "d(1)",
+        "d(2)",
+        "p(3)"
+      ],
+      [
+        "d(1)",
+        "d(2)",
+        "p(2)",
+        "p(3)"
+      ]
+    ]
+  },
+  {
+    "name": "scalar_choice_local",
+    "source": "d(1..2).1{p(X+1):d(X)}1.",
+    "expanded": "d(1..2).1{p(2):d(1);p(3):d(2)}1.",
+    "models": [
+      [
+        "d(1)",
+        "d(2)",
+        "p(2)"
+      ],
+      [
+        "d(1)",
+        "d(2)",
+        "p(3)"
+      ]
+    ]
+  },
+  {
+    "name": "dependent_global_endpoint",
+    "source": "n(1;2).1 {p(1..N)} 1 :- n(N).",
+    "expanded": "n(1;2).1{p(1)}1:-n(1).1{p(1);p(2)}1:-n(2).",
+    "models": [
+      [
+        "n(1)",
+        "n(2)",
+        "p(1)"
+      ]
+    ]
+  },
+  {
+    "name": "dependent_local_endpoint",
+    "source": "n(1;2).1 {p(1..N):n(N)} 1.",
+    "expanded": "n(1;2).1{p(1):n(1);p(1):n(2);p(2):n(2)}1.",
+    "models": [
+      [
+        "n(1)",
+        "n(2)",
+        "p(1)"
+      ],
+      [
+        "n(1)",
+        "n(2)",
+        "p(2)"
+      ]
+    ]
+  },
+  {
+    "name": "dependent_repeated_bound_and_argument",
+    "source": "n(1;2).1 {p(N,1..N):n(N)} 1.",
+    "expanded": "n(1;2).1{p(1,1):n(1);p(2,1):n(2);p(2,2):n(2)}1.",
+    "models": [
+      [
+        "n(1)",
+        "n(2)",
+        "p(1,1)"
+      ],
+      [
+        "n(1)",
+        "n(2)",
+        "p(2,1)"
+      ],
+      [
+        "n(1)",
+        "n(2)",
+        "p(2,2)"
+      ]
+    ]
+  },
+  {
+    "name": "arithmetic_endpoints",
+    "source": "d(1).1{p(X+1..X+2):d(X)}1.",
+    "expanded": "d(1).1{p(2):d(1);p(3):d(1)}1.",
+    "models": [
+      [
+        "d(1)",
+        "p(2)"
+      ],
+      [
+        "d(1)",
+        "p(3)"
+      ]
+    ]
+  },
+  {
+    "name": "two_dependent_intervals",
+    "source": "d(1).1{p(X..X+1,X-1..X):d(X)}1.",
+    "expanded": "d(1).1{p(1,0):d(1);p(1,1):d(1);p(2,0):d(1);p(2,1):d(1)}1.",
+    "models": [
+      [
+        "d(1)",
+        "p(1,0)"
+      ],
+      [
+        "d(1)",
+        "p(1,1)"
+      ],
+      [
+        "d(1)",
+        "p(2,0)"
+      ],
+      [
+        "d(1)",
+        "p(2,1)"
+      ]
+    ]
+  },
+  {
+    "name": "repeated_interval_occurrences",
+    "source": "n(1).{p(N..N,N..N):n(N)}.",
+    "expanded": "n(1).{p(1,1):n(1)}.",
+    "models": [
+      [
+        "n(1)"
+      ],
+      [
+        "n(1)",
+        "p(1,1)"
+      ]
+    ]
+  },
+  {
+    "name": "duplicate_evaluated_choice_heads",
+    "source": "n(1..2).{p(X-X+1):n(X)}.",
+    "expanded": "n(1..2).{p(1):n(1);p(1):n(2)}.",
+    "models": [
+      [
+        "n(1)",
+        "n(2)"
+      ],
+      [
+        "n(1)",
+        "n(2)",
+        "p(1)"
+      ]
+    ]
+  },
+  {
+    "name": "closed_and_dependent_endpoints",
+    "source": "n(2).{p(2..1,1..N):n(N)}.",
+    "expanded": "n(2).{}.",
+    "models": [
+      [
+        "n(2)"
+      ]
+    ]
+  },
+  {
+    "name": "mixed_range_and_scalar",
+    "source": "d(1).{p(1..2,X+1):d(X)}.",
+    "expanded": "d(1).{p(1,2):d(1);p(2,2):d(1)}.",
+    "models": [
+      [
+        "d(1)"
+      ],
+      [
+        "d(1)",
+        "p(1,2)"
+      ],
+      [
+        "d(1)",
+        "p(2,2)"
+      ],
+      [
+        "d(1)",
+        "p(1,2)",
+        "p(2,2)"
+      ]
+    ]
+  },
+  {
+    "name": "dependent_empty_required",
+    "source": "n(2).1{p(N+1..N):n(N)}1.",
+    "expanded": "n(2).1{}1.",
+    "models": []
+  },
+  {
+    "name": "signed_choice",
+    "source": "d(1).1{-p(X+1);p(X+1)}1:-d(X).",
+    "expanded": "d(1).1{-p(2);p(2)}1:-d(1).",
+    "models": [
+      [
+        "-p(2)",
+        "d(1)"
+      ],
+      [
+        "d(1)",
+        "p(2)"
+      ]
+    ]
+  },
+  {
+    "name": "signed_local_condition",
+    "source": "-d(1).{-p(X+1): -d(X)}.",
+    "expanded": "-d(1).{-p(2): -d(1)}.",
+    "models": [
+      [
+        "-d(1)"
+      ],
+      [
+        "-d(1)",
+        "-p(2)"
+      ]
+    ]
+  },
+  {
+    "name": "local_range_binding",
+    "source": "1{p(X+1):X=1..2}1.",
+    "expanded": "1{p(2);p(3)}1.",
+    "models": [
+      [
+        "p(2)"
+      ],
+      [
+        "p(3)"
+      ]
+    ]
+  },
+  {
+    "name": "local_dependency_order",
+    "source": "1{p(Y+1):Y=X+1,X=1}1.",
+    "expanded": "1{p(3)}1.",
+    "models": [
+      [
+        "p(3)"
+      ]
+    ]
+  },
+  {
+    "name": "negative_local_condition",
+    "source": "n(1).{s}.1{p(X+1):n(X),not s}1.",
+    "expanded": "n(1).{s}.1{p(2):n(1),not s}1.",
+    "models": [
+      [
+        "n(1)",
+        "p(2)"
+      ]
+    ]
+  },
+  {
+    "name": "scalar_symbol_argument",
+    "source": "{p(X+1,s):X=1}.",
+    "expanded": "{p(2,s)}.",
+    "models": [
+      [],
+      [
+        "p(2,s)"
+      ]
+    ]
+  },
+  {
+    "name": "scalar_string_argument",
+    "source": "{p(X+1,\"s\"):X=1}.",
+    "expanded": "{p(2,\"s\")}.",
+    "models": [
+      [],
+      [
+        "p(2,\"s\")"
+      ]
+    ]
+  },
+  {
+    "name": "interval_range",
+    "source": "p(1..2);q.",
+    "expanded": "p(1)|q.p(2)|q.",
+    "models": [
+      [
+        "p(1)",
+        "p(2)"
+      ],
+      [
+        "q"
+      ]
+    ]
+  },
+  {
+    "name": "interval_empty",
+    "source": "p(2..1);q.",
+    "expanded": "",
+    "models": [
+      []
+    ]
+  },
+  {
+    "name": "interval_two_ranges",
+    "source": "p(1..2);q(1..2).",
+    "expanded": "p(1)|q(1).p(1)|q(2).p(2)|q(1).p(2)|q(2).",
+    "models": [
+      [
+        "p(1)",
+        "p(2)"
+      ],
+      [
+        "q(1)",
+        "q(2)"
+      ]
+    ]
+  },
+  {
+    "name": "interval_empty_sibling",
+    "source": "p(1..2);q(2..1).",
+    "expanded": "",
+    "models": [
+      []
+    ]
+  },
+  {
+    "name": "interval_argument_product",
+    "source": "p(1..2,1..2);q.",
+    "expanded": "p(1,1)|q.p(1,2)|q.p(2,1)|q.p(2,2)|q.",
+    "models": [
+      [
+        "p(1,1)",
+        "p(1,2)",
+        "p(2,1)",
+        "p(2,2)"
+      ],
+      [
+        "q"
+      ]
+    ]
+  },
+  {
+    "name": "interval_cycle",
+    "source": "d(1).p(1..2)|q:-d(1).p(1):-q.p(2):-q.q:-p(1).q:-p(2).",
+    "expanded": "d(1).p(1)|q:-d(1).p(2)|q:-d(1).p(1):-q.p(2):-q.q:-p(1).q:-p(2).",
+    "models": [
+      [
+        "d(1)",
+        "p(1)",
+        "p(2)",
+        "q"
+      ]
+    ]
+  },
+  {
+    "name": "interval_overlap",
+    "source": "p(1..2)|p(2..3).",
+    "expanded": "p(1)|p(2).p(1)|p(3).p(2)|p(2).p(2)|p(3).",
+    "models": [
+      [
+        "p(1)",
+        "p(2)"
+      ],
+      [
+        "p(2)",
+        "p(3)"
+      ]
+    ]
+  },
+  {
+    "name": "interval_identical_ranges",
+    "source": "p(1..2)|p(1..2).",
+    "expanded": "p(1).p(2).",
+    "models": [
+      [
+        "p(1)",
+        "p(2)"
+      ]
+    ]
+  },
+  {
+    "name": "interval_dependent_range",
+    "source": "d(1).p(X..X+1)|q:-d(X).",
+    "expanded": "d(1).p(1)|q:-d(1).p(2)|q:-d(1).",
+    "models": [
+      [
+        "d(1)",
+        "p(1)",
+        "p(2)"
+      ],
+      [
+        "d(1)",
+        "q"
+      ]
+    ]
+  },
+  {
+    "name": "interval_two_dependent_ranges",
+    "source": "d(1).p(X..X+1)|q(X-1..X):-d(X).",
+    "expanded": "d(1).p(1)|q(0):-d(1).p(1)|q(1):-d(1).p(2)|q(0):-d(1).p(2)|q(1):-d(1).",
+    "models": [
+      [
+        "d(1)",
+        "p(1)",
+        "p(2)"
+      ],
+      [
+        "d(1)",
+        "q(0)",
+        "q(1)"
+      ]
+    ]
+  }
+]

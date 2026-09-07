@@ -1,0 +1,179 @@
+//! Checked finite fact products; no rule binding enumeration occurs here.
+
+use themelios_base::span::Location;
+use themelios_program::program::{DefaultNegation, Head, LiteralInner, Statement};
+use themelios_program::provenance::WithProvenance;
+use themelios_program::symbol::Symbol;
+use themelios_program::term::{EvalError, Term as SourceTerm};
+use zetesis_core::{AtomPattern, Predicate, Template, Term, Value};
+
+use crate::diagnostic::unsupported;
+use crate::expansion::Budget;
+use crate::{AdmissionFailure, ExpansionFailure, ExpansionResource, ProfileFeature, compile};
+
+pub(crate) fn facts(
+    carrier: &WithProvenance<Statement>,
+    budget: &mut Budget,
+    location: Location,
+) -> Result<Option<Vec<Template>>, ExpansionFailure> {
+    let Statement::Rule(rule) = carrier.get() else {
+        return Ok(None);
+    };
+    if rule.body().get().elements().next().is_some() {
+        return Ok(None);
+    }
+    let Head::Literal(literal) = rule.head().get() else {
+        return Ok(None);
+    };
+    if literal.negation != DefaultNegation::None {
+        return Err(unsupported(ProfileFeature::NegatedHead, location).into());
+    }
+    let LiteralInner::Atom(atom) = &literal.inner else {
+        return Ok(None);
+    };
+    let atom = atom.get();
+    let mut facts = Vec::new();
+    for arguments in atom.alternatives() {
+        let sizes = arguments
+            .iter()
+            .map(|term| size(term, location))
+            .collect::<Result<Vec<_>, _>>()?;
+        // Every argument is validated even if another has an empty interval.
+        let count = sizes
+            .iter()
+            .fold(1_u128, |count, size| count.saturating_mul(*size));
+        budget.charge(ExpansionResource::Templates, count, location)?;
+        let intermediate = sizes
+            .iter()
+            .fold(0_u128, |sum, size| sum.saturating_add(*size));
+        budget.charge(
+            ExpansionResource::Values,
+            intermediate.saturating_add(count.saturating_mul(arguments.len() as u128)),
+            location,
+        )?;
+        if count == 0 {
+            continue;
+        }
+        budget.charge(
+            ExpansionResource::ScalarBytes,
+            (atom.name.as_str().len() as u128).saturating_mul(count),
+            location,
+        )?;
+        let predicate = Predicate::with_sign(
+            atom.name.as_str(),
+            arguments.len(),
+            crate::coherence::core_sign(atom.sign),
+        )
+        .map_err(|error| AdmissionFailure::Construction { error, location })?;
+        let alternatives = arguments
+            .iter()
+            .map(|term| values(term, budget, location))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut cursor = vec![0; arguments.len()];
+        for _ in 0..count {
+            let mut terms = Vec::with_capacity(arguments.len());
+            for (values, index) in alternatives.iter().zip(&cursor) {
+                let value = &values[*index];
+                budget.charge(ExpansionResource::ScalarBytes, value_bytes(value), location)?;
+                terms.push(Term::Constant(value.clone()));
+            }
+            let head = AtomPattern::new(predicate.clone(), terms)
+                .map_err(|error| AdmissionFailure::Construction { error, location })?;
+            facts.push(Template::new(
+                Some(head),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            ));
+            for (index, values) in cursor.iter_mut().zip(&alternatives).rev() {
+                *index += 1;
+                if *index < values.len() {
+                    break;
+                }
+                *index = 0;
+            }
+        }
+    }
+    Ok(Some(facts))
+}
+
+fn size(term: &SourceTerm, location: Location) -> Result<u128, ExpansionFailure> {
+    let mut pending = vec![term];
+    let mut size = 0_u128;
+    while let Some(term) = pending.pop() {
+        match term {
+            SourceTerm::Pool(items) => pending.extend(items),
+            SourceTerm::Interval { lower, upper } => {
+                let (lower, upper) = interval(lower, upper, location)?;
+                let width = (i64::from(upper) - i64::from(lower) + 1).max(0);
+                size =
+                    size.saturating_add(u128::try_from(width).expect("nonnegative interval width"));
+            }
+            SourceTerm::Symbolic(symbol) => {
+                compile::scalar(symbol, location)?;
+                size = size.saturating_add(1);
+            }
+            SourceTerm::Variable(variable) => {
+                return Err(ExpansionFailure::Evaluation {
+                    error: EvalError::NotGround {
+                        variable: variable.clone(),
+                    },
+                    location,
+                });
+            }
+            _ => return Err(unsupported(ProfileFeature::Term, location).into()),
+        }
+    }
+    Ok(size)
+}
+
+fn values(
+    term: &SourceTerm,
+    budget: &mut Budget,
+    location: Location,
+) -> Result<Vec<Value>, ExpansionFailure> {
+    let mut pending = vec![term];
+    let mut values = Vec::new();
+    while let Some(term) = pending.pop() {
+        match term {
+            SourceTerm::Pool(items) => pending.extend(items.iter().rev()),
+            SourceTerm::Interval { lower, upper } => {
+                let (lower, upper) = interval(lower, upper, location)?;
+                values.extend((lower..=upper).map(Value::Number));
+            }
+            SourceTerm::Symbolic(symbol) => {
+                let bytes = crate::structural_value::symbol_bytes(symbol);
+                budget.charge(ExpansionResource::ScalarBytes, bytes, location)?;
+                values.push(compile::scalar(symbol, location)?);
+            }
+            _ => return Err(unsupported(ProfileFeature::Term, location).into()),
+        }
+    }
+    Ok(values)
+}
+
+fn interval(
+    lower: &SourceTerm,
+    upper: &SourceTerm,
+    location: Location,
+) -> Result<(i32, i32), ExpansionFailure> {
+    match (lower, upper) {
+        (
+            SourceTerm::Symbolic(Symbol::Number(lower)),
+            SourceTerm::Symbolic(Symbol::Number(upper)),
+        ) => Ok((*lower, *upper)),
+        _ => Err(ExpansionFailure::Evaluation {
+            error: EvalError::Undefined,
+            location,
+        }),
+    }
+}
+
+fn value_bytes(value: &Value) -> u128 {
+    match value {
+        Value::Infimum | Value::Supremum | Value::Number(_) => 0,
+        Value::Structured(value) => value.payload_bytes() as u128,
+        Value::String(value) | Value::Symbol(value) => value.len() as u128,
+    }
+}

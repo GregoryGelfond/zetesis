@@ -1,0 +1,30 @@
+[
+  {
+    "command": [
+      "lake",
+      "build"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-06T17:01:54.620563+00:00",
+    "elapsed_seconds": 0.6144465829711407,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/record-correction-20260906/build.log"
+  },
+  {
+    "command": [
+      "lake",
+      "env",
+      "lean",
+      "-DautoImplicit=false",
+      "-DwarningAsError=true",
+      "Audit.lean"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-06T17:01:55.235195+00:00",
+    "elapsed_seconds": 0.5705594581086189,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/record-correction-20260906/audit.log"
+  }
+]

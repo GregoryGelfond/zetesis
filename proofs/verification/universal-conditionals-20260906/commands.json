@@ -1,0 +1,72 @@
+[
+  {
+    "command": [
+      "lake",
+      "env",
+      "lean",
+      "-DautoImplicit=false",
+      "-DwarningAsError=true",
+      "Zetesis/UniversalConditionals.lean"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-06T18:45:58.928106+00:00",
+    "elapsed_seconds": 0.770933,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/universal-conditionals-20260906/module.log"
+  },
+  {
+    "command": [
+      "lake",
+      "clean"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-06T18:45:59.700534+00:00",
+    "elapsed_seconds": 0.465248,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/universal-conditionals-20260906/clean.log"
+  },
+  {
+    "command": [
+      "lake",
+      "build"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-06T18:46:00.166068+00:00",
+    "elapsed_seconds": 4.165506,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/universal-conditionals-20260906/build.log"
+  },
+  {
+    "command": [
+      "lake",
+      "env",
+      "lean",
+      "-DautoImplicit=false",
+      "-DwarningAsError=true",
+      "Audit.lean"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-06T18:46:04.331816+00:00",
+    "elapsed_seconds": 0.577997,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/universal-conditionals-20260906/audit.log"
+  },
+  {
+    "command": [
+      "lake",
+      "env",
+      "lean",
+      "--version"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-06T18:46:04.910094+00:00",
+    "elapsed_seconds": 0.313309,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/universal-conditionals-20260906/version.log"
+  }
+]

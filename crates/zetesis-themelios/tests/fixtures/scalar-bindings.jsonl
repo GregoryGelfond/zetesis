@@ -1,0 +1,118 @@
+{"name":"assign_constant","source":"p(X) :- X=3.","valid":true,"models":[["p(3)"]],"native":"admit"}
+{"name":"assign_symbol","source":"p(X) :- X=a.","valid":true,"models":[["p(a)"]],"native":"admit"}
+{"name":"assign_reversed","source":"p(X) :- 3=X.","valid":true,"models":[["p(3)"]],"native":"admit"}
+{"name":"assign_forward_arithmetic","source":"d(2). p(Y) :- d(X),Y=X+3.","valid":true,"models":[["d(2)","p(5)"]],"native":"admit"}
+{"name":"assign_reversed_arithmetic","source":"d(2). p(Y) :- X+3=Y,d(X).","valid":true,"models":[["d(2)","p(5)"]],"native":"admit"}
+{"name":"assign_chained_reordered","source":"d(2). p(X,Y,Z) :- Z=Y+1,Y=X+3,d(X).","valid":true,"models":[["d(2)","p(2,5,6)"]],"native":"admit"}
+{"name":"assign_alias_reordered","source":"p(X) :- X=Y,Y=3.","valid":true,"models":[["p(3)"]],"native":"admit"}
+{"name":"assign_already_bound_filter","source":"d(1;2). p(X) :- d(X),X=2.","valid":true,"models":[["d(1)","d(2)","p(2)"]],"native":"admit"}
+{"name":"assign_multiple_consistent","source":"p(X) :- X=2,X=1+1.","valid":true,"models":[["p(2)"]],"native":"admit"}
+{"name":"assign_multiple_conflicting","source":"p(X) :- X=2,X=3.","valid":true,"models":[[]],"native":"admit"}
+{"name":"assign_cycle_unsafe","source":"p(X) :- X=Y,Y=X.","valid":false,"models":[],"native":"UnsafeVariable"}
+{"name":"assign_self_unsafe","source":"p(X) :- X=X.","valid":false,"models":[],"native":"UnsafeVariable"}
+{"name":"assign_negative_unsafe","source":"p(X) :- not X=1.","valid":false,"models":[],"native":"UnsafeVariable"}
+{"name":"assign_inverse_affine","source":"p(X) :- X+1=3.","valid":true,"models":[["p(2)"]],"native":"UnsafeVariable"}
+{"name":"assign_inverse_nonlinear_unsafe","source":"p(X) :- X*X=4.","valid":false,"models":[],"native":"UnsafeVariable"}
+{"name":"assign_integer_bounds","source":"p(X) :- 1<=X,X<=3.","valid":true,"models":[["p(1)","p(2)","p(3)"]],"native":"UnsafeVariable"}
+{"name":"head_arithmetic","source":"row(1;2). col(1;2). diag(R,C,R-C+2) :- row(R),col(C).","valid":true,"models":[["col(1)","col(2)","diag(1,1,2)","diag(1,2,1)","diag(2,1,3)","diag(2,2,2)","row(1)","row(2)"]],"native":"admit"}
+{"name":"head_duplicate_results","source":"d(1;2). p(X-X) :- d(X).","valid":true,"models":[["d(1)","d(2)","p(0)"]],"native":"admit"}
+{"name":"head_conditional_choice_arithmetic","source":"d(1;2). {p(X+1):d(X)}.","valid":true,"models":[["d(1)","d(2)"],["d(1)","d(2)","p(2)"],["d(1)","d(2)","p(2)","p(3)"],["d(1)","d(2)","p(3)"]],"native":"Term"}
+{"name":"head_negative_gate_preserved","source":"d(1). {off}. p(X+1) :- d(X),not off.","valid":true,"models":[["d(1)","off"],["d(1)","p(2)"]],"native":"admit"}
+{"name":"head_double_negative_self","source":"p(1). p(X+1) :- p(X),X<2,not not p(X+1).","valid":true,"models":[["p(1)"],["p(1)","p(2)"]],"native":"Term"}
+{"name":"head_finite_positive_recursion","source":"p(0). p(X+1) :- p(X),X<3.","valid":true,"models":[["p(0)","p(1)","p(2)","p(3)"]],"native":"admit"}
+{"name":"head_finite_reverse_recursion","source":"p(3). p(X-1) :- p(X),X>0.","valid":true,"models":[["p(0)","p(1)","p(2)","p(3)"]],"native":"admit"}
+{"name":"head_unsupported_recursive_cycle","source":"p(X+1) :- p(X),X<3.","valid":true,"models":[[]],"native":"admit"}
+{"name":"interval_assignment","source":"p(X) :- X=1..3.","valid":true,"models":[["p(1)","p(2)","p(3)"]],"native":"admit"}
+{"name":"interval_reversed_assignment","source":"p(X) :- 1..3=X.","valid":true,"models":[["p(1)","p(2)","p(3)"]],"native":"admit"}
+{"name":"interval_variable_bounds","source":"range(1,2).range(3,2). p(X) :- range(L,U),X=L..U.","valid":true,"models":[["p(1)","p(2)","range(1,2)","range(3,2)"]],"native":"admit"}
+{"name":"interval_negative_bounds","source":"p(X) :- X=-2..0.","valid":true,"models":[["p(-1)","p(-2)","p(0)"]],"native":"admit"}
+{"name":"interval_empty","source":"p(X) :- X=3..2.","valid":true,"models":[[]],"native":"admit"}
+{"name":"interval_unknown_bound_unsafe","source":"p(X) :- X=Y..3.","valid":false,"models":[],"native":"UnsafeVariable"}
+{"name":"interval_filtered","source":"p(X) :- X=1..3,X!=2.","valid":true,"models":[["p(1)","p(3)"]],"native":"admit"}
+{"name":"interval_normal_head_all","source":"{on}. p(1..2) :- on.","valid":true,"models":[[],["on","p(1)","p(2)"]],"native":"admit"}
+{"name":"interval_choice_head_independent","source":"{p(1..2)}.","valid":true,"models":[[],["p(1)"],["p(1)","p(2)"],["p(2)"]],"native":"admit"}
+{"name":"interval_correlated_variable","source":"p(X,X) :- X=1..2.","valid":true,"models":[["p(1,1)","p(2,2)"]],"native":"admit"}
+{"name":"interval_distinct_occurrences","source":"p(1..2,1..2).","valid":true,"models":[["p(1,1)","p(1,2)","p(2,1)","p(2,2)"]],"native":"admit"}
+{"name":"interval_body_positive","source":"q(1). ok :- q(1..2).","valid":true,"models":[["ok","q(1)"]],"native":"Term"}
+{"name":"interval_body_negative","source":"q(1). ok :- not q(1..2).","valid":true,"models":[["ok","q(1)"]],"native":"Term"}
+{"name":"interval_choice_local_binder","source":"{p(X):X=1..2}.","valid":true,"models":[[],["p(1)"],["p(1)","p(2)"],["p(2)"]],"native":"admit"}
+{"name":"interval_variable_head","source":"h(2). time(0..M) :- h(M).","valid":true,"models":[["h(2)","time(0)","time(1)","time(2)"]],"native":"admit"}
+{"name":"interval_local_aggregate_binder","source":"ok :- #count{X:X=1..2}=2.","valid":true,"models":[["ok"]],"native":"admit"}
+{"name":"aggregate_local_assignment","source":"p(1;2). ok :- #count{Y:p(X),Y=X+1}=2.","valid":true,"models":[["ok","p(1)","p(2)"]],"native":"admit"}
+{"name":"aggregate_global_variable_not_locally_bound","source":"p(1). q(X) :- #count{Y:p(Y),X=Y+1}=1.","valid":false,"models":[],"native":"UnsafeVariable"}
+{"name":"aggregate_interval_outer_scope","source":"p(1;3). bad(D) :- D=1..3,not{p(X):X=D}1.","valid":true,"models":[["p(1)","p(3)"]],"native":"admit"}
+{"name":"undefined_assignment_drops_instance","source":"d(0;1). p(Y) :- d(X),Y=1/X.","valid":true,"models":[["d(0)","d(1)","p(1)"]],"native":"Undefined"}
+{"name":"undefined_head_drops_instance","source":"d(0;1). p(1/X) :- d(X).","valid":true,"models":[["d(0)","d(1)","p(1)"]],"native":"Undefined"}
+{"name":"undefined_interval_bound","source":"p(X) :- X=0..a.","valid":true,"models":[[]],"native":"admit"}
+{"name":"overflow_assignment","source":"d(2147483647). p(Y) :- d(X),Y=X+1.","valid":true,"models":[["d(2147483647)","p(-2147483648)"]],"native":"Overflow"}
+{"name":"overflow_head","source":"d(2147483647). p(X+1) :- d(X).","valid":true,"models":[["d(2147483647)","p(-2147483648)"]],"native":"Overflow"}
+{"name":"interval_dependency_chain","source":"h(2). p(X,Y) :- X=0..M,Y=X+1,h(M).","valid":true,"models":[["h(2)","p(0,1)","p(1,2)","p(2,3)"]],"native":"admit"}
+{"name":"interval_rebinding_filter","source":"d(2;4). p(X) :- d(X),X=1..3.","valid":true,"models":[["d(2)","d(4)","p(2)"]],"native":"admit"}
+{"name":"interval_constraints_no_support","source":"p(X) :- X=1..3. :- X=1..3,not p(X).","valid":true,"models":[["p(1)","p(2)","p(3)"]],"native":"admit"}
+{"name":"generated_value_outside_input_constants","source":"start(2). duration(2). end(E) :- start(S),duration(D),E=S+D. :- end(E),E>3.","valid":true,"models":[],"native":"admit"}
+{"name":"negative_fact_blocks_generative_recursion","source":"stop. p(0). p(X+1) :- p(X),not stop.","valid":true,"models":[["p(0)","stop"]],"native":"SupportRounds"}
+{"name":"assign_string","source":"p(X):-X=\"hello world\".","valid":true,"models":[["p(\"hello world\")"]],"native":"admit"}
+{"name":"assign_alias_reverse_chain","source":"p(X,Y):-X=Y,Z=X,3=Z.","valid":true,"models":[["p(3,3)"]],"native":"admit"}
+{"name":"assign_filter_before_binder","source":"p(X):-X!=2,X=1..3.","valid":true,"models":[["p(1)","p(3)"]],"native":"admit"}
+{"name":"assign_positive_binding_undo","source":"d(1;2;3).e(2).p(X,Y):-d(X),Y=X+1,e(Y).","valid":true,"models":[["d(1)","d(2)","d(3)","e(2)","p(1,2)"]],"native":"admit"}
+{"name":"assign_scalar_chain_after_range","source":"p(X,Y,Z):-Z=X+Y,Y=X+1,X=1..2.","valid":true,"models":[["p(1,2,3)","p(2,3,5)"]],"native":"admit"}
+{"name":"assign_range_chain_after_scalar","source":"p(X,Y):-X=1..Y,Y=2.","valid":true,"models":[["p(1,2)","p(2,2)"]],"native":"admit"}
+{"name":"assign_expression_cannot_invert_multiple","source":"p(X,Y):-X+Y=3.","valid":false,"models":[],"native":"UnsafeVariable"}
+{"name":"assign_signed_constant","source":"p(X):-X=-2.","valid":true,"models":[["p(-2)"]],"native":"admit"}
+{"name":"assign_symbol_bound_equality","source":"d(a;b).p(X):-d(X),X=a.","valid":true,"models":[["d(a)","d(b)","p(a)"]],"native":"admit"}
+{"name":"assign_ground_false_before_unsafe","source":"p(X):-1=2,not q(X).","valid":false,"models":[],"native":"UnsafeVariable"}
+{"name":"assign_later_conflict_drops_row","source":"p(X,Y):-X=1..2,Y=X+1,Y=2.","valid":true,"models":[["p(1,2)"]],"native":"admit"}
+{"name":"range_intersection","source":"p(X):-X=1..3,X=2..4.","valid":true,"models":[["p(2)","p(3)"]],"native":"admit"}
+{"name":"range_reversed_membership","source":"d(2;4).p(X):-d(X),1..3=X.","valid":true,"models":[["d(2)","d(4)","p(2)"]],"native":"admit"}
+{"name":"range_two_independent_cursors","source":"p(X,Y):-X=1..2,Y=3..4.","valid":true,"models":[["p(1,3)","p(1,4)","p(2,3)","p(2,4)"]],"native":"admit"}
+{"name":"range_dependent_cursor_undo","source":"p(X,Y):-X=1..3,Y=1..X.","valid":true,"models":[["p(1,1)","p(2,1)","p(2,2)","p(3,1)","p(3,2)","p(3,3)"]],"native":"admit"}
+{"name":"range_empty_nested_cursor","source":"p(X,Y):-X=1..3,Y=2..X.","valid":true,"models":[["p(2,2)","p(3,2)","p(3,3)"]],"native":"admit"}
+{"name":"range_target_cannot_bind_endpoint","source":"p(Y):-X=2,X=Y..3.","valid":false,"models":[],"native":"UnsafeVariable"}
+{"name":"range_unknown_upper_unsafe","source":"p(X):-X=1..Y.","valid":false,"models":[],"native":"UnsafeVariable"}
+{"name":"range_unknown_both_unsafe","source":"p(X):-X=Y..Z.","valid":false,"models":[],"native":"UnsafeVariable"}
+{"name":"range_self_bound_unsafe","source":"p(X):-X=X..3.","valid":false,"models":[],"native":"UnsafeVariable"}
+{"name":"range_negative_literal_unsafe","source":"p(X):-not X=1..2.","valid":false,"models":[],"native":"Term"}
+{"name":"choice_body_global_interval","source":"{p(X)}:-X=1..2.","valid":true,"models":[[],["p(1)"],["p(1)","p(2)"],["p(2)"]],"native":"admit"}
+{"name":"choice_local_scalar_assignment","source":"d(1;2).{p(Y):d(X),Y=X+1}.","valid":true,"models":[["d(1)","d(2)"],["d(1)","d(2)","p(2)"],["d(1)","d(2)","p(2)","p(3)"],["d(1)","d(2)","p(3)"]],"native":"admit"}
+{"name":"choice_local_dependent_range","source":"{p(X,Y):X=1..2,Y=1..X}.","valid":true,"models":[[],["p(1,1)"],["p(1,1)","p(2,1)"],["p(1,1)","p(2,1)","p(2,2)"],["p(1,1)","p(2,2)"],["p(2,1)"],["p(2,1)","p(2,2)"],["p(2,2)"]],"native":"admit"}
+{"name":"choice_local_bound_filter","source":"d(1;2).{p(X):d(X),X=2}.","valid":true,"models":[["d(1)","d(2)"],["d(1)","d(2)","p(2)"]],"native":"admit"}
+{"name":"choice_recursive_local_binding","source":"{p(X):X=1..2,p(X)}.","valid":true,"models":[[]],"native":"admit"}
+{"name":"choice_local_variable_cannot_escape","source":"q(X):-1{p(Y):Y=1..2,X=Y}1.","valid":false,"models":[],"native":"UnsafeVariable"}
+{"name":"aggregate_local_duplicate_values","source":"ok:-#count{Y:X=1..2,Y=X-X}=1.","valid":true,"models":[["ok"]],"native":"admit"}
+{"name":"aggregate_local_range_chain","source":"ok:-#count{X,Y:X=1..2,Y=1..X}=3.","valid":true,"models":[["ok"]],"native":"admit"}
+{"name":"aggregate_local_reversed_equality","source":"d(1;2).ok:-#count{Y:d(X),X+1=Y}=2.","valid":true,"models":[["d(1)","d(2)","ok"]],"native":"admit"}
+{"name":"aggregate_global_scope_unsafe","source":"q(X):-#count{Y:Y=1..2,X=Y}=2.","valid":false,"models":[],"native":"UnsafeVariable"}
+{"name":"head_arithmetic_choice_global","source":"{p(X+1)}:-X=1..2.","valid":true,"models":[[],["p(2)"],["p(2)","p(3)"],["p(3)"]],"native":"Term"}
+{"name":"head_interval_scalar_dependency","source":"h(2).p(1..Y):-h(X),Y=X+1.","valid":true,"models":[["h(2)","p(1)","p(2)","p(3)"]],"native":"admit"}
+{"name":"head_two_intervals","source":"{on}.p(1..2,3..4):-on.","valid":true,"models":[[],["on","p(1,3)","p(1,4)","p(2,3)","p(2,4)"]],"native":"admit"}
+{"name":"head_interval_recursive_guarded","source":"p(0).p(X+1..X+2):-p(X),X<2.","valid":true,"models":[["p(0)","p(1)","p(2)","p(3)"]],"native":"admit"}
+{"name":"head_arithmetic_unsupported_cycle","source":"p(X+1):-q(X).q(X):-p(X).","valid":true,"models":[[]],"native":"admit"}
+{"name":"constraint_generated_arithmetic","source":"{a}.:-X=1..2,Y=X+1,Y=3,not a.","valid":true,"models":[["a"]],"native":"admit"}
+{"name":"constraint_interval_no_derived_support","source":":-X=1..2,not p(X).","valid":true,"models":[],"native":"admit"}
+{"name":"undefined_scalar_on_unreachable_rule","source":"p(Y):-missing(X),Y=1/0.","valid":true,"models":[[]],"native":"Undefined"}
+{"name":"undefined_interval_runtime_bound","source":"d(a;2).p(X):-d(Y),X=0..Y.","valid":true,"models":[["d(2)","d(a)","p(0)","p(1)","p(2)"]],"native":"admit"}
+{"name":"undefined_head_arithmetic_type","source":"d(a;2).p(X+1):-d(X).","valid":true,"models":[["d(2)","d(a)","p(3)"]],"native":"Undefined"}
+{"name":"overflow_interval_bound","source":"d(2147483647).p(X):-d(Y),X=Y+1..Y+1.","valid":true,"models":[["d(2147483647)","p(-2147483648)"]],"native":"Overflow"}
+{"name":"range_symbol_lower_empty","source":"d(a;2).p(X):-d(Y),X=Y..3.","valid":true,"models":[["d(2)","d(a)","p(2)","p(3)"]],"native":"admit"}
+{"name":"range_string_upper_empty","source":"d(\"a\";2).p(X):-d(Y),X=0..Y.","valid":true,"models":[["d(\"a\")","d(2)","p(0)","p(1)","p(2)"]],"native":"admit"}
+{"name":"range_inf_upper_empty","source":"d(#inf;2).p(X):-d(Y),X=0..Y.","valid":true,"models":[["d(#inf)","d(2)","p(0)","p(1)","p(2)"]],"native":"Symbol"}
+{"name":"range_sup_lower_empty","source":"d(#sup;2).p(X):-d(Y),X=Y..3.","valid":true,"models":[["d(#sup)","d(2)","p(2)","p(3)"]],"native":"Symbol"}
+{"name":"range_bound_target_nonnumeric","source":"d(a;2).p(X):-d(X),X=0..3.","valid":true,"models":[["d(2)","d(a)","p(2)"]],"native":"admit"}
+{"name":"range_nonnumeric_expression_still_undefined","source":"d(a;2).p(X):-d(Y),X=0..Y+1.","valid":true,"models":[["d(2)","d(a)","p(0)","p(1)","p(2)","p(3)"]],"native":"Undefined"}
+{"name":"range_reversed_nonnumeric_empty","source":"d(a;2).p(X):-d(Y),0..Y=X.","valid":true,"models":[["d(2)","d(a)","p(0)","p(1)","p(2)"]],"native":"admit"}
+{"name":"range_nested_empty_undo","source":"d(a;2).p(X,Y):-d(Z),X=0..Z,Y=X..2.","valid":true,"models":[["d(2)","d(a)","p(0,0)","p(0,1)","p(0,2)","p(1,1)","p(1,2)","p(2,2)"]],"native":"admit"}
+{"name":"anonymous_negative_fact","source":"p(1).a:-not p(_).","valid":true,"models":[["p(1)"]],"native":"admit"}
+{"name":"anonymous_negative_missing","source":"a:-not p(_).","valid":true,"models":[["a"]],"native":"admit"}
+{"name":"anonymous_negative_choices","source":"{p(1);p(2)}.a:-not p(_).","valid":true,"models":[["a"],["p(1)"],["p(1)","p(2)"],["p(2)"]],"native":"admit"}
+{"name":"anonymous_double_negative_choices","source":"{p(1);p(2)}.a:-not not p(_).","valid":true,"models":[[],["a","p(1)"],["a","p(1)","p(2)"],["a","p(2)"]],"native":"admit"}
+{"name":"anonymous_two_positions","source":"p(1,2).p(2,1).a:-not p(_,_).","valid":true,"models":[["p(1,2)","p(2,1)"]],"native":"admit"}
+{"name":"anonymous_other_named_variable_unsafe","source":"p(1,2).a:-not p(X,_).","valid":false,"models":[],"native":"UnsafeVariable"}
+{"name":"anonymous_bound_first_position","source":"d(1;2).p(1,3).a(X):-d(X),not p(X,_).","valid":true,"models":[["a(2)","d(1)","d(2)","p(1,3)"]],"native":"admit"}
+{"name":"anonymous_bound_second_position","source":"d(1;2).p(1,3).a(X):-d(X),not p(_,X).","valid":true,"models":[["a(1)","a(2)","d(1)","d(2)","p(1,3)"]],"native":"admit"}
+{"name":"anonymous_double_negative_recursive","source":"p(1):-not not p(_).","valid":true,"models":[[],["p(1)"]],"native":"admit"}
+{"name":"anonymous_odd_recursive","source":"p(1):-not p(_).","valid":true,"models":[],"native":"admit"}
+{"name":"anonymous_mutual_negative","source":"p(1):-not q(_).q(1):-not p(_).","valid":true,"models":[["p(1)"],["q(1)"]],"native":"admit"}
+{"name":"anonymous_two_position_recursive","source":"p(1,2):-not not p(_,_).","valid":true,"models":[[],["p(1,2)"]],"native":"admit"}
+{"name":"anonymous_local_choice_condition","source":"q(1,3).{p(X):X=1..2,not q(X,_)}.","valid":true,"models":[["p(2)","q(1,3)"],["q(1,3)"]],"native":"admit"}
+{"name":"anonymous_local_aggregate_condition","source":"d(1;2).q(1,3).n(N):-N=#count{X:d(X),not q(X,_)}.","valid":true,"models":[["d(1)","d(2)","n(1)","q(1,3)"]],"native":"admit"}
+{"name":"anonymous_nested_defaultneg_local","source":"{q(1,3)}.d(1;2).n(N):-N=#count{X:d(X),not not q(X,_)}.","valid":true,"models":[["d(1)","d(2)","n(0)"],["d(1)","d(2)","n(1)","q(1,3)"]],"native":"admit"}

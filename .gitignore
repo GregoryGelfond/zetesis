@@ -1,0 +1,9 @@
+/target/
+/proofs/.lake/
+/validation/reference/target/
+
+# Local build, Python and Finder artifacts.
+**/target/
+__pycache__/
+*.py[cod]
+.DS_Store

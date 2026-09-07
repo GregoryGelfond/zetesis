@@ -1,0 +1,11 @@
+[package]
+name = "zetesis-reference"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+publish = false
+description = "Dependency-free executable semantic model for a finite reduct machine"
+
+[dependencies]
+
+[workspace]

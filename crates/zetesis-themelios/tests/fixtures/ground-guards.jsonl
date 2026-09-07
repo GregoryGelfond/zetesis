@@ -1,0 +1,124 @@
+{"name": "body_true_0", "source": "p :- #true.", "source_sha256": "c6f8532f6dc986edf195c2c1a9e40a02940a0104c5f0228a645a2cb3a86174a8", "models": [["p"]]}
+{"name": "choice_true_0", "source": "1 { p : #true } 1.", "source_sha256": "a2059736ce11a49b1858c7b86889cf3ceddbf351d37abfadb5f6732c378f663e", "models": [["p"]]}
+{"name": "aggregate_true_0", "source": "p :- #count{1 : #true}=1.", "source_sha256": "48a54c8958d4d4b1b77926da02c645ec4861f15ecdbe878283f6fc94b84229ff", "models": [["p"]]}
+{"name": "body_true_1", "source": "p :- not #true.", "source_sha256": "a9e4b35f5e00323dbca6b949d140b4ee66bde94163bd0c39bb7b22974daf44fd", "models": [[]]}
+{"name": "choice_true_1", "source": "1 { p : not #true } 1.", "source_sha256": "b96de3c4f8a8195ef16bd93dd25594d703c45410d8e50e7615fcc38161a8dc92", "models": []}
+{"name": "aggregate_true_1", "source": "p :- #count{1 : not #true}=1.", "source_sha256": "610235df704de513cb19765c043596c8be69c3b9d55be54e38c8a607c866673c", "models": [[]]}
+{"name": "body_true_2", "source": "p :- not not #true.", "source_sha256": "213e766b9ecd6ca5a752668c406b2198dc10bcf403b28d387e4a9c8700028711", "models": [["p"]]}
+{"name": "choice_true_2", "source": "1 { p : not not #true } 1.", "source_sha256": "2f38fabe787493c9c8404694ea8293532238c6d45967f6a61bff730e3b7121ad", "models": [["p"]]}
+{"name": "aggregate_true_2", "source": "p :- #count{1 : not not #true}=1.", "source_sha256": "f22141dd48b10f8bc02cad100058d18e2a6d23aa140c7f3d3029042472eff0c7", "models": [["p"]]}
+{"name": "body_false_0", "source": "p :- #false.", "source_sha256": "0f6f3ee3e7ef20c7869970585538a36d9f621c43bfeedeb94c94c9cf21be1bd1", "models": [[]]}
+{"name": "choice_false_0", "source": "1 { p : #false } 1.", "source_sha256": "2496be9d6df5aabea25ed8dc6edd24dd9b4c533bc0a665e7f29b3b9f73ec96bf", "models": []}
+{"name": "aggregate_false_0", "source": "p :- #count{1 : #false}=1.", "source_sha256": "b299d6e292c4473741aebb5c6cac2837ce62ed2144ba54a6a20d2af60ebb20d6", "models": [[]]}
+{"name": "body_false_1", "source": "p :- not #false.", "source_sha256": "f7381f738a325087a87822c79bdc237dafdc5bf41d9e6f6d94853e7d14438a67", "models": [["p"]]}
+{"name": "choice_false_1", "source": "1 { p : not #false } 1.", "source_sha256": "75b1a87d29bb8307fe2391ddc22234b8a76ce6323e324deeb15207f94fb83e59", "models": [["p"]]}
+{"name": "aggregate_false_1", "source": "p :- #count{1 : not #false}=1.", "source_sha256": "213cc781ddae43922f369e4184f9de891517e4bee9bfd071082cc9db54f71281", "models": [["p"]]}
+{"name": "body_false_2", "source": "p :- not not #false.", "source_sha256": "9a6c1c20803f080e69a17f0b402ab112ac6460251c0199f4d097d49617d9335a", "models": [[]]}
+{"name": "choice_false_2", "source": "1 { p : not not #false } 1.", "source_sha256": "16dcbf63ff1b023bb91b83c16afe636de30c39f8b478e85bc15ea2f6ebce5cb6", "models": []}
+{"name": "aggregate_false_2", "source": "p :- #count{1 : not not #false}=1.", "source_sha256": "8b41913e235c3e204d01ca63c5fafe4e5d36a4d28491139aa5b4146247078b2e", "models": [[]]}
+{"name": "body_eq_true_0", "source": "p :- 1=1.", "source_sha256": "4d367d20c0ca0780c54ec1e534e8f53c03096b6f97c601b445d935c2bf9d7642", "models": [["p"]]}
+{"name": "choice_eq_true_0", "source": "1 { p : 1=1 } 1.", "source_sha256": "77e6c766c39b8b153d3e6591b54e6b264146c2e2e28e067ad79d57e49de25544", "models": [["p"]]}
+{"name": "aggregate_eq_true_0", "source": "p :- #count{1 : 1=1}=1.", "source_sha256": "d85849562c08144ee3df3ec4cf8e6033998d1f0c28fa982ec26ec1ed3eb20f9c", "models": [["p"]]}
+{"name": "body_eq_true_1", "source": "p :- not 1=1.", "source_sha256": "b81373bdada4fb1b0a470c731a3161c103634dec19f6ace9f526acecd6e3642a", "models": [[]]}
+{"name": "choice_eq_true_1", "source": "1 { p : not 1=1 } 1.", "source_sha256": "b2673db5c6ec4f9f1bd51a131559be4f3ece9f3900a85d9738bb2de6088158c8", "models": []}
+{"name": "aggregate_eq_true_1", "source": "p :- #count{1 : not 1=1}=1.", "source_sha256": "1d2f535e62a6a204ee20ac38b10d551fcafad96c751563ad4114f1e7277fc4a2", "models": [[]]}
+{"name": "body_eq_true_2", "source": "p :- not not 1=1.", "source_sha256": "e2d200a3e665b76e5222b0be1d65f1e9797ee36cdb2c8dacb015804d823547cd", "models": [["p"]]}
+{"name": "choice_eq_true_2", "source": "1 { p : not not 1=1 } 1.", "source_sha256": "f9c31120db0313091a883dfd826862fd76d211d728041b22f336d9fecc2e16f2", "models": [["p"]]}
+{"name": "aggregate_eq_true_2", "source": "p :- #count{1 : not not 1=1}=1.", "source_sha256": "0e2d508cb88d833e12a945c6162626af21fa0bd506e641fa07c33e51bbc71083", "models": [["p"]]}
+{"name": "body_eq_false_0", "source": "p :- 1=2.", "source_sha256": "19c941d4c863af283b8905172c2444f676dfe86505bd368f4612d0119149830c", "models": [[]]}
+{"name": "choice_eq_false_0", "source": "1 { p : 1=2 } 1.", "source_sha256": "8042370a9533c33007b6ad5774e4f669bf78d2c1b1fe9a2d698c960f22da001b", "models": []}
+{"name": "aggregate_eq_false_0", "source": "p :- #count{1 : 1=2}=1.", "source_sha256": "704446b3d5577b0be5fa6618435d0c476c33f1d3962901ba17b07a34004535f0", "models": [[]]}
+{"name": "body_eq_false_1", "source": "p :- not 1=2.", "source_sha256": "e31fb32fd562bc10322b525513d93924410b78f05d508f6a37b81ceabd05ade4", "models": [["p"]]}
+{"name": "choice_eq_false_1", "source": "1 { p : not 1=2 } 1.", "source_sha256": "e16300fcbac1ca9e23ea4ec46cdc77a86314f0bd44ea61227c02f139bebb8a68", "models": [["p"]]}
+{"name": "aggregate_eq_false_1", "source": "p :- #count{1 : not 1=2}=1.", "source_sha256": "3b7bcf81fc5486f9d8bd32a4011e5783c2448d23d0bbf376e6f817d9048951b2", "models": [["p"]]}
+{"name": "body_eq_false_2", "source": "p :- not not 1=2.", "source_sha256": "a2b26d1566d373cb5e2d0cec210fd8e7f789b15ed96b117db23012fcb0782da9", "models": [[]]}
+{"name": "choice_eq_false_2", "source": "1 { p : not not 1=2 } 1.", "source_sha256": "77b491ef25d30add28f6ba7408219783bf03f96fdbefee2c6f12056fd1cea2ce", "models": []}
+{"name": "aggregate_eq_false_2", "source": "p :- #count{1 : not not 1=2}=1.", "source_sha256": "d0742592a92b1ebab792e8c48c8059327acb206f6cf506c0856230ad96ecacf2", "models": [[]]}
+{"name": "body_tt_0", "source": "p :- 1<2<3.", "source_sha256": "51bd6b0552384fc4f1fe3ad1c7a6c42a279ae0ba05ab1a472bdd78957cdb1115", "models": [["p"]]}
+{"name": "choice_tt_0", "source": "1 { p : 1<2<3 } 1.", "source_sha256": "db77ad901b7cffcd01e95aa6a08d53971225893122a7e8ce05576241b7781f65", "models": [["p"]]}
+{"name": "aggregate_tt_0", "source": "p :- #count{1 : 1<2<3}=1.", "source_sha256": "d96b2f45a528a5fda26566e3beeb8429971da4d63dc57f6afc97ade810393305", "models": [["p"]]}
+{"name": "body_tt_1", "source": "p :- not 1<2<3.", "source_sha256": "adbd0433585cff0367039842225ded110d88f04285ab2d8f6aac9f125e741bce", "models": [[]]}
+{"name": "choice_tt_1", "source": "1 { p : not 1<2<3 } 1.", "source_sha256": "ff0d08ed5881ea74407572b44b6872182856548b34865b4e7fb8b8b9a5f94de8", "models": []}
+{"name": "aggregate_tt_1", "source": "p :- #count{1 : not 1<2<3}=1.", "source_sha256": "e3bac89e02f4914953cc992b7e423be39bea6284be7e0aa54e65e8fc46bfa35b", "models": [[]]}
+{"name": "body_tt_2", "source": "p :- not not 1<2<3.", "source_sha256": "080b427a40e347aba66aa7d8bbffa003fb926df2724d82fb7f05bb26c3fadef0", "models": [["p"]]}
+{"name": "choice_tt_2", "source": "1 { p : not not 1<2<3 } 1.", "source_sha256": "8e41a964690de666241b29fcfb2bb44b330e8eef61d6143d2bd82e85bd903cd9", "models": [["p"]]}
+{"name": "aggregate_tt_2", "source": "p :- #count{1 : not not 1<2<3}=1.", "source_sha256": "33637c868825b618c29de3d6477f597aa678d6343069fa08f940abd88b07589e", "models": [["p"]]}
+{"name": "body_tf_0", "source": "p :- 1<3<2.", "source_sha256": "d6a1f46c70774e6703b3a4eabcd4134ca195d917ffbe418d62fc2e02d835c9da", "models": [[]]}
+{"name": "choice_tf_0", "source": "1 { p : 1<3<2 } 1.", "source_sha256": "02e2df9d84b9268cccd0090fa70e95b0e6feeff1537a01025fe42712199b82b2", "models": []}
+{"name": "aggregate_tf_0", "source": "p :- #count{1 : 1<3<2}=1.", "source_sha256": "ed5ba83669bd3706b13341675a7c629be0059ee2bcf5e3b5f456d6ba1f085dde", "models": [[]]}
+{"name": "body_tf_1", "source": "p :- not 1<3<2.", "source_sha256": "63cbd51bdc24b109a0186fcecd2e3d57ba791b193fb8d81ead2686101a370d3f", "models": [["p"]]}
+{"name": "choice_tf_1", "source": "1 { p : not 1<3<2 } 1.", "source_sha256": "1126345cf4d30dde9b2cac893f8279fd4215d308cce70c6edb102f0047c52a68", "models": [["p"]]}
+{"name": "aggregate_tf_1", "source": "p :- #count{1 : not 1<3<2}=1.", "source_sha256": "b0c57bba3c5cf52076ea25471cc351f063a4c515c9d0b54434bfddb484068dbf", "models": [["p"]]}
+{"name": "body_tf_2", "source": "p :- not not 1<3<2.", "source_sha256": "a90419fee86aa40f9b466d32a96489ec24e40c0e7c2e86a43055c4f8ace61c1f", "models": [[]]}
+{"name": "choice_tf_2", "source": "1 { p : not not 1<3<2 } 1.", "source_sha256": "ea332bdecc305cd39e1f67673dc452e8effeaa1ce317982c45266864b5a1c765", "models": []}
+{"name": "aggregate_tf_2", "source": "p :- #count{1 : not not 1<3<2}=1.", "source_sha256": "0facce442e95a18260c55e0e25c950aee3d59c4af22a98d2320419a7eb66e273", "models": [[]]}
+{"name": "body_ft_0", "source": "p :- 3<1<2.", "source_sha256": "33b3f3c22469f3a401aa7681a8f367dc51ac297a091ee6751800e0a50e78b63a", "models": [[]]}
+{"name": "choice_ft_0", "source": "1 { p : 3<1<2 } 1.", "source_sha256": "55eb15d6a96a8d31a18a691997b1a2267c509b85adf4a647688d1040ce3b6e50", "models": []}
+{"name": "aggregate_ft_0", "source": "p :- #count{1 : 3<1<2}=1.", "source_sha256": "b98488d1443e6d96d896e5419e016af2a94d6349e7c5279b225da3c1db8e9346", "models": [[]]}
+{"name": "body_ft_1", "source": "p :- not 3<1<2.", "source_sha256": "3669ad376c2bffb12957f4e813a3dbde811427e7a11a8741bc2a4cbf82bb8414", "models": [["p"]]}
+{"name": "choice_ft_1", "source": "1 { p : not 3<1<2 } 1.", "source_sha256": "fb119e7b9d9d7b5185f1b868713c5103e288c714869d878e9692e74ad189608b", "models": [["p"]]}
+{"name": "aggregate_ft_1", "source": "p :- #count{1 : not 3<1<2}=1.", "source_sha256": "318c21abb745f001719672745bf534614d338839d546bb29c0a2b9ec9f44d4f9", "models": [["p"]]}
+{"name": "body_ft_2", "source": "p :- not not 3<1<2.", "source_sha256": "8b4855eb74b99177d2916b24e4672d24c53d693020a8aeae3b258fe86a9371e5", "models": [[]]}
+{"name": "choice_ft_2", "source": "1 { p : not not 3<1<2 } 1.", "source_sha256": "bc1008e7da70dff9e922d40f1d6f7dd206041f68aef7f29292d3c3f04f359de4", "models": []}
+{"name": "aggregate_ft_2", "source": "p :- #count{1 : not not 3<1<2}=1.", "source_sha256": "f93bcb69bbd7c57d67b8aa186c14fb6a0fbb19ea4b80c6e1d2446148e77b169a", "models": [[]]}
+{"name": "body_ff_0", "source": "p :- 3<2<1.", "source_sha256": "64fd65b395c127841984faad9992c677242e529b89d5464e172fa5be63825b0b", "models": [[]]}
+{"name": "choice_ff_0", "source": "1 { p : 3<2<1 } 1.", "source_sha256": "02b0307616eb003dee69a03e007635550d5c1fc30a903d7b19ad60f265c0316b", "models": []}
+{"name": "aggregate_ff_0", "source": "p :- #count{1 : 3<2<1}=1.", "source_sha256": "4c0775f4e839354767da04f1d5de55e24cf621a343fb05f9e5193a8a0dfe3721", "models": [[]]}
+{"name": "body_ff_1", "source": "p :- not 3<2<1.", "source_sha256": "9bac351dfa395d5e27b9cccbe284b7bd129e37451cac6a85375895927336fb84", "models": [["p"]]}
+{"name": "choice_ff_1", "source": "1 { p : not 3<2<1 } 1.", "source_sha256": "1f8efe3b91d94136af0f50f7d03cd5434f42b6603cfd302767937efcc06ed5ef", "models": [["p"]]}
+{"name": "aggregate_ff_1", "source": "p :- #count{1 : not 3<2<1}=1.", "source_sha256": "9e3ff9a1cb37c7e19e3fcfef9f7985bc28d045942b0d6046203a60b5fe46da61", "models": [["p"]]}
+{"name": "body_ff_2", "source": "p :- not not 3<2<1.", "source_sha256": "2cc41332a6737e3b82d6ea3aa128feb5513e3386375447b531b63e766dd58877", "models": [[]]}
+{"name": "choice_ff_2", "source": "1 { p : not not 3<2<1 } 1.", "source_sha256": "93f24fd8e4b516a5c853cc8865282b9525865595a157803c500b7781156d16c5", "models": []}
+{"name": "aggregate_ff_2", "source": "p :- #count{1 : not not 3<2<1}=1.", "source_sha256": "f7f154524ed4f0dc0b8c8e40f4a9648d1d9f8426c246774ab95b3dd71bcc54f3", "models": [[]]}
+{"name": "independent_neg", "source": "d(1..3). p(X):-d(X),not X=2.", "source_sha256": "b948525a3bdb9be2b3ff2121bb7a02e1b6219503dadd18dd950f5eac89c0cfd5", "models": [["d(1)", "d(2)", "d(3)", "p(1)", "p(3)"]]}
+{"name": "independent_double", "source": "d(1..3). p(X):-d(X),not not X=2.", "source_sha256": "c3b257067bdf27974d2e983281b9c3e532aecff509a9dc36f53d2aace56af174", "models": [["d(1)", "d(2)", "d(3)", "p(2)"]]}
+{"name": "chain_bound", "source": "d(1..3).p(X):-d(X),not 0<X<2.", "source_sha256": "e18d95777b7bc25bf4e93f8f6631ef40ff73a481830d4fcc9f33b74e6796dc48", "models": [["d(1)", "d(2)", "d(3)", "p(2)", "p(3)"]]}
+{"name": "chain_double_bound", "source": "d(1..3).p(X):-d(X),not not 0<X<2.", "source_sha256": "1cc585b8211f8b964bea4d8b099785de4bf406ad4a67136580262821a6f3df02", "models": [["d(1)", "d(2)", "d(3)", "p(1)"]]}
+{"name": "choice_bound_chain", "source": "d(1..3).{p(X):d(X),not 0<X<2}.", "source_sha256": "4d09dc0a8995b34034f9b424a50f86701ad5572f4ff07a27f97db83b41491f11", "models": [["d(1)", "d(2)", "d(3)"], ["d(1)", "d(2)", "d(3)", "p(2)"], ["d(1)", "d(2)", "d(3)", "p(2)", "p(3)"], ["d(1)", "d(2)", "d(3)", "p(3)"]]}
+{"name": "aggregate_bound_chain", "source": "d(1..3).n(N):-N=#count{X:d(X),not 0<X<2}.", "source_sha256": "a601a08fc462b6d4e9408e18f1d3a351e86e5bbf72d237a3e8c11c7b4e522b42", "models": [["d(1)", "d(2)", "d(3)", "n(2)"]]}
+{"name": "historical_boolean_body", "source": "a :- #true. b :- not #false. c :- not not #true.", "source_sha256": "4b95f877a46b6fed971c06e1acc7bb6020461ae0a1653970a4e374b9741d41af", "models": [["a", "b", "c"]]}
+{"name": "historical_boolean_body_false", "source": "a :- #false. b :- not #true.", "source_sha256": "a63bcc0199c3f05ad8e27a0262fa4e2c14bcf851425f7ff32eaba74e3457e8f2", "models": [[]]}
+{"name": "historical_comparison_negated", "source": "d(1..3). p(X) :- d(X), not X=2.", "source_sha256": "c4b4cc71acf0edc8ffc94727fbd1b3564c2c15fed3f2611524f3ed203c8dccfd", "models": [["d(1)", "d(2)", "d(3)", "p(1)", "p(3)"]]}
+{"name": "historical_comparison_chain_bound", "source": "d(1..3). p(X) :- d(X), 0<X<3.", "source_sha256": "0479482fe9460a71248c321963ee4966aa9a2a696f1ca21a9fa1fdeab46a5fce", "models": [["d(1)", "d(2)", "d(3)", "p(1)", "p(2)"]]}
+{"name": "historical_comparison_double_negative", "source": "d(1..3). p(X) :- d(X), not not 0<X<3.", "source_sha256": "a038ce98dd2a8b75729c57901748009c4b227d34ee88775c6ee7d7758362ea84", "models": [["d(1)", "d(2)", "d(3)", "p(1)", "p(2)"]]}
+{"name": "bound_plain_=", "source": "d(1..3). p(X):-d(X),X=2.", "source_sha256": "b599c93845dd511ce89b9740ed0709eb0fe63f53935a15ae30c7c2087ff782b1", "models": [["d(1)", "d(2)", "d(3)", "p(2)"]]}
+{"name": "bound_not_=", "source": "d(1..3). p(X):-d(X),not X=2.", "source_sha256": "b948525a3bdb9be2b3ff2121bb7a02e1b6219503dadd18dd950f5eac89c0cfd5", "models": [["d(1)", "d(2)", "d(3)", "p(1)", "p(3)"]]}
+{"name": "bound_double_=", "source": "d(1..3). p(X):-d(X),not not X=2.", "source_sha256": "c3b257067bdf27974d2e983281b9c3e532aecff509a9dc36f53d2aace56af174", "models": [["d(1)", "d(2)", "d(3)", "p(2)"]]}
+{"name": "bound_plain_!=", "source": "d(1..3). p(X):-d(X),X!=2.", "source_sha256": "66a9a309c66dbfa7e0b00e703e40c08ccb9424d30f41840b44c443d03693de31", "models": [["d(1)", "d(2)", "d(3)", "p(1)", "p(3)"]]}
+{"name": "bound_not_!=", "source": "d(1..3). p(X):-d(X),not X!=2.", "source_sha256": "ef35fc5bf6865dbacbf92a0a0517eee42e3ba6c39d15a240a023c18bd766b76d", "models": [["d(1)", "d(2)", "d(3)", "p(2)"]]}
+{"name": "bound_double_!=", "source": "d(1..3). p(X):-d(X),not not X!=2.", "source_sha256": "47054bc00e0b4f179ed16227d883c1c55cae377fea066744ab4c6a44943f9adc", "models": [["d(1)", "d(2)", "d(3)", "p(1)", "p(3)"]]}
+{"name": "bound_plain_<", "source": "d(1..3). p(X):-d(X),X<2.", "source_sha256": "1de3336da3383879889556ab87c1307a44cb7b458086d2e95f006b774aec0700", "models": [["d(1)", "d(2)", "d(3)", "p(1)"]]}
+{"name": "bound_not_<", "source": "d(1..3). p(X):-d(X),not X<2.", "source_sha256": "192f26956a8e70362e31e64b9c8ea63160781b2719fa1500d05d290d25819f7d", "models": [["d(1)", "d(2)", "d(3)", "p(2)", "p(3)"]]}
+{"name": "bound_double_<", "source": "d(1..3). p(X):-d(X),not not X<2.", "source_sha256": "3d5929c63ecdd758c788f69b6a820dd390d8345a2c72e334f52b9316b72af612", "models": [["d(1)", "d(2)", "d(3)", "p(1)"]]}
+{"name": "bound_plain_<=", "source": "d(1..3). p(X):-d(X),X<=2.", "source_sha256": "e6a9151b85e9cdde5d1f0205ad3d441a4b548c403c399bf981984b70b7eb677f", "models": [["d(1)", "d(2)", "d(3)", "p(1)", "p(2)"]]}
+{"name": "bound_not_<=", "source": "d(1..3). p(X):-d(X),not X<=2.", "source_sha256": "d502dc944bb8bd30158cac5b89099c1778c4eff072be5491b9ab53a94cb25ff1", "models": [["d(1)", "d(2)", "d(3)", "p(3)"]]}
+{"name": "bound_double_<=", "source": "d(1..3). p(X):-d(X),not not X<=2.", "source_sha256": "d686848dc3cd838220752cebb20a8afe4c3982761fe787afafc2b9063d4a4ed8", "models": [["d(1)", "d(2)", "d(3)", "p(1)", "p(2)"]]}
+{"name": "bound_plain_>", "source": "d(1..3). p(X):-d(X),X>2.", "source_sha256": "d8c96b632aca6d9ecd889f8d080772f34e4e8667e81d3f08e12358274aa825ba", "models": [["d(1)", "d(2)", "d(3)", "p(3)"]]}
+{"name": "bound_not_>", "source": "d(1..3). p(X):-d(X),not X>2.", "source_sha256": "0e911be7fbe730b6ab2f6265ecad95153fd10fcf369f7d4ebec121d255003367", "models": [["d(1)", "d(2)", "d(3)", "p(1)", "p(2)"]]}
+{"name": "bound_double_>", "source": "d(1..3). p(X):-d(X),not not X>2.", "source_sha256": "2f19316e89fcdf434125bd6db7ffd885903285ce2d61f9623d5f3416b7fff947", "models": [["d(1)", "d(2)", "d(3)", "p(3)"]]}
+{"name": "bound_plain_>=", "source": "d(1..3). p(X):-d(X),X>=2.", "source_sha256": "8669bbd9336a552c146b7d25eecddd7d8e5c75d090508e6e76401d92f6393428", "models": [["d(1)", "d(2)", "d(3)", "p(2)", "p(3)"]]}
+{"name": "bound_not_>=", "source": "d(1..3). p(X):-d(X),not X>=2.", "source_sha256": "4e2bbca065ae6196e5483451e0dad725d9d43c5f4be5c27272b14d5cedf846bf", "models": [["d(1)", "d(2)", "d(3)", "p(1)"]]}
+{"name": "bound_double_>=", "source": "d(1..3). p(X):-d(X),not not X>=2.", "source_sha256": "d09c73e107bd6f2713e648423cb2a0a682d33016b09eef51f19a8b46bd109a4a", "models": [["d(1)", "d(2)", "d(3)", "p(2)", "p(3)"]]}
+{"name": "bound_arithmetic", "source": "d(0..2).p(X):-d(X),not X+1=2.", "source_sha256": "3ac1a5f5d8cd10acea5a6cd11f64d071248ac62b30412b8994de4a9727804652", "models": [["d(0)", "d(1)", "d(2)", "p(0)", "p(2)"]]}
+{"name": "independent_scalar_binder", "source": "p(X):-not not X=1,X=1.", "source_sha256": "58084d618c4542dbc01f06749b1b23f6544ebff0613f4288732bd69725d255a5", "models": [["p(1)"]]}
+{"name": "independent_range_after_guard", "source": "p(X):-not 0<X<2,X=0..2.", "source_sha256": "0e2ac775d7810bb6f2dddc9d3514f8f11f39a98b09cdb8fa77b41edd7c4e667e", "models": [["p(0)", "p(2)"]]}
+{"name": "three_step_chain", "source": "d(0..2).p(X):-d(X),not 0<=X<2!=1.", "source_sha256": "c5255a230f8da3f2ec5dae9aa4cf08df2b296885cce1c6ee9e612cf54ba2c213", "models": [["d(0)", "d(1)", "d(2)", "p(2)"]]}
+{"name": "middle_repeated_variable", "source": "d(0..2).p(X):-d(X),0<=X<=X.", "source_sha256": "f356282e377a0c1d58b50b75115272fdb83fe449a5be297089ecc2154029a109", "models": [["d(0)", "d(1)", "d(2)", "p(0)", "p(1)", "p(2)"]]}
+{"name": "negative_signed_binder", "source": "-d(-1;0;1). -p(X):--d(X),not X=0.", "source_sha256": "7c2703fc667e58d720c73296c24b27c185fb61246454df95660ce3f78a43885d", "models": [["-d(-1)", "-d(0)", "-d(1)", "-p(-1)", "-p(1)"]]}
+{"name": "string_order", "source": "p:-not \"z\"<\"a\".q:-not not a<\"a\".", "source_sha256": "2a6d659fef7550a80f577a9e5df894492644cdd1174f6d72048c34802f06eda1", "models": [["p", "q"]]}
+{"name": "negated_tuple", "source": "d(1..2).p(X):-d(X),not (X,2)=(1,2).", "source_sha256": "1662a6aa4e2e2fe4801da47e742fbfbce9c3005a44ae299d7bc63f356054362d", "models": [["d(1)", "d(2)", "p(2)"]]}
+{"name": "double_tuple", "source": "d(1..2).p(X):-d(X),not not (X,2)!=(1,2).", "source_sha256": "3b29dc51605b1b9bd4fea5741ca47c15cdae8081a446a9e9be39b9af6ddb4e52", "models": [["d(1)", "d(2)", "p(2)"]]}
+{"name": "tuple_chain", "source": "d(1..2).p(X):-d(X),not (X,2)=(1,2)!=(2,3).", "source_sha256": "df8138940e0415fc574d3d7dd041210e9ba6ef506aded8db9cfe0f248fcb11b3", "models": [["d(1)", "d(2)", "p(2)"]]}
+{"name": "unequal_tuple_lengths", "source": "d(1).p(X):-d(X),not (X,2)=(1,2,3).", "source_sha256": "6197f1fbcbf1c81f652513949f71a183a8989dbf10065c93e47a7ff249014ed2", "models": [["d(1)", "p(1)"]]}
+{"name": "choice_outer_guard", "source": "d(1..3).{p(X)}:-d(X),not X=2.", "source_sha256": "79349a50105a66d121fa8748ea12c064931063e483f5429ac9b05a647b1f35e0", "models": [["d(1)", "d(2)", "d(3)"], ["d(1)", "d(2)", "d(3)", "p(1)"], ["d(1)", "d(2)", "d(3)", "p(1)", "p(3)"], ["d(1)", "d(2)", "d(3)", "p(3)"]]}
+{"name": "choice_local_tuple", "source": "d(1..2).1{p(X):d(X),not (X,1)=(2,1)}1.", "source_sha256": "5c0679e9ab66bd1611c4e931b7ebd3c5478f94fa91a8b99997ae110b03e9791f", "models": [["d(1)", "d(2)", "p(1)"]]}
+{"name": "aggregate_duplicate_tuple", "source": "d(1..2).n(N):-N=#count{k:d(X),not X=2;k:d(X),not not X=1}.", "source_sha256": "b8724a8ff1ce1de26761fe155a0ee0d558b0accefe544a25f7be8bc5484ae320", "models": [["d(1)", "d(2)", "n(1)"]]}
+{"name": "aggregate_local_shadow", "source": "d(1..2).r(2).n(X,N):-r(X),N=#count{Y:d(Y),not Y=X}.", "source_sha256": "1964c4534322495ee405b500ee1889dd11b36ed87aa90763ea2aef0d8bc09d0d", "models": [["d(1)", "d(2)", "n(2,1)", "r(2)"]]}
+{"name": "aggregate_two_local_values", "source": "d(1..2).n(N):-N=#count{X,Y:d(X),d(Y),not 0<X<Y}.", "source_sha256": "b1f19b42708c5f580c15c7d2a1b7b6417c96675fabfc2093bb5c2ea25b94f88c", "models": [["d(1)", "d(2)", "n(3)"]]}
+{"name": "aggregate_nonbinding_target_guard", "source": "d(1..2).n(N):-N=#count{X:d(X)},#count{Y:d(Y),not Y=N}>=1.", "source_sha256": "915255697696985d40f78c6c76478a62a796c8222f0d7329a212261796077565", "models": [["d(1)", "d(2)", "n(2)"]]}
+{"name": "recursion_false_guard", "source": "d(1).p(1):-q,not not 1=2.q:-p(X),d(X).", "source_sha256": "41583c2253eb1bdd3687612af7492f8e14351c46469de640e2249e63fca80417", "models": [["d(1)"]]}
+{"name": "recursion_true_guard", "source": "d(1).p(1):-q,not 1=2.q:-p(X),d(X).", "source_sha256": "1357a3605e7b22fc341d27b5cfa823c22524784eb67c6dbf85fb776273afcd4e", "models": [["d(1)"]]}
+{"name": "negation_loop_guard", "source": "p:-not q,#true.q:-not p,not #false.", "source_sha256": "dbf0e931ca4aa5d35d0c61f267964528614e3b5671ab44be8a00d12cf0edb862", "models": [["p"], ["q"]]}
+{"name": "disjunction_guard", "source": "a|b:-not 1<3<2.a:-b.b:-a.", "source_sha256": "8c5009f0604d50abfb23bc131f7e2d7014b1836a654b9fd5ad040a7d8a8e23e7", "models": [["a", "b"]]}
+{"name": "constraint_guard", "source": "{a;b}.:-a,b,not not 1=1.", "source_sha256": "eed4ac86ab3d95214e103594519c669a427f27f2b25166d4066caaf51aedf7ec", "models": [[], ["a"], ["b"]]}
+{"name": "false_guard_keeps_safety", "source": "d(1..2).p(X):-d(X),#false.", "source_sha256": "d855cf35575381f46dbe65142b788504b13f02e316ef6aae54c473453552113e", "models": [["d(1)", "d(2)"]]}

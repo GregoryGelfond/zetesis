@@ -1,0 +1,6 @@
+  completion: exhausted
+  effective execution: backend=hybrid GPU propagation + exact CPU residual search; oracle=countermodel; grounder=eager; CPU search workers=1; adapter=fixture adapter, Metal; vendor=0x106b
+  formula GPU: batches=1; candidates=1; propagation work=12; completed sweeps=1; GPU-decided committed=1; CPU residuals completed=0
+  formula accounting: pending candidates=0; queued verified models=0; peak authored GPU bytes=128
+  formula batch limits: candidates=64; pending bytes=4096; propagation sweeps=64; propagation work/candidate=1000 (u32 ceiling); GPU kernel timing=unavailable
+  countermodel: search work=10; decisions=0; candidates=1; queries=0; witnesses=0; candidate restrictions=0; classical queries=2; verified stable models=1

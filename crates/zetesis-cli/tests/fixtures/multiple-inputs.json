@@ -1,0 +1,324 @@
+[
+  {
+    "name": "forward_global_constants",
+    "files": {
+      "rules.lp": "p(lower..upper). {q(X)}:-p(X).",
+      "constants.lp": "#const lower=1. #const upper=lower+1."
+    },
+    "roots": [
+      "rules.lp",
+      "constants.lp"
+    ],
+    "records": [
+      [
+        [
+          "p(1)",
+          "p(2)"
+        ],
+        null
+      ],
+      [
+        [
+          "p(1)",
+          "p(2)",
+          "q(1)"
+        ],
+        null
+      ],
+      [
+        [
+          "p(1)",
+          "p(2)",
+          "q(1)",
+          "q(2)"
+        ],
+        null
+      ],
+      [
+        [
+          "p(1)",
+          "p(2)",
+          "q(2)"
+        ],
+        null
+      ]
+    ]
+  },
+  {
+    "name": "shared_include_and_explicit_root",
+    "files": {
+      "a.lp": "#include \"data.lp\". a.",
+      "b.lp": "#include \"data.lp\". b.",
+      "data.lp": "#const n=1. p(n)."
+    },
+    "roots": [
+      "a.lp",
+      "b.lp",
+      "data.lp",
+      "a.lp"
+    ],
+    "records": [
+      [
+        [
+          "a",
+          "b",
+          "p(1)"
+        ],
+        null
+      ]
+    ]
+  },
+  {
+    "name": "root_before_include",
+    "files": {
+      "data.lp": "#const n=1. p(n).",
+      "rules.lp": "#include \"data.lp\". q(n)."
+    },
+    "roots": [
+      "data.lp",
+      "rules.lp"
+    ],
+    "records": [
+      [
+        [
+          "p(1)",
+          "q(1)"
+        ],
+        null
+      ]
+    ]
+  },
+  {
+    "name": "hidden_display_multiplicity",
+    "files": {
+      "a.lp": "{hidden}. #show visible/0.",
+      "b.lp": "visible."
+    },
+    "roots": [
+      "a.lp",
+      "b.lp"
+    ],
+    "records": [
+      [
+        [
+          "visible"
+        ],
+        null
+      ],
+      [
+        [
+          "visible"
+        ],
+        null
+      ]
+    ]
+  },
+  {
+    "name": "weak_minimize_global_key",
+    "files": {
+      "a.lp": "{a;b}. :-not a. :-not b. :~a.[2@1,k]",
+      "b.lp": "#minimize{2@1,k:b}."
+    },
+    "roots": [
+      "a.lp",
+      "b.lp"
+    ],
+    "records": [
+      [
+        [
+          "a",
+          "b"
+        ],
+        [
+          2
+        ]
+      ]
+    ]
+  },
+  {
+    "name": "optimal_ties",
+    "files": {
+      "a.lp": "1{a;b}1.",
+      "b.lp": ":~a.[2@1,k] #minimize{2@1,k:b}."
+    },
+    "roots": [
+      "a.lp",
+      "b.lp"
+    ],
+    "records": [
+      [
+        [
+          "a"
+        ],
+        [
+          2
+        ]
+      ],
+      [
+        [
+          "b"
+        ],
+        [
+          2
+        ]
+      ]
+    ]
+  },
+  {
+    "name": "cross_root_unsat",
+    "files": {
+      "a.lp": "p.",
+      "b.lp": ":-p."
+    },
+    "roots": [
+      "a.lp",
+      "b.lp"
+    ],
+    "records": []
+  },
+  {
+    "name": "zero_priority_slot",
+    "files": {
+      "a.lp": "{a}.",
+      "b.lp": ":~a.[0@7,k]"
+    },
+    "roots": [
+      "a.lp",
+      "b.lp"
+    ],
+    "records": [
+      [
+        [],
+        [
+          0
+        ]
+      ],
+      [
+        [
+          "a"
+        ],
+        [
+          0
+        ]
+      ]
+    ]
+  },
+  {
+    "name": "original_quoted_scalar",
+    "files": {
+      "a.lp": "p(\"two words\").",
+      "b.lp": "q(X):-p(X). #show q/1."
+    },
+    "roots": [
+      "a.lp",
+      "b.lp"
+    ],
+    "records": [
+      [
+        [
+          "q(\"two words\")"
+        ],
+        null
+      ]
+    ]
+  },
+  {
+    "name": "empty_roots",
+    "files": {
+      "a.lp": "",
+      "b.lp": ""
+    },
+    "roots": [
+      "a.lp",
+      "b.lp"
+    ],
+    "records": [
+      [
+        [],
+        null
+      ]
+    ]
+  },
+  {
+    "name": "cwd_include_shadowing",
+    "files": {
+      "sub/entry.lp": "#include \"data.lp\".",
+      "sub/data.lp": "shadowed.",
+      "data.lp": "cwd.",
+      "second.lp": "second."
+    },
+    "roots": [
+      "sub/entry.lp",
+      "second.lp"
+    ],
+    "records": [
+      [
+        [
+          "cwd",
+          "second"
+        ],
+        null
+      ]
+    ]
+  },
+  {
+    "name": "including_directory_fallback",
+    "files": {
+      "sub/entry.lp": "#include \"data.lp\".",
+      "sub/data.lp": "fallback.",
+      "second.lp": "second."
+    },
+    "roots": [
+      "sub/entry.lp",
+      "second.lp"
+    ],
+    "records": [
+      [
+        [
+          "fallback",
+          "second"
+        ],
+        null
+      ]
+    ]
+  },
+  {
+    "name": "cwd_not_directory_fallback",
+    "files": {
+      "block": "ordinary file",
+      "sub/entry.lp": "#include \"block/data.lp\".",
+      "sub/block/data.lp": "fallback."
+    },
+    "roots": [
+      "sub/entry.lp"
+    ],
+    "records": [
+      [
+        [
+          "fallback"
+        ],
+        null
+      ]
+    ]
+  },
+  {
+    "name": "subcommand_spelling_as_later_root",
+    "files": {
+      "one.lp": "a.",
+      "devices": "b."
+    },
+    "roots": [
+      "one.lp",
+      "devices"
+    ],
+    "records": [
+      [
+        [
+          "a",
+          "b"
+        ],
+        null
+      ]
+    ]
+  }
+]

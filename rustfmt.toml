@@ -1,0 +1,2 @@
+# Module declarations follow semantic dependency order.
+reorder_modules = false

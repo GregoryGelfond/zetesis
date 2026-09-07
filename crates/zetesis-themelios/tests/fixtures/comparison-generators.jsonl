@@ -1,0 +1,137 @@
+{"name":"double_equality","source":"p(X):-not not X=1.","source_sha256":"3a123d30ff2aa325f47798188919d39851cf9ee190d0092d4c183fd97597ff94","valid":true,"native":"admit","models":[["p(1)"]]}
+{"name":"double_equality_reverse","source":"p(X):-not not 1=X.","source_sha256":"0819b7950ff7900bc42b868a6aee53eafbbd6dcd69366962f97d984e69b01206","valid":true,"native":"admit","models":[["p(1)"]]}
+{"name":"double_chain","source":"p(X):-not not X=1<2.","source_sha256":"a04f0dc6c555073d4735adfb6b42110b3baa893625c9e754cda2e7692c351d37","valid":true,"native":"admit","models":[["p(1)"]]}
+{"name":"chain_equality","source":"p(X):-X=1<2.","source_sha256":"c26f361f6bb4f372f20e4e48e25b1d896e771c58665188fdeb3f07226dc918f0","valid":true,"native":"admit","models":[["p(1)"]]}
+{"name":"chain_integer","source":"p(X):-0<X<3.","source_sha256":"c1055d86ee888af3be8a22969f9bd9372c826a7de41b605989f6f7d70030d8c1","valid":true,"native":"admit","models":[["p(1)","p(2)"]]}
+{"name":"conditional_double","source":"z:-p(X):not not X=1.","source_sha256":"5e243c4e6e6c514bfe31d45a8b1f0485c03661197b61b9343010b174ec35a159","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_many_equal","source":"p(X,Y):-X=Y=1.","source_sha256":"217083b51589b808baa43d90c9f4eea6041ed2159237b79ba24bc64b9fe36936","valid":true,"native":"admit","models":[["p(1,1)"]]}
+{"name":"chain_double_many_equal","source":"p(X,Y):-not not X=Y=1.","source_sha256":"24391e36e563cb8c8e59397cef473c31c74273b22ec90e9ce3c5d83e91668281","valid":true,"native":"admit","models":[["p(1,1)"]]}
+{"name":"chain_false_tail","source":"p(X):-X=1>2.","source_sha256":"8b0d97cdaa47efecf72c05bbd8ac0990104ff9178df6e7929404ac9613603990","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_undefined_tail","source":"p(X):-X=1<1/0.","source_sha256":"0d8de34a39e37b4a8ae064922d2957acfbef8878067477018d78c0f0fceb7fea","valid":true,"native":"Evaluation","models":[[]]}
+{"name":"chain_double_false_tail","source":"p(X):-not not X=1>2.","source_sha256":"4a11ae42d3a20e0dbc0d0ce6b67761cd40eb3efc57b78ebb9294d7c6e7c9df45","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_negative_equality","source":"p(X):-not X=1<2.","source_sha256":"cb35e5affb138ab71d8c9caeb074f3d463e4c210367f7e515c0e85faf9f34a64","valid":false,"native":"UnsafeVariable","models":[]}
+{"name":"chain_negative_integer","source":"p(X):-not 0<X<3.","source_sha256":"95a2af684c0d3d78535d779b9c3c26172ba16a9855f867b4f42398ddbbf3d1cd","valid":false,"native":"UnsafeVariable","models":[]}
+{"name":"chain_double_integer","source":"p(X):-not not 0<X<3.","source_sha256":"f0f2d0b5ea5519ff0492a96dd7374d8d3d10eb64d2ac9975ce6255ad312ecb37","valid":true,"native":"admit","models":[["p(1)","p(2)"]]}
+{"name":"chain_reverse_integer","source":"p(X):-3>X>0.","source_sha256":"2d57a42d1569bd6fe05b1fef8998385955d08b83eba09285346b124feb4f7744","valid":true,"native":"admit","models":[["p(1)","p(2)"]]}
+{"name":"chain_mixed_integer","source":"p(X):-0<=X<3.","source_sha256":"6e12e06ae9a3910c672a5260eb1b870186a8543c5900934c964b1384625081f5","valid":true,"native":"admit","models":[["p(0)","p(1)","p(2)"]]}
+{"name":"chain_empty","source":"p(X):-3<X<0.","source_sha256":"de7f027240a701a1ba00fd981b2113b4d2775d29c664cfce65d0de621afcae32","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_equal_bounds","source":"p(X):-1<=X<=1.","source_sha256":"50f45b085600d3e02e0ebf10caf9747a6360e3dc7067d2e4e2e7a719ae0a4fbb","valid":true,"native":"admit","models":[["p(1)"]]}
+{"name":"chain_dynamic_bounds","source":"d(0,3).p(X):-d(L,U),L<X<U.","source_sha256":"9d8dddfafd79a5fd9500d36b55e23441cd2ba049f495bf81464734d6ea53f8ed","valid":false,"native":"UnsafeVariable","models":[]}
+{"name":"chain_dynamic_symbol_upper","source":"d(0,a).p(X):-d(L,U),L<X<U.","source_sha256":"3ff7db426085ed1a4d0ff1ccc5c0c9af27d213f2180a80052451b84b5a80c456","valid":false,"native":"UnsafeVariable","models":[]}
+{"name":"chain_dynamic_symbol_lower","source":"d(a,3).p(X):-d(L,U),L<X<U.","source_sha256":"6abed3145f87b3f38022b2eedd645ffb32f98759ed92f1e3d76ebcdd9983dc1e","valid":false,"native":"UnsafeVariable","models":[]}
+{"name":"chain_numeric_expression","source":"d(1).p(X):-d(L),L-1<X<L+2.","source_sha256":"f9e82288eef545b05ed60481f8df24a6d8fca398943647ac3156e076e2c2e06f","valid":false,"native":"UnsafeVariable","models":[]}
+{"name":"chain_symbol_upper","source":"p(X):-0<X<a.","source_sha256":"290b65b572199f332722d3c4226bd1c71bcafc788e47a96502f8bd7e230be9e6","valid":false,"native":"UnsafeVariable","models":[]}
+{"name":"chain_symbol_lower","source":"p(X):-a<X<3.","source_sha256":"4e338a01e21bcbcf4342cdbae9af6bb505a4b14376ecab7d78a1e4c36f59be89","valid":false,"native":"UnsafeVariable","models":[]}
+{"name":"double_symbol","source":"p(X):-not not X=a.","source_sha256":"7cb8006f93d89616b22f0d12301a0d1d6e0d57f43c1b74ad18f92edbbd7baf8e","valid":true,"native":"admit","models":[["p(a)"]]}
+{"name":"double_string","source":"p(X):-not not X=\"x\".","source_sha256":"5c2135cfcb5294b342138483ee4ea604e63d51fe55455771cb600ec2cc312656","valid":true,"native":"admit","models":[["p(\"x\")"]]}
+{"name":"double_bound_expression","source":"d(1).p(Y):-not not Y=X+1,d(X).","source_sha256":"1ae529ebbde039f91adcc04fe38add55e36bc4530d671b6575e87683a9933ffa","valid":true,"native":"admit","models":[["d(1)","p(2)"]]}
+{"name":"double_equality_cycle","source":"p(X,Y):-not not X=Y,not not Y=X.","source_sha256":"adcb49b9d760895c53583de1e188687a99058d660cb632f27864ee0c6da652fd","valid":false,"native":"UnsafeVariable","models":[]}
+{"name":"double_self_expression","source":"p(X):-not not X=X+1.","source_sha256":"7cd7ea6df056eaa2fb0db51b26f2282d971920c189085a8e894afdbe4def3e27","valid":false,"native":"UnsafeVariable","models":[]}
+{"name":"double_range","source":"p(X):-not not X=1..2.","source_sha256":"d405705932e11e245fe653f50af271d6dbb198168e3026cc2cc2437d795b2906","valid":true,"native":"admit","models":[["p(1)","p(2)"]]}
+{"name":"triple_comparison","source":"p(X):-0<X<3<4.","source_sha256":"d1d8e992764699199898a029636f9a7655bed352fac0773a91aad116e91ed555","valid":true,"native":"admit","models":[["p(1)","p(2)"]]}
+{"name":"multiple_lower_upper","source":"p(X):-0<X<3>X.","source_sha256":"b401574e5ef5dd4ff7a85c9ecbb778476fda9e69ba14c9e4a06ca26586e21179","valid":true,"native":"admit","models":[["p(1)","p(2)"]]}
+{"name":"choice_double","source":"{p(X):not not X=1}.","source_sha256":"e203b84da401367fbb86c876ea5f3d8cc0911b425d61eb2096d1e8f9cbcef7ad","valid":true,"native":"admit","models":[[],["p(1)"]]}
+{"name":"aggregate_double","source":"n(N):-N=#count{X:not not X=1}.","source_sha256":"bf185a89ac5345572898a716518a4b8b91f8329bc297ce23baa4ea69998961bc","valid":true,"native":"admit","models":[["n(1)"]]}
+{"name":"conditional_scope","source":"d(1..2).p(X):-d(X).q:-p(X):not not X=1.","source_sha256":"5074854e8ea2c7f9bda86a9ea1d1ddc484addda1dbfdc7a333f66cf3dcce4aad","valid":true,"native":"admit","models":[["d(1)","d(2)","p(1)","p(2)","q"]]}
+{"name":"double_tuple","source":"p(X):-not not (X,2)=(1,2).","source_sha256":"c34a2c6ccbfe43a5c6a6176e66726ada09cb8818a5430da69f25e126b340035c","valid":true,"native":"admit","models":[["p(1)"]]}
+{"name":"chain_positive_036","source":"p(X):--1<X<1.","source_sha256":"eee94aeddea81dfa92e43c7451c88f5149b89371135c08ec7d040e2e1cbfa585","valid":true,"native":"admit","models":[["p(0)"]]}
+{"name":"chain_positive_037","source":"p(X):-1>X>-1.","source_sha256":"87d7053e2246a9a49700680b2cf53e9a519deb423a2e65859a29cc61a907e20c","valid":true,"native":"admit","models":[["p(0)"]]}
+{"name":"chain_positive_038","source":"p(X):--1<X<=1.","source_sha256":"2ca09ad67cacdfb01612d36b550d4a25321b3f56fde0e47fa15c3fc91981eb32","valid":true,"native":"admit","models":[["p(0)","p(1)"]]}
+{"name":"chain_positive_039","source":"p(X):-1>=X>-1.","source_sha256":"c40a62f1b9b9547e47ab7270a13911fbaf44044eb6aa1eca47babe25fc06450b","valid":true,"native":"admit","models":[["p(0)","p(1)"]]}
+{"name":"chain_positive_040","source":"p(X):--1<=X<1.","source_sha256":"bf54a7b063fc5e35c85ed098e0cbd2d3fc7e141515f8efe8eaaa419f78e5b37d","valid":true,"native":"admit","models":[["p(-1)","p(0)"]]}
+{"name":"chain_positive_041","source":"p(X):-1>X>=-1.","source_sha256":"89ae5f28d194ccc64207bbf4ac16a1dc309d2dff2f0c0b6ff1b3d375775eeed6","valid":true,"native":"admit","models":[["p(-1)","p(0)"]]}
+{"name":"chain_positive_042","source":"p(X):--1<=X<=1.","source_sha256":"02f65ff883488c018de8500a5350e6226477d03aa0320be09822c202bec27f5c","valid":true,"native":"admit","models":[["p(-1)","p(0)","p(1)"]]}
+{"name":"chain_positive_043","source":"p(X):-1>=X>=-1.","source_sha256":"44c7a3cc13fd8460f123122b01bed8919c247335a27509f09c01b7a9433d7105","valid":true,"native":"admit","models":[["p(-1)","p(0)","p(1)"]]}
+{"name":"chain_positive_044","source":"p(X):-1<X<1.","source_sha256":"6a1b4d06a5561aa2edbb1fae626e561dbaa15a88eddd1227b9ce8fb95b710192","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_positive_045","source":"p(X):-1>X>1.","source_sha256":"9742a019a0be7d141b6bef8cb8f68ae5e54bcfb1249a15c8fe76bc3e04946814","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_positive_046","source":"p(X):-1<X<=1.","source_sha256":"f34a3ccbe6e5920bc4ea324a2e8d72706e058fb3672bf81ce982eb8c452d1f1a","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_positive_047","source":"p(X):-1>=X>1.","source_sha256":"ed615bb7a2ef52512fbe76ea4dab2dd5bfece02e9b609474068c5e772b93ae58","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_positive_048","source":"p(X):-1<=X<1.","source_sha256":"509ce03efcf6dec95a3a28ba4057117ae6536010901e19db9414c8600529e3db","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_positive_049","source":"p(X):-1>X>=1.","source_sha256":"1e9e994a5d9194b924b3cc0d037e0ae33e4f56a91de5617dd1125a73109fd7a1","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_positive_050","source":"p(X):-1<=X<=1.","source_sha256":"50f45b085600d3e02e0ebf10caf9747a6360e3dc7067d2e4e2e7a719ae0a4fbb","valid":true,"native":"admit","models":[["p(1)"]]}
+{"name":"chain_positive_051","source":"p(X):-1>=X>=1.","source_sha256":"4b7842473e96e3a120921e4c6f87e5ac9521b8ad9dac5756536f999c28ed7692","valid":true,"native":"admit","models":[["p(1)"]]}
+{"name":"chain_positive_052","source":"p(X):-2<X<0.","source_sha256":"c7d64a590cad2e8a03d04b9243ca944e4715d378e93b5e90c18dee7fac851363","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_positive_053","source":"p(X):-0>X>2.","source_sha256":"e8d7f16f5360502c2dada93742c6603429b33a2822d6fc69669a48b1ce56f261","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_positive_054","source":"p(X):-2<X<=0.","source_sha256":"f4cb7055a800cbf975f9a8185ecbbe6895b9f8e6aa375ca68e36b083247cb642","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_positive_055","source":"p(X):-0>=X>2.","source_sha256":"777ccd9f9ce27b8bddeeefc144923afcf6ee023f699b9d9dfc3ca88e78c13b54","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_positive_056","source":"p(X):-2<=X<0.","source_sha256":"1915201a024ad08360ba3570a6e472b1b955eba8834959fb7db045bc6c6095c3","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_positive_057","source":"p(X):-0>X>=2.","source_sha256":"254357a9bfd4d431c80e8ccba5353c5241bd81c4305507aae1a5c71ab567190d","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_positive_058","source":"p(X):-2<=X<=0.","source_sha256":"d5a3be27e8845b0a8a84bc4a1bfe07b6193cd691b3c8e8216ade35f650d15231","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_positive_059","source":"p(X):-0>=X>=2.","source_sha256":"eaa332b8d10e2105d27f44c99898a97b63d0b969abc24d744ef1b930df504b85","valid":true,"native":"admit","models":[[]]}
+{"name":"positive_eq_dependency","source":"d(1;2).p(X,Y):-X=Y+1<4,d(Y).","source_sha256":"1add4b6a6b298be159b761106768167fbd14c133e1f1e013969184e301721b5f","valid":true,"native":"admit","models":[["d(1)","d(2)","p(2,1)","p(3,2)"]]}
+{"name":"positive_eq_pair","source":"p(X,Y):-1=X=Y.","source_sha256":"6500b5327438bf5a790b14ac7b316c3b00a804a1c1037a4d1567ef1ba706a53c","valid":true,"native":"admit","models":[["p(1,1)"]]}
+{"name":"positive_eq_conflict","source":"p(X):-1=X=2.","source_sha256":"4996ed737fbc773adcf5873a0687f9baa15d80ab4ef4eb36f1afcc9ff73e4ea6","valid":true,"native":"admit","models":[[]]}
+{"name":"positive_eq_symbol","source":"p(X):-X=a<z.","source_sha256":"4c21f81ca80e700e003b3dd16d1ecacd144df0848dc3a48fbab04e93689c7a3e","valid":true,"native":"admit","models":[["p(a)"]]}
+{"name":"positive_eq_order_a","source":"p(X,Y):-Y=X+1,X=1<2.","source_sha256":"8c825e8124ee705b53f2172f3bd9a19d32fb884c0c304690c591188dd1e47dff","valid":true,"native":"admit","models":[["p(1,2)"]]}
+{"name":"positive_eq_order_b","source":"p(X,Y):-X=1<2,Y=X+1.","source_sha256":"80ab8bc78f5e203116db7409fa6fce044413044fa957943bac620961ce94b01e","valid":true,"native":"admit","models":[["p(1,2)"]]}
+{"name":"positive_bound_contradiction","source":"d(0;1;2).p(X):-d(X),X=1<3.","source_sha256":"9417df443d4b191451efb6d478fd20a856085e413a97dd8a605f5ccb97af4be3","valid":true,"native":"admit","models":[["d(0)","d(1)","d(2)","p(1)"]]}
+{"name":"positive_bound_range","source":"d(a;1;3).p(X):-d(X),0<X<3.","source_sha256":"c0f656a1d50d5fd01e10f27564f2018742cfbc542421dbb8aae314e964884865","valid":true,"native":"admit","models":[["d(1)","d(3)","d(a)","p(1)"]]}
+{"name":"positive_choice_chain","source":"1{p(X):0<X<3}1.","source_sha256":"5204b714e3c4680edefa2b4652e363312396085a89224e6bcb45c0ee455b5e1a","valid":true,"native":"admit","models":[["p(1)"],["p(2)"]]}
+{"name":"positive_choice_eq","source":"{p(X):X=1<2}.","source_sha256":"1e26934fb0526187153b4998f4a01c72096f146c4918bcec330d4527e98e3e1b","valid":true,"native":"admit","models":[[],["p(1)"]]}
+{"name":"positive_aggregate_chain","source":"n(N):-N=#count{X:0<X<3}.","source_sha256":"1848a1f05de07f7c472ddeeea130f890abf93371e94c4c4771e4c8b84dfacc2e","valid":true,"native":"admit","models":[["n(2)"]]}
+{"name":"positive_aggregate_eq","source":"{a}.n(N):-N=#sum{X,k:X=1<2,a}.","source_sha256":"578bbae9776696424f9c4755d22a6b56166e859fed50e2d2f911b1bdaa453d56","valid":true,"native":"admit","models":[["a","n(1)"],["n(0)"]]}
+{"name":"positive_conditional_chain","source":"{p(1);p(2)}.q:-p(X):0<X<3.","source_sha256":"ab304456d6f5f1f8294522ccaa24122f748a76ac79ae2acf72b448b16983381c","valid":true,"native":"admit","models":[[],["p(1)"],["p(1)","p(2)","q"],["p(2)"]]}
+{"name":"positive_recursive_eq","source":"p(0).p(Y):-p(X),Y=X+1<3.","source_sha256":"39601aecc74f6a8b7c91c1aaabea6e12612d8e76b7f2bc1f190965632462d57e","valid":true,"native":"admit","models":[["p(0)","p(1)","p(2)"]]}
+{"name":"positive_negative_gate","source":"{a}.p(X):-X=1<2,not a.","source_sha256":"c1b3980bcbd5bb065b82e29919c9c6879495cc2191ef4e20450804eb709a641a","valid":true,"native":"admit","models":[["a"],["p(1)"]]}
+{"name":"positive_double_gate","source":"{a}.p(X):-X=1<2,not not a.","source_sha256":"dfc8d713dd6e27268f960256f22c9fca9e03eca01253a35a4d6b9ea4b3c0ffc1","valid":true,"native":"admit","models":[[],["a","p(1)"]]}
+{"name":"positive_disjunction","source":"p(X)|q(X):-X=1<2.","source_sha256":"de900d6f0a6eab0e59cb3b7d70fd57600e02048f37f093d72953aac65e0beee4","valid":true,"native":"admit","models":[["p(1)"],["q(1)"]]}
+{"name":"positive_coherence","source":"{p(1)}.-p(X):-X=1<2.","source_sha256":"30fbe9829411dfd085cf3f4c96549e26287c33ed733334b05115c9802e23b13a","valid":true,"native":"admit","models":[["-p(1)"]]}
+{"name":"positive_defined_zero","source":"p(X):-X=0!=1.","source_sha256":"16d48f6dc4409d621f94f9c3219296e1aa9707fc2c87753ce5fed83a423876ba","valid":true,"native":"admit","models":[["p(0)"]]}
+{"name":"positive_neq_tail_false","source":"p(X):-X=0!=0.","source_sha256":"4f8cb5b0cdd3629e6ba20e32da76e5ec20e390e129fd5fb8a9a4fc029747103a","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_double_080","source":"p(X):-not not -1<X<1.","source_sha256":"23562ad548b9130b84eec676078028fb509c08e8fca5813c1bda21eb7df92a54","valid":true,"native":"admit","models":[["p(0)"]]}
+{"name":"chain_double_081","source":"p(X):-not not 1>X>-1.","source_sha256":"566683fe30f9e9710ca3cd46645d21092701bcad3f237148f9f261c0dcb625fb","valid":true,"native":"admit","models":[["p(0)"]]}
+{"name":"chain_double_082","source":"p(X):-not not -1<X<=1.","source_sha256":"86c30564e3554600586dcb609c5d84d8c606901c6ea3daccf6172f07b95ed794","valid":true,"native":"admit","models":[["p(0)","p(1)"]]}
+{"name":"chain_double_083","source":"p(X):-not not 1>=X>-1.","source_sha256":"b70403372e17578567edba1c22acd93d79f6bfe3c9670bf23ba1e10410731f57","valid":true,"native":"admit","models":[["p(0)","p(1)"]]}
+{"name":"chain_double_084","source":"p(X):-not not -1<=X<1.","source_sha256":"2560f86e4684cb32893779ac1df8ec59bda52c061fc2e23bd6bea4ea4359d0b8","valid":true,"native":"admit","models":[["p(-1)","p(0)"]]}
+{"name":"chain_double_085","source":"p(X):-not not 1>X>=-1.","source_sha256":"77e2081a8f98b07b02c2f225489a8c6e82804e6d2a1f25974e1e4c14a3f4faaf","valid":true,"native":"admit","models":[["p(-1)","p(0)"]]}
+{"name":"chain_double_086","source":"p(X):-not not -1<=X<=1.","source_sha256":"ac8f3666e845e9e1752f4debef8bd0cbc38b928d2620c383546dbe98572bbcb4","valid":true,"native":"admit","models":[["p(-1)","p(0)","p(1)"]]}
+{"name":"chain_double_087","source":"p(X):-not not 1>=X>=-1.","source_sha256":"61dd5e690ceac6b4638fb0672a7d1bde69035783a484226ddf8049a7665e6fe7","valid":true,"native":"admit","models":[["p(-1)","p(0)","p(1)"]]}
+{"name":"chain_double_088","source":"p(X):-not not 1<X<1.","source_sha256":"b8ed683184ceda0de00733e313cd277df11cb15a998a13f4c718143fefa7ba6a","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_double_089","source":"p(X):-not not 1>X>1.","source_sha256":"bb547f5781a6c6334ab7b0098b3f145290cce42a15b3884a310117ba86796e99","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_double_090","source":"p(X):-not not 1<X<=1.","source_sha256":"28cae6e5b679cd06c338ed2448e85c0c23730a37071e13fd812e6ebcd47301e9","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_double_091","source":"p(X):-not not 1>=X>1.","source_sha256":"b45d24f0842924dd6134daa4ff49aaf0104f5a4872926dd2161b47b05492c2a5","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_double_092","source":"p(X):-not not 1<=X<1.","source_sha256":"c0cd358dfdc5af11d3e1363d07f2a6803b429d54fc7ba6178b213cb9ec91e2a0","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_double_093","source":"p(X):-not not 1>X>=1.","source_sha256":"4aa81a68eca81b13caaa11bc142053ef80d5687b9bb5132d3f92481567d0312a","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_double_094","source":"p(X):-not not 1<=X<=1.","source_sha256":"86db6f224aa77b9582b9dac8755ebf0027bc7ecb399108c192987f00cc2eccf9","valid":true,"native":"admit","models":[["p(1)"]]}
+{"name":"chain_double_095","source":"p(X):-not not 1>=X>=1.","source_sha256":"a3b9ad54dfa144b7a85e51af4991b641b84b6358d57eeeba05a2c969e8412712","valid":true,"native":"admit","models":[["p(1)"]]}
+{"name":"chain_double_096","source":"p(X):-not not 2<X<0.","source_sha256":"9830fdc26b544c3167a2c5cbbdf13a9636f69bdb7194ecdf5507d0d787141ec9","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_double_097","source":"p(X):-not not 0>X>2.","source_sha256":"d62ad2407bd04aa60b0bfdb2d0684dbbdc4e1701a882f5c9a291ff9d275790c2","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_double_098","source":"p(X):-not not 2<X<=0.","source_sha256":"7e1f8c4beee9132b9863c1133698cd2364d2b44a925027e48f758a2e970ecb9f","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_double_099","source":"p(X):-not not 0>=X>2.","source_sha256":"f7364a87daefabba1ea8a8e8c1d5691460574bbef2b1a382cc344a41f4255320","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_double_100","source":"p(X):-not not 2<=X<0.","source_sha256":"034029aaee0b69149c4d964a94ded26b23ffecded16920e4da9b0f0d397e8469","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_double_101","source":"p(X):-not not 0>X>=2.","source_sha256":"35e7f7424dc35415f8d1ba11d24cdbc8d523e88f3e992c91d67eb19d449aeb1b","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_double_102","source":"p(X):-not not 2<=X<=0.","source_sha256":"53a86c182eea9fcf07d3f8c4bf4ce02d519ac9502246d22ba0097f17a234d23f","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_double_103","source":"p(X):-not not 0>=X>=2.","source_sha256":"ae308b5915595fa8e92631057b9e25f49f26e0571be98dae4b33bd5ff1af611a","valid":true,"native":"admit","models":[[]]}
+{"name":"double_eq_dependency","source":"d(1;2).p(X,Y):-not not X=Y+1<4,d(Y).","source_sha256":"1ef844f9dd88b683337c9b811db2476eaa4180c719eeb3cf70f632aac3d7aeff","valid":true,"native":"admit","models":[["d(1)","d(2)","p(2,1)","p(3,2)"]]}
+{"name":"double_eq_pair","source":"p(X,Y):-not not 1=X=Y.","source_sha256":"ee2c31dbf24236afbce80e5a22484ae06e225fb887c15e48c1f880cb99346fce","valid":true,"native":"admit","models":[["p(1,1)"]]}
+{"name":"double_eq_conflict","source":"p(X):-not not 1=X=2.","source_sha256":"154f214eb29484ed2afd55465c95e8149f6aa4dd7cc22eb5815f4cbf9ff599f7","valid":true,"native":"admit","models":[[]]}
+{"name":"double_eq_symbol","source":"p(X):-not not X=a<z.","source_sha256":"21ee99c485020b05b356942eed9fc90be89b02c42a94826a79b63a60810f8f4b","valid":true,"native":"admit","models":[["p(a)"]]}
+{"name":"double_eq_order_a","source":"p(X,Y):-Y=X+1,not not X=1<2.","source_sha256":"6206372b517c125119e8cceb110a389e2487b299f373fe225fe1ec7997b399d5","valid":true,"native":"admit","models":[["p(1,2)"]]}
+{"name":"double_eq_order_b","source":"p(X,Y):-not not X=1<2,Y=X+1.","source_sha256":"3a98eb2ff6d4fbec6200e76e965de6507fce205ea4054920dd33d7994db0be20","valid":true,"native":"admit","models":[["p(1,2)"]]}
+{"name":"double_bound_contradiction","source":"d(0;1;2).p(X):-d(X),not not X=1<3.","source_sha256":"06bf285f133bb10df162930b7143664b6410677fa0bc0c30b24bc1494a94ee2e","valid":true,"native":"admit","models":[["d(0)","d(1)","d(2)","p(1)"]]}
+{"name":"double_bound_range","source":"d(a;1;3).p(X):-d(X),not not 0<X<3.","source_sha256":"e1f001a2676450c3dafd9d6ce270dbb8aed2424dffcd163cb0262f401b229610","valid":true,"native":"admit","models":[["d(1)","d(3)","d(a)","p(1)"]]}
+{"name":"double_choice_chain","source":"1{p(X):not not 0<X<3}1.","source_sha256":"d290311147c92102fb62a29a842e54b7aa3ebd38cc3d422cfd02d0dd9ea961a8","valid":true,"native":"admit","models":[["p(1)"],["p(2)"]]}
+{"name":"double_choice_eq","source":"{p(X):not not X=1<2}.","source_sha256":"19cf66c0f5de390877cfef9cd7c496b64e68619c362e7460f3dfc0efa8e3734d","valid":true,"native":"admit","models":[[],["p(1)"]]}
+{"name":"double_aggregate_chain","source":"n(N):-N=#count{X:not not 0<X<3}.","source_sha256":"50f7e18689b93d04da5b0ff85569f5c579fdb2f0ed63636300002e3cc973d739","valid":true,"native":"admit","models":[["n(2)"]]}
+{"name":"double_aggregate_eq","source":"{a}.n(N):-N=#sum{X,k:not not X=1<2,a}.","source_sha256":"519ac1ec912659472f0cb1a0a86fa9915dfdb353ab923aa7e96b0df146f619a4","valid":true,"native":"admit","models":[["a","n(1)"],["n(0)"]]}
+{"name":"double_conditional_chain","source":"{p(1);p(2)}.q:-p(X):not not 0<X<3.","source_sha256":"c1ab86d08acbaab67bc7d29e1990829fa3f3575b306dad3f0a8d6cae5d033554","valid":true,"native":"admit","models":[[],["p(1)"],["p(1)","p(2)","q"],["p(2)"]]}
+{"name":"double_recursive_eq","source":"p(0).p(Y):-p(X),not not Y=X+1<3.","source_sha256":"5b55e6b5d51e6138a3a54900901e88d383a2835812cbb3eb52b9d3268d25d65a","valid":true,"native":"admit","models":[["p(0)","p(1)","p(2)"]]}
+{"name":"double_negative_gate","source":"{a}.p(X):-not not X=1<2,not a.","source_sha256":"0547ab5dd01399dc500e2b82b0a20ec340cefa049f477c4dd39511e622a9fd82","valid":true,"native":"admit","models":[["a"],["p(1)"]]}
+{"name":"double_double_gate","source":"{a}.p(X):-not not X=1<2,not not a.","source_sha256":"73788ae57c56ccc741f8d710483a1882880894d3665319be140d08e4d3b387b4","valid":true,"native":"admit","models":[[],["a","p(1)"]]}
+{"name":"double_disjunction","source":"p(X)|q(X):-not not X=1<2.","source_sha256":"cae499dc4e1fdf1d77a14778d8301c8fcb8701a759f042c074678431fa5c7053","valid":true,"native":"admit","models":[["p(1)"],["q(1)"]]}
+{"name":"double_coherence","source":"{p(1)}.-p(X):-not not X=1<2.","source_sha256":"4d3ac721c03a4b81149eccf861614d5cb83408fc3fd8e3a6cca6c588a90c9f8e","valid":true,"native":"admit","models":[["-p(1)"]]}
+{"name":"double_defined_zero","source":"p(X):-not not X=0!=1.","source_sha256":"0563e7fdf531b3622bf5cff9a143a4b57f8eaa0ed2a2a4241242d4ae70fe134f","valid":true,"native":"admit","models":[["p(0)"]]}
+{"name":"double_neq_tail_false","source":"p(X):-not not X=0!=0.","source_sha256":"fd17dd580c8a2926c8c45d5278137e160ea672ed972918117b9cc291b6f20be4","valid":true,"native":"admit","models":[[]]}
+{"name":"double_false_neighbor_undefined","source":"p(X):-not not X=1>2<1/0.","source_sha256":"7fddf67b88443aa8c523644a8b29eae2bc53f2da29b5f5d51c079f6935cd9ab5","valid":true,"native":"Evaluation","models":[[]]}
+{"name":"double_runtime_undefined","source":"d(0;1).p(Y):-d(X),not not Y=1/X.","source_sha256":"04e50ba59941d9cd9bc96853801e3cfbab78e038b85efb90bed0fb7f42f4df95","valid":true,"native":"Evaluation","models":[["d(0)","d(1)","p(1)"]]}
+{"name":"double_runtime_overflow","source":"d(2147483647).p(Y):-d(X),not not Y=X+1.","source_sha256":"6fc2bd0c7acb100877967aaa0e52b66819b6786072825aaca5607da335a4867b","valid":true,"native":"Evaluation","models":[["d(2147483647)","p(-2147483648)"]]}
+{"name":"chain_two_unbound_variables","source":"p(X,Y):-0<X<3>Y>0.","source_sha256":"de5e9c3b493c06525ec630bb53eccede7c49a56eaf78ee113511792d2a6917c5","valid":true,"native":"UnsafeVariable","models":[["p(1,1)","p(1,2)","p(2,1)","p(2,2)"]]}
+{"name":"chain_const_directive","source":"#const l=0. #const u=3. p(X):-l<X<u.","source_sha256":"b68658357f643302dc6b4f6b059cf5f00450b64cbe448c613ce88485062959f6","valid":true,"native":"admit","models":[["p(1)","p(2)"]]}
+{"name":"chain_closed_arithmetic","source":"p(X):-1-1<X<2+1.","source_sha256":"527c63597232a368bc77568f8dd7e913461520db38b06fc5f5ef3e3b2b846387","valid":true,"native":"admit","models":[["p(1)","p(2)"]]}
+{"name":"double_chain_closed_arithmetic","source":"p(X):-not not 1-1<X<2+1.","source_sha256":"b47fd71821d527b24160851bc2c098bb5459ed7ac382a8cc519bb60c0f56d969","valid":true,"native":"admit","models":[["p(1)","p(2)"]]}
+{"name":"chain_integer_max_empty","source":"p(X):-2147483647<X<=2147483647.","source_sha256":"fcb22151635a54fe937f3c2d2b48441eee1bb4d7ac67440db9f904d73d7df7a8","valid":true,"native":"admit","models":[[]]}
+{"name":"chain_integer_min_empty","source":"p(X):-(-2147483647-1)<=X<(-2147483647-1).","source_sha256":"74602f49dd676d9481696779d51eb0e26721645c50b741a57cf74d7c2a647607","valid":true,"native":"admit","models":[[]]}
+{"name":"head_cannot_use_choice_local","source":"p(X):-1{q(Y):not not Y=1<2}1.","source_sha256":"15dbd2a65b160a89a6fe96e0935af930fcb4fc54b95fd67ac7c3e95eb49230f1","valid":false,"native":"UnsafeVariable","models":[]}
+{"name":"head_cannot_use_aggregate_local","source":"p(X):-#count{Y:not not Y=1<2}=1.","source_sha256":"8268c4d947e0a8dbe760f0e257c753a101ce5954795c06bd3d6fa2e081ee7b63","valid":false,"native":"UnsafeVariable","models":[]}
+{"name":"head_cannot_use_conditional_local","source":"p(X):-q(X):not not X=1.","source_sha256":"8dcef80e172877f86643ce338c8c2618446fbc02e40dace5295202987ead8d03","valid":false,"native":"UnsafeVariable","models":[]}
+{"name":"separate_closed_inequalities","source":"p(X):-0<X,X<3.","source_sha256":"0b263fd5425c35d57fe5c8b51562c1cfd30fba00ad957902e2c1dc200e5e0686","valid":true,"native":"admit","models":[["p(1)","p(2)"]]}

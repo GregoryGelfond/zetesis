@@ -1,0 +1,225 @@
+use super::*;
+use zetesis_ferraris::AdmissionLimits;
+
+fn theory() -> Theory {
+    Theory::new(
+        2,
+        vec![
+            Node::False,
+            Node::Atom(0),
+            Node::Atom(1),
+            Node::And(1, 2),
+            Node::Or(1, 2),
+            Node::Implies(3, 4),
+        ],
+        vec![5],
+        AdmissionLimits::default(),
+    )
+    .unwrap()
+}
+fn device() -> wgpu::Limits {
+    wgpu::Limits::default()
+}
+fn plan(graph: &Graph, limits: FormulaLimits, fresh: bool) -> Plan {
+    Plan::new(graph, 2, limits, &device(), fresh, 7).unwrap()
+}
+#[test]
+fn packed_nodes_preserve_topology_shared_atom_ids_and_original_operators() {
+    let graph = Graph::new(&theory(), &device()).unwrap();
+    let (nodes, roots) = graph.pack().unwrap();
+    assert_eq!(
+        nodes,
+        vec![
+            0, 0, 0, 2, 1, 0, 0, 0, 1, 1, 0, 1, 2, 1, 2, 5, 3, 1, 2, 6, 4, 3, 4, 7
+        ]
+    );
+    assert_eq!(roots, vec![5]);
+    assert_eq!((graph.setup_work, graph.sweep_work), (15, 57));
+    let limits = FormulaLimits::default();
+    let plan = plan(&graph, limits, true);
+    assert_eq!(
+        plan.params(&graph),
+        [2, 6, 1, 8, 1, 2, 64, 100_000_000, 15, 57, 7, 0]
+    );
+    let a = Interpretation::new(&graph.theory, [0]).unwrap();
+    let b = Interpretation::new(&graph.theory, [1]).unwrap();
+    assert_eq!(plan.pack(&graph, &[a, b]).unwrap(), vec![1, 2]);
+    let foreign = Interpretation::new(&theory(), []).unwrap();
+    assert_eq!(
+        plan.pack(&graph, &[foreign.clone(), foreign])
+            .unwrap_err()
+            .kind(),
+        GpuErrorKind::Seed
+    );
+}
+#[test]
+fn fresh_resident_and_transport_budgets_are_inclusive_and_fully_accounted() {
+    let graph = Graph::new(&theory(), &device()).unwrap();
+    let cold = plan(&graph, FormulaLimits::default(), true);
+    let hot = plan(&graph, FormulaLimits::default(), false);
+    assert_eq!(cold.accounted - hot.accounted, graph.bytes);
+    for fresh in [false, true] {
+        let bytes = plan(&graph, FormulaLimits::default(), fresh).accounted;
+        for (limit, ok) in [(bytes, true), (bytes - 1, false)] {
+            assert_eq!(
+                Plan::new(
+                    &graph,
+                    2,
+                    FormulaLimits {
+                        max_batch_bytes: limit,
+                        ..Default::default()
+                    },
+                    &device(),
+                    fresh,
+                    1
+                )
+                .is_ok(),
+                ok
+            );
+        }
+    }
+    let smaller = Plan::new(&graph, 1, FormulaLimits::default(), &device(), false, 1).unwrap();
+    assert!(smaller.transport < hot.transport);
+    assert!(
+        Plan::new(
+            &graph,
+            2,
+            FormulaLimits {
+                max_candidates: 1,
+                ..Default::default()
+            },
+            &device(),
+            false,
+            1
+        )
+        .is_err()
+    );
+    let work = graph.setup_work;
+    assert!(
+        Plan::new(
+            &graph,
+            2,
+            FormulaLimits {
+                max_work_per_candidate: work,
+                ..Default::default()
+            },
+            &device(),
+            false,
+            1
+        )
+        .is_ok()
+    );
+    assert!(
+        Plan::new(
+            &graph,
+            2,
+            FormulaLimits {
+                max_work_per_candidate: work - 1,
+                ..Default::default()
+            },
+            &device(),
+            false,
+            1
+        )
+        .is_err()
+    );
+}
+#[test]
+fn device_limits_zero_atoms_and_word_boundaries_have_explicit_layouts() {
+    for count in [0usize, 1, 31, 32, 33, 63, 64, 65, 4097] {
+        let theory = Theory::new(count, vec![], vec![], AdmissionLimits::default()).unwrap();
+        let graph = Graph::new(&theory, &device()).unwrap();
+        let plan = Plan::new(&graph, 1, FormulaLimits::default(), &device(), true, 1).unwrap();
+        let candidate = Interpretation::new(&theory, 0..count).unwrap();
+        let packed = plan.pack(&graph, &[candidate]).unwrap();
+        assert_eq!(packed.len(), count.div_ceil(32).max(1));
+        if count > 0 {
+            assert_eq!(
+                packed[(count - 1) / 32],
+                u32::MAX >> (31 - (count - 1) % 32)
+            );
+        }
+        assert_eq!(graph.pack().unwrap(), (vec![0; 4], vec![0]));
+    }
+    let mut small = device();
+    small.max_storage_buffer_binding_size = 16;
+    assert!(Graph::new(&theory(), &small).is_err());
+    let graph = Graph::new(&theory(), &device()).unwrap();
+    small = device();
+    small.max_compute_workgroups_per_dimension = 1;
+    assert!(Plan::new(&graph, 2, FormulaLimits::default(), &small, false, 1).is_err());
+    small = device();
+    small.max_uniform_buffer_binding_size = 47;
+    assert!(Plan::new(&graph, 1, FormulaLimits::default(), &small, false, 1).is_err());
+    small = device();
+    small.max_buffer_size = 47;
+    assert!(Plan::new(&graph, 2, FormulaLimits::default(), &small, false, 1).is_err());
+    if usize::BITS > 32 {
+        assert!(address(usize::MAX).is_err());
+    }
+    assert!(mul(u64::MAX, 2).is_err());
+    assert!(sum(&[u64::MAX, 1]).is_err());
+}
+#[test]
+fn result_records_validate_epoch_world_status_and_exact_charged_work() {
+    let graph = Graph::new(&theory(), &device()).unwrap();
+    let plan = plan(&graph, FormulaLimits::default(), false);
+    let valid = [7, 0, 1, 0, 15, MAGIC, 7, 1, 2, 1, 72, MAGIC];
+    let checks = decode(&valid, &plan).unwrap();
+    assert_eq!(checks[0].verdict(), FormulaVerdict::NotModel);
+    assert_eq!(checks[1].verdict(), FormulaVerdict::NoProperSubset);
+    assert_eq!(
+        checks[1].statistics(),
+        FormulaStatistics {
+            work: 72,
+            rounds: 1
+        }
+    );
+    for (index, value) in [
+        (0, 6),
+        (1, 1),
+        (2, 0),
+        (3, 1),
+        (4, 14),
+        (5, 0),
+        (8, 2),
+        (9, 0),
+        (10, 71),
+    ] {
+        let mut invalid = valid;
+        invalid[index] = value;
+        if invalid == valid {
+            continue;
+        }
+        assert!(decode(&invalid, &plan).is_err(), "{index}={value}");
+    }
+    assert!(decode(&valid[..11], &plan).is_err());
+    for (limits, status, reason) in [
+        (
+            FormulaLimits {
+                max_rounds: 0,
+                ..Default::default()
+            },
+            4,
+            ResidualReason::RoundLimit,
+        ),
+        (
+            FormulaLimits {
+                max_work_per_candidate: 15,
+                ..Default::default()
+            },
+            5,
+            ResidualReason::WorkLimit,
+        ),
+    ] {
+        let bounded = Plan::new(&graph, 1, limits, &device(), false, 1).unwrap();
+        let result = decode(&[1, 0, status, 0, 15, MAGIC], &bounded).unwrap();
+        assert_eq!(result[0].verdict(), FormulaVerdict::Residual(reason));
+        assert!(decode(&[1, 0, 2, 0, 15, MAGIC], &bounded).is_err());
+    }
+    let fixed = Plan::new(&graph, 1, FormulaLimits::default(), &device(), false, 1).unwrap();
+    assert_eq!(
+        decode(&[1, 0, 3, 1, 72, MAGIC], &fixed).unwrap()[0].verdict(),
+        FormulaVerdict::Residual(ResidualReason::FixedPoint)
+    );
+}

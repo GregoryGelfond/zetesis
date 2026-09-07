@@ -1,0 +1,20 @@
+{"name":"sibling_bindings","source":"d(1;2). p(X,Y):-d(X),d(Y),X+Y=3,X!=Y.","records":[[["d(1)","d(2)","p(1,2)","p(2,1)"],null]]}
+{"name":"same_depth_repeated_variable","source":"d(1;2). e(1,2).e(2,2).p(X):-d(X),e(X,X),X+1=3.","records":[[["d(1)","d(2)","e(1,2)","e(2,2)","p(2)"],null]]}
+{"name":"empty_positive_true","source":"{a}. p:-1=1,not a.","records":[[["a"],null],[["p"],null]]}
+{"name":"empty_positive_false","source":"{a}. p:-1=2,not a.","records":[[[],null],[["a"],null]]}
+{"name":"negative_alternative_witnesses","source":"d(1;2).{off(1);off(2)}.p:-d(X),X+0>0,not off(X).","records":[[["d(1)","d(2)","off(1)","off(2)"],null],[["d(1)","d(2)","off(1)","p"],null],[["d(1)","d(2)","off(2)","p"],null],[["d(1)","d(2)","p"],null]]}
+{"name":"double_negative_alternative_witnesses","source":"d(1;2).{on(1);on(2)}.p:-d(X),X+0>0,not not on(X).","records":[[["d(1)","d(2)"],null],[["d(1)","d(2)","on(1)","on(2)","p"],null],[["d(1)","d(2)","on(1)","p"],null],[["d(1)","d(2)","on(2)","p"],null]]}
+{"name":"tuple_residual","source":"d(1;2).p(X,Y):-d(X),d(Y),X+Y=3,(X,Y)!=(1,2).","records":[[["d(1)","d(2)","p(2,1)"],null]]}
+{"name":"range_residual","source":"d(1;2;3).p(X):-d(X),X+0>0,X=2..3.","records":[[["d(1)","d(2)","d(3)","p(2)","p(3)"],null]]}
+{"name":"generated_range","source":"d(1;2).p(X,Y):-d(X),Y=1..2,X+Y=3.","records":[[["d(1)","d(2)","p(1,2)","p(2,1)"],null]]}
+{"name":"generated_scalar","source":"d(1;2).p(X,Y):-d(X),Y=X+1,Y=3.","records":[[["d(1)","d(2)","p(2,3)"],null]]}
+{"name":"generated_head","source":"d(1;2).p(X+1):-d(X),X+0=2.","records":[[["d(1)","d(2)","p(3)"],null]]}
+{"name":"local_choice","source":"d(1;2).{p(X):d(X),X+0=2}.","records":[[["d(1)","d(2)"],null],[["d(1)","d(2)","p(2)"],null]]}
+{"name":"local_aggregate","source":"d(1;2).p:-#count{X:d(X),X+0=2}=1.","records":[[["d(1)","d(2)","p"],null]]}
+{"name":"factor_fixed_head","source":"key(1;2).left(1,2).left(2,2).right(1,3).right(2,1).p(X):-key(X),left(X,Y),right(X,Z),Y!=X,Z!=X.","records":[[["key(1)","key(2)","left(1,2)","left(2,2)","p(1)","right(1,3)","right(2,1)"],null]]}
+{"name":"factor_disjoint_constraint","source":"d(1;2).{a;b}.:-d(X),d(Y),X=1,Y=2,a,b.","records":[[["a","d(1)","d(2)"],null],[["b","d(1)","d(2)"],null],[["d(1)","d(2)"],null]]}
+{"name":"deferred_dead_join","source":"d(0).e(1).p(X):-d(X),1/X>0,e(X),X>=0.","records":[[["d(0)","e(1)"],null]]}
+{"name":"deferred_dead_generated_join","source":"d(0).e(1).p(Y):-d(X),1/X>0,e(X),Y=1..2.","records":[[["d(0)","e(1)"],null]]}
+{"name":"earlier_false_discards_invalid","source":"d(0).p:-d(X),X!=0,1/X>0.","records":[[["d(0)"],null]]}
+{"name":"recursive_filtered","source":"{p(0)}.p(X):-p(Y),d(X),X=Y+1.d(1;2).","records":[[["d(1)","d(2)"],null],[["d(1)","d(2)","p(0)","p(1)","p(2)"],null]]}
+{"name":"local_fixed_outer","source":"d(1;2).{p(X,Y):d(Y),X+Y=3}:-d(X).","records":[[["d(1)","d(2)"],null],[["d(1)","d(2)","p(1,2)"],null],[["d(1)","d(2)","p(1,2)","p(2,1)"],null],[["d(1)","d(2)","p(2,1)"],null]]}

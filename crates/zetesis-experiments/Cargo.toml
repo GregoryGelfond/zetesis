@@ -1,0 +1,31 @@
+[package]
+name = "zetesis-experiments"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "Reproducible conformance and backend measurements for zetesis."
+
+[dependencies]
+zetesis-core.workspace = true
+zetesis-cpu.workspace = true
+zetesis-wgpu.workspace = true
+zetesis-ferraris.workspace = true
+zetesis-sat.workspace = true
+clap.workspace = true
+rayon.workspace = true
+
+[dev-dependencies]
+criterion = { version = "0.7", default-features = false, features = ["cargo_bench_support"] }
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "zetesis-bench"
+path = "src/main.rs"
+
+[[bench]]
+name = "oracles"
+harness = false

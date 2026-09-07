@@ -1,0 +1,137 @@
+{
+  "inspection_date": "2026-09-06",
+  "purpose": "Read-only architecture investigation; no solve/build or theory-support qualification.",
+  "themelios_current_commit": "c4d4045dd0e248ce1922dfa6aa3bfa968b7c6d1d",
+  "themelios_status_porcelain": "",
+  "themelios_dependency_pin": "87c11a3f2b72b81a12fd53226941fdf95e7294d3",
+  "themelios_files": [
+    {
+      "path": "docs/design/solve.md",
+      "current_sha256": "c1a0360242ea123e24dc121678d685386b52a93f72fe25d65e07acda8eef8513",
+      "pinned_sha256": "c1a0360242ea123e24dc121678d685386b52a93f72fe25d65e07acda8eef8513",
+      "equal_to_pin": true
+    },
+    {
+      "path": "docs/design/program.md",
+      "current_sha256": "b677ca1e520b872794b9a8fc72b92f904cfa81ef7d397f0be706d5ca5914eab0",
+      "pinned_sha256": "b677ca1e520b872794b9a8fc72b92f904cfa81ef7d397f0be706d5ca5914eab0",
+      "equal_to_pin": true
+    },
+    {
+      "path": "docs/design/base.md",
+      "current_sha256": "d7a656f42820382e47e202dd0715fd3316e23b93ff35473b2c374ba3d424192c",
+      "pinned_sha256": "d7a656f42820382e47e202dd0715fd3316e23b93ff35473b2c374ba3d424192c",
+      "equal_to_pin": true
+    },
+    {
+      "path": "docs/specification.md",
+      "current_sha256": "371dbb3d29644939adb38d909c23474d65bdeee2cff82baa413fd9868693bd09",
+      "pinned_sha256": "371dbb3d29644939adb38d909c23474d65bdeee2cff82baa413fd9868693bd09",
+      "equal_to_pin": true
+    },
+    {
+      "path": "Cargo.toml",
+      "current_sha256": "02fc277462522ec230955a0d013dd054fb00a721189bc7836632eb23451cd441",
+      "pinned_sha256": "02fc277462522ec230955a0d013dd054fb00a721189bc7836632eb23451cd441",
+      "equal_to_pin": true
+    },
+    {
+      "path": "crates/themelios-program/src/program/directive.rs",
+      "current_sha256": "09ba027ebdd9b8fb919e177e0dccb0993600c3c4f554947128de7c06216c8774",
+      "pinned_sha256": "09ba027ebdd9b8fb919e177e0dccb0993600c3c4f554947128de7c06216c8774",
+      "equal_to_pin": true
+    },
+    {
+      "path": "crates/themelios-program/src/transform.rs",
+      "current_sha256": "53ab28f235a5b054e1b6e09e8da3874703f0d041dca46099be673d8279397431",
+      "pinned_sha256": "53ab28f235a5b054e1b6e09e8da3874703f0d041dca46099be673d8279397431",
+      "equal_to_pin": true
+    },
+    {
+      "path": "crates/themelios-analysis/src/safe.rs",
+      "current_sha256": "ade473c60ed7ae7360dc5b60f6e3a9665223d126e575700fbca86b7a85f4d99c",
+      "pinned_sha256": "d6d7a86711ad6aa4b4fd3a611a44392f94f9dca4a205133322b7de560ee6ef44",
+      "equal_to_pin": false
+    },
+    {
+      "path": "crates/themelios-syntax/src/parse/theory.rs",
+      "current_sha256": "2768406805c0abfe87d85a4389edc2b56b328d8835abfc0078b1a96a5f7202a5",
+      "pinned_sha256": "2768406805c0abfe87d85a4389edc2b56b328d8835abfc0078b1a96a5f7202a5",
+      "equal_to_pin": true
+    }
+  ],
+  "zetesis_reference_files": [
+    {
+      "path": "docs/design/zetesis.md",
+      "sha256": "09d01beca39626dfd8cceaa40e31d0b7901feaeb6f1e8fea9bf4abf6cd8dcb96"
+    },
+    {
+      "path": "docs/design/themelios-solve-integration.md",
+      "sha256": "072edf8d32b196f30647ba4ef1ed3ffbfdecc2b413488a0c23a8855c1b82088d"
+    },
+    {
+      "path": "docs/design/rust-functions.md",
+      "sha256": "2362b60cfa221671e7291cb120b85b1ede30443d068d0635787c9509a1a7c5a0"
+    },
+    {
+      "path": "docs/design/incremental-sessions.md",
+      "sha256": "ec0925ebbcc49463cc858053497444ea884d2914ff95a23392fb9c21a4cdadbc"
+    },
+    {
+      "path": "docs/design/native-search.md",
+      "sha256": "2d14ad26e7fec7a04153cb0398e93e8b72fa8170592fad2b0aa1cb05809746af"
+    },
+    {
+      "path": "docs/design/ferraris.md",
+      "sha256": "36064d8ea48ff02f2cae35ba81cbedd91250dbadc83031ffb75749ea06c5269f"
+    },
+    {
+      "path": "docs/verification/stocktake-20260906-conditionals-objectives.md",
+      "sha256": "9a3f04351cd27928b95b069983752bb8b3aa720bb89275d961c4b8d3a2947f47"
+    },
+    {
+      "path": "crates/zetesis-ferraris/src/theory.rs",
+      "sha256": "16d1d48dfa68487c7ed4bda8eb3e338ac42a6b72792947164ebc3d8c9d035185"
+    },
+    {
+      "path": "crates/zetesis-sat/src/batch.rs",
+      "sha256": "62adf8cbbd0615ce5d054baf2b4b4fa33701325b664397bd8763560de8c7c74a"
+    },
+    {
+      "path": "crates/zetesis-sat/src/ferraris.rs",
+      "sha256": "7f40a7638d6f40790fb0405f7224d512cbd0619c9a7a437b0ad1268b2b00a4f3"
+    },
+    {
+      "path": "crates/zetesis-cli/src/formula_execution.rs",
+      "sha256": "e016c4a7571c9e0a76049caedd1ed08a934e698791ff5c581c7e94c5243bbf48"
+    },
+    {
+      "path": "crates/zetesis-cli/src/countermodel.rs",
+      "sha256": "75dfaac156bdceca453063cf20efd5d7e46a35b898b3b2fcada591ab0688f065"
+    }
+  ],
+  "installed_clingcon_reference_files": [
+    {
+      "path": "<clingcon-package>/include/clingcon.h",
+      "sha256": "5b90d2b9990170458c2250c97ed342c15fadb296dc74fe6ee3b8a313da9ad519"
+    },
+    {
+      "path": "<clingcon-package>/lib/python3.14/site-packages/clingcon/__init__.py",
+      "sha256": "440f93ffd88907df86c2584a257dcb3517c88665439c401cd474ce665097ca53"
+    },
+    {
+      "path": "<clingcon-package>/lib/python3.14/site-packages/clingcon/__main__.py",
+      "sha256": "a59f023a10d8392cad8f99691cb10d76cfa7ecc036440cd512196be12b571530"
+    },
+    {
+      "path": "<clingcon-package>/conda-meta/clingcon-5.2.1-py314h93ecee7_2.json",
+      "sha256": "7639f7199bf8c95ede976cdee7e479ed3cec32b838a439e9e6456dfb49901cf0"
+    }
+  ],
+  "themelios_workspace_crates": [
+    "crates/themelios-analysis",
+    "crates/themelios-base",
+    "crates/themelios-program",
+    "crates/themelios-syntax"
+  ]
+}

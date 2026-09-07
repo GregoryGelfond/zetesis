@@ -1,0 +1,5252 @@
+{
+  "schema": 1,
+  "status": "manual formulas and independent clingo probes executed; native checks in disjunction.rs",
+  "source_origin": "new hand-authored independent regression inputs, no external source copied",
+  "manual_formula_grammar": "atom string | false | [and/or/imp,left,right]; true encoded as false->false; no production frontend involved",
+  "cases": [
+    {
+      "name": "plain",
+      "source": "a | b.\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "b"
+        ],
+        "roots": [
+          [
+            "or",
+            [
+              "or",
+              false,
+              "a"
+            ],
+            "b"
+          ]
+        ],
+        "producer_bodies": {
+          "a": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "b": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a"
+        ],
+        [
+          "b"
+        ]
+      ],
+      "objective": null,
+      "notes": "A genuine disjunction, not a choice or two facts.",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/plain.lp",
+      "sha256": "ebf852e13269be850fc42f5892e39dcc445161e07eb3b962e1b28b9733ae12c2",
+      "reference": [
+        {
+          "name": "plain",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/plain.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/plain.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a"
+              ],
+              [
+                "b"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "mutual-cycle",
+      "source": "a | b. a :- b. b :- a.\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "b"
+        ],
+        "roots": [
+          [
+            "or",
+            [
+              "or",
+              false,
+              "a"
+            ],
+            "b"
+          ],
+          [
+            "imp",
+            "b",
+            "a"
+          ],
+          [
+            "imp",
+            "a",
+            "b"
+          ]
+        ],
+        "producer_bodies": {
+          "a": [
+            [
+              "imp",
+              false,
+              false
+            ],
+            "b"
+          ],
+          "b": [
+            [
+              "imp",
+              false,
+              false
+            ],
+            "a"
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a",
+          "b"
+        ]
+      ],
+      "objective": null,
+      "notes": "Both head atoms may belong to the same stable model; shifting fails here.",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/mutual-cycle.lp",
+      "sha256": "9bf60e4e9b57285d987909d179968ad282421208966aaa9679bcf91f16e48101",
+      "reference": [
+        {
+          "name": "mutual-cycle",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/mutual-cycle.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/mutual-cycle.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\", \"b\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a",
+                "b"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "unsupported-cycle",
+      "source": "a | b :- c. c :- a. c :- b.\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "b",
+          "c"
+        ],
+        "roots": [
+          [
+            "imp",
+            "c",
+            [
+              "or",
+              [
+                "or",
+                false,
+                "a"
+              ],
+              "b"
+            ]
+          ],
+          [
+            "imp",
+            "a",
+            "c"
+          ],
+          [
+            "imp",
+            "b",
+            "c"
+          ]
+        ],
+        "producer_bodies": {
+          "a": [
+            "c"
+          ],
+          "b": [
+            "c"
+          ],
+          "c": [
+            "a",
+            "b"
+          ]
+        }
+      },
+      "expected_stable_models": [
+        []
+      ],
+      "objective": null,
+      "notes": "Possible support must start empty and not invent cyclic support.",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/unsupported-cycle.lp",
+      "sha256": "cc9f54b37ab35ba24094315cc6619a22432e4dff943d8deed7547d31fa9dd287",
+      "reference": [
+        {
+          "name": "unsupported-cycle",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/unsupported-cycle.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/unsupported-cycle.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              []
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "negative-body",
+      "source": "a | b :- not c. c :- not a, not b.\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "b",
+          "c"
+        ],
+        "roots": [
+          [
+            "imp",
+            [
+              "imp",
+              "c",
+              false
+            ],
+            [
+              "or",
+              [
+                "or",
+                false,
+                "a"
+              ],
+              "b"
+            ]
+          ],
+          [
+            "imp",
+            [
+              "and",
+              [
+                "and",
+                [
+                  "imp",
+                  false,
+                  false
+                ],
+                [
+                  "imp",
+                  "a",
+                  false
+                ]
+              ],
+              [
+                "imp",
+                "b",
+                false
+              ]
+            ],
+            "c"
+          ]
+        ],
+        "producer_bodies": {
+          "a": [
+            [
+              "imp",
+              "c",
+              false
+            ]
+          ],
+          "b": [
+            [
+              "imp",
+              "c",
+              false
+            ]
+          ],
+          "c": [
+            [
+              "and",
+              [
+                "and",
+                [
+                  "imp",
+                  false,
+                  false
+                ],
+                [
+                  "imp",
+                  "a",
+                  false
+                ]
+              ],
+              [
+                "imp",
+                "b",
+                false
+              ]
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a"
+        ],
+        [
+          "b"
+        ],
+        [
+          "c"
+        ]
+      ],
+      "objective": null,
+      "notes": "",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/negative-body.lp",
+      "sha256": "280d3868416abef619eb80c1ed4f061241a3d0f2fb7b59adee230f979481c9be",
+      "reference": [
+        {
+          "name": "negative-body",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/negative-body.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/negative-body.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        },\n        {\n          \"Time\": 0.001,\n          \"Value\": [\n            \"b\"\n          ]\n        }\n      ],\n      \"Stop\": 0.001\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 3,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.001,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a"
+              ],
+              [
+                "b"
+              ],
+              [
+                "c"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "double-negative-body",
+      "source": "a | b :- not not a.\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "b"
+        ],
+        "roots": [
+          [
+            "imp",
+            [
+              "imp",
+              [
+                "imp",
+                "a",
+                false
+              ],
+              false
+            ],
+            [
+              "or",
+              [
+                "or",
+                false,
+                "a"
+              ],
+              "b"
+            ]
+          ]
+        ],
+        "producer_bodies": {
+          "a": [
+            [
+              "imp",
+              [
+                "imp",
+                "a",
+                false
+              ],
+              false
+            ]
+          ],
+          "b": [
+            [
+              "imp",
+              [
+                "imp",
+                "a",
+                false
+              ],
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [],
+        [
+          "a"
+        ]
+      ],
+      "objective": null,
+      "notes": "Frozen default negation must remain structural.",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/double-negative-body.lp",
+      "sha256": "8841ffa7c821a4f1f4c8b8350588d572bbca186b051081b7ad6f080725eb7441",
+      "reference": [
+        {
+          "name": "double-negative-body",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/double-negative-body.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/double-negative-body.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [],
+              [
+                "a"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "duplicates",
+      "source": "a | a.\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a"
+        ],
+        "roots": [
+          [
+            "or",
+            [
+              "or",
+              false,
+              "a"
+            ],
+            "a"
+          ]
+        ],
+        "producer_bodies": {
+          "a": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a"
+        ]
+      ],
+      "objective": null,
+      "notes": "Duplicate head syntax may merge origins but cannot change the formula.",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/duplicates.lp",
+      "sha256": "b7fedd1a6ab6416bfca15b4270a3175a7b8f6b19d977d4d40f88d3a6982135ff",
+      "reference": [
+        {
+          "name": "duplicates",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/duplicates.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/duplicates.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "constraint",
+      "source": "a | b. :- a.\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "b"
+        ],
+        "roots": [
+          [
+            "or",
+            [
+              "or",
+              false,
+              "a"
+            ],
+            "b"
+          ],
+          [
+            "imp",
+            "a",
+            false
+          ]
+        ],
+        "producer_bodies": {
+          "a": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "b": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "b"
+        ]
+      ],
+      "objective": null,
+      "notes": "",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/constraint.lp",
+      "sha256": "2557c2ffa4ebdd32a46ba703e379de55f01304145d883f236d42b6aada96bea5",
+      "reference": [
+        {
+          "name": "constraint",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/constraint.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/constraint.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "b"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "other-producer",
+      "source": "a | b. a.\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "b"
+        ],
+        "roots": [
+          [
+            "or",
+            [
+              "or",
+              false,
+              "a"
+            ],
+            "b"
+          ],
+          "a"
+        ],
+        "producer_bodies": {
+          "a": [
+            [
+              "imp",
+              false,
+              false
+            ],
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "b": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a"
+        ]
+      ],
+      "objective": null,
+      "notes": "Support union includes all producers; b is not thereby required.",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/other-producer.lp",
+      "sha256": "caef2e34dd8698822b3f4e9ce5228d7af3cc29dcfbcca0a1cb64fbaca0e3a997",
+      "reference": [
+        {
+          "name": "other-producer",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/other-producer.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/other-producer.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "one-way-cycle",
+      "source": "a | b. a :- b.\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "b"
+        ],
+        "roots": [
+          [
+            "or",
+            [
+              "or",
+              false,
+              "a"
+            ],
+            "b"
+          ],
+          [
+            "imp",
+            "b",
+            "a"
+          ]
+        ],
+        "producer_bodies": {
+          "a": [
+            [
+              "imp",
+              false,
+              false
+            ],
+            "b"
+          ],
+          "b": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a"
+        ]
+      ],
+      "objective": null,
+      "notes": "",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/one-way-cycle.lp",
+      "sha256": "56fe0b99524d49ef64b9b41d4110142c1ab95c62fe5b5d29b8f3f9c33dabf4bf",
+      "reference": [
+        {
+          "name": "one-way-cycle",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/one-way-cycle.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/one-way-cycle.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "consequence",
+      "source": "a | b. c :- a. c :- b.\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "b",
+          "c"
+        ],
+        "roots": [
+          [
+            "or",
+            [
+              "or",
+              false,
+              "a"
+            ],
+            "b"
+          ],
+          [
+            "imp",
+            "a",
+            "c"
+          ],
+          [
+            "imp",
+            "b",
+            "c"
+          ]
+        ],
+        "producer_bodies": {
+          "a": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "b": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "c": [
+            "a",
+            "b"
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a",
+          "c"
+        ],
+        [
+          "b",
+          "c"
+        ]
+      ],
+      "objective": null,
+      "notes": "",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/consequence.lp",
+      "sha256": "6be6a487105a49459bda6c9c780471aa2e50f262a7538a8213f207c7450d195e",
+      "reference": [
+        {
+          "name": "consequence",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/consequence.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/consequence.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\", \"c\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\", \"c\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a",
+                "c"
+              ],
+              [
+                "b",
+                "c"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "false-body",
+      "source": "a | b :- c.\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "b",
+          "c"
+        ],
+        "roots": [
+          [
+            "imp",
+            "c",
+            [
+              "or",
+              [
+                "or",
+                false,
+                "a"
+              ],
+              "b"
+            ]
+          ]
+        ],
+        "producer_bodies": {
+          "a": [
+            "c"
+          ],
+          "b": [
+            "c"
+          ],
+          "c": []
+        }
+      },
+      "expected_stable_models": [
+        []
+      ],
+      "objective": null,
+      "notes": "",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/false-body.lp",
+      "sha256": "a40e4d5f439de3879023304b512a3c89ebab58a861140fdfe497b7ed270efe2a",
+      "reference": [
+        {
+          "name": "false-body",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/false-body.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/false-body.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              []
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "head-overlap",
+      "source": "a | b. b | c.\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "b",
+          "c"
+        ],
+        "roots": [
+          [
+            "or",
+            [
+              "or",
+              false,
+              "a"
+            ],
+            "b"
+          ],
+          [
+            "or",
+            [
+              "or",
+              false,
+              "b"
+            ],
+            "c"
+          ]
+        ],
+        "producer_bodies": {
+          "a": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "b": [
+            [
+              "imp",
+              false,
+              false
+            ],
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "c": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a",
+          "c"
+        ],
+        [
+          "b"
+        ]
+      ],
+      "objective": null,
+      "notes": "",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/head-overlap.lp",
+      "sha256": "8a8fa3b61ca4da30ee2bb54e218426b99d7fed3553bdbe7648b387f9fa5890bf",
+      "reference": [
+        {
+          "name": "head-overlap",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/head-overlap.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/head-overlap.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"a\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a",
+                "c"
+              ],
+              [
+                "b"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "scalar-identity",
+      "source": "p(\"x\") | q(x).\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "p(\"x\")",
+          "q(x)"
+        ],
+        "roots": [
+          [
+            "or",
+            [
+              "or",
+              false,
+              "p(\"x\")"
+            ],
+            "q(x)"
+          ]
+        ],
+        "producer_bodies": {
+          "p(\"x\")": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "q(x)": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "p(\"x\")"
+        ],
+        [
+          "q(x)"
+        ]
+      ],
+      "objective": null,
+      "notes": "",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/scalar-identity.lp",
+      "sha256": "9b7c14b3ae485252a2ac8c2570653ab7cbd3e5f1ead090017dc6a4d998a2e7c1",
+      "reference": [
+        {
+          "name": "scalar-identity",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/scalar-identity.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/scalar-identity.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"q(x)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"p(\\\"x\\\")\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "p(\"x\")"
+              ],
+              [
+                "q(x)"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "ground-head-arithmetic",
+      "source": "a(1+2) | b.\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a(3)",
+          "b"
+        ],
+        "roots": [
+          [
+            "or",
+            [
+              "or",
+              false,
+              "a(3)"
+            ],
+            "b"
+          ]
+        ],
+        "producer_bodies": {
+          "a(3)": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "b": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a(3)"
+        ],
+        [
+          "b"
+        ]
+      ],
+      "objective": null,
+      "notes": "Existing constant normalization may reduce arithmetic before the scalar-head profile.",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/ground-head-arithmetic.lp",
+      "sha256": "2d599caf32fa1f125252c8c81135836d005644fb8111ed7de861de386b24c3be",
+      "reference": [
+        {
+          "name": "ground-head-arithmetic",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/ground-head-arithmetic.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/ground-head-arithmetic.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a(3)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a(3)"
+              ],
+              [
+                "b"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "shared-head-variable",
+      "source": "d(1). d(2). a(X) | b(X) :- d(X).\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a(1)",
+          "a(2)",
+          "b(1)",
+          "b(2)",
+          "d(1)",
+          "d(2)"
+        ],
+        "roots": [
+          "d(1)",
+          "d(2)",
+          [
+            "imp",
+            "d(1)",
+            [
+              "or",
+              [
+                "or",
+                false,
+                "a(1)"
+              ],
+              "b(1)"
+            ]
+          ],
+          [
+            "imp",
+            "d(2)",
+            [
+              "or",
+              [
+                "or",
+                false,
+                "a(2)"
+              ],
+              "b(2)"
+            ]
+          ]
+        ],
+        "producer_bodies": {
+          "a(1)": [
+            "d(1)"
+          ],
+          "a(2)": [
+            "d(2)"
+          ],
+          "b(1)": [
+            "d(1)"
+          ],
+          "b(2)": [
+            "d(2)"
+          ],
+          "d(1)": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "d(2)": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a(1)",
+          "a(2)",
+          "d(1)",
+          "d(2)"
+        ],
+        [
+          "a(1)",
+          "b(2)",
+          "d(1)",
+          "d(2)"
+        ],
+        [
+          "a(2)",
+          "b(1)",
+          "d(1)",
+          "d(2)"
+        ],
+        [
+          "b(1)",
+          "b(2)",
+          "d(1)",
+          "d(2)"
+        ]
+      ],
+      "objective": null,
+      "notes": "",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/shared-head-variable.lp",
+      "sha256": "63f4ff32936670cf0c0302d3607d99718c19dd3aafb6aaf2206290756583121a",
+      "reference": [
+        {
+          "name": "shared-head-variable",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/shared-head-variable.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/shared-head-variable.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"b(1)\", \"a(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"b(1)\", \"b(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"a(1)\", \"a(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"a(1)\", \"b(2)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 4,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a(1)",
+                "a(2)",
+                "d(1)",
+                "d(2)"
+              ],
+              [
+                "a(1)",
+                "b(2)",
+                "d(1)",
+                "d(2)"
+              ],
+              [
+                "a(2)",
+                "b(1)",
+                "d(1)",
+                "d(2)"
+              ],
+              [
+                "b(1)",
+                "b(2)",
+                "d(1)",
+                "d(2)"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "repeated-head-variable",
+      "source": "d(1). d(2). a(X,X) | b(X) :- d(X).\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a(1,1)",
+          "a(2,2)",
+          "b(1)",
+          "b(2)",
+          "d(1)",
+          "d(2)"
+        ],
+        "roots": [
+          "d(1)",
+          "d(2)",
+          [
+            "imp",
+            "d(1)",
+            [
+              "or",
+              [
+                "or",
+                false,
+                "a(1,1)"
+              ],
+              "b(1)"
+            ]
+          ],
+          [
+            "imp",
+            "d(2)",
+            [
+              "or",
+              [
+                "or",
+                false,
+                "a(2,2)"
+              ],
+              "b(2)"
+            ]
+          ]
+        ],
+        "producer_bodies": {
+          "a(1,1)": [
+            "d(1)"
+          ],
+          "a(2,2)": [
+            "d(2)"
+          ],
+          "b(1)": [
+            "d(1)"
+          ],
+          "b(2)": [
+            "d(2)"
+          ],
+          "d(1)": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "d(2)": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a(1,1)",
+          "a(2,2)",
+          "d(1)",
+          "d(2)"
+        ],
+        [
+          "a(1,1)",
+          "b(2)",
+          "d(1)",
+          "d(2)"
+        ],
+        [
+          "a(2,2)",
+          "b(1)",
+          "d(1)",
+          "d(2)"
+        ],
+        [
+          "b(1)",
+          "b(2)",
+          "d(1)",
+          "d(2)"
+        ]
+      ],
+      "objective": null,
+      "notes": "",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/repeated-head-variable.lp",
+      "sha256": "52f30722918c2f50ce55c10701fd088a6fee5d10ec744cca873d1abc11e485d8",
+      "reference": [
+        {
+          "name": "repeated-head-variable",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/repeated-head-variable.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/repeated-head-variable.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"b(1)\", \"a(2,2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"b(1)\", \"b(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"a(1,1)\", \"a(2,2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"a(1,1)\", \"b(2)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 4,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a(1,1)",
+                "a(2,2)",
+                "d(1)",
+                "d(2)"
+              ],
+              [
+                "a(1,1)",
+                "b(2)",
+                "d(1)",
+                "d(2)"
+              ],
+              [
+                "a(2,2)",
+                "b(1)",
+                "d(1)",
+                "d(2)"
+              ],
+              [
+                "b(1)",
+                "b(2)",
+                "d(1)",
+                "d(2)"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "all-head-separators",
+      "source": "d(1). d(2). e(1). e(2). a(X) | b(Y) :- d(X), e(Y).\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a(1)",
+          "a(2)",
+          "b(1)",
+          "b(2)",
+          "d(1)",
+          "d(2)",
+          "e(1)",
+          "e(2)"
+        ],
+        "roots": [
+          "d(1)",
+          "d(2)",
+          "e(1)",
+          "e(2)",
+          [
+            "imp",
+            [
+              "and",
+              [
+                "and",
+                [
+                  "imp",
+                  false,
+                  false
+                ],
+                "d(1)"
+              ],
+              "e(1)"
+            ],
+            [
+              "or",
+              [
+                "or",
+                false,
+                "a(1)"
+              ],
+              "b(1)"
+            ]
+          ],
+          [
+            "imp",
+            [
+              "and",
+              [
+                "and",
+                [
+                  "imp",
+                  false,
+                  false
+                ],
+                "d(1)"
+              ],
+              "e(2)"
+            ],
+            [
+              "or",
+              [
+                "or",
+                false,
+                "a(1)"
+              ],
+              "b(2)"
+            ]
+          ],
+          [
+            "imp",
+            [
+              "and",
+              [
+                "and",
+                [
+                  "imp",
+                  false,
+                  false
+                ],
+                "d(2)"
+              ],
+              "e(1)"
+            ],
+            [
+              "or",
+              [
+                "or",
+                false,
+                "a(2)"
+              ],
+              "b(1)"
+            ]
+          ],
+          [
+            "imp",
+            [
+              "and",
+              [
+                "and",
+                [
+                  "imp",
+                  false,
+                  false
+                ],
+                "d(2)"
+              ],
+              "e(2)"
+            ],
+            [
+              "or",
+              [
+                "or",
+                false,
+                "a(2)"
+              ],
+              "b(2)"
+            ]
+          ]
+        ],
+        "producer_bodies": {
+          "a(1)": [
+            [
+              "and",
+              [
+                "and",
+                [
+                  "imp",
+                  false,
+                  false
+                ],
+                "d(1)"
+              ],
+              "e(1)"
+            ],
+            [
+              "and",
+              [
+                "and",
+                [
+                  "imp",
+                  false,
+                  false
+                ],
+                "d(1)"
+              ],
+              "e(2)"
+            ]
+          ],
+          "a(2)": [
+            [
+              "and",
+              [
+                "and",
+                [
+                  "imp",
+                  false,
+                  false
+                ],
+                "d(2)"
+              ],
+              "e(1)"
+            ],
+            [
+              "and",
+              [
+                "and",
+                [
+                  "imp",
+                  false,
+                  false
+                ],
+                "d(2)"
+              ],
+              "e(2)"
+            ]
+          ],
+          "b(1)": [
+            [
+              "and",
+              [
+                "and",
+                [
+                  "imp",
+                  false,
+                  false
+                ],
+                "d(1)"
+              ],
+              "e(1)"
+            ],
+            [
+              "and",
+              [
+                "and",
+                [
+                  "imp",
+                  false,
+                  false
+                ],
+                "d(2)"
+              ],
+              "e(1)"
+            ]
+          ],
+          "b(2)": [
+            [
+              "and",
+              [
+                "and",
+                [
+                  "imp",
+                  false,
+                  false
+                ],
+                "d(1)"
+              ],
+              "e(2)"
+            ],
+            [
+              "and",
+              [
+                "and",
+                [
+                  "imp",
+                  false,
+                  false
+                ],
+                "d(2)"
+              ],
+              "e(2)"
+            ]
+          ],
+          "d(1)": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "d(2)": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "e(1)": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "e(2)": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a(1)",
+          "a(2)",
+          "d(1)",
+          "d(2)",
+          "e(1)",
+          "e(2)"
+        ],
+        [
+          "b(1)",
+          "b(2)",
+          "d(1)",
+          "d(2)",
+          "e(1)",
+          "e(2)"
+        ]
+      ],
+      "objective": null,
+      "notes": "Any future factorization must fix the union of all head variables, not just one head.",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/all-head-separators.lp",
+      "sha256": "5a5f60494deb6869ec6167b7b0b1a621d95fb9431b23c86a6619b8135deda742",
+      "reference": [
+        {
+          "name": "all-head-separators",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/all-head-separators.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/all-head-separators.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"e(1)\", \"e(2)\", \"d(1)\", \"d(2)\", \"b(1)\", \"b(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"e(1)\", \"e(2)\", \"d(1)\", \"d(2)\", \"a(1)\", \"a(2)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a(1)",
+                "a(2)",
+                "d(1)",
+                "d(2)",
+                "e(1)",
+                "e(2)"
+              ],
+              [
+                "b(1)",
+                "b(2)",
+                "d(1)",
+                "d(2)",
+                "e(1)",
+                "e(2)"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "ground-head-coalescing",
+      "source": "d(1). d(2). a(X) | a(Y) :- d(X), d(Y).\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a(1)",
+          "a(2)",
+          "d(1)",
+          "d(2)"
+        ],
+        "roots": [
+          "d(1)",
+          "d(2)",
+          [
+            "imp",
+            [
+              "and",
+              [
+                "and",
+                [
+                  "imp",
+                  false,
+                  false
+                ],
+                "d(1)"
+              ],
+              "d(1)"
+            ],
+            [
+              "or",
+              [
+                "or",
+                false,
+                "a(1)"
+              ],
+              "a(1)"
+            ]
+          ],
+          [
+            "imp",
+            [
+              "and",
+              [
+                "and",
+                [
+                  "imp",
+                  false,
+                  false
+                ],
+                "d(1)"
+              ],
+              "d(2)"
+            ],
+            [
+              "or",
+              [
+                "or",
+                false,
+                "a(1)"
+              ],
+              "a(2)"
+            ]
+          ],
+          [
+            "imp",
+            [
+              "and",
+              [
+                "and",
+                [
+                  "imp",
+                  false,
+                  false
+                ],
+                "d(2)"
+              ],
+              "d(1)"
+            ],
+            [
+              "or",
+              [
+                "or",
+                false,
+                "a(2)"
+              ],
+              "a(1)"
+            ]
+          ],
+          [
+            "imp",
+            [
+              "and",
+              [
+                "and",
+                [
+                  "imp",
+                  false,
+                  false
+                ],
+                "d(2)"
+              ],
+              "d(2)"
+            ],
+            [
+              "or",
+              [
+                "or",
+                false,
+                "a(2)"
+              ],
+              "a(2)"
+            ]
+          ]
+        ],
+        "producer_bodies": {
+          "a(1)": [
+            [
+              "and",
+              [
+                "and",
+                [
+                  "imp",
+                  false,
+                  false
+                ],
+                "d(1)"
+              ],
+              "d(1)"
+            ],
+            [
+              "and",
+              [
+                "and",
+                [
+                  "imp",
+                  false,
+                  false
+                ],
+                "d(1)"
+              ],
+              "d(2)"
+            ],
+            [
+              "and",
+              [
+                "and",
+                [
+                  "imp",
+                  false,
+                  false
+                ],
+                "d(2)"
+              ],
+              "d(1)"
+            ]
+          ],
+          "a(2)": [
+            [
+              "and",
+              [
+                "and",
+                [
+                  "imp",
+                  false,
+                  false
+                ],
+                "d(1)"
+              ],
+              "d(2)"
+            ],
+            [
+              "and",
+              [
+                "and",
+                [
+                  "imp",
+                  false,
+                  false
+                ],
+                "d(2)"
+              ],
+              "d(1)"
+            ],
+            [
+              "and",
+              [
+                "and",
+                [
+                  "imp",
+                  false,
+                  false
+                ],
+                "d(2)"
+              ],
+              "d(2)"
+            ]
+          ],
+          "d(1)": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "d(2)": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a(1)",
+          "a(2)",
+          "d(1)",
+          "d(2)"
+        ]
+      ],
+      "objective": null,
+      "notes": "Equal instantiated heads coalesce after binding; diagonal instances force both atoms.",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/ground-head-coalescing.lp",
+      "sha256": "ca2784d1ec22ae2e34db1d713003f9c0df6a5ceefebc7612bcbc6bf32afcedaf",
+      "reference": [
+        {
+          "name": "ground-head-coalescing",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/ground-head-coalescing.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/ground-head-coalescing.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"a(1)\", \"a(2)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a(1)",
+                "a(2)",
+                "d(1)",
+                "d(2)"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "some-head-already-supported",
+      "source": "a. d(1). d(2). a | b(X) :- d(X). b(1) | c.\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "b(1)",
+          "b(2)",
+          "c",
+          "d(1)",
+          "d(2)"
+        ],
+        "roots": [
+          "a",
+          "d(1)",
+          "d(2)",
+          [
+            "imp",
+            "d(1)",
+            [
+              "or",
+              [
+                "or",
+                false,
+                "a"
+              ],
+              "b(1)"
+            ]
+          ],
+          [
+            "imp",
+            "d(2)",
+            [
+              "or",
+              [
+                "or",
+                false,
+                "a"
+              ],
+              "b(2)"
+            ]
+          ],
+          [
+            "or",
+            [
+              "or",
+              false,
+              "b(1)"
+            ],
+            "c"
+          ]
+        ],
+        "producer_bodies": {
+          "a": [
+            [
+              "imp",
+              false,
+              false
+            ],
+            "d(1)",
+            "d(2)"
+          ],
+          "b(1)": [
+            "d(1)",
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "b(2)": [
+            "d(2)"
+          ],
+          "c": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "d(1)": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "d(2)": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a",
+          "b(1)",
+          "d(1)",
+          "d(2)"
+        ],
+        [
+          "a",
+          "c",
+          "d(1)",
+          "d(2)"
+        ]
+      ],
+      "objective": null,
+      "notes": "U must include b(2) even though a was already seen; final roots cannot reuse single-head early skip.",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/some-head-already-supported.lp",
+      "sha256": "85533c0c29a8252707db3c6c7538796bd80bed5a19995a104efd92932dea7aa1",
+      "reference": [
+        {
+          "name": "some-head-already-supported",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/some-head-already-supported.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/some-head-already-supported.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"a\", \"c\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"a\", \"b(1)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a",
+                "b(1)",
+                "d(1)",
+                "d(2)"
+              ],
+              [
+                "a",
+                "c",
+                "d(1)",
+                "d(2)"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "filters",
+      "source": "d(1). d(2). a(X) | b(X) :- d(X), X != 2.\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a(1)",
+          "b(1)",
+          "d(1)",
+          "d(2)"
+        ],
+        "roots": [
+          "d(1)",
+          "d(2)",
+          [
+            "imp",
+            "d(1)",
+            [
+              "or",
+              [
+                "or",
+                false,
+                "a(1)"
+              ],
+              "b(1)"
+            ]
+          ]
+        ],
+        "producer_bodies": {
+          "a(1)": [
+            "d(1)"
+          ],
+          "b(1)": [
+            "d(1)"
+          ],
+          "d(1)": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "d(2)": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a(1)",
+          "d(1)",
+          "d(2)"
+        ],
+        [
+          "b(1)",
+          "d(1)",
+          "d(2)"
+        ]
+      ],
+      "objective": null,
+      "notes": "",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/filters.lp",
+      "sha256": "77072ca5638981c31f3da066560d6cc7bec34b64c37bd34e189071bcc038861b",
+      "reference": [
+        {
+          "name": "filters",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/filters.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/filters.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"b(1)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"a(1)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a(1)",
+                "d(1)",
+                "d(2)"
+              ],
+              [
+                "b(1)",
+                "d(1)",
+                "d(2)"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "range-body",
+      "source": "a(X) | b(X) :- X=1..2.\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a(1)",
+          "a(2)",
+          "b(1)",
+          "b(2)"
+        ],
+        "roots": [
+          [
+            "or",
+            [
+              "or",
+              false,
+              "a(1)"
+            ],
+            "b(1)"
+          ],
+          [
+            "or",
+            [
+              "or",
+              false,
+              "a(2)"
+            ],
+            "b(2)"
+          ]
+        ],
+        "producer_bodies": {
+          "a(1)": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "a(2)": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "b(1)": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "b(2)": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a(1)",
+          "a(2)"
+        ],
+        [
+          "a(1)",
+          "b(2)"
+        ],
+        [
+          "a(2)",
+          "b(1)"
+        ],
+        [
+          "b(1)",
+          "b(2)"
+        ]
+      ],
+      "objective": null,
+      "notes": "Existing finite body binder; no head interval pooling.",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/range-body.lp",
+      "sha256": "158774277741071fd1856ee6a6f412907b933fd9721731c69ba39cc9309b7497",
+      "reference": [
+        {
+          "name": "range-body",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/range-body.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/range-body.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b(1)\", \"a(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b(1)\", \"b(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a(1)\", \"a(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a(1)\", \"b(2)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 4,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a(1)",
+                "a(2)"
+              ],
+              [
+                "a(1)",
+                "b(2)"
+              ],
+              [
+                "a(2)",
+                "b(1)"
+              ],
+              [
+                "b(1)",
+                "b(2)"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "arithmetic-body",
+      "source": "d(1). a(Y) | b(Y) :- d(X), Y=X+1.\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a(2)",
+          "b(2)",
+          "d(1)"
+        ],
+        "roots": [
+          "d(1)",
+          [
+            "imp",
+            "d(1)",
+            [
+              "or",
+              [
+                "or",
+                false,
+                "a(2)"
+              ],
+              "b(2)"
+            ]
+          ]
+        ],
+        "producer_bodies": {
+          "a(2)": [
+            "d(1)"
+          ],
+          "b(2)": [
+            "d(1)"
+          ],
+          "d(1)": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a(2)",
+          "d(1)"
+        ],
+        [
+          "b(2)",
+          "d(1)"
+        ]
+      ],
+      "objective": null,
+      "notes": "",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/arithmetic-body.lp",
+      "sha256": "4002fcf16fc83ec8b139055e488aee7756a86c06d60440323801ce3982f05dad",
+      "reference": [
+        {
+          "name": "arithmetic-body",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/arithmetic-body.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/arithmetic-body.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"b(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"a(2)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a(2)",
+                "d(1)"
+              ],
+              [
+                "b(2)",
+                "d(1)"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "count-body",
+      "source": "d(1). a | b :- #count {X:d(X)} >= 1.\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "b",
+          "d(1)"
+        ],
+        "roots": [
+          "d(1)",
+          [
+            "imp",
+            "d(1)",
+            [
+              "or",
+              [
+                "or",
+                false,
+                "a"
+              ],
+              "b"
+            ]
+          ]
+        ],
+        "producer_bodies": {
+          "a": [
+            "d(1)"
+          ],
+          "b": [
+            "d(1)"
+          ],
+          "d(1)": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a",
+          "d(1)"
+        ],
+        [
+          "b",
+          "d(1)"
+        ]
+      ],
+      "objective": null,
+      "notes": "One possible tuple, so count>=1 is its positive condition even under a frozen reduct.",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/count-body.lp",
+      "sha256": "baf2e467ac60e84c974a14cec70cb220ca676e952ba7a6e5c75d1ca07c813dfe",
+      "reference": [
+        {
+          "name": "count-body",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/count-body.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/count-body.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a",
+                "d(1)"
+              ],
+              [
+                "b",
+                "d(1)"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "recursive-count-body",
+      "source": "a | b :- #count {1:a} >= 1.\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "b"
+        ],
+        "roots": [
+          [
+            "imp",
+            "a",
+            [
+              "or",
+              [
+                "or",
+                false,
+                "a"
+              ],
+              "b"
+            ]
+          ]
+        ],
+        "producer_bodies": {
+          "a": [
+            "a"
+          ],
+          "b": [
+            "a"
+          ]
+        }
+      },
+      "expected_stable_models": [
+        []
+      ],
+      "objective": null,
+      "notes": "",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/recursive-count-body.lp",
+      "sha256": "6a969edf15c620993d402f8e5adef30be661b1e40e085bfca94c9f06145050d5",
+      "reference": [
+        {
+          "name": "recursive-count-body",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/recursive-count-body.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/recursive-count-body.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              []
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "priority-order",
+      "source": "a | b. #minimize {1@5,k:a; 2@0,k:b}.\n",
+      "expected_native": "refuse",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "b"
+        ],
+        "roots": [
+          [
+            "or",
+            [
+              "or",
+              false,
+              "a"
+            ],
+            "b"
+          ]
+        ],
+        "producer_bodies": {
+          "a": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "b": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a"
+        ],
+        [
+          "b"
+        ]
+      ],
+      "objective": {
+        "presence": "present",
+        "priority_slots": [
+          5,
+          0
+        ],
+        "items": [
+          [
+            5,
+            1,
+            [
+              "k"
+            ],
+            "a"
+          ],
+          [
+            0,
+            2,
+            [
+              "k"
+            ],
+            "b"
+          ]
+        ],
+        "expected_optimum_cost": [
+          0,
+          2
+        ],
+        "expected_optimal_models": [
+          [
+            "b"
+          ]
+        ]
+      },
+      "notes": "",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "expected_refusal": "ObjectiveDisjunctionDependency",
+      "path": "sources/priority-order.lp",
+      "sha256": "ebf667cc752f42730f58baa82abe7da9d3baeb6a6689b31e923213dc9c19de7f",
+      "reference": [
+        {
+          "name": "priority-order",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/priority-order.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/priority-order.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            0, 2\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            0, 2\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 1,\n    \"Costs\": [\n      0, 2\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "b"
+              ]
+            ],
+            "cost": [
+              0,
+              2
+            ],
+            "result": "OPTIMUM FOUND"
+          }
+        },
+        {
+          "name": "priority-order",
+          "mode": "ignore",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/priority-order.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=ignore"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/priority-order.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a"
+              ],
+              [
+                "b"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "present-zero-priorities",
+      "source": "a | b. #minimize {0@7,k:a; 0@3,k:b}.\n",
+      "expected_native": "refuse",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "b"
+        ],
+        "roots": [
+          [
+            "or",
+            [
+              "or",
+              false,
+              "a"
+            ],
+            "b"
+          ]
+        ],
+        "producer_bodies": {
+          "a": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "b": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a"
+        ],
+        [
+          "b"
+        ]
+      ],
+      "objective": {
+        "presence": "present",
+        "priority_slots": [
+          7,
+          3
+        ],
+        "items": [
+          [
+            7,
+            0,
+            [
+              "k"
+            ],
+            "a"
+          ],
+          [
+            3,
+            0,
+            [
+              "k"
+            ],
+            "b"
+          ]
+        ],
+        "expected_optimum_cost": [
+          0,
+          0
+        ],
+        "expected_optimal_models": [
+          [
+            "a"
+          ],
+          [
+            "b"
+          ]
+        ]
+      },
+      "notes": "",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "expected_refusal": "ObjectiveDisjunctionDependency",
+      "path": "sources/present-zero-priorities.lp",
+      "sha256": "37fdf1b4949b45875a629f420a79b3c425c97666e41b7c59668f37f2b1568b61",
+      "reference": [
+        {
+          "name": "present-zero-priorities",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/present-zero-priorities.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/present-zero-priorities.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            0, 0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            0, 0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ],\n          \"Costs\": [\n            0, 0\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 3,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 2,\n    \"Costs\": [\n      0, 0\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a"
+              ],
+              [
+                "b"
+              ]
+            ],
+            "cost": [
+              0,
+              0
+            ],
+            "result": "OPTIMUM FOUND"
+          }
+        },
+        {
+          "name": "present-zero-priorities",
+          "mode": "ignore",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/present-zero-priorities.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=ignore"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/present-zero-priorities.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a"
+              ],
+              [
+                "b"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "duplicate-objective-key",
+      "source": "a | b. #minimize {1@4,k:a; 1@4,k:b}.\n",
+      "expected_native": "refuse",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "b"
+        ],
+        "roots": [
+          [
+            "or",
+            [
+              "or",
+              false,
+              "a"
+            ],
+            "b"
+          ]
+        ],
+        "producer_bodies": {
+          "a": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "b": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a"
+        ],
+        [
+          "b"
+        ]
+      ],
+      "objective": {
+        "presence": "present",
+        "priority_slots": [
+          4
+        ],
+        "items": [
+          [
+            4,
+            1,
+            [
+              "k"
+            ],
+            "a"
+          ],
+          [
+            4,
+            1,
+            [
+              "k"
+            ],
+            "b"
+          ]
+        ],
+        "expected_optimum_cost": [
+          1
+        ],
+        "expected_optimal_models": [
+          [
+            "a"
+          ],
+          [
+            "b"
+          ]
+        ]
+      },
+      "notes": "",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "expected_refusal": "ObjectiveDisjunctionDependency",
+      "path": "sources/duplicate-objective-key.lp",
+      "sha256": "c29fd7b061291aa426b7f90e1e711d4fdf65ae3437b8d27c2d2e320c3e38cb4d",
+      "reference": [
+        {
+          "name": "duplicate-objective-key",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/duplicate-objective-key.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/duplicate-objective-key.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            1\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            1\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ],\n          \"Costs\": [\n            1\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 3,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 2,\n    \"Costs\": [\n      1\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a"
+              ],
+              [
+                "b"
+              ]
+            ],
+            "cost": [
+              1
+            ],
+            "result": "OPTIMUM FOUND"
+          }
+        },
+        {
+          "name": "duplicate-objective-key",
+          "mode": "ignore",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/duplicate-objective-key.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=ignore"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/duplicate-objective-key.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a"
+              ],
+              [
+                "b"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "cycle-duplicate-objective-key",
+      "source": "a | b. a :- b. b :- a. #minimize {1@4,k:a; 1@4,k:b}.\n",
+      "expected_native": "refuse",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "b"
+        ],
+        "roots": [
+          [
+            "or",
+            [
+              "or",
+              false,
+              "a"
+            ],
+            "b"
+          ],
+          [
+            "imp",
+            "a",
+            "b"
+          ],
+          [
+            "imp",
+            "b",
+            "a"
+          ]
+        ],
+        "producer_bodies": {
+          "a": [
+            [
+              "imp",
+              false,
+              false
+            ],
+            "b"
+          ],
+          "b": [
+            [
+              "imp",
+              false,
+              false
+            ],
+            "a"
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a",
+          "b"
+        ]
+      ],
+      "objective": {
+        "presence": "present",
+        "priority_slots": [
+          4
+        ],
+        "items": [
+          [
+            4,
+            1,
+            [
+              "k"
+            ],
+            "a"
+          ],
+          [
+            4,
+            1,
+            [
+              "k"
+            ],
+            "b"
+          ]
+        ],
+        "expected_optimum_cost": [
+          1
+        ],
+        "expected_optimal_models": [
+          [
+            "a",
+            "b"
+          ]
+        ]
+      },
+      "notes": "",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "expected_refusal": "ObjectiveDisjunctionDependency",
+      "path": "sources/cycle-duplicate-objective-key.lp",
+      "sha256": "e271feffe241887459346b0525fe39475d622602d4d2502a88a2f34f1965f4c6",
+      "reference": [
+        {
+          "name": "cycle-duplicate-objective-key",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/cycle-duplicate-objective-key.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/cycle-duplicate-objective-key.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\", \"b\"\n          ],\n          \"Costs\": [\n            1\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\", \"b\"\n          ],\n          \"Costs\": [\n            1\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 1,\n    \"Costs\": [\n      1\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a",
+                "b"
+              ]
+            ],
+            "cost": [
+              1
+            ],
+            "result": "OPTIMUM FOUND"
+          }
+        },
+        {
+          "name": "cycle-duplicate-objective-key",
+          "mode": "ignore",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/cycle-duplicate-objective-key.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=ignore"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/cycle-duplicate-objective-key.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\", \"b\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a",
+                "b"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "negative-objective-weight",
+      "source": "a | b. #minimize {-1@0,k:a; 0@0,k:b}.\n",
+      "expected_native": "refuse",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "b"
+        ],
+        "roots": [
+          [
+            "or",
+            [
+              "or",
+              false,
+              "a"
+            ],
+            "b"
+          ]
+        ],
+        "producer_bodies": {
+          "a": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "b": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a"
+        ],
+        [
+          "b"
+        ]
+      ],
+      "objective": {
+        "presence": "present",
+        "priority_slots": [
+          0
+        ],
+        "items": [
+          [
+            0,
+            -1,
+            [
+              "k"
+            ],
+            "a"
+          ],
+          [
+            0,
+            0,
+            [
+              "k"
+            ],
+            "b"
+          ]
+        ],
+        "expected_optimum_cost": [
+          -1
+        ],
+        "expected_optimal_models": [
+          [
+            "a"
+          ]
+        ]
+      },
+      "notes": "",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "expected_refusal": "ObjectiveDisjunctionDependency",
+      "path": "sources/negative-objective-weight.lp",
+      "sha256": "09eaa3ced0c78f8a9768529818c44e84b5b864c44128681cbfc3e814f3dc4342",
+      "reference": [
+        {
+          "name": "negative-objective-weight",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/negative-objective-weight.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/negative-objective-weight.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ],\n          \"Costs\": [\n            -1\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ],\n          \"Costs\": [\n            -1\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 3,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 1,\n    \"Costs\": [\n      -1\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a"
+              ]
+            ],
+            "cost": [
+              -1
+            ],
+            "result": "OPTIMUM FOUND"
+          }
+        },
+        {
+          "name": "negative-objective-weight",
+          "mode": "ignore",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/negative-objective-weight.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=ignore"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/negative-objective-weight.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a"
+              ],
+              [
+                "b"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "impossible-objective-priority",
+      "source": "a | b :- a. #minimize {1@7,k:a}.\n",
+      "expected_native": "refuse",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "b"
+        ],
+        "roots": [
+          [
+            "imp",
+            "a",
+            [
+              "or",
+              [
+                "or",
+                false,
+                "a"
+              ],
+              "b"
+            ]
+          ]
+        ],
+        "producer_bodies": {
+          "a": [
+            "a"
+          ],
+          "b": [
+            "a"
+          ]
+        }
+      },
+      "expected_stable_models": [
+        []
+      ],
+      "objective": {
+        "presence": "absent",
+        "priority_slots": [],
+        "items": [],
+        "expected_optimum_cost": null,
+        "expected_optimal_models": [
+          []
+        ]
+      },
+      "notes": "Positive unsupported carrier is empty, so the objective priority should be absent; verify against actual clingo grounding.",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "expected_refusal": "ObjectiveDisjunctionDependency",
+      "path": "sources/impossible-objective-priority.lp",
+      "sha256": "1b82a71f31e796c750761b4a5d457e5b3ca469d47091a2dac8db635bcbee2202",
+      "reference": [
+        {
+          "name": "impossible-objective-priority",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/impossible-objective-priority.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/impossible-objective-priority.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              []
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        },
+        {
+          "name": "impossible-objective-priority",
+          "mode": "ignore",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/impossible-objective-priority.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=ignore"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/impossible-objective-priority.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              []
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "constrained-objective-priority",
+      "source": "a | b. :- a. #minimize {1@7,k:a}.\n",
+      "expected_native": "refuse",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "b"
+        ],
+        "roots": [
+          [
+            "or",
+            [
+              "or",
+              false,
+              "a"
+            ],
+            "b"
+          ],
+          [
+            "imp",
+            "a",
+            false
+          ]
+        ],
+        "producer_bodies": {
+          "a": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "b": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "b"
+        ]
+      ],
+      "objective": {
+        "presence": "present",
+        "priority_slots": [
+          7
+        ],
+        "items": [
+          [
+            7,
+            1,
+            [
+              "k"
+            ],
+            "a"
+          ]
+        ],
+        "expected_optimum_cost": [
+          0
+        ],
+        "expected_optimal_models": [
+          [
+            "b"
+          ]
+        ]
+      },
+      "notes": "Ground presence is distinct from whether a stable model can activate a key; independent clingo check required.",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "expected_refusal": "ObjectiveDisjunctionDependency",
+      "path": "sources/constrained-objective-priority.lp",
+      "sha256": "945faccbb8e28c525debea9378b50ffc1f293253b4397be6db5e4df3657f8c0e",
+      "reference": [
+        {
+          "name": "constrained-objective-priority",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/constrained-objective-priority.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/constrained-objective-priority.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        },\n        {\n          \"Time\": 0.001,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        }\n      ],\n      \"Stop\": 0.001\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 1,\n    \"Costs\": [\n      0\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.001,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "b"
+              ]
+            ],
+            "cost": [
+              0
+            ],
+            "result": "OPTIMUM FOUND"
+          }
+        },
+        {
+          "name": "constrained-objective-priority",
+          "mode": "ignore",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/constrained-objective-priority.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=ignore"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/constrained-objective-priority.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "b"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "unsafe-second-head",
+      "source": "d(1). a(X) | b(Y) :- d(X).\n",
+      "expected_native": "refuse",
+      "expected_refusal": "UnsafeVariable",
+      "manual_theory": null,
+      "expected_stable_models": null,
+      "objective": null,
+      "notes": "Choosing the safe disjunct cannot make Y safe.",
+      "predicted_clingo_optimum_cost": null,
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/unsafe-second-head.lp",
+      "sha256": "70e2bccd97856ede1585c5615bdfee8809eb5ee190ea1d2cad498ff0e9835aae",
+      "reference": [
+        {
+          "name": "unsafe-second-head",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/unsafe-second-head.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 65,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/unsafe-second-head.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"UNKNOWN\",\n  \"Models\": {\n    \"Number\": 0,\n    \"More\": \"yes\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": "sources/unsafe-second-head.lp:1:7-27: error: unsafe variables in:\n  a(X)::;b(Y):::-[#inc_base];d(X).\nsources/unsafe-second-head.lp:1:16-17: note: 'Y' is unsafe\n\n*** ERROR: (clingo): grounding stopped because of errors\n"
+          },
+          "normalized": {
+            "status": "incomplete_or_refused",
+            "result": "UNKNOWN"
+          }
+        }
+      ]
+    },
+    {
+      "name": "unsafe-aggregate-local",
+      "source": "d(1). a(X) | b :- #count {X:d(X)} >= 1.\n",
+      "expected_native": "refuse",
+      "expected_refusal": "UnsafeVariable",
+      "manual_theory": null,
+      "expected_stable_models": null,
+      "objective": null,
+      "notes": "Head X is global; aggregate-local binding cannot rescue it.",
+      "predicted_clingo_optimum_cost": null,
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/unsafe-aggregate-local.lp",
+      "sha256": "fea2d2d6dc741d5bbc7b355a664d0859cece05e40cc81f883cb87afa56b3cc36",
+      "reference": [
+        {
+          "name": "unsafe-aggregate-local",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/unsafe-aggregate-local.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 65,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/unsafe-aggregate-local.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"UNKNOWN\",\n  \"Models\": {\n    \"Number\": 0,\n    \"More\": \"yes\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": "sources/unsafe-aggregate-local.lp:1:7-40: error: unsafe variables in:\n  a(X)::;b:::-[#inc_base];1<=#count{X:d(X)}.\nsources/unsafe-aggregate-local.lp:1:9-10: note: 'X' is unsafe\n\n*** ERROR: (clingo): grounding stopped because of errors\n"
+          },
+          "normalized": {
+            "status": "incomplete_or_refused",
+            "result": "UNKNOWN"
+          }
+        }
+      ]
+    },
+    {
+      "name": "conditional-head",
+      "source": "d(1). a(X):d(X) | b.\n",
+      "expected_native": "refuse",
+      "expected_refusal": "conditional disjunction element",
+      "manual_theory": null,
+      "expected_stable_models": null,
+      "objective": null,
+      "notes": "Do not reuse the choice-element lowering contract.",
+      "predicted_clingo_optimum_cost": null,
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/conditional-head.lp",
+      "sha256": "5a83b19424d6c3922f259794dc2f3f25c8d026ae697e5ee21d2e8885afbbc639",
+      "reference": [
+        {
+          "name": "conditional-head",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/conditional-head.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/conditional-head.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"a(1)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"b\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a(1)",
+                "d(1)"
+              ],
+              [
+                "b",
+                "d(1)"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "default-negated-head",
+      "source": "not a | b.\n",
+      "expected_native": "refuse",
+      "expected_refusal": "NegatedHead",
+      "manual_theory": null,
+      "expected_stable_models": [
+        []
+      ],
+      "objective": null,
+      "notes": "Outside first positive-head slice.",
+      "predicted_clingo_optimum_cost": null,
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/default-negated-head.lp",
+      "sha256": "70b0f8088ee3e221815b587ced8c6ad9e1cf006ca77e5cbce22188f22caaf05b",
+      "reference": [
+        {
+          "name": "default-negated-head",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/default-negated-head.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/default-negated-head.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              []
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "strong-negated-head",
+      "source": "a | -b.\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "-b"
+        ],
+        "roots": [
+          [
+            "or",
+            [
+              "or",
+              false,
+              "a"
+            ],
+            "-b"
+          ]
+        ],
+        "producer_bodies": {
+          "a": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "-b": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a"
+        ],
+        [
+          "-b"
+        ]
+      ],
+      "objective": null,
+      "notes": "Signed atoms have distinct semantic identities; this source contains no opposing pair.",
+      "predicted_clingo_optimum_cost": null,
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/strong-negated-head.lp",
+      "sha256": "18fe7a5deae6430545ccc023fc070fbf726d022eedbfeeb5e564f98ff8081c01",
+      "reference": [
+        {
+          "name": "strong-negated-head",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/strong-negated-head.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/strong-negated-head.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"-b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "-b"
+              ],
+              [
+                "a"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "infinite-head",
+      "source": "a | q(#sup).\n",
+      "expected_native": "refuse",
+      "expected_refusal": "Symbol",
+      "manual_theory": null,
+      "expected_stable_models": [
+        [
+          "a"
+        ],
+        [
+          "q(#sup)"
+        ]
+      ],
+      "objective": null,
+      "notes": "Infinite head constants remain outside the ordinary literal profile.",
+      "predicted_clingo_optimum_cost": null,
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/infinite-head.lp",
+      "sha256": "f69f1aa3fa7bed8c89a67a830fb4b8757bd41d910347a0c4298fe7302ace6012",
+      "reference": [
+        {
+          "name": "infinite-head",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/infinite-head.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/infinite-head.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"q(#sup)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a"
+              ],
+              [
+                "q(#sup)"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "interval-head",
+      "source": "a(1..2) | b.\n",
+      "expected_native": "refuse",
+      "expected_refusal": "generated/interval disjunction head",
+      "manual_theory": null,
+      "expected_stable_models": null,
+      "objective": null,
+      "notes": "Multi-valued head-term semantics deferred.",
+      "predicted_clingo_optimum_cost": null,
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/interval-head.lp",
+      "sha256": "70c03ab291c48da2336ab2aa7cf92f4f745ff11c52e907c0c10aaa39e74c8007",
+      "reference": [
+        {
+          "name": "interval-head",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/interval-head.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/interval-head.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a(1)\", \"a(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a(1)",
+                "a(2)"
+              ],
+              [
+                "b"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "pooled-head",
+      "source": "a(1;2) | b.\n",
+      "expected_native": "refuse",
+      "expected_refusal": "PooledArguments",
+      "manual_theory": null,
+      "expected_stable_models": null,
+      "objective": null,
+      "notes": "Head pooling deferred rather than silently unpooled.",
+      "predicted_clingo_optimum_cost": null,
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/pooled-head.lp",
+      "sha256": "9e1c4c6db51cdc34fd9ad4ba920f7b1ba475ae04cb1be5f2d240abdb25529787",
+      "reference": [
+        {
+          "name": "pooled-head",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/pooled-head.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/pooled-head.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a(2)\", \"a(1)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a(1)",
+                "a(2)"
+              ],
+              [
+                "b"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "variable-arithmetic-head",
+      "source": "d(1). a(X+1) | b :- d(X).\n",
+      "expected_native": "refuse",
+      "expected_refusal": "generated disjunction head",
+      "manual_theory": null,
+      "expected_stable_models": [
+        [
+          "d(1)",
+          "a(2)"
+        ],
+        [
+          "d(1)",
+          "b"
+        ]
+      ],
+      "objective": null,
+      "notes": "Finite computed head arguments are a later source-profile extension.",
+      "predicted_clingo_optimum_cost": null,
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/variable-arithmetic-head.lp",
+      "sha256": "cd5defc889e07559bc4d83e6088456f43f486036fe5cc6cc1e669821f3542ddb",
+      "reference": [
+        {
+          "name": "variable-arithmetic-head",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/variable-arithmetic-head.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/variable-arithmetic-head.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"a(2)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a(2)",
+                "d(1)"
+              ],
+              [
+                "b",
+                "d(1)"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "objective-negative-dependency",
+      "source": "a | b. c :- not a. #minimize {1@7,k:c}.\n",
+      "expected_native": "refuse",
+      "expected_refusal": "ObjectiveDisjunctionDependency",
+      "manual_theory": null,
+      "expected_stable_models": [
+        [
+          "a"
+        ],
+        [
+          "b",
+          "c"
+        ]
+      ],
+      "objective": null,
+      "notes": "New disjunct predicates must not bypass existing objective dependency checks.",
+      "predicted_clingo_optimum_cost": [
+        0
+      ],
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/objective-negative-dependency.lp",
+      "sha256": "e89ba81ced27c61b2cee0c3aca9291b845f1f2b15cf7a2c7f1bea4017e700a40",
+      "reference": [
+        {
+          "name": "objective-negative-dependency",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/objective-negative-dependency.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/objective-negative-dependency.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\", \"c\"\n          ],\n          \"Costs\": [\n            1\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 3,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 1,\n    \"Costs\": [\n      0\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a"
+              ]
+            ],
+            "cost": [
+              0
+            ],
+            "result": "OPTIMUM FOUND"
+          }
+        },
+        {
+          "name": "objective-negative-dependency",
+          "mode": "ignore",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/objective-negative-dependency.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=ignore"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/objective-negative-dependency.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\", \"c\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a"
+              ],
+              [
+                "b",
+                "c"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "objective-assignment-disjunction",
+      "source": "d(1). a(S) | b :- S=#sum {V:d(V)}. #minimize {S@0,k:a(S)}.\n",
+      "expected_native": "refuse",
+      "expected_refusal": "ObjectiveDisjunctionDependency",
+      "manual_theory": null,
+      "expected_stable_models": [
+        [
+          "d(1)",
+          "a(1)"
+        ],
+        [
+          "d(1)",
+          "b"
+        ]
+      ],
+      "objective": null,
+      "notes": "An objective-relevant aggregate assignment currently requires a total normal-head observer.",
+      "predicted_clingo_optimum_cost": [
+        0
+      ],
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/objective-assignment-disjunction.lp",
+      "sha256": "280c49d794ab51083a5f553271589be2f30016d6014f2773bd3d9ef020cebd29",
+      "reference": [
+        {
+          "name": "objective-assignment-disjunction",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/objective-assignment-disjunction.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/objective-assignment-disjunction.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"b\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"b\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 1,\n    \"Costs\": [\n      0\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "b",
+                "d(1)"
+              ]
+            ],
+            "cost": [
+              0
+            ],
+            "result": "OPTIMUM FOUND"
+          }
+        },
+        {
+          "name": "objective-assignment-disjunction",
+          "mode": "ignore",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/objective-assignment-disjunction.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=ignore"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/objective-assignment-disjunction.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"a(1)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a(1)",
+                "d(1)"
+              ],
+              [
+                "b",
+                "d(1)"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "objective-generated-disjunction",
+      "source": "x(1) | x(2). y(S) :- S=#sum {V:x(V)}. z(S) | other :- y(S). #minimize {S@0,k:z(S)}.\n",
+      "expected_native": "refuse",
+      "expected_refusal": "ObjectiveDisjunctionDependency",
+      "manual_theory": null,
+      "expected_stable_models": [
+        [
+          "x(1)",
+          "y(1)",
+          "z(1)"
+        ],
+        [
+          "x(1)",
+          "y(1)",
+          "other"
+        ],
+        [
+          "x(2)",
+          "y(2)",
+          "z(2)"
+        ],
+        [
+          "x(2)",
+          "y(2)",
+          "other"
+        ]
+      ],
+      "objective": null,
+      "notes": "total_dependency must not skip a disjunctive producer when checking generated-value observers.",
+      "predicted_clingo_optimum_cost": [
+        0
+      ],
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/objective-generated-disjunction.lp",
+      "sha256": "16298edcf736d2af0a6e31450c5460dd307a7ab3e6b49068c8cd4b16668a4ef4",
+      "reference": [
+        {
+          "name": "objective-generated-disjunction",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/objective-generated-disjunction.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/objective-generated-disjunction.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"x(1)\", \"y(1)\", \"z(1)\"\n          ],\n          \"Costs\": [\n            1\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"x(1)\", \"y(1)\", \"other\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"x(1)\", \"y(1)\", \"other\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"x(2)\", \"y(2)\", \"other\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 4,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 2,\n    \"Costs\": [\n      0\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "other",
+                "x(1)",
+                "y(1)"
+              ],
+              [
+                "other",
+                "x(2)",
+                "y(2)"
+              ]
+            ],
+            "cost": [
+              0
+            ],
+            "result": "OPTIMUM FOUND"
+          }
+        },
+        {
+          "name": "objective-generated-disjunction",
+          "mode": "ignore",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/objective-generated-disjunction.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=ignore"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/objective-generated-disjunction.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"x(1)\", \"y(1)\", \"z(1)\"\n          ]\n        },\n        {\n          \"Time\": 0.001,\n          \"Value\": [\n            \"x(2)\", \"y(2)\", \"z(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.001,\n          \"Value\": [\n            \"x(1)\", \"y(1)\", \"other\"\n          ]\n        },\n        {\n          \"Time\": 0.001,\n          \"Value\": [\n            \"x(2)\", \"y(2)\", \"other\"\n          ]\n        }\n      ],\n      \"Stop\": 0.001\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 4,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.001,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.001\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "other",
+                "x(1)",
+                "y(1)"
+              ],
+              [
+                "other",
+                "x(2)",
+                "y(2)"
+              ],
+              [
+                "x(1)",
+                "y(1)",
+                "z(1)"
+              ],
+              [
+                "x(2)",
+                "y(2)",
+                "z(2)"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "unrelated-priorities",
+      "source": "a | b. c. #minimize {1@7,k:c; 2@3,k:c}.\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "b",
+          "c"
+        ],
+        "roots": [
+          [
+            "or",
+            [
+              "or",
+              false,
+              "a"
+            ],
+            "b"
+          ],
+          "c"
+        ],
+        "producer_bodies": {
+          "a": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "b": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "c": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a",
+          "c"
+        ],
+        [
+          "b",
+          "c"
+        ]
+      ],
+      "objective": {
+        "presence": "present",
+        "priority_slots": [
+          7,
+          3
+        ],
+        "items": [
+          [
+            7,
+            1,
+            [
+              "k"
+            ],
+            "c"
+          ],
+          [
+            3,
+            2,
+            [
+              "k"
+            ],
+            "c"
+          ]
+        ],
+        "expected_optimum_cost": [
+          1,
+          2
+        ],
+        "expected_optimal_models": [
+          [
+            "a",
+            "c"
+          ],
+          [
+            "b",
+            "c"
+          ]
+        ]
+      },
+      "notes": "",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/unrelated-priorities.lp",
+      "sha256": "d77f3409cfd8d5f2873ab415a2d62bf2fcf08c41cd894175baf135e808d42623",
+      "reference": [
+        {
+          "name": "unrelated-priorities",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/unrelated-priorities.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/unrelated-priorities.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ],\n          \"Costs\": [\n            1, 2\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ],\n          \"Costs\": [\n            1, 2\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"a\"\n          ],\n          \"Costs\": [\n            1, 2\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 3,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 2,\n    \"Costs\": [\n      1, 2\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a",
+                "c"
+              ],
+              [
+                "b",
+                "c"
+              ]
+            ],
+            "cost": [
+              1,
+              2
+            ],
+            "result": "OPTIMUM FOUND"
+          }
+        },
+        {
+          "name": "unrelated-priorities",
+          "mode": "ignore",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/unrelated-priorities.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=ignore"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/unrelated-priorities.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a",
+                "c"
+              ],
+              [
+                "b",
+                "c"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "unrelated-zero",
+      "source": "a | b. c. #minimize {0@7,k:c}.\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "b",
+          "c"
+        ],
+        "roots": [
+          [
+            "or",
+            [
+              "or",
+              false,
+              "a"
+            ],
+            "b"
+          ],
+          "c"
+        ],
+        "producer_bodies": {
+          "a": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "b": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "c": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a",
+          "c"
+        ],
+        [
+          "b",
+          "c"
+        ]
+      ],
+      "objective": {
+        "presence": "present",
+        "priority_slots": [
+          7
+        ],
+        "items": [
+          [
+            7,
+            0,
+            [
+              "k"
+            ],
+            "c"
+          ]
+        ],
+        "expected_optimum_cost": [
+          0
+        ],
+        "expected_optimal_models": [
+          [
+            "a",
+            "c"
+          ],
+          [
+            "b",
+            "c"
+          ]
+        ]
+      },
+      "notes": "",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/unrelated-zero.lp",
+      "sha256": "85f1605dab68a2238c60f9d2e0a84e6886513628e0fda9c2e92aef23b8fe31fe",
+      "reference": [
+        {
+          "name": "unrelated-zero",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/unrelated-zero.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/unrelated-zero.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"a\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 3,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 2,\n    \"Costs\": [\n      0\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a",
+                "c"
+              ],
+              [
+                "b",
+                "c"
+              ]
+            ],
+            "cost": [
+              0
+            ],
+            "result": "OPTIMUM FOUND"
+          }
+        },
+        {
+          "name": "unrelated-zero",
+          "mode": "ignore",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/unrelated-zero.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=ignore"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/unrelated-zero.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a",
+                "c"
+              ],
+              [
+                "b",
+                "c"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "unrelated-negative",
+      "source": "a | b. c. #minimize {-1@7,k:c; -1@7,k:c}.\n",
+      "expected_native": "admit",
+      "manual_theory": {
+        "atoms": [
+          "a",
+          "b",
+          "c"
+        ],
+        "roots": [
+          [
+            "or",
+            [
+              "or",
+              false,
+              "a"
+            ],
+            "b"
+          ],
+          "c"
+        ],
+        "producer_bodies": {
+          "a": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "b": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ],
+          "c": [
+            [
+              "imp",
+              false,
+              false
+            ]
+          ]
+        }
+      },
+      "expected_stable_models": [
+        [
+          "a",
+          "c"
+        ],
+        [
+          "b",
+          "c"
+        ]
+      ],
+      "objective": {
+        "presence": "present",
+        "priority_slots": [
+          7
+        ],
+        "items": [
+          [
+            7,
+            -1,
+            [
+              "k"
+            ],
+            "c"
+          ],
+          [
+            7,
+            -1,
+            [
+              "k"
+            ],
+            "c"
+          ]
+        ],
+        "expected_optimum_cost": [
+          -1
+        ],
+        "expected_optimal_models": [
+          [
+            "a",
+            "c"
+          ],
+          [
+            "b",
+            "c"
+          ]
+        ]
+      },
+      "notes": "",
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/unrelated-negative.lp",
+      "sha256": "3bdc5f0d7e9510187ade6afd6fd0c8a04ab51220764149563a3d88c1bac752eb",
+      "reference": [
+        {
+          "name": "unrelated-negative",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/unrelated-negative.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/unrelated-negative.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ],\n          \"Costs\": [\n            -1\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ],\n          \"Costs\": [\n            -1\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"a\"\n          ],\n          \"Costs\": [\n            -1\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 3,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 2,\n    \"Costs\": [\n      -1\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a",
+                "c"
+              ],
+              [
+                "b",
+                "c"
+              ]
+            ],
+            "cost": [
+              -1
+            ],
+            "result": "OPTIMUM FOUND"
+          }
+        },
+        {
+          "name": "unrelated-negative",
+          "mode": "ignore",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/unrelated-negative.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=ignore"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/unrelated-negative.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a",
+                "c"
+              ],
+              [
+                "b",
+                "c"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "objective-mandatory-sibling",
+      "source": "a. a | b. #minimize {1@1:b}.\n",
+      "expected_native": "refuse",
+      "expected_refusal": "ObjectiveDisjunctionDependency",
+      "manual_theory": null,
+      "expected_stable_models": [
+        [
+          "a"
+        ]
+      ],
+      "objective": null,
+      "notes": "Clingo erases this objective entirely, unlike a constraint forbidding b.",
+      "predicted_clingo_optimum_cost": null,
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/objective-mandatory-sibling.lp",
+      "sha256": "08d15a29505ca55064e7e5a3e5ddc3ff08cf477c8c097fcec3c42890c325a31d",
+      "reference": [
+        {
+          "name": "objective-mandatory-sibling",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/objective-mandatory-sibling.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/objective-mandatory-sibling.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "objective-indirect-sibling",
+      "source": "a. a | b. c :- b. #minimize {1@1:c}.\n",
+      "expected_native": "refuse",
+      "expected_refusal": "ObjectiveDisjunctionDependency",
+      "manual_theory": null,
+      "expected_stable_models": [
+        [
+          "a"
+        ]
+      ],
+      "objective": null,
+      "notes": "Indirect objective reachability retains the same mandatory-sibling hazard.",
+      "predicted_clingo_optimum_cost": null,
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/objective-indirect-sibling.lp",
+      "sha256": "9f70cdb073508edc0338512d890c20015fa82a8d4ea2f63a3bf2b39bebca9a7b",
+      "reference": [
+        {
+          "name": "objective-indirect-sibling",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/objective-indirect-sibling.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/objective-indirect-sibling.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    },
+    {
+      "name": "conditional-empty-head",
+      "source": "a | b : .\n",
+      "expected_native": "refuse",
+      "expected_refusal": "ConditionalDisjunction",
+      "manual_theory": null,
+      "expected_stable_models": [
+        [
+          "a"
+        ],
+        [
+          "b"
+        ]
+      ],
+      "objective": null,
+      "notes": "Explicit empty colon remains a conditioned source head.",
+      "predicted_clingo_optimum_cost": null,
+      "reference_execution": "complete external command recorded; status is explicit per run",
+      "path": "sources/conditional-empty-head.lp",
+      "sha256": "16d0976a920873511e2d42174ff753de39d8ca2e0f9962971288bdc27dc555db",
+      "reference": [
+        {
+          "name": "conditional-empty-head",
+          "mode": "optN",
+          "raw": {
+            "command": [
+              "clingo",
+              "sources/conditional-empty-head.lp",
+              "--models=0",
+              "--outf=2",
+              "--warn=none",
+              "--opt-mode=optN"
+            ],
+            "returncode": 30,
+            "stop": null,
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/conditional-empty-head.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": ""
+          },
+          "normalized": {
+            "status": "complete",
+            "models": [
+              [
+                "a"
+              ],
+              [
+                "b"
+              ]
+            ],
+            "cost": null,
+            "result": "SATISFIABLE"
+          }
+        }
+      ]
+    }
+  ],
+  "reference_binary": {
+    "path": "clingo",
+    "sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015"
+  }
+}
