@@ -23,6 +23,8 @@ pub struct CaptureLimits {
     pub max_atom_text_bytes: usize,
     /// Maximum native path bytes across the retained source catalog.
     pub max_source_path_bytes: usize,
+    /// Maximum framed subject bytes hashed per admission, without retaining them.
+    pub max_subject_bytes: usize,
     /// Maximum bytes in the complete serialized report, including its newline.
     pub max_output_bytes: usize,
 }
@@ -35,6 +37,7 @@ impl Default for CaptureLimits {
             max_model_atoms: 65_536,
             max_atom_text_bytes: 1_048_576,
             max_source_path_bytes: 1_048_576,
+            max_subject_bytes: 67_108_864,
             max_output_bytes: 16_777_216,
         }
     }
@@ -119,6 +122,9 @@ pub struct Options {
     /// Inclusive native path byte ceiling across the retained source catalog.
     #[arg(long, default_value_t = 1_048_576)]
     pub max_source_path_bytes: usize,
+    /// Inclusive framed execution-subject byte ceiling for cross-binary evidence.
+    #[arg(long, default_value_t = 67_108_864)]
+    pub max_subject_bytes: usize,
     /// Inclusive complete JSON report byte ceiling.
     #[arg(long, default_value_t = 16_777_216)]
     pub max_output_bytes: usize,
@@ -136,6 +142,7 @@ impl Options {
                 max_model_atoms: self.max_model_atoms,
                 max_atom_text_bytes: self.max_atom_text_bytes,
                 max_source_path_bytes: self.max_source_path_bytes,
+                max_subject_bytes: self.max_subject_bytes,
                 max_output_bytes: self.max_output_bytes,
             },
             ..Configuration::default()

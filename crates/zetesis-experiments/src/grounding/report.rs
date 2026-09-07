@@ -6,7 +6,9 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use zetesis_themelios::SourceBundle;
 
-use super::{CaptureRefusal, Configuration, Error, Mode, Models, PhaseRecord, storage};
+use super::{
+    CaptureRefusal, Configuration, Error, Mode, Models, PhaseRecord, SubjectFingerprint, storage,
+};
 
 /// One original canonical file, hashed before admission timing.
 #[derive(Debug, Serialize)]
@@ -40,14 +42,16 @@ pub struct Sample {
     pub admitted: bool,
     /// Exact ordered native subject/metadata/provenance comparison, if reached.
     pub subject_equal: Option<bool>,
+    /// Framed cross-executable evidence computed after timing, if reached.
+    pub subject_fingerprint: Option<SubjectFingerprint>,
     /// Native full-model verification, if reached, including a failed prefix.
     pub models: Option<Models>,
 }
 
 /// Reusable diagnostic result. The initial unmeasured native subject remains
-/// live during all samples; only its catalog and complete model multiset survive
-/// in this report. Source loading, hashing, setup, verification and serialization
-/// are excluded from admission timing. Detailed timing includes instrumentation
+/// live during all samples; its catalog, bounded fingerprint and complete model
+/// multiset survive in this report. Source loading, hashing, setup, verification
+/// and serialization are excluded from admission timing. Detailed timing includes instrumentation
 /// overhead and does not isolate arithmetic from joins or emission.
 #[derive(Debug, Serialize)]
 pub struct Report {
@@ -65,6 +69,8 @@ pub struct Report {
     pub nodes: Option<usize>,
     /// Number of roots in that DAG, if admission succeeded.
     pub roots: Option<usize>,
+    /// Initial execution-subject evidence, distinct from exact in-process comparison.
+    pub subject_fingerprint: Option<SubjectFingerprint>,
     /// Initial unmeasured native model enumeration, including any failed prefix.
     pub qualification: Option<Models>,
     /// Every started timed admission in execution order; no outliers are removed.
@@ -72,6 +78,7 @@ pub struct Report {
     /// First refusal; any measured and verified prefix remains available.
     pub failure: Option<Error>,
     /// True only if all requested admissions and complete-model checks succeeded.
+    /// A fingerprint can still be explicitly unavailable for its declared domain.
     pub complete: bool,
 }
 
@@ -85,6 +92,7 @@ impl Report {
             atoms: Vec::new(),
             nodes: None,
             roots: None,
+            subject_fingerprint: None,
             qualification: None,
             samples: storage::reserve(configuration.repetitions * Mode::ALL.len())?,
             failure: None,

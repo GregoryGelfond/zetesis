@@ -17,6 +17,7 @@ use zetesis_themelios::{
 
 mod config;
 mod error;
+mod fingerprint;
 mod observer;
 mod report;
 mod semantic;
@@ -24,6 +25,7 @@ mod storage;
 
 pub use config::{CaptureLimits, Configuration, Options};
 pub use error::Error;
+pub use fingerprint::{FingerprintUnavailable, SubjectFingerprint};
 pub use observer::{CaptureRefusal, PhaseRecord, SourceSpan};
 pub use report::{Report, Sample, SourceIdentity, write_report};
 pub use semantic::Models;
@@ -59,7 +61,9 @@ impl Mode {
 /// O(repetitions * (phase records + models + model atom indices)) cells, plus
 /// bounded source, atom text and native subject storage. Model copying scans the
 /// native carrier twice per accepted model; multiset sorting adds comparison
-/// work outside timing. Captured durations include observer overhead.
+/// work outside timing. Execution-subject fingerprinting adds a borrowed scan
+/// bounded by `capture.max_subject_bytes`, with fixed-size hashing scratch and
+/// no retained byte encoding. Captured durations include observer overhead.
 ///
 /// # Errors
 /// Invalid configuration or initial report allocation returns `Err`. Later
@@ -83,6 +87,10 @@ fn qualify(path: &Path, report: &mut Report) -> Result<(), Error> {
     report.atoms = semantic::catalog(&reference, config.capture.max_atom_text_bytes)?;
     report.nodes = Some(reference.theory().nodes().len());
     report.roots = Some(reference.theory().roots().len());
+    report.subject_fingerprint = Some(fingerprint::subject(
+        &reference,
+        config.capture.max_subject_bytes,
+    )?);
     let (models, failure) = semantic::enumerate(&reference, &config);
     report.qualification = Some(models);
     if let Some(error) = failure {
@@ -139,6 +147,10 @@ fn sample(
         if !equal {
             return Err(Error::SubjectChanged);
         }
+        sample.subject_fingerprint = Some(fingerprint::subject(
+            &subject,
+            config.capture.max_subject_bytes,
+        )?);
         let (models, failure) = semantic::enumerate(&subject, &config);
         let equal = report
             .qualification
@@ -192,6 +204,7 @@ fn measure(
         capture_refusal: capture,
         admitted: admitted.is_ok(),
         subject_equal: None,
+        subject_fingerprint: None,
         models: None,
     };
     Ok((sample, admitted, refusal))

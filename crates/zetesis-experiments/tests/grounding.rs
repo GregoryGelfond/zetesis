@@ -7,7 +7,8 @@ use std::{
 
 use clap::Parser;
 use zetesis_experiments::grounding::{
-    CaptureRefusal, Configuration, Error, Mode, Report, profile, write_report,
+    CaptureRefusal, Configuration, Error, FingerprintUnavailable, Mode, Report, SubjectFingerprint,
+    profile, write_report,
 };
 use zetesis_experiments::{CommandOptions, Experiment};
 
@@ -44,6 +45,93 @@ fn modes_preserve_complete_native_models() {
         assert!(checked.exhausted);
         assert_eq!(&checked.interpretations, models);
         assert_eq!(checked.verified_models, 2);
+    }
+}
+
+#[test]
+fn every_sample_retains_the_complete_execution_fingerprint() {
+    let report = qualified_identity();
+    assert!(matches!(
+        report.subject_fingerprint,
+        Some(SubjectFingerprint::Available { .. })
+    ));
+    for sample in &report.samples {
+        assert_eq!(sample.subject_fingerprint, report.subject_fingerprint);
+    }
+}
+
+#[test]
+fn subject_encoding_ceiling_is_inclusive() {
+    let report = qualified_identity();
+    let Some(SubjectFingerprint::Available { bytes, .. }) = report.subject_fingerprint else {
+        panic!("complete supported subject fingerprint");
+    };
+    let mut config = configuration();
+    config.capture.max_subject_bytes = bytes;
+    assert!(profile(source("identity.lp"), config).unwrap().complete);
+    config.capture.max_subject_bytes = bytes - 1;
+    let refused = profile(source("identity.lp"), config).unwrap();
+    assert!(!refused.complete);
+    assert!(
+        refused.nodes.is_some(),
+        "native admission already succeeded"
+    );
+    assert!(refused.subject_fingerprint.is_none(), "no prefix digest");
+    assert!(
+        refused.qualification.is_none(),
+        "capture refusal precedes solve"
+    );
+    assert!(
+        matches!(refused.failure, Some(Error::Limit { resource: "subject_encoding_bytes", limit }) if limit == bytes - 1)
+    );
+}
+
+#[test]
+fn term_observations_preserve_internal_qualification() {
+    let report = profile(source("term-observation.lp"), configuration()).unwrap();
+    assert!(report.complete, "{:?}", report.failure);
+    assert_eq!(
+        report.subject_fingerprint,
+        Some(SubjectFingerprint::Unavailable {
+            reason: FingerprintUnavailable::TermObservations,
+        })
+    );
+    assert_eq!(
+        report.qualification.as_ref().unwrap().interpretations,
+        [vec![0]]
+    );
+    for sample in &report.samples {
+        assert_eq!(sample.subject_equal, Some(true));
+        assert_eq!(sample.subject_fingerprint, report.subject_fingerprint);
+        assert!(sample.models.as_ref().unwrap().exhausted);
+    }
+}
+
+#[test]
+fn chain_controls_have_the_expected_complete_model() {
+    let expected: std::collections::BTreeSet<_> = (0..64)
+        .map(|n| format!("vertex({n})"))
+        .chain((0..63).map(|n| format!("edge({n},{})", n + 1)))
+        .chain((0..64).map(|n| format!("reach({n})")))
+        .collect();
+    for name in ["sparse-arithmetic.lp", "plain-chain.lp"] {
+        let report = profile(source(name), configuration()).unwrap();
+        assert!(report.complete, "{name}: {:?}", report.failure);
+        assert_eq!(
+            report
+                .atoms
+                .iter()
+                .cloned()
+                .collect::<std::collections::BTreeSet<_>>(),
+            expected
+        );
+        let models = report.qualification.unwrap();
+        assert!(models.exhausted);
+        assert_eq!(models.verified_models, 1);
+        assert_eq!(
+            models.interpretations,
+            [(0..report.atoms.len()).collect::<Vec<_>>()]
+        );
     }
 }
 
@@ -306,11 +394,15 @@ fn native_limits_are_numeric_json_fields() {
         ("formula", 18),
         ("search", 4),
         ("certificate", 4),
-        ("capture", 6),
+        ("capture", 7),
     ] {
         assert_eq!(encoded[field].as_object().unwrap().len(), count, "{field}");
     }
     assert_eq!(encoded["formula"]["max_work"], config.formula.max_work);
+    assert_eq!(
+        encoded["capture"]["max_subject_bytes"],
+        config.capture.max_subject_bytes
+    );
     assert_eq!(
         encoded["formula"]["observation"]["max_origins"],
         config.formula.observation.max_origins
@@ -387,6 +479,8 @@ fn command_adapts_to_the_library_configuration() {
         "2",
         "--max-models",
         "7",
+        "--max-subject-bytes",
+        "19",
     ])
     .unwrap();
     let Some(Experiment::Grounding(options)) = command.command else {
@@ -395,6 +489,7 @@ fn command_adapts_to_the_library_configuration() {
     assert_eq!(options.source, PathBuf::from("source.lp"));
     assert_eq!(options.configuration().repetitions, 2);
     assert_eq!(options.configuration().capture.max_models, 7);
+    assert_eq!(options.configuration().capture.max_subject_bytes, 19);
 }
 
 #[test]

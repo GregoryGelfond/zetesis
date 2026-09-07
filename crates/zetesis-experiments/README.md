@@ -168,6 +168,21 @@ model multiplicities are retained. Native exhaustion is required, including for
 an inconsistent source with zero models. This internal parity is not independent
 clingo agreement, a compiler proof, or qualification of a physical backend.
 
+The initial reference and each sample also retain `subject_fingerprint`, an
+additive schema-one field for comparisons between executables. Available records
+identify the `zetesis-execution-subject-v1` framed SHA-256 grammar and byte count.
+The [encoding contract](../../docs/verification/scalar-evaluation-20260907/fingerprint.md)
+specifies complete ordered atoms/values, formula nodes/roots, grouped provenance,
+objective absence and display metadata. Hashing occurs outside timing with
+fixed-size scratch and an independent byte-work ceiling. A matching fingerprint
+is collision-resistant evidence, not a proof of identity or an exportable program.
+Term-observation query plans have no complete public representation and produce
+an explicit `unavailable` reason, while exact internal comparison and complete
+enumeration continue. `complete: true` alone does not imply an available digest.
+Cross-executable ablations must require an available matching grammar/digest for
+every reference and sample, identical source/configuration seals and complete
+matching full-model multisets. They must retain all measured samples.
+
 Objectives, including inactive/empty declarations, are explicitly refused; this
 experiment does not silently enumerate past an optimization contract. Native
 admission/search refusals and capture exhaustion yield `complete: false`, retain
@@ -186,6 +201,7 @@ The command accepts 1–11 rounds and these independent inclusive capture ceilin
 | `--max-model-atoms` | 65536 | True-atom indices across one enumeration |
 | `--max-atom-text-bytes` | 1048576 | Full catalog spelling bytes |
 | `--max-source-path-bytes` | 1048576 | Retained native source path bytes |
+| `--max-subject-bytes` | 67108864 | Framed execution-subject bytes hashed per admission |
 | `--max-output-bytes` | 16777216 | Entire JSON record and newline |
 
 Zero is a real ceiling. The command uses unchanged native defaults; the public
