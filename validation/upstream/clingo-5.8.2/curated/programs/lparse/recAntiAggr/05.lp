@@ -1,0 +1,1 @@
+p :- not not #sum { 1:p } > 0.

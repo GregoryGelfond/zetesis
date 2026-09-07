@@ -1,4 +1,101 @@
-# Full kr-domains regression gate
+# Validation tooling
+
+This package has two commands and a reusable corpus library. `zetesis-corpus`
+checks the selected clingo fixture's integrity without running a solver.
+`zetesis-validate` runs the separate 94-case kr-domains solver campaign described
+below. Neither command is invoked by the production solver.
+
+## Selected clingo corpus
+
+From the repository root, verify the checked-in data with the pinned Rust
+toolchain:
+
+```sh
+cargo run --locked -p zetesis-validation --bin zetesis-corpus -- \
+  verify validation/upstream/clingo-5.8.2/curated
+```
+
+Normal verification needs only `curated/manifest.json`, `curated/LICENSE.md`,
+and the 24 `.lp` files under `curated/programs/`. It does not read C++ files,
+invoke the import decoder, start clingo, or require another estate checkout.
+The sources are ordinary ASP files with their exact original bytes; they can
+also be passed directly to a solver:
+
+```sh
+clingo validation/upstream/clingo-5.8.2/curated/programs/lparse/projectionBug/01.lp 0
+```
+
+To install only the integrity command into Cargo's binary directory:
+
+```sh
+cargo install --path crates/zetesis-validation --bin zetesis-corpus --locked
+zetesis-corpus verify /path/to/zetesis/validation/upstream/clingo-5.8.2/curated
+```
+
+An explicit import reproduces the curated files from the retained legacy
+catalog and pinned originals. Use a new destination whose parent exists:
+
+```sh
+corpus_import_dir=$(mktemp -d)
+cargo run --locked -p zetesis-validation --bin zetesis-corpus -- \
+  import validation/upstream/clingo-5.8.2 "$corpus_import_dir/curated"
+cargo run --locked -p zetesis-validation --bin zetesis-corpus -- \
+  verify "$corpus_import_dir/curated"
+```
+
+Import checks all three original file hashes, exact assertion byte/line spans,
+section ordinals, decoded adjacent C++ strings, source hashes and helper
+contracts before creating output. The decoder accepts only the literal subset
+needed by these pinned assertions; it is not a general C++ parser. Import never
+replaces an existing path or writes inside the original-source directory.
+Publication requires exclusive ownership of the destination parent and is not
+crash-atomic. A write or final verification failure attempts to remove the new
+directory; a cleanup failure retains both causes explicitly.
+
+The manifest pins 24 assertion identities and 73 complete model occurrences.
+It keeps complete models separate from the original helper's prefix-selected
+displays, preserving repeated and empty displays. The exact original helper
+expectation also retains its diagnostic text. This integrity check establishes
+agreement among the recorded contracts, not a fresh enumeration or native
+admission verdict. Native admission labels stay in the existing caller policy
+and cannot change this curated target.
+
+Each case resolves to an immutable upstream URL, original file hash, assertion
+span and exact spelling through the manifest. `LICENSE.md` is the upstream MIT
+license; `origins[].copyright_notice` retains each original file's complete
+notice verbatim. The `.lp` files contain no added comments or terminal newlines.
+The manifest itself has a SHA-256 pinned in the Rust library; deliberate target
+changes require updating both identities after review.
+
+Rust clients use `zetesis_validation::curated::open(path, Limits)` or the
+explicit `import_legacy` function. The returned `Corpus` owns verified sources;
+`Case`, `Provenance`, `Origin` and `Contract` provide borrowed views without
+public unchecked constructors. Source strings remain stable if the filesystem
+later changes. Returned paths describe what was read and do not reserve those
+files for a later solver invocation. A consumer needing exact verified input
+should use `Case::source()`.
+
+`Limits` bounds serialized manifests/catalogs, individual and cumulative source
+bytes, individual original/license bytes, cases, full-model occurrences and
+atom occurrences. Limits are inclusive; zero means zero. JSON containers are
+allocated from the bounded serialized document before contract validation.
+Import retains the three bounded original texts while checking assertions.
+These are input and retained-source measures, not heap or RSS accounting.
+
+Both commands emit machine-readable reports. `zetesis-corpus` writes one JSON
+record only after successful verification, with `semantic_solver_run: false`.
+It exits 0 on integrity success and 2 on argument, integrity, filesystem or output
+failure. Diagnostics go to stderr. A stdout write failure can leave a partial
+record; consumers must check successful process completion before accepting it.
+
+The existing Python comparison/gate and Rust native-admission tests still read
+`cases.jsonl`; the explicit import tests still read the retained C++ originals.
+They remain in place until their callers and independent checks are migrated.
+See the [migration record](../../docs/verification/corpus-curation-20260907/README.md)
+for the exact remaining work. This first slice does not replace the solver
+campaign or claim repository cleanup is complete.
+
+## Full kr-domains regression gate
 
 `zetesis-validate` is an independent validation executable. It is not linked to
 or invoked by the production solver. The default target contains all 94 original

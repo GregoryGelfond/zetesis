@@ -1,0 +1,1609 @@
+{
+  "schema": 1,
+  "upstream_revision": "a99ffb2a58293c68b28fcc283a1d1c9ccad900fe",
+  "license_path": "LICENSE.md",
+  "license_sha256": "8de01c48f0adf249cd631e7320fbf4f15b6f5c25ddb18cdf1410c95c9f0c445d",
+  "origins": [
+    {
+      "path": "libgringo/tests/output/lparse.cc",
+      "url": "https://github.com/potassco/clingo/blob/a99ffb2a58293c68b28fcc283a1d1c9ccad900fe/libgringo/tests/output/lparse.cc",
+      "sha256": "f1071f4e5a4a18c818cff85ded75ea7b048ae1303d8271feb099d19bd005e87b",
+      "copyright_notice": "// {{{ MIT License\n\n// Copyright 2017 Roland Kaminski\n\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to\n// deal in the Software without restriction, including without limitation the\n// rights to use, copy, modify, merge, publish, distribute, sublicense, and/or\n// sell copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\n// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS\n// IN THE SOFTWARE.\n\n// }}}"
+    },
+    {
+      "path": "libgringo/tests/output/aspcomp13.cc",
+      "url": "https://github.com/potassco/clingo/blob/a99ffb2a58293c68b28fcc283a1d1c9ccad900fe/libgringo/tests/output/aspcomp13.cc",
+      "sha256": "dddbc1befc29b251865b1c359c464c2f441fb5de499f07f90d1ed792cbdcd8a0",
+      "copyright_notice": "// {{{ MIT License\n\n// Copyright 2017 Roland Kaminski\n\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to\n// deal in the Software without restriction, including without limitation the\n// rights to use, copy, modify, merge, publish, distribute, sublicense, and/or\n// sell copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\n// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS\n// IN THE SOFTWARE.\n\n// }}}"
+    },
+    {
+      "path": "libgringo/tests/output/solver_helper.hh",
+      "url": "https://github.com/potassco/clingo/blob/a99ffb2a58293c68b28fcc283a1d1c9ccad900fe/libgringo/tests/output/solver_helper.hh",
+      "sha256": "c657770081a59aba05f4f96ac308e6b5544d5c76f4ae6809d970e0136d1ae373",
+      "copyright_notice": "// {{{ MIT License\n\n// Copyright 2017 Roland Kaminski\n\n// Permission is hereby granted, free of charge, to any person obtaining a copy\n// of this software and associated documentation files (the \"Software\"), to\n// deal in the Software without restriction, including without limitation the\n// rights to use, copy, modify, merge, publish, distribute, sublicense, and/or\n// sell copies of the Software, and to permit persons to whom the Software is\n// furnished to do so, subject to the following conditions:\n\n// The above copyright notice and this permission notice shall be included in\n// all copies or substantial portions of the Software.\n\n// THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\n// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS\n// IN THE SOFTWARE.\n\n// }}}"
+    }
+  ],
+  "cases": [
+    {
+      "id": "lparse/bug-disjunction-range/01",
+      "path": "programs/lparse/bug-disjunction-range/01.lp",
+      "source_sha256": "84afc936dd391d465fff62a770ca2036ba1fa5819973a0512e0e0561af735086",
+      "license": "MIT",
+      "provenance": {
+        "source_file": "libgringo/tests/output/lparse.cc",
+        "section": "bug-disjunction-range",
+        "assertion_ordinal": 1,
+        "byte_start": 1396,
+        "byte_end": 1468,
+        "line_start": 36,
+        "line_end": 36,
+        "assertion": "REQUIRE(\"([[p(1),p(2)],[q]],[])\" == IO::to_string(solve(\"p(1..2); q.\")))",
+        "helper_arguments": [],
+        "expected_helper_output": "([[p(1),p(2)],[q]],[])"
+      },
+      "contract": {
+        "full_models": [
+          [
+            "p(1)",
+            "p(2)"
+          ],
+          [
+            "q"
+          ]
+        ],
+        "prefixes": [
+          ""
+        ],
+        "helper_models": [
+          [
+            "p(1)",
+            "p(2)"
+          ],
+          [
+            "q"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "lparse/bug-disjunction-range/05",
+      "path": "programs/lparse/bug-disjunction-range/05.lp",
+      "source_sha256": "3184a99ac9522b8d81c75926a8e5b54bc795a5bc9a8b493f0f61d18da956f0d9",
+      "license": "MIT",
+      "provenance": {
+        "source_file": "libgringo/tests/output/lparse.cc",
+        "section": "bug-disjunction-range",
+        "assertion_ordinal": 5,
+        "byte_start": 2078,
+        "byte_end": 2189,
+        "line_start": 45,
+        "line_end": 45,
+        "assertion": "REQUIRE(\"([[],[p(1),p(2),q],[p(1),q],[p(2),q]],[])\" == IO::to_string(solve(\"not p(1..2); q. {p(1)}. {p(2)}.\")))",
+        "helper_arguments": [],
+        "expected_helper_output": "([[],[p(1),p(2),q],[p(1),q],[p(2),q]],[])"
+      },
+      "contract": {
+        "full_models": [
+          [],
+          [
+            "p(1)",
+            "q"
+          ],
+          [
+            "p(2)",
+            "q"
+          ],
+          [
+            "p(1)",
+            "p(2)",
+            "q"
+          ]
+        ],
+        "prefixes": [
+          ""
+        ],
+        "helper_models": [
+          [],
+          [
+            "p(1)",
+            "p(2)",
+            "q"
+          ],
+          [
+            "p(1)",
+            "q"
+          ],
+          [
+            "p(2)",
+            "q"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "lparse/bug-disjunction-range/13",
+      "path": "programs/lparse/bug-disjunction-range/13.lp",
+      "source_sha256": "9a8d0e486bb2bbe39bd66b59e1e148c8d4fafc13bc3fea1a43109e3822ca4fd5",
+      "license": "MIT",
+      "provenance": {
+        "source_file": "libgringo/tests/output/lparse.cc",
+        "section": "bug-disjunction-range",
+        "assertion_ordinal": 13,
+        "byte_start": 3687,
+        "byte_end": 3771,
+        "line_start": 65,
+        "line_end": 65,
+        "assertion": "REQUIRE(\"([[p(1),p(2)],[q]],[])\" == IO::to_string(solve(\"p(1..2):#true; q:#true.\")))",
+        "helper_arguments": [],
+        "expected_helper_output": "([[p(1),p(2)],[q]],[])"
+      },
+      "contract": {
+        "full_models": [
+          [
+            "q"
+          ],
+          [
+            "p(1)",
+            "p(2)"
+          ]
+        ],
+        "prefixes": [
+          ""
+        ],
+        "helper_models": [
+          [
+            "p(1)",
+            "p(2)"
+          ],
+          [
+            "q"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "lparse/bug-disjunction-pools/01",
+      "path": "programs/lparse/bug-disjunction-pools/01.lp",
+      "source_sha256": "9529c738c4ac3090e724a9b84238288aa9f8703bd87899ef80d0e292ce70ffab",
+      "license": "MIT",
+      "provenance": {
+        "source_file": "libgringo/tests/output/lparse.cc",
+        "section": "bug-disjunction-pools",
+        "assertion_ordinal": 1,
+        "byte_start": 6170,
+        "byte_end": 6241,
+        "line_start": 96,
+        "line_end": 96,
+        "assertion": "REQUIRE(\"([[p(1),p(2)],[q]],[])\" == IO::to_string(solve(\"p(1;2); q.\")))",
+        "helper_arguments": [],
+        "expected_helper_output": "([[p(1),p(2)],[q]],[])"
+      },
+      "contract": {
+        "full_models": [
+          [
+            "q"
+          ],
+          [
+            "p(1)",
+            "p(2)"
+          ]
+        ],
+        "prefixes": [
+          ""
+        ],
+        "helper_models": [
+          [
+            "p(1)",
+            "p(2)"
+          ],
+          [
+            "q"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "lparse/unpool/01",
+      "path": "programs/lparse/unpool/01.lp",
+      "source_sha256": "24ec25ef4f8445a5db2b674795642e3a2eec61996149b7b1507f05f5456f5b78",
+      "license": "MIT",
+      "provenance": {
+        "source_file": "libgringo/tests/output/lparse.cc",
+        "section": "unpool",
+        "assertion_ordinal": 1,
+        "byte_start": 11827,
+        "byte_end": 11907,
+        "line_start": 171,
+        "line_end": 171,
+        "assertion": "REQUIRE(\"([[a(1),a(2),a(4)]],[])\" == IO::to_string(solve(\"a(X) :- X=(1;2;4).\")))",
+        "helper_arguments": [],
+        "expected_helper_output": "([[a(1),a(2),a(4)]],[])"
+      },
+      "contract": {
+        "full_models": [
+          [
+            "a(1)",
+            "a(2)",
+            "a(4)"
+          ]
+        ],
+        "prefixes": [
+          ""
+        ],
+        "helper_models": [
+          [
+            "a(1)",
+            "a(2)",
+            "a(4)"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "lparse/projectionBug/01",
+      "path": "programs/lparse/projectionBug/01.lp",
+      "source_sha256": "b4752bf8e173a7cf0c90b5b4986acb5edabd07fb9f77f7efe173f8b07eb5d6a7",
+      "license": "MIT",
+      "provenance": {
+        "source_file": "libgringo/tests/output/lparse.cc",
+        "section": "projectionBug",
+        "assertion_ordinal": 1,
+        "byte_start": 18799,
+        "byte_end": 19105,
+        "line_start": 285,
+        "line_end": 288,
+        "assertion": "REQUIRE(\"([[p(1),p(2)]],[])\" == IO::to_string(solve(\"q((1,x),2).\\n\"\n                                                            \"p(A) :- q((A,_),_).\\n\"\n                                                            \"p(B) :- q((A,_),B).\\n\",\n                                                            {\"p(\"})))",
+        "helper_arguments": [
+          "{\"p(\"}"
+        ],
+        "expected_helper_output": "([[p(1),p(2)]],[])"
+      },
+      "contract": {
+        "full_models": [
+          [
+            "p(1)",
+            "p(2)",
+            "q((1,x),2)"
+          ]
+        ],
+        "prefixes": [
+          "p("
+        ],
+        "helper_models": [
+          [
+            "p(1)",
+            "p(2)"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "lparse/aggregateMinBug/01",
+      "path": "programs/lparse/aggregateMinBug/01.lp",
+      "source_sha256": "6951e9928eaa299669aa3e442ff13198c837f6f00972752267348d91a6566acd",
+      "license": "MIT",
+      "provenance": {
+        "source_file": "libgringo/tests/output/lparse.cc",
+        "section": "aggregateMinBug",
+        "assertion_ordinal": 1,
+        "byte_start": 19587,
+        "byte_end": 19908,
+        "line_start": 298,
+        "line_end": 301,
+        "assertion": "REQUIRE(\"([[a(20),a(50),a(60),output(20)],[a(20),a(50),output(20)],[a(50),a(60),output(50)],[a(50),output(50)]]\"\n                \",[])\" == IO::to_string(solve(\"a(50).\"\n                                              \"{ a(20) ; a(60) }.\"\n                                              \"output(X) :- X = #min { C : a(C) }.\")))",
+        "helper_arguments": [],
+        "expected_helper_output": "([[a(20),a(50),a(60),output(20)],[a(20),a(50),output(20)],[a(50),a(60),output(50)],[a(50),output(50)]],[])"
+      },
+      "contract": {
+        "full_models": [
+          [
+            "a(50)",
+            "output(50)"
+          ],
+          [
+            "a(50)",
+            "a(60)",
+            "output(50)"
+          ],
+          [
+            "a(20)",
+            "a(50)",
+            "output(20)"
+          ],
+          [
+            "a(20)",
+            "a(50)",
+            "a(60)",
+            "output(20)"
+          ]
+        ],
+        "prefixes": [
+          ""
+        ],
+        "helper_models": [
+          [
+            "a(20)",
+            "a(50)",
+            "a(60)",
+            "output(20)"
+          ],
+          [
+            "a(20)",
+            "a(50)",
+            "output(20)"
+          ],
+          [
+            "a(50)",
+            "a(60)",
+            "output(50)"
+          ],
+          [
+            "a(50)",
+            "output(50)"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "lparse/aggregateRecBug/02",
+      "path": "programs/lparse/aggregateRecBug/02.lp",
+      "source_sha256": "9061b5383f9203bbd087d94d883628c08b7a7e1c21572b72fc0eadab09766480",
+      "license": "MIT",
+      "provenance": {
+        "source_file": "libgringo/tests/output/lparse.cc",
+        "section": "aggregateRecBug",
+        "assertion_ordinal": 2,
+        "byte_start": 30947,
+        "byte_end": 31012,
+        "line_start": 478,
+        "line_end": 478,
+        "assertion": "REQUIRE(\"([],[])\" == IO::to_string(solve(\"a :- #sum {1:a}!=1.\")))",
+        "helper_arguments": [],
+        "expected_helper_output": "([],[])"
+      },
+      "contract": {
+        "full_models": [],
+        "prefixes": [
+          ""
+        ],
+        "helper_models": []
+      }
+    },
+    {
+      "id": "lparse/recAntiAggr/05",
+      "path": "programs/lparse/recAntiAggr/05.lp",
+      "source_sha256": "0f0aa946af78efa004614074cbc3af9184e442de0e23822bd89d1fd3cc4256cd",
+      "license": "MIT",
+      "provenance": {
+        "source_file": "libgringo/tests/output/lparse.cc",
+        "section": "recAntiAggr",
+        "assertion_ordinal": 5,
+        "byte_start": 32072,
+        "byte_end": 32154,
+        "line_start": 496,
+        "line_end": 496,
+        "assertion": "REQUIRE(\"([[],[p]],[])\" == IO::to_string(solve(\"p :- not not #sum { 1:p } > 0.\")))",
+        "helper_arguments": [],
+        "expected_helper_output": "([[],[p]],[])"
+      },
+      "contract": {
+        "full_models": [
+          [],
+          [
+            "p"
+          ]
+        ],
+        "prefixes": [
+          ""
+        ],
+        "helper_models": [
+          [],
+          [
+            "p"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "lparse/head/03",
+      "path": "programs/lparse/head/03.lp",
+      "source_sha256": "2ee90dc040b023e10d08bdadc2b1de80a0c1c1ee5d57c6fe48b4581a789170d4",
+      "license": "MIT",
+      "provenance": {
+        "source_file": "libgringo/tests/output/lparse.cc",
+        "section": "head",
+        "assertion_ordinal": 3,
+        "byte_start": 33800,
+        "byte_end": 33988,
+        "line_start": 521,
+        "line_end": 522,
+        "assertion": "REQUIRE(\"([[p(1)],[p(1),p(2)],[p(1),p(3)],[p(1),p(4)],[p(2)],[p(2),p(3)],[p(2),p(4)],[p(3)],[p(3),p(4)],[p(4)]]\"\n                \",[])\" == IO::to_string(solve(\"1#count{X:p(X):X=1..4}2.\")))",
+        "helper_arguments": [],
+        "expected_helper_output": "([[p(1)],[p(1),p(2)],[p(1),p(3)],[p(1),p(4)],[p(2)],[p(2),p(3)],[p(2),p(4)],[p(3)],[p(3),p(4)],[p(4)]],[])"
+      },
+      "contract": {
+        "full_models": [
+          [
+            "p(4)"
+          ],
+          [
+            "p(3)"
+          ],
+          [
+            "p(3)",
+            "p(4)"
+          ],
+          [
+            "p(2)"
+          ],
+          [
+            "p(2)",
+            "p(4)"
+          ],
+          [
+            "p(2)",
+            "p(3)"
+          ],
+          [
+            "p(1)"
+          ],
+          [
+            "p(1)",
+            "p(3)"
+          ],
+          [
+            "p(1)",
+            "p(4)"
+          ],
+          [
+            "p(1)",
+            "p(2)"
+          ]
+        ],
+        "prefixes": [
+          ""
+        ],
+        "helper_models": [
+          [
+            "p(1)"
+          ],
+          [
+            "p(1)",
+            "p(2)"
+          ],
+          [
+            "p(1)",
+            "p(3)"
+          ],
+          [
+            "p(1)",
+            "p(4)"
+          ],
+          [
+            "p(2)"
+          ],
+          [
+            "p(2)",
+            "p(3)"
+          ],
+          [
+            "p(2)",
+            "p(4)"
+          ],
+          [
+            "p(3)"
+          ],
+          [
+            "p(3)",
+            "p(4)"
+          ],
+          [
+            "p(4)"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "lparse/assign/01",
+      "path": "programs/lparse/assign/01.lp",
+      "source_sha256": "4413741f8fd245a3986113cbbb27239d20abec47528f7a284d560068c5265cf6",
+      "license": "MIT",
+      "provenance": {
+        "source_file": "libgringo/tests/output/lparse.cc",
+        "section": "assign",
+        "assertion_ordinal": 1,
+        "byte_start": 34685,
+        "byte_end": 34771,
+        "line_start": 534,
+        "line_end": 534,
+        "assertion": "REQUIRE(\"([[p,q(1)],[q(0)]],[])\" == IO::to_string(solve(\"{p}. q(M):-M=#count{1:p}.\")))",
+        "helper_arguments": [],
+        "expected_helper_output": "([[p,q(1)],[q(0)]],[])"
+      },
+      "contract": {
+        "full_models": [
+          [
+            "q(0)"
+          ],
+          [
+            "p",
+            "q(1)"
+          ]
+        ],
+        "prefixes": [
+          ""
+        ],
+        "helper_models": [
+          [
+            "p",
+            "q(1)"
+          ],
+          [
+            "q(0)"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "lparse/assign/03",
+      "path": "programs/lparse/assign/03.lp",
+      "source_sha256": "d730de86b15d886f3e06cd993eec367a74076674548cf4a38caa30e33984bc61",
+      "license": "MIT",
+      "provenance": {
+        "source_file": "libgringo/tests/output/lparse.cc",
+        "section": "assign",
+        "assertion_ordinal": 3,
+        "byte_start": 34876,
+        "byte_end": 34960,
+        "line_start": 536,
+        "line_end": 536,
+        "assertion": "REQUIRE(\"([[p,q(1)],[q(0)]],[])\" == IO::to_string(solve(\"{p}. q(M):-M=#sum{1:p}.\")))",
+        "helper_arguments": [],
+        "expected_helper_output": "([[p,q(1)],[q(0)]],[])"
+      },
+      "contract": {
+        "full_models": [
+          [
+            "q(0)"
+          ],
+          [
+            "p",
+            "q(1)"
+          ]
+        ],
+        "prefixes": [
+          ""
+        ],
+        "helper_models": [
+          [
+            "p",
+            "q(1)"
+          ],
+          [
+            "q(0)"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "lparse/assign/04",
+      "path": "programs/lparse/assign/04.lp",
+      "source_sha256": "77a8f1f9287e900d77944781b4210d7e3a95a2d811693e9280e4b96490b3d5df",
+      "license": "MIT",
+      "provenance": {
+        "source_file": "libgringo/tests/output/lparse.cc",
+        "section": "assign",
+        "assertion_ordinal": 4,
+        "byte_start": 34970,
+        "byte_end": 35057,
+        "line_start": 537,
+        "line_end": 537,
+        "assertion": "REQUIRE(\"([[p,q(p)],[q(#sup)]],[])\" == IO::to_string(solve(\"{p}. q(M):-M=#min{p:p}.\")))",
+        "helper_arguments": [],
+        "expected_helper_output": "([[p,q(p)],[q(#sup)]],[])"
+      },
+      "contract": {
+        "full_models": [
+          [
+            "q(#sup)"
+          ],
+          [
+            "p",
+            "q(p)"
+          ]
+        ],
+        "prefixes": [
+          ""
+        ],
+        "helper_models": [
+          [
+            "p",
+            "q(p)"
+          ],
+          [
+            "q(#sup)"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "lparse/assign/05",
+      "path": "programs/lparse/assign/05.lp",
+      "source_sha256": "6776e56744f5f8f9b916567838074efc41c290358e331feae08f097504714a46",
+      "license": "MIT",
+      "provenance": {
+        "source_file": "libgringo/tests/output/lparse.cc",
+        "section": "assign",
+        "assertion_ordinal": 5,
+        "byte_start": 35067,
+        "byte_end": 35154,
+        "line_start": 538,
+        "line_end": 538,
+        "assertion": "REQUIRE(\"([[p,q(p)],[q(#inf)]],[])\" == IO::to_string(solve(\"{p}. q(M):-M=#max{p:p}.\")))",
+        "helper_arguments": [],
+        "expected_helper_output": "([[p,q(p)],[q(#inf)]],[])"
+      },
+      "contract": {
+        "full_models": [
+          [
+            "q(#inf)"
+          ],
+          [
+            "p",
+            "q(p)"
+          ]
+        ],
+        "prefixes": [
+          ""
+        ],
+        "helper_models": [
+          [
+            "p",
+            "q(p)"
+          ],
+          [
+            "q(#inf)"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "lparse/assign/06",
+      "path": "programs/lparse/assign/06.lp",
+      "source_sha256": "d58fe7c366e4aaeb856f76608aac68693119d25742bd8e9775817a3b9d5a7f63",
+      "license": "MIT",
+      "provenance": {
+        "source_file": "libgringo/tests/output/lparse.cc",
+        "section": "assign",
+        "assertion_ordinal": 6,
+        "byte_start": 35164,
+        "byte_end": 35440,
+        "line_start": 539,
+        "line_end": 544,
+        "assertion": "REQUIRE(\"([[p(1),p(2),q(1)],\"\n                \"[p(1),p(3),q(1)],\"\n                \"[p(1),p(4),q(1)],\"\n                \"[p(2),p(3),q(2)],\"\n                \"[p(2),p(4),q(2)],\"\n                \"[p(3),p(4),q(3)]],[])\" == IO::to_string(solve(\"2{p(1..4)}2. q(M):-M=#min{X:p(X)}.\")))",
+        "helper_arguments": [],
+        "expected_helper_output": "([[p(1),p(2),q(1)],[p(1),p(3),q(1)],[p(1),p(4),q(1)],[p(2),p(3),q(2)],[p(2),p(4),q(2)],[p(3),p(4),q(3)]],[])"
+      },
+      "contract": {
+        "full_models": [
+          [
+            "p(3)",
+            "p(4)",
+            "q(3)"
+          ],
+          [
+            "p(2)",
+            "p(4)",
+            "q(2)"
+          ],
+          [
+            "p(2)",
+            "p(3)",
+            "q(2)"
+          ],
+          [
+            "p(1)",
+            "p(4)",
+            "q(1)"
+          ],
+          [
+            "p(1)",
+            "p(3)",
+            "q(1)"
+          ],
+          [
+            "p(1)",
+            "p(2)",
+            "q(1)"
+          ]
+        ],
+        "prefixes": [
+          ""
+        ],
+        "helper_models": [
+          [
+            "p(1)",
+            "p(2)",
+            "q(1)"
+          ],
+          [
+            "p(1)",
+            "p(3)",
+            "q(1)"
+          ],
+          [
+            "p(1)",
+            "p(4)",
+            "q(1)"
+          ],
+          [
+            "p(2)",
+            "p(3)",
+            "q(2)"
+          ],
+          [
+            "p(2)",
+            "p(4)",
+            "q(2)"
+          ],
+          [
+            "p(3)",
+            "p(4)",
+            "q(3)"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "lparse/conjunction/02",
+      "path": "programs/lparse/conjunction/02.lp",
+      "source_sha256": "35f7d0814033702c97db321d0bf8966d345d89f5debf7148107e94f380afba1e",
+      "license": "MIT",
+      "provenance": {
+        "source_file": "libgringo/tests/output/lparse.cc",
+        "section": "conjunction",
+        "assertion_ordinal": 2,
+        "byte_start": 35958,
+        "byte_end": 36225,
+        "line_start": 557,
+        "line_end": 560,
+        "assertion": "REQUIRE(\"([[a,b,c]],[])\" == IO::to_string(solve(\"a:-b:c.\\n\"\n                                                        \"c:-a.\\n\"\n                                                        \"b:-c.\\n\",\n                                                        {\"a\", \"b\", \"c\"})))",
+        "helper_arguments": [
+          "{\"a\", \"b\", \"c\"}"
+        ],
+        "expected_helper_output": "([[a,b,c]],[])"
+      },
+      "contract": {
+        "full_models": [
+          [
+            "a",
+            "b",
+            "c"
+          ]
+        ],
+        "prefixes": [
+          "a",
+          "b",
+          "c"
+        ],
+        "helper_models": [
+          [
+            "a",
+            "b",
+            "c"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "lparse/conjunction/04",
+      "path": "programs/lparse/conjunction/04.lp",
+      "source_sha256": "e5879056c619f06bbcc677bcb40dda91eea24a6a28e3e883a48bfe9f92653677",
+      "license": "MIT",
+      "provenance": {
+        "source_file": "libgringo/tests/output/lparse.cc",
+        "section": "conjunction",
+        "assertion_ordinal": 4,
+        "byte_start": 36663,
+        "byte_end": 37102,
+        "line_start": 567,
+        "line_end": 571,
+        "assertion": "REQUIRE(\"([[a(1),a(2),a(3),c,q],[a(3)]],[])\" == IO::to_string(solve(\"{c}.\\n\"\n                                                                            \"a(1):-c.\\n\"\n                                                                            \"a(2):-c.\\n\"\n                                                                            \"a(3).\\n\"\n                                                                            \"q:-a(X):X=1..3.\\n\")))",
+        "helper_arguments": [],
+        "expected_helper_output": "([[a(1),a(2),a(3),c,q],[a(3)]],[])"
+      },
+      "contract": {
+        "full_models": [
+          [
+            "a(3)"
+          ],
+          [
+            "a(1)",
+            "a(2)",
+            "a(3)",
+            "c",
+            "q"
+          ]
+        ],
+        "prefixes": [
+          ""
+        ],
+        "helper_models": [
+          [
+            "a(1)",
+            "a(2)",
+            "a(3)",
+            "c",
+            "q"
+          ],
+          [
+            "a(3)"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "lparse/conjunction/05",
+      "path": "programs/lparse/conjunction/05.lp",
+      "source_sha256": "cafd943148b8403aa8dae56c68b863bf3bd698d43c6c7069801bddc248907ace",
+      "license": "MIT",
+      "provenance": {
+        "source_file": "libgringo/tests/output/lparse.cc",
+        "section": "conjunction",
+        "assertion_ordinal": 5,
+        "byte_start": 37112,
+        "byte_end": 37246,
+        "line_start": 572,
+        "line_end": 573,
+        "assertion": "REQUIRE(\"([[p],[q]],[])\" == IO::to_string(solve(\"p :- p:q.\\n\"\n                                                        \"q :- q:p.\\n\")))",
+        "helper_arguments": [],
+        "expected_helper_output": "([[p],[q]],[])"
+      },
+      "contract": {
+        "full_models": [
+          [
+            "q"
+          ],
+          [
+            "p"
+          ]
+        ],
+        "prefixes": [
+          ""
+        ],
+        "helper_models": [
+          [
+            "p"
+          ],
+          [
+            "q"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "lparse/conjunction/07",
+      "path": "programs/lparse/conjunction/07.lp",
+      "source_sha256": "b2adf24b34bd8d590e08805064c54af18c89cd48af1b33cb73475b9233f2633b",
+      "license": "MIT",
+      "provenance": {
+        "source_file": "libgringo/tests/output/lparse.cc",
+        "section": "conjunction",
+        "assertion_ordinal": 7,
+        "byte_start": 37528,
+        "byte_end": 37841,
+        "line_start": 578,
+        "line_end": 582,
+        "assertion": "REQUIRE(\"([[],[p(1),r,s],[p(2),q,r],[p(3),r,s]],[])\" ==\n                IO::to_string(solve(\"{ p(1..3) } 1.\\n\"\n                                    \"q :- p(Y..X) : Y = 2, X = 2.\\n\"\n                                    \"r :- p(X) : #true.\\n\"\n                                    \"s :- p(X-1;2*(X..X+1)-3) : X=2.\\n\")))",
+        "helper_arguments": [],
+        "expected_helper_output": "([[],[p(1),r,s],[p(2),q,r],[p(3),r,s]],[])"
+      },
+      "contract": {
+        "full_models": [
+          [],
+          [
+            "p(2)",
+            "q",
+            "r"
+          ],
+          [
+            "p(3)",
+            "r",
+            "s"
+          ],
+          [
+            "p(1)",
+            "r",
+            "s"
+          ]
+        ],
+        "prefixes": [
+          ""
+        ],
+        "helper_models": [
+          [],
+          [
+            "p(1)",
+            "r",
+            "s"
+          ],
+          [
+            "p(2)",
+            "q",
+            "r"
+          ],
+          [
+            "p(3)",
+            "r",
+            "s"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "lparse/minMax/01",
+      "path": "programs/lparse/minMax/01.lp",
+      "source_sha256": "5ad1d5c64f27d8364626fb3284b95f5a247380701c4042968e8894329f7051c2",
+      "license": "MIT",
+      "provenance": {
+        "source_file": "libgringo/tests/output/lparse.cc",
+        "section": "minMax",
+        "assertion_ordinal": 1,
+        "byte_start": 55635,
+        "byte_end": 55807,
+        "line_start": 891,
+        "line_end": 892,
+        "assertion": "REQUIRE(\"([[a],[b]],[])\" == IO::to_string(solve(\"a :- #min { 1:a; 2:b } != 2.\\n\"\n                                                        \"b :- #max { 1:a; 2:b } != 1.\\n\")))",
+        "helper_arguments": [],
+        "expected_helper_output": "([[a],[b]],[])"
+      },
+      "contract": {
+        "full_models": [
+          [
+            "b"
+          ],
+          [
+            "a"
+          ]
+        ],
+        "prefixes": [
+          ""
+        ],
+        "helper_models": [
+          [
+            "a"
+          ],
+          [
+            "b"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "lparse/IESolver/01",
+      "path": "programs/lparse/IESolver/01.lp",
+      "source_sha256": "4dbe48fc2b0bae9bdfa9e65a501e4f97dbe4db10f9d09ca96ca2bb6279b00f0e",
+      "license": "MIT",
+      "provenance": {
+        "source_file": "libgringo/tests/output/lparse.cc",
+        "section": "IESolver",
+        "assertion_ordinal": 1,
+        "byte_start": 61800,
+        "byte_end": 62123,
+        "line_start": 990,
+        "line_end": 993,
+        "assertion": "REQUIRE(\"([[p(1),p(a),q]],[])\" == IO::to_string(solve(\"p(1).\\n\"\n                                                              \"p(a).\\n\"\n                                                              \"q :- p(X), -0x7FFFFFFF-1 <= X <= 0x7FFFFFFF.\\n\",\n                                                              {\"p\", \"q\"})))",
+        "helper_arguments": [
+          "{\"p\", \"q\"}"
+        ],
+        "expected_helper_output": "([[p(1),p(a),q]],[])"
+      },
+      "contract": {
+        "full_models": [
+          [
+            "p(1)",
+            "p(a)",
+            "q"
+          ]
+        ],
+        "prefixes": [
+          "p",
+          "q"
+        ],
+        "helper_models": [
+          [
+            "p(1)",
+            "p(a)",
+            "q"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "aspcomp13/aspcomp2013_01/01",
+      "path": "programs/aspcomp13/aspcomp2013_01/01.lp",
+      "source_sha256": "5b5d1cc8b308aae22af0cb360d91d3defbc2bfdfb0fe93088c5720820f242c97",
+      "license": "MIT",
+      "provenance": {
+        "source_file": "libgringo/tests/output/aspcomp13.cc",
+        "section": "aspcomp2013_01",
+        "assertion_ordinal": 1,
+        "byte_start": 1566,
+        "byte_end": 2731,
+        "line_start": 43,
+        "line_end": 63,
+        "assertion": "REQUIRE(\n            \"([[solution(1,3),solution(2,4),solution(3,2)]],[])\" ==\n            IO::to_string(solve(\"% instance\\n\"\n                                \"t(1,5).\\n\"\n                                \"t(2,3).\\n\"\n                                \"t(3,1).\\n\"\n                                \"t(4,4).\\n\"\n                                \"t(5,2).\\n\"\n                                \"p(1,2).\\n\"\n                                \"p(2,3).\\n\"\n                                \"p(3,1).\\n\"\n                                \"patternlength(3).\\n\"\n                                \"\\n\"\n                                \"% encoding\\n\"\n                                \"kval(1).\\n\"\n                                \"kval(N+1) :- kval(N), N < L, patternlength(L). \\n\"\n                                \"1 <= { subt(K,I,E) : t(I,E) } <= 1 :- kval(K), patternlength(L).\\n\"\n                                \":- subt(K1,I1,_), subt(K2,I2,_), K1<K2, I1 >= I2.\\n\"\n                                \"solution(K,E) :- subt(K,_,E).\\n\"\n                                \":- solution(K1,ET1), solution(K2,ET2), p(K1,EP1), p(K2,EP2), ET1 < ET2, EP1 >= EP2.\\n\",\n                                {\"solution(\"})))",
+        "helper_arguments": [
+          "{\"solution(\"}"
+        ],
+        "expected_helper_output": "([[solution(1,3),solution(2,4),solution(3,2)]],[])"
+      },
+      "contract": {
+        "full_models": [
+          [
+            "kval(1)",
+            "kval(2)",
+            "kval(3)",
+            "p(1,2)",
+            "p(2,3)",
+            "p(3,1)",
+            "patternlength(3)",
+            "solution(1,3)",
+            "solution(2,4)",
+            "solution(3,2)",
+            "subt(1,2,3)",
+            "subt(2,4,4)",
+            "subt(3,5,2)",
+            "t(1,5)",
+            "t(2,3)",
+            "t(3,1)",
+            "t(4,4)",
+            "t(5,2)"
+          ]
+        ],
+        "prefixes": [
+          "solution("
+        ],
+        "helper_models": [
+          [
+            "solution(1,3)",
+            "solution(2,4)",
+            "solution(3,2)"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "aspcomp13/aspcomp2013_05/01",
+      "path": "programs/aspcomp13/aspcomp2013_05/01.lp",
+      "source_sha256": "9e2f0339f81cbe24b1857240b0e547ed7a05c5cd1a3dbaea6ea67ed33b03f799",
+      "license": "MIT",
+      "provenance": {
+        "source_file": "libgringo/tests/output/aspcomp13.cc",
+        "section": "aspcomp2013_05",
+        "assertion_ordinal": 1,
+        "byte_start": 13234,
+        "byte_end": 15646,
+        "line_start": 258,
+        "line_end": 296,
+        "assertion": "REQUIRE(\"([[value(a,0),value(b,1),value(c,3)],\"\n                \"[value(a,0),value(b,2),value(c,3)],\"\n                \"[value(a,0),value(b,3),value(c,1)],\"\n                \"[value(a,0),value(b,3),value(c,2)],\"\n                \"[value(a,1),value(b,0),value(c,3)],\"\n                \"[value(a,1),value(b,3),value(c,0)],\"\n                \"[value(a,2),value(b,0),value(c,3)],\"\n                \"[value(a,2),value(b,3),value(c,0)],\"\n                \"[value(a,3),value(b,0),value(c,1)],\"\n                \"[value(a,3),value(b,0),value(c,2)],\"\n                \"[value(a,3),value(b,1),value(c,0)],\"\n                \"[value(a,3),value(b,2),value(c,0)]],[])\" ==\n                IO::to_string(solve(\"%instance\\n\"\n                                    \"\\n\"\n                                    \"edge(a,b). edge(b,c). edge(c,a).\\n\"\n                                    \"\\n\"\n                                    \"%encoding\\n\"\n                                    \"\\n\"\n                                    \"% nodes and values\\n\"\n                                    \"node(X) :- edge(X,Y).\\n\"\n                                    \"node(Y) :- edge(X,Y).\\n\"\n                                    \"num_edges(N) :- N = #sum { 1,X,Y : edge(X,Y) }.\\n\"\n                                    \"num(0).\\n\"\n                                    \"num(N) :- num(N1), N=N1+1, num_edges(E), N<=E.\\n\"\n                                    \"\\n\"\n                                    \"% assignment to nodes\\n\"\n                                    \"{ value(X,N) : num(N) } = 1 :- node(X).\\n\"\n                                    \"\\n\"\n                                    \"% assignment to edges\\n\"\n                                    \"{ edge_value(edge(X,Y),N) : num(N), N>0 } = 1 :- edge(X,Y).\\n\"\n                                    \"\\n\"\n                                    \"% relates node values with edge values\\n\"\n                                    \":- not edge_value(edge(X,Y),M-N), edge(X,Y), value(X,M), value(Y,N), N < M.\\n\"\n                                    \":- not edge_value(edge(X,Y),N-M), edge(X,Y), value(X,M), value(Y,N), N > M.\\n\"\n                                    \"\\n\"\n                                    \"% alldifferent values\\n\"\n                                    \":- value(X,N), value(Y,N), num(N), X<Y.\\n\"\n                                    \":- edge_value(X,N), edge_value(Y,N), num(N), X<Y.\\n\",\n                                    {\"value(\"})))",
+        "helper_arguments": [
+          "{\"value(\"}"
+        ],
+        "expected_helper_output": "([[value(a,0),value(b,1),value(c,3)],[value(a,0),value(b,2),value(c,3)],[value(a,0),value(b,3),value(c,1)],[value(a,0),value(b,3),value(c,2)],[value(a,1),value(b,0),value(c,3)],[value(a,1),value(b,3),value(c,0)],[value(a,2),value(b,0),value(c,3)],[value(a,2),value(b,3),value(c,0)],[value(a,3),value(b,0),value(c,1)],[value(a,3),value(b,0),value(c,2)],[value(a,3),value(b,1),value(c,0)],[value(a,3),value(b,2),value(c,0)]],[])"
+      },
+      "contract": {
+        "full_models": [
+          [
+            "edge(a,b)",
+            "edge(b,c)",
+            "edge(c,a)",
+            "edge_value(edge(a,b),2)",
+            "edge_value(edge(b,c),1)",
+            "edge_value(edge(c,a),3)",
+            "node(a)",
+            "node(b)",
+            "node(c)",
+            "num(0)",
+            "num(1)",
+            "num(2)",
+            "num(3)",
+            "num_edges(3)",
+            "value(a,3)",
+            "value(b,1)",
+            "value(c,0)"
+          ],
+          [
+            "edge(a,b)",
+            "edge(b,c)",
+            "edge(c,a)",
+            "edge_value(edge(a,b),2)",
+            "edge_value(edge(b,c),3)",
+            "edge_value(edge(c,a),1)",
+            "node(a)",
+            "node(b)",
+            "node(c)",
+            "num(0)",
+            "num(1)",
+            "num(2)",
+            "num(3)",
+            "num_edges(3)",
+            "value(a,1)",
+            "value(b,3)",
+            "value(c,0)"
+          ],
+          [
+            "edge(a,b)",
+            "edge(b,c)",
+            "edge(c,a)",
+            "edge_value(edge(a,b),1)",
+            "edge_value(edge(b,c),3)",
+            "edge_value(edge(c,a),2)",
+            "node(a)",
+            "node(b)",
+            "node(c)",
+            "num(0)",
+            "num(1)",
+            "num(2)",
+            "num(3)",
+            "num_edges(3)",
+            "value(a,2)",
+            "value(b,3)",
+            "value(c,0)"
+          ],
+          [
+            "edge(a,b)",
+            "edge(b,c)",
+            "edge(c,a)",
+            "edge_value(edge(a,b),1)",
+            "edge_value(edge(b,c),2)",
+            "edge_value(edge(c,a),3)",
+            "node(a)",
+            "node(b)",
+            "node(c)",
+            "num(0)",
+            "num(1)",
+            "num(2)",
+            "num(3)",
+            "num_edges(3)",
+            "value(a,3)",
+            "value(b,2)",
+            "value(c,0)"
+          ],
+          [
+            "edge(a,b)",
+            "edge(b,c)",
+            "edge(c,a)",
+            "edge_value(edge(a,b),1)",
+            "edge_value(edge(b,c),2)",
+            "edge_value(edge(c,a),3)",
+            "node(a)",
+            "node(b)",
+            "node(c)",
+            "num(0)",
+            "num(1)",
+            "num(2)",
+            "num(3)",
+            "num_edges(3)",
+            "value(a,0)",
+            "value(b,1)",
+            "value(c,3)"
+          ],
+          [
+            "edge(a,b)",
+            "edge(b,c)",
+            "edge(c,a)",
+            "edge_value(edge(a,b),3)",
+            "edge_value(edge(b,c),1)",
+            "edge_value(edge(c,a),2)",
+            "node(a)",
+            "node(b)",
+            "node(c)",
+            "num(0)",
+            "num(1)",
+            "num(2)",
+            "num(3)",
+            "num_edges(3)",
+            "value(a,0)",
+            "value(b,3)",
+            "value(c,2)"
+          ],
+          [
+            "edge(a,b)",
+            "edge(b,c)",
+            "edge(c,a)",
+            "edge_value(edge(a,b),2)",
+            "edge_value(edge(b,c),1)",
+            "edge_value(edge(c,a),3)",
+            "node(a)",
+            "node(b)",
+            "node(c)",
+            "num(0)",
+            "num(1)",
+            "num(2)",
+            "num(3)",
+            "num_edges(3)",
+            "value(a,0)",
+            "value(b,2)",
+            "value(c,3)"
+          ],
+          [
+            "edge(a,b)",
+            "edge(b,c)",
+            "edge(c,a)",
+            "edge_value(edge(a,b),3)",
+            "edge_value(edge(b,c),2)",
+            "edge_value(edge(c,a),1)",
+            "node(a)",
+            "node(b)",
+            "node(c)",
+            "num(0)",
+            "num(1)",
+            "num(2)",
+            "num(3)",
+            "num_edges(3)",
+            "value(a,0)",
+            "value(b,3)",
+            "value(c,1)"
+          ],
+          [
+            "edge(a,b)",
+            "edge(b,c)",
+            "edge(c,a)",
+            "edge_value(edge(a,b),3)",
+            "edge_value(edge(b,c),1)",
+            "edge_value(edge(c,a),2)",
+            "node(a)",
+            "node(b)",
+            "node(c)",
+            "num(0)",
+            "num(1)",
+            "num(2)",
+            "num(3)",
+            "num_edges(3)",
+            "value(a,3)",
+            "value(b,0)",
+            "value(c,1)"
+          ],
+          [
+            "edge(a,b)",
+            "edge(b,c)",
+            "edge(c,a)",
+            "edge_value(edge(a,b),2)",
+            "edge_value(edge(b,c),3)",
+            "edge_value(edge(c,a),1)",
+            "node(a)",
+            "node(b)",
+            "node(c)",
+            "num(0)",
+            "num(1)",
+            "num(2)",
+            "num(3)",
+            "num_edges(3)",
+            "value(a,2)",
+            "value(b,0)",
+            "value(c,3)"
+          ],
+          [
+            "edge(a,b)",
+            "edge(b,c)",
+            "edge(c,a)",
+            "edge_value(edge(a,b),1)",
+            "edge_value(edge(b,c),3)",
+            "edge_value(edge(c,a),2)",
+            "node(a)",
+            "node(b)",
+            "node(c)",
+            "num(0)",
+            "num(1)",
+            "num(2)",
+            "num(3)",
+            "num_edges(3)",
+            "value(a,1)",
+            "value(b,0)",
+            "value(c,3)"
+          ],
+          [
+            "edge(a,b)",
+            "edge(b,c)",
+            "edge(c,a)",
+            "edge_value(edge(a,b),3)",
+            "edge_value(edge(b,c),2)",
+            "edge_value(edge(c,a),1)",
+            "node(a)",
+            "node(b)",
+            "node(c)",
+            "num(0)",
+            "num(1)",
+            "num(2)",
+            "num(3)",
+            "num_edges(3)",
+            "value(a,3)",
+            "value(b,0)",
+            "value(c,2)"
+          ]
+        ],
+        "prefixes": [
+          "value("
+        ],
+        "helper_models": [
+          [
+            "value(a,0)",
+            "value(b,1)",
+            "value(c,3)"
+          ],
+          [
+            "value(a,0)",
+            "value(b,2)",
+            "value(c,3)"
+          ],
+          [
+            "value(a,0)",
+            "value(b,3)",
+            "value(c,1)"
+          ],
+          [
+            "value(a,0)",
+            "value(b,3)",
+            "value(c,2)"
+          ],
+          [
+            "value(a,1)",
+            "value(b,0)",
+            "value(c,3)"
+          ],
+          [
+            "value(a,1)",
+            "value(b,3)",
+            "value(c,0)"
+          ],
+          [
+            "value(a,2)",
+            "value(b,0)",
+            "value(c,3)"
+          ],
+          [
+            "value(a,2)",
+            "value(b,3)",
+            "value(c,0)"
+          ],
+          [
+            "value(a,3)",
+            "value(b,0)",
+            "value(c,1)"
+          ],
+          [
+            "value(a,3)",
+            "value(b,0)",
+            "value(c,2)"
+          ],
+          [
+            "value(a,3)",
+            "value(b,1)",
+            "value(c,0)"
+          ],
+          [
+            "value(a,3)",
+            "value(b,2)",
+            "value(c,0)"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "aspcomp13/aspcomp2013_27/01",
+      "path": "programs/aspcomp13/aspcomp2013_27/01.lp",
+      "source_sha256": "af3fe34f497c8987b69fa1f8fb674f1943c91964058394d64684adf93d6fb0fc",
+      "license": "MIT",
+      "provenance": {
+        "source_file": "libgringo/tests/output/aspcomp13.cc",
+        "section": "aspcomp2013_27",
+        "assertion_ordinal": 1,
+        "byte_start": 160171,
+        "byte_end": 162139,
+        "line_start": 2695,
+        "line_end": 2723,
+        "assertion": "REQUIRE(\"([[chosenColour(1,blue),chosenColour(2,green),chosenColour(3,red)],\"\n                \"[chosenColour(1,blue),chosenColour(2,red),chosenColour(3,green)],\"\n                \"[chosenColour(1,green),chosenColour(2,blue),chosenColour(3,red)],\"\n                \"[chosenColour(1,green),chosenColour(2,red),chosenColour(3,blue)],\"\n                \"[chosenColour(1,red),chosenColour(2,blue),chosenColour(3,green)],\"\n                \"[chosenColour(1,red),chosenColour(2,green),chosenColour(3,blue)]],[])\" ==\n                IO::to_string(solve(\"% instance\\n\"\n                                    \"\\n\"\n                                    \"node(1). node(2). node(3). \\n\"\n                                    \"link(1,2). link(2,1). link(2,3). \\n\"\n                                    \"link(3,2). link(3,1). link(1,3). \\n\"\n                                    \"colour(red). colour(green). colour(blue).\\n\"\n                                    \"\\n\"\n                                    \"% encoding\\n\"\n                                    \"\\n\"\n                                    \"% Guess colours.\\n\"\n                                    \"chosenColour(N,C) | notChosenColour(N,C) :- node(N), colour(C).\\n\"\n                                    \"\\n\"\n                                    \"% At least one color per node.\\n\"\n                                    \":- node(X), not colored(X).\\n\"\n                                    \"colored(X) :- chosenColour(X,Fv1).\\n\"\n                                    \"\\n\"\n                                    \"% Only one color per node.\\n\"\n                                    \":- chosenColour(N,C1), chosenColour(N,C2), C1!=C2. \\n\"\n                                    \"\\n\"\n                                    \"% No two adjacent nodes have the same colour. \\n\"\n                                    \":- link(X,Y),  X<Y, chosenColour(X,C), chosenColour(Y,C).\\n\"\n                                    \"\\n\",\n                                    {\"chosenColour(\"})))",
+        "helper_arguments": [
+          "{\"chosenColour(\"}"
+        ],
+        "expected_helper_output": "([[chosenColour(1,blue),chosenColour(2,green),chosenColour(3,red)],[chosenColour(1,blue),chosenColour(2,red),chosenColour(3,green)],[chosenColour(1,green),chosenColour(2,blue),chosenColour(3,red)],[chosenColour(1,green),chosenColour(2,red),chosenColour(3,blue)],[chosenColour(1,red),chosenColour(2,blue),chosenColour(3,green)],[chosenColour(1,red),chosenColour(2,green),chosenColour(3,blue)]],[])"
+      },
+      "contract": {
+        "full_models": [
+          [
+            "chosenColour(1,blue)",
+            "chosenColour(2,red)",
+            "chosenColour(3,green)",
+            "colored(1)",
+            "colored(2)",
+            "colored(3)",
+            "colour(blue)",
+            "colour(green)",
+            "colour(red)",
+            "link(1,2)",
+            "link(1,3)",
+            "link(2,1)",
+            "link(2,3)",
+            "link(3,1)",
+            "link(3,2)",
+            "node(1)",
+            "node(2)",
+            "node(3)",
+            "notChosenColour(1,green)",
+            "notChosenColour(1,red)",
+            "notChosenColour(2,blue)",
+            "notChosenColour(2,green)",
+            "notChosenColour(3,blue)",
+            "notChosenColour(3,red)"
+          ],
+          [
+            "chosenColour(1,green)",
+            "chosenColour(2,red)",
+            "chosenColour(3,blue)",
+            "colored(1)",
+            "colored(2)",
+            "colored(3)",
+            "colour(blue)",
+            "colour(green)",
+            "colour(red)",
+            "link(1,2)",
+            "link(1,3)",
+            "link(2,1)",
+            "link(2,3)",
+            "link(3,1)",
+            "link(3,2)",
+            "node(1)",
+            "node(2)",
+            "node(3)",
+            "notChosenColour(1,blue)",
+            "notChosenColour(1,red)",
+            "notChosenColour(2,blue)",
+            "notChosenColour(2,green)",
+            "notChosenColour(3,green)",
+            "notChosenColour(3,red)"
+          ],
+          [
+            "chosenColour(1,green)",
+            "chosenColour(2,blue)",
+            "chosenColour(3,red)",
+            "colored(1)",
+            "colored(2)",
+            "colored(3)",
+            "colour(blue)",
+            "colour(green)",
+            "colour(red)",
+            "link(1,2)",
+            "link(1,3)",
+            "link(2,1)",
+            "link(2,3)",
+            "link(3,1)",
+            "link(3,2)",
+            "node(1)",
+            "node(2)",
+            "node(3)",
+            "notChosenColour(1,blue)",
+            "notChosenColour(1,red)",
+            "notChosenColour(2,green)",
+            "notChosenColour(2,red)",
+            "notChosenColour(3,blue)",
+            "notChosenColour(3,green)"
+          ],
+          [
+            "chosenColour(1,blue)",
+            "chosenColour(2,green)",
+            "chosenColour(3,red)",
+            "colored(1)",
+            "colored(2)",
+            "colored(3)",
+            "colour(blue)",
+            "colour(green)",
+            "colour(red)",
+            "link(1,2)",
+            "link(1,3)",
+            "link(2,1)",
+            "link(2,3)",
+            "link(3,1)",
+            "link(3,2)",
+            "node(1)",
+            "node(2)",
+            "node(3)",
+            "notChosenColour(1,green)",
+            "notChosenColour(1,red)",
+            "notChosenColour(2,blue)",
+            "notChosenColour(2,red)",
+            "notChosenColour(3,blue)",
+            "notChosenColour(3,green)"
+          ],
+          [
+            "chosenColour(1,red)",
+            "chosenColour(2,blue)",
+            "chosenColour(3,green)",
+            "colored(1)",
+            "colored(2)",
+            "colored(3)",
+            "colour(blue)",
+            "colour(green)",
+            "colour(red)",
+            "link(1,2)",
+            "link(1,3)",
+            "link(2,1)",
+            "link(2,3)",
+            "link(3,1)",
+            "link(3,2)",
+            "node(1)",
+            "node(2)",
+            "node(3)",
+            "notChosenColour(1,blue)",
+            "notChosenColour(1,green)",
+            "notChosenColour(2,green)",
+            "notChosenColour(2,red)",
+            "notChosenColour(3,blue)",
+            "notChosenColour(3,red)"
+          ],
+          [
+            "chosenColour(1,red)",
+            "chosenColour(2,green)",
+            "chosenColour(3,blue)",
+            "colored(1)",
+            "colored(2)",
+            "colored(3)",
+            "colour(blue)",
+            "colour(green)",
+            "colour(red)",
+            "link(1,2)",
+            "link(1,3)",
+            "link(2,1)",
+            "link(2,3)",
+            "link(3,1)",
+            "link(3,2)",
+            "node(1)",
+            "node(2)",
+            "node(3)",
+            "notChosenColour(1,blue)",
+            "notChosenColour(1,green)",
+            "notChosenColour(2,blue)",
+            "notChosenColour(2,red)",
+            "notChosenColour(3,green)",
+            "notChosenColour(3,red)"
+          ]
+        ],
+        "prefixes": [
+          "chosenColour("
+        ],
+        "helper_models": [
+          [
+            "chosenColour(1,blue)",
+            "chosenColour(2,green)",
+            "chosenColour(3,red)"
+          ],
+          [
+            "chosenColour(1,blue)",
+            "chosenColour(2,red)",
+            "chosenColour(3,green)"
+          ],
+          [
+            "chosenColour(1,green)",
+            "chosenColour(2,blue)",
+            "chosenColour(3,red)"
+          ],
+          [
+            "chosenColour(1,green)",
+            "chosenColour(2,red)",
+            "chosenColour(3,blue)"
+          ],
+          [
+            "chosenColour(1,red)",
+            "chosenColour(2,blue)",
+            "chosenColour(3,green)"
+          ],
+          [
+            "chosenColour(1,red)",
+            "chosenColour(2,green)",
+            "chosenColour(3,blue)"
+          ]
+        ]
+      }
+    }
+  ]
+}
