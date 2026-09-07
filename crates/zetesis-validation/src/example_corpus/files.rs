@@ -66,3 +66,7 @@ pub(super) fn digest(path: &str, bytes: &[u8], expected: &str) -> Result<(), Err
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "../../tests/support/example_files.rs"]
+mod tests;

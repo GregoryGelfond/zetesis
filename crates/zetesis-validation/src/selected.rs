@@ -339,7 +339,10 @@ impl Report {
     /// and filesystem failures. Temporary cleanup failures retain the primary cause.
     pub fn publish(&self) -> Result<(), Error> {
         publication::write(
-            &view::Published { passed: self.passed(), report: self },
+            &view::Published {
+                passed: self.passed(),
+                report: self,
+            },
             &self.destination,
             self.max_report_bytes,
         )

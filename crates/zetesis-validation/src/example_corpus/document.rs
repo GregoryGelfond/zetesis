@@ -234,7 +234,7 @@ impl Corpus {
     pub const fn reference_toolchain(&self) -> &ReferenceToolchain {
         &self.reference_toolchain
     }
-    pub(super) fn license_sha256(&self) -> &str {
+    pub(crate) fn license_sha256(&self) -> &str {
         &self.license_sha256
     }
 }
@@ -405,3 +405,7 @@ pub(super) fn validate_contract(contract: &Contract) -> Result<(), Error> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "../../tests/support/example_document.rs"]
+mod tests;

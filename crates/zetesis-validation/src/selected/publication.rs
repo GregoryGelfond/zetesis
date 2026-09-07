@@ -74,12 +74,13 @@ fn validate(destination: &Destination) -> Result<(), Error> {
     }
 }
 
-struct Counter {
+struct Counter<W> {
+    inner: W,
     bytes: usize,
     limit: usize,
     exceeded: bool,
 }
-impl Write for Counter {
+impl<W: Write> Write for Counter<W> {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         if self
             .bytes
@@ -89,49 +90,61 @@ impl Write for Counter {
             self.exceeded = true;
             return Err(io::Error::other("report byte ceiling"));
         }
-        self.bytes += bytes.len();
-        Ok(bytes.len())
+        let written = self.inner.write(bytes)?;
+        self.bytes += written;
+        Ok(written)
     }
     fn flush(&mut self) -> io::Result<()> {
-        Ok(())
+        self.inner.flush()
     }
 }
 
-pub(crate) fn write(report: &impl serde::Serialize, destination: &Destination, limit: usize) -> Result<(), Error> {
-    validate(destination)?;
-    let mut size = Counter {
+// Both passes enforce the same inclusive bound. `Serialize` is not required to
+// produce identical bytes on successive calls, so preflight alone is insufficient.
+fn encode(
+    report: &impl serde::Serialize,
+    writer: impl Write,
+    path: &Path,
+    limit: usize,
+) -> Result<(), Error> {
+    let mut bounded = Counter {
+        inner: writer,
         bytes: 0,
         limit,
         exceeded: false,
     };
-    let encoded = serde_json::to_writer(&mut size, &report)
-        .and_then(|()| size.write_all(b"\n").map_err(serde_json::Error::io));
-    if size.exceeded {
-        return Err(Error::Bytes {
-            path: destination.path.clone(),
+    let encoded = serde_json::to_writer(&mut bounded, report)
+        .map_err(Error::Json)
+        .and_then(|()| {
+            bounded
+                .write_all(b"\n")
+                .map_err(|source| identity::io(path, source))
+        })
+        .and_then(|()| bounded.flush().map_err(|source| identity::io(path, source)));
+    if bounded.exceeded {
+        Err(Error::Bytes {
+            path: path.to_owned(),
             limit,
-        });
+        })
+    } else {
+        encoded
     }
-    encoded.map_err(Error::Json)?;
+}
+
+pub(crate) fn write(
+    report: &impl serde::Serialize,
+    destination: &Destination,
+    limit: usize,
+) -> Result<(), Error> {
+    validate(destination)?;
+    encode(report, io::sink(), &destination.path, limit)?;
     let parent = destination
         .path
         .parent()
         .expect("prepared report has a canonical parent");
     let mut temporary =
         tempfile::NamedTempFile::new_in(parent).map_err(|source| identity::io(parent, source))?;
-    let written = serde_json::to_writer(&mut temporary, &report)
-        .map_err(Error::Json)
-        .and_then(|()| {
-            temporary
-                .write_all(b"\n")
-                .map_err(|source| identity::io(temporary.path(), source))
-        })
-        .and_then(|()| {
-            temporary
-                .flush()
-                .map_err(|source| identity::io(temporary.path(), source))
-        });
-    if let Err(primary) = written {
+    if let Err(primary) = encode(report, &mut temporary, &destination.path, limit) {
         return cleanup(temporary, primary);
     }
     if let Err(primary) = validate(destination) {
@@ -152,3 +165,7 @@ fn cleanup(temporary: tempfile::NamedTempFile, primary: Error) -> Result<(), Err
         }),
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/support/selected_publication.rs"]
+mod tests;

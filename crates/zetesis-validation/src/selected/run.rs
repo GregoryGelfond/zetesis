@@ -417,3 +417,7 @@ fn invoke(
     }
     record
 }
+
+#[cfg(test)]
+#[path = "../../tests/support/selected_run.rs"]
+mod tests;
