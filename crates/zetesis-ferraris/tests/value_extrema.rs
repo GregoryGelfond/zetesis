@@ -1,0 +1,374 @@
+//! Ordered values are checked against independent complete failing-subset formulas.
+use zetesis_core::{Sign, Value, ValueLimits, ValueNode};
+use zetesis_cpu::Control;
+use zetesis_ferraris::{
+    AggregateComparison as Comparison, AggregateErrorKind as Error, AggregateExtremum as Extremum,
+    AggregateLimits, Node, ValueExtremumElement as Element, append_value_extremum,
+};
+
+fn ordered() -> Vec<Value> {
+    let structure = |nodes| Value::from_nodes(nodes, ValueLimits::default()).unwrap();
+    let function = |sign, arity| ValueNode::Function {
+        name: "f".into(),
+        sign,
+        arity,
+    };
+    vec![
+        Value::Infimum,
+        Value::Number(-2),
+        Value::Symbol("a".into()),
+        structure(vec![function(Sign::Negative, 0)]),
+        Value::String("a".into()),
+        structure(vec![ValueNode::Tuple { arity: 1 }, ValueNode::Number(1)]),
+        structure(vec![function(Sign::Positive, 1), ValueNode::Number(1)]),
+        structure(vec![function(Sign::Negative, 1), ValueNode::Number(1)]),
+        Value::Supremum,
+    ]
+}
+// Independent explicit ASP ordering for this finite carrier; never storage Ord
+// or the production comparator. Source regressions cover a broader carrier.
+fn rank(value: &Value) -> usize {
+    match value {
+        Value::Infimum => 0,
+        Value::Number(-2) => 1,
+        Value::Symbol(_) => 2,
+        Value::String(_) => 4,
+        Value::Structured(value) => match value.nodes()[0] {
+            ValueNode::Function { arity: 0, .. } => 3,
+            ValueNode::Tuple { .. } => 5,
+            ValueNode::Function {
+                sign: Sign::Positive,
+                ..
+            } => 6,
+            ValueNode::Function {
+                sign: Sign::Negative,
+                ..
+            } => 7,
+            _ => panic!("outside independently ordered fixture"),
+        },
+        Value::Supremum => 8,
+        Value::Number(_) => panic!("outside independently ordered fixture"),
+    }
+}
+fn value<'a>(extremum: Extremum, values: impl Iterator<Item = &'a Value>) -> usize {
+    match extremum {
+        Extremum::Min => values.map(rank).min().unwrap_or(8),
+        Extremum::Max => values.map(rank).max().unwrap_or(0),
+    }
+}
+fn holds(comparison: Comparison, value: usize, bound: &Value) -> bool {
+    let bound = rank(bound);
+    match comparison {
+        Comparison::Eq => value == bound,
+        Comparison::Ne => value != bound,
+        Comparison::Lt => value < bound,
+        Comparison::Le => value <= bound,
+        Comparison::Gt => value > bound,
+        Comparison::Ge => value >= bound,
+    }
+}
+const COMPARISONS: [Comparison; 6] = [
+    Comparison::Eq,
+    Comparison::Ne,
+    Comparison::Lt,
+    Comparison::Le,
+    Comparison::Gt,
+    Comparison::Ge,
+];
+const EXTREMA: [Extremum; 2] = [Extremum::Min, Extremum::Max];
+
+fn prefix() -> Vec<Node> {
+    vec![
+        Node::False,
+        Node::Implies(0, 0),
+        Node::Atom(0),
+        Node::Atom(1),
+        Node::Implies(2, 0),
+        Node::Implies(4, 0),
+        Node::Implies(3, 0),
+        Node::And(2, 3),
+        Node::Or(2, 3),
+        Node::Implies(2, 3),
+        Node::Or(2, 4),
+    ]
+}
+
+// Recursive evaluation is only the small independent test interpreter. It
+// materializes neither the production topological mask nor its witness formula.
+fn eval(nodes: &[Node], root: usize, world: u8, frozen: Option<u8>) -> bool {
+    if frozen.is_some_and(|candidate| !eval(nodes, root, candidate, None)) {
+        return false;
+    }
+    match nodes[root] {
+        Node::False => false,
+        Node::Atom(atom) => world & (1 << atom) != 0,
+        Node::And(a, b) => eval(nodes, a, world, frozen) && eval(nodes, b, world, frozen),
+        Node::Or(a, b) => eval(nodes, a, world, frozen) || eval(nodes, b, world, frozen),
+        Node::Implies(a, b) => !eval(nodes, a, world, frozen) || eval(nodes, b, world, frozen),
+    }
+}
+
+fn push(nodes: &mut Vec<Node>, node: Node) -> usize {
+    let index = nodes.len();
+    nodes.push(node);
+    index
+}
+
+fn reference(
+    elements: &[Element],
+    extremum: Extremum,
+    comparison: Comparison,
+    bound: &Value,
+) -> (Vec<Node>, usize) {
+    let mut nodes = prefix();
+    let mut root = 1;
+    for subset in 0usize..(1 << elements.len()) {
+        let selected = elements
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| subset & (1 << index) != 0)
+            .map(|(_, element)| &element.value);
+        if holds(comparison, value(extremum, selected), bound) {
+            continue;
+        }
+        let mut antecedent = 1;
+        let mut consequent = 0;
+        for (index, element) in elements.iter().enumerate() {
+            if subset & (1 << index) == 0 {
+                consequent = push(&mut nodes, Node::Or(consequent, element.condition));
+            } else {
+                antecedent = push(&mut nodes, Node::And(antecedent, element.condition));
+            }
+        }
+        let implication = push(&mut nodes, Node::Implies(antecedent, consequent));
+        root = push(&mut nodes, Node::And(root, implication));
+    }
+    (nodes, root)
+}
+
+fn verify(elements: &[Element], extremum: Extremum, comparison: Comparison, bound: &Value) {
+    let mut nodes = prefix();
+    let built = append_value_extremum(
+        &mut nodes,
+        elements,
+        extremum,
+        comparison,
+        bound,
+        AggregateLimits::default(),
+        &Control::default(),
+    )
+    .unwrap();
+    let (mut specified, expected) = reference(elements, extremum, comparison, bound);
+    let mut root = built.root();
+    let mut expected_root = expected;
+    // Positive, default-negated and double-default-negated formulas.
+    for _ in 0..3 {
+        for outer in 0..4 {
+            assert_eq!(
+                eval(&nodes, root, outer, None),
+                eval(&specified, expected_root, outer, None)
+            );
+            for inner in 0..4 {
+                assert_eq!(
+                    eval(&nodes, root, inner, Some(outer)),
+                    eval(&specified, expected_root, inner, Some(outer)),
+                    "{elements:?} {extremum:?} {comparison:?} {bound:?} M={outer} J={inner}"
+                );
+            }
+        }
+        root = push(&mut nodes, Node::Implies(root, 0));
+        expected_root = push(&mut specified, Node::Implies(expected_root, 0));
+    }
+}
+#[test]
+fn complete_value_order_and_every_guard_preserve_all_original_and_frozen_worlds() {
+    let values = ordered();
+    for left in &values {
+        for right in &values {
+            for condition in [2, 4, 5, 9, 10] {
+                let elements = [
+                    Element {
+                        value: left.clone(),
+                        condition: 2,
+                    },
+                    Element {
+                        value: right.clone(),
+                        condition,
+                    },
+                ];
+                for extremum in EXTREMA {
+                    for comparison in COMPARISONS {
+                        for bound in &values {
+                            verify(&elements, extremum, comparison, bound);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+#[test]
+fn empty_and_tied_complete_values_keep_their_sentinel_and_eligibility_semantics() {
+    for extremum in EXTREMA {
+        for comparison in COMPARISONS {
+            for value in ordered() {
+                verify(&[], extremum, comparison, &value);
+                let elements = [
+                    Element {
+                        value: value.clone(),
+                        condition: 10,
+                    },
+                    Element {
+                        value: value.clone(),
+                        condition: 3,
+                    },
+                    Element {
+                        value: value.clone(),
+                        condition: 5,
+                    },
+                ];
+                verify(&elements, extremum, comparison, &value);
+            }
+        }
+    }
+}
+#[test]
+fn exact_limits_restore_the_existing_prefix() {
+    let value = ordered()[6].clone();
+    let elements = [
+        Element {
+            value: value.clone(),
+            condition: 2,
+        },
+        Element {
+            value: value.clone(),
+            condition: 3,
+        },
+    ];
+    let mut nodes = prefix();
+    let built = append_value_extremum(
+        &mut nodes,
+        &elements,
+        Extremum::Min,
+        Comparison::Eq,
+        &value,
+        AggregateLimits::default(),
+        &Control::default(),
+    )
+    .unwrap();
+    let exact = AggregateLimits {
+        max_elements: 2,
+        max_nodes: nodes.len(),
+        max_work: built.statistics().work,
+        max_states: 0,
+        max_subsets: 0,
+    };
+    let mut repeated = prefix();
+    assert_eq!(
+        append_value_extremum(
+            &mut repeated,
+            &elements,
+            Extremum::Min,
+            Comparison::Eq,
+            &value,
+            exact,
+            &Control::default()
+        )
+        .unwrap(),
+        built
+    );
+    assert_eq!(repeated, nodes);
+    for (limits, expected) in [
+        (
+            AggregateLimits {
+                max_elements: 1,
+                ..exact
+            },
+            Error::ElementLimit,
+        ),
+        (
+            AggregateLimits {
+                max_nodes: exact.max_nodes - 1,
+                ..exact
+            },
+            Error::NodeLimit,
+        ),
+        (
+            AggregateLimits {
+                max_work: exact.max_work - 1,
+                ..exact
+            },
+            Error::WorkLimit,
+        ),
+    ] {
+        let mut nodes = prefix();
+        let error = append_value_extremum(
+            &mut nodes,
+            &elements,
+            Extremum::Min,
+            Comparison::Eq,
+            &value,
+            limits,
+            &Control::default(),
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), expected);
+        assert_eq!(nodes, prefix());
+    }
+}
+
+#[test]
+fn bad_inputs_and_cancellation_restore_the_existing_prefix() {
+    let value = ordered()[6].clone();
+    let mut nodes = prefix();
+    let error = append_value_extremum(
+        &mut nodes,
+        &[Element {
+            value: value.clone(),
+            condition: usize::MAX,
+        }],
+        Extremum::Max,
+        Comparison::Eq,
+        &value,
+        AggregateLimits::default(),
+        &Control::default(),
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), Error::InvalidCondition { element: 0 });
+    assert_eq!(nodes, prefix());
+    nodes.push(Node::And(usize::MAX, 0));
+    let bad = nodes.clone();
+    assert!(matches!(
+        append_value_extremum(
+            &mut nodes,
+            &[],
+            Extremum::Min,
+            Comparison::Eq,
+            &value,
+            AggregateLimits::default(),
+            &Control::default()
+        )
+        .unwrap_err()
+        .kind(),
+        Error::InvalidPrefix { .. }
+    ));
+    assert_eq!(nodes, bad);
+    let control = Control::default();
+    control.cancel();
+    let mut nodes = prefix();
+    assert!(matches!(
+        append_value_extremum(
+            &mut nodes,
+            &[],
+            Extremum::Min,
+            Comparison::Eq,
+            &value,
+            AggregateLimits::default(),
+            &control
+        )
+        .unwrap_err()
+        .kind(),
+        Error::Control(_)
+    ));
+    assert_eq!(nodes, prefix());
+}

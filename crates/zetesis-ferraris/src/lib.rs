@@ -18,8 +18,8 @@ mod tight;
 pub use aggregate::{
     AggregateBuild, AggregateComparison, AggregateElement, AggregateError, AggregateErrorKind,
     AggregateExtremum, AggregateFamilyBuild, AggregateFamilyLimits, AggregateGuard,
-    AggregateLimits, AggregateProfile, AggregateStatistics, ExtremumBound, append_aggregate,
-    append_aggregate_family, append_extremum,
+    AggregateLimits, AggregateProfile, AggregateStatistics, ExtremumBound, ValueExtremumElement,
+    append_aggregate, append_aggregate_family, append_extremum, append_value_extremum,
 };
 
 pub use normal::{from_ground_program, from_ground_program_supported};

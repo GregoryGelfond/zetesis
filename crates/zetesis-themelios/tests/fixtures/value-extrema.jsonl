@@ -1,0 +1,218 @@
+{"name":"upstream-assign-min","source":"{p}. q(M):-M=#min{p:p}.","models":[["p","q(p)"],["q(#sup)"]]}
+{"name":"empty-min","source":"q(M):-M=#min{}.","models":[["q(#sup)"]]}
+{"name":"closed-min-a","source":"{p}.q(M):-M=#min{a,k:p}.","models":[["p","q(a)"],["q(#sup)"]]}
+{"name":"closed-min-\"a\"","source":"{p}.q(M):-M=#min{\"a\",k:p}.","models":[["p","q(\"a\")"],["q(#sup)"]]}
+{"name":"closed-min--a","source":"{p}.q(M):-M=#min{-a,k:p}.","models":[["p","q(-a)"],["q(#sup)"]]}
+{"name":"closed-min-f(1)","source":"{p}.q(M):-M=#min{f(1),k:p}.","models":[["p","q(f(1))"],["q(#sup)"]]}
+{"name":"closed-min--f(1)","source":"{p}.q(M):-M=#min{-f(1),k:p}.","models":[["p","q(-f(1))"],["q(#sup)"]]}
+{"name":"closed-min-(1,)","source":"{p}.q(M):-M=#min{(1,),k:p}.","models":[["p","q((1,))"],["q(#sup)"]]}
+{"name":"closed-min-(1,x)","source":"{p}.q(M):-M=#min{(1,x),k:p}.","models":[["p","q((1,x))"],["q(#sup)"]]}
+{"name":"closed-min-#inf","source":"{p}.q(M):-M=#min{#inf,k:p}.","models":[["p","q(#inf)"],["q(#sup)"]]}
+{"name":"closed-min-#sup","source":"{p}.q(M):-M=#min{#sup,k:p}.","models":[["p","q(#sup)"],["q(#sup)"]]}
+{"name":"mixed-min","source":"{p;q}.r(M):-M=#min{-2,n:p;a,s:q;\"z\",t:p;-f(1),f:q;(1,x),u:p,q}.","models":[["p","q","r(-2)"],["p","r(-2)"],["q","r(a)"],["r(#sup)"]]}
+{"name":"variables-min","source":"d(a).d(f(1)).d(\"z\").r(M):-M=#min{X:d(X)}.","models":[["d(\"z\")","d(a)","d(f(1))","r(a)"]]}
+{"name":"outer-cache-min","source":"d(1,a).d(2,f(1)).r(K,M):-d(K,X),M=#min{X:p}.{p}.","models":[["d(1,a)","d(2,f(1))","p","r(1,a)","r(2,f(1))"],["d(1,a)","d(2,f(1))","r(1,#sup)","r(2,#sup)"]]}
+{"name":"alias-min","source":"{p;q}.r(M):-M=#min{f(1),a:p;f(1),a:not p;f(1),b:q}.","models":[["p","q","r(f(1))"],["p","r(f(1))"],["q","r(f(1))"],["r(f(1))"]]}
+{"name":"recursive-min","source":"p:-#min{f(1),a:p}=f(1).","models":[[]]}
+{"name":"recursive-negative-min","source":"p:-not #min{f(1),a:p}!=f(1).","models":[[],["p"]]}
+{"name":"correlation-min","source":"{p}.r(N,M):-N=#min{a:p;f(1):not p},M=#count{1:p}.","models":[["p","r(a,1)"],["r(f(1),0)"]]}
+{"name":"objective-min","source":"{p}.r(M):-M=#min{f(1):p}.#minimize{1@1:p}.","models":[["p","r(f(1))"],["r(#sup)"]]}
+{"name":"guard-min-=-a","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}=a.","models":[[],["p","q","r"],["p","r"],["q"]]}
+{"name":"guard-min-=-\"z\"","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}=\"z\".","models":[[],["p"],["p","q"],["q","r"]]}
+{"name":"guard-min-=-f(1)","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}=f(1).","models":[["p"],["p","q"],["q"],["r"]]}
+{"name":"guard-min-=-#inf","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}=#inf.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-min-=-#sup","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}=#sup.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-min-not =-a","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}=a.","models":[["p"],["p","q"],["q","r"],["r"]]}
+{"name":"guard-min-not =-\"z\"","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}=\"z\".","models":[["p","q","r"],["p","r"],["q"],["r"]]}
+{"name":"guard-min-not =-f(1)","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}=f(1).","models":[[],["p","q","r"],["p","r"],["q","r"]]}
+{"name":"guard-min-not =-#inf","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}=#inf.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-min-not =-#sup","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}=#sup.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-min-not not =-a","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}=a.","models":[[],["p","q","r"],["p","r"],["q"]]}
+{"name":"guard-min-not not =-\"z\"","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}=\"z\".","models":[[],["p"],["p","q"],["q","r"]]}
+{"name":"guard-min-not not =-f(1)","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}=f(1).","models":[["p"],["p","q"],["q"],["r"]]}
+{"name":"guard-min-not not =-#inf","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}=#inf.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-min-not not =-#sup","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}=#sup.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-min-!=-a","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}!=a.","models":[["p"],["p","q"],["q","r"],["r"]]}
+{"name":"guard-min-!=-\"z\"","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}!=\"z\".","models":[["p","q","r"],["p","r"],["q"],["r"]]}
+{"name":"guard-min-!=-f(1)","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}!=f(1).","models":[[],["p","q","r"],["p","r"],["q","r"]]}
+{"name":"guard-min-!=-#inf","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}!=#inf.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-min-!=-#sup","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}!=#sup.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-min-not !=-a","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}!=a.","models":[[],["p","q","r"],["p","r"],["q"]]}
+{"name":"guard-min-not !=-\"z\"","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}!=\"z\".","models":[[],["p"],["p","q"],["q","r"]]}
+{"name":"guard-min-not !=-f(1)","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}!=f(1).","models":[["p"],["p","q"],["q"],["r"]]}
+{"name":"guard-min-not !=-#inf","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}!=#inf.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-min-not !=-#sup","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}!=#sup.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-min-not not !=-a","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}!=a.","models":[["p"],["p","q"],["q","r"],["r"]]}
+{"name":"guard-min-not not !=-\"z\"","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}!=\"z\".","models":[["p","q","r"],["p","r"],["q"],["r"]]}
+{"name":"guard-min-not not !=-f(1)","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}!=f(1).","models":[[],["p","q","r"],["p","r"],["q","r"]]}
+{"name":"guard-min-not not !=-#inf","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}!=#inf.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-min-not not !=-#sup","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}!=#sup.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-min-<-a","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}<a.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-min-<-\"z\"","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}<\"z\".","models":[[],["p","q","r"],["p","r"],["q"]]}
+{"name":"guard-min-<-f(1)","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}<f(1).","models":[[],["p","q","r"],["p","r"],["q","r"]]}
+{"name":"guard-min-<-#inf","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}<#inf.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-min-<-#sup","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}<#sup.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-min-not <-a","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}<a.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-min-not <-\"z\"","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}<\"z\".","models":[["p"],["p","q"],["q","r"],["r"]]}
+{"name":"guard-min-not <-f(1)","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}<f(1).","models":[["p"],["p","q"],["q"],["r"]]}
+{"name":"guard-min-not <-#inf","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}<#inf.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-min-not <-#sup","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}<#sup.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-min-not not <-a","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}<a.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-min-not not <-\"z\"","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}<\"z\".","models":[[],["p","q","r"],["p","r"],["q"]]}
+{"name":"guard-min-not not <-f(1)","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}<f(1).","models":[[],["p","q","r"],["p","r"],["q","r"]]}
+{"name":"guard-min-not not <-#inf","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}<#inf.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-min-not not <-#sup","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}<#sup.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-min-<=-a","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}<=a.","models":[[],["p","q","r"],["p","r"],["q"]]}
+{"name":"guard-min-<=-\"z\"","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}<=\"z\".","models":[[],["p","q","r"],["p","r"],["q","r"]]}
+{"name":"guard-min-<=-f(1)","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}<=f(1).","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-min-<=-#inf","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}<=#inf.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-min-<=-#sup","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}<=#sup.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-min-not <=-a","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}<=a.","models":[["p"],["p","q"],["q","r"],["r"]]}
+{"name":"guard-min-not <=-\"z\"","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}<=\"z\".","models":[["p"],["p","q"],["q"],["r"]]}
+{"name":"guard-min-not <=-f(1)","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}<=f(1).","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-min-not <=-#inf","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}<=#inf.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-min-not <=-#sup","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}<=#sup.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-min-not not <=-a","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}<=a.","models":[[],["p","q","r"],["p","r"],["q"]]}
+{"name":"guard-min-not not <=-\"z\"","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}<=\"z\".","models":[[],["p","q","r"],["p","r"],["q","r"]]}
+{"name":"guard-min-not not <=-f(1)","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}<=f(1).","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-min-not not <=-#inf","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}<=#inf.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-min-not not <=-#sup","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}<=#sup.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-min->-a","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}>a.","models":[["p"],["p","q"],["q","r"],["r"]]}
+{"name":"guard-min->-\"z\"","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}>\"z\".","models":[["p"],["p","q"],["q"],["r"]]}
+{"name":"guard-min->-f(1)","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}>f(1).","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-min->-#inf","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}>#inf.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-min->-#sup","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}>#sup.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-min-not >-a","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}>a.","models":[[],["p","q","r"],["p","r"],["q"]]}
+{"name":"guard-min-not >-\"z\"","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}>\"z\".","models":[[],["p","q","r"],["p","r"],["q","r"]]}
+{"name":"guard-min-not >-f(1)","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}>f(1).","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-min-not >-#inf","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}>#inf.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-min-not >-#sup","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}>#sup.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-min-not not >-a","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}>a.","models":[["p"],["p","q"],["q","r"],["r"]]}
+{"name":"guard-min-not not >-\"z\"","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}>\"z\".","models":[["p"],["p","q"],["q"],["r"]]}
+{"name":"guard-min-not not >-f(1)","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}>f(1).","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-min-not not >-#inf","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}>#inf.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-min-not not >-#sup","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}>#sup.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-min->=-a","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}>=a.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-min->=-\"z\"","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}>=\"z\".","models":[["p"],["p","q"],["q","r"],["r"]]}
+{"name":"guard-min->=-f(1)","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}>=f(1).","models":[["p"],["p","q"],["q"],["r"]]}
+{"name":"guard-min->=-#inf","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}>=#inf.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-min->=-#sup","source":"{p;q}.r:-#min{a,k:p;\"z\",k:q;f(1),k:not p}>=#sup.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-min-not >=-a","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}>=a.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-min-not >=-\"z\"","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}>=\"z\".","models":[[],["p","q","r"],["p","r"],["q"]]}
+{"name":"guard-min-not >=-f(1)","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}>=f(1).","models":[[],["p","q","r"],["p","r"],["q","r"]]}
+{"name":"guard-min-not >=-#inf","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}>=#inf.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-min-not >=-#sup","source":"{p;q}.r:-not #min{a,k:p;\"z\",k:q;f(1),k:not p}>=#sup.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-min-not not >=-a","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}>=a.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-min-not not >=-\"z\"","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}>=\"z\".","models":[["p"],["p","q"],["q","r"],["r"]]}
+{"name":"guard-min-not not >=-f(1)","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}>=f(1).","models":[["p"],["p","q"],["q"],["r"]]}
+{"name":"guard-min-not not >=-#inf","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}>=#inf.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-min-not not >=-#sup","source":"{p;q}.r:-not not #min{a,k:p;\"z\",k:q;f(1),k:not p}>=#sup.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"upstream-assign-max","source":"{p}. q(M):-M=#max{p:p}.","models":[["p","q(p)"],["q(#inf)"]]}
+{"name":"empty-max","source":"q(M):-M=#max{}.","models":[["q(#inf)"]]}
+{"name":"closed-max-a","source":"{p}.q(M):-M=#max{a,k:p}.","models":[["p","q(a)"],["q(#inf)"]]}
+{"name":"closed-max-\"a\"","source":"{p}.q(M):-M=#max{\"a\",k:p}.","models":[["p","q(\"a\")"],["q(#inf)"]]}
+{"name":"closed-max--a","source":"{p}.q(M):-M=#max{-a,k:p}.","models":[["p","q(-a)"],["q(#inf)"]]}
+{"name":"closed-max-f(1)","source":"{p}.q(M):-M=#max{f(1),k:p}.","models":[["p","q(f(1))"],["q(#inf)"]]}
+{"name":"closed-max--f(1)","source":"{p}.q(M):-M=#max{-f(1),k:p}.","models":[["p","q(-f(1))"],["q(#inf)"]]}
+{"name":"closed-max-(1,)","source":"{p}.q(M):-M=#max{(1,),k:p}.","models":[["p","q((1,))"],["q(#inf)"]]}
+{"name":"closed-max-(1,x)","source":"{p}.q(M):-M=#max{(1,x),k:p}.","models":[["p","q((1,x))"],["q(#inf)"]]}
+{"name":"closed-max-#inf","source":"{p}.q(M):-M=#max{#inf,k:p}.","models":[["p","q(#inf)"],["q(#inf)"]]}
+{"name":"closed-max-#sup","source":"{p}.q(M):-M=#max{#sup,k:p}.","models":[["p","q(#sup)"],["q(#inf)"]]}
+{"name":"mixed-max","source":"{p;q}.r(M):-M=#max{-2,n:p;a,s:q;\"z\",t:p;-f(1),f:q;(1,x),u:p,q}.","models":[["p","q","r(-f(1))"],["p","r(\"z\")"],["q","r(-f(1))"],["r(#inf)"]]}
+{"name":"variables-max","source":"d(a).d(f(1)).d(\"z\").r(M):-M=#max{X:d(X)}.","models":[["d(\"z\")","d(a)","d(f(1))","r(f(1))"]]}
+{"name":"outer-cache-max","source":"d(1,a).d(2,f(1)).r(K,M):-d(K,X),M=#max{X:p}.{p}.","models":[["d(1,a)","d(2,f(1))","p","r(1,a)","r(2,f(1))"],["d(1,a)","d(2,f(1))","r(1,#inf)","r(2,#inf)"]]}
+{"name":"alias-max","source":"{p;q}.r(M):-M=#max{f(1),a:p;f(1),a:not p;f(1),b:q}.","models":[["p","q","r(f(1))"],["p","r(f(1))"],["q","r(f(1))"],["r(f(1))"]]}
+{"name":"recursive-max","source":"p:-#max{f(1),a:p}=f(1).","models":[[]]}
+{"name":"recursive-negative-max","source":"p:-not #max{f(1),a:p}!=f(1).","models":[[],["p"]]}
+{"name":"correlation-max","source":"{p}.r(N,M):-N=#max{a:p;f(1):not p},M=#count{1:p}.","models":[["p","r(a,1)"],["r(f(1),0)"]]}
+{"name":"objective-max","source":"{p}.r(M):-M=#max{f(1):p}.#minimize{1@1:p}.","models":[["p","r(f(1))"],["r(#inf)"]]}
+{"name":"guard-max-=-a","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}=a.","models":[[],["p","q"],["p","r"],["q"]]}
+{"name":"guard-max-=-\"z\"","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}=\"z\".","models":[[],["p"],["p","q","r"],["q"]]}
+{"name":"guard-max-=-f(1)","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}=f(1).","models":[["p"],["p","q"],["q","r"],["r"]]}
+{"name":"guard-max-=-#inf","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}=#inf.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-max-=-#sup","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}=#sup.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-max-not =-a","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}=a.","models":[["p"],["p","q","r"],["q","r"],["r"]]}
+{"name":"guard-max-not =-\"z\"","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}=\"z\".","models":[["p","q"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max-not =-f(1)","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}=f(1).","models":[[],["p","q","r"],["p","r"],["q"]]}
+{"name":"guard-max-not =-#inf","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}=#inf.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max-not =-#sup","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}=#sup.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max-not not =-a","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}=a.","models":[[],["p","q"],["p","r"],["q"]]}
+{"name":"guard-max-not not =-\"z\"","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}=\"z\".","models":[[],["p"],["p","q","r"],["q"]]}
+{"name":"guard-max-not not =-f(1)","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}=f(1).","models":[["p"],["p","q"],["q","r"],["r"]]}
+{"name":"guard-max-not not =-#inf","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}=#inf.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-max-not not =-#sup","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}=#sup.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-max-!=-a","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}!=a.","models":[["p"],["p","q","r"],["q","r"],["r"]]}
+{"name":"guard-max-!=-\"z\"","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}!=\"z\".","models":[["p","q"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max-!=-f(1)","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}!=f(1).","models":[[],["p","q","r"],["p","r"],["q"]]}
+{"name":"guard-max-!=-#inf","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}!=#inf.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max-!=-#sup","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}!=#sup.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max-not !=-a","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}!=a.","models":[[],["p","q"],["p","r"],["q"]]}
+{"name":"guard-max-not !=-\"z\"","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}!=\"z\".","models":[[],["p"],["p","q","r"],["q"]]}
+{"name":"guard-max-not !=-f(1)","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}!=f(1).","models":[["p"],["p","q"],["q","r"],["r"]]}
+{"name":"guard-max-not !=-#inf","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}!=#inf.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-max-not !=-#sup","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}!=#sup.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-max-not not !=-a","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}!=a.","models":[["p"],["p","q","r"],["q","r"],["r"]]}
+{"name":"guard-max-not not !=-\"z\"","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}!=\"z\".","models":[["p","q"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max-not not !=-f(1)","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}!=f(1).","models":[[],["p","q","r"],["p","r"],["q"]]}
+{"name":"guard-max-not not !=-#inf","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}!=#inf.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max-not not !=-#sup","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}!=#sup.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max-<-a","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}<a.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-max-<-\"z\"","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}<\"z\".","models":[[],["p","q"],["p","r"],["q"]]}
+{"name":"guard-max-<-f(1)","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}<f(1).","models":[[],["p","q","r"],["p","r"],["q"]]}
+{"name":"guard-max-<-#inf","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}<#inf.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-max-<-#sup","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}<#sup.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max-not <-a","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}<a.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max-not <-\"z\"","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}<\"z\".","models":[["p"],["p","q","r"],["q","r"],["r"]]}
+{"name":"guard-max-not <-f(1)","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}<f(1).","models":[["p"],["p","q"],["q","r"],["r"]]}
+{"name":"guard-max-not <-#inf","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}<#inf.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max-not <-#sup","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}<#sup.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-max-not not <-a","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}<a.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-max-not not <-\"z\"","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}<\"z\".","models":[[],["p","q"],["p","r"],["q"]]}
+{"name":"guard-max-not not <-f(1)","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}<f(1).","models":[[],["p","q","r"],["p","r"],["q"]]}
+{"name":"guard-max-not not <-#inf","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}<#inf.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-max-not not <-#sup","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}<#sup.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max-<=-a","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}<=a.","models":[[],["p","q"],["p","r"],["q"]]}
+{"name":"guard-max-<=-\"z\"","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}<=\"z\".","models":[[],["p","q","r"],["p","r"],["q"]]}
+{"name":"guard-max-<=-f(1)","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}<=f(1).","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max-<=-#inf","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}<=#inf.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-max-<=-#sup","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}<=#sup.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max-not <=-a","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}<=a.","models":[["p"],["p","q","r"],["q","r"],["r"]]}
+{"name":"guard-max-not <=-\"z\"","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}<=\"z\".","models":[["p"],["p","q"],["q","r"],["r"]]}
+{"name":"guard-max-not <=-f(1)","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}<=f(1).","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-max-not <=-#inf","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}<=#inf.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max-not <=-#sup","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}<=#sup.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-max-not not <=-a","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}<=a.","models":[[],["p","q"],["p","r"],["q"]]}
+{"name":"guard-max-not not <=-\"z\"","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}<=\"z\".","models":[[],["p","q","r"],["p","r"],["q"]]}
+{"name":"guard-max-not not <=-f(1)","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}<=f(1).","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max-not not <=-#inf","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}<=#inf.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-max-not not <=-#sup","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}<=#sup.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max->-a","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}>a.","models":[["p"],["p","q","r"],["q","r"],["r"]]}
+{"name":"guard-max->-\"z\"","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}>\"z\".","models":[["p"],["p","q"],["q","r"],["r"]]}
+{"name":"guard-max->-f(1)","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}>f(1).","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-max->-#inf","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}>#inf.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max->-#sup","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}>#sup.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-max-not >-a","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}>a.","models":[[],["p","q"],["p","r"],["q"]]}
+{"name":"guard-max-not >-\"z\"","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}>\"z\".","models":[[],["p","q","r"],["p","r"],["q"]]}
+{"name":"guard-max-not >-f(1)","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}>f(1).","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max-not >-#inf","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}>#inf.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-max-not >-#sup","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}>#sup.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max-not not >-a","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}>a.","models":[["p"],["p","q","r"],["q","r"],["r"]]}
+{"name":"guard-max-not not >-\"z\"","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}>\"z\".","models":[["p"],["p","q"],["q","r"],["r"]]}
+{"name":"guard-max-not not >-f(1)","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}>f(1).","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-max-not not >-#inf","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}>#inf.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max-not not >-#sup","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}>#sup.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-max->=-a","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}>=a.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max->=-\"z\"","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}>=\"z\".","models":[["p"],["p","q","r"],["q","r"],["r"]]}
+{"name":"guard-max->=-f(1)","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}>=f(1).","models":[["p"],["p","q"],["q","r"],["r"]]}
+{"name":"guard-max->=-#inf","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}>=#inf.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max->=-#sup","source":"{p;q}.r:-#max{a,k:p;\"z\",k:q;f(1),k:not p}>=#sup.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-max-not >=-a","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}>=a.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-max-not >=-\"z\"","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}>=\"z\".","models":[[],["p","q"],["p","r"],["q"]]}
+{"name":"guard-max-not >=-f(1)","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}>=f(1).","models":[[],["p","q","r"],["p","r"],["q"]]}
+{"name":"guard-max-not >=-#inf","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}>=#inf.","models":[[],["p"],["p","q"],["q"]]}
+{"name":"guard-max-not >=-#sup","source":"{p;q}.r:-not #max{a,k:p;\"z\",k:q;f(1),k:not p}>=#sup.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max-not not >=-a","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}>=a.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max-not not >=-\"z\"","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}>=\"z\".","models":[["p"],["p","q","r"],["q","r"],["r"]]}
+{"name":"guard-max-not not >=-f(1)","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}>=f(1).","models":[["p"],["p","q"],["q","r"],["r"]]}
+{"name":"guard-max-not not >=-#inf","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}>=#inf.","models":[["p","q","r"],["p","r"],["q","r"],["r"]]}
+{"name":"guard-max-not not >=-#sup","source":"{p;q}.r:-not not #max{a,k:p;\"z\",k:q;f(1),k:not p}>=#sup.","models":[[],["p"],["p","q"],["q"]]}

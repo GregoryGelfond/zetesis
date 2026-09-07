@@ -8,8 +8,8 @@ use themelios_program::program::{AggregateFunction, DefaultNegation};
 use zetesis_core::{Atom, AtomPattern, Value};
 use zetesis_ferraris::{
     AggregateComparison, AggregateElement, AggregateExtremum, AggregateFamilyLimits,
-    AggregateGuard as NumericGuard, ExtremumBound, Node, Theory, append_aggregate,
-    append_aggregate_family, append_extremum,
+    AggregateGuard as NumericGuard, Node, Theory, ValueExtremumElement, append_aggregate,
+    append_aggregate_family, append_value_extremum,
 };
 
 use crate::expansion::Budget;
@@ -170,8 +170,22 @@ pub(super) struct Builder<'a> {
 }
 
 struct CachedAggregate {
-    elements: Arc<[AggregateElement]>,
+    elements: GroundAggregate,
     roots: Option<Arc<[(Value, usize)]>>,
+}
+
+#[derive(Clone)]
+enum GroundAggregate {
+    Numeric(Arc<[AggregateElement]>),
+    Extrema(Arc<[ValueExtremumElement]>),
+}
+impl GroundAggregate {
+    fn len(&self) -> usize {
+        match self {
+            Self::Numeric(elements) => elements.len(),
+            Self::Extrema(elements) => elements.len(),
+        }
+    }
 }
 impl Builder<'_> {
     // Only the completed atom catalog establishes which opposite tuples can
@@ -572,8 +586,13 @@ impl Builder<'_> {
             }
         }
         if !guards.is_empty() {
-            let within =
-                self.aggregate_guards(&selected, guards, assignment, None, rule.location)?;
+            let within = self.aggregate_guards(
+                &GroundAggregate::Numeric(selected.into()),
+                guards,
+                assignment,
+                None,
+                rule.location,
+            )?;
             let outside = self.neg(within, rule.location)?;
             let violated = self.and(body, outside, rule.location)?;
             let constraint = self.node(Node::Implies(violated, 0), rule.location)?;
@@ -622,16 +641,14 @@ impl Builder<'_> {
         assignment: &[Value],
         support: &Support,
         location: Location,
-    ) -> Result<Arc<[AggregateElement]>, FormulaFailure> {
+    ) -> Result<GroundAggregate, FormulaFailure> {
         let Some(target) = aggregate.binding else {
-            return self
-                .aggregate_elements(aggregate, assignment, support, location)
-                .map(Arc::from);
+            return self.aggregate_elements(aggregate, assignment, support, location);
         };
         let (key, bytes) = self.cache_key(aggregate.id, target, assignment, location)?;
         self.work(location)?;
         if let Some(cached) = self.aggregate_cache.get(&key) {
-            return Ok(Arc::clone(&cached.elements));
+            return Ok(cached.elements.clone());
         }
         ceiling(
             FormulaResource::AggregateCacheRows,
@@ -654,12 +671,11 @@ impl Builder<'_> {
         )?;
         self.cached_elements += elements.len();
         self.cached_key_bytes += bytes;
-        let elements: Arc<[AggregateElement]> = Arc::from(elements);
         self.work(location)?;
         self.aggregate_cache.insert(
             key,
             CachedAggregate {
-                elements: Arc::clone(&elements),
+                elements: elements.clone(),
                 roots: None,
             },
         );
@@ -700,23 +716,34 @@ impl Builder<'_> {
     fn assignment_family(
         &mut self,
         function: AggregateFunction,
-        elements: &[AggregateElement],
+        elements: &GroundAggregate,
         location: Location,
     ) -> Result<Arc<[(Value, usize)]>, FormulaFailure> {
-        let values = crate::formula_assignment::candidates(
-            function,
-            elements.iter().map(|element| element.weight),
-            self.limits,
-            &mut self.counters,
-            location,
-        )?;
+        let values = match elements {
+            GroundAggregate::Numeric(elements) => crate::formula_assignment::candidates(
+                function,
+                elements.iter().map(|element| element.weight),
+                self.limits,
+                &mut self.counters,
+                location,
+            )?,
+            GroundAggregate::Extrema(elements) => crate::formula_assignment::extrema_candidates(
+                function,
+                elements.iter().map(|element| &element.value),
+                self.limits,
+                self.budget,
+                &mut self.counters,
+                location,
+            )?,
+        };
         ceiling(
             FormulaResource::AggregateCacheRoots,
             self.cached_roots as u128 + values.len() as u128,
             self.limits.max_aggregate_cache_roots as u128,
             location,
         )?;
-        if let Some(kind) = extremum(function) {
+        if let GroundAggregate::Extrema(elements) = elements {
+            let kind = extremum(function).expect("value aggregate is min/max");
             let mut roots = Vec::new();
             for value in values {
                 self.work(location)?;
@@ -727,6 +754,9 @@ impl Builder<'_> {
             self.cached_roots += roots.len();
             return Ok(Arc::from(roots));
         }
+        let GroundAggregate::Numeric(elements) = elements else {
+            unreachable!("handled extrema")
+        };
         let mut guards = Vec::new();
         for value in &values {
             self.work(location)?;
@@ -798,8 +828,9 @@ impl Builder<'_> {
         assignment: &[Value],
         support: &Support,
         location: Location,
-    ) -> Result<Vec<AggregateElement>, FormulaFailure> {
-        let mut grouped = BTreeMap::<GroundKey, (i32, usize)>::new();
+    ) -> Result<GroundAggregate, FormulaFailure> {
+        let is_extremum = extremum(aggregate.function).is_some();
+        let mut grouped = BTreeMap::<GroundKey, (Value, usize)>::new();
         for element in &aggregate.elements {
             let mut local = Join::new(
                 &element.condition,
@@ -814,6 +845,11 @@ impl Builder<'_> {
             {
                 let key = self.aggregate_key(&element.key, &binding, location)?;
                 let weight = match &key {
+                    GroundKey::Tuple(tuple) if is_extremum => {
+                        let value = tuple.first().expect("admitted nonempty extremum tuple");
+                        crate::formula_assignment::extremum_value(value, location)?;
+                        formula_support::copy(value, self.budget, location)?
+                    }
                     GroundKey::Tuple(tuple) => {
                         let Some(weight) = crate::formula_assignment::tuple_weight(
                             aggregate.function,
@@ -823,13 +859,10 @@ impl Builder<'_> {
                         else {
                             continue;
                         };
-                        weight
+                        Value::Number(weight)
                     }
-                    GroundKey::Atom(_) => 1,
+                    GroundKey::Atom(_) => Value::Number(1),
                 };
-                if extremum(aggregate.function).is_some() {
-                    extremum_bound(&Value::Number(weight), location)?;
-                }
                 let condition = self.body(&element.condition, &binding, location, support)?;
                 let previous = grouped.get(&key).map_or(0, |(_, condition)| *condition);
                 if !grouped.contains_key(&key) {
@@ -844,11 +877,25 @@ impl Builder<'_> {
                 grouped.insert(key, (weight, condition));
             }
         }
+        if is_extremum {
+            return Ok(GroundAggregate::Extrema(
+                grouped
+                    .into_values()
+                    .map(|(value, condition)| ValueExtremumElement { value, condition })
+                    .collect::<Vec<_>>()
+                    .into(),
+            ));
+        }
         let elements: Vec<_> = grouped
             .into_values()
-            .map(|(weight, condition)| AggregateElement { weight, condition })
+            .map(|(value, condition)| {
+                let Value::Number(weight) = value else {
+                    unreachable!("numeric contribution")
+                };
+                AggregateElement { weight, condition }
+            })
             .collect();
-        Ok(elements)
+        Ok(GroundAggregate::Numeric(elements.into()))
     }
     fn aggregate_key(
         &mut self,
@@ -933,7 +980,7 @@ impl Builder<'_> {
     }
     fn aggregate_guards(
         &mut self,
-        elements: &[AggregateElement],
+        elements: &GroundAggregate,
         guards: &[AggregateGuard],
         assignment: &[Value],
         kind: Option<AggregateExtremum>,
@@ -950,6 +997,9 @@ impl Builder<'_> {
                 location,
             )?;
             if let Some(kind) = kind {
+                let GroundAggregate::Extrema(elements) = elements else {
+                    unreachable!("extrema contribution")
+                };
                 let root = self.extremum_root(
                     elements,
                     kind,
@@ -960,6 +1010,9 @@ impl Builder<'_> {
                 result = self.and(result, root, location)?;
                 continue;
             }
+            let GroundAggregate::Numeric(elements) = elements else {
+                unreachable!("numeric contribution")
+            };
             let Value::Number(bound) = bound else {
                 return Err(crate::diagnostic::unsupported(
                     crate::ProfileFeature::Aggregate,
@@ -1021,29 +1074,19 @@ fn extremum(function: AggregateFunction) -> Option<AggregateExtremum> {
         _ => None,
     }
 }
-fn extremum_bound(value: &Value, location: Location) -> Result<ExtremumBound, FormulaFailure> {
-    match value {
-        Value::Infimum => Ok(ExtremumBound::NegativeInfinity),
-        Value::Supremum => Ok(ExtremumBound::PositiveInfinity),
-        Value::Number(value) if *value != i32::MIN && *value != i32::MAX => {
-            Ok(ExtremumBound::Number(i64::from(*value)))
-        }
-        _ => Err(crate::diagnostic::unsupported(crate::ProfileFeature::Aggregate, location).into()),
-    }
-}
 impl Builder<'_> {
     fn extremum_root(
         &mut self,
-        elements: &[AggregateElement],
+        elements: &[ValueExtremumElement],
         kind: AggregateExtremum,
         comparison: AggregateComparison,
         bound: &Value,
         location: Location,
     ) -> Result<usize, FormulaFailure> {
-        let bound = extremum_bound(bound, location)?;
+        crate::formula_assignment::extremum_value(bound, location)?;
         let first = self.nodes.len();
         let limits = self.aggregate_limits();
-        let build = append_extremum(
+        let build = append_value_extremum(
             &mut self.nodes,
             elements,
             kind,

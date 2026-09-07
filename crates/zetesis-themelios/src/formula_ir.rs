@@ -267,6 +267,13 @@ impl Rewrite for Normalizer<'_> {
             return term;
         }
         let result = (|| {
+            // Aggregate-local admission accepts real sentinel tuple values and
+            // bounds. Other source contexts retain their own scalar checks.
+            if matches!(term, Term::Symbolic(Symbol::Infimum | Symbol::Supremum)) {
+                self.budget
+                    .charge(ExpansionResource::TermWork, 1, self.location)?;
+                return Ok(term);
+            }
             if matches!(
                 term,
                 Term::UnaryOperation { .. } | Term::BinaryOperation { .. } | Term::Absolute(_)

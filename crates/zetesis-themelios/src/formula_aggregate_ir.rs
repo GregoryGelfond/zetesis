@@ -11,7 +11,7 @@ use themelios_program::term::Term;
 use crate::diagnostic::unsupported;
 use crate::formula_ir::{
     AggregateElementIr, AggregateGuard, AggregateIr, AggregateKey, Compiler, Expression, LiteralIr,
-    Variables,
+    Operation, Variables,
 };
 use crate::{AdmissionFailure, FormulaFailure, InputLimit, ProfileFeature};
 use zetesis_core::{Term as CoreTerm, Value};
@@ -103,16 +103,29 @@ impl Compiler<'_> {
         if let Some(left) = left {
             guards.push(AggregateGuard {
                 relation: reverse(left.relation.unwrap_or(Relation::Le)),
-                bound: self.expression(&left.term, variables)?,
+                bound: self.aggregate_expression(&left.term, variables)?,
             });
         }
         if let Some(right) = right {
             guards.push(AggregateGuard {
                 relation: right.relation.unwrap_or(Relation::Le),
-                bound: self.expression(&right.term, variables)?,
+                bound: self.aggregate_expression(&right.term, variables)?,
             });
         }
         Ok(guards)
+    }
+    fn aggregate_expression(
+        &mut self,
+        term: &Term,
+        variables: &mut Variables,
+    ) -> Result<Expression, FormulaFailure> {
+        if let Some(value) = sentinel(term) {
+            self.value(&value)?;
+            return Ok(Expression {
+                nodes: vec![Operation::Constant(value)],
+            });
+        }
+        self.expression(term, variables)
     }
     pub(super) fn body_guards(
         &mut self,
@@ -175,7 +188,11 @@ impl Compiler<'_> {
         if !matches!(term, Term::Variable(_) | Term::Symbolic(_)) {
             return Err(unsupported(ProfileFeature::Aggregate, self.location).into());
         }
-        let term = self.objective_term(term, variables)?;
+        let term = if let Some(value) = sentinel(term) {
+            CoreTerm::Constant(value)
+        } else {
+            self.objective_term(term, variables)?
+        };
         if let CoreTerm::Constant(value) = &term {
             self.value(value)?;
         }
@@ -213,10 +230,8 @@ impl Compiler<'_> {
                     if matches!(
                         aggregate.function(),
                         AggregateFunction::Min | AggregateFunction::Max
-                    ) && !matches!(
-                        tuple.first(),
-                        Some(CoreTerm::Variable(_) | CoreTerm::Constant(Value::Number(_)))
-                    ) {
+                    ) && tuple.is_empty()
+                    {
                         return Err(unsupported(ProfileFeature::Aggregate, self.location).into());
                     }
                     self.bindings(&mut condition, &mut local)?;
@@ -266,6 +281,13 @@ impl Compiler<'_> {
             guards,
             elements,
         })
+    }
+}
+fn sentinel(term: &Term) -> Option<Value> {
+    match term {
+        Term::Symbolic(Symbol::Infimum) => Some(Value::Infimum),
+        Term::Symbolic(Symbol::Supremum) => Some(Value::Supremum),
+        _ => None,
     }
 }
 fn reverse(relation: Relation) -> Relation {

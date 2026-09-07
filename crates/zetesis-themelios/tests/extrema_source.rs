@@ -54,12 +54,11 @@ fn empty_assignments_use_real_extrema_and_respect_assignment_cache_limits() {
     }
 }
 #[test]
-fn unresolved_numeric_endpoints_and_non_numeric_weights_remain_located_refusals() {
+fn unresolved_numeric_endpoints_remain_located_refusals() {
     for source in [
         "p :- #min {2147483647,k:not p} != 2147483647.",
         "p :- #max {-2147483648,k:not p} != -2147483648.",
         "m(M) :- M = #max {2147483647,k}.",
-        "m(M) :- M = #min {a,k}.",
     ] {
         assert!(
             !admit(source, FormulaLimits::default())

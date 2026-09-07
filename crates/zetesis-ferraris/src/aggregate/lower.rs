@@ -146,6 +146,18 @@ pub(super) fn validate(
     builder: &mut Builder<'_>,
     elements: &[AggregateElement],
 ) -> Result<(bool, i128)> {
+    validate_elements(
+        builder,
+        elements
+            .iter()
+            .map(|element| (element.condition, element.weight)),
+    )
+}
+
+pub(super) fn validate_elements(
+    builder: &mut Builder<'_>,
+    elements: impl ExactSizeIterator<Item = (usize, i32)>,
+) -> Result<(bool, i128)> {
     builder.tick()?;
     if builder.nodes.len() > builder.limits.max_nodes {
         return Err(AggregateErrorKind::NodeLimit);
@@ -163,14 +175,14 @@ pub(super) fn validate(
     }
     let mut nonnegative = true;
     let mut total = 0i128;
-    for (index, element) in elements.iter().enumerate() {
+    for (index, (condition, weight)) in elements.enumerate() {
         builder.tick()?;
-        if element.condition >= builder.nodes.len() {
+        if condition >= builder.nodes.len() {
             return Err(AggregateErrorKind::InvalidCondition { element: index });
         }
-        nonnegative &= element.weight >= 0;
+        nonnegative &= weight >= 0;
         total = total
-            .checked_add(i128::from(element.weight))
+            .checked_add(i128::from(weight))
             .ok_or(AggregateErrorKind::ArithmeticOverflow)?;
     }
     Ok((nonnegative, total))

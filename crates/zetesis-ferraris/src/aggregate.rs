@@ -1,8 +1,9 @@
-//! Finite scalar aggregate compilation with reduct-preserving connectives.
+//! Finite aggregate compilation with reduct-preserving connectives.
 
 mod lower;
 mod extremum;
 mod family;
+mod value_extremum;
 
 use std::fmt;
 
@@ -11,6 +12,7 @@ pub use family::{
     AggregateFamilyBuild, AggregateFamilyLimits, AggregateGuard, append_aggregate_family,
 };
 pub use lower::append_aggregate;
+pub use value_extremum::{ValueExtremumElement, append_value_extremum};
 
 /// One distinct, already coalesced tuple's weight and eligibility formula.
 /// Callers OR every alternative eligibility condition for an equal whole tuple.
@@ -89,7 +91,7 @@ pub enum AggregateProfile {
     Threshold,
     /// Conjunction of a subset implication for every failing aggregate subset.
     SubsetImplications,
-    /// Numeric min/max using filtered eligibility disjunctions and exact guards.
+    /// Min/max using filtered eligibility disjunctions and exact guards.
     Extremum,
 }
 

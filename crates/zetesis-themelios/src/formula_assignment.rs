@@ -58,6 +58,21 @@ pub(crate) fn values(
             }
         }
     }
+    if matches!(
+        aggregate.function,
+        AggregateFunction::Min | AggregateFunction::Max
+    ) {
+        return extrema_candidates(
+            aggregate.function,
+            tuples
+                .iter()
+                .map(|tuple| tuple.first().expect("admitted nonempty extremum tuple")),
+            limits,
+            budget,
+            counters,
+            location,
+        );
+    }
     let mut weights = Vec::new();
     for tuple in tuples {
         if let Some(weight) = tuple_weight(aggregate.function, &tuple, location)? {
@@ -65,6 +80,53 @@ pub(crate) fn values(
         }
     }
     candidates(aggregate.function, weights, limits, counters, location)
+}
+
+/// Preserve the independently recorded endpoint profile while extending term
+/// classes. Source endpoint behavior is a separate compatibility obligation.
+pub(crate) fn extremum_value(value: &Value, location: Location) -> Result<(), FormulaFailure> {
+    if matches!(value, Value::Number(i32::MIN | i32::MAX)) {
+        return Err(unsupported(ProfileFeature::Aggregate, location).into());
+    }
+    Ok(())
+}
+
+/// A completed possible tuple carrier covers every actual selected value.
+/// Storage order is only the deterministic candidate/cache enumeration order.
+pub(crate) fn extrema_candidates<'a>(
+    function: AggregateFunction,
+    possible: impl IntoIterator<Item = &'a Value>,
+    limits: FormulaLimits,
+    budget: &mut Budget,
+    counters: &mut Counters,
+    location: Location,
+) -> Result<Vec<Value>, FormulaFailure> {
+    let empty = match function {
+        AggregateFunction::Min => Value::Supremum,
+        AggregateFunction::Max => Value::Infimum,
+        _ => unreachable!("value candidates are extrema only"),
+    };
+    ceiling(
+        FormulaResource::AssignmentValues,
+        1,
+        limits.max_assignment_values as u128,
+        location,
+    )?;
+    let mut values = BTreeSet::from([empty]);
+    for value in possible {
+        counters.work(limits, location)?;
+        extremum_value(value, location)?;
+        if !values.contains(value) {
+            ceiling(
+                FormulaResource::AssignmentValues,
+                values.len() as u128 + 1,
+                limits.max_assignment_values as u128,
+                location,
+            )?;
+            values.insert(crate::formula_support::copy(value, budget, location)?);
+        }
+    }
+    Ok(values.into_iter().collect())
 }
 
 /// Select the numeric contribution before eligibility lowering. Whole tuples

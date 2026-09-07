@@ -7,7 +7,7 @@ use super::{
 };
 use crate::Node;
 
-/// A finite numeric extremum with the source language's empty-set convention.
+/// A finite extremum with the source language's empty-set convention.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AggregateExtremum {
     /// Minimum eligible value; the empty result is positive infinity (`#sup`).
@@ -88,6 +88,17 @@ fn compile(
     // G is max >= bound / min <= bound. H is the corresponding strict
     // comparison. Both are monotone in eligible tuples, including sentinels.
     let (inclusive, strict) = witnesses(builder, elements, extremum, bound, falsum, truth)?;
+    comparison_root(builder, extremum, comparison, inclusive, strict, falsum)
+}
+
+pub(super) fn comparison_root(
+    builder: &mut Builder<'_>,
+    extremum: AggregateExtremum,
+    comparison: AggregateComparison,
+    inclusive: usize,
+    strict: usize,
+    falsum: usize,
+) -> Result<usize, AggregateErrorKind> {
     let (positive, negative) = match extremum {
         AggregateExtremum::Max => (AggregateComparison::Ge, AggregateComparison::Lt),
         AggregateExtremum::Min => (AggregateComparison::Le, AggregateComparison::Gt),
