@@ -355,3 +355,21 @@ fn union_truth_mutation_changes_the_expected_models() {
     );
     assert!(mutated.checks.iter().all(|check| !check.accepted()));
 }
+
+#[test]
+fn instance_scratch_is_reserved_before_catalog_growth() {
+    let a = nullary("a");
+    let program = program(vec![rule(None, vec![], vec![a.clone()], vec![]), rule(None, vec![], vec![a.clone(), a], vec![])]);
+    let seeds = [Seed::new(&program, []).unwrap()];
+    let atom_bytes = size_of::<Atom>() + 1;
+    let fixed_bytes = (5 + 2 + 11 + 2) * size_of::<u32>();
+    let limits = lazy::Limits { max_atoms: 1, max_chunk_rules: 2, max_chunk_words: 11, max_instance_bytes: 2 * atom_bytes, max_host_bytes: fixed_bytes + 6 * atom_bytes, ..Default::default() };
+    let completed = lazy::check_with(&program, &seeds, limits, &Control::default(), lazy::evaluate).unwrap();
+    assert_eq!(completed.progress.instances, 2);
+    assert_eq!(completed.progress.catalog_atoms, 1);
+    let below = lazy::Limits { max_host_bytes: limits.max_host_bytes - 1, ..limits };
+    let failure = lazy::check_with(&program, &seeds, below, &Control::default(), |_| panic!("catalog admission must fail before dispatch")).unwrap_err();
+    assert!(matches!(failure.cause, lazy::Cause::<Stop>::Source(Stop::Allocation)));
+    assert_eq!(failure.progress.instances, 1);
+    assert_eq!(failure.progress.chunks, 0);
+}

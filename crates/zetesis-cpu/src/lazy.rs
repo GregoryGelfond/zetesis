@@ -33,6 +33,9 @@ pub struct Limits {
     pub max_chunk_rules: usize,
     /// Maximum encoded instance words, excluding the offset table.
     pub max_chunk_words: usize,
+    /// Fixed scratch allowance for one copied source instance, reserved
+    /// separately from all catalog growth throughout every scan.
+    pub max_instance_bytes: usize,
     /// Maximum requested owned payload bytes for catalog copies, snapshots,
     /// seeds, pending deltas, chunk packing and one result. Input program/seeds,
     /// allocator rounding, tree-node bookkeeping and backend-private transport
@@ -49,6 +52,7 @@ impl Default for Limits {
             max_source_work: 10_000_000,
             max_chunk_rules: 256,
             max_chunk_words: 16_384,
+            max_instance_bytes: 1024 * 1024,
             max_host_bytes: 128 * 1024 * 1024,
         }
     }
@@ -370,9 +374,7 @@ fn run<E>(
             max_instance_atoms: limits
                 .max_chunk_words
                 .saturating_sub(RECORD_HEADER_WORDS - 1),
-            max_instance_bytes: limits
-                .max_host_bytes
-                .saturating_sub(state.fixed_bytes + state.payload_bytes),
+            max_instance_bytes: limits.max_instance_bytes,
         };
         let scanned = source::scan(program, &snapshot, scan_limits, control, |instance| {
             state.offer(&instance, seeds.len(), limits, control, progress, execute)
@@ -464,6 +466,7 @@ impl State {
             .ok_or(Stop::Allocation)?;
         let fixed_bytes = fixed_words
             .checked_mul(size_of::<u32>())
+            .and_then(|bytes| bytes.checked_add(limits.max_instance_bytes))
             .ok_or(Stop::Allocation)?;
         if fixed_bytes > limits.max_host_bytes {
             return Err(Stop::Allocation);
@@ -551,25 +554,9 @@ impl State {
             self.flush(worlds, control, progress, execute)?;
         }
         let offset = u32::try_from(self.records.len()).map_err(|_| Stop::CarrierLimit)?;
-        let instance_bytes = instance
-            .head()
-            .into_iter()
-            .chain(instance.positive())
-            .chain(instance.gate_true())
-            .chain(instance.gate_false())
-            .try_fold(0usize, |total, atom| {
-                total.checked_add(atom_bytes(atom)?).ok_or(Stop::Allocation)
-            })?;
-        let catalog_limits = Limits {
-            max_host_bytes: limits
-                .max_host_bytes
-                .checked_sub(instance_bytes)
-                .ok_or(Stop::Allocation)?,
-            ..limits
-        };
         let head = instance
             .head()
-            .map(|atom| self.intern(atom, catalog_limits))
+            .map(|atom| self.intern(atom, limits))
             .transpose()?
             .map_or(CONSTRAINT_HEAD, |id| id + 1);
         self.records.push(head);
@@ -588,7 +575,7 @@ impl State {
             .chain(instance.gate_false())
         {
             control.poll()?;
-            let id = self.intern(atom, catalog_limits)?;
+            let id = self.intern(atom, limits)?;
             self.records.push(id);
         }
         self.offsets.push(offset);
