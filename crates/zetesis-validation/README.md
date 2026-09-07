@@ -88,9 +88,10 @@ It exits 0 on integrity success and 2 on argument, integrity, filesystem or outp
 failure. Diagnostics go to stderr. A stdout write failure can leave a partial
 record; consumers must check successful process completion before accepting it.
 
-The existing Python comparison/gate and Rust native-admission tests still read
+The five Rust source/ordinary-solver regression consumers now read this owned
+curated corpus directly. The existing Python comparison/gate still reads
 `cases.jsonl`; the explicit import tests still read the retained C++ originals.
-They remain in place until their callers and independent checks are migrated.
+Those legacy inputs remain until their callers and independent checks are migrated.
 See the [migration record](../../docs/verification/corpus-curation-20260907/README.md)
 for the exact remaining work. This first slice does not replace the solver
 campaign or claim repository cleanup is complete.

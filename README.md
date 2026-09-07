@@ -162,9 +162,9 @@ syntax, raising and evaluation errors from zetesis implementation refusals.
 | Area | Implemented scope |
 |---|---|
 | Normal rules | Safe finite rules, constraints, default/double negation, strong negation with coherence, and relational lazy checking in the admitted normal-rule profile. |
-| Formula rules | Bounded choices, signed disjunctions, finite rule/head pools, evaluated heads, scalar/range bindings, comparisons and admitted universal body conditionals. |
+| Formula rules | Bounded choices, signed singleton/disjunctive heads, finite rule/head pools, evaluated heads, scalar/range bindings, comparisons and admitted universal body conditionals. |
 | Aggregates | Body count/sum/sum+ and complete-value min/max comparisons, scoped independent assignments, and a restricted finite function-count head profile. |
-| Logical values | Closed signed functions and tuples; finite constructor generation from bound inputs; positive tuple-pattern extraction; evaluated already-safe negative arguments. Positive named-function patterns remain a gap. |
+| Logical values | Closed signed functions and tuples; finite construction from bound inputs; positive tuple/function patterns; evaluated positive arguments with independently bound inputs; evaluated already-safe negative arguments. |
 | Objectives and observations | Admitted minimize/maximize/weak constraints; complete tuple keys and optimal ties; signature, term and conditional `#show`; `#defined`; original include bundles and constants. |
 | Refusal boundaries | Broader conditioned heads, some binding/aggregate combinations, objective-dependent disjunction/conditionals, broader directives and exact clingo undefined-arithmetic behavior remain incomplete. |
 
@@ -176,24 +176,44 @@ explains endpoint guards and why an internal refusal does not by itself establis
 a modeling error. Undefined or overflowing admitted arithmetic currently produces
 an explicit refusal rather than reproducing all of clingo's simplifications.
 
-The current combined checkpoint passes **94 unchanged non-clingcon
-kr-domains cases**, checking answer contracts, costs, counts and optimum ties.
-All **24 selected upstream clingo assertions** pass with 73 complete full-model
-occurrences, retaining original bytes and provenance. Local line coverage is
-**91.4857% workspace / 91.9220% CPU-only CLI**, and the Lean library checks
-**646 theorems in 45 modules**. The
-[checkpoint](docs/verification/grounder-tranche-20260907/README.md) states exact
-source/binary scopes and limitations; the
+The current source adds [signed singleton heads](docs/verification/singleton-heads-20260907/README.md),
+[constructor patterns](docs/verification/function-patterns-20260907/README.md) and
+[evaluated positive arguments](docs/verification/positive-arguments-20260907/README.md).
+For example, `q(X):-d(X),p(X+1).` consumes `X` from `d(X)` and retains the
+matching `p` atom. Arithmetic does not infer an inverse binding.
+
+The current release passes **94 unchanged non-clingcon kr-domains cases**,
+checking answer contracts, costs, counts and optimum ties. All **24 selected
+upstream clingo assertions** pass with 73 complete full-model occurrences,
+retaining original bytes and provenance. The combined gates pass **1,303 workspace
+test/doc checks** and **283 CPU-only CLI checks**, with explicit external/device
+ignores retained. Local line coverage is **91.2170% workspace / 91.7886% CPU-only
+CLI**; the pinned Lean build and audit check **686 theorems in 50 modules**.
+The [checkpoint](docs/verification/execution-tranche-20260907/README.md) states
+the source/binary scopes and limitations; hosted CI attaches to each published
+revision. The
 [verification record](docs/verification/status.md) indexes historical results.
 
-Earlier CPU measurements demonstrate useful specialized improvements, while
-SEND + MORE = MONEY remains slower than clingo and spends most of its measured
-driver time grounding. GPU measurements establish correctness and mixed
-microbenchmark results, not a general full-solve speedup. The
-[performance record](docs/verification/api-hardening-20260907/README.md)
-and [SEND attribution pilot](docs/verification/grounder-performance-20260907/send-attribution.md)
-keep these distinct. The new attribution API locates work to guide general
-improvements with matched, complete-result measurements.
+A [controlled scalar ablation](docs/verification/scalar-evaluation-20260907/ablation.md)
+reduced median SEND formula admission from **50.346 ms to 19.367 ms (61.53%)**
+by removing temporary arithmetic trees. Complete models and ordered execution
+subjects matched; the plain-chain control's 2.87% median increase is retained.
+This measures admission in the recorded paired artifacts, excluding parsing and
+solving. A separate [end-to-end CPU comparison](docs/verification/execution-performance-20260907/README.md)
+records the integrated release, with 21 timed samples per solver and case:
+
+| Original input | Previous zetesis | Current zetesis | clingo 5.8.2 |
+|---|---:|---:|---:|
+| SEND + MORE = MONEY | 72.20 ms | 40.88 ms | 12.77 ms |
+| Eight queens, variant 02 | 114.92 ms | 105.70 ms | 121.74 ms |
+| Task allocation, variant 04 / larger mix | 131.71 ms | 131.46 ms | 191.65 ms |
+
+All 225 invocations preserve complete answer contracts. SEND improves 43.4%
+against the previous release; current zetesis is 13.2% faster than clingo on the
+selected queens input and 31.4% faster on task allocation. These are measured
+workload-specific CPU results, not a general solver ranking. Physical GPU
+microbenchmarks establish correctness with mixed timing results; the enumerated
+gate projection remains the default.
 
 ## Libraries and mathematical specification
 

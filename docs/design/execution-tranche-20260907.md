@@ -10,7 +10,7 @@ qualified source until the combined checks complete.
 
 | Area | First slice | Subsequent scope |
 | --- | --- | --- |
-| Language foundations | Positive named-function patterns through the existing structural matcher. | Independently bound positive evaluated arguments, with explicit input-readiness and join scheduling. |
+| Language foundations | Positive named-function patterns through the existing structural matcher. | Independently bound positive evaluated arguments with explicit input readiness; retain the existing join schedule for this slice. |
 | CPU evaluation | Direct checked scalar operations over the current expression representation. Keep scratch, joins and charges fixed for measurement. | Relational lazy bound-column probing with stable row order and explicit index costs. |
 | GPU and parallel execution | An explicit gate-projection alternative, retaining the existing kernel as the default and measurement baseline. | Ordinary shared-budget residual scheduling characterization, then an isolated partitioning experiment if justified. |
 | Signed heads and validation | Signed singleton heads through the existing Ferraris head representation. | Reuse the validation process/comparison components from a typed library and migrate the selected upstream campaign to curated Rust fixtures. |
@@ -19,6 +19,14 @@ Singleton `not` and `not not` heads are independent of structural matching.
 Their original literals remain in implications; neither supplies positive support.
 Structured consequent witnesses depend on the matcher and remain a later slice.
 Boolean/signed observation guards are another independent future extension.
+
+The integration checkpoint includes both language slices, direct scalar
+evaluation, the explicit GPU projection and curated Rust test consumers. It also
+adds concise ordinary help and terminal metadata styling. The lazy bound-column
+index, ordinary shared-budget scheduling characterization and Rust campaign
+migration are follow-ons; they have not been implemented by this checkpoint.
+The [integration record](../verification/execution-tranche-20260907/README.md)
+distinguishes the actual qualification and measurements from this work plan.
 
 ## Semantic and resource obligations
 

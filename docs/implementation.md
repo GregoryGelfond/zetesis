@@ -66,6 +66,13 @@ constructors, repeated variables and independently anonymous positions. Matching
 uses staged binding deltas so an unsuccessful row cannot modify the caller's
 environment. Whole captures retain the original body atom in the formula. The
 [source API guide](../crates/zetesis-themelios/README.md) gives the exact scope.
+The [function-pattern record](verification/function-patterns-20260907/README.md)
+retains the constructor and transactional-matching evidence. Evaluated positive
+positions, such as `p(X+1)` or `p(f(X,X+1))`, compare captured complete values
+with the existing expression plan after independent inputs are ready. Ordinary
+positions in the same atom can supply those inputs. These checks cannot infer
+inverse bindings or supply support; the [positive-argument record](verification/positive-arguments-20260907/README.md)
+states the source, scope, failure and resource contracts.
 See the [strong-negation record](verification/strong-negation-20260906/README.md)
 for independent full-model/reduct tests and retained reference diagnostics.
 
@@ -141,8 +148,10 @@ can derive a head never suggested by the generator and can reject a constraint
 that the generator did not inspect. This separation is the central experiment.
 
 The current CPU joins use predicate-indexed relations and repeated source
-rounds. Semi-naive delta scheduling, shared joins across candidate batches and
-selectivity planning remain optimization work. The implementation already avoids
+rounds. Bound-column indexing in the relational lazy engine, semi-naive delta
+scheduling, shared joins across candidate batches and selectivity planning remain
+optimization work. Formula eager support already has its own column indexes;
+the three grounding paths must be measured separately. The implementation avoids
 an upfront ground rule store, but does not imply that every lazy workload is fast.
 
 ## GPU profile
@@ -154,7 +163,12 @@ It freezes candidate truth, narrows Boolean domains and returns original-model
 rejection, proper-subset refutation or an explicit residual. It supplies no
 complete candidate/countermodel search, objective scoring or source grounding.
 The `zetesis-bench formula` experiment includes native CPU completion of every
-residual. Explicit GPU selection in ordinary CLI formula solving now composes
+residual. The opt-in [gate-projection comparison](verification/gate-projection-20260907/README.md)
+uses one shared shader scaffold and matched synthetic candidate batches;
+`GateProjection::Enumerated` remains the default. Its per-candidate CPU quotas
+and serial residual completion differ from ordinary cumulative-budget execution.
+Actual-stream characterization of the latter remains separate work.
+Explicit GPU selection in ordinary CLI formula solving now composes
 bounded original-model proposal batches, GPU propagation and native residual
 checking. Pending candidates and verified models awaiting scoring/output remain
 accounted for across limits and failures. Portable tests and shader
@@ -238,6 +252,19 @@ double-negated supportedness conditions to prune unsupported classical atoms
 without constraining reduct countermodels. Generated small programs compare
 both translations against the independent lazy closure oracle.
 
+Formula grounding evaluates numeric unary, binary and absolute operations
+directly over the existing flat expression plan. This removes temporary boxed
+term trees while preserving checked i32 results, operand/error order, locations
+and authored work/payload charges. Constructor evaluation, scratch vectors and
+join scheduling are unchanged. The [scalar implementation record](verification/scalar-evaluation-20260907/README.md)
+separates pinned-evaluator tests and abstract Lean laws from the
+[controlled admission ablation](verification/scalar-evaluation-20260907/ablation.md).
+That ablation records SEND median admission of 50.346 ms before and 19.367 ms
+after, with equal ordered execution subjects and complete models. It excludes
+parsing/solving and later integrated language changes; the plain-chain control's
+2.87% median increase remains visible. It establishes no ordinary-release,
+relational-lazy or GPU performance result.
+
 The finite source extension evaluates supported ground scalar arithmetic and
 unambiguous acyclic constants, then expands bounded ordinary fact pools and
 intervals into the same S0 templates. It retains original locations and bounds
@@ -278,7 +305,7 @@ clingo behavior cannot be represented remain explicit refusals. The
 checked lookup and ordering behavior.
 
 The separate `admit_formula` / `admit_bundle_formula` APIs add integer-bounded
-conditional choice groups, count/sum/sum+/numeric min/max comparisons and scoped
+conditional choice groups, count/sum/sum+/complete-value min/max comparisons and scoped
 equality assignments. Numeric choice-head intervals introduce independent local
 value slots within the original group; empty expansions retain its bounds.
 Evaluated scalar arguments and top-level interval endpoints may depend on
@@ -324,6 +351,11 @@ and supply no positive support, including double negation. The ground
 `NegativeHeads.lean` grammar proves the necessary positive-support law and
 stable-model preservation of its double-negated support guards; this is not a
 verification of the Rust compiler or possible-support grounding.
+Ordinary singleton heads `not p` and `not not p` use this same signed formula
+path, including either predicate sign and evaluated arguments. Their original
+implication and frozen polarity remain intact; neither occurrence produces
+positive support. The [singleton-head record](verification/singleton-heads-20260907/README.md)
+states its complete-model and arbitrary M/J checks.
 Explicitly true head conditions can normalize without changing the rule family;
 broader conditioned heads, negative choice heads and objective-reachable
 disjunctive producers remain typed refusals. Finite rule/head pools retain their
@@ -385,9 +417,11 @@ construction; original priorities, tuple components and source direction remain
 available. Equal keys across all three source forms combine eligibility.
 The [mixed-direction campaign](verification/objective-directions-20260905/README.md)
 checks complete costs, unchanged reduct formulas and explicit numeric boundaries.
-The current corpus campaign passes
-all 94 unchanged entry graphs with complete model/count/cost parity under default
-limits. General factored body construction, retained candidate traversal, root
+The preceding fully qualified [93d2575 checkpoint](verification/grounder-tranche-20260907/README.md)
+passed all 94 unchanged entry graphs under default limits, preserving their
+original display/count/cost and optimum contracts. Hidden full models are not
+reconstructed from `#show`. The [new integration record](verification/execution-tranche-20260907/README.md)
+tracks qualification of the newer source separately. General factored body construction, retained candidate traversal, root
 failed-literal propagation, indexed exact semantic blocks and optional objective
 bounds reduce repeated work without changing the original reduct. The
 [objective-pruning protocol](design/objective-pruning.md) keeps dominance and
@@ -410,6 +444,15 @@ and establishing optimality only after complete coverage of all candidates that
 can improve or tie a retained incumbent. Exit 0 means the
 requested operation completed, 2 means input/backend/output failure and 3 means
 search interruption; these are explicitly not clingo's exit-code conventions.
+
+Human presentation remains a CLI adapter. `-h` and `--help` show everyday options;
+`--help-all` shows the existing advanced controls without changing their parser
+or defaults. Typed metadata writes style five labels blue and their values italic
+gray. Each process stream resolves Auto from its own terminal capability;
+injected library writers keep Auto plain, and JSON disables styling. Ordinary
+diagnostic writes pass through without buffering or classification. See the
+[CLI stream contract](../crates/zetesis-cli/README.md) for writer-prefix failures
+and semantic/publication evidence.
 
 ## Formal and hardware boundary
 

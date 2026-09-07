@@ -17,11 +17,19 @@ rustup toolchain install 1.97.1 --profile minimal --component rustfmt,clippy
 cargo build --locked -p zetesis-cli
 ./target/debug/zetesis examples/network-repair.lp --models 0 --backend cpu
 ./target/debug/zetesis examples/network-repair.lp --models 0 --json --stats
+./target/debug/zetesis --help
+./target/debug/zetesis --help-all
 ```
 
 The example has two complete answer sets. Answers go to stdout; human statistics
 go to stderr. `--models 0` requests exhaustion. A resource interruption must remain
 incomplete. If `CARGO_TARGET_DIR` is set, use that directory's `debug/` executable.
+Short help contains everyday solve options; full help also describes oracle,
+worker, batch and resource controls. Both views use the same parser/defaults.
+Human metadata styling resolves stdout and stderr separately; redirected streams
+and generic Auto library writers stay plain. JSON remains plain even with
+`--color always`. The [CLI guide](../crates/zetesis-cli/README.md) describes the
+injected-writer and failure contracts.
 
 For regular use, `./scripts/install.sh` installs release commands in `~/.local/bin`
 or a supplied binary directory. Add it to `PATH`; normal solving needs no Cargo
@@ -68,7 +76,10 @@ Use the relevant focused tests while implementing, for example:
 ```sh
 cargo test --locked -p zetesis-themelios --test formula_preparation
 cargo test --locked -p zetesis-themelios --test structural_bindings
+cargo test --locked -p zetesis-themelios --test negative_heads --test function_patterns --test positive_arguments
+cargo test --locked -p zetesis-themelios --test scalar_evaluation
 cargo test --locked -p zetesis-cli --test grounding_statistics
+cargo test --locked -p zetesis-cli --test help --test metadata_style
 ```
 
 Test names state one proposition. Complete parity checks inspect model identity
@@ -76,6 +87,13 @@ and exhaustion; displayed symbols can hide distinct answer sets. Property tests
 and independent small-world reduct evaluators complement exact source regressions.
 Failures of budgets, arithmetic and writers must remain failures. Avoid tests
 that mirror implementation solely to increase line coverage.
+
+Current language work is recorded by slice: [singleton heads](verification/singleton-heads-20260907/README.md),
+[function patterns](verification/function-patterns-20260907/README.md), and
+[independently bound positive arguments](verification/positive-arguments-20260907/README.md).
+The [scalar evaluator](verification/scalar-evaluation-20260907/README.md) preserves
+the pinned arithmetic contract. Their focused evidence remains distinct from the
+[combined qualification](verification/execution-tranche-20260907/README.md).
 
 ## Required checks and prerequisites
 
@@ -151,6 +169,14 @@ models, costs, ties and exhaustion. Describe source loading, preparation,
 grounding, solving, output, transfer and residual work according to the actual
 measured scope. `--stats` has instrumentation overhead; summed worker time and
 wall time are different quantities.
+
+The [scalar ablation](verification/scalar-evaluation-20260907/ablation.md) is an
+example of a controlled admission measurement with matched ordered subjects and
+complete models. It does not measure ordinary solve latency. The paired GPU gate
+command likewise measures synthetic membership with per-candidate CPU limits;
+the enumerated projection remains the default. Relational-lazy bound-column
+indexes, ordinary shared-budget scheduling characterization and migration of
+remaining campaigns into Rust are separate open work.
 
 Before pushing, review the human entry points against integrated code:
 
