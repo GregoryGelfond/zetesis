@@ -13,7 +13,7 @@ use zetesis_cpu::{Control, Stop};
 use zetesis_objective::Score;
 use zetesis_themelios::OutputSelection;
 
-use crate::RunError;
+use crate::{ColorMode, RunError};
 
 #[derive(Clone, Copy)]
 pub(super) enum Contents<'a> {
@@ -28,6 +28,7 @@ impl Record {
         number: usize,
         contents: Contents<'_>,
         score: Option<&Score>,
+        color: ColorMode,
         maximum: usize,
         control: &Control,
     ) -> Result<Self, RunError> {
@@ -38,7 +39,7 @@ impl Record {
             stopped: None,
             control,
         };
-        if let Err(error) = write_record(&mut length, number, contents, score) {
+        if let Err(error) = write_record(&mut length, number, contents, score, color) {
             if let Some(observed) = length.refusal {
                 return Err(RunError::ObservationOutputLimit {
                     observed,
@@ -54,7 +55,7 @@ impl Record {
         bytes
             .try_reserve_exact(length.bytes)
             .map_err(|error| RunError::Output(io::Error::other(error)))?;
-        write_record(&mut bytes, number, contents, score)?;
+        write_record(&mut bytes, number, contents, score, color)?;
         debug_assert_eq!(bytes.len(), length.bytes);
         Ok(Self(bytes))
     }
@@ -69,19 +70,21 @@ fn write_record(
     number: usize,
     contents: Contents<'_>,
     score: Option<&Score>,
+    color: ColorMode,
 ) -> io::Result<()> {
+    color.answer(output, number)?;
     match contents {
         Contents::Atoms(model, selection) => {
-            crate::driver::write_model(output, number, model, selection)?;
+            crate::driver::write_atoms(output, model, selection)?;
         }
-        Contents::Observed(text) => writeln!(output, "Answer: {number}\n{text}")?,
+        Contents::Observed(text) => writeln!(output, "{text}")?,
     }
     if let Some(score) = score {
-        write!(output, "Optimization:")?;
+        color.objective(output)?;
         for &(_, cost) in score.costs() {
             write!(output, " {cost}")?;
         }
-        writeln!(output)?;
+        color.objective_end(output)?;
     }
     Ok(())
 }

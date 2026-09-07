@@ -578,13 +578,11 @@ pub(crate) fn solve_program(
     }
 }
 
-pub(crate) fn write_model(
+pub(crate) fn write_atoms(
     output: &mut impl Write,
-    number: usize,
     model: &Model,
     selection: &OutputSelection,
 ) -> io::Result<()> {
-    writeln!(output, "Answer: {number}")?;
     for (index, atom) in model
         .atoms()
         .iter()
@@ -691,7 +689,7 @@ pub(crate) fn finish(output: &mut impl Write, report: &Report, json: bool) -> Re
 
 #[cfg(test)]
 mod value_output_tests {
-    use super::write_model;
+    use super::write_atoms;
     use zetesis_core::{Atom, Model, Predicate, Value};
     use zetesis_themelios::OutputSelection;
 
@@ -709,10 +707,10 @@ mod value_output_tests {
                 .map(|value| Atom::new(Predicate::new("p", 1).unwrap(), vec![value]).unwrap()),
         );
         let mut output = Vec::new();
-        write_model(&mut output, 1, &model, &OutputSelection::default()).unwrap();
+        write_atoms(&mut output, &model, &OutputSelection::default()).unwrap();
         assert_eq!(
             String::from_utf8(output).unwrap(),
-            "Answer: 1\np(#inf) p(\"#inf\") p(\"#sup\") p(#sup)\n"
+            "p(#inf) p(\"#inf\") p(\"#sup\") p(#sup)\n"
         );
     }
 }

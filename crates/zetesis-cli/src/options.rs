@@ -106,6 +106,10 @@ pub struct Options {
     /// Stream a versioned JSON document with full models, shown channels and coverage.
     #[arg(long)]
     pub json: bool,
+    /// Color human headings and optimization metadata. Auto follows stdout
+    /// terminal detection, `NO_COLOR` and `TERM`; JSON is always plain.
+    #[arg(long, value_enum, default_value_t)]
+    pub color: crate::ColorMode,
     /// Maximum JSON bytes per model record or terminal outcome; not an all-model buffer.
     #[arg(long, default_value_t = 8_388_608)]
     pub max_json_record_bytes: usize,

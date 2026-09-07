@@ -15,6 +15,7 @@ mod admission;
 mod engine;
 mod devices;
 mod process;
+mod presentation;
 mod countermodel;
 mod optimization;
 mod objective_bounds;
@@ -44,6 +45,7 @@ pub use driver::{
 pub use failure::{PartialReport, RunFailure};
 pub use formula_execution::{CompletionAccounting, FormulaExecutionStatistics};
 pub use options::{Backend, Command, Grounder, Options, Oracle};
+pub use presentation::ColorMode;
 pub use process::entry;
 pub use semantic_outcome::SemanticOutcome;
 pub use solve_config::SolveConfig;

@@ -54,6 +54,7 @@ impl Display<'_> {
             number,
             contents,
             score,
+            self.options.color,
             self.options.max_observation_bytes,
             self.control,
         )?;

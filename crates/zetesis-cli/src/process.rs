@@ -3,7 +3,7 @@ use crate::{
     run_bundle_detailed_with_diagnostics, run_detailed_with_diagnostics,
 };
 use clap::Parser;
-use std::io::{self, Read, Write};
+use std::io::{self, IsTerminal, Read, Write};
 use std::process::ExitCode;
 use zetesis_themelios::{BundleLimits, SourceBundle};
 
@@ -12,8 +12,11 @@ use zetesis_themelios::{BundleLimits, SourceBundle};
 /// independently; this is not clingo's numeric exit-code protocol.
 #[must_use]
 pub fn entry() -> ExitCode {
-    let options = Options::parse();
+    let mut options = Options::parse();
     let mut output = io::stdout().lock();
+    let disabled = std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty())
+        || std::env::var_os("TERM").is_some_and(|value| value == "dumb");
+    options.color = options.color.resolve(output.is_terminal(), disabled);
     if options.command == Some(Command::Devices) {
         return match devices(&mut output) {
             Ok(()) => ExitCode::SUCCESS,

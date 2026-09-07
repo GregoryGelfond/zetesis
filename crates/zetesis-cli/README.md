@@ -24,6 +24,21 @@ of tied optimal models. `--models 0` displays every full optimal model. Display
 selection preserves hidden differences, so identical answer lines can represent
 distinct answer sets.
 
+Human output defaults to `--color auto`: eligible stdout terminals receive cyan
+answer headings with a bold `Answer:` label and italic green optimization
+metadata. Standard ANSI palette colors inherit the terminal's configured theme;
+atom lines stay plain. `--color always` forces these styles, while `--color never`
+disables them. Automatic mode respects a nonempty `NO_COLOR` and `TERM=dumb`,
+and does not style redirected output. JSON always ignores color selection.
+
+`ColorMode` is a typed presentation policy; it is absent from semantic
+`SolveConfig`. The process resolves terminal/environment capabilities once.
+Library calls with a generic injected writer keep `Auto` plain and can request
+`Always` explicitly. Styling and reset bytes count toward the complete human
+record ceiling before publication. A partial write remains a publication failure,
+including when it interrupts an escape sequence; the writer's retained prefix
+cannot be recalled or guaranteed to have restored terminal styling.
+
 `SATISFIABLE`, `UNSATISFIABLE`, or `OPTIMUM FOUND` and the separate coverage record
 describe the result. A search or objective resource stop prints `INCOMPLETE` and
 cannot establish UNSAT or optimality. Retained incumbents may still be displayed

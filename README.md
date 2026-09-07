@@ -105,6 +105,11 @@ partial failure evidence. A resource stop is **incomplete**, never an UNSAT proo
 The [CLI guide](crates/zetesis-cli/README.md) describes stream contracts and exit
 codes.
 
+On a capable terminal, human answer headings use cyan with a bold `Answer:` label;
+optimization metadata uses italic green. Colors come from your terminal palette.
+`--color auto|always|never` controls styling. Automatic mode respects `NO_COLOR`
+and `TERM=dumb`, and leaves redirected output plain. JSON never contains styling.
+
 `--stats` adds host timings and available work counters to stderr. It separates
 source preparation, eager grounding, solving and output. Formula grounding has
 additional attribution for support completion, rule instantiation and other
