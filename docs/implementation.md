@@ -298,12 +298,17 @@ it, retaining original atoms, root origins and metadata. This is explicitly eage
 formula admission. The CLI selects the appropriate oracle automatically.
 The unchanged kr-domains queens variant 01 passes all 92 models on this path.
 [Universal body conditionals](design/universal-conditionals.md) now compile as finite
-conjunctions of original condition-to-consequent implications. Locals need independent
-condition bindings; completed possible-positive support precedes all local joins.
-Empty completed families are true, while resource exhaustion remains a refusal.
-Consequent-derived bindings and objective-reachable conditional producers remain
-outside this bounded extension. Candidate-specific omission is formalized, but
-the current compiler still constructs these families eagerly.
+conjunctions of original condition-to-consequent implications. Completed
+possible-positive support precedes all local joins. Each condition assignment
+retains a disjunction of signed consequent alternatives; finite positive
+consequent-only variables/anonymous slots can select local support witnesses.
+These cannot bind the outer rule, repair condition safety or provide support.
+Empty alternative families are false; completed empty condition domains are true.
+Resource exhaustion remains a refusal. Objective-reachable conditional producers
+and broader structured witness patterns remain outside this bounded extension.
+Pooled analysis input carries `AnalysisBasis::DependencyProjection`; its safety
+and class verdicts are not original-source certificates. Candidate-specific
+omission is formalized, but the compiler still builds these families eagerly.
 Unconditional disjunctive heads of either classical sign admit positive,
 default-negated and double-default-negated atom occurrences with closed values,
 whole variables, checked scalar arithmetic and top-level numeric/dependent intervals. Each
