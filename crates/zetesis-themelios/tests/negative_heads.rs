@@ -352,7 +352,7 @@ fn polarity_never_binds_variables_or_opens_other_head_profiles() {
         ("not not a.", ProfileFeature::NegatedHead),
         ("{not a}.", ProfileFeature::NegatedHead),
         ("not a:b|c.", ProfileFeature::ConditionalDisjunction),
-        ("not a(1;2)|b.", ProfileFeature::PooledArguments),
+        // Finite pools retain head polarity; finite_pools covers the former pool refusal.
         ("#true|b.", ProfileFeature::Head),
         (
             "not a|b.#minimize{1:a}.",

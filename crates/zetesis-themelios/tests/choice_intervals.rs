@@ -339,8 +339,8 @@ fn refused(error: &FormulaFailure, expected: &str) -> bool {
 #[test]
 fn excluded_endpoints_syntax_and_unsafe_scopes_remain_typed_refusals() {
     let mut count = 0;
-    // Historical reference records stay immutable. These five former refusals
-    // are now covered by evaluated_heads with explicit source expansions.
+    // Historical reference records stay immutable. These former refusals are
+    // covered by evaluated_heads and finite_pools with explicit expansions.
     for case in cases().iter().filter(|case| {
         case["native"] != "admit"
             && !matches!(
@@ -350,6 +350,8 @@ fn excluded_endpoints_syntax_and_unsafe_scopes_remain_typed_refusals() {
                     | "dependent_repeated_bound_and_argument"
                     | "closed_and_dependent_endpoints"
                     | "ordinary_head_expression_still_refused"
+                    | "pooled_interval_argument"
+                    | "pooled_argument_rows"
             )
     }) {
         let Err(error) = input(case["source"].as_str().unwrap()) else {
@@ -371,7 +373,7 @@ fn excluded_endpoints_syntax_and_unsafe_scopes_remain_typed_refusals() {
         assert!(!error.diagnostics().is_empty());
         count += 1;
     }
-    assert_eq!(count, 19);
+    assert_eq!(count, 17);
     assert!(
         admit_extended(
             "1{p(1..2)}1.".into(),

@@ -294,7 +294,7 @@ fn excluded_head_forms_and_objective_dependencies_remain_located_refusals() {
     for (source, predicted) in [
         ("d(1).p((X..X+1)+1)|q:-d(X).", ProfileFeature::Term),
         ("p(a..b)|q.", ProfileFeature::Term),
-        ("a(1;2)|b.", ProfileFeature::PooledArguments),
+        // Finite pools, including this former a(1;2)|b refusal, have dedicated tests.
         (
             "d(1).a(X+1):d(X)|b.",
             ProfileFeature::ConditionalDisjunction,

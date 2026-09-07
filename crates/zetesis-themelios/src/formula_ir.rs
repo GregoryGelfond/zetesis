@@ -134,6 +134,7 @@ pub(crate) fn prepare(
     let constants = extended::resolve(source, budget, fallback)?;
     let mut rules = Vec::new();
     let mut analyzed = Vec::new();
+    let mut pool_projection_nodes = 0;
     let mut objectives = Vec::new();
     let mut objective_declarations = Vec::new();
     let mut compiler = Compiler {
@@ -194,19 +195,13 @@ pub(crate) fn prepare(
                 rules.push(compiler.fact_rule(head, &origins)?);
             }
         } else {
-            compiler
-                .budget
-                .charge(ExpansionResource::Templates, 1, compiler.location)?;
-            compiler.budget.charge(
-                ExpansionResource::Origins,
-                origins.len() as u128,
-                compiler.location,
+            compiler.source_rules(
+                statement,
+                &origins,
+                &mut pool_projection_nodes,
+                &mut rules,
+                &mut analyzed,
             )?;
-            let Statement::Rule(rule) = statement.get() else {
-                return Err(unsupported(ProfileFeature::Statement, compiler.location).into());
-            };
-            rules.push(compiler.rule(rule, origins)?);
-            analyzed.push(statement.clone());
         }
     }
     let analyzed = SourceProgram::of(analyzed);
@@ -503,7 +498,11 @@ impl Compiler<'_> {
             _ => Err(unsupported(ProfileFeature::Objective, self.location).into()),
         }
     }
-    fn rule(&mut self, rule: &Rule, origins: Vec<Location>) -> Result<RuleIr, FormulaFailure> {
+    pub(super) fn rule(
+        &mut self,
+        rule: &Rule,
+        origins: Vec<Location>,
+    ) -> Result<RuleIr, FormulaFailure> {
         let mut variables = Variables::default();
         let mut body = Vec::new();
         for element in rule.body().get().elements() {

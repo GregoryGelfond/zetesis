@@ -36,6 +36,7 @@ mod formula;
 mod formula_ir;
 mod formula_aggregate_ir;
 mod formula_analysis;
+mod formula_pool;
 mod formula_assignment_ir;
 mod formula_assignment;
 mod formula_objective_dependencies;

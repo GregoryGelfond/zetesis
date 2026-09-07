@@ -35,7 +35,7 @@ fn upstream_refusals_are_typed_profile_boundaries() {
         );
         count += 1;
     }
-    assert_eq!(count, 6);
+    assert_eq!(count, 4);
 }
 
 #[test]

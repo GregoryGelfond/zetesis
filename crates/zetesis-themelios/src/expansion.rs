@@ -14,14 +14,18 @@ use crate::AdmissionFailure;
 pub struct ExpansionLimits {
     /// Maximum distinct, unannotated constant definitions.
     pub max_constants: usize,
-    /// Maximum dependency-scan and bottom-up term evaluation steps combined.
+    /// Maximum dependency/pool scans, bounded source copies and bottom-up term
+    /// evaluation steps combined.
     pub max_term_work: usize,
     /// Maximum output templates, also capped by core admission's template limit.
     pub max_templates: usize,
-    /// Maximum intermediate scalar alternatives plus emitted fact arguments.
+    /// Maximum intermediate scalar alternatives, emitted fact arguments, and
+    /// conservatively counted nodes in finite-pool source alternatives.
     pub max_values: usize,
-    /// Maximum scalar string/symbol bytes copied during substitution and fact
-    /// emission. Original source storage remains bounded by admission options.
+    /// Maximum scalar payload bytes copied during substitution/fact emission
+    /// plus finite-pool cursor positions and copied term cells/text payload. Other
+    /// AST carriers, provenance and allocator overhead are excluded; original
+    /// source storage remains bounded by admission options.
     pub max_scalar_bytes: usize,
     /// Maximum original rule-location copies in the emitted template evidence.
     pub max_origin_locations: usize,
@@ -48,13 +52,13 @@ impl Default for ExpansionLimits {
 pub enum ExpansionResource {
     /// Constant definitions before canonicalization can merge them.
     Constants,
-    /// Dependency scans and term-fold steps.
+    /// Dependency/pool scans, bounded source copies and term-fold steps.
     TermWork,
     /// Emitted core templates.
     Templates,
-    /// Intermediate alternatives and emitted scalar fact arguments.
+    /// Intermediate alternatives, emitted fact arguments and finite-pool source nodes.
     Values,
-    /// Copied symbolic/string payload bytes.
+    /// Copied scalar payload plus finite-pool positions and term cells/text bytes.
     ScalarBytes,
     /// Copies of original parsed rule locations across emitted templates.
     Origins,
