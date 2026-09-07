@@ -300,14 +300,16 @@ search. It is distinct from the lazy closure oracle's candidate-specific joins.
 apply; the source value domain is capped at 1,024 and support closure at 1,024
 rounds, including a final round establishing no changes.
 
-The current `#minimize`, `#maximize` and positive weak-constraint profile accepts scalar
-weights/tuples, constant numeric priorities, positive ordinary conditions and
-scalar equality/inequality filters. Dependencies relevant to an objective have
+The current `#minimize`, `#maximize` and positive weak-constraint profile accepts numeric
+weights, constant numeric priorities, closed or whole-bound logical tuple values,
+positive ordinary conditions and scalar equality/inequality filters. Closed
+structured terms and finite constructed keys retain their full logical identity.
+Dependencies relevant to an objective have
 additional explicit restrictions, including default-negated and disjunctive
 producers and non-total aggregate observers. Unrelated rules and negative
 constraints retain their ordinary semantics. These checks preserve observable
 objective presence and priority slots. Classical sign is preserved in these
-conditions independently of default negation. Compound logical terms,
+conditions independently of default negation. Positive named-function patterns,
 richer weak bodies and broader directives remain implementation
 work. Undefined/overflowing arithmetic is a located refusal.
 

@@ -170,20 +170,24 @@ explains endpoint guards and why an internal refusal does not by itself establis
 a modeling error. Undefined or overflowing admitted arithmetic currently produces
 an explicit refusal rather than reproducing all of clingo's simplifications.
 
-The retained complete corpus checkpoint passes **94 unchanged non-clingcon
+The current combined checkpoint passes **94 unchanged non-clingcon
 kr-domains cases**, checking answer contracts, costs, counts and optimum ties.
-The selected upstream clingo assertions retain original bytes, provenance
-and full-model references. Current results and their exact source/binary scopes
-are indexed in the [verification record](docs/verification/status.md).
+All **24 selected upstream clingo assertions** pass with 73 complete full-model
+occurrences, retaining original bytes and provenance. Local line coverage is
+**91.4857% workspace / 91.9220% CPU-only CLI**, and the Lean library checks
+**646 theorems in 45 modules**. The
+[checkpoint](docs/verification/grounder-tranche-20260907/README.md) states exact
+source/binary scopes and limitations; the
+[verification record](docs/verification/status.md) indexes historical results.
 
 Earlier CPU measurements demonstrate useful specialized improvements, while
 SEND + MORE = MONEY remains slower than clingo and spends most of its measured
 driver time grounding. GPU measurements establish correctness and mixed
 microbenchmark results, not a general full-solve speedup. The
 [performance record](docs/verification/api-hardening-20260907/README.md)
-and [grounding work plan](docs/design/grounding-selection.md) keep these distinct.
-The new attribution API exists to guide general improvements with matched,
-complete-result measurements.
+and [SEND attribution pilot](docs/verification/grounder-performance-20260907/send-attribution.md)
+keep these distinct. The new attribution API locates work to guide general
+improvements with matched, complete-result measurements.
 
 ## Libraries and mathematical specification
 
@@ -196,8 +200,8 @@ part of each capability, not just command-line behavior.
 |---|---|
 | [zetesis-themelios](crates/zetesis-themelios/README.md) | Bounded source preparation, themelios analysis, relational admission and eager formula grounding, preserving origins. |
 | [zetesis-domain](crates/zetesis-domain/README.md) | Conservative domain analysis over a borrowed themelios program, independent of solving. |
-| [zetesis-core](crates/zetesis-core/README.md) / [zetesis-ferraris](crates/zetesis-ferraris/README.md) | Relational and formula semantics, interpretations, reducts and validated representations. |
-| [zetesis-cpu](crates/zetesis-cpu/README.md) / [zetesis-wgpu](crates/zetesis-wgpu/README.md) | Closure execution and GPU primitives. |
+| [zetesis-core](crates/zetesis-core/src/lib.rs) / [zetesis-ferraris](crates/zetesis-ferraris/README.md) | Relational and formula semantics, interpretations, reducts and validated representations. |
+| [zetesis-cpu](crates/zetesis-cpu/src/lib.rs) / [zetesis-wgpu](crates/zetesis-wgpu/README.md) | Closure execution and GPU primitives. |
 | [zetesis-sat](crates/zetesis-sat/README.md) / [zetesis-objective](crates/zetesis-objective/README.md) | Native candidate/countermodel search and exact objective work. Boolean queries are internal machinery; stable acceptance belongs to the reduct composition. |
 | [zetesis-cli](crates/zetesis-cli/README.md) | Prepared-input sessions, solve configuration, typed outcomes and output views, plus the process adapter. Extracting orchestration into a dedicated package remains planned. |
 | [zetesis-validation](crates/zetesis-validation/README.md) / [zetesis-experiments](crates/zetesis-experiments/README.md) | External-oracle qualification, curated fixtures and bounded measurements, separate from production acceptance. |

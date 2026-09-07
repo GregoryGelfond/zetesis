@@ -280,8 +280,9 @@ conditional choice groups, count/sum/sum+/numeric min/max comparisons and scoped
 equality assignments. Numeric choice-head intervals introduce independent local
 value slots within the original group; empty expansions retain its bounds.
 Evaluated scalar arguments and top-level interval endpoints may depend on
-independently bound outer or local variables. Pools, nested intervals and closed
-nonnumeric endpoints remain refused. The
+independently bound outer or local variables. Rule/head pools are admitted within
+the documented finite expansion profile; unsupported nested generative forms and
+closed nonnumeric interval endpoints remain refused. The
 [evaluated-head evidence](verification/evaluated-heads-20260906/README.md) records
 this extension; the earlier [interval evidence](verification/choice-intervals-20260906/README.md)
 preserves its original comparisons and external endpoint timeout.
