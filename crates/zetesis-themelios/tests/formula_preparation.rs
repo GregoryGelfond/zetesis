@@ -52,6 +52,54 @@ fn preparation_exposes_analysis_without_support_completion() {
 }
 
 #[test]
+fn send_analysis_precedes_grounding() {
+    let source =
+        include_str!("../../../validation/corpus/kr-domains/standalone/send-money/send-money.lp");
+    let prepared = prepare_formula(
+        source.into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits {
+            max_support_rounds: 0,
+            ..FormulaLimits::default()
+        },
+    )
+    .unwrap();
+    let analysis = prepared.source_analysis();
+    assert!(analysis.classes().uses_choice());
+    assert!(analysis.safety().is_safe());
+    assert!(matches!(
+        analysis.classes().tightness(),
+        zetesis_themelios::analysis::Verdict::Holds
+    ));
+    // These facts do not waive the requested grounding ceiling or implement laziness.
+    assert!(matches!(
+        prepared.ground(),
+        Err(FormulaFailure::Limit {
+            resource: FormulaResource::SupportRounds,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn materialization_checks_dynamic_arithmetic() {
+    let prepared = prepare_formula(
+        "p(0). q(1/X) :- p(X).".into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap();
+    assert!(matches!(
+        prepared.ground(),
+        Err(FormulaFailure::Expansion(
+            ExpansionFailure::Evaluation { .. }
+        ))
+    ));
+}
+
+#[test]
 fn preparation_enforces_the_analysis_budget() {
     let error = prepare_formula(
         "p.".into(),

@@ -35,9 +35,12 @@ lazy engine's capability.
 
 SEND uses bounded choices and evaluated arithmetic beyond that engine's current
 template support. These are implementation boundaries, not an impossibility
-result for lazy grounding. Its apparently acyclic dependency structure does not
-supply the missing implementation. No executed upstream class verdict for SEND
-is claimed by this source review.
+result for lazy grounding. The preparation regression now executes pinned analysis
+on the unchanged corpus source: the normalized projection uses choice, is safe
+under the pinned analysis, and has a `Holds` tightness verdict. It obtains these
+facts with the support-round ceiling set to zero, then confirms materialization
+still refuses that ceiling. Tightness neither supplies a lazy implementation nor
+waives resource limits.
 
 The general point also has prior research support: Bomanson, Janhunen and
 Weinzierl show aggregate extensions through on-demand normalization in
