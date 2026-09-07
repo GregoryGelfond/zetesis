@@ -89,8 +89,9 @@ pub use expansion::{ExpansionFailure, ExpansionLimits, ExpansionResource};
 pub use extended::admit_extended;
 pub use formula::{
     AdmittedFormula, AdmittedFormulaBundle, FormulaBundleFailure, FormulaFailure, FormulaLimits,
-    FormulaResource, admit_bundle_formula, admit_bundle_formula_with_grounding_observer,
-    admit_formula, admit_formula_with_grounding_observer,
+    FormulaResource, PreparedFormula, PreparedFormulaBundle, admit_bundle_formula,
+    admit_bundle_formula_with_grounding_observer, admit_formula,
+    admit_formula_with_grounding_observer, prepare_bundle_formula, prepare_formula,
 };
 pub use grounding_observer::GroundingObserver;
 pub use metadata::{

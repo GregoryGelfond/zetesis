@@ -72,13 +72,20 @@ estimate may hurt performance; it must not alter accepted models.
 
 ## Prepare before deciding to materialize
 
-`AdmittedFormula::source_analysis()` currently exposes
-`Analysis::of(analyzed_program())` only after admission/materialization succeeds.
-The analysis is computed internally during preparation, but a consumer wishing
-to avoid eager grounding needs a public bounded preparation boundary earlier.
-Relational `Admitted` and `AdmittedBundle` currently expose no equivalent retained
-analysis. A planning API must address those boundaries without performing eager
-grounding simply to decide whether to use it.
+`prepare_formula` and `prepare_bundle_formula` expose the existing bounded
+compiler preparation before possible-support completion or theory materialization.
+Their owned `PreparedFormula` and `PreparedFormulaBundle` receipts retain source
+evidence, metadata, the analyzed program and its upstream analysis. Consuming
+`ground()` resumes the original expansion budget and grounding limits; the caller
+cannot replace them at that boundary. The existing admission functions compose
+preparation and grounding. Optional observation starts only when grounding starts.
+
+This is a formula compiler preparation, not a universal routing API. It can still
+refuse forms that the formula compiler cannot lower; success does not prove later
+arithmetic is defined, that materialization fits its limits, or that lazy formula
+execution is implemented. Relational `Admitted` and `AdmittedBundle` still expose
+no equivalent retained analysis. A future planning API must cover those boundaries
+without materializing a theory merely to choose a grounder.
 
 The analyzed program is a normalized, pool-free logical/optimization projection:
 constants and closed terms are resolved, facts and admitted pools expanded, and

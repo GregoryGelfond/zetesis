@@ -16,8 +16,12 @@ use zetesis_ferraris::Theory;
 use crate::{
     AdmissionFailure, AdmissionOptions, BundleAdmissionError, BundleAdmissionOptions,
     ExpansionFailure, ExpansionLimits, InputLimit, SourceBundle, SourceMetadata, bundle_admission,
-    extended, formula_ground, formula_ir, metadata, profile,
+    extended, formula_ir, metadata, profile,
 };
+
+mod preparation;
+use preparation::Preparation;
+pub use preparation::{PreparedFormula, PreparedFormulaBundle};
 
 /// Independent finite grounding and formula-storage ceilings. No zero value
 /// means unlimited. Source parsing and scalar expansion retain their own limits.
@@ -498,6 +502,42 @@ pub fn admit_formula_with_grounding_observer(
     limits: FormulaLimits,
     observer: Option<&dyn crate::GroundingObserver>,
 ) -> Result<AdmittedFormula, FormulaFailure> {
+    prepare_formula(text, options, expansion, limits)?.ground_with_observer(observer)
+}
+
+/// Prepare finite formula source without materializing possible support or a theory.
+///
+/// The result exposes the bounded analysis projection and retains the remaining
+/// expansion budget for [`PreparedFormula::ground`]. Preparation establishes the
+/// current compiler's source and binding contract, not successful grounding,
+/// lazy-execution eligibility, or stable-model membership. Runtime arithmetic and
+/// grounding limits are still checked when materialization is requested.
+///
+/// ```
+/// use zetesis_themelios::{
+///     AdmissionOptions, ExpansionLimits, FormulaLimits, prepare_formula,
+/// };
+/// let prepared = prepare_formula(
+///     "edge(1,2). reach(X,Y) :- edge(X,Y).".into(),
+///     AdmissionOptions::default(),
+///     ExpansionLimits::default(),
+///     FormulaLimits::default(),
+/// )?;
+/// assert!(prepared.source_analysis().safety().is_safe());
+/// let admitted = prepared.ground()?;
+/// assert_eq!(admitted.atoms().len(), 2);
+/// # Ok::<(), zetesis_themelios::FormulaFailure>(())
+/// ```
+///
+/// # Errors
+/// Returns the parsing, raising, source-profile, analysis, binding and preparation
+/// failures of [`admit_formula`], before the eager-grounding boundary.
+pub fn prepare_formula(
+    text: String,
+    options: AdmissionOptions,
+    expansion: ExpansionLimits,
+    limits: FormulaLimits,
+) -> Result<PreparedFormula, FormulaFailure> {
     let start = Location {
         source: options.source_id,
         span: Span::empty(ByteOffset::new(0)),
@@ -534,20 +574,15 @@ pub fn admit_formula_with_grounding_observer(
         source: source.id(),
         span: source.span(),
     };
-    let compiled = compile(
+    let preparation = prepare(
         raised.program(),
         options,
         expansion,
         limits,
         location,
         &mut metadata,
-        observer,
     )?;
-    Ok(AdmittedFormula {
-        compiled,
-        source,
-        metadata: metadata.finish(),
-    })
+    Ok(PreparedFormula::new(preparation, source, metadata.finish()))
 }
 
 /// Admit the same finite formula profile across original include graphs.
@@ -577,12 +612,27 @@ pub fn admit_bundle_formula_with_grounding_observer(
     limits: FormulaLimits,
     observer: Option<&dyn crate::GroundingObserver>,
 ) -> Result<AdmittedFormulaBundle, FormulaBundleFailure> {
-    match compile_bundle(&bundle, options, expansion, limits, observer) {
-        Ok((compiled, metadata)) => Ok(AdmittedFormulaBundle {
-            compiled,
-            bundle,
-            metadata,
-        }),
+    prepare_bundle_formula(bundle, options, expansion, limits)?.ground_with_observer(observer)
+}
+
+/// Prepare the finite formula profile across an original source bundle.
+///
+/// Include identity, global constants and metadata have the same contract as
+/// [`admit_bundle_formula`]. The result exposes analysis before possible-support
+/// completion and retains its remaining budget for materialization.
+///
+/// # Errors
+/// Retains the original bundle alongside every located preparation refusal.
+pub fn prepare_bundle_formula(
+    bundle: SourceBundle,
+    options: BundleAdmissionOptions,
+    expansion: ExpansionLimits,
+    limits: FormulaLimits,
+) -> Result<PreparedFormulaBundle, FormulaBundleFailure> {
+    match prepare_bundle(&bundle, options, expansion, limits) {
+        Ok((preparation, metadata)) => {
+            Ok(PreparedFormulaBundle::new(preparation, bundle, metadata))
+        }
         Err(error) => Err(FormulaBundleFailure {
             bundle,
             error: Box::new(error),
@@ -590,13 +640,12 @@ pub fn admit_bundle_formula_with_grounding_observer(
     }
 }
 
-fn compile_bundle(
+fn prepare_bundle(
     bundle: &SourceBundle,
     options: BundleAdmissionOptions,
     expansion: ExpansionLimits,
     limits: FormulaLimits,
-    observer: Option<&dyn crate::GroundingObserver>,
-) -> Result<(Compiled, SourceMetadata), FormulaFailure> {
+) -> Result<(Preparation, SourceMetadata), FormulaFailure> {
     bundle_admission::check_include_identity(bundle)
         .map_err(|error| FormulaFailure::Include(Box::new(error)))?;
     let mut definitions = BTreeMap::new();
@@ -644,34 +693,30 @@ fn compile_bundle(
         max_body_elements: options.max_body_elements,
         ..AdmissionOptions::default()
     };
-    let compiled = compile(
+    let preparation = prepare(
         &SourceProgram::of(statements),
         local,
         expansion,
         limits,
         location,
         &mut metadata,
-        observer,
     )?;
-    Ok((compiled, metadata.finish()))
+    Ok((preparation, metadata.finish()))
 }
 
-fn compile(
+fn prepare(
     source: &SourceProgram,
     options: AdmissionOptions,
     expansion: ExpansionLimits,
     limits: FormulaLimits,
     location: Location,
     metadata: &mut SourceMetadata,
-    observer: Option<&dyn crate::GroundingObserver>,
-) -> Result<Compiled, FormulaFailure> {
+) -> Result<Preparation, FormulaFailure> {
     let mut budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates);
     metadata.observations =
         crate::observation::compile(source, options, limits.observation, &mut budget, location)?;
     let prepared = formula_ir::prepare(source, options, limits, &mut budget, location)?;
-    crate::grounding_observer::observe(observer, || {
-        formula_ground::ground(prepared, limits, &mut budget, location)
-    })
+    Ok(Preparation::new(prepared, budget, limits, location))
 }
 
 pub(crate) fn ceiling(

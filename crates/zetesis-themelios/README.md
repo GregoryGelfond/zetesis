@@ -12,6 +12,21 @@ The library keeps three explicit admission contracts:
 
 The CLI chooses an admitted source route automatically. The library APIs remain explicit so callers can require a relational or formula result. `ExpansionFailure::needs_formula_admission()` permits a formula retry only for an unsupported profile or a scalar operation that stopped at a variable. Syntax errors, arithmetic undefinedness/overflow, exceeded budgets, and independent core failures are not profile retries.
 
+## Preparation before grounding
+
+`prepare_formula` and `prepare_bundle_formula` return owned preparation receipts
+before possible-support completion and formula materialization. Callers can read
+the original source catalog, metadata, normalized logical program and pinned
+themelios analysis, then consume the receipt with `ground()` or
+`ground_with_observer(...)`. These resume the original budgets. Existing
+`admit_formula` functions compose the same two operations.
+
+Preparation is a checked compiler boundary; later grounding can still refuse
+undefined arithmetic or exhausted resources. Its analysis describes the bounded
+normalized projection, and does not assert that a lazy implementation exists for
+that source. The [grounding-selection contract](../../docs/design/grounding-selection.md)
+separates class facts, implementation availability and strategy preference.
+
 ## Closed structural values
 
 Bounded closed functions and tuples are logical values, including `f(1,g(2))`,
