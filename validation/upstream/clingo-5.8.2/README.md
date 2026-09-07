@@ -1,5 +1,18 @@
 # Exact upstream clingo assertions
 
+For normal fixture consumption, start with the self-contained `curated/`
+directory and the Rust `zetesis_validation::curated` API. After installation:
+
+```sh
+zetesis-corpus verify validation/upstream/clingo-5.8.2/curated
+```
+
+This verifies 24 exact ASP files, the sealed provenance/license and 73 recorded
+full-model occurrences without reading C++ or running a solver. The
+[curation record](../../../docs/verification/corpus-curation-20260907/README.md)
+describes the independent import/verification checks. The legacy consumers below
+remain active during migration; fixture integrity alone is not model parity.
+
 These 24 objective-free semantic assertions come from clingo v5.8.2, commit
 `a99ffb2a58293c68b28fcc283a1d1c9ccad900fe`. The original C++ files and solver
 helper are preserved under `originals/`, with their MIT copyright notices and

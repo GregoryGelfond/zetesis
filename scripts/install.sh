@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build once, then run zetesis, zetesis-bench and zetesis-validate without Cargo.
+# Build once, then run the solver and qualification commands without Cargo.
 set -eu
 
 case "${1-}" in
@@ -32,7 +32,8 @@ mkdir -p -- "$install_dir"
 install -m 755 "$target_dir/$host_target/release/zetesis" "$install_dir/zetesis"
 install -m 755 "$target_dir/$host_target/release/zetesis-bench" "$install_dir/zetesis-bench"
 install -m 755 "$target_dir/$host_target/release/zetesis-validate" "$install_dir/zetesis-validate"
-printf 'Installed %s, %s and %s\n' "$install_dir/zetesis" "$install_dir/zetesis-bench" "$install_dir/zetesis-validate"
+install -m 755 "$target_dir/$host_target/release/zetesis-corpus" "$install_dir/zetesis-corpus"
+printf 'Installed %s, %s, %s and %s\n' "$install_dir/zetesis" "$install_dir/zetesis-bench" "$install_dir/zetesis-validate" "$install_dir/zetesis-corpus"
 case ":$PATH:" in
     *":$install_dir:"*) ;;
     *) printf 'Add this directory to PATH: %s\n' "$install_dir" ;;
