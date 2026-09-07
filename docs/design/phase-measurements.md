@@ -108,3 +108,9 @@ arithmetic bounds. Its `native_stage_timings` evidence and stage availability /
 integrity totals do not change answer parity or device qualification. Host elapsed
 includes waits, excludes source file loading and statistics emission, and is not
 GPU kernel time. No extra clock reads occur when statistics are disabled.
+
+With `--json`, both timing views appear as typed fields in the terminal statistics
+object. The JSON document header precedes the recorder and its terminal envelope
+follows the snapshot; both are excluded explicitly. Individual model evaluation,
+encoding and emission remain measured output work. This avoids claiming that a
+terminal record includes the time needed to emit that same record.

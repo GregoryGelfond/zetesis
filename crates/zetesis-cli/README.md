@@ -173,6 +173,20 @@ nor process RSS. Portable tests establish correctness, not a parallel speedup.
 Device selection and initialization happen during ordinary invocation; no setup
 script, qualification command or stored pass marker is required.
 
+## Machine output
+
+`zetesis input.lp --models 0 --json` streams one schema-1 JSON document. Full
+semantic atoms, shown atom indices, shown terms and costs remain separate. The
+terminal outcome distinguishes exhaustive results, partial search, proved optima
+and failures. Add `--stats` for typed search/execution counters and both stage and
+phase timings. The fixed JSON header and terminal envelope lie outside the timing
+interval; model view construction and emission are output work.
+
+`--max-json-record-bytes` bounds each model and terminal record (8 MiB by default).
+A broken output stream can leave a truncated document; no completed publication
+is claimed. Integers are exact decimal values and need lossless consumer parsing.
+See the [complete schema and failure contract](../../docs/verification/json-output-20260907/README.md).
+
 ## Grounding and solving time
 
 `--stats` includes a host-millisecond summary and an exact stage record separating

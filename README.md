@@ -138,6 +138,7 @@ zetesis --version
 zetesis devices
 zetesis examples/network-repair.lp --models 0
 zetesis examples/network-repair.lp --models 0 --stats
+zetesis examples/network-repair.lp --models 0 --json
 zetesis examples/network-repair.lp --backend metal --grounder eager --models 0
 ```
 
@@ -160,6 +161,12 @@ candidate generation, original validation, GPU host calls, exact reduct checking
 objectives and output. Unentered phases remain unmeasured; failed attempts retain
 their timing. Without `--stats`, no timing clock is read. The validator captures
 these optional measurements separately from its answer-parity decisions.
+
+`--json` selects a versioned streaming document for machine consumers. It retains
+full answer sets separately from shown atoms and terms, objective costs, completion
+and partial failure evidence; `--stats` also adds typed timing and execution data.
+Human output remains the default. [The JSON contract](docs/verification/json-output-20260907/README.md)
+states numeric precision, per-record limits and transport-failure behavior.
 
 For programs using reduct closure, automatic hardware selection checks the first candidate on the lazy CPU path. Later
 batches of at least 32 candidates can use a detected physical GPU, with an

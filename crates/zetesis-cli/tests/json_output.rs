@@ -390,3 +390,47 @@ fn view_refusal_after_optimization_keeps_exhaustion_without_claiming_unsat() {
     assert_eq!(value["outcome"]["optimization"]["optimal"], true);
     assert_eq!(value["models"], json!([]));
 }
+
+#[test]
+fn eager_and_lazy_stage_views_match_the_typed_partition() {
+    for (source, extra, mode) in [
+        ("{a}.", vec!["--stats", "--grounder", "eager"], "eager"),
+        (
+            "{a}.",
+            vec!["--stats", "--grounder", "lazy"],
+            "lazy_interleaved",
+        ),
+        ("a | b.", vec!["--stats"], "eager"),
+    ] {
+        let (result, value) = solve(source, &options(&extra));
+        let report = result.unwrap();
+        let typed = report.phase_timings.unwrap().stages;
+        let stages = &value["statistics"]["stage_timings"];
+        assert_eq!(stages["schema"], 1);
+        assert_eq!(stages["grounding_mode"], mode);
+        assert_eq!(stages["complete"], true);
+        assert_eq!(stages["json_envelope"], "excluded");
+        let mut elapsed = 0_u64;
+        for stage in zetesis_cli::SolveStage::ALL {
+            let measured = &stages["measurements"][stage.label()];
+            match typed.get(stage) {
+                Some(measurement) => {
+                    assert_eq!(measured["calls"], measurement.calls);
+                    assert_eq!(
+                        measured["elapsed_ns"].as_u64().map(u128::from),
+                        Some(measurement.elapsed.as_nanos())
+                    );
+                    elapsed += measured["elapsed_ns"].as_u64().unwrap();
+                }
+                None => assert!(measured.is_null()),
+            }
+        }
+        assert_eq!(
+            elapsed + stages["unattributed_elapsed_ns"].as_u64().unwrap(),
+            stages["driver_elapsed_ns"].as_u64().unwrap()
+        );
+        if mode == "lazy_interleaved" {
+            assert!(stages["measurements"]["grounding"].is_null());
+        }
+    }
+}

@@ -221,7 +221,48 @@ fn phases(out: &mut Buffer, timings: Option<&PhaseTimings>) -> Result<(), RunErr
             out.text("null")?;
         }
     }
-    out.text("},\"source_loading\":\"excluded\",\"statistics_output\":\"excluded\",\"kernel_time\":null}")
+    out.text("},\"source_loading\":\"excluded\",\"statistics_output\":\"excluded\",\"json_envelope\":\"excluded\",\"kernel_time\":null}")
+}
+
+fn stages(out: &mut Buffer, timings: Option<&crate::StageTimings>) -> Result<(), RunError> {
+    let Some(timings) = timings else {
+        return out.text("null");
+    };
+    out.text("{\"schema\":1,\"clock\":\"host_monotonic\",\"scope\":\"driver\"")?;
+    out.number_field("driver_elapsed_ns", timings.driver_elapsed.as_nanos())?;
+    out.text(",\"grounding_mode\":")?;
+    out.string(timings.grounding_mode.label())?;
+    out.text(",\"measurements\":{")?;
+    for (index, stage) in crate::SolveStage::ALL.into_iter().enumerate() {
+        if index != 0 {
+            out.text(",")?;
+        }
+        out.string(stage.label())?;
+        out.text(":")?;
+        if let Some(value) = timings.get(stage) {
+            out.text("{\"calls\":")?;
+            out.text(&value.calls.to_string())?;
+            out.number_field("elapsed_ns", value.elapsed.as_nanos())?;
+            out.text(",\"complete\":")?;
+            out.text(if value.overflowed { "false" } else { "true" })?;
+            out.text("}")?;
+        } else {
+            out.text("null")?;
+        }
+    }
+    out.text("},\"unattributed_elapsed_ns\":")?;
+    if let Some(value) = timings.unattributed {
+        out.text(&value.as_nanos().to_string())?;
+    } else {
+        out.text("null")?;
+    }
+    out.text(",\"complete\":")?;
+    out.text(if timings.is_complete() {
+        "true"
+    } else {
+        "false"
+    })?;
+    out.text(",\"timer_overhead\":\"not_separated\",\"source_loading\":\"excluded\",\"statistics_output\":\"excluded\",\"json_envelope\":\"excluded\",\"kernel_time\":null}")
 }
 
 fn error_kind(error: &RunError) -> &'static str {
@@ -440,6 +481,8 @@ fn statistics(
         execution_statistics(out, execution)?;
         out.text(",\"phase_timings\":")?;
         phases(out, timings)?;
+        out.text(",\"stage_timings\":")?;
+        stages(out, timings.map(|timing| &timing.stages))?;
         out.text("}")?;
     } else {
         out.text("null")?;
