@@ -1,0 +1,287 @@
+[
+  {
+    "name": "retained-range",
+    "source": "p(1..2):#true;q:#true.",
+    "expanded": "p(1)|q. p(2)|q.",
+    "models": [
+      [
+        "p(1)",
+        "p(2)"
+      ],
+      [
+        "q"
+      ]
+    ]
+  },
+  {
+    "name": "empty-colon",
+    "source": "a|b:.",
+    "expanded": "a|b.",
+    "models": [
+      [
+        "a"
+      ],
+      [
+        "b"
+      ]
+    ]
+  },
+  {
+    "name": "both-empty",
+    "source": "a:;b:.",
+    "expanded": "a|b.",
+    "models": [
+      [
+        "a"
+      ],
+      [
+        "b"
+      ]
+    ]
+  },
+  {
+    "name": "singleton-true",
+    "source": "p:#true.",
+    "expanded": "p.",
+    "models": [
+      [
+        "p"
+      ]
+    ]
+  },
+  {
+    "name": "singleton-empty",
+    "source": "p:.",
+    "expanded": "p.",
+    "models": [
+      [
+        "p"
+      ]
+    ]
+  },
+  {
+    "name": "double-true",
+    "source": "p:#true,#true;q:#true.",
+    "expanded": "p|q.",
+    "models": [
+      [
+        "p"
+      ],
+      [
+        "q"
+      ]
+    ]
+  },
+  {
+    "name": "boolean-true-polarities",
+    "source": "p:not #false;q:not not #true.",
+    "expanded": "p|q.",
+    "models": [
+      [
+        "p"
+      ],
+      [
+        "q"
+      ]
+    ]
+  },
+  {
+    "name": "two-range-occurrences",
+    "source": "p(1..2):#true;q(1..2):#true.",
+    "expanded": "p(1)|q(1).p(1)|q(2).p(2)|q(1).p(2)|q(2).",
+    "models": [
+      [
+        "p(1)",
+        "p(2)"
+      ],
+      [
+        "q(1)",
+        "q(2)"
+      ]
+    ]
+  },
+  {
+    "name": "argument-product",
+    "source": "p(1..2,1..2):#true;q:#true.",
+    "expanded": "p(1,1)|q.p(1,2)|q.p(2,1)|q.p(2,2)|q.",
+    "models": [
+      [
+        "p(1,1)",
+        "p(1,2)",
+        "p(2,1)",
+        "p(2,2)"
+      ],
+      [
+        "q"
+      ]
+    ]
+  },
+  {
+    "name": "empty-range-family",
+    "source": "p(2..1):#true;q:#true.",
+    "expanded": "",
+    "models": [
+      []
+    ]
+  },
+  {
+    "name": "empty-singleton-range",
+    "source": "p(2..1):#true.",
+    "expanded": "",
+    "models": [
+      []
+    ]
+  },
+  {
+    "name": "duplicate-occurrences",
+    "source": "p:#true;p:#true;q:#true.",
+    "expanded": "p|q.",
+    "models": [
+      [
+        "p"
+      ],
+      [
+        "q"
+      ]
+    ]
+  },
+  {
+    "name": "body-dependent-ranges",
+    "source": "d(1).p(X..X+1):#true;q:#true:-d(X).",
+    "expanded": "d(1).p(1)|q:-d(1).p(2)|q:-d(1).",
+    "models": [
+      [
+        "d(1)",
+        "p(1)",
+        "p(2)"
+      ],
+      [
+        "d(1)",
+        "q"
+      ]
+    ]
+  },
+  {
+    "name": "recursive-disjunction",
+    "source": "a:#true;b:#true.a:-b.b:-a.",
+    "expanded": "a|b.a:-b.b:-a.",
+    "models": [
+      [
+        "a",
+        "b"
+      ]
+    ]
+  },
+  {
+    "name": "negative-no-support",
+    "source": "not a:#true;b:#true.",
+    "expanded": "not a|b.",
+    "models": [
+      []
+    ]
+  },
+  {
+    "name": "double-negative-no-support",
+    "source": "not not a:#true;b:#true.",
+    "expanded": "not not a|b.",
+    "models": [
+      [
+        "b"
+      ]
+    ]
+  },
+  {
+    "name": "negative-supported",
+    "source": "{a}.not a:#true;b:#true.",
+    "expanded": "{a}.not a|b.",
+    "models": [
+      [],
+      [
+        "a",
+        "b"
+      ]
+    ]
+  },
+  {
+    "name": "double-negative-supported",
+    "source": "{a}.not not a:#true;b:#true.",
+    "expanded": "{a}.not not a|b.",
+    "models": [
+      [
+        "a"
+      ],
+      [
+        "b"
+      ]
+    ]
+  },
+  {
+    "name": "strong-sign",
+    "source": "-p:#true;q:#true.",
+    "expanded": "-p|q.",
+    "models": [
+      [
+        "-p"
+      ],
+      [
+        "q"
+      ]
+    ]
+  },
+  {
+    "name": "coherence",
+    "source": "p.-p:#true;q:#true.",
+    "expanded": "p.-p|q.",
+    "models": [
+      [
+        "p",
+        "q"
+      ]
+    ]
+  },
+  {
+    "name": "closed-structural",
+    "source": "p(f(a)):#true;q((1,a)):#true.",
+    "expanded": "p(f(a))|q((1,a)).",
+    "models": [
+      [
+        "p(f(a))"
+      ],
+      [
+        "q((1,a))"
+      ]
+    ]
+  },
+  {
+    "name": "boolean-outer-body",
+    "source": "p:#true;q:#true:-#false.",
+    "expanded": "p|q:-#false.",
+    "models": [
+      []
+    ]
+  },
+  {
+    "name": "negative-singleton-condition",
+    "source": "not a:#true.",
+    "expanded": "not a|not a.",
+    "models": [
+      []
+    ]
+  },
+  {
+    "name": "double-negative-singleton-condition",
+    "source": "not not a:#true.",
+    "expanded": "not not a|not not a.",
+    "models": []
+  },
+  {
+    "name": "double-negative-singleton-supported",
+    "source": "{a}.not not a:#true.",
+    "expanded": "{a}.not not a|not not a.",
+    "models": [
+      [
+        "a"
+      ]
+    ]
+  }
+]

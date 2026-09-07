@@ -44,6 +44,7 @@ mod formula_factor;
 mod formula_guard;
 mod formula_conditional;
 mod formula_conditional_ir;
+mod formula_conditional_head_ir;
 mod formula_support;
 mod formula_binding_plan;
 mod formula_binding_guard;

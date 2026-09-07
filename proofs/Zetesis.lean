@@ -33,6 +33,7 @@ import Zetesis.SignedObjectiveBounds
 import Zetesis.UniversalConditionals
 import Zetesis.FiniteBindings
 import Zetesis.NegativeHeads
+import Zetesis.TrueHeads
 import Zetesis.TightPlans
 
 import Zetesis.CertifiedExecution

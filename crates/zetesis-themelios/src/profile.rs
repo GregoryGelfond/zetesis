@@ -93,17 +93,11 @@ fn check_profile(
         if formula {
             match rule.head() {
                 None
-                | Some(ast::Head::Literal(_) | ast::Head::Aggregate(ast::Aggregate::Set(_))) => {}
-                Some(ast::Head::Disjunction(head)) => {
-                    for element in head.elements() {
-                        if matches!(element, ast::DisjunctionElement::ConditionalLiteral(_)) {
-                            return Err(unsupported(
-                                ProfileFeature::ConditionalDisjunction,
-                                parsed.location(element.syntax().text_range()),
-                            ));
-                        }
-                    }
-                }
+                | Some(
+                    ast::Head::Literal(_)
+                    | ast::Head::Aggregate(ast::Aggregate::Set(_))
+                    | ast::Head::Disjunction(_),
+                ) => {}
                 Some(head) => {
                     return Err(unsupported(
                         ProfileFeature::Head,

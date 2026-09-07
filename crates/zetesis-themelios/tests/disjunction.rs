@@ -292,12 +292,16 @@ fn excluded_heads_and_objective_dependencies_are_located_refusals() {
     for case in cases()
         .iter()
         // The immutable fixture records a historical arithmetic refusal.
-        // Current scalar/interval and negated-head semantics have dedicated tests.
+        // Current scalar/interval, negated-head and true/empty-condition semantics
+        // have dedicated tests.
         .filter(|case| {
             case["expected_native"] == "refuse"
                 && !matches!(
                     case["name"].as_str().unwrap(),
-                    "variable-arithmetic-head" | "interval-head" | "default-negated-head"
+                    "variable-arithmetic-head"
+                        | "interval-head"
+                        | "default-negated-head"
+                        | "conditional-empty-head"
                 )
         })
     {

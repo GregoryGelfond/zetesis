@@ -527,13 +527,7 @@ impl Compiler<'_> {
                         self.limits.max_disjunction_elements as u128,
                         self.location,
                     )?;
-                    if !element.get().condition().is_empty() {
-                        return Err(unsupported(
-                            ProfileFeature::ConditionalDisjunction,
-                            self.location,
-                        )
-                        .into());
-                    }
+                    self.true_head_condition(element.get().condition())?;
                     // Generated arguments share outer bindings; each emitted
                     // rule retains its original disjunction, without shifting.
                     heads.push(self.disjunction_head(

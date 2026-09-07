@@ -9,8 +9,8 @@ use zetesis_cpu::Control;
 fn upstream_admissions_preserve_complete_models_on_both_reduct_routes() {
     replay(
         include_str!("../../../validation/upstream/clingo-5.8.2/cases.jsonl"),
-        15,
-        37,
+        16,
+        39,
     );
 }
 
