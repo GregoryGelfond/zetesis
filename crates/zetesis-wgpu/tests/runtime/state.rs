@@ -88,3 +88,43 @@ fn validation_health_and_execution_precedence_never_recover_after_failure() {
         }
     }
 }
+
+#[test]
+fn cancellation_never_hides_a_scope_failure() {
+    let (_, mut faults) = state();
+    let error = faults
+        .complete::<()>(
+            Err(error(GpuErrorKind::Validation, "scope")),
+            Err(GpuError::interrupted(zetesis_cpu::Stop::Cancelled)),
+        )
+        .unwrap_err();
+    assert_eq!(error.kind(), GpuErrorKind::Validation);
+    assert_eq!(error.interruption, None);
+}
+
+#[test]
+fn cancellation_never_hides_a_device_fault() {
+    let (sender, mut faults) = state();
+    sender.try_send("device lost".into()).unwrap();
+    let error = faults
+        .complete::<()>(
+            Ok(()),
+            Err(GpuError::interrupted(zetesis_cpu::Stop::Cancelled)),
+        )
+        .unwrap_err();
+    assert_eq!(error.interruption, None);
+    assert_eq!(error.detail(), "device lost");
+}
+
+#[test]
+fn cancellation_survives_successful_scope_completion() {
+    let (_, mut faults) = state();
+    let error = faults
+        .complete::<()>(
+            Ok(()),
+            Err(GpuError::interrupted(zetesis_cpu::Stop::Cancelled)),
+        )
+        .unwrap_err();
+    assert_eq!(error.interruption, Some(zetesis_cpu::Stop::Cancelled));
+    assert!(faults.invalidated);
+}

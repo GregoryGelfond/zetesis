@@ -1,9 +1,10 @@
-//! Exact batched reduct checking over an explicitly compiled static program.
+//! Exact batched reduct checking with static and lazy source executors.
 //!
-//! A workgroup owns one candidate's closure, using integer atom latches and
-//! frozen seed gates. This backend never grounds source templates and does not
-//! claim lazy GPU execution. A returned rejection is logical; adapter, capacity,
-//! timeout, validation, and device errors remain distinct failures.
+//! Static workgroups own complete candidate closures. [`GpuLazyOracle`] instead
+//! evaluates bounded source instances over immutable per-world snapshots, with
+//! host joins and round barriers. Both use integer truth and frozen seed gates.
+//! A returned rejection is logical; adapter, capacity, timeout, validation and
+//! device errors remain distinct failures.
 //!
 //! The shader implements the monotone event/iteration schedules modeled in the
 //! Lean specification. The Rust-to-WGSL packing and device implementation are
@@ -16,6 +17,7 @@ mod residency;
 mod runtime;
 mod selection;
 mod adapter;
+mod lazy;
 
 use std::fmt;
 use std::time::Duration;
@@ -32,6 +34,7 @@ pub use formula::{
 };
 
 pub use adapter::{AdapterBackend, AdapterCategory, AdapterMetadata};
+pub use lazy::{GpuLazyOracle, LazyGpuStatistics};
 
 pub use selection::{
     GpuBackendPreference, GpuInfo, GpuSelection, NVIDIA_VENDOR_ID, compiled_backends,
@@ -114,6 +117,7 @@ pub enum GpuErrorKind {
 pub struct GpuError {
     kind: GpuErrorKind,
     detail: String,
+    interruption: Option<zetesis_cpu::Stop>,
 }
 
 impl GpuError {
@@ -121,6 +125,15 @@ impl GpuError {
         Self {
             kind,
             detail: detail.into(),
+            interruption: None,
+        }
+    }
+
+    fn interrupted(stop: zetesis_cpu::Stop) -> Self {
+        Self {
+            kind: GpuErrorKind::Device,
+            detail: "lazy readback interrupted; in-flight lifecycle invalidated".to_owned(),
+            interruption: Some(stop),
         }
     }
 

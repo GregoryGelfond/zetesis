@@ -8,13 +8,13 @@ license.workspace = true
 
 [dependencies]
 zetesis-core = { path = "../zetesis-core" }
+zetesis-cpu = { path = "../zetesis-cpu" }
 zetesis-ferraris = { path = "../zetesis-ferraris" }
 wgpu.workspace = true
 bytemuck.workspace = true
 pollster.workspace = true
 
 [dev-dependencies]
-zetesis-cpu = { path = "../zetesis-cpu" }
 # The shader validator paired with this wgpu release. Hardware-independent
 # validation checks the authored WGSL even when no adapter is available.
 naga = { version = "=30.0.1", features = ["wgsl-in"] }

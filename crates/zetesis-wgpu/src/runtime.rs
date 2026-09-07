@@ -76,6 +76,10 @@ impl Runtime {
         self.faults.check()
     }
 
+    pub(crate) fn invalidate(&mut self) {
+        self.faults.invalidated = true;
+    }
+
     // Drain every scope, then inspect asynchronous health even if execution
     // already failed. Precedence and permanent invalidation are shared.
     pub(crate) fn complete<T>(
@@ -183,27 +187,85 @@ pub(crate) fn read<T>(
     timeout: Duration,
     decode: impl FnOnce(&[u32]) -> Result<T, GpuError>,
 ) -> Result<T, GpuError> {
+    read_with_wait(
+        device,
+        readback,
+        submission,
+        WaitPolicy {
+            timeout,
+            quantum: timeout,
+        },
+        || Ok(()),
+        decode,
+    )
+}
+
+#[derive(Clone, Copy)]
+struct WaitPolicy {
+    timeout: Duration,
+    quantum: Duration,
+}
+
+// Poll control between bounded waits. Failure invalidates the owning Runtime,
+// and buffers are dropped rather than reused while a submission remains live.
+pub(crate) fn read_polled<T>(
+    device: &wgpu::Device,
+    readback: &wgpu::Buffer,
+    submission: wgpu::SubmissionIndex,
+    timeout: Duration,
+    control: impl FnMut() -> Result<(), GpuError>,
+    decode: impl FnOnce(&[u32]) -> Result<T, GpuError>,
+) -> Result<T, GpuError> {
+    read_with_wait(
+        device,
+        readback,
+        submission,
+        WaitPolicy {
+            timeout,
+            quantum: Duration::from_millis(50),
+        },
+        control,
+        decode,
+    )
+}
+
+fn read_with_wait<T>(
+    device: &wgpu::Device,
+    readback: &wgpu::Buffer,
+    submission: wgpu::SubmissionIndex,
+    policy: WaitPolicy,
+    mut control: impl FnMut() -> Result<(), GpuError>,
+    decode: impl FnOnce(&[u32]) -> Result<T, GpuError>,
+) -> Result<T, GpuError> {
     let (sender, receiver) = mpsc::sync_channel(1);
     readback
         .slice(..)
         .map_async(wgpu::MapMode::Read, move |mapped| {
             let _ = sender.try_send(mapped);
         });
-    device
-        .poll(wgpu::PollType::Wait {
-            submission_index: Some(submission),
-            timeout: Some(timeout),
-        })
-        .map_err(|error| {
-            GpuError::new(
-                if matches!(error, wgpu::PollError::Timeout) {
-                    GpuErrorKind::Timeout
-                } else {
-                    GpuErrorKind::Device
-                },
-                error.to_string(),
-            )
-        })?;
+    let started = std::time::Instant::now();
+    let submission = Some(submission);
+    loop {
+        control()?;
+        let remaining = policy.timeout.saturating_sub(started.elapsed());
+        match device.poll(wgpu::PollType::Wait {
+            submission_index: submission.clone(),
+            timeout: Some(remaining.min(policy.quantum)),
+        }) {
+            Ok(_) => break,
+            Err(wgpu::PollError::Timeout) if started.elapsed() < policy.timeout => {}
+            Err(error) => {
+                return Err(GpuError::new(
+                    if matches!(error, wgpu::PollError::Timeout) {
+                        GpuErrorKind::Timeout
+                    } else {
+                        GpuErrorKind::Device
+                    },
+                    error.to_string(),
+                ));
+            }
+        }
+    }
     receiver
         .try_recv()
         .map_err(|error| {
