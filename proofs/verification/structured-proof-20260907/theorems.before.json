@@ -327,17 +327,17 @@
   {
     "name": "Zetesis.CertifiedExecution.completed_membership_exact",
     "file": "Zetesis/CertifiedExecution.lean",
-    "line": 66
+    "line": 60
   },
   {
     "name": "Zetesis.CertifiedExecution.fallback_quota_is_cumulative",
     "file": "Zetesis/CertifiedExecution.lean",
-    "line": 107
+    "line": 86
   },
   {
     "name": "Zetesis.CertifiedExecution.interruption_cannot_accept",
     "file": "Zetesis/CertifiedExecution.lean",
-    "line": 100
+    "line": 79
   },
   {
     "name": "Zetesis.CertifiedExecution.ranked_support_verdict_sound",
@@ -347,12 +347,12 @@
   {
     "name": "Zetesis.CertifiedExecution.restricted_result_original",
     "file": "Zetesis/CertifiedExecution.lean",
-    "line": 113
+    "line": 92
   },
   {
     "name": "Zetesis.CertifiedExecution.unsupported_requires_completion",
     "file": "Zetesis/CertifiedExecution.lean",
-    "line": 103
+    "line": 82
   },
   {
     "name": "Zetesis.ChoiceIntervals.all_classical",

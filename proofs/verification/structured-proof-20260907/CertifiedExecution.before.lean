@@ -57,45 +57,24 @@ theorem ranked_support_verdict_sound (T : Theory α) (M : Atoms α)
     | true =>
       exact ranked_support_stable M T rules rank roots ranked (model.mp rfl) (support rfl)
 
-/-- A completed classification agrees with stability in the original theory.
-
-The four scoped obligations use certificate soundness, original-model necessity,
-exact residual completion, and the impossibility of stopped completion. The final
-case split composes them; no termination or successful completion is asserted.
--/
 theorem completed_membership_exact (T : Theory α) (M : Atoms α)
     (verdict : Verdict) (exact : Option Bool) (result : Bool)
     (sound : Sound T M verdict)
     (oracle : ∀ b, exact = some b → (b = true ↔ Stable M T))
     (done : complete verdict exact = some result) : result = true ↔ Stable M T := by
-  have certified_case (certified : verdict = .stable) : result = true ↔ Stable M T := by
-    have accepted : result = true := by simpa [certified, complete] using done.symm
-    have stable_model : Stable M T := by simpa only [certified, Sound] using sound
-    exact ⟨fun _ => stable_model, fun _ => accepted⟩
-
-  have rejected_case (rejected : verdict = .notModel) : result = true ↔ Stable M T := by
-    have not_accepted : result = false := by simpa [rejected, complete] using done.symm
-    have not_original_model : ¬ Models M T := by simpa only [rejected, Sound] using sound
-    have not_stable : ¬ Stable M T := by
-      intro stable_model
-      exact not_original_model stable_model.1
-    simpa [not_accepted] using not_stable
-
-  have residual_case (residual : verdict = .residual) : result = true ↔ Stable M T := by
-    have exact_result : exact = some result := by simpa only [residual, complete] using done
-    exact oracle result exact_result
-
-  have stopped_case (stopped : verdict = .stopped) : False := by
-    have no_completed_result : complete .stopped exact ≠ some result := by simp [complete]
-    exact no_completed_result (stopped ▸ done)
-
-  -- QED: the four verdict cases exhaust every completed classification.
-  show result = true ↔ Stable M T
   cases verdict with
-  | stable => exact certified_case rfl
-  | notModel => exact rejected_case rfl
-  | residual => exact residual_case rfl
-  | stopped => exact False.elim (stopped_case rfl)
+  | stable =>
+    have h : result = true := by simpa [complete] using done.symm
+    subst result
+    exact ⟨fun _ => sound, fun _ => rfl⟩
+  | notModel =>
+    have h : result = false := by simpa [complete] using done.symm
+    subst result
+    constructor
+    · intro h; cases h
+    · intro stable; exact False.elim (sound stable.1)
+  | residual => exact oracle result done
+  | stopped => simp [complete] at done
 
 theorem interruption_cannot_accept (exact : Option Bool) :
     complete .stopped exact ≠ some true := by simp [complete]

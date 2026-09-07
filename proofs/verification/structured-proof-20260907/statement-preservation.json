@@ -1,0 +1,7 @@
+{
+  "theorem": "Zetesis.CertifiedExecution.completed_membership_exact",
+  "statement_byte_identical": true,
+  "statement_sha256": "c1c45fa38138d161ce73fb3725903378447f2f36b865950dad27d4f3ce81e9f6",
+  "new_public_theorems": 0,
+  "scope": "Proof body and documentation only; no changed theorem premises or conclusion."
+}

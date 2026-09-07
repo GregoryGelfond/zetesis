@@ -1,13 +1,5 @@
 # zetesis — Lean semantic specification
 
-This package is also a reusable mathematical proof library, independent of the
-Rust solver. Its [reading guide](guide/README.md) starts from logic-programming
-questions; the [structured proof convention](STYLE.md) and
-[worked membership proof](guide/certified-membership.md) make the main argument
-readable before its Lean details. The convention has one deliberately bounded
-pilot so far; it is not a claim of a library-wide rewrite.
-
-
 This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **613 kernel-checked theorems** across forty-one semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
 
 The formalization connects normalized stable-model semantics to candidate seeds, compositional reduct execution, lazy completion, consequence bounds, and completed search certificates. It supplies mathematical contracts for the Rust, wgpu, Rayon, and neuromorphic implementation work. It does not verify those implementations or make Lean a runtime dependency.

@@ -25,8 +25,11 @@ while eliminating their 652 inner countermodel queries. A
 [matched library measurement](docs/verification/tight-wall-performance-20260906/README.md)
 finds about 1.66× speedup on the larger task-allocation input and 1.96× on two
 queens encodings, with certificate construction included. Single-model and small
-cases need selective treatment. Automatic selection in ordinary solving remains
-the next integration step; these are CPU library measurements.
+cases need selective treatment. Automatic CPU selection now uses the checked
+certificate in ordinary solving. The later [ordinary invocation comparison](docs/verification/first-six-checkpoint-20260907/ordinary-comparison.md)
+measures 4–42% lower median latency on the six queens encodings against the prior
+installed baseline; SEND + MORE = MONEY is essentially unchanged. These CPU
+measurements include admission and output; they establish no GPU speedup.
 
 In the normal-rule specialization, the CPU oracle works directly with relational
 source templates. It binds rules
@@ -149,8 +152,10 @@ optional inventory command, not an initialization step.
 `--stats` writes settings, available search counters, completion status and
 host phase timings to stderr while preserving answer-set output on stdout.
 Unavailable counters and untracked automatic CPU/GPU transitions are labeled
-explicitly. The timing includes admission, search and output; it excludes source
-loading and is not a GPU kernel measurement. The phase section separates admission,
+explicitly. A readable timing summary separates source preparation, actual eager grounding,
+solving (including setup and waits), and output. Lazy joins are explicitly
+interleaved with solving; an unavailable grounding duration is not reported as
+zero. The timing excludes source loading and is not a GPU kernel measurement. The phase section separates admission,
 candidate generation, original validation, GPU host calls, exact reduct checking,
 objectives and output. Unentered phases remain unmeasured; failed attempts retain
 their timing. Without `--stats`, no timing clock is read. The validator captures
@@ -491,9 +496,14 @@ parsing and structured program syntax. zetesis uses morphe's `87c11a3` Git pin.
 [Rayon](https://github.com/rayon-rs/rayon) runs independent CPU candidates;
 [wgpu](https://github.com/gfx-rs/wgpu) supplies the GPU boundary.
 
-zetesis is a separate experiment from apokrisis. It follows the Rust conventions
-of themelios, keryx and morphe: documented library boundaries, typed refusals,
-explicit limits, no authored unsafe code and strict lint checks.
+zetesis is a separate experiment from apokrisis and a member of the same estate
+as themelios, keryx and morphe. Its [library-first design](docs/design/library-first-20260907.md)
+uses typed semantic models, composable operations, explicit limits and refusals,
+and human or machine views over those models. The [contribution contract](CONTRIBUTING.md)
+sets the same clarity, lint, documentation and verification bar. The semantic
+kernels are reusable today; extracting ordinary orchestration from CLI-shaped
+configuration remains an explicit architectural task. Standalone ground/solve
+and ASPIF interchange are specified follow-on capabilities.
 
 ## License
 

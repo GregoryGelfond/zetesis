@@ -97,6 +97,26 @@ For native SpiNNaker2 code, Rust's Cortex-M4F target is an enabling condition, n
 
 Experiment-owned semantic crates SHOULD forbid unsafe Rust. Any required MMIO, DMA, FFI, or startup code belongs in a small target adapter with explicit invariants. This is a new design choice for this experiment, not an inherited apokrisis policy.
 
+### 2.1 Estate ancestry and library ownership
+
+zetesis MUST follow the [library-first contribution contract](../../CONTRIBUTING.md).
+Reusable semantic models, operations, typed limits and outcomes precede process
+configuration and rendering. Their public register is the logic programmer's:
+program properties, interpretations, answer sets, consequences and proved optima.
+Rust contracts and Lean predicates SHOULD share these mathematical distinctions;
+backend execution is a separately stated refinement of them. The CLI MUST compose library capabilities; exposing
+a function that still requires clap-derived options and human byte writers does
+not fulfill that boundary. The [estate audit and extraction plan](library-first-20260907.md)
+identifies implemented examples in themelios, keryx and morphe and the remaining
+zetesis composition gap. New slices must improve that boundary without duplicating
+the solve algorithm or copying a sibling's unrelated implementation choices.
+
+Human, JSON and consumer-defined output are views over typed results. ASPIF is a
+separate semantic conversion of a declared ground capability; lost provenance may
+be explicit, but changed stable models or objectives may not be hidden as a lossy
+view. Source, already-owned program and ground input doors share validated semantic
+operations. Lazy execution need not materialize a complete ground artifact to solve.
+
 ## 3. Source language and themelios integration
 
 ### 3.1 Dependency boundary
