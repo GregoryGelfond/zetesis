@@ -1,0 +1,122 @@
+//! Machine-visible failure identity and output publication boundaries.
+
+use super::{Buffer, Document, input_failure, write_interruption};
+use crate::test_writer::BoundedWriter;
+use crate::{Interruption, Options, RunError};
+use clap::Parser;
+use std::io::{self, Write};
+
+#[test]
+fn input_failure_survives_a_broken_json_prefix() {
+    let mut writer = BoundedWriter::new(3);
+    let error = input_failure(
+        &mut writer,
+        RunError::Input(io::Error::new(io::ErrorKind::NotFound, "source missing")).into(),
+        &Options::parse_from(["zetesis", "--json"]),
+    );
+    assert!(matches!(*error.cause, RunError::Input(_)));
+    assert!(error.to_string().contains("source missing"));
+    assert!(error.partial_report.is_none());
+    assert!(error.secondary_output.is_some());
+    assert_eq!(writer.bytes(), b"{\"s");
+}
+
+#[test]
+fn source_stops_have_distinct_machine_codes() {
+    use zetesis_cpu::Stop;
+    for (stop, code) in [
+        (Stop::Cancelled, "cancelled"),
+        (Stop::Deadline, "deadline"),
+        (Stop::WorkLimit, "work_limit"),
+        (Stop::DerivedAtomLimit, "derived_atom_limit"),
+        (Stop::CandidateLimit, "candidate_limit"),
+        (Stop::CarrierLimit, "carrier_limit"),
+        (Stop::Allocation, "allocation"),
+        (Stop::WrongProgram, "wrong_program"),
+        (Stop::InvalidProgram, "invalid_program"),
+    ] {
+        let mut out = Buffer::new(4096);
+        write_interruption(&mut out, Some(Interruption::Oracle(stop))).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
+        assert_eq!(value["kind"], "oracle");
+        assert_eq!(value["code"], code);
+        assert_eq!(value["detail"], format!("{stop:?}"));
+    }
+}
+
+#[test]
+fn countermodel_stops_have_distinct_machine_codes() {
+    use zetesis_sat::Incomplete;
+    for (stop, code) in [
+        (Incomplete::Cancelled, "cancelled"),
+        (Incomplete::Deadline, "deadline"),
+        (Incomplete::WorkLimit, "work_limit"),
+        (Incomplete::DecisionLimit, "decision_limit"),
+        (Incomplete::CandidateLimit, "candidate_limit"),
+        (Incomplete::PendingBytes, "pending_bytes"),
+        (Incomplete::CompletionScratch, "completion_scratch"),
+        (Incomplete::BatchCandidateLimit, "batch_candidate_limit"),
+        (Incomplete::PendingBatch, "pending_batch"),
+        (Incomplete::Allocation, "allocation"),
+        (Incomplete::WrongTheory, "wrong_theory"),
+        (Incomplete::ClosedEnumerator, "closed_enumerator"),
+        (Incomplete::LateCertificate, "late_certificate"),
+        (Incomplete::InvalidWitness, "invalid_witness"),
+        (Incomplete::CounterOverflow, "counter_overflow"),
+    ] {
+        let mut out = Buffer::new(4096);
+        write_interruption(&mut out, Some(Interruption::Countermodel(stop))).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
+        assert_eq!(value["kind"], "countermodel");
+        assert_eq!(value["code"], code);
+        assert_eq!(value["detail"], format!("{stop:?}"));
+    }
+}
+
+#[test]
+fn incumbent_stops_have_distinct_machine_codes() {
+    use crate::OptimizationStop;
+    for (stop, code) in [
+        (OptimizationStop::Models, "models"),
+        (OptimizationStop::Atoms, "atoms"),
+        (OptimizationStop::Bytes, "bytes"),
+        (OptimizationStop::Overflow, "overflow"),
+        (OptimizationStop::Allocation, "allocation"),
+    ] {
+        let mut out = Buffer::new(4096);
+        write_interruption(&mut out, Some(Interruption::Incumbent(stop))).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
+        assert_eq!(value["kind"], "incumbent");
+        assert_eq!(value["code"], code);
+    }
+}
+
+struct FlushFailure(Vec<u8>);
+impl Write for FlushFailure {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.0.extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Err(io::Error::new(
+            io::ErrorKind::BrokenPipe,
+            "flush disconnected",
+        ))
+    }
+}
+
+#[test]
+fn failed_flush_prevents_a_later_json_footer() {
+    let mut sink = FlushFailure(Vec::new());
+    let mut document = Document::new(&mut sink, true).unwrap();
+    let error = document.flush().unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
+    let error = document
+        .finish(
+            Err(RunError::Input(io::Error::other("original cause")).into()),
+            &Options::parse_from(["zetesis", "--json"]),
+        )
+        .unwrap_err();
+    assert!(error.to_string().contains("original cause"));
+    assert_eq!(sink.0, b"{\"schema\":1,\"format\":\"zetesis\",\"models\":[");
+}

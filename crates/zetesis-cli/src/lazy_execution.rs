@@ -48,11 +48,14 @@ pub(crate) mod tests;
 
 #[cfg(feature = "gpu")]
 impl LazyExecutionStatistics {
-    pub(crate) fn new(requested_backend: crate::Backend, info: &zetesis_wgpu::GpuInfo) -> Self {
+    pub(crate) fn new(
+        requested_backend: crate::Backend,
+        metadata: zetesis_wgpu::AdapterMetadata<'_>,
+    ) -> Self {
         Self {
             requested_backend,
-            adapter: info.name().to_owned(),
-            backend: info.backend().to_owned(),
+            adapter: metadata.name.to_owned(),
+            backend: metadata.backend.label().to_owned(),
             batches: 0,
             submitted_candidates: 0,
             completed_candidates: 0,
@@ -111,5 +114,24 @@ impl LazyExecutionStatistics {
         };
         *self = next;
         Ok(())
+    }
+}
+
+/// Convert complete checks or an incomplete source batch into ordinary-session
+/// results. Device/protocol failures remain errors; they never become rejections.
+#[cfg(feature = "gpu")]
+pub(crate) fn batch_results(
+    result: Result<zetesis_cpu::lazy::Batch, zetesis_cpu::lazy::Failure<zetesis_wgpu::GpuError>>,
+) -> Result<Vec<Result<Option<zetesis_core::Model>, zetesis_cpu::Stop>>, crate::RunError> {
+    match result {
+        Ok(batch) => Ok(batch
+            .checks
+            .into_iter()
+            .map(|check| Ok(check.accepted().then(|| check.closure().clone())))
+            .collect()),
+        Err(failure) => match failure.cause {
+            zetesis_cpu::lazy::Cause::Source(stop) => Ok(vec![Err(stop)]),
+            _ => Err(crate::RunError::LazyGpu(failure)),
+        },
     }
 }

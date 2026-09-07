@@ -122,3 +122,141 @@ fn duration_overflow_preserves_the_previous_record() {
     assert!(matches!(error, crate::RunError::LazyStatisticsOverflow));
     assert_eq!(stats, before);
 }
+
+#[cfg(feature = "gpu")]
+mod classification {
+    use std::error::Error;
+    use zetesis_core::{
+        AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Seed, Template,
+    };
+    use zetesis_cpu::{Control, Stop, lazy};
+    use zetesis_wgpu::GpuError;
+
+    fn atom(name: &str) -> Atom {
+        Atom::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap()
+    }
+
+    fn program() -> Program {
+        let pattern = |name| AtomPattern::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap();
+        Program::new(
+            vec![
+                Template::new(
+                    Some(pattern("a")),
+                    vec![],
+                    vec![],
+                    vec![pattern("b")],
+                    vec![],
+                ),
+                Template::new(
+                    Some(pattern("b")),
+                    vec![],
+                    vec![],
+                    vec![pattern("a")],
+                    vec![],
+                ),
+            ],
+            AdmissionLimits::default(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn adapter_observation_does_not_claim_execution() {
+        let stats = crate::LazyExecutionStatistics::new(
+            crate::Backend::Nvidia,
+            zetesis_wgpu::AdapterMetadata {
+                name: "METADATA FIXTURE: no physical execution",
+                backend: zetesis_wgpu::AdapterBackend::Vulkan,
+                category: zetesis_wgpu::AdapterCategory::DiscreteGpu,
+                vendor_id: 0,
+                device_id: 0,
+                pci_bus_id: None,
+                driver: None,
+                driver_info: None,
+            },
+        );
+        assert_eq!(stats.requested_backend, crate::Backend::Nvidia);
+        assert_eq!(stats.backend, "Vulkan");
+        assert_eq!(stats.adapter, "METADATA FIXTURE: no physical execution");
+        assert_eq!(stats.batches, 0);
+        assert_eq!(stats.submitted_candidates, 0);
+        assert_eq!(stats.dispatches, 0);
+        assert_eq!(stats.uploaded_bytes, 0);
+        assert_eq!(stats.downloaded_bytes, 0);
+    }
+
+    #[test]
+    fn batch_results_preserve_candidate_occurrence_order() {
+        let program = program();
+        let seeds = [
+            vec![],
+            vec![atom("a")],
+            vec![atom("b")],
+            vec![atom("a"), atom("b")],
+            vec![atom("a")],
+        ]
+        .map(|atoms| Seed::new(&program, atoms).unwrap());
+        let batch = lazy::check_with(
+            &program,
+            &seeds,
+            lazy::Limits::default(),
+            &Control::default(),
+            |chunk| Ok::<_, GpuError>(lazy::evaluate(chunk).unwrap()),
+        );
+        let actual = crate::lazy_execution::batch_results(batch).unwrap();
+        assert_eq!(
+            actual,
+            vec![
+                Ok(None),
+                Ok(Some(Model::new([atom("a")]))),
+                Ok(Some(Model::new([atom("b")]))),
+                Ok(None),
+                Ok(Some(Model::new([atom("a")])))
+            ]
+        );
+    }
+
+    #[test]
+    fn source_failure_becomes_an_incomplete_session_result() {
+        let program = program();
+        let seeds = [Seed::new(&program, []).unwrap()];
+        let batch = lazy::check_with(
+            &program,
+            &seeds,
+            lazy::Limits {
+                max_source_work: 0,
+                ..Default::default()
+            },
+            &Control::default(),
+            |chunk| Ok::<_, GpuError>(lazy::evaluate(chunk).unwrap()),
+        );
+        assert_eq!(
+            crate::lazy_execution::batch_results(batch).unwrap(),
+            vec![Err(Stop::WorkLimit)]
+        );
+    }
+
+    #[test]
+    fn protocol_failure_remains_an_external_session_error() {
+        let program = program();
+        let seeds = [Seed::new(&program, []).unwrap()];
+        let batch = lazy::check_with(
+            &program,
+            &seeds,
+            lazy::Limits::default(),
+            &Control::default(),
+            |_| Ok::<_, GpuError>(vec![]),
+        );
+        let error = crate::lazy_execution::batch_results(batch).unwrap_err();
+        assert!(matches!(error, crate::RunError::LazyGpu(_)));
+        assert!(error.to_string().contains("encoded contract"));
+        let failure = error
+            .source()
+            .unwrap()
+            .downcast_ref::<lazy::Failure<GpuError>>()
+            .unwrap();
+        assert_eq!(failure.progress.rounds, 0);
+        assert!(failure.progress.source_work > 0);
+        assert!(matches!(failure.cause, lazy::Cause::InvalidOutput));
+    }
+}

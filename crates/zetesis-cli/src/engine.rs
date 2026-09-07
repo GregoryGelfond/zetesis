@@ -38,11 +38,11 @@ pub(crate) struct Engine {
 
 impl Engine {
     pub(crate) fn lazy_statistics(&self) -> Option<crate::LazyExecutionStatistics> {
-        #[cfg(feature = "gpu")]
-        if let Executor::LazyGpu { statistics, .. } = &self.executor {
-            return Some(statistics.clone());
+        match &self.executor {
+            #[cfg(feature = "gpu")]
+            Executor::LazyGpu { statistics, .. } => Some(statistics.clone()),
+            _ => None,
         }
-        None
     }
     #[cfg(test)]
     pub(crate) fn new(
@@ -290,7 +290,8 @@ impl Executor {
                 selection(options.backend),
             )
             .map_err(RunError::Gpu)?;
-            let statistics = crate::LazyExecutionStatistics::new(options.backend, oracle.info());
+            let statistics =
+                crate::LazyExecutionStatistics::new(options.backend, oracle.info().metadata());
             phases.lazy_grounding();
             diagnostics.metadata(Label::Grounding, format_args!("requested=lazy, effective=lazy (host source joins; per-world device consequences; no complete ground-rule store)"))?;
             diagnostics.metadata(
@@ -381,17 +382,7 @@ impl Executor {
                     Err(failure) => failure.progress,
                 };
                 statistics.record(seeds.len(), result.is_ok(), progress, oracle.statistics())?;
-                match result {
-                    Ok(batch) => Ok(batch
-                        .checks
-                        .into_iter()
-                        .map(|check| Ok(check.accepted().then(|| check.closure().clone())))
-                        .collect()),
-                    Err(failure) => match failure.cause {
-                        zetesis_cpu::lazy::Cause::Source(stop) => Ok(vec![Err(stop)]),
-                        _ => Err(RunError::LazyGpu(failure)),
-                    },
-                }
+                crate::lazy_execution::batch_results(result)
             }
             Self::Cpu(oracle) => Ok(oracle
                 .check_batch(program, seeds, limits, control)

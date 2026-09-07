@@ -748,3 +748,7 @@ mod lazy_tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/support/json_failures.rs"]
+mod failure_tests;
