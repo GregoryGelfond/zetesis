@@ -8,7 +8,7 @@ readable before its Lean details. The convention has one deliberately bounded
 pilot so far; it is not a claim of a library-wide rewrite.
 
 
-This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **723 kernel-checked theorems** across fifty-seven semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
+This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **702 kernel-checked theorems** across fifty-three semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
 
 The formalization connects normalized stable-model semantics to candidate seeds, compositional reduct execution, lazy completion, consequence bounds, and completed search certificates. It supplies mathematical contracts for the Rust, wgpu, Rayon, and neuromorphic implementation work. It does not verify those implementations or make Lean a runtime dependency.
 
@@ -21,7 +21,7 @@ lake build
 lake env lean -DautoImplicit=false -DwarningAsError=true Audit.lean
 ```
 
-`lean-toolchain` pins `leanprover/lean4:v4.33.1`. The package has no remote dependencies, so the build itself needs no network once that toolchain exists. `lake build` compiles the umbrella module and all fifty-seven semantic modules. `Audit.lean` requests the transitive axiom dependencies of every project theorem.
+`lean-toolchain` pins `leanprover/lean4:v4.33.1`. The package has no remote dependencies, so the build itself needs no network once that toolchain exists. `lake build` compiles the umbrella module and all fifty-three semantic modules. `Audit.lean` requests the transitive axiom dependencies of every project theorem.
 
 The [verification report](./verification.json) records the checked source hashes and commands. The [axiom audit](./axiom-audit.txt) contains only standard Lean logical axioms where needed: `propext`, `Quot.sound`, and `Classical.choice`. In particular, no theorem depends on `sorryAx` or `Lean.ofReduceBool`.
 
@@ -89,10 +89,6 @@ preserves an earlier inconsistent manifest and explains its repair.
 | [AggregateConsumers](./Zetesis/AggregateConsumers.lean) | Ready schedules use only initial or preceding outputs; covered proposals retain their downstream value association and original aggregate clause |
 | [StructuredWitnesses](./Zetesis/StructuredWitnesses.lean) | Compatible positive witnesses retain complete source atoms and completed condition bindings; identical complete row collections preserve contextual stability |
 | [OrderedProbes](./Zetesis/OrderedProbes.lean) | A monotone finite boundary search partitions rows exactly; certified windows retain every full match under an explicit key implication |
-| [AggregateBounds](./Zetesis/AggregateBounds.lean) | Aggregate proposals retain their equality and activation; active natural count intervals reject outside candidates while inactive instances impose no frozen obligation |
-| [CountEligibility](./Zetesis/CountEligibility.lean) | Complete tuple/atom correspondence preserves original eligibility, indexed witness lists and selected activity in original/frozen thresholds |
-| [EvaluationPrefix](./Zetesis/EvaluationPrefix.lean) | A finite partial-operation plan reads only its initialized prefix; storage reuse preserves values and first errors, and reset makes old cells irrelevant |
-| [LazyRounds](./Zetesis/LazyRounds.lean) | Complete union scans cover individual worlds; independent per-world antecedent and gate checks preserve exact consequences, constraints and fixed-snapshot chunk composition |
 | [Examples](./Zetesis/Examples.lean) | Choices break Gamma antimonotonicity; omitting a constraint gate can lose a stable model |
 
 [theorems.json](./theorems.json) indexes every theorem by qualified name, source file, and line. All theorem assumptions remain explicit in the Lean declarations.
@@ -276,8 +272,8 @@ remain adapter obligations.
 ## Structural binding and finite consequent alternatives
 
 The [grounder tranche record](verification/grounder-tranche-20260907/README.md)
-extends the prior 616-declaration inventory by 30 laws in three modules. That
-checkpoint had 646 theorems in 45 semantic modules. Four
+extends the prior 616-declaration inventory by 30 laws in three modules. The
+complete public inventory now has 646 theorems in 45 semantic modules. Four
 previously private structural extension/single-binding helpers are public laws
 with explicit contracts; their statements and proof bodies are unchanged.
 
@@ -325,9 +321,9 @@ Rust joins, arithmetic inversion or resource refinement.
 
 ## Dependency and ordered-probe laws
 
-The [dependency audit](verification/dependency-tranche-20260907/README.md) added
-sixteen laws in three modules. That checkpoint had 702 theorems in 53 semantic
-modules. It preserves the previous 686-theorem record and all fifty
+The [current audit](verification/dependency-tranche-20260907/README.md) adds sixteen
+laws in three modules, bringing the complete library to 702 theorems in 53
+semantic modules. It preserves the previous 686-theorem record and all fifty
 prior semantic source files unchanged.
 
 `AggregateConsumers.lean` gives eight laws over an already chosen finite schedule
@@ -355,47 +351,3 @@ match when full matching implies the key conditions. Relating Rust's storage
 order and parent binding to those predicates remains an explicit representation
 obligation. The laws do not establish ASP value order, source-carrier completion,
 matcher rollback, Rust resource/cancellation behavior or physical execution.
-
-
-## Aggregate bounds, evaluation storage and lazy rounds
-
-The [current audit](verification/aggregate-bounds-lazy-metal-20260907/README.md)
-extends the library by 21 laws in four modules to **723 theorems in 57 semantic
-modules**. All 702 prior declaration locations, axiom sets and 53 prior semantic
-source files are unchanged. These modules develop fundamentals needed by the
-solver; they do not broaden this release into a general ASP literature project.
-The original theory and its frozen reduct remain the acceptance foundation.
-
-`AggregateBounds.lean` gives four laws about natural count intervals guarded by
-an aggregate equality and rule activation. Active instances reject counts outside
-the interval; inactive instances impose no obligation in the frozen reduct. A
-proposed value alone cannot activate the group. Complete carriers, actual bound
-evaluation, distinct head identities and source safety remain explicit premises.
-Signed machine bounds, generated Rust constraints and stronger partial-search
-pruning are not verified by these laws.
-
-`CountEligibility.lean` gives seven laws extending complete tuple/atom
-correspondence to arbitrary retained eligibility formulas. Key and atom indices
-select the same ordered witnesses, including duplicates. Tuple activity equals
-the representative head conjoined with its coalesced eligibility, in original
-truth and every frozen M/J pair; finite thresholds inherit that equivalence.
-Possible-support traversal, complete distinct representative tables, source
-scope, Rust maps/cursors and resources remain separate obligations. Weighted or
-extremal heads, general aliases and negative head literals are outside this module.
-
-`EvaluationPrefix.lean` gives three laws over finite plans of supplied pure
-partial operations. Appending initializes exactly the next cell; evaluation over
-an explicit live prefix agrees with evaluation over live values alone, including
-the first error. Resetting the live prefix excludes old values. Operation validity,
-operand indices, scalar arithmetic, logical charging, Rust allocation, `Drop` and
-unwinding remain unproved implementation correspondences.
-
-`LazyRounds.lean` gives seven laws about shared source instances and separate
-world snapshots. A completed union scan covers each world's enabled bindings,
-but union membership does not establish truth within that world. Independent
-positive-antecedent and frozen-gate checks yield exact consequences and constraint
-detection. Chunk composition keeps the same immutable snapshot and seed; a
-completed round has the corresponding closed/exact interpretation only under
-fresh complete coverage. Previous-snapshot exhaustion does not certify a later
-snapshot. Rust traversal, atom-ID encoding, budgets, WGSL, readback and publication
-remain separate obligations. These laws provide no physical Metal qualification.

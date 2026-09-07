@@ -16,10 +16,6 @@
 'Zetesis.AggregateAssignment.subset_sums_nodup' depends on axioms: [propext]
 'Zetesis.AggregateAssignment.unique_length_le' depends on axioms: [propext, Quot.sound]
 'Zetesis.AggregateAssignment.unique_nodup' depends on axioms: [propext]
-'Zetesis.AggregateBounds.active_bounds' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.AggregateBounds.inactive_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.AggregateBounds.proposal_does_not_activate' depends on axioms: [propext]
-'Zetesis.AggregateBounds.violated_bound_refutes' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AggregateConsumers.available_iff' depends on axioms: [propext]
 'Zetesis.AggregateConsumers.covered_consumer' depends on axioms: [propext, Quot.sound]
 'Zetesis.AggregateConsumers.false_filter_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -167,13 +163,6 @@
 'Zetesis.ConstructorPatterns.root_capture' depends on axioms: [propext]
 'Zetesis.ConstructorPatterns.successful_shapes' depends on axioms: [propext, Quot.sound]
 'Zetesis.ConstructorPatterns.tuple_refuses_function' does not depend on any axioms
-'Zetesis.CountEligibility.activity_equivalent' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.CountEligibility.activity_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.CountEligibility.activity_original' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.CountEligibility.eligibility_equal' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.CountEligibility.indexed_rows_equal' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.CountEligibility.key_iff_atom' depends on axioms: [propext, Quot.sound]
-'Zetesis.CountEligibility.threshold_equivalent' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.CountHeads.activity_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.CountHeads.activity_original' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.CountHeads.alias_directions_are_rejected' does not depend on any axioms
@@ -222,9 +211,6 @@
 'Zetesis.DagSharing.stored_meaning' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.DagSharing.valid_mono' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.DagSharing.well_formed_reference' depends on axioms: [propext, Quot.sound]
-'Zetesis.EvaluationPrefix.reset_preservation' depends on axioms: [propext, Quot.sound]
-'Zetesis.EvaluationPrefix.storage_preservation' depends on axioms: [propext, Quot.sound]
-'Zetesis.EvaluationPrefix.write_prefix' depends on axioms: [propext, Quot.sound]
 'Zetesis.EventCounterexamples.empty_trace_legal' does not depend on any axioms
 'Zetesis.EventCounterexamples.empty_trace_not_closed' does not depend on any axioms
 'Zetesis.EventCounterexamples.factOperator_monotone' does not depend on any axioms
@@ -349,13 +335,6 @@
 'Zetesis.IndexedCandidates.lookup_insert' depends on axioms: [propext]
 'Zetesis.IndexedCandidates.recorded_projection_rejected' depends on axioms: [propext]
 'Zetesis.IndexedCandidates.unseen_projection_allowed' depends on axioms: [propext]
-'Zetesis.LazyRounds.chunk_concatenation' depends on axioms: [propext, Quot.sound]
-'Zetesis.LazyRounds.completed_round_closed' does not depend on any axioms
-'Zetesis.LazyRounds.completed_round_exact' depends on axioms: [propext, Quot.sound]
-'Zetesis.LazyRounds.union_scan_covers_world' does not depend on any axioms
-'Zetesis.LazyRounds.world_below_union' does not depend on any axioms
-'Zetesis.LazyRounds.world_consequences_exact' does not depend on any axioms
-'Zetesis.LazyRounds.world_constraints_exact' does not depend on any axioms
 'Zetesis.Lifted.bind_monotone' does not depend on any axioms
 'Zetesis.Lifted.certified_materializer_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Lifted.composition_exact' does not depend on any axioms

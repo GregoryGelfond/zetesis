@@ -51,7 +51,3 @@ import Zetesis.PositiveArguments
 import Zetesis.AggregateConsumers
 import Zetesis.StructuredWitnesses
 import Zetesis.OrderedProbes
-import Zetesis.AggregateBounds
-import Zetesis.CountEligibility
-import Zetesis.EvaluationPrefix
-import Zetesis.LazyRounds

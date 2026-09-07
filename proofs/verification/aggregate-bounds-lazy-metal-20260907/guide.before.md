@@ -41,17 +41,3 @@ finite-value path: exact checks filter supplied support rows without creating
 bindings or atoms. Independent inputs and complete row coverage are premises;
 Rust readiness, source/capture correspondence and resource completion remain
 separate obligations.
-
-
-Aggregate-producing source bounds and tuple-count heads connect
-[AggregateBounds](../Zetesis/AggregateBounds.lean) with
-[CountEligibility](../Zetesis/CountEligibility.lean): a proposed value retains its
-original equality, and complete tuple/head correspondence retains every eligibility
-formula. These are source-to-formula obligations, not permission to substitute
-possible-support membership for logical truth.
-
-[EvaluationPrefix](../Zetesis/EvaluationPrefix.lean) specifies the live-prefix
-invariant beneath reusable expression storage. [LazyRounds](../Zetesis/LazyRounds.lean)
-specifies fresh source coverage and separate world truth beneath shared device
-batches. Both are finite execution foundations. Their Rust memory, cursor and
-shader correspondences remain explicit work; neither supplies a device certificate.
