@@ -224,7 +224,7 @@ fn admission_and_materialization_failures_retain_causes_and_locations() {
         RunError::ObservationOutputLimit { limit: 20, .. }
     ));
     assert!(error.source().is_none());
-    assert!(error.to_string().contains("observation Answer bytes"));
+    assert!(error.to_string().contains("human Answer requires at least"));
     assert!(output.is_empty());
 }
 

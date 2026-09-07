@@ -108,7 +108,9 @@ fn observation_failures_emit_no_partial_answer_or_false_completion() {
     assert!(output.is_empty());
 }
 #[test]
-fn existing_plain_cpu_models_do_not_consume_observation_limits() {
+fn plain_models_do_not_consume_observation_work() {
+    let answer = "Answer: 1\na\n";
+    let record_limit = answer.len().to_string();
     let (result, output, _) = solve(
         "a.",
         &[
@@ -117,7 +119,7 @@ fn existing_plain_cpu_models_do_not_consume_observation_limits() {
             "--max-observation-work",
             "0",
             "--max-observation-bytes",
-            "0",
+            &record_limit,
         ],
     );
     assert_eq!(result.unwrap().models, 1);

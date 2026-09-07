@@ -40,7 +40,7 @@ impl MembershipExecution for Injected {
     fn next(
         &mut self,
         models: &mut StableModels,
-        options: &Options,
+        options: &crate::SolveConfig,
         control: &Control,
         _: &Recorder,
     ) -> Option<Result<Interpretation, Failure>> {
@@ -272,7 +272,7 @@ fn failed_device_shaped_checks_do_not_recount_previous_parallel_completion() {
             let mut options = options();
             options.completion_workers = NonZeroUsize::new(workers).unwrap();
             let mut execution = Injected {
-                queue: BatchQueue::new(&options).unwrap(),
+                queue: BatchQueue::new(&(&options).into()).unwrap(),
                 fail_on: if shape { 0 } else { 2 },
                 shape_on: if shape { 2 } else { 0 },
                 ..Default::default()

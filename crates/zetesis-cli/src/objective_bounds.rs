@@ -9,7 +9,7 @@ use zetesis_themelios::objective_bound::{
     ObjectiveBoundLimits, ObjectivePlan, ObjectivePlanLimits,
 };
 
-use crate::Options;
+use crate::SolveConfig;
 use crate::countermodel::Input;
 
 pub(crate) struct Bounds {
@@ -20,7 +20,7 @@ pub(crate) struct Bounds {
 impl Bounds {
     pub(crate) fn new(
         input: Input<'_>,
-        options: &Options,
+        options: &SolveConfig,
         diagnostics: &mut impl Write,
         control: &Control,
     ) -> io::Result<Self> {
@@ -59,7 +59,7 @@ impl Bounds {
         &mut self,
         score: &Score,
         models: &mut StableModels,
-        options: &Options,
+        options: &SolveConfig,
         diagnostics: &mut impl Write,
         control: &Control,
     ) -> io::Result<()> {

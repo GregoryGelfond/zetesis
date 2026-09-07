@@ -40,7 +40,10 @@ impl Default for Limits {
     }
 }
 
-/// A membership result for one original semantic interpretation.
+/// Low-level membership verdict data. Native [`check`] returns a verdict for its
+/// supplied subject; the enum itself carries no binding to that subject or its
+/// theory and can also be constructed by callers. For a record that retains the
+/// subject of an actual native check, use [`crate::check_interpretation`].
 #[derive(Clone, Debug)]
 pub enum Check {
     /// Original model whose proper-subset frozen-reduct query was proved UNSAT.
@@ -53,7 +56,8 @@ pub enum Check {
     Inconclusive(Incomplete),
 }
 impl Check {
-    /// True only after a completed minimality proof.
+    /// Whether this verdict is the `Stable` variant. This inspects data only;
+    /// it does not run a check or authenticate a caller-constructed verdict.
     #[must_use]
     pub fn accepted(&self) -> bool {
         matches!(self, Self::Stable)

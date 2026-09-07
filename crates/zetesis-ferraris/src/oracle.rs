@@ -28,7 +28,9 @@ pub struct Statistics {
     pub subsets: u64,
 }
 
-/// A complete candidate decision with a checkable rejection witness.
+/// Completed membership verdict data with a checkable rejection witness. The
+/// public variants do not retain the original checked subject; use
+/// [`crate::check_interpretation`] for an owned subject-bound native decision.
 #[derive(Clone, Debug)]
 pub enum Verdict {
     /// No proper subset satisfies the candidate's frozen formula reduct.

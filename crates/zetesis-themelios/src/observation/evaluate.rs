@@ -7,12 +7,14 @@ use themelios_program::symbol::{Name, Sign};
 use zetesis_core::Atom;
 
 use super::{
-    Condition, Control, DefaultNegation, Directive, Error, ErrorKind, Evaluation, Limits, Model,
-    ObservationProgram, Operand, Pattern, Relation, Resource, Statistics, Symbol, Template, Value,
+    Condition, ConstructionLimits, Control, DefaultNegation, Directive, Error, ErrorKind,
+    Evaluation, Limits, Model, ObservationProgram, Operand, Pattern, Relation, Resource,
+    Statistics, Symbol, Template, Value,
 };
 
 pub(super) struct Work<'a> {
     pub limits: Limits,
+    pub construction: ConstructionLimits,
     pub control: &'a Control,
     pub statistics: Statistics,
     pub location: Option<Location>,
@@ -52,7 +54,7 @@ impl Work<'_> {
         Ok(values)
     }
     fn compare(&mut self, left: &Value, right: &Value) -> Result<Ordering, Error> {
-        self.step(1 + scalar_bytes(left) as u128 + scalar_bytes(right) as u128)?;
+        self.step(value_work(left) + value_work(right))?;
         Ok(left.compare_terms(right))
     }
     fn symbol_check(
@@ -103,13 +105,13 @@ impl Work<'_> {
         metric.bytes = usize::try_from(observed).expect("checked usize ceiling");
         Ok(())
     }
-    fn build(
+    fn measure(
         &mut self,
         term: &Template,
         binding: &[Option<&Value>],
         depth: usize,
         metric: &mut Metric,
-    ) -> Result<Symbol, Error> {
+    ) -> Result<(), Error> {
         self.step(1)?;
         self.check(
             Resource::Depth,
@@ -117,25 +119,21 @@ impl Work<'_> {
             self.limits.max_symbol_depth as u128,
         )?;
         match term {
-            Template::Value(symbol) => {
-                self.symbol_check(symbol, depth, metric)?;
-                Ok(symbol.clone())
-            }
+            Template::Value(symbol) => self.symbol_check(symbol, depth, metric)?,
             Template::Variable(slot) => {
                 let value =
                     binding[*slot].expect("compiled observation variable has a positive binder");
-                let count = match value {
-                    Value::Structured(value) => value.nodes().len(),
-                    _ => 1,
-                };
-                if let Value::Structured(value) = value {
+                let count = if let Value::Structured(value) = value {
                     self.check(
                         Resource::Depth,
                         depth as u128 + value.depth() as u128 - 1,
                         self.limits.max_symbol_depth as u128,
                     )?;
-                    self.step(count as u128)?;
-                }
+                    self.step(value.nodes().len() as u128)?;
+                    value.nodes().len()
+                } else {
+                    1
+                };
                 self.check(
                     Resource::Nodes,
                     metric.nodes as u128 + count as u128,
@@ -143,29 +141,73 @@ impl Work<'_> {
                 )?;
                 metric.nodes += count;
                 self.payload(scalar_bytes(value), metric)?;
-                scalar(value).map_err(|kind| self.error(kind))
             }
             Template::Function(_, _, arguments) | Template::Tuple(arguments) => {
-                metric.nodes += 1;
                 self.check(
                     Resource::Nodes,
-                    metric.nodes as u128,
+                    metric.nodes as u128 + 1,
                     self.limits.max_symbol_nodes as u128,
                 )?;
+                metric.nodes += 1;
                 if let Template::Function(_, name, _) = term {
                     self.payload(name.as_str().len(), metric)?;
                 }
-                // Child slots are bounded before reserving, even when a later child fails.
-                self.check(
-                    Resource::Nodes,
-                    (metric.nodes as u128) + arguments.len() as u128,
-                    self.limits.max_symbol_nodes as u128,
-                )?;
+                for argument in arguments {
+                    self.measure(argument, binding, depth + 1, metric)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    // Source symbols are depth-capped at compilation. Exact child reservations
+    // avoid the upstream clone's separate, geometrically grown work stack.
+    fn copy_symbol(&mut self, symbol: &Symbol) -> Result<Symbol, Error> {
+        self.step(0)?;
+        Ok(match symbol {
+            Symbol::Infimum => Symbol::Infimum,
+            Symbol::Supremum => Symbol::Supremum,
+            Symbol::Number(value) => Symbol::Number(*value),
+            Symbol::String(value) => Symbol::String(value.clone()),
+            Symbol::Function {
+                name,
+                arguments,
+                sign,
+            } => {
                 let mut values = self.reserve(arguments.len())?;
                 for argument in arguments {
-                    values.push(self.build(argument, binding, depth + 1, metric)?);
+                    values.push(self.copy_symbol(argument)?);
                 }
-                Ok(if let Template::Function(sign, name, _) = term {
+                Symbol::Function {
+                    name: name.clone(),
+                    arguments: values,
+                    sign: *sign,
+                }
+            }
+            Symbol::Tuple(arguments) => {
+                let mut values = self.reserve(arguments.len())?;
+                for argument in arguments {
+                    values.push(self.copy_symbol(argument)?);
+                }
+                Symbol::Tuple(values)
+            }
+        })
+    }
+
+    // Measurement precedes every clone/allocation in this construction. Compiled
+    // template recursion is capped at 64; bound structured values convert iteratively.
+    fn construct(&mut self, term: &Template, binding: &[Option<&Value>]) -> Result<Symbol, Error> {
+        self.step(0)?;
+        Ok(match term {
+            Template::Value(symbol) => self.copy_symbol(symbol)?,
+            Template::Variable(slot) => scalar(binding[*slot].expect("safe observation variable"))
+                .map_err(|kind| self.error(kind))?,
+            Template::Function(_, _, arguments) | Template::Tuple(arguments) => {
+                let mut values = self.reserve(arguments.len())?;
+                for argument in arguments {
+                    values.push(self.construct(argument, binding)?);
+                }
+                if let Template::Function(sign, name, _) = term {
                     Symbol::Function {
                         name: name.clone(),
                         arguments: values,
@@ -173,9 +215,9 @@ impl Work<'_> {
                     }
                 } else {
                     Symbol::Tuple(values)
-                })
+                }
             }
-        }
+        })
     }
 }
 
@@ -192,9 +234,28 @@ impl Metric {
 pub(super) fn scalar_bytes(value: &Value) -> usize {
     match value {
         Value::String(text) | Value::Symbol(text) => text.len(),
-        Value::Structured(value) => value.payload_bytes(),
+        Value::Structured(value) => structured_text_bytes(value),
         _ => 0,
     }
+}
+pub(super) fn structured_text_bytes(value: &zetesis_core::StructuralValue) -> usize {
+    value
+        .nodes()
+        .iter()
+        .map(|node| match node {
+            zetesis_core::ValueNode::String(text)
+            | zetesis_core::ValueNode::Symbol(text)
+            | zetesis_core::ValueNode::Function { name: text, .. } => text.len(),
+            _ => 0,
+        })
+        .sum()
+}
+fn value_work(value: &Value) -> u128 {
+    let nodes = match value {
+        Value::Structured(value) => value.nodes().len(),
+        _ => 1,
+    };
+    nodes as u128 + scalar_bytes(value) as u128
 }
 pub(super) fn scalar(value: &Value) -> Result<Symbol, ErrorKind> {
     Ok(match value {
@@ -343,7 +404,20 @@ fn emit<'a>(
     work.statistics.bindings += 1;
     if conditions(directive, atoms, binding, work)? {
         let mut metric = Metric::default();
-        let term = work.build(&directive.term, binding, 1, &mut metric)?;
+        work.measure(&directive.term, binding, 1, &mut metric)?;
+        // Symbol reconstruction reserves at most N stack cells while retaining
+        // at most N output cells. This logical storage bound does not charge
+        // unrelated capacity or cached spelling of the borrowed input value.
+        // Canonical Name::new validation temporarily copies name text into a
+        // Source; the second text allowance covers that live validation scratch.
+        let construction = 2 * metric.nodes as u128 * std::mem::size_of::<Symbol>() as u128
+            + 2 * metric.bytes as u128;
+        work.check(
+            Resource::ConstructionBytes,
+            construction,
+            work.construction.max_bytes as u128,
+        )?;
+        let term = work.construct(&directive.term, binding)?;
         insert(term, metric, result, bytes, work)?;
     }
     Ok(())
@@ -435,10 +509,12 @@ pub(super) fn evaluate(
     program: &ObservationProgram,
     model: &Model,
     limits: Limits,
+    construction: ConstructionLimits,
     control: &Control,
 ) -> Result<Evaluation, Error> {
     let mut work = Work {
         limits,
+        construction,
         control,
         statistics: Statistics::default(),
         location: None,

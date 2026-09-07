@@ -13,6 +13,11 @@ pub struct Seed {
 }
 impl Seed {
     /// Validate true atoms against the program's symbolic gate carrier.
+    /// The input iterator must terminate. Construction consumes its atoms, checks
+    /// signature/domain membership, and canonicalizes them in a tree set; it does
+    /// not enumerate the carrier or ground the program. Comparisons can inspect
+    /// atom/value payload. The program handle is shared; distinct atoms are owned.
+    /// Tree-set allocation is infallible and is not a typed allocation refusal.
     ///
     /// # Errors
     /// Returns [`SeedError::OutsideCarrier`] for a foreign predicate or value.
@@ -49,31 +54,43 @@ impl Seed {
     }
 }
 
-/// A canonical set of derived atoms. This is data, not a claim of stability;
-/// only an oracle outcome supplies that claim.
+/// A canonical set of supplied atoms, also named [`Interpretation`]. Construction
+/// establishes neither derivation, program satisfaction, nor stable membership.
+/// Cloning copies the tree and owned atom/string payload; structured values share
+/// their immutable node storage. No program or oracle is retained.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Model {
     atoms: BTreeSet<Atom>,
 }
 impl Model {
-    /// Coalesce derived atoms into canonical set order.
+    /// Coalesce supplied atoms into canonical set order.
+    /// The iterator must terminate. Construction owns distinct atoms and uses
+    /// `O(n log n)` comparisons for `n` input atoms; comparisons inspect tuple and
+    /// text/node payload. Tree allocation is infallible, not a typed refusal.
     #[must_use]
     pub fn new(atoms: impl IntoIterator<Item = Atom>) -> Self {
         Self {
             atoms: atoms.into_iter().collect(),
         }
     }
-    /// All derived atoms in canonical order.
+    /// All supplied atoms in canonical order. Borrowing is constant time;
+    /// traversing the set visits each distinct atom without cloning it.
     #[must_use]
     pub fn atoms(&self) -> &BTreeSet<Atom> {
         &self.atoms
     }
-    /// Exact result membership.
+    /// Exact set membership with a logarithmic number of atom comparisons.
+    /// A comparison can inspect tuple and text/node payload.
     #[must_use]
     pub fn contains(&self, atom: &Atom) -> bool {
         self.atoms.contains(atom)
     }
 }
+
+/// A finite total truth assignment represented by its true atoms. Every absent
+/// atom is false. This raw value carries no program-satisfaction or stability
+/// guarantee; [`Model`] remains available as the original compatible name.
+pub type Interpretation = Model;
 
 /// A candidate construction or representation refusal, never logical rejection.
 #[derive(Clone, Debug, PartialEq, Eq)]

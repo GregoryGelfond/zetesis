@@ -1,11 +1,10 @@
-use crate::engine::Engine;
 use crate::failure::Progress;
 use crate::phase_timing::{Recorder, SolvePhase};
 use crate::{Backend, Grounder, Options, RunFailure};
 use std::fmt;
 use std::io::{self, Write};
 use zetesis_core::{Model, Program};
-use zetesis_cpu::{BatchError, CandidateLimits, Candidates, Control, Stop};
+use zetesis_cpu::{BatchError, Control, Stop};
 use zetesis_themelios::{
     AdmissionFailure, BundleAdmissionFailure, BundleError, ExpansionFailure, OutputSelection,
     SourceBundle,
@@ -16,7 +15,8 @@ use zetesis_themelios::{
 pub enum Completion {
     /// Every relevant candidate was checked. With an objective, candidates
     /// worse than a verified incumbent may be omitted; all optimal ties remain
-    /// covered. Zero models now establishes UNSAT.
+    /// covered. This is search coverage, independently of output delivery.
+    /// UNSAT additionally requires no verified stable model.
     Exhausted,
     /// The requested number of models was returned; coverage remains partial.
     RequestedModels,
@@ -92,7 +92,7 @@ pub enum RunError {
     JsonRecord(zetesis_themelios::observation::ViewError),
     /// A complete buffered Answer would exceed its byte ceiling.
     ObservationOutputLimit {
-        /// Required record bytes.
+        /// Attempted prefix bytes: a lower bound on the required complete record.
         observed: u128,
         /// Inclusive configured ceiling.
         limit: usize,
@@ -127,6 +127,15 @@ pub enum RunError {
         /// Explicit materialization request.
         grounder: Grounder,
     },
+    /// An already prepared representation cannot honor the requested strategy.
+    PreparedInput {
+        /// Representation supplied by the caller.
+        profile: crate::PreparedProfile,
+        /// Explicit membership strategy.
+        oracle: crate::Oracle,
+        /// Explicit materialization strategy.
+        grounder: Grounder,
+    },
     /// Static normal-rule to formula translation exceeded its admission contract.
     Formula(zetesis_ferraris::AdmissionError),
     /// Finite source-to-formula admission was refused with original locations.
@@ -135,6 +144,8 @@ pub enum RunError {
     FormulaBundleAdmission(zetesis_themelios::FormulaBundleFailure),
     /// Output could not be written.
     Output(io::Error),
+    /// Cancellation or a deadline stopped record preparation or prepublication.
+    PublicationStopped(Stop),
     /// Explicit static lowering was refused.
     Static(zetesis_core::StaticError),
     /// GPU capability, submission, or result transport failed.
@@ -187,13 +198,16 @@ impl fmt::Display for RunError {
                 "the countermodel oracle requires --grounder eager or auto; requested {backend:?} with {}",
                 grounder.label()
             ),
+            Self::PreparedInput { profile, oracle, grounder } => write!(f,
+                "prepared {profile:?} cannot honor oracle {oracle:?} with grounder {grounder:?}"),
             Self::Formula(error) => error.fmt(f),
             Self::FormulaAdmission(error) => error.fmt(f),
             Self::FormulaBundleAdmission(error) => error.fmt(f),
             Self::Output(error) => write!(f, "output: {error}"),
+            Self::PublicationStopped(error) => write!(f, "publication stopped: {error}"),
             Self::Observation(error) => error.fmt(f),
             Self::JsonRecord(error) => error.fmt(f),
-            Self::ObservationOutputLimit { observed, limit } => write!(f, "observation Answer bytes {observed} exceed limit {limit}"),
+            Self::ObservationOutputLimit { observed, limit } => write!(f, "human Answer requires at least {observed} bytes; limit {limit}"),
             Self::Static(error) => error.fmt(f),
             #[cfg(feature = "gpu")]
             Self::Gpu(error) => error.fmt(f),
@@ -245,6 +259,7 @@ impl std::error::Error for RunError {
             Self::Batch(error) => Some(error),
             Self::CompletionPool(error) => Some(error),
             Self::Output(error) => Some(error),
+            Self::PublicationStopped(error) => Some(error),
             Self::Observation(error) => Some(error),
             Self::JsonRecord(error) => Some(error),
             Self::ObservationOutputLimit { .. } => None,
@@ -260,6 +275,7 @@ impl std::error::Error for RunError {
             #[cfg(feature = "gpu")]
             Self::Gpu(error) => Some(error),
             Self::Words(error) => Some(error),
+            Self::PreparedInput { .. } => None,
         }
     }
 }
@@ -347,6 +363,37 @@ pub fn run_detailed_with_diagnostics(
     diagnostics: &mut impl Write,
     control: &Control,
 ) -> Result<Report, RunFailure> {
+    run_finalized_with_diagnostics(source, options, output, diagnostics, control)
+        .map(crate::SolveReport::into_report)
+        .map_err(crate::SolveFailure::into_legacy)
+}
+
+/// Admit source and publish models, retaining semantic evidence independently.
+/// Diagnostics are discarded; [`run_finalized_with_diagnostics`] retains an
+/// explicit diagnostics sink. Existing [`run_detailed`] remains compatible.
+///
+/// # Errors
+/// Returns the typed cause, finalized available semantics and delivery evidence.
+pub fn run_finalized(
+    source: String,
+    options: &Options,
+    output: &mut impl Write,
+    control: &Control,
+) -> Result<crate::SolveReport, crate::SolveFailure> {
+    run_finalized_with_diagnostics(source, options, output, &mut io::sink(), control)
+}
+
+/// Run with finalized semantic evidence independent of publication.
+///
+/// # Errors
+/// Retains the original cause, semantic outcome, and separate reporting failures.
+pub fn run_finalized_with_diagnostics(
+    source: String,
+    options: &Options,
+    output: &mut impl Write,
+    diagnostics: &mut impl Write,
+    control: &Control,
+) -> Result<crate::SolveReport, crate::SolveFailure> {
     let mut document = crate::output::Document::new(output, options.json)?;
     let phases = Recorder::new(options.stats);
     let result = crate::admission::source(
@@ -400,6 +447,22 @@ pub fn run_bundle_detailed_with_diagnostics(
     diagnostics: &mut impl Write,
     control: &Control,
 ) -> Result<Report, RunFailure> {
+    run_bundle_finalized_with_diagnostics(bundle, options, output, diagnostics, control)
+        .map(crate::SolveReport::into_report)
+        .map_err(crate::SolveFailure::into_legacy)
+}
+
+/// Run with finalized semantic evidence independent of publication.
+///
+/// # Errors
+/// Retains the original cause, semantic outcome, and separate reporting failures.
+pub fn run_bundle_finalized_with_diagnostics(
+    bundle: SourceBundle,
+    options: &Options,
+    output: &mut impl Write,
+    diagnostics: &mut impl Write,
+    control: &Control,
+) -> Result<crate::SolveReport, crate::SolveFailure> {
     let mut document = crate::output::Document::new(output, options.json)?;
     let phases = Recorder::new(options.stats);
     let result = crate::admission::bundle(
@@ -416,20 +479,22 @@ pub fn run_bundle_detailed_with_diagnostics(
 
 #[cfg(test)]
 pub(crate) fn report_statistics(
-    result: Result<Progress, RunFailure>,
+    result: Result<Progress, crate::SolveFailure>,
     diagnostics: &mut impl Write,
     options: &Options,
     phases: &Recorder,
 ) -> Result<Report, RunFailure> {
-    report_progress_statistics(result, diagnostics, options, phases).map(|progress| progress.report)
+    report_progress_statistics(result, diagnostics, options, phases)
+        .map(|progress| progress.report)
+        .map_err(crate::SolveFailure::into_legacy)
 }
 
 fn report_progress_statistics(
-    mut result: Result<Progress, RunFailure>,
+    mut result: Result<Progress, crate::SolveFailure>,
     diagnostics: &mut impl Write,
     options: &Options,
     phases: &Recorder,
-) -> Result<Progress, RunFailure> {
+) -> Result<Progress, crate::SolveFailure> {
     if let Some(timings) = phases.snapshot() {
         match &mut result {
             Ok(progress) => progress.report.phase_timings = Some(timings),
@@ -447,7 +512,7 @@ fn report_progress_statistics(
             return Err(match result {
                 Ok(progress) => progress.fail(RunError::Output(error)),
                 Err(mut failure) => {
-                    failure.secondary_output = Some(error);
+                    failure.record_diagnostics(error);
                     failure
                 }
             });
@@ -464,21 +529,17 @@ pub(crate) fn solve_program(
     diagnostics: &mut impl Write,
     control: &Control,
     phases: &Recorder,
-) -> Result<Progress, RunFailure> {
+) -> Result<Progress, crate::SolveFailure> {
     let _solving = phases.stage(crate::SolveStage::Solving);
-    let mut engine = phases.measure(SolvePhase::ExecutionSetup, || {
-        Engine::new(options, program, diagnostics, phases)
-    })?;
-    let mut candidates = phases.measure(SolvePhase::CandidateSetup, || {
-        Candidates::new(
-            program,
-            CandidateLimits {
-                max_candidates: options.max_candidates,
-                max_carrier_atoms: options.max_carrier_atoms,
-            },
-            control.clone(),
-        )
-    });
+    let config = options.into();
+    let mut session = crate::closure_session::ClosureSession::new(
+        program,
+        None,
+        &config,
+        diagnostics,
+        control,
+        phases,
+    )?;
     let mut progress = Progress::new(0);
     let observations = zetesis_themelios::observation::ObservationProgram::default();
     let display = crate::display::Display {
@@ -487,75 +548,23 @@ pub(crate) fn solve_program(
         options,
         control,
     };
-    let report = &mut progress.report;
-    let result = (|| {
-        loop {
-            let count = if report.checked == 0 {
-                1
-            } else {
-                options.batch_size.get()
-            };
-            let mut seeds = Vec::new();
-            let mut finished = false;
-            let mut interruption = None;
-            let generation = phases.start(SolvePhase::CandidateGeneration);
-            for _ in 0..count {
-                match candidates.next() {
-                    Some(Ok(seed)) => seeds.push(seed),
-                    Some(Err(error)) => {
-                        interruption = Some(error);
-                        progress.observed_interruption = Some(Interruption::Oracle(error));
-                        break;
-                    }
-                    None => {
-                        finished = true;
-                        break;
-                    }
+    loop {
+        let next = session.next(&config, diagnostics, control, phases);
+        progress.apply(session.outcome());
+        match next {
+            Some(Ok(model)) => {
+                let result = phases.measure(SolvePhase::ObservationOutput, || {
+                    display.write(output, progress.report.models + 1, &model, None)
+                });
+                if let Err(error) = result {
+                    return Err(progress.fail(error));
                 }
+                progress.report.models += 1;
             }
-            drop(generation);
-            let results = engine.check(options, program, &seeds, diagnostics, control, phases)?;
-            // The batch oracle has already completed every returned membership
-            // result, even if later publication stops before consuming them all.
-            progress.verified_models += results
-                .iter()
-                .filter(|result| matches!(result, Ok(Some(_))))
-                .count() as u64;
-            for result in results {
-                report.checked += 1;
-                match result {
-                    Ok(Some(model)) => {
-                        phases.measure(SolvePhase::ObservationOutput, || {
-                            display.write(output, report.models + 1, &model, None)
-                        })?;
-                        report.models += 1;
-                        if options.models != 0 && report.models >= options.models {
-                            return Ok(Completion::RequestedModels);
-                        }
-                    }
-                    Ok(None) => (),
-                    Err(error) => {
-                        interruption = Some(error);
-                        break;
-                    }
-                }
-            }
-            if let Some(error) = interruption {
-                report.interruption = Some(Interruption::Oracle(error));
-                return Ok(Completion::Interrupted);
-            }
-            if finished {
-                return Ok(Completion::Exhausted);
-            }
+            Some(Err(error)) => return Err(progress.fail(error)),
+            None => break,
         }
-    })();
-    progress.report.discovered_gate_atoms = candidates.discovered_atoms();
-    let completion = match result {
-        Ok(completion) => completion,
-        Err(error) => return Err(progress.fail(error)),
-    };
-    progress.completion = Some(completion);
-    progress.report.completion = completion;
+    }
     let finished = phases.measure(SolvePhase::ObservationOutput, || {
         finish(output, &progress.report, options.json)
     });

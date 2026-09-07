@@ -14,6 +14,9 @@ mod oracle;
 mod normal;
 mod aggregate;
 mod tight;
+mod checked;
+
+pub use checked::{CheckedInterpretation, StableInterpretation, check_interpretation};
 
 pub use aggregate::{
     AggregateBuild, AggregateComparison, AggregateElement, AggregateError, AggregateErrorKind,

@@ -8,7 +8,7 @@ use zetesis_sat::{Incomplete, StableModels};
 use crate::phase_timing::Recorder;
 #[cfg(feature = "gpu")]
 use crate::phase_timing::SolvePhase;
-use crate::{Backend, Options, RunError};
+use crate::{Backend, RunError, SolveConfig};
 
 pub use crate::completion_accounting::CompletionAccounting;
 
@@ -49,7 +49,7 @@ pub(crate) trait MembershipExecution {
     fn next(
         &mut self,
         models: &mut StableModels,
-        options: &Options,
+        options: &SolveConfig,
         control: &zetesis_cpu::Control,
         phases: &Recorder,
     ) -> Option<Result<Interpretation, Failure>>;
@@ -70,7 +70,10 @@ pub(crate) enum Execution {
 }
 
 impl Execution {
-    pub(crate) fn new(options: &Options, diagnostics: &mut impl Write) -> Result<Self, RunError> {
+    pub(crate) fn new(
+        options: &SolveConfig,
+        diagnostics: &mut impl Write,
+    ) -> Result<Self, RunError> {
         if matches!(options.backend, Backend::Auto | Backend::Cpu) {
             let oracle = if options.oracle == crate::Oracle::Auto {
                 "Ferraris reduct membership"
@@ -98,12 +101,12 @@ impl Execution {
     }
 
     #[cfg(not(feature = "gpu"))]
-    fn gpu(_: &Options, _: &mut impl Write) -> Result<Self, RunError> {
+    fn gpu(_: &SolveConfig, _: &mut impl Write) -> Result<Self, RunError> {
         Err(RunError::BackendUnavailable)
     }
 
     #[cfg(feature = "gpu")]
-    fn gpu(options: &Options, diagnostics: &mut impl Write) -> Result<Self, RunError> {
+    fn gpu(options: &SolveConfig, diagnostics: &mut impl Write) -> Result<Self, RunError> {
         let oracle = zetesis_wgpu::GpuFormulaOracle::new_selected(
             zetesis_wgpu::GpuOptions::default(),
             crate::engine::selection(options.backend),
@@ -165,7 +168,7 @@ impl MembershipExecution for Execution {
     fn next(
         &mut self,
         models: &mut StableModels,
-        options: &Options,
+        options: &SolveConfig,
         control: &zetesis_cpu::Control,
         phases: &Recorder,
     ) -> Option<Result<Interpretation, Failure>> {
@@ -202,7 +205,7 @@ fn propagate(
     statistics: &mut FormulaExecutionStatistics,
     theory: &zetesis_ferraris::Theory,
     candidates: &[Interpretation],
-    options: &Options,
+    options: &SolveConfig,
     phases: &Recorder,
 ) -> Result<Vec<zetesis_sat::BatchVerdict>, Failure> {
     let limits = zetesis_wgpu::FormulaLimits {
@@ -268,4 +271,19 @@ fn batch_statistics(
     statistics.queued_models = queue.len();
     statistics.completion = queue.accounting();
     statistics
+}
+
+impl<E: MembershipExecution + ?Sized> MembershipExecution for &mut E {
+    fn next(
+        &mut self,
+        models: &mut StableModels,
+        config: &SolveConfig,
+        control: &zetesis_cpu::Control,
+        phases: &Recorder,
+    ) -> Option<Result<Interpretation, Failure>> {
+        (**self).next(models, config, control, phases)
+    }
+    fn statistics(&self, models: &StableModels) -> Option<FormulaExecutionStatistics> {
+        (**self).statistics(models)
+    }
 }

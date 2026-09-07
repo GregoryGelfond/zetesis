@@ -355,6 +355,9 @@ import Zetesis
 #print axioms Zetesis.Optimization.constant_on_stable_iff
 #print axioms Zetesis.Optimization.optimal_is_minimal_reduct
 #print axioms Zetesis.Optimization.optimal_is_stable
+#print axioms Zetesis.Outcomes.completed_unsatisfiable_iff_empty
+#print axioms Zetesis.Outcomes.delivered_values_are_valid
+#print axioms Zetesis.Outcomes.empty_delivery_can_hide_a_valid_model
 #print axioms Zetesis.Propagation.disabled_gate_leaves_inputs_free
 #print axioms Zetesis.Propagation.disabled_implication_must_not_be_enforced
 #print axioms Zetesis.Propagation.empty_candidate_has_no_proper_tested_world

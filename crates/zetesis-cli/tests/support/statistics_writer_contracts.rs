@@ -7,7 +7,7 @@ use clap::Parser;
 
 use crate::test_writer::BoundedWriter;
 use crate::{
-    Backend, Completion, Options, Report, RunError, RunFailure, run_detailed_with_diagnostics,
+    Backend, Completion, Options, Report, RunError, SolveFailure, run_finalized_with_diagnostics,
 };
 use zetesis_cpu::Control;
 
@@ -28,21 +28,22 @@ fn options(arguments: &[&str]) -> Options {
     .unwrap()
 }
 
-fn actual(source: &str, options: &Options, control: &Control) -> Result<Report, RunFailure> {
+fn actual(source: &str, options: &Options, control: &Control) -> Result<Report, SolveFailure> {
     assert!(
         !options.stats,
         "obtain the outcome independently of its statistics rendering"
     );
-    run_detailed_with_diagnostics(
+    run_finalized_with_diagnostics(
         source.into(),
         options,
         &mut io::sink(),
         &mut io::sink(),
         control,
     )
+    .map(crate::SolveReport::into_report)
 }
 
-fn every_prefix(options: &Options, outcome: &Result<Report, RunFailure>) -> String {
+fn every_prefix(options: &Options, outcome: &Result<Report, SolveFailure>) -> String {
     let elapsed = Duration::from_micros(1_234);
     let mut reference = Vec::new();
     super::write_detailed(&mut reference, options, outcome.as_ref(), elapsed).unwrap();

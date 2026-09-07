@@ -75,7 +75,7 @@ fn load_input(options: &Options) -> Result<Input, RunError> {
     {
         return Err(RunError::MixedStandardInput);
     }
-    crate::engine::validate_combination(options)?;
+    crate::engine::validate_combination(&options.into())?;
     if options.input.as_os_str() == "-" {
         let source = read_source(options).map_err(RunError::Input)?;
         Ok(Input::Source(source))

@@ -24,6 +24,15 @@ impl Default for CandidateLimits {
     }
 }
 
+/// Retained termination of the gate-seed enumerator, independent of membership.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CandidateTermination {
+    /// Every seed in the complete gate carrier was returned.
+    Exhausted,
+    /// Enumeration stopped before proving complete seed coverage.
+    Stopped(Stop),
+}
+
 /// Enumerate empty, `{a}`, `{b}`, `{a,b}`, `{c}`, and so on. A new carrier
 /// atom is requested only on carry beyond the known binary counter. Creation
 /// and the first successful empty seed never request a carrier tuple.
@@ -36,7 +45,7 @@ pub struct Candidates<'a> {
     control: Control,
     emitted: u64,
     started: bool,
-    finished: bool,
+    termination: Option<CandidateTermination>,
 }
 
 impl<'a> Candidates<'a> {
@@ -52,7 +61,7 @@ impl<'a> Candidates<'a> {
             control,
             emitted: 0,
             started: false,
-            finished: false,
+            termination: None,
         }
     }
 
@@ -60,6 +69,14 @@ impl<'a> Candidates<'a> {
     #[must_use]
     pub fn discovered_atoms(&self) -> usize {
         self.atoms.len()
+    }
+
+    /// Retained stopping outcome, even after the error item has been consumed.
+    /// `None` means not yet terminated. Exhausted seed generation alone does not
+    /// prove that membership checking completed, or that no stable model exists.
+    #[must_use]
+    pub const fn termination(&self) -> Option<CandidateTermination> {
+        self.termination
     }
 
     fn next_seed(&mut self) -> Result<Option<Seed>, Stop> {
@@ -116,17 +133,17 @@ impl Iterator for Candidates<'_> {
     type Item = Result<Seed, Stop>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.finished {
+        if self.termination.is_some() {
             return None;
         }
         match self.next_seed() {
             Ok(Some(seed)) => Some(Ok(seed)),
             Ok(None) => {
-                self.finished = true;
+                self.termination = Some(CandidateTermination::Exhausted);
                 None
             }
             Err(error) => {
-                self.finished = true;
+                self.termination = Some(CandidateTermination::Stopped(error));
                 Some(Err(error))
             }
         }

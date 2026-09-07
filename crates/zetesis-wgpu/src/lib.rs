@@ -15,6 +15,7 @@ mod packing;
 mod residency;
 mod runtime;
 mod selection;
+mod adapter;
 
 use std::fmt;
 use std::time::Duration;
@@ -29,6 +30,8 @@ pub use formula::{
     FormulaBatchStats, FormulaCheck, FormulaLimits, FormulaStatistics, FormulaVerdict,
     GpuFormulaOracle, ResidualReason,
 };
+
+pub use adapter::{AdapterBackend, AdapterCategory, AdapterMetadata};
 
 pub use selection::{
     GpuBackendPreference, GpuInfo, GpuSelection, NVIDIA_VENDOR_ID, compiled_backends,

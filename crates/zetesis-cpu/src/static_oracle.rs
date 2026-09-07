@@ -1,6 +1,6 @@
 //! Packed integer closure scans over an explicitly compiled static graph.
 
-use zetesis_core::{AtomId, GroundProgram, GroundRule, Seed};
+use zetesis_core::{AtomId, GroundProgram, GroundRule, Interpretation, Program, Seed};
 
 use crate::{Control, Limits, Stop};
 
@@ -25,6 +25,7 @@ pub struct StaticStatistics {
 /// the [`GroundProgram`] supplied to [`check_static`].
 #[derive(Clone, Debug)]
 pub struct StaticCheck {
+    program: Program,
     closure_words: Vec<u32>,
     constraint_violated: bool,
     seed_mismatch: bool,
@@ -32,6 +33,55 @@ pub struct StaticCheck {
 }
 
 impl StaticCheck {
+    /// The admitted source instance underlying the checked graph. Constant time.
+    #[must_use]
+    pub const fn program(&self) -> &Program {
+        &self.program
+    }
+
+    /// Decode the completed closure only with a graph of the checked instance.
+    /// Compiled graphs of the same immutable program have the same canonical
+    /// carrier order. This scans the carrier and clones selected atom payload into
+    /// a tree set; it performs no grounding or membership check.
+    /// Tree construction and payload copying use infallible allocation, not a
+    /// typed resource refusal. See [`GroundProgram::interpretation_from_words`].
+    ///
+    /// # Errors
+    /// Rejects a foreign program before decoding, even when word counts match.
+    /// An invalid packed shape reports an internal admitted-invariant failure.
+    pub fn interpretation(&self, graph: &GroundProgram) -> Result<Interpretation, Stop> {
+        if !self.program.same_instance(graph.program()) {
+            return Err(Stop::WrongProgram);
+        }
+        graph
+            .interpretation_from_words(&self.closure_words)
+            .map_err(|_| Stop::InvalidProgram)
+    }
+
+    /// Decode an accepted closure into a stable receipt for the checked program.
+    /// A rejected check returns `None`; the original check remains available.
+    /// Decoding has the cost of [`Self::interpretation`], with a shared program
+    /// handle. No reduct computation is repeated.
+    ///
+    /// # Errors
+    /// Rejects foreign graph identity even for a rejected check; an invalid word
+    /// shape returns [`Stop::InvalidProgram`].
+    pub fn stable_interpretation(
+        &self,
+        graph: &GroundProgram,
+    ) -> Result<Option<crate::StableInterpretation>, Stop> {
+        if !self.program.same_instance(graph.program()) {
+            return Err(Stop::WrongProgram);
+        }
+        if !self.accepted() {
+            return Ok(None);
+        }
+        Ok(Some(crate::StableInterpretation::new(
+            self.program.clone(),
+            self.interpretation(graph)?,
+        )))
+    }
+
     /// Exact least closure of the selected positive reduct, even for rejection.
     /// Word count matches the graph and all unused tail bits are zero.
     #[must_use]
@@ -200,6 +250,7 @@ pub fn check_static(
     }
     control.poll()?;
     Ok(StaticCheck {
+        program: graph.program().clone(),
         closure_words: closure,
         constraint_violated,
         seed_mismatch,

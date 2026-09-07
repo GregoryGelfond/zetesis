@@ -14,6 +14,9 @@ mod ordering;
 mod encoding;
 mod ferraris;
 mod timing;
+mod checked;
+
+pub use checked::{CheckedInterpretation, StableInterpretation, check_interpretation};
 
 pub use cnf::{AdmissionError, AdmissionLimits, Assignment, Cnf, Literal, Resource};
 pub use error::Incomplete;

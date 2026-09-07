@@ -2,13 +2,12 @@
 
 use std::cmp::Ordering;
 use std::fmt;
-use std::io::Write;
 
 use zetesis_core::{Model, Value};
 use zetesis_cpu::Control;
 use zetesis_objective::{ObjectiveProgram, Score};
 
-use crate::{Interruption, Options, Report, RunError};
+use crate::{Interruption, SolveConfig};
 
 /// A completely evaluated incumbent, not by itself an optimality certificate.
 #[derive(Clone, Debug)]
@@ -59,7 +58,7 @@ impl Incumbents {
         &mut self,
         program: &ObjectiveProgram,
         model: Model,
-        options: &Options,
+        options: &SolveConfig,
         control: &Control,
     ) -> Result<bool, Interruption> {
         let evaluation = zetesis_objective::evaluate(
@@ -142,7 +141,7 @@ impl Incumbents {
     fn admit(
         &mut self,
         model: &Model,
-        options: &Options,
+        options: &SolveConfig,
         replacement: bool,
     ) -> Result<(), OptimizationStop> {
         let (models, atoms, bytes) = if replacement {
@@ -172,30 +171,20 @@ impl Incumbents {
             .map_err(|_| OptimizationStop::Allocation)
     }
 
-    pub(crate) fn write(
-        &self,
-        output: &mut impl Write,
-        report: &mut Report,
-        display: &crate::display::Display<'_>,
-    ) -> Result<(), RunError> {
-        if let Some(best) = &self.best {
-            for model in &self.models {
-                display.write(output, report.models + 1, model, Some(&best.score))?;
-                report.models += 1;
-            }
-            if !display.options.json {
-                writeln!(
-                    output,
-                    "Incumbent ties: {}; stable models scored: {}; objective work: {}",
-                    best.tied_models, best.scored_models, best.work
-                )?;
-            }
-        }
-        Ok(())
+    pub(crate) fn metadata(&self) -> Option<&Optimization> {
+        self.best.as_ref()
     }
 
-    pub(crate) fn into_optimization(self) -> Option<Optimization> {
-        self.best
+    pub(crate) const fn scored(&self) -> u64 {
+        self.scored
+    }
+
+    pub(crate) fn retained(&self) -> usize {
+        self.models.len()
+    }
+
+    pub(crate) fn take_models(&mut self) -> std::vec::IntoIter<Model> {
+        std::mem::take(&mut self.models).into_iter()
     }
 }
 

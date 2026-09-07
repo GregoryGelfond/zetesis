@@ -1,5 +1,9 @@
 //! Located source declarations and display selection, separate from semantics.
 
+mod compile;
+
+pub use compile::{MetadataError, MetadataFeature, MetadataLimits, MetadataResource};
+
 use std::collections::BTreeSet;
 
 use themelios_base::span::Location;
@@ -52,7 +56,7 @@ impl LocatedDirective {
     }
 }
 
-/// Display selection only. Models that display the same atoms remain distinct
+/// Atom-channel selection only. Term observations are independent. Models that display the same atoms remain distinct
 /// underlying stable models and must be counted/enumerated independently.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct OutputSelection {
@@ -60,7 +64,101 @@ pub struct OutputSelection {
     signatures: BTreeSet<Predicate>,
 }
 
+/// Truthful atom-channel name; `OutputSelection` remains the compatibility name.
+pub type AtomSelection = OutputSelection;
+
+/// Inclusive admission limits for an explicit signed-signature slice.
+#[derive(Clone, Copy, Debug)]
+pub struct AtomSelectionLimits {
+    /// Input occurrences, including duplicates, before set construction.
+    pub max_signatures: usize,
+    /// Sum of input UTF-8 predicate-name lengths, including duplicates.
+    /// The resulting set holds at most this text plus one Predicate per input;
+    /// allocator overhead and tree bookkeeping are excluded.
+    pub max_name_bytes: usize,
+}
+impl Default for AtomSelectionLimits {
+    fn default() -> Self {
+        Self {
+            max_signatures: 1_024,
+            max_name_bytes: 1_048_576,
+        }
+    }
+}
+
+/// Explicit atom selection was refused before cloning any signature.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AtomSelectionError {
+    /// Too many input occurrences.
+    Signatures {
+        /// Inclusive ceiling.
+        limit: usize,
+        /// Required count.
+        observed: usize,
+    },
+    /// Cumulative predicate-name text exceeds its inclusive ceiling.
+    NameBytes {
+        /// Inclusive ceiling.
+        limit: usize,
+        /// Required byte count.
+        observed: u128,
+    },
+}
+impl std::fmt::Display for AtomSelectionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "atom selection refused: {self:?}")
+    }
+}
+impl std::error::Error for AtomSelectionError {}
+
 impl OutputSelection {
+    /// Select all original atoms. No allocation or observation evaluation occurs.
+    #[must_use]
+    pub fn all() -> Self {
+        Self::default()
+    }
+    /// Select no original atoms. Term observations remain independent.
+    #[must_use]
+    pub fn none() -> Self {
+        Self {
+            explicit: true,
+            signatures: BTreeSet::new(),
+        }
+    }
+    /// Select the union of the supplied signed predicate signatures.
+    /// Input occurrences and text are checked before cloning; equal signatures
+    /// deduplicate without changing the limits charged for their input. An empty
+    /// slice selects no atoms. Time is O(N log N) predicate comparisons, including
+    /// name bytes; retained text/cells are bounded by the admitted slice.
+    ///
+    /// # Errors
+    /// Returns a typed inclusive count/text refusal before constructing the set.
+    pub fn from_signatures(
+        signatures: &[Predicate],
+        limits: AtomSelectionLimits,
+    ) -> Result<Self, AtomSelectionError> {
+        if signatures.len() > limits.max_signatures {
+            return Err(AtomSelectionError::Signatures {
+                limit: limits.max_signatures,
+                observed: signatures.len(),
+            });
+        }
+        let mut bytes = 0_u128;
+        for signature in signatures {
+            bytes += signature.name().len() as u128;
+            if bytes > limits.max_name_bytes as u128 {
+                return Err(AtomSelectionError::NameBytes {
+                    limit: limits.max_name_bytes,
+                    observed: bytes,
+                });
+            }
+        }
+        Ok(Self {
+            explicit: true,
+            signatures: signatures.iter().cloned().collect(),
+        })
+    }
+
     /// Whether a signature or empty `#show` directive was present. When false,
     /// every atom is displayed; when true, only the selected signatures are.
     #[must_use]
@@ -100,6 +198,21 @@ impl SourceMetadata {
     #[must_use]
     pub fn output(&self) -> &OutputSelection {
         &self.output
+    }
+
+    /// Atom-channel policy; term observations remain a separate channel.
+    #[must_use]
+    pub fn atom_selection(&self) -> &AtomSelection {
+        &self.output
+    }
+
+    /// Source-free atom policy with no directive provenance or term observations.
+    #[must_use]
+    pub fn for_atoms(selection: AtomSelection) -> Self {
+        Self {
+            output: selection,
+            ..Self::default()
+        }
     }
 
     /// Bounded term queries, evaluated separately from full-model semantics.
@@ -172,6 +285,9 @@ pub(crate) fn collect_profile(
     formula: bool,
 ) -> Result<(), AdmissionFailure> {
     for carrier in program.statements() {
+        if !matches!(carrier.get(), Statement::Defined(_) | Statement::Show(_)) {
+            continue;
+        }
         for origin in carrier.provenance().origins() {
             let Origin::Parsed(location) = origin else {
                 continue;

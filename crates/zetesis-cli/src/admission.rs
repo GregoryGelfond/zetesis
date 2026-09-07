@@ -10,7 +10,7 @@ use zetesis_themelios::{
 
 use crate::failure::Progress;
 use crate::phase_timing::{Recorder, SolvePhase};
-use crate::{Options, Oracle, RunError, RunFailure};
+use crate::{Options, Oracle, RunError, SolveFailure};
 
 pub(crate) fn source(
     source: String,
@@ -19,11 +19,17 @@ pub(crate) fn source(
     diagnostics: &mut impl Write,
     control: &Control,
     phases: &Recorder,
-) -> Result<Progress, RunFailure> {
-    crate::engine::validate_combination(options)?;
+) -> Result<Progress, SolveFailure> {
+    crate::engine::validate_combination(&options.into())?;
     if options.oracle == Oracle::Countermodel
-        && let Some(report) =
-            crate::countermodel::check_control(output, diagnostics, control, phases, options.json)?
+        && let Some(report) = crate::countermodel::check_control(
+            output,
+            diagnostics,
+            control,
+            phases,
+            options.json,
+            None,
+        )?
     {
         return Ok(report);
     }
@@ -58,10 +64,15 @@ pub(crate) fn source(
             Err(error) => return Err(RunError::Expansion(error).into()),
         }
     };
-    crate::engine::validate_countermodel(options)?;
-    if let Some(report) =
-        crate::countermodel::check_control(output, diagnostics, control, phases, options.json)?
-    {
+    crate::engine::validate_countermodel(&options.into())?;
+    if let Some(report) = crate::countermodel::check_control(
+        output,
+        diagnostics,
+        control,
+        phases,
+        options.json,
+        None,
+    )? {
         return Ok(report);
     }
     let observer = phases.grounding_observer();
@@ -102,11 +113,17 @@ pub(crate) fn bundle(
     diagnostics: &mut impl Write,
     control: &Control,
     phases: &Recorder,
-) -> Result<Progress, RunFailure> {
-    crate::engine::validate_combination(options)?;
+) -> Result<Progress, SolveFailure> {
+    crate::engine::validate_combination(&options.into())?;
     if options.oracle == Oracle::Countermodel
-        && let Some(report) =
-            crate::countermodel::check_control(output, diagnostics, control, phases, options.json)?
+        && let Some(report) = crate::countermodel::check_control(
+            output,
+            diagnostics,
+            control,
+            phases,
+            options.json,
+            None,
+        )?
     {
         return Ok(report);
     }
@@ -148,10 +165,15 @@ pub(crate) fn bundle(
             Err(error) => return Err(RunError::BundleAdmission(error).into()),
         }
     };
-    crate::engine::validate_countermodel(options)?;
-    if let Some(report) =
-        crate::countermodel::check_control(output, diagnostics, control, phases, options.json)?
-    {
+    crate::engine::validate_countermodel(&options.into())?;
+    if let Some(report) = crate::countermodel::check_control(
+        output,
+        diagnostics,
+        control,
+        phases,
+        options.json,
+        None,
+    )? {
         return Ok(report);
     }
     let observer = phases.grounding_observer();

@@ -8,7 +8,7 @@ readable before its Lean details. The convention has one deliberately bounded
 pilot so far; it is not a claim of a library-wide rewrite.
 
 
-This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **613 kernel-checked theorems** across forty-one semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
+This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **616 kernel-checked theorems** across forty-two semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
 
 The formalization connects normalized stable-model semantics to candidate seeds, compositional reduct execution, lazy completion, consequence bounds, and completed search certificates. It supplies mathematical contracts for the Rust, wgpu, Rayon, and neuromorphic implementation work. It does not verify those implementations or make Lean a runtime dependency.
 
@@ -21,7 +21,7 @@ lake build
 lake env lean -DautoImplicit=false -DwarningAsError=true Audit.lean
 ```
 
-`lean-toolchain` pins `leanprover/lean4:v4.33.1`. The package has no remote dependencies, so the build itself needs no network once that toolchain exists. `lake build` compiles the umbrella module and all forty-one semantic modules. `Audit.lean` requests the transitive axiom dependencies of every project theorem.
+`lean-toolchain` pins `leanprover/lean4:v4.33.1`. The package has no remote dependencies, so the build itself needs no network once that toolchain exists. `lake build` compiles the umbrella module and all forty-two semantic modules. `Audit.lean` requests the transitive axiom dependencies of every project theorem.
 
 The [verification report](./verification.json) records the checked source hashes and commands. The [axiom audit](./axiom-audit.txt) contains only standard Lean logical axioms where needed: `propext`, `Quot.sound`, and `Classical.choice`. In particular, no theorem depends on `sorryAx` or `Lean.ofReduceBool`.
 
@@ -37,6 +37,7 @@ preserves an earlier inconsistent manifest and explains its repair.
 
 | Module | What is proved |
 |---|---|
+| [Outcomes](./Zetesis/Outcomes.lean) | Complete regional UNSAT depends on verified membership, not publication; delivery retains membership validity and empty delivery can hide a model |
 | [BatchAccounting](./Zetesis/BatchAccounting.lean) | Proposal, pending classification and exact prefix commitment preserve finite coverage and occurrence counts; interrupted or delayed failures cannot establish exhaustion |
 | [CertifiedExecution](./Zetesis/CertifiedExecution.lean) | Ranked support soundly precedes exact residual completion over the unchanged original theory; interruption cannot accept and fallback quotas accumulate |
 | [TrueHeads](./Zetesis/TrueHeads.lean) | Atom-free true-condition erasure preserves whole-rule families, every frozen reduct and contextual stability; positive producer necessity is retained |

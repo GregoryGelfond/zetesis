@@ -39,3 +39,4 @@ import Zetesis.TightPlans
 import Zetesis.CertifiedExecution
 import Zetesis.ValueExtrema
 import Zetesis.FinitePools
+import Zetesis.Outcomes

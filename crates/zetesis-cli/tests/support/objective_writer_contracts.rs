@@ -59,7 +59,7 @@ fn attempt(foreign: bool, sink: &mut impl Write) -> (io::Result<()>, StableModel
             objectives: planned.objectives(),
             observations: planned.metadata().observations(),
         },
-        &options,
+        &(&options).into(),
         &mut io::sink(),
         &Control::default(),
     )
@@ -73,7 +73,7 @@ fn attempt(foreign: bool, sink: &mut impl Write) -> (io::Result<()>, StableModel
     let result = bounds.improve(
         score.score(),
         &mut models,
-        &options,
+        &(&options).into(),
         sink,
         &Control::default(),
     );

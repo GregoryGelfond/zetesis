@@ -82,7 +82,7 @@ fn equal_atom_counts_do_not_authorize_a_bound_from_a_different_theory() {
     let mut diagnostics = Vec::new();
     let mut bounds = Bounds::new(
         input(&planned),
-        &options,
+        &(&options).into(),
         &mut diagnostics,
         &Control::default(),
     )
@@ -95,7 +95,7 @@ fn equal_atom_counts_do_not_authorize_a_bound_from_a_different_theory() {
         .improve(
             &score(&planned, &["a"]),
             &mut models,
-            &options,
+            &(&options).into(),
             &mut diagnostics,
             &Control::default(),
         )
@@ -111,7 +111,7 @@ fn equal_atom_counts_do_not_authorize_a_bound_from_a_different_theory() {
         .improve(
             &score(&planned, &[]),
             &mut models,
-            &options,
+            &(&options).into(),
             &mut diagnostics,
             &Control::default(),
         )
@@ -137,7 +137,7 @@ fn bound_capacity_failure_restores_exact_search_and_disables_only_pruning() {
     let mut diagnostics = Vec::new();
     let mut bounds = Bounds::new(
         input(&admitted),
-        &options,
+        &(&options).into(),
         &mut diagnostics,
         &Control::default(),
     )
@@ -158,7 +158,7 @@ fn bound_capacity_failure_restores_exact_search_and_disables_only_pruning() {
         .improve(
             &score(&admitted, &["a"]),
             &mut models,
-            &options,
+            &(&options).into(),
             &mut diagnostics,
             &Control::default(),
         )

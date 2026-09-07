@@ -28,7 +28,7 @@ impl MembershipExecution for NativeBatch {
     fn next(
         &mut self,
         models: &mut StableModels,
-        options: &Options,
+        options: &crate::SolveConfig,
         control: &Control,
         _: &crate::phase_timing::Recorder,
     ) -> Option<Result<Interpretation, Failure>> {
@@ -135,7 +135,7 @@ fn run(
         &crate::phase_timing::Recorder::new(options.stats),
     )
     .map(|progress| progress.report)
-    .map_err(crate::RunFailure::into_cause)
+    .map_err(|failure| *failure.cause)
 }
 
 fn records(output: &[u8]) -> Vec<Vec<String>> {

@@ -350,7 +350,7 @@ The implementation includes:
   membership pool separately from scalar CPU and hybrid execution. Ordinary
   solving now exposes optional host phase measurements; demonstrating a useful
   full-solve GPU crossover and deployment stress qualification remain targets.
-- A Lean specification with **613 checked theorems**, including the reduct
+- A Lean specification with **616 checked theorems**, including the reduct
   acceptance criterion, lazy final coverage, finite aggregate-assignment coverage,
   exact structural DAG sharing, signed coherence, first-true witness scanning
   and completion-preserving frozen-query propagation, plus batch coverage and
@@ -421,7 +421,10 @@ adds bounded typed model/JSON views, separate eager grounding/solving statistics
 a structured Lean proof pilot and a pinned proof CI job. It passes the 94 original
 corpus contracts and 48 external oracle tests. Its hosted coverage is **91.68%
 workspace** and **92.10% CPU-only CLI**, retaining both independent **91% floors**.
-Broader writer-free solve orchestration and ASPIF remain planned.
+The subsequent [API hardening checkpoint](docs/design/api-hardening-20260907.md)
+adds prepared-input sessions, finalized semantic outcomes and subject-bound
+checking receipts, and repairs human-record and observation accounting limits.
+ASPIF remains planned; the session currently lives in the existing CLI library package.
 
 The [coverage workflow](docs/verification/coverage.md) complements the semantic
 tests with separate full-workspace and CPU-only measurements, an enforced floor,

@@ -6,7 +6,8 @@ use zetesis_themelios::observation::ViewError;
 
 use crate::failure::Progress;
 use crate::{
-    Completion, Interruption, Options, PhaseTimings, Report, RunError, RunFailure, SolvePhase,
+    Completion, Interruption, Options, PhaseTimings, RunError, RunFailure, SolveFailure,
+    SolvePhase, SolveReport,
 };
 
 pub(crate) struct Document<'a, W> {
@@ -15,7 +16,7 @@ pub(crate) struct Document<'a, W> {
     failed: bool,
 }
 impl<'a, W: Write> Document<'a, W> {
-    pub(crate) fn new(sink: &'a mut W, json: bool) -> Result<Self, RunFailure> {
+    pub(crate) fn new(sink: &'a mut W, json: bool) -> Result<Self, SolveFailure> {
         let mut document = Self {
             sink,
             json,
@@ -29,9 +30,9 @@ impl<'a, W: Write> Document<'a, W> {
 
     pub(crate) fn finish(
         mut self,
-        mut result: Result<Progress, RunFailure>,
+        mut result: Result<Progress, SolveFailure>,
         options: &Options,
-    ) -> Result<Report, RunFailure> {
+    ) -> Result<SolveReport, SolveFailure> {
         if self.json && !self.failed {
             let emitted = summary(&result, options.max_json_record_bytes)
                 .and_then(|record| self.write_all(&record).map_err(RunError::Output));
@@ -39,9 +40,7 @@ impl<'a, W: Write> Document<'a, W> {
                 Ok(()) => match &mut result {
                     Ok(progress) => progress.summary_published = true,
                     Err(failure) => {
-                        if let Some(partial) = &mut failure.partial_report {
-                            partial.summary_published = true;
-                        }
+                        failure.acknowledge_summary();
                     }
                 },
                 Err(error) => {
@@ -50,7 +49,7 @@ impl<'a, W: Write> Document<'a, W> {
                         Err(mut failure) => {
                             // The original error remains authoritative. A failed JSON
                             // footer is independently retained as secondary output.
-                            failure.secondary_output = Some(match error {
+                            failure.record_summary(match error {
                                 RunError::Output(error) => error,
                                 other => io::Error::other(other),
                             });
@@ -60,7 +59,7 @@ impl<'a, W: Write> Document<'a, W> {
                 }
             }
         }
-        result.map(|progress| progress.report)
+        result.map(Progress::finalize)
     }
 }
 impl<W: Write> Write for Document<'_, W> {
@@ -127,8 +126,9 @@ pub(crate) fn input_failure(
 ) -> RunFailure {
     match Document::new(output, true) {
         Ok(document) => document
-            .finish(Err(failure), options)
-            .expect_err("input failure remains failed"),
+            .finish(Err(failure.into()), options)
+            .expect_err("input failure remains failed")
+            .into_legacy(),
         Err(output_failure) => {
             let mut failure = failure;
             failure.secondary_output = Some(io::Error::other(output_failure));
@@ -145,7 +145,7 @@ fn completion(value: Completion) -> &'static str {
     }
 }
 
-fn summary(result: &Result<Progress, RunFailure>, maximum: usize) -> Result<Vec<u8>, RunError> {
+fn summary(result: &Result<Progress, SolveFailure>, maximum: usize) -> Result<Vec<u8>, RunError> {
     let mut out = Buffer::new(maximum);
     let view = SummaryView::new(result);
     let status = if result.is_err() {
@@ -281,10 +281,12 @@ fn error_kind(error: &RunError) -> &'static str {
         RunError::BackendUnavailable => "backend_unavailable",
         RunError::UnsupportedCombination { .. } => "unsupported_combination",
         RunError::UnsupportedOracle { .. } => "unsupported_oracle",
+        RunError::PreparedInput { .. } => "prepared_input",
         RunError::Formula(_) => "formula",
         RunError::FormulaAdmission(_) => "formula_admission",
         RunError::FormulaBundleAdmission(_) => "formula_bundle_admission",
         RunError::Output(_) => "output",
+        RunError::PublicationStopped(_) => "publication_stopped",
         RunError::Static(_) => "static",
         RunError::Words(_) => "words",
         RunError::FormulaBatchShape { .. } => "formula_batch_shape",
@@ -529,7 +531,7 @@ struct SummaryView<'a> {
     timings: Option<&'a PhaseTimings>,
 }
 impl<'a> SummaryView<'a> {
-    fn new(result: &'a Result<Progress, RunFailure>) -> Self {
+    fn new(result: &'a Result<Progress, SolveFailure>) -> Self {
         match result {
             Ok(progress) => {
                 let report = &progress.report;

@@ -45,6 +45,7 @@ pub struct Statistics {
 /// A resource stop never constructs this value.
 #[derive(Clone, Debug)]
 pub struct Check {
+    program: Program,
     closure: Model,
     constraint_violated: bool,
     seed_mismatch: bool,
@@ -52,6 +53,32 @@ pub struct Check {
 }
 
 impl Check {
+    /// The immutable instance whose reduct closure was checked. Constant time.
+    #[must_use]
+    pub const fn program(&self) -> &Program {
+        &self.program
+    }
+
+    /// Exact least reduct closure, including rejected candidates. Constant-time
+    /// borrow; the raw interpretation alone carries no stable-membership claim.
+    #[must_use]
+    pub const fn interpretation(&self) -> &zetesis_core::Interpretation {
+        &self.closure
+    }
+
+    /// Transfer an accepted closure into an instance-bound stable receipt without
+    /// rechecking membership, cloning atoms, or allocating.
+    ///
+    /// # Errors
+    /// A rejected check is returned intact, retaining both rejection conditions.
+    pub fn into_stable_interpretation(self) -> Result<crate::StableInterpretation, Self> {
+        if self.accepted() {
+            Ok(crate::StableInterpretation::new(self.program, self.closure))
+        } else {
+            Err(self)
+        }
+    }
+
     /// Whether the reconstructed closure is stable for the supplied seed.
     #[must_use]
     pub fn accepted(&self) -> bool {
@@ -117,6 +144,7 @@ pub fn check(
     }
     if program.templates().is_empty() {
         return Ok(Check {
+            program: program.clone(),
             closure: Model::default(),
             constraint_violated: false,
             seed_mismatch: false,
@@ -184,6 +212,7 @@ pub fn check(
     let closure = Model::new(closure);
     control.poll()?;
     Ok(Check {
+        program: program.clone(),
         closure,
         constraint_violated,
         seed_mismatch,

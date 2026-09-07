@@ -93,6 +93,7 @@ pub(crate) struct Progress {
     pub(crate) observed_interruption: Option<Interruption>,
     pub(crate) completion: Option<Completion>,
     pub(crate) summary_published: bool,
+    pub(crate) semantic: Option<crate::SemanticOutcome>,
 }
 
 impl Progress {
@@ -113,12 +114,46 @@ impl Progress {
             observed_interruption: None,
             completion: None,
             summary_published: false,
+            semantic: None,
         }
     }
 
-    pub(crate) fn fail(self, cause: RunError) -> RunFailure {
+    pub(crate) fn apply(&mut self, semantic: crate::SemanticOutcome) {
+        self.verified_models = semantic.verified_models();
+        self.completion = semantic.completion();
+        self.observed_interruption = semantic.interruption();
+        self.report.checked = semantic.candidate_progress();
+        if let Some(completion) = semantic.completion() {
+            self.report.completion = completion;
+        }
+        self.report.interruption = semantic.interruption();
+        self.report.discovered_gate_atoms = semantic.discovered_gate_atoms();
+        self.report.countermodel_statistics = semantic.countermodel_statistics().copied();
+        self.report.formula_execution = semantic.formula_execution().cloned();
+        self.report.optimization = semantic.incumbent().cloned();
+        self.semantic = Some(semantic);
+    }
+
+    pub(crate) fn finalize(self) -> crate::SolveReport {
+        crate::SolveReport {
+            publication: crate::Publication {
+                models: self.report.models,
+                summary: self.summary_published,
+            },
+            semantic: self
+                .semantic
+                .expect("entered successful solve has semantic evidence"),
+            report: self.report,
+        }
+    }
+
+    pub(crate) fn fail(self, cause: RunError) -> crate::SolveFailure {
+        let publication = crate::Publication {
+            models: self.report.models,
+            summary: self.summary_published,
+        };
         let report = self.report;
-        RunFailure {
+        let mut failure = crate::SolveFailure::from(RunFailure {
             cause: Box::new(cause),
             phase_timings: report.phase_timings.map(Box::new),
             partial_report: Some(Box::new(PartialReport {
@@ -134,6 +169,9 @@ impl Progress {
                 optimization: report.optimization,
             })),
             secondary_output: None,
-        }
+        });
+        failure.semantic = self.semantic.map(Box::new);
+        failure.publication = Some(publication);
+        failure
     }
 }

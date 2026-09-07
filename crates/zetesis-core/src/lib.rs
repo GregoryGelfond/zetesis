@@ -29,7 +29,7 @@ mod candidate;
 mod carrier;
 mod ground;
 
-pub use candidate::{Model, Seed, SeedError};
+pub use candidate::{Interpretation, Model, Seed, SeedError};
 pub use carrier::{AtomIter, CarrierError};
 pub use ground::{AtomId, GroundProgram, GroundRule, StaticError, StaticLimits, WordError};
 pub use program::{AdmissionError, AdmissionLimits, AdmissionResource, Program};

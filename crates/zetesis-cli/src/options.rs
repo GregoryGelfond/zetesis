@@ -110,10 +110,10 @@ pub struct Options {
     #[arg(long, default_value_t = 8_388_608)]
     pub max_json_record_bytes: usize,
     /// Cumulative encoding, certificate and search operations for the formula oracle.
-    #[arg(long, default_value_t = 100_000_000)]
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_search_work)]
     pub max_search_work: u64,
     /// Cumulative branch decisions for the countermodel oracle.
-    #[arg(long, default_value_t = 1_000_000)]
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_search_decisions)]
     pub max_search_decisions: u64,
     /// Maximum term-evaluation/dependency steps in source expansion.
     #[arg(long, default_value_t = 1_048_576)]
@@ -127,10 +127,10 @@ pub struct Options {
     /// Maximum models to display; 0 requests all. Without objectives this stops
     /// search early. Optimization seeks exhaustion and then displays this many
     /// tied optima; interrupted runs may display incumbents without proving an optimum.
-    #[arg(long, default_value_t = 1)]
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.models)]
     pub models: usize,
     /// Cumulative objective evaluation work across all verified stable models.
-    #[arg(long, default_value_t = 100_000_000)]
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_objective_work)]
     pub max_objective_work: u64,
     /// Observation evaluation/rendering work per displayed full model.
     #[arg(long, default_value_t = 1_000_000)]
@@ -146,51 +146,51 @@ pub struct Options {
     pub max_observation_bytes: usize,
     /// Cumulative work for optional incumbent candidate bounds. Zero disables
     /// pruning; a refused bound preserves ordinary exact answer-set search.
-    #[arg(long, default_value_t = 10_000_000)]
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_objective_bound_work)]
     pub max_objective_bound_work: u64,
     /// Maximum complete objective bindings evaluated per stable model.
-    #[arg(long, default_value_t = 1_000_000)]
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_objective_bindings)]
     pub max_objective_bindings: u64,
     /// Maximum distinct objective contribution keys retained per stable model.
-    #[arg(long, default_value_t = 1_000_000)]
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_objective_keys)]
     pub max_objective_keys: usize,
     /// Maximum encoded objective contribution bytes per stable model.
-    #[arg(long, default_value_t = 67_108_864)]
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_objective_key_bytes)]
     pub max_objective_key_bytes: usize,
     /// Maximum tied incumbent models retained while proving an optimum.
-    #[arg(long, default_value_t = 100_000)]
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_optimal_models)]
     pub max_optimal_models: usize,
     /// Maximum atoms across retained incumbent models, before display selection.
-    #[arg(long, default_value_t = 1_000_000)]
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_optimal_atoms)]
     pub max_optimal_atoms: usize,
     /// Maximum retained model payload bytes, excluding allocator overhead.
-    #[arg(long, default_value_t = 67_108_864)]
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_optimal_bytes)]
     pub max_optimal_bytes: usize,
     /// Maximum batched formula candidates; closure batches follow its first seed.
-    #[arg(long, default_value = "64")]
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.batch_size)]
     pub batch_size: NonZeroUsize,
     /// Closure CPU worker count. Formula completion has a separate worker setting.
-    #[arg(long, default_value = "4")]
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.workers)]
     pub workers: NonZeroUsize,
     /// Exact formula completion workers; one retains the scalar CPU cursor.
-    #[arg(long, default_value = "1")]
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.completion_workers)]
     pub completion_workers: NonZeroUsize,
     /// Maximum logical scratch bytes for completion batches, excluding the scalar
     /// cursor, allocator overhead, thread stacks and GPU storage.
-    #[arg(long, default_value_t = 268_435_456)]
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_completion_scratch_bytes)]
     pub max_completion_scratch_bytes: u64,
     /// Maximum candidate seeds; reaching a limit leaves search incomplete.
-    #[arg(long, default_value_t = 1_000_000)]
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_candidates)]
     pub max_candidates: u64,
     /// Maximum gate tuples retained by the incremental candidate cursor.
-    #[arg(long, default_value_t = 4_096)]
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_carrier_atoms)]
     pub max_carrier_atoms: usize,
     /// Maximum charged oracle operations per CPU candidate; lazy joins and eager
     /// scans charge different operations.
-    #[arg(long, default_value_t = 10_000_000)]
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_work)]
     pub max_work: u64,
     /// Maximum derived CPU atoms and materialized eager atoms.
-    #[arg(long, default_value_t = 1_000_000)]
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_atoms)]
     pub max_atoms: usize,
     /// Maximum bytes in each original file or standard input before parsing.
     #[arg(long, default_value_t = 1_048_576)]
@@ -208,12 +208,12 @@ pub struct Options {
     #[arg(long, default_value_t = 32)]
     pub max_include_depth: usize,
     /// Maximum source substitutions inspected during eager CPU/GPU lowering.
-    #[arg(long, default_value_t = 10_000_000)]
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_substitutions)]
     pub max_substitutions: usize,
     /// Maximum rules retained during eager CPU/GPU lowering.
-    #[arg(long, default_value_t = 1_000_000)]
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_ground_rules)]
     pub max_ground_rules: usize,
     /// Maximum accounted GPU batch transport bytes, excluding driver overhead.
-    #[arg(long, default_value_t = 67_108_864)]
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_batch_bytes)]
     pub max_batch_bytes: u64,
 }

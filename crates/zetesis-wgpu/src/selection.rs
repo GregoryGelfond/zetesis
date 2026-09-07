@@ -3,7 +3,10 @@
 use std::cmp::Ordering;
 use std::fmt;
 
-use crate::{GpuError, GpuErrorKind, GpuOptions, check_adapter_limits};
+use crate::{
+    AdapterBackend, AdapterCategory, AdapterMetadata, GpuError, GpuErrorKind, GpuOptions,
+    check_adapter_limits,
+};
 
 /// NVIDIA's PCI vendor identifier. Matching uses the reported numeric ID,
 /// never a device-name substring. This selects wgpu devices, not CUDA.
@@ -110,29 +113,57 @@ impl GpuInfo {
         &self.raw.name
     }
 
+    /// Borrow reported metadata as typed values with explicit optional text.
+    /// This has fixed cost and performs no allocation or adapter discovery.
+    #[must_use]
+    pub fn metadata(&self) -> AdapterMetadata<'_> {
+        AdapterMetadata {
+            name: self.name(),
+            backend: self.backend_kind(),
+            category: self.category(),
+            vendor_id: self.vendor_id(),
+            device_id: self.device_id(),
+            pci_bus_id: reported_text(self.pci_bus_id()),
+            driver: reported_text(self.driver()),
+            driver_info: reported_text(self.driver_info()),
+        }
+    }
+
+    /// Observed compute API, independent of the original selection preference.
+    #[must_use]
+    pub fn backend_kind(&self) -> AdapterBackend {
+        match self.raw.backend {
+            wgpu::Backend::Noop => AdapterBackend::Noop,
+            wgpu::Backend::Vulkan => AdapterBackend::Vulkan,
+            wgpu::Backend::Metal => AdapterBackend::Metal,
+            wgpu::Backend::Dx12 => AdapterBackend::Dx12,
+            wgpu::Backend::Gl => AdapterBackend::Gl,
+            wgpu::Backend::BrowserWebGpu => AdapterBackend::BrowserWebGpu,
+        }
+    }
+
+    /// Reported device category, without inferring successful execution.
+    #[must_use]
+    pub fn category(&self) -> AdapterCategory {
+        match self.raw.device_type {
+            wgpu::DeviceType::Other => AdapterCategory::Other,
+            wgpu::DeviceType::IntegratedGpu => AdapterCategory::IntegratedGpu,
+            wgpu::DeviceType::DiscreteGpu => AdapterCategory::DiscreteGpu,
+            wgpu::DeviceType::VirtualGpu => AdapterCategory::VirtualGpu,
+            wgpu::DeviceType::Cpu => AdapterCategory::Cpu,
+        }
+    }
+
     /// Graphics/compute API used, preserving the existing title-case labels.
     #[must_use]
     pub fn backend(&self) -> &str {
-        match self.raw.backend {
-            wgpu::Backend::Noop => "Noop",
-            wgpu::Backend::Vulkan => "Vulkan",
-            wgpu::Backend::Metal => "Metal",
-            wgpu::Backend::Dx12 => "Dx12",
-            wgpu::Backend::Gl => "Gl",
-            wgpu::Backend::BrowserWebGpu => "BrowserWebGpu",
-        }
+        self.backend_kind().label()
     }
 
     /// Unmodified wgpu device-category name.
     #[must_use]
     pub fn device_type(&self) -> &str {
-        match self.raw.device_type {
-            wgpu::DeviceType::Other => "Other",
-            wgpu::DeviceType::IntegratedGpu => "IntegratedGpu",
-            wgpu::DeviceType::DiscreteGpu => "DiscreteGpu",
-            wgpu::DeviceType::VirtualGpu => "VirtualGpu",
-            wgpu::DeviceType::Cpu => "Cpu",
-        }
+        self.category().label()
     }
 
     /// Whether wgpu classified this adapter as an integrated or discrete GPU.
@@ -187,6 +218,10 @@ impl GpuInfo {
     pub fn capability_issue(&self) -> Option<&str> {
         self.capability_issue.as_deref()
     }
+}
+
+fn reported_text(value: &str) -> Option<&str> {
+    (!value.is_empty()).then_some(value)
 }
 
 /// Native APIs compiled for this target. Auto, browser WebGPU, and the
@@ -722,3 +757,7 @@ mod tests {
 #[cfg(test)]
 #[path = "../tests/support/selection_contracts.rs"]
 mod contract_tests;
+
+#[cfg(test)]
+#[path = "../tests/support/adapter_metadata.rs"]
+mod metadata_tests;

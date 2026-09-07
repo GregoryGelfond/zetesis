@@ -7,7 +7,7 @@ use zetesis_core::{Atom, Model, Sign, Value, ValueNode};
 use zetesis_cpu::{Control, Stop};
 use zetesis_objective::Score;
 
-use super::{Error, Evaluation, Limits, ObservationProgram, Statistics};
+use super::{ConstructionLimits, Error, Evaluation, Limits, ObservationProgram, Statistics};
 use crate::OutputSelection;
 
 /// A full supplied model beside its independent observation and objective channels.
@@ -42,13 +42,37 @@ impl ObservationProgram {
         limits: Limits,
         control: &Control,
     ) -> Result<ModelView<'a>, Error> {
+        self.view_with_construction_limits(
+            model,
+            selection,
+            score,
+            limits,
+            ConstructionLimits::default(),
+            control,
+        )
+    }
+
+    /// Construct a view with an independent observation-construction ceiling.
+    /// JSON encoding remains a separate operation with its own accounting.
+    ///
+    /// # Errors
+    /// Returns the same typed refusals as observation evaluation.
+    pub fn view_with_construction_limits<'a>(
+        &self,
+        model: &'a Model,
+        selection: &'a OutputSelection,
+        score: Option<&'a Score>,
+        limits: Limits,
+        construction: ConstructionLimits,
+        control: &Control,
+    ) -> Result<ModelView<'a>, Error> {
         let terms = if self.is_empty() {
             Evaluation {
                 symbols: Vec::new(),
                 statistics: Statistics::default(),
             }
         } else {
-            self.evaluate(model, limits, control)?
+            self.evaluate_with_construction_limits(model, limits, construction, control)?
         };
         Ok(ModelView {
             model,
@@ -91,6 +115,12 @@ impl ModelView<'_> {
     /// Observation work, independent of JSON view work.
     #[must_use]
     pub fn statistics(&self) -> Statistics {
+        self.observation_statistics()
+    }
+
+    /// Work performed while evaluating observations; excludes subsequent encoding.
+    #[must_use]
+    pub fn observation_statistics(&self) -> Statistics {
         self.terms.statistics()
     }
 
@@ -122,7 +152,36 @@ impl ModelView<'_> {
     /// Refuses before exceeding the record, work or traversal-depth ceilings;
     /// allocation/control failures return no partial JSON value.
     pub fn json(&self, limits: ViewLimits, control: &Control) -> Result<String, ViewError> {
+        self.encode_json(limits, control)
+            .map(super::json::Encoded::into_text)
+            .map_err(|failure| failure.cause())
+    }
+
+    /// Encode schema [`super::json::SCHEMA_VERSION`] with retained work accounting.
+    /// The data is byte-identical to [`Self::json`]. The returned statistics exclude
+    /// observation evaluation and external writes. A failure contains accounting
+    /// for the discarded private prefix, never that prefix itself.
+    ///
+    /// # Errors
+    /// Returns the same causes as [`Self::json`], with work charged before refusal.
+    pub fn encode_json(
+        &self,
+        limits: super::json::Limits,
+        control: &Control,
+    ) -> Result<super::json::Encoded, super::json::Failure> {
         let mut out = Buffer::new(limits, control);
+        let result = self.encode_json_into(&mut out);
+        let statistics = super::json::Statistics {
+            work: out.work,
+            buffered_bytes: out.text.len(),
+        };
+        match result {
+            Ok(()) => Ok(super::json::Encoded::new(out.text, statistics)),
+            Err(cause) => Err(super::json::Failure::new(cause, statistics)),
+        }
+    }
+
+    fn encode_json_into(&self, out: &mut Buffer<'_>) -> Result<(), ViewError> {
         out.text("{\"full_model\":[")?;
         for (index, atom) in self.model.atoms().iter().enumerate() {
             if index != 0 {
@@ -187,11 +246,12 @@ impl ModelView<'_> {
             out.text("null")?;
         }
         out.text("}")?;
-        Ok(out.text)
+        Ok(())
     }
 }
 
-/// Independent bounds for one pure model view, excluding allocator overhead.
+/// Independent bounds for JSON encoding, excluding allocator overhead.
+/// Also available as [`super::json::Limits`].
 #[derive(Clone, Copy, Debug)]
 pub struct ViewLimits {
     /// Maximum retained UTF-8 JSON bytes; zero means zero.
@@ -211,7 +271,8 @@ impl Default for ViewLimits {
     }
 }
 
-/// A pure view failed without returning partial JSON.
+/// JSON encoding failed without returning partial JSON.
+/// Also available as [`super::json::Error`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ViewError {
     /// Complete view would exceed the configured retained-byte ceiling.

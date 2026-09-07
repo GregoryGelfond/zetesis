@@ -60,6 +60,15 @@ mod formula_weak;
 pub mod objective_bound;
 pub mod observation;
 
+/// Canonical shared frontend tiers, including all vocabulary exposed by this crate.
+pub use themelios_analysis as analysis;
+/// Canonical source identities, spans, diagnostics and source catalogs.
+pub use themelios_base as base;
+/// Canonical owned logical program, provenance, terms and symbols.
+pub use themelios_program as logical;
+/// Canonical lossless syntax and parsing vocabulary.
+pub use themelios_syntax as syntax;
+
 use themelios_base::source::{Source, SourceId};
 use themelios_base::span::{ByteOffset, Location, Span};
 use themelios_program::raise::raise;
@@ -84,7 +93,11 @@ pub use formula::{
     admit_formula, admit_formula_with_grounding_observer,
 };
 pub use grounding_observer::GroundingObserver;
-pub use metadata::{LocatedDirective, OutputSelection, SourceDirective, SourceMetadata};
+pub use metadata::{
+    AtomSelection, AtomSelectionError, AtomSelectionLimits, LocatedDirective, MetadataError,
+    MetadataFeature, MetadataLimits, MetadataResource, OutputSelection, SourceDirective,
+    SourceMetadata,
+};
 
 /// Explicit host admission ceilings. Zero means that no resource of that kind
 /// may be consumed; limits never mean unlimited.

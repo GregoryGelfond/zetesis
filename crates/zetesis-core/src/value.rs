@@ -28,6 +28,8 @@ impl Value {
     /// coercion or arithmetic evaluation occurs. Structural traversal is iterative.
     /// Extrema are distinct from integers and
     /// from a string or symbolic name containing their printed spelling.
+    /// This borrows both terms and allocates nothing. Cost includes the visited
+    /// node prefix and the compared text bytes; it is not constant in term size.
     #[must_use]
     pub fn compare_terms(&self, other: &Self) -> std::cmp::Ordering {
         use std::cmp::Ordering;
@@ -78,6 +80,9 @@ pub struct Predicate {
 
 impl Predicate {
     /// Construct a signature. Source-language spelling belongs to the adapter.
+    /// After converting `name` into an owned string, validation is constant time.
+    /// String input transfers storage; borrowed text conversion copies its bytes.
+    /// No program admission or source-language lexical validation occurs.
     ///
     /// # Errors
     /// Returns [`ConstructionError::EmptyPredicateName`] for an empty name.
@@ -86,6 +91,7 @@ impl Predicate {
     }
     /// Construct a signed signature without modifying its name. Equal names
     /// and arities with opposite signs denote distinct logical atoms.
+    /// Has the ownership and conversion costs of [`Self::new`].
     ///
     /// # Errors
     /// Returns [`ConstructionError::EmptyPredicateName`] for an empty name.
@@ -126,6 +132,9 @@ pub struct Atom {
 
 impl Atom {
     /// Construct an atom with exactly the signature's arity.
+    /// Checks vector length in constant time and transfers the supplied signature
+    /// and value vector without copying them. No program membership or source
+    /// spelling check occurs; input construction costs remain with the caller.
     ///
     /// # Errors
     /// Returns [`ConstructionError::ArityMismatch`] for the wrong tuple length.

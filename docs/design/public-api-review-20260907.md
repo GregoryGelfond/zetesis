@@ -130,3 +130,10 @@ hosted jobs, the two line-coverage floors, and the 94-case CPU corpus campaign p
 That does not close these newly identified API obligations or establish
 mission-critical fitness. Complete the bounded hardening checkpoint before the
 next feature/optimization tranche and before promising a stable public API.
+
+## Implementation follow-up
+
+The authorized [API hardening checkpoint](api-hardening-20260907.md) implements
+these bounded repairs. Its qualification record preserves the additional findings,
+regressions and remaining limits; the review above describes the original inspected
+release.

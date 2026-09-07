@@ -2,10 +2,10 @@
 
 use themelios_program::symbol::{Name, Sign};
 
-use super::evaluate::{Work, terms};
+use super::evaluate::{Work, structured_text_bytes, terms};
 use super::{
-    Control, Error, ErrorKind, Limits, Model, ObservationProgram, Rendered, Resource, Statistics,
-    Symbol, Value,
+    ConstructionLimits, Control, Error, ErrorKind, Limits, Model, ObservationProgram, Rendered,
+    Resource, Statistics, Symbol, Value,
 };
 
 fn append(out: &mut String, text: &str, work: &mut Work<'_>) -> Result<(), Error> {
@@ -55,7 +55,7 @@ fn scalar(out: &mut String, value: &Value, work: &mut Work<'_>) -> Result<(), Er
         Value::String(text) => quoted(out, text, work),
         Value::Structured(value) => {
             use std::fmt::Write as _;
-            work.step(value.payload_bytes() as u128)?;
+            work.step(value.nodes().len() as u128 + structured_text_bytes(value) as u128)?;
             work.check(
                 Resource::Depth,
                 value.depth() as u128,
@@ -68,7 +68,7 @@ fn scalar(out: &mut String, value: &Value, work: &mut Work<'_>) -> Result<(), Er
             )?;
             work.check(
                 Resource::Bytes,
-                value.payload_bytes() as u128,
+                structured_text_bytes(value) as u128,
                 work.limits.max_symbol_bytes as u128,
             )?;
             for node in value.nodes() {
@@ -196,10 +196,12 @@ pub(super) fn render(
     model: &Model,
     selection: &crate::OutputSelection,
     limits: Limits,
+    construction: ConstructionLimits,
     control: &Control,
 ) -> Result<Rendered, Error> {
     let mut work = Work {
         limits,
+        construction,
         control,
         statistics: Statistics::default(),
         location: None,

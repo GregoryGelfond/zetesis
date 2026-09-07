@@ -13,9 +13,11 @@ record profile is not an implemented capability.
 **Implementation follow-up.** The bounded typed model view, `--json` document
 adapter and separate eager grounding/solving measurements were subsequently
 delivered in the [library boundaries checkpoint](../verification/estate-boundaries-20260907/README.md).
-The proposal below remains a record of the design at inspection time. A reusable
-solve session and model-event interface, and ASPIF interchange, remain unfinished;
-the delivered JSON adapter still composes CLI-owned execution outcomes.
+The proposal below remains a record of the design at inspection time. The later
+[API hardening checkpoint](api-hardening-20260907.md) implements coherent prepared
+inputs, writer-free sessions and finalized semantic outcomes over shared ordinary
+execution loops. The session remains in the existing CLI library package; dependency
+extraction and ASPIF interchange remain unfinished.
 
 The existing semantic kernels are already useful libraries. The highest-priority
 gap is the composition layer: the ordinary source-to-optimal-model path can only

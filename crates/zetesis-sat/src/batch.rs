@@ -10,7 +10,10 @@ use crate::timing::{self, Phase};
 use crate::{Incomplete, Solve};
 use zetesis_ferraris::{Interpretation, Theory, models};
 
-/// A sound partial decision about one original candidate and its frozen reduct.
+/// Verdict data supplied through the trusted batch-checker protocol. The caller
+/// must supply a sound decision about the exact original candidate and its frozen
+/// reduct, as specified by [`StableModels::next_batch`]. Constructing a variant
+/// does not check that obligation or bind the data to a subject.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BatchVerdict {
     /// The original candidate satisfies the theory and no proper subset models its reduct.

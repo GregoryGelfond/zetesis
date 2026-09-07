@@ -315,3 +315,118 @@ fn shown_term_depth_limit_is_inclusive() {
     .unwrap();
     assert_eq!(value, fixture.json());
 }
+
+#[test]
+fn detailed_encoding_preserves_json_bytes() {
+    let fixture = nested_observation();
+    let view = fixture.view();
+    let observations = view.observation_statistics();
+    let encoded = view
+        .encode_json(ViewLimits::default(), &fixture.control)
+        .unwrap();
+    assert_eq!(
+        encoded.text(),
+        view.json(ViewLimits::default(), &fixture.control).unwrap()
+    );
+    assert_eq!(encoded.statistics().buffered_bytes, encoded.text().len());
+    assert!(encoded.statistics().work > 0);
+    assert_eq!(view.observation_statistics(), observations);
+    assert_eq!(view.statistics(), observations);
+    assert_eq!(zetesis_themelios::observation::json::SCHEMA_VERSION, 1);
+}
+
+#[test]
+fn encoding_refusal_retains_discarded_accounting() {
+    use zetesis_themelios::observation::json;
+    let fixture = string_observation();
+    let view = fixture.view();
+    let complete = view
+        .encode_json(json::Limits::default(), &fixture.control)
+        .unwrap();
+    let mut preceding_work = 0;
+    for ceiling in 0..complete.text().len() {
+        let failure = view
+            .encode_json(
+                json::Limits {
+                    max_bytes: ceiling,
+                    ..Default::default()
+                },
+                &fixture.control,
+            )
+            .unwrap_err();
+        assert_eq!(failure.cause(), json::Error::Bytes);
+        assert!(failure.statistics().buffered_bytes <= ceiling);
+        assert!(failure.statistics().work >= preceding_work);
+        assert!(failure.statistics().work <= complete.statistics().work);
+        preceding_work = failure.statistics().work;
+    }
+}
+
+#[test]
+fn encoding_work_accounting_is_inclusive() {
+    use zetesis_themelios::observation::json;
+    let fixture = nested_observation();
+    let view = fixture.view();
+    let complete = view
+        .encode_json(json::Limits::default(), &fixture.control)
+        .unwrap();
+    let work = complete.statistics().work;
+    let exact = view
+        .encode_json(
+            json::Limits {
+                max_work: work,
+                ..Default::default()
+            },
+            &fixture.control,
+        )
+        .unwrap();
+    assert_eq!(exact.text(), complete.text());
+    assert_eq!(exact.statistics(), complete.statistics());
+    let failure = view
+        .encode_json(
+            json::Limits {
+                max_work: work - 1,
+                ..Default::default()
+            },
+            &fixture.control,
+        )
+        .unwrap_err();
+    assert_eq!(failure.cause(), json::Error::Work);
+    assert!(failure.statistics().work < work);
+    assert!(failure.statistics().buffered_bytes < complete.text().len());
+}
+
+#[test]
+fn cancelled_encoding_has_zero_accounting() {
+    use zetesis_themelios::observation::json;
+    let fixture = string_observation();
+    let view = fixture.view();
+    fixture.control.cancel();
+    let failure = view
+        .encode_json(json::Limits::default(), &fixture.control)
+        .unwrap_err();
+    assert_eq!(
+        failure.cause(),
+        json::Error::Stopped(zetesis_cpu::Stop::Cancelled)
+    );
+    assert_eq!(failure.statistics(), json::Statistics::default());
+}
+
+#[test]
+fn depth_refusal_retains_encoding_work() {
+    use zetesis_themelios::observation::json;
+    let fixture = nested_observation();
+    let failure = fixture
+        .view()
+        .encode_json(
+            json::Limits {
+                max_depth: 1,
+                ..Default::default()
+            },
+            &fixture.control,
+        )
+        .unwrap_err();
+    assert_eq!(failure.cause(), json::Error::Depth);
+    assert!(failure.statistics().work > 0);
+    assert!(failure.statistics().buffered_bytes > 0);
+}

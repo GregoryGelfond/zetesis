@@ -1775,6 +1775,21 @@
     "line": 79
   },
   {
+    "name": "Zetesis.Outcomes.completed_unsatisfiable_iff_empty",
+    "file": "Zetesis/Outcomes.lean",
+    "line": 31
+  },
+  {
+    "name": "Zetesis.Outcomes.delivered_values_are_valid",
+    "file": "Zetesis/Outcomes.lean",
+    "line": 56
+  },
+  {
+    "name": "Zetesis.Outcomes.empty_delivery_can_hide_a_valid_model",
+    "file": "Zetesis/Outcomes.lean",
+    "line": 67
+  },
+  {
     "name": "Zetesis.Propagation.disabled_gate_leaves_inputs_free",
     "file": "Zetesis/Propagation.lean",
     "line": 169

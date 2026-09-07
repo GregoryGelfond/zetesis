@@ -7,12 +7,12 @@ use zetesis_core::{GroundProgram, Model, Program, Seed, StaticLimits};
 use zetesis_cpu::{BatchOracle, Control, Limits, Stop};
 
 use crate::phase_timing::{Recorder, SolvePhase};
-use crate::{Backend, Grounder, Options, Oracle, RunError};
+use crate::{Backend, Grounder, Oracle, RunError, SolveConfig};
 
 /// An initial scheduling heuristic, not a measured performance crossover.
 pub(crate) const AUTO_GPU_MIN_BATCH: usize = 32;
 
-pub(crate) fn validate_combination(options: &Options) -> Result<(), RunError> {
+pub(crate) fn validate_combination(options: &SolveConfig) -> Result<(), RunError> {
     if options.oracle == Oracle::Countermodel {
         validate_countermodel(options)?;
     }
@@ -27,7 +27,7 @@ pub(crate) fn validate_combination(options: &Options) -> Result<(), RunError> {
     Ok(())
 }
 
-pub(crate) fn validate_countermodel(options: &Options) -> Result<(), RunError> {
+pub(crate) fn validate_countermodel(options: &SolveConfig) -> Result<(), RunError> {
     if options.grounder == Grounder::Lazy {
         return Err(RunError::UnsupportedOracle {
             backend: options.backend,
@@ -44,16 +44,27 @@ pub(crate) struct Engine {
 }
 
 impl Engine {
+    #[cfg(test)]
     pub(crate) fn new(
-        options: &Options,
+        options: &SolveConfig,
         program: &Program,
+        diagnostics: &mut impl Write,
+        phases: &Recorder,
+    ) -> Result<Self, RunError> {
+        Self::with_ground(options, program, None, diagnostics, phases)
+    }
+
+    pub(crate) fn with_ground(
+        options: &SolveConfig,
+        program: &Program,
+        cached: Option<Arc<GroundProgram>>,
         diagnostics: &mut impl Write,
         phases: &Recorder,
     ) -> Result<Self, RunError> {
         validate_combination(options)?;
         let executor = match options.backend {
             Backend::Auto | Backend::Cpu => {
-                let cpu = Executor::cpu(options, program, None, diagnostics, phases)?;
+                let cpu = Executor::cpu(options, program, cached, diagnostics, phases)?;
                 if options.backend == Backend::Auto {
                     if options.grounder == Grounder::Lazy {
                         writeln!(
@@ -74,7 +85,7 @@ impl Engine {
                 }
                 cpu
             }
-            _ => Executor::gpu(options, program, None, diagnostics, phases)?,
+            _ => Executor::gpu(options, program, cached, diagnostics, phases)?,
         };
         Ok(Self {
             executor,
@@ -87,7 +98,7 @@ impl Engine {
 
     pub(crate) fn check(
         &mut self,
-        options: &Options,
+        options: &SolveConfig,
         program: &Program,
         seeds: &[Seed],
         diagnostics: &mut impl Write,
@@ -160,7 +171,7 @@ fn should_probe_gpu(automatic: bool, attempted: bool, candidates: usize) -> bool
     automatic && !attempted && candidates >= AUTO_GPU_MIN_BATCH
 }
 
-fn cpu_mode(options: &Options) -> &'static str {
+fn cpu_mode(options: &SolveConfig) -> &'static str {
     if options.grounder == Grounder::Eager {
         "eager"
     } else {
@@ -183,7 +194,7 @@ enum Executor {
 
 impl Executor {
     fn cpu(
-        options: &Options,
+        options: &SolveConfig,
         program: &Program,
         cached: Option<Arc<GroundProgram>>,
         diagnostics: &mut impl Write,
@@ -238,7 +249,7 @@ impl Executor {
 
     #[cfg(not(feature = "gpu"))]
     fn gpu(
-        _: &Options,
+        _: &SolveConfig,
         _: &Program,
         _: Option<Arc<GroundProgram>>,
         _: &mut impl Write,
@@ -249,7 +260,7 @@ impl Executor {
 
     #[cfg(feature = "gpu")]
     fn gpu(
-        options: &Options,
+        options: &SolveConfig,
         program: &Program,
         cached: Option<Arc<GroundProgram>>,
         diagnostics: &mut impl Write,
@@ -293,7 +304,7 @@ impl Executor {
 
     fn check(
         &mut self,
-        options: &Options,
+        options: &SolveConfig,
         program: &Program,
         seeds: &[Seed],
         control: &Control,
@@ -341,7 +352,7 @@ impl Executor {
 }
 
 fn compile_static(
-    options: &Options,
+    options: &SolveConfig,
     program: &Program,
     max_atoms: usize,
     phases: &Recorder,
@@ -360,7 +371,7 @@ fn compile_static(
 }
 
 fn static_diagnostics(
-    options: &Options,
+    options: &SolveConfig,
     ground: &GroundProgram,
     diagnostics: &mut impl Write,
 ) -> Result<(), RunError> {

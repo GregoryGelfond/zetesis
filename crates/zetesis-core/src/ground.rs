@@ -305,6 +305,23 @@ impl GroundProgram {
                 .map(|(_, atom)| atom.clone()),
         ))
     }
+
+    /// Decode an arbitrary interpretation with this graph's atom-index meanings.
+    /// This is the accurately named counterpart of [`Self::model_from_words`];
+    /// no satisfaction or stability check occurs. Decoding scans the whole carrier
+    /// and clones selected atoms into a canonical set. Costs include their payload
+    /// and set comparisons; no compilation occurs. The owned tree uses infallible
+    /// allocation, so allocator failure is not represented by [`WordError`].
+    ///
+    /// # Errors
+    /// Refuses an incorrect word count or nonzero tail padding. Raw words carry
+    /// no instance identity; callers must establish their correspondence to this graph.
+    pub fn interpretation_from_words(
+        &self,
+        words: &[u32],
+    ) -> Result<crate::Interpretation, WordError> {
+        self.model_from_words(words)
+    }
 }
 
 fn power(base: usize, exponent: usize) -> Result<usize, StaticError> {

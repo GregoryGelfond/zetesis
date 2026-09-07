@@ -7,7 +7,7 @@ use zetesis_ferraris::{Interpretation, Theory};
 use zetesis_sat::{BatchError, BatchLimits, BatchVerdict, CompletionExecutor, StableModels};
 
 use crate::formula_execution::Failure;
-use crate::{Options, RunError};
+use crate::{RunError, SolveConfig};
 
 #[derive(Default)]
 /// Owns only reduct-verified models awaiting objective scoring or output.
@@ -20,7 +20,7 @@ pub(crate) struct BatchQueue {
 }
 
 impl BatchQueue {
-    pub(crate) fn new(options: &Options) -> Result<Self, RunError> {
+    pub(crate) fn new(options: &SolveConfig) -> Result<Self, RunError> {
         Ok(Self {
             completion: CompletionExecutor::with_scratch_limit(
                 options.completion_workers,
@@ -49,7 +49,7 @@ impl BatchQueue {
     pub(crate) fn next(
         &mut self,
         models: &mut StableModels,
-        options: &Options,
+        options: &SolveConfig,
         control: &Control,
         mut checker: impl FnMut(&Theory, &[Interpretation]) -> Result<Vec<BatchVerdict>, Failure>,
     ) -> Option<Result<Interpretation, Failure>> {

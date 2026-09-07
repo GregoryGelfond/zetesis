@@ -28,7 +28,7 @@ fn collected_seeds_observe_cancellation_and_deadline_before_any_oracle() {
         .unwrap();
         let mut diagnostics = Vec::new();
         let mut engine = Engine::new(
-            &options,
+            &(&options).into(),
             program,
             &mut diagnostics,
             &crate::phase_timing::Recorder::new(false),
@@ -43,7 +43,7 @@ fn collected_seeds_observe_cancellation_and_deadline_before_any_oracle() {
         ] {
             let batch = engine
                 .check(
-                    &options,
+                    &(&options).into(),
                     program,
                     &[seed.clone(), seed.clone()],
                     &mut diagnostics,
@@ -59,7 +59,7 @@ fn collected_seeds_observe_cancellation_and_deadline_before_any_oracle() {
         }
         let batch = engine
             .check(
-                &options,
+                &(&options).into(),
                 program,
                 &[seed.clone(), seed.clone()],
                 &mut diagnostics,
@@ -92,11 +92,17 @@ fn eager_static_cache_reuse_does_not_record_a_second_materialization() {
     ])
     .unwrap();
     let phases = crate::phase_timing::Recorder::new(true);
-    let first =
-        super::Executor::cpu(&options, admitted.program(), None, &mut Vec::new(), &phases).unwrap();
+    let first = super::Executor::cpu(
+        &(&options).into(),
+        admitted.program(),
+        None,
+        &mut Vec::new(),
+        &phases,
+    )
+    .unwrap();
     let ground = first.ground().unwrap();
     let second = super::Executor::cpu(
-        &options,
+        &(&options).into(),
         admitted.program(),
         Some(ground.clone()),
         &mut Vec::new(),

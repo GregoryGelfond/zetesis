@@ -8,6 +8,7 @@ mod compile;
 mod evaluate;
 mod render;
 pub mod view;
+pub mod json;
 
 pub use view::{ModelView, ViewError, ViewLimits};
 
@@ -70,7 +71,7 @@ pub struct Limits {
     pub max_symbol_nodes: usize,
     /// Maximum constructed symbol depth.
     pub max_symbol_depth: usize,
-    /// Bytes per constructed symbol.
+    /// UTF-8 string and constructor-name bytes per constructed symbol.
     pub max_symbol_bytes: usize,
     /// Retained term payload (16 bytes/node plus UTF-8 text; excluding allocator
     /// overhead) and complete rendered line bytes, each independently.
@@ -86,6 +87,30 @@ impl Default for Limits {
             max_symbol_depth: 64,
             max_symbol_bytes: 1_048_576,
             max_output_bytes: 8_388_608,
+        }
+    }
+}
+
+/// Independent storage preflight for constructing one observation symbol.
+/// Existing evaluation/rendering methods use the default; explicit variants allow
+/// callers to set this ceiling independently of logical text/output limits.
+#[derive(Clone, Copy, Debug)]
+pub struct ConstructionLimits {
+    /// Inclusive conservative bound: twice the semantic node count times
+    /// `size_of::<Symbol>()`, plus twice the UTF-8 string/name bytes. One node
+    /// allowance covers constructed Symbol cells, the other the reverse-conversion
+    /// stack. The extra text allowance covers the canonical name validator's
+    /// temporary Source text copy. The same conservative formula applies to all
+    /// symbols and is checked before construction, including duplicate terms.
+    /// Borrowed input capacity/cached spelling, allocator overhead, reference-count
+    /// headers and join/result-container bookkeeping are excluded. Logical output
+    /// and node limits separately bound retained results. This is not an RSS cap.
+    pub max_bytes: usize,
+}
+impl Default for ConstructionLimits {
+    fn default() -> Self {
+        Self {
+            max_bytes: 8_388_608,
         }
     }
 }
@@ -117,6 +142,8 @@ pub enum Resource {
     Terms,
     /// Total retained/rendered payload.
     OutputBytes,
+    /// Conservative per-symbol construction cells, text and conversion stack.
+    ConstructionBytes,
 }
 
 /// A source form outside this observation slice.
@@ -238,6 +265,20 @@ pub struct ObservationProgram {
     directives: Vec<Directive>,
 }
 impl ObservationProgram {
+    /// Compile only this channel through the validated shared-program metadata door.
+    /// Constants and observation safety are checked; logical execution is not admitted.
+    ///
+    /// # Errors
+    /// Returns the same located refusals as [`crate::SourceMetadata::compile`].
+    pub fn compile(
+        program: &themelios_program::program::Program,
+        limits: crate::MetadataLimits,
+        fallback: Location,
+    ) -> Result<Self, crate::MetadataError> {
+        crate::SourceMetadata::compile(program, limits, fallback)
+            .map(|metadata| metadata.observations)
+    }
+
     /// Whether the term channel contains no source templates.
     #[must_use]
     pub fn is_empty(&self) -> bool {
@@ -259,8 +300,27 @@ impl ObservationProgram {
         limits: Limits,
         control: &Control,
     ) -> Result<Evaluation, Error> {
-        evaluate::evaluate(self, model, limits, control)
+        self.evaluate_with_construction_limits(
+            model,
+            limits,
+            ConstructionLimits::default(),
+            control,
+        )
     }
+    /// Evaluate with an explicit independent symbol-construction storage ceiling.
+    ///
+    /// # Errors
+    /// Returns a typed refusal and charged work, without a partial term set.
+    pub fn evaluate_with_construction_limits(
+        &self,
+        model: &Model,
+        limits: Limits,
+        construction: ConstructionLimits,
+        control: &Control,
+    ) -> Result<Evaluation, Error> {
+        evaluate::evaluate(self, model, limits, construction, control)
+    }
+
     /// Render selected original atoms plus distinct terms as one complete line.
     /// Equal symbols from the two channels remain repeated. No newline is included.
     ///
@@ -273,7 +333,28 @@ impl ObservationProgram {
         limits: Limits,
         control: &Control,
     ) -> Result<Rendered, Error> {
-        render::render(self, model, selection, limits, control)
+        self.render_with_construction_limits(
+            model,
+            selection,
+            limits,
+            ConstructionLimits::default(),
+            control,
+        )
+    }
+    /// Render with an independent construction ceiling for observed terms.
+    /// Borrowed atom spelling does not construct new Symbol values.
+    ///
+    /// # Errors
+    /// Returns a typed refusal without a partial rendered line.
+    pub fn render_with_construction_limits(
+        &self,
+        model: &Model,
+        selection: &crate::OutputSelection,
+        limits: Limits,
+        construction: ConstructionLimits,
+        control: &Control,
+    ) -> Result<Rendered, Error> {
+        render::render(self, model, selection, limits, construction, control)
     }
 }
 

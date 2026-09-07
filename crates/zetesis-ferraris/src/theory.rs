@@ -77,6 +77,10 @@ pub struct Theory(Arc<Data>);
 impl Theory {
     /// Validate a circuit without recursive traversal. The caller owns input
     /// vector construction; these bounds govern admission and later evaluation.
+    /// Scans every node and root in O(nodes + roots) time and transfers their
+    /// vectors without copying elements. The shared instance handle uses one
+    /// infallible `Arc` allocation; subsequent clones share it in constant time.
+    /// No formula evaluation, grounding, or search occurs.
     ///
     /// # Errors
     /// Refuses excessive dimensions, invalid atom/edge/root indices, or a word
@@ -141,6 +145,8 @@ impl Theory {
 }
 
 /// Packed membership in exactly one immutable theory's finite atom universe.
+/// This is an arbitrary truth assignment, with no satisfaction or stability
+/// claim. Cloning copies the packed words and shares the theory handle.
 #[derive(Clone, Debug)]
 pub struct Interpretation {
     pub(crate) theory: Theory,
@@ -148,6 +154,10 @@ pub struct Interpretation {
 }
 impl Interpretation {
     /// Construct an interpretation, coalescing repeated atom indices.
+    /// For a universe of U atoms and n input indices, this initializes
+    /// ceil(U/64) words and consumes the iterator in O(ceil(U/64) + n) time,
+    /// using O(ceil(U/64)) owned words. The iterator must terminate; its own cost
+    /// is additional. No formula is evaluated. The theory handle is shared.
     ///
     /// # Errors
     /// Refuses out-of-universe atoms or failed storage reservation.
@@ -179,13 +189,15 @@ impl Interpretation {
         &self.theory
     }
 
-    /// Membership; an out-of-universe index is false.
+    /// Constant-time membership; an out-of-universe index is false.
     #[must_use]
     pub fn contains(&self, atom: usize) -> bool {
         atom < self.theory.atom_count() && self.words[atom / 64] & (1 << (atom % 64)) != 0
     }
 
     /// Atom indices in ascending order, without materializing a second carrier.
+    /// Construction is constant time; complete traversal scans the entire atom
+    /// universe, including false atoms, in O(U) time and constant auxiliary space.
     pub fn atoms(&self) -> impl Iterator<Item = usize> + '_ {
         (0..self.theory.atom_count()).filter(|atom| self.contains(*atom))
     }

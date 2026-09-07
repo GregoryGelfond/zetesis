@@ -1,5 +1,7 @@
-//! Streaming command-line orchestration for zetesis.
+//! Reusable ordinary-solve sessions and command-line adapters for zetesis.
 //!
+//! [`Session`] consumes coherent prepared owners without argument parsing or output
+//! writers. [`run_finalized`] retains semantic evidence separately from publication.
 //! [`run`] accepts source and an injected output sink. Parsing, exact oracles,
 //! and candidate enumeration remain reusable libraries. [`entry`] adapts these
 //! operations to process arguments, standard streams, and exit codes.
@@ -23,6 +25,8 @@ mod phase_timing;
 mod stage_timing;
 mod formula_queue;
 mod output;
+mod solve_config;
+mod semantic_outcome;
 
 #[cfg(test)]
 #[path = "../tests/support/bounded_writer.rs"]
@@ -33,13 +37,25 @@ pub use optimization::{Optimization, OptimizationStop};
 pub use devices::devices;
 pub use driver::{
     Completion, Interruption, Report, RunError, run, run_bundle_detailed_with_diagnostics,
-    run_bundle_with_diagnostics, run_detailed, run_detailed_with_diagnostics, run_with_diagnostics,
+    run_bundle_finalized_with_diagnostics, run_bundle_with_diagnostics, run_detailed,
+    run_detailed_with_diagnostics, run_finalized, run_finalized_with_diagnostics,
+    run_with_diagnostics,
 };
 pub use failure::{PartialReport, RunFailure};
 pub use formula_execution::{CompletionAccounting, FormulaExecutionStatistics};
 pub use options::{Backend, Command, Grounder, Options, Oracle};
 pub use process::entry;
+pub use semantic_outcome::SemanticOutcome;
+pub use solve_config::SolveConfig;
 
 pub use phase_timing::{PhaseTimings, SolvePhase};
 
 pub use zetesis_telemetry::{GroundingMode, SolveStage, StageMeasurement, StageTimings};
+
+mod closure_session;
+mod formula_session;
+mod finalized;
+pub use finalized::{Publication, SolveFailure, SolveReport};
+
+mod session;
+pub use session::{PreparedInput, PreparedProfile, Session, SessionModel, Subject};
