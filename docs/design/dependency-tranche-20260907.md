@@ -95,6 +95,10 @@ the CLI combination check does not meet this criterion.
 
 ## Stocktake and next tranche
 
+The [revised coming tranche](aggregate-bounds-lazy-metal-20260907.md) records the
+concrete language, CPU, GPU and tooling sequence after this checkpoint, including
+the aggregate-bound and head-aggregate priorities and directive exclusions.
+
 After this tranche is integrated and qualified, review language admission,
 measured performance, lazy/Metal execution, public APIs, code clarity and the
 remaining version 1.0 requirements before selecting new implementation slices.
