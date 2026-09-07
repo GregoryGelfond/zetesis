@@ -45,6 +45,12 @@ pub(crate) fn check(
         if !relevant_head(&rule.head, &relevant) {
             continue;
         }
+        // The existing total-observer certificate assumes no filter or value
+        // consumer of its aggregate output. A scheduled proposal does not prove
+        // that the objective priority survives grounding simplification.
+        if rule.bindings.as_ref().is_some_and(|plan| plan.consumers) {
+            return Err(refusal(rule.location));
+        }
         if rule
             .body
             .iter()

@@ -84,15 +84,15 @@ impl Compiler<'_> {
         &mut self,
         body: &[LiteralIr],
         choice_guards: &[AggregateGuard],
-    ) -> Result<(), FormulaFailure> {
-        for binder in body {
+        aggregate_values: &[bool],
+        consumers: bool,
+    ) -> Result<bool, FormulaFailure> {
+        let mut consumed = false;
+        for (target, dependent) in aggregate_values.iter().enumerate() {
             self.scope_work(1)?;
-            let LiteralIr::Aggregate(aggregate) = binder else {
+            if !dependent {
                 continue;
-            };
-            let Some(target) = aggregate.binding else {
-                continue;
-            };
+            }
             for guard in choice_guards {
                 if self.expression_uses(&guard.bound, target)? {
                     return Err(
@@ -101,11 +101,26 @@ impl Compiler<'_> {
                 }
             }
             for literal in body {
+                self.scope_work(1)?;
+                // These operations only consume completed proposal values.
+                // The original aggregate equality and static guards remain.
+                if consumers
+                    && matches!(
+                        literal,
+                        LiteralIr::Compare(..)
+                            | LiteralIr::TupleCompare(..)
+                            | LiteralIr::Guard(_)
+                            | LiteralIr::Bind { .. }
+                    )
+                {
+                    consumed |= self.literal_uses(literal, target)?;
+                    continue;
+                }
                 // Its own single equality guard supplies the target. Every
                 // other binder must also have independent tuples/conditions.
                 // Non-binding aggregate comparisons run after the complete
                 // generated row, so their established element dependencies
-                // remain valid; the prior guard/filter restrictions stay.
+                // remain valid. Other scopes retain their restrictions.
                 if matches!(literal, LiteralIr::Aggregate(other) if other.binding == Some(target)) {
                     continue;
                 }
@@ -116,16 +131,16 @@ impl Compiler<'_> {
                 }
             }
         }
-        Ok(())
+        Ok(consumed)
     }
 
-    fn scope_work(&mut self, count: usize) -> Result<(), FormulaFailure> {
+    pub(super) fn scope_work(&mut self, count: usize) -> Result<(), FormulaFailure> {
         self.budget
             .charge(ExpansionResource::TermWork, count as u128, self.location)?;
         Ok(())
     }
 
-    fn expression_uses(
+    pub(super) fn expression_uses(
         &mut self,
         expression: &Expression,
         variable: usize,
@@ -143,7 +158,7 @@ impl Compiler<'_> {
         Ok(atom.terms().contains(&Term::Variable(variable)))
     }
 
-    fn element_uses(
+    pub(super) fn element_uses(
         &mut self,
         element: &AggregateElementIr,
         variable: usize,

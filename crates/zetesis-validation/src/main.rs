@@ -5,6 +5,14 @@ mod corpus;
 mod execution;
 mod normalize;
 mod phase;
+#[cfg_attr(
+    any(target_os = "linux", target_os = "macos"),
+    path = "legacy_process.rs"
+)]
+#[cfg_attr(
+    not(any(target_os = "linux", target_os = "macos")),
+    path = "process_portable.rs"
+)]
 mod process;
 mod runner;
 mod stage;

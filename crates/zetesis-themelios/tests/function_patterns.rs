@@ -295,8 +295,8 @@ fn late_mismatch_leaves_the_next_row_unbound() {
 }
 
 #[test]
-fn structured_consequent_remains_a_typed_refusal() {
-    let source = "{p(f(1))}.q:-p(f(X)):#true.";
+fn inverse_consequent_remains_a_typed_refusal() {
+    let source = "{p(f(1))}.q:-p(f(X+1)):#true.";
     assert!(
         matches!(
             admit_formula(

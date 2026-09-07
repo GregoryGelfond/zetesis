@@ -90,6 +90,46 @@
     "line": 61
   },
   {
+    "name": "Zetesis.AggregateConsumers.available_iff",
+    "file": "Zetesis/AggregateConsumers.lean",
+    "line": 39
+  },
+  {
+    "name": "Zetesis.AggregateConsumers.covered_consumer",
+    "file": "Zetesis/AggregateConsumers.lean",
+    "line": 76
+  },
+  {
+    "name": "Zetesis.AggregateConsumers.false_filter_frozen",
+    "file": "Zetesis/AggregateConsumers.lean",
+    "line": 96
+  },
+  {
+    "name": "Zetesis.AggregateConsumers.frozen_consumer_identity",
+    "file": "Zetesis/AggregateConsumers.lean",
+    "line": 104
+  },
+  {
+    "name": "Zetesis.AggregateConsumers.original_clause",
+    "file": "Zetesis/AggregateConsumers.lean",
+    "line": 89
+  },
+  {
+    "name": "Zetesis.AggregateConsumers.proposal_does_not_assert_head",
+    "file": "Zetesis/AggregateConsumers.lean",
+    "line": 114
+  },
+  {
+    "name": "Zetesis.AggregateConsumers.ready_split",
+    "file": "Zetesis/AggregateConsumers.lean",
+    "line": 50
+  },
+  {
+    "name": "Zetesis.AggregateConsumers.scheduled_input_has_prior_producer",
+    "file": "Zetesis/AggregateConsumers.lean",
+    "line": 60
+  },
+  {
     "name": "Zetesis.BatchAccounting.commit_accounted",
     "file": "Zetesis/BatchAccounting.lean",
     "line": 103
@@ -1920,6 +1960,16 @@
     "line": 79
   },
   {
+    "name": "Zetesis.OrderedProbes.boundary_partitions",
+    "file": "Zetesis/OrderedProbes.lean",
+    "line": 43
+  },
+  {
+    "name": "Zetesis.OrderedProbes.complete_match_retained",
+    "file": "Zetesis/OrderedProbes.lean",
+    "line": 78
+  },
+  {
     "name": "Zetesis.Outcomes.completed_unsatisfiable_iff_empty",
     "file": "Zetesis/Outcomes.lean",
     "line": 31
@@ -2873,6 +2923,36 @@
     "name": "Zetesis.StructuralBindings.wildcard_only_preserves_binding",
     "file": "Zetesis/StructuralBindings.lean",
     "line": 185
+  },
+  {
+    "name": "Zetesis.StructuredWitnesses.active_condition_requires_witness",
+    "file": "Zetesis/StructuredWitnesses.lean",
+    "line": 101
+  },
+  {
+    "name": "Zetesis.StructuredWitnesses.complete_row_collection_keeps_stability",
+    "file": "Zetesis/StructuredWitnesses.lean",
+    "line": 113
+  },
+  {
+    "name": "Zetesis.StructuredWitnesses.completed_condition_preserved",
+    "file": "Zetesis/StructuredWitnesses.lean",
+    "line": 83
+  },
+  {
+    "name": "Zetesis.StructuredWitnesses.frozen_witness_truth",
+    "file": "Zetesis/StructuredWitnesses.lean",
+    "line": 61
+  },
+  {
+    "name": "Zetesis.StructuredWitnesses.original_witness_truth",
+    "file": "Zetesis/StructuredWitnesses.lean",
+    "line": 40
+  },
+  {
+    "name": "Zetesis.StructuredWitnesses.refused_witness_preserves_condition",
+    "file": "Zetesis/StructuredWitnesses.lean",
+    "line": 94
   },
   {
     "name": "Zetesis.Thresholds.threshold_bound_antitone",

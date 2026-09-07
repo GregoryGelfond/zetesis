@@ -242,11 +242,7 @@ fn scalar_failures_remain_admission_errors() {
 
 #[test]
 fn unsupported_value_families_remain_refused() {
-    for source in [
-        "d(1).p(f(X..X+1)):-d(X).",
-        "d(1).q:-d(X),not p(f(X;2)).",
-        "p(f(N)):-N=#count{}.",
-    ] {
+    for source in ["d(1).p(f(X..X+1)):-d(X).", "d(1).q:-d(X),not p(f(X;2))."] {
         assert!(
             limited(source, ExpansionLimits::default(), FormulaLimits::default()).is_err(),
             "{source}"

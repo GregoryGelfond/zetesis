@@ -149,7 +149,9 @@ fn options(directory: &Path) -> FixtureOptions {
 }
 
 fn check(options: &Options, loaded: &Loaded, expected: &str) -> Value {
-    let result = super::check_case(options, loaded, &loaded.manifest.cases[0]);
+    let mut pending = Vec::new();
+    let result = super::check_case(options, loaded, &loaded.manifest.cases[0], &mut pending);
+    assert!(pending.is_empty());
     assert_eq!(result["status"], expected, "{result:#}");
     assert_eq!(result["path"], "synthetic.lp");
     if expected != "pass" && expected != "reference_pass" {
@@ -196,7 +198,7 @@ fn concurrent_fixture_publication_preserves_exact_process_results() {
                         4_096,
                     )
                     .unwrap();
-                    assert_eq!(captured.status, "completed");
+                    assert_eq!(captured.status, "completed", "{captured:?}");
                     assert_eq!(captured.exit_code, Some(17));
                     assert_eq!(captured.stdout, stdout);
                     assert_eq!(captured.stderr, stderr);

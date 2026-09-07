@@ -64,7 +64,8 @@ the same atom, independent of traversal and literal order. These equality checks
 never infer bindings. `q(X):-p(f(X+1))` without another binder receives
 `UnboundArgumentInput`: arithmetic inversion is unsupported by this profile,
 which is distinct from declaring the source unsafe in ASP.
-Structured consequent-only witnesses retain their separate profile restriction.
+Positive structured consequent-only witnesses use this matcher in their own
+local alternative scope; evaluated witness positions retain a separate refusal.
 Pools/intervals below a constructor remain outside this generation profile.
 The [finite-value](../../docs/verification/finite-values-20260907/README.md) and
 [tuple-binding](../../docs/verification/structural-bindings-20260907/README.md)
@@ -206,11 +207,16 @@ An empty alternative range is false even under default negation; a successfully
 exhausted empty condition domain is true. Partial enumeration never certifies
 vacuity. Undefined arithmetic and resource exhaustion remain located refusals.
 
-Positive consequent-only whole variables and anonymous arguments obtain finite
-witnesses from completed possible-support rows. Evaluated negative arguments
-consume independently bound inputs. Arithmetic inversion, structured
-consequent-only witness patterns and nested pools remain explicit profile
-boundaries. Original condition formulas are retained; possible support does not
+Positive consequent-only whole variables, anonymous arguments and structural
+patterns obtain finite witnesses from completed possible-support rows. For example,
+`q:-p(f(X,_)):#true.` requires some complete `p(f(...))` atom, retaining its
+anonymous values and predicate/constructor signs. Repeated or prebound names must
+agree; a failed row cannot leave bindings for the next row. Witness names are
+private to each alternative and cannot establish condition or outer-rule safety.
+Evaluated negative arguments consume independently bound inputs. Evaluated
+positions mixed with local witness extraction, arithmetic inversion, negative
+anonymous witnesses and nested pools remain explicit profile boundaries.
+Original condition formulas are retained; possible support does not
 substitute for their truth. Pooled analysis syntax uses the explicit
 `DependencyProjection` basis described above, without changing runtime reduct
 or certificate premises.
@@ -226,6 +232,11 @@ semantics. They do not prove source join completeness, compiler correspondence
 or machine resource accounting. The [current evidence](../../docs/verification/conditional-scope-20260907/README.md)
 and [earlier conditional record](../../docs/verification/stocktake-20260906-conditionals-objectives.md)
 retain the executable checks and their scope.
+The [structured-witness record](../../docs/verification/structured-witnesses-20260907/README.md)
+adds complete original-source comparisons, finite frozen checks, inclusive limits
+and the scoped [StructuredWitnesses](../../proofs/Zetesis/StructuredWitnesses.lean)
+laws. Pattern copies are preflighted; matching reuses the existing transactional
+work and storage accounting, including its conservative charges for shared values.
 
 ## Finite aggregate comparisons
 
@@ -233,7 +244,7 @@ Formula admission accepts body `#count`, `#sum`, `#sum+` and numeric `#min`/`#ma
 
 Complete tuple identity controls deduplication: repeated eligible tuples combine their condition formulas by disjunction. Equal weights alone never merge different tuples. Recursive or classically tautological eligibility is preserved for the reduct. Nonnegative weights use bounded threshold formulas; signed sums use an exact bounded subset-implication translation. `!=` retains its aggregate reduct and is not replaced with default negation of equality. Choice bounds are constraints over eligible selected heads, so they cannot create support.
 
-Both sum functions ignore empty tuples and tuples with a nonnumeric first component; `#sum+` additionally ignores negative weights. Zero weights are neutral. Filtering is consistent in assignment candidates and final formula construction, and never weakens source variable safety. A count's empty tuple is valid and contributes once. Current typed refusals include dependencies between aggregate assignment generators, target-dependent assignment conditions or other body filters, nonnumeric min/max weights, tuple intervals and nonpositive body-set base literals.
+Both sum functions ignore empty tuples and tuples with a nonnumeric first component; `#sum+` additionally ignores negative weights. Zero weights are neutral. Filtering is consistent in assignment candidates and final formula construction, and never weakens source variable safety. A count's empty tuple is valid and contributes once. Current typed refusals include dependencies between aggregate assignment generators, target-dependent assignment conditions, generated body-atom/range/conditional/choice consumers, tuple intervals and nonpositive body-set base literals. Ordinary scalar and tuple filters may consume independently generated assignment values as described below.
 
 The possible-support computation conservatively ignores aggregate comparisons, retaining all potential normal/choice heads. This is sufficient for the stable-model upper bound, but does not reproduce objective priority presence for impossible aggregate producers. Ordinary aggregate producer comparisons therefore receive `ObjectiveAggregateDependency` when they can feed an objective. A narrow structural observer contract for total assignments is described below. Aggregate constraints never derive support and remain admissible with objectives.
 
@@ -241,11 +252,15 @@ The possible-support computation conservatively ignores aggregate comparisons, r
 
 ## Generated aggregate values and upstream analysis
 
-Several positive function aggregates may bind distinct otherwise unbound named variables through single equality guards (`N = #sum{...}` or the reversed guard). Each target must be absent from its own and all other binding aggregates' tuples and conditions, other aggregate guards, ordinary outer filters or scalar binders, and choice bounds. A target already bound by an ordinary positive atom remains an equality test. Non-binding aggregate element tuples and conditions may use generated targets after the complete row is constructed; this preserves the previously admitted comparison profile. Every other global/local variable still needs a valid positive binding. Dependencies between assignment generators and objective-relevant multiple-assignment producers remain explicit refusals.
+Several positive function aggregates may bind distinct otherwise unbound named variables through single equality guards (`N = #sum{...}` or the reversed guard). Each target must be absent from its own and all other binding aggregates' tuples and conditions, other aggregate guards, and choice bounds. A target already bound by an ordinary positive atom remains an equality test. Non-binding aggregate element tuples and conditions may use generated targets after the complete row is constructed; this preserves the previously admitted comparison profile. Every other global/local variable still needs a valid positive binding. Dependencies between assignment generators and objective-relevant multiple-assignment producers remain explicit refusals.
+
+In ordinary rules and constraints, independent aggregate assignments may feed scalar comparisons, tuple comparisons, complete Boolean guards, scalar equalities and constructed or evaluated head values. For example, `{p(1);p(2)}.q(f(Y)):-N=#count{X:p(X)},N>0,Y=N+1.` has four complete answer sets. A private plan records required/produced slots and preserves the prior generator order wherever inputs are ready. Relational bindings precede these instructions; synthetic captures and comparisons never invent inputs. The source body order, aggregate equalities and existing original/frozen guard lowering stay unchanged. Missing and cyclic value inputs have explicit scheduling diagnostics. This does not reject ordinary predicate recursion merely because it is recursive.
+
+New consumers reaching body atoms (including evaluated positive checks), dependent ranges, conditional/choice scopes or objective producers remain refused. Cross-aggregate dependencies are checked transitively through intermediate scalar values. Previously admitted scopes remain available. Plans charge scans and input/readiness/instruction storage before allocation; ordinary aggregate-free rules retain their previous expansion accounting. Undefined or overflowing consumer arithmetic refuses the whole admission under the existing final-row policy, even when an aggregate proposal would later be unrealizable. No early filter optimization hides that error.
 
 For example, `{p}. pair(N,S) :- N=#count{1:p}, S=#sum{2:p}.` has two answer sets, containing `pair(0,0)` or `p` and `pair(1,2)`. The cursor streams the product of each bounded attainable-value set. Shared atoms can correlate the actual values: every original equality remains in the theory, so reduct checking rejects unrealizable combinations. No global source-domain product or new lowering rule is introduced.
 
-After each complete outer positive/filter join, the candidate cursor computes attainable subset sums over full deduplicated tuple keys; a count produces `0..n`. Empty count/sum aggregates produce zero. Numeric min/max assignments propose their possible numeric tuple values plus the actual empty sentinel (`#sup` for min, `#inf` for max), distinct from every integer. This can introduce numbers absent from the source domain. Conditions sharing atoms can make some proposed values unrealizable: the actual aggregate equality remains in every emitted formula, and the reduct oracle determines membership. Checked integer overflow, generated-value, work, substitution, atom, and round ceilings refuse the input; recursive value growth never authorizes a partial support relation.
+After each complete outer relational join, the candidate cursor computes attainable subset sums over full deduplicated tuple keys and runs ready value consumers; a count produces `0..n`. Final filters inspect complete generated rows. Empty count/sum aggregates produce zero. Numeric min/max assignments propose their possible numeric tuple values plus the actual empty sentinel (`#sup` for min, `#inf` for max), distinct from every integer. This can introduce numbers absent from the source domain. Conditions sharing atoms can make some proposed values unrealizable: the actual aggregate equality remains in every emitted formula, and the reduct oracle determines membership. Checked integer overflow, generated-value, work, substitution, atom, and round ceilings refuse the input; recursive value growth never authorizes a partial support relation.
 
 Final grounding reuses eligibility only over its completed, immutable possible-support relation. A cache key contains the deterministic aggregate IR identity and complete outer binding with the proven-absent assignment target removed. Its values are full-tuple-coalesced condition formulas, never a candidate model's truth values. Independent cache row, element, root, and key-payload ceilings bound retained entries; copies/lookups/reference returns consume the normal work and scalar-payload budgets. Each assignment binding constructs equality roots for all bounded candidate values. Nonnegative count/sum families share one threshold table; signed families retain exact subset implications with cumulative quotas. Numeric extrema use filtered eligibility disjunctions and preserve implication in not-equal formulas. Numeric min/max bounds and first tuple values at i32 endpoints retain an internal admission guard while six clingo 5.8.2 discrepancies are unresolved. The [numeric boundary record](../../docs/design/numeric-semantics.md) keeps this implementation/semantic gap separate from themelios rejection and agreed language exclusions. Every returned equality root is remapped through structural DAG interning and retained under its exact scalar candidate value. Original roots still carry every source occurrence.
 
@@ -254,6 +269,8 @@ Final grounding reuses eligibility only over its completed, immutable possible-s
 The upstream safety result is preserved verbatim. At pin `87c11a3`, its ASP-Core-2 reading treats aggregate guard variables as required, so `n(N) :- N=#sum{}.` is reported unsafe there. The frontend admits that narrow clingo binder extension only after its own explicit target/scope checks. It does not relabel the upstream result as safe or use its finiteness result to remove runtime ceilings. `Unknown` remains unknown, and a `Holds` finiteness value is never evidence by itself when the upstream safety premise does not hold. No sibling repository or dependency pin is changed.
 
 The Lean aggregate-assignment contract proves candidate-value coverage and full-tuple OR-coalescing under explicit carrier coverage assumptions. It does not prove this Rust cursor, parser/scope logic, recursive support completion, caching, or objective-priority behavior.
+
+The scoped [aggregate consumer laws](../../proofs/Zetesis/AggregateConsumers.lean) describe input readiness, retained value association and original/frozen clauses. They do not establish Rust refinement or runtime budgets. [Consumer verification](../../docs/verification/aggregate-consumers-20260907/README.md) records finite-ground comparisons, exact limits and a schedule-bypass negative control.
 
 ## Lifted objectives
 

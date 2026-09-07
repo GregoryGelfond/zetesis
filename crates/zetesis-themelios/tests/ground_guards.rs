@@ -14,9 +14,9 @@ use zetesis_core::{Atom, Sign, Value};
 use zetesis_cpu::Control;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
-    ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
-    FormulaResource, ProfileFeature, SourceBundle, admit_bundle_formula, admit_formula,
+    AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
+    ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
+    SourceBundle, admit_bundle_formula, admit_formula,
 };
 
 type Models = BTreeSet<BTreeSet<String>>;
@@ -284,20 +284,6 @@ fn guard_conditions_do_not_supply_missing_bindings_or_expand_other_source_profil
                 .iter()
                 .all(|diagnostic| diagnostic.primary().location.source == SOURCE)
         );
-    }
-    for source in [
-        "{a}.n(N):-N=#count{1:a},not N=0.",
-        "{a}.n(N):-N=#count{1:a},not not 0<=N<=1.",
-    ] {
-        assert!(matches!(
-            input(source),
-            Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
-                AdmissionFailure::Profile {
-                    feature: ProfileFeature::AggregateAssignment,
-                    ..
-                }
-            )))
-        ));
     }
     assert!(
         input("#true.").is_err(),

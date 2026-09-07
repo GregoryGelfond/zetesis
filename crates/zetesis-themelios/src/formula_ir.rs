@@ -1,5 +1,9 @@
 //! Bounded normalization and explicit global/element-local variable scopes.
 
+#[cfg(test)]
+#[path = "formula_assignment_plan_tests.rs"]
+mod assignment_plan_tests;
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use themelios_base::span::Location;
@@ -43,6 +47,7 @@ pub(crate) struct ObjectiveIr {
 pub(crate) struct RuleIr {
     pub head: HeadIr,
     pub body: Vec<LiteralIr>,
+    pub bindings: Option<crate::formula_assignment_plan::Plan>,
     pub variables: usize,
     pub origins: Vec<Location>,
     pub location: Location,
@@ -394,6 +399,7 @@ impl Compiler<'_> {
         Ok(RuleIr {
             head: HeadIr::Normal(Some(head)),
             body: Vec::new(),
+            bindings: None,
             variables: 0,
             origins: origins.to_vec(),
             location: self.location,
@@ -608,25 +614,14 @@ impl Compiler<'_> {
             _ => return Err(unsupported(ProfileFeature::Head, self.location).into()),
         };
         let aggregate_guards = self.body_guards(rule, &mut variables)?;
-        let choice_guards = match rule.head().get() {
-            Head::Choice(choice) => self.choice_guards(choice, &mut variables)?,
-            Head::Aggregate(aggregate) => self.guards(
-                aggregate
-                    .left_guard()
-                    .map(themelios_program::provenance::WithProvenance::get),
-                aggregate
-                    .right_guard()
-                    .map(themelios_program::provenance::WithProvenance::get),
-                &mut variables,
-            )?,
-            _ => Vec::new(),
-        };
+        let choice_guards = self.head_guards(rule.head().get(), &mut variables)?;
         let assignments = self.assignment_targets(rule, &aggregate_guards, &mut variables)?;
         self.bindings(&mut body, &mut variables)?;
         variables.safety(self.location)?;
         self.body_aggregates(rule, aggregate_guards, assignments, &variables, &mut body)?;
         self.body_conditionals(rule, &variables, &mut body)?;
-        self.assignment_context(&body, &choice_guards)?;
+        let bindings =
+            self.assignment_plan(&body, variables.count, &choice_guards, ordinary.is_some())?;
         let head = if let Some(head) = ordinary {
             head
         } else {
@@ -644,10 +639,31 @@ impl Compiler<'_> {
         Ok(RuleIr {
             head,
             body,
+            bindings,
             variables: variables.count,
             origins,
             location: self.location,
         })
+    }
+
+    fn head_guards(
+        &mut self,
+        head: &Head,
+        variables: &mut Variables,
+    ) -> Result<Vec<AggregateGuard>, FormulaFailure> {
+        match head {
+            Head::Choice(choice) => self.choice_guards(choice, variables),
+            Head::Aggregate(aggregate) => self.guards(
+                aggregate
+                    .left_guard()
+                    .map(themelios_program::provenance::WithProvenance::get),
+                aggregate
+                    .right_guard()
+                    .map(themelios_program::provenance::WithProvenance::get),
+                variables,
+            ),
+            _ => Ok(Vec::new()),
+        }
     }
     fn choice_elements(
         &mut self,

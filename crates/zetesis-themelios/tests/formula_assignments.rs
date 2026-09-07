@@ -97,7 +97,8 @@ fn outer_bindings_local_scopes_and_previously_bound_targets_are_preserved() {
             "{source}"
         );
     }
-    for source in ["n(N):-N=#count{},N>0.", "n(A,B):-A=#count{},B=#count{A:p}."] {
+    {
+        let source = "n(A,B):-A=#count{},B=#count{A:p}.";
         assert!(
             matches!(
                 admit(source),

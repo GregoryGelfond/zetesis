@@ -18,6 +18,14 @@ import Zetesis
 #print axioms Zetesis.AggregateAssignment.subset_sums_nodup
 #print axioms Zetesis.AggregateAssignment.unique_length_le
 #print axioms Zetesis.AggregateAssignment.unique_nodup
+#print axioms Zetesis.AggregateConsumers.available_iff
+#print axioms Zetesis.AggregateConsumers.covered_consumer
+#print axioms Zetesis.AggregateConsumers.false_filter_frozen
+#print axioms Zetesis.AggregateConsumers.frozen_consumer_identity
+#print axioms Zetesis.AggregateConsumers.original_clause
+#print axioms Zetesis.AggregateConsumers.proposal_does_not_assert_head
+#print axioms Zetesis.AggregateConsumers.ready_split
+#print axioms Zetesis.AggregateConsumers.scheduled_input_has_prior_producer
 #print axioms Zetesis.BatchAccounting.commit_accounted
 #print axioms Zetesis.BatchAccounting.commit_preserves_coverage
 #print axioms Zetesis.BatchAccounting.commit_preserves_occurrences
@@ -384,6 +392,8 @@ import Zetesis
 #print axioms Zetesis.Optimization.constant_on_stable_iff
 #print axioms Zetesis.Optimization.optimal_is_minimal_reduct
 #print axioms Zetesis.Optimization.optimal_is_stable
+#print axioms Zetesis.OrderedProbes.boundary_partitions
+#print axioms Zetesis.OrderedProbes.complete_match_retained
 #print axioms Zetesis.Outcomes.completed_unsatisfiable_iff_empty
 #print axioms Zetesis.Outcomes.delivered_values_are_valid
 #print axioms Zetesis.Outcomes.empty_delivery_can_hide_a_valid_model
@@ -575,6 +585,12 @@ import Zetesis
 #print axioms Zetesis.StructuralBindings.retained_atom_stability
 #print axioms Zetesis.StructuralBindings.selected_row_coverage
 #print axioms Zetesis.StructuralBindings.wildcard_only_preserves_binding
+#print axioms Zetesis.StructuredWitnesses.active_condition_requires_witness
+#print axioms Zetesis.StructuredWitnesses.complete_row_collection_keeps_stability
+#print axioms Zetesis.StructuredWitnesses.completed_condition_preserved
+#print axioms Zetesis.StructuredWitnesses.frozen_witness_truth
+#print axioms Zetesis.StructuredWitnesses.original_witness_truth
+#print axioms Zetesis.StructuredWitnesses.refused_witness_preserves_condition
 #print axioms Zetesis.Thresholds.threshold_bound_antitone
 #print axioms Zetesis.Thresholds.threshold_query_exact
 #print axioms Zetesis.Thresholds.threshold_sum_monotone

@@ -1,4 +1,4 @@
-//! Finite consequent alternatives use the existing flat value evaluator.
+//! Finite consequent alternatives share value evaluation and structural matching.
 //!
 //! The fold consumes a finite source tree. Child plans are moved in postorder;
 //! every moved operation is charged, so deeply nested source cannot hide the
@@ -62,18 +62,7 @@ impl Compiler<'_> {
                 _ => false,
             });
         let atom = if missing && negation == DefaultNegation::None {
-            // This witness door is relational, never arithmetic inversion or a
-            // global value universe. Structured witness patterns have a separate
-            // matcher and are deliberately outside this consequent slice.
-            if arguments
-                .iter()
-                .any(|term| !matches!(term, Term::Variable(_) | Term::Symbolic(_)))
-            {
-                return Err(unsupported(ProfileFeature::Term, self.location).into());
-            }
-            let atom = self.atom(atom, &mut local, true)?;
-            bindings.push(LiteralIr::Atom(DefaultNegation::None, atom.clone()));
-            atom
+            self.consequent_witness(atom, arguments, &mut local, &mut bindings)?
         } else {
             ceiling(
                 FormulaResource::Arity,
@@ -124,6 +113,70 @@ impl Compiler<'_> {
             bindings,
             variables: local.count,
         })
+    }
+
+    /// Witnesses select relational rows, never invert arithmetic or enumerate a
+    /// global value universe. Extracted names stay private to this alternative;
+    /// the whole captured source atom remains its emitted logical consequent.
+    fn consequent_witness(
+        &mut self,
+        atom: &Atom,
+        arguments: &[Term],
+        local: &mut Variables,
+        bindings: &mut Vec<LiteralIr>,
+    ) -> Result<AtomPattern, FormulaFailure> {
+        if let Some(pattern) = self.positive_pattern(atom, local)? {
+            let atom = self.consequent_capture(&pattern.atom)?;
+            bindings.push(LiteralIr::PatternAtom(pattern));
+            Ok(atom)
+        } else {
+            if arguments
+                .iter()
+                .any(|term| !matches!(term, Term::Variable(_) | Term::Symbolic(_)))
+            {
+                return Err(unsupported(ProfileFeature::Term, self.location).into());
+            }
+            let atom = self.atom(atom, local, true)?;
+            bindings.push(LiteralIr::Atom(DefaultNegation::None, atom.clone()));
+            Ok(atom)
+        }
+    }
+
+    /// Retain the complete capture independently of its matching instruction.
+    /// Capture slots represent matched arguments; closed constants retain their
+    /// complete values. Charge term/payload visits, predicate text, term cells
+    /// and selected value payload before cloning. Structured payload is charged
+    /// conservatively even when its immutable allocation is shared by the clone,
+    /// following the existing value-copy budget. Allocator metadata is excluded.
+    fn consequent_capture(&mut self, pattern: &AtomPattern) -> Result<AtomPattern, FormulaFailure> {
+        self.budget.charge(
+            ExpansionResource::TermWork,
+            pattern.terms().len() as u128
+                + pattern
+                    .terms()
+                    .iter()
+                    .map(|term| match term {
+                        CoreTerm::Constant(zetesis_core::Value::Structured(value)) => {
+                            value.nodes().len() as u128
+                        }
+                        _ => 0,
+                    })
+                    .sum::<u128>(),
+            self.location,
+        )?;
+        let bytes = pattern.predicate().name().len() as u128
+            + std::mem::size_of_val(pattern.terms()) as u128
+            + pattern
+                .terms()
+                .iter()
+                .map(|term| match term {
+                    CoreTerm::Constant(value) => crate::formula_ir::value_bytes(value),
+                    CoreTerm::Variable(_) => 0,
+                })
+                .sum::<u128>();
+        self.budget
+            .charge(ExpansionResource::ScalarBytes, bytes, self.location)?;
+        Ok(pattern.clone())
     }
 
     fn consequent_slot(&self, variables: &mut Variables) -> Result<usize, FormulaFailure> {

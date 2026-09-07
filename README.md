@@ -147,8 +147,9 @@ Metal has been physically qualified on an Apple M4 Pro for the recorded builds.
 The static closure oracle uses a bounded ground graph; general formula execution
 batches GPU propagation and exact CPU residual completion. Source loading,
 parsing, materialization, candidate generation and objective work still run on
-the host. GPU/lazy execution, CUDA, multi-GPU execution and neuromorphic backends
-are future work. See [execution boundaries](docs/implementation.md) and the
+the host. Lazy execution on Metal is required before version 1.0 and remains an
+implementation gap. CUDA, multi-GPU execution and neuromorphic backends are
+future work. See [execution boundaries](docs/implementation.md) and the
 [hardware evidence](docs/verification/metal-requalification-20260907/README.md).
 
 ## Status
@@ -163,10 +164,10 @@ syntax, raising and evaluation errors from zetesis implementation refusals.
 |---|---|
 | Normal rules | Safe finite rules, constraints, default/double negation, strong negation with coherence, and relational lazy checking in the admitted normal-rule profile. |
 | Formula rules | Bounded choices, signed singleton/disjunctive heads, finite rule/head pools, evaluated heads, scalar/range bindings, comparisons and admitted universal body conditionals. |
-| Aggregates | Body count/sum/sum+ and complete-value min/max comparisons, scoped independent assignments, and a restricted finite function-count head profile. |
-| Logical values | Closed signed functions and tuples; finite construction from bound inputs; positive tuple/function patterns; evaluated positive arguments with independently bound inputs; evaluated already-safe negative arguments. |
+| Aggregates | Body count/sum/sum+ and complete-value min/max comparisons; independent assignments feeding scalar/tuple filters, scalar equalities and evaluated or constructed heads; a restricted finite function-count head profile. |
+| Logical values | Closed signed functions and tuples; finite construction from bound inputs; positive tuple/function patterns, including local conditional-consequent witnesses; evaluated positive arguments with independently bound inputs; evaluated already-safe negative arguments. |
 | Objectives and observations | Admitted minimize/maximize/weak constraints; complete tuple keys and optimal ties; signature, term and conditional `#show`; `#defined`; original include bundles and constants. |
-| Refusal boundaries | Broader conditioned heads, some binding/aggregate combinations, objective-dependent disjunction/conditionals, broader directives and exact clingo undefined-arithmetic behavior remain incomplete. |
+| Refusal boundaries | Cross-aggregate assignment dependencies, new aggregate-generated body-atom/range/conditional/choice consumers, broader conditioned heads, objective-dependent disjunction/conditionals, broader directives and exact clingo undefined-arithmetic behavior remain incomplete. |
 
 These rows summarize profiles; they are not a grammar specification. The
 [source API guide](crates/zetesis-themelios/README.md) describes composition,
@@ -176,44 +177,76 @@ explains endpoint guards and why an internal refusal does not by itself establis
 a modeling error. Undefined or overflowing admitted arithmetic currently produces
 an explicit refusal rather than reproducing all of clingo's simplifications.
 
-The current source adds [signed singleton heads](docs/verification/singleton-heads-20260907/README.md),
+The preceding execution tranche added [signed singleton heads](docs/verification/singleton-heads-20260907/README.md),
 [constructor patterns](docs/verification/function-patterns-20260907/README.md) and
 [evaluated positive arguments](docs/verification/positive-arguments-20260907/README.md).
 For example, `q(X):-d(X),p(X+1).` consumes `X` from `d(X)` and retains the
 matching `p` atom. Arithmetic does not infer an inverse binding.
 
-The current release passes **94 unchanged non-clingcon kr-domains cases**,
+The current source also adds [aggregate consumers](docs/verification/aggregate-consumers-20260907/README.md)
+and [positive structured witnesses](docs/verification/structured-witnesses-20260907/README.md).
+An independent assignment can feed `N>0` and `Y=N+1` before constructing `q(f(Y))`;
+its proposed values still retain the original aggregate equality in the theory.
+The consequent in `q:-p(f(X,_)):#true.` selects complete matching `p` atoms through
+the existing transactional matcher. Local witnesses cannot establish outer or
+condition safety, and matching possible support does not make an atom true.
+Mixed evaluated/witness arguments, arithmetic inversion and negative anonymous
+witnesses remain refused.
+
+The **2026-09-07 dependency checkpoint** passes **94 unchanged
+non-clingcon kr-domains cases**,
 checking answer contracts, costs, counts and optimum ties. All **24 selected
-upstream clingo assertions** pass with 73 complete full-model occurrences,
-retaining original bytes and provenance. The combined gates pass **1,303 workspace
-test/doc checks** and **283 CPU-only CLI checks**, with explicit external/device
-ignores retained. Local line coverage is **91.2170% workspace / 91.7886% CPU-only
-CLI**; the pinned Lean build and audit check **686 theorems in 50 modules**.
-The [checkpoint](docs/verification/execution-tranche-20260907/README.md) states
+upstream clingo assertions** passed with 73 complete full-model occurrences,
+retaining original bytes and provenance. Final local gates pass **1,419 workspace
+test/doc checks** and **284 CPU-only CLI checks**, with explicit external/device
+ignores retained. Local line coverage is **91.1452% workspace / 91.7886% CPU-only
+CLI**; the pinned Lean build and audit check **702 theorems in 53 modules**.
+The four release commands are installed. The
+[checkpoint](docs/verification/dependency-tranche-20260907/README.md) states
 the source/binary scopes and limitations; hosted CI attaches to each published
 revision. The
 [verification record](docs/verification/status.md) indexes historical results.
 
-A [controlled scalar ablation](docs/verification/scalar-evaluation-20260907/ablation.md)
-reduced median SEND formula admission from **50.346 ms to 19.367 ms (61.53%)**
-by removing temporary arithmetic trees. Complete models and ordered execution
-subjects matched; the plain-chain control's 2.87% median increase is retained.
-This measures admission in the recorded paired artifacts, excluding parsing and
-solving. A separate [end-to-end CPU comparison](docs/verification/execution-performance-20260907/README.md)
-records the integrated release, with 21 timed samples per solver and case:
+The [clean Lean build and audit](proofs/verification/dependency-tranche-20260907/README.md)
+preserve the prior semantic sources and theorem/axiom records. These are checked
+semantic laws, not a proof of the Rust/GPU implementation. Physical-device
+qualification retains its separately dated executable identity.
 
-| Original input | Previous zetesis | Current zetesis | clingo 5.8.2 |
+The [current end-to-end CPU comparison](docs/verification/dependency-performance-20260907/README.md)
+uses the final installed build, 21 timed alternating pairs per case, one worker
+per solver and complete answer/optimal-tie enumeration. All three native routes
+select eager grounding and certified tight-support checking automatically:
+
+| Original input | zetesis median | clingo 5.8.2 median | zetesis / clingo |
 |---|---:|---:|---:|
-| SEND + MORE = MONEY | 72.20 ms | 40.88 ms | 12.77 ms |
-| Eight queens, variant 02 | 114.92 ms | 105.70 ms | 121.74 ms |
-| Task allocation, variant 04 / larger mix | 131.71 ms | 131.46 ms | 191.65 ms |
+| SEND + MORE = MONEY | 41.02 ms | 12.78 ms | 3.210 |
+| Eight queens, variant 02 | 105.31 ms | 120.95 ms | 0.871 |
+| Task allocation, variant 04 / larger mix | 131.26 ms | 194.29 ms | 0.676 |
 
-All 225 invocations preserve complete answer contracts. SEND improves 43.4%
-against the previous release; current zetesis is 13.2% faster than clingo on the
-selected queens input and 31.4% faster on task allocation. These are measured
-workload-specific CPU results, not a general solver ranking. Physical GPU
-microbenchmarks establish correctness with mixed timing results; the enumerated
-gate projection remains the default.
+All 150 comparison invocations preserve complete answer contracts. Zetesis is
+12.9% faster on this queens input and 32.4% faster on this task-allocation input;
+clingo remains substantially faster on SEND. These are workload-specific CPU
+results, not a general ranking or a controlled change from the previous release.
+Separate single `--stats` observations put SEND grounding at **19.74 ms** and
+solving at **16.83 ms**. Queens and task allocation spend most of their measured
+driver time solving. These instrumented observations are not phase medians.
+
+The new [matched lazy CPU oracle experiment](docs/verification/ordered-joins-20260907/README.md)
+measures 61.9–62.7% less time for sparse scalar joins at 256 rows and
+68.3–71.1% less for eight-seed Rayon batches. Dense controls range from 4.0% less
+to 1.4% more time. It excludes source preparation and outer search; the three
+eager cases above do not exercise this optimization. Full samples and scopes
+remain in the records.
+
+The preceding [scalar ablation](docs/verification/scalar-evaluation-20260907/ablation.md)
+and [end-to-end comparison](docs/verification/execution-performance-20260907/README.md)
+retain their historical artifacts: a 61.5% isolated SEND admission reduction
+and a separately measured 43.4% whole-process reduction. Physical GPU
+microbenchmarks have mixed timing results; no new GPU speedup is claimed here.
+The required [full corpus matrix](docs/design/corpus-performance.md) will compare
+every non-clingcon kr-domains case across eager/lazy and CPU/Metal configurations
+with clingo, retaining unsupported and incomplete cells. It has not yet been
+collected; the table above covers only the three named CPU cases.
 
 ## Libraries and mathematical specification
 
@@ -230,7 +263,7 @@ part of each capability, not just command-line behavior.
 | [zetesis-cpu](crates/zetesis-cpu/src/lib.rs) / [zetesis-wgpu](crates/zetesis-wgpu/README.md) | Closure execution and GPU primitives. |
 | [zetesis-sat](crates/zetesis-sat/README.md) / [zetesis-objective](crates/zetesis-objective/README.md) | Native candidate/countermodel search and exact objective work. Boolean queries are internal machinery; stable acceptance belongs to the reduct composition. |
 | [zetesis-cli](crates/zetesis-cli/README.md) | Prepared-input sessions, solve configuration, typed outcomes and output views, plus the process adapter. Extracting orchestration into a dedicated package remains planned. |
-| [zetesis-validation](crates/zetesis-validation/README.md) / [zetesis-experiments](crates/zetesis-experiments/README.md) | External-oracle qualification, curated fixtures and bounded measurements, separate from production acceptance. |
+| [zetesis-validation](crates/zetesis-validation/README.md) / [zetesis-experiments](crates/zetesis-experiments/README.md) | Curated fixtures, reusable bounded process capture and reported-answer checks, external-oracle qualification and bounded measurements, separate from production acceptance. |
 
 `prepare_formula` and `prepare_bundle_formula` expose analysis before ground
 materialization. Consuming their receipts with `ground()` resumes the original
@@ -243,9 +276,18 @@ The in-repository [Lean library](proofs/README.md) gives reusable mathematical
 laws, with a [reading guide](proofs/guide/README.md), structured proof convention,
 pinned toolchain and axiom/source audit. These are checked semantic contracts;
 they do **not** certify the Rust compiler, search implementation or shaders.
+Release work focuses on the [fundamentals enabling solver verification](docs/design/verified-solver.md),
+with definitions and module boundaries that can fit a broader ASP theory library.
+Comprehensive formalization of that broader theory is an adjacent long-term aim.
 See the [theory-extension design](docs/design/theory-propagators/README.md)
 and [neuromorphic feasibility assessment](docs/design/neuromorphic-feasibility-20260906.md)
 for future integrations.
+Selectable [Gelfond–Zhang aggregate semantics](docs/design/aggregate-semantics.md)
+is a post-1.0 direction; the current aggregate semantics remains clingo/Ferraris.
+[Brave and cautious consequences](docs/design/consequences.md) target version
+1.1. Their design considers streaming and targeted restricted search
+while keeping complete and partial conclusions distinct; no consequence-query
+API or performance evidence is available yet.
 
 ## Build and check
 
@@ -278,8 +320,14 @@ Linux/macOS, proofs and Linux coverage; a hosted runner does not establish NVIDI
 or Metal hardware qualification.
 
 The intended authored implementation is Rust, Lean and WGSL. Repository cleanup
-is in progress: existing Python qualification tools and historical upstream C++
+is in progress. The first reusable Rust process/answer boundary now serves the
+existing 94-case validator on Linux/macOS. It separates direct-child completion,
+cleanup ownership and reported display evidence; it does not certify solver
+correctness or hidden full models. The selected-upstream Rust solver campaign
+remains pending. Existing Python qualification tools and historical upstream C++
 provenance remain until Rust replacements and curated evidence are verified.
+Corpus expectation annotations are consumed only by separate validation tools;
+they are ordinary comments to the solver and never guide its answers.
 The [organization plan](docs/design/repository-organization.md) records the
 migration without weakening gates or discarding evidence. Tooling follows the
 same coding and review standards as the solver.

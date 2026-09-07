@@ -227,8 +227,6 @@ fn profile(error: &FormulaFailure, expected: ProfileFeature) {
 #[test]
 fn every_target_is_checked_in_other_tuples_conditions_guards_and_filters() {
     for source in [
-        "r(N,M):-N=#count{},M=#count{},M>0.",
-        "r(N,M):-N=#count{},M=#count{},(0,M)=(0,0).",
         "r(N,M):-N=#count{M:p},M=#count{}.",
         "r(N,M):-N=#count{},M=#count{N:p}.",
         "r(N,M):-N=#count{X:p(X),X=M},M=#count{}.",
@@ -236,7 +234,6 @@ fn every_target_is_checked_in_other_tuples_conditions_guards_and_filters() {
         "r(N,M):-N=#count{X:p(X),Y=M+1},M=#count{}.",
         "r(N,M):-N=#count{X:p(X),X=1..M},M=#count{}.",
         "r(N,M):-N=#count{},M=#count{},not q(M,_).",
-        "r(N,M):-N=#count{},M=#count{},K=M+1.",
         "r(N,M):-N=#count{},M=#count{},K=1..M.",
         "r(N,M):-N=#count{},M=#count{},M<=#count{}.",
         "r(N,M):-N=#count{},M=#count{},M=#sum{}.",

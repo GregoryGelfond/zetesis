@@ -1948,6 +1948,7 @@ version = "0.1.0"
 name = "zetesis-cpu"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "rayon",
  "zetesis-core",
 ]
@@ -2040,10 +2041,13 @@ name = "zetesis-validation"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "rustix",
  "serde",
  "serde_json",
  "sha2",
  "tempfile",
+ "themelios-program",
+ "zetesis-core",
 ]
 
 [[package]]

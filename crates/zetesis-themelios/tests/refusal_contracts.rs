@@ -600,12 +600,9 @@ fn observation_bindings_preserve_symbol_string_and_infinite_value_identity() {
 }
 
 #[test]
-fn aggregate_assignment_target_reuse_is_refused_in_each_nonhead_context() {
-    for source in [
-        "p(1). n(N) :- N=#count{X:p(X)}, (N,0)=(1,0).",
-        "p(1). n(N) :- N=#count{X:p(X)}, N<=#count{X:p(X)}.",
-        "p(1). n(N,M) :- N=#count{X:p(X)}, M=N+1.",
-    ] {
+fn aggregate_guards_require_independent_inputs() {
+    {
+        let source = "p(1). n(N) :- N=#count{X:p(X)}, N<=#count{X:p(X)}.";
         let error = formula(source, FormulaLimits::default()).unwrap_err();
         assert!(
             error.to_string().contains("aggregate assignment"),

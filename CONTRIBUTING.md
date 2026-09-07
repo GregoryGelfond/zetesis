@@ -97,6 +97,14 @@ package, its audited axioms and source-hash record; no proof holes or hidden
 assumptions. Follow the [structured proof convention](proofs/STYLE.md) and
 [proof boundary](proofs/README.md).
 
+For a solver release, restrict proof development to the fundamentals enabling
+formal verification of zetesis: semantic laws, representation correspondence,
+grounding/search coverage, reduct checking and honest bounded outcomes. Choose reusable
+ASP and stable-model definitions, explicit module boundaries and careful source
+attribution so these results can naturally become part of a broader Lean theory
+library. That larger collection is a design horizon, not a requirement to
+formalize unrelated literature or extract a separate package during solver work.
+
 Keep model identity distinct from its displayed projection, publication distinct
 from verification, and resource exhaustion distinct from exhaustive coverage.
 Refuse unsupported constructs and exceeded limits explicitly. Interchange may

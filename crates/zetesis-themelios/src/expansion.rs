@@ -33,7 +33,9 @@ pub struct ExpansionLimits {
     /// operations, check instructions and initial distinct required-input slots.
     /// Conditional alternatives additionally charge scoped variable payload,
     /// including required-input copies, binding vectors and source atom/body-element
-    /// carriers. Ordinary aggregate, choice and conditional scope clones remain
+    /// carriers. Aggregate consumer plans reserve instruction cells, required
+    /// outer slots, readiness/producers and temporary scheduling cells.
+    /// Ordinary aggregate, choice and conditional scope clones remain
     /// excluded, as do other AST carriers, provenance and allocator overhead.
     /// Original source storage remains bounded by admission options.
     pub max_scalar_bytes: usize,

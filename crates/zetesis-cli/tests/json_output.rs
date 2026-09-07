@@ -47,6 +47,28 @@ fn hidden_choices(oracle: &str) -> (Report, Json) {
 }
 
 #[test]
+fn elenctic_comments_do_not_change_answer_sets() {
+    // Contradictory external test expectations must have no solver effect.
+    let source = "a. {b}. #show a/0. #show b/0.";
+    let annotated =
+        format!("% @expect unsat\n% @count 0\n% @cost {{99}}\n% @model {{absent}}\n{source}");
+    for oracle in ["closure", "countermodel"] {
+        let options = options(&["--oracle", oracle]);
+        let (plain, expected) = solve(source, &options);
+        let (annotated, actual) = solve(&annotated, &options);
+        for report in [plain.unwrap(), annotated.unwrap()] {
+            assert_eq!(report.completion, Completion::Exhausted);
+            assert_eq!(report.models, 2);
+            assert_eq!(
+                report.countermodel_statistics.is_some(),
+                oracle == "countermodel"
+            );
+        }
+        assert_eq!(actual["models"], expected["models"]);
+    }
+}
+
+#[test]
 fn explicit_oracles_select_distinct_routes() {
     for (oracle, formula_route) in [("closure", false), ("countermodel", true)] {
         let (report, _) = hidden_choices(oracle);

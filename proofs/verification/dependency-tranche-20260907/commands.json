@@ -1,0 +1,85 @@
+[
+  {
+    "command": [
+      "lake",
+      "env",
+      "lean",
+      "--version"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-07T20:40:00.276209+00:00",
+    "elapsed_seconds": 3.2107186659704894,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/dependency-tranche-20260907/version.log"
+  },
+  {
+    "command": [
+      "lake",
+      "clean"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-07T20:40:03.487508+00:00",
+    "elapsed_seconds": 0.2614134999457747,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/dependency-tranche-20260907/clean.log"
+  },
+  {
+    "command": [
+      "lake",
+      "build"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-07T20:40:03.749547+00:00",
+    "elapsed_seconds": 6.259497083956376,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/dependency-tranche-20260907/build.log"
+  },
+  {
+    "command": [
+      "lake",
+      "env",
+      "lean",
+      "-DautoImplicit=false",
+      "-DwarningAsError=true",
+      "Zetesis/OrderedProbes.lean"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-07T20:40:10.009454+00:00",
+    "elapsed_seconds": 0.6359151671640575,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/dependency-tranche-20260907/ordered-probes.log"
+  },
+  {
+    "command": [
+      "sh",
+      "-c",
+      "for source in Zetesis/*.lean; do printf \"%s\\n\" \"$source\"; lake env lean -DautoImplicit=false -DwarningAsError=true \"$source\" || exit \"$?\"; done"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-07T20:40:10.645768+00:00",
+    "elapsed_seconds": 33.92077654087916,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/dependency-tranche-20260907/strict-modules.log"
+  },
+  {
+    "command": [
+      "lake",
+      "env",
+      "lean",
+      "-DautoImplicit=false",
+      "-DwarningAsError=true",
+      "Audit.lean"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-07T20:40:44.567036+00:00",
+    "elapsed_seconds": 0.552399542182684,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/dependency-tranche-20260907/audit.log"
+  }
+]

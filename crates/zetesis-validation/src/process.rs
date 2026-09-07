@@ -1,191 +1,364 @@
-//! Bounded child lifetime and concurrently drained, capped temporary capture.
+//! Raw child-process evidence with bounded capture and cleanup polling.
+//!
+//! The strong backend currently supports Linux and macOS. It starts a fresh
+//! process group, drains both pipes without reader threads, and retains at most
+//! `max_output_bytes` bytes across the two streams. Completion means that the
+//! direct child was reaped and both pipes reached EOF. It proves no descendant
+//! termination property: even a same-group descendant can survive after closing
+//! both inherited pipes. Process-group termination is attempted only for stopped
+//! or faulted capture. Completion says nothing about a solver's enumeration,
+//! answer correctness, or system quiescence. Calls require exclusive ownership
+//! of the child wait status.
+//!
+//! Deadlines bound authored polling, not the latency of OS calls or allocation.
+//! Retained vectors use fallible amortized growth. Capture bytes exclude vector
+//! capacity and OS pipe storage. A stopped capture
+//! is partial evidence. UTF-8 conversion is a separate, fallible view.
 
 use std::ffi::OsString;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::fmt;
+use std::io;
 use std::path::Path;
-use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, mpsc};
-use std::thread;
+use std::process::{Child, ExitStatus};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
-#[derive(Debug, Serialize)]
-pub(crate) struct Capture {
-    pub(crate) status: &'static str,
-    pub(crate) exit_code: Option<i32>,
-    pub(crate) elapsed_ms: u128,
-    pub(crate) stdout: String,
-    pub(crate) stderr: String,
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod posix;
+
+/// Borrowed process arguments. Both paths must be absolute.
+#[derive(Clone, Copy, Debug)]
+pub struct Invocation<'a> {
+    /// Executable selected and resolved by the caller; no shell is inserted.
+    pub executable: &'a Path,
+    /// Arguments excluding the executable name.
+    pub arguments: &'a [OsString],
+    /// Working directory, independent of executable resolution.
+    pub directory: &'a Path,
 }
 
-pub(crate) fn invoke(
-    executable: &Path,
-    arguments: &[OsString],
-    directory: &Path,
-    timeout: Duration,
-    output_limit: usize,
-) -> Result<Capture, String> {
-    let mut stdout = tempfile::tempfile().map_err(|error| error.to_string())?;
-    let mut stderr = tempfile::tempfile().map_err(|error| error.to_string())?;
-    let stdout_copy = stdout.try_clone().map_err(|error| error.to_string())?;
-    let stderr_copy = stderr.try_clone().map_err(|error| error.to_string())?;
+/// Inclusive raw capture ceiling and independent polling intervals.
+#[derive(Clone, Copy, Debug)]
+pub struct Limits {
+    /// Invocation deadline, starting before spawn. Zero permits no polling work.
+    pub timeout: Duration,
+    /// Retained stdout plus stderr bytes. Zero still permits empty output.
+    pub max_output_bytes: usize,
+    /// Additional interval for group termination and direct-child reaping.
+    pub cleanup_timeout: Duration,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self {
+            timeout: Duration::from_secs(30),
+            max_output_bytes: 8 * 1024 * 1024,
+            cleanup_timeout: Duration::from_secs(1),
+        }
+    }
+}
+
+/// Why capture polling ended. This is not a solver result.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Stop {
+    /// Direct child reaped and both streams closed without a capture fault.
+    /// This establishes no descendant-termination or system-quiescence property.
+    Completed,
+    /// The invocation deadline was reached.
+    Deadline,
+    /// A byte beyond the combined retained-output ceiling was observed.
+    OutputLimit,
+    /// A capture or child-lifetime operation failed; inspect the failure fields.
+    Failure,
+}
+
+/// Direct-child exit evidence, independent of the reason capture stopped.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub struct Exit {
+    /// Numeric normal-exit code, absent for signal termination.
+    pub code: Option<i32>,
+    /// Terminating POSIX signal, absent for normal exit.
+    pub signal: Option<i32>,
+}
+
+impl From<ExitStatus> for Exit {
+    fn from(value: ExitStatus) -> Self {
+        #[cfg(unix)]
+        let signal = {
+            use std::os::unix::process::ExitStatusExt;
+            value.signal()
+        };
+        #[cfg(not(unix))]
+        let signal = None;
+        Self {
+            code: value.code(),
+            signal,
+        }
+    }
+}
+
+/// Failed operation; error text is diagnostic rather than a classification.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Operation {
+    /// Making a child pipe nonblocking.
+    ConfigurePipe,
+    /// Reading the standard-output pipe.
+    ReadStdout,
+    /// Reading the standard-error pipe.
+    ReadStderr,
+    /// Reserving retained byte storage before copying output.
+    RetainBytes,
+    /// Observing child termination without consuming its wait status.
+    ObserveExit,
+    /// Sending a termination signal to the still-owned process group.
+    TerminateGroup,
+    /// Reaping the direct child without a blocking wait.
+    ReapChild,
+}
+
+/// An OS or allocation failure associated with a specific capture operation.
+#[derive(Debug)]
+pub struct Failure {
+    operation: Operation,
+    cause: io::Error,
+}
+
+impl Failure {
+    /// Operation that failed.
+    #[must_use]
+    pub const fn operation(&self) -> Operation {
+        self.operation
+    }
+    /// Original diagnostic error.
+    #[must_use]
+    pub const fn cause(&self) -> &io::Error {
+        &self.cause
+    }
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    pub(super) fn new(operation: Operation, cause: io::Error) -> Self {
+        Self { operation, cause }
+    }
+}
+
+impl fmt::Display for Failure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}: {}", self.operation, self.cause)
+    }
+}
+impl std::error::Error for Failure {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.cause)
+    }
+}
+
+/// Refusal before a child is started.
+#[derive(Debug)]
+pub enum StartError {
+    /// The strong process-group backend is unavailable on this platform.
+    UnsupportedPlatform,
+    /// Executable or working-directory path is relative.
+    RelativePath,
+    /// An invocation or cleanup deadline cannot be represented by `Instant`.
+    DeadlineOverflow,
+    /// Starting the requested executable failed.
+    Spawn(io::Error),
+}
+impl fmt::Display for StartError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnsupportedPlatform => {
+                f.write_str("bounded process groups require Linux or macOS")
+            }
+            Self::RelativePath => f.write_str("process executable and directory must be absolute"),
+            Self::DeadlineOverflow => f.write_str("process deadline is not representable"),
+            Self::Spawn(error) => write!(f, "spawn: {error}"),
+        }
+    }
+}
+impl std::error::Error for StartError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        if let Self::Spawn(error) = self {
+            Some(error)
+        } else {
+            None
+        }
+    }
+}
+
+/// Immutable retained bytes and direct-child evidence.
+#[derive(Debug)]
+pub struct Capture {
+    stop: Stop,
+    exit: Option<Exit>,
+    elapsed: Duration,
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+    failure: Option<Failure>,
+    cleanup_failure: Option<Failure>,
+}
+impl Capture {
+    /// Reason capture polling stopped.
+    #[must_use]
+    pub const fn stop(&self) -> Stop {
+        self.stop
+    }
+    /// Direct-child exit if successfully reaped.
+    #[must_use]
+    pub const fn exit(&self) -> Option<Exit> {
+        self.exit
+    }
+    /// Host elapsed time including the initial cleanup attempt.
+    #[must_use]
+    pub const fn elapsed(&self) -> Duration {
+        self.elapsed
+    }
+    /// Exact retained standard-output prefix.
+    #[must_use]
+    pub fn stdout(&self) -> &[u8] {
+        &self.stdout
+    }
+    /// Exact retained standard-error prefix.
+    #[must_use]
+    pub fn stderr(&self) -> &[u8] {
+        &self.stderr
+    }
+    /// Strict UTF-8 view; no replacement characters are inserted.
+    ///
+    /// # Errors
+    /// Returns the first invalid UTF-8 sequence, including in a stopped prefix.
+    pub fn stdout_text(&self) -> Result<&str, std::str::Utf8Error> {
+        std::str::from_utf8(&self.stdout)
+    }
+    /// Strict UTF-8 view of retained standard error.
+    ///
+    /// # Errors
+    /// Returns the first invalid UTF-8 sequence.
+    pub fn stderr_text(&self) -> Result<&str, std::str::Utf8Error> {
+        std::str::from_utf8(&self.stderr)
+    }
+    /// Primary capture fault, without replacing a preceding limit/deadline stop.
+    #[must_use]
+    pub const fn failure(&self) -> Option<&Failure> {
+        self.failure.as_ref()
+    }
+    /// First fault during the bounded cleanup attempt.
+    #[must_use]
+    pub const fn cleanup_failure(&self) -> Option<&Failure> {
+        self.cleanup_failure.as_ref()
+    }
+}
+
+/// Capture plus any direct child whose cleanup still requires caller action.
+#[derive(Debug)]
+#[must_use = "inspect capture and handle pending cleanup explicitly"]
+pub struct Outcome {
+    capture: Capture,
+    pending: Option<PendingChild>,
+}
+impl Outcome {
+    /// Evidence retained even if cleanup remains unresolved.
+    #[must_use]
+    pub const fn capture(&self) -> &Capture {
+        &self.capture
+    }
+    /// Whether bounded cleanup left an owned direct child.
+    #[must_use]
+    pub const fn cleanup_pending(&self) -> bool {
+        self.pending.is_some()
+    }
+    /// Separate evidence from the explicit cleanup obligation.
+    #[must_use]
+    pub fn into_parts(self) -> (Capture, Option<PendingChild>) {
+        (self.capture, self.pending)
+    }
+}
+
+/// Exclusive ownership of a direct child not yet successfully reaped.
+///
+/// `Drop` performs no wait, signal, or thread creation. Call [`Self::retry`] or
+/// explicitly [`Self::abandon`] at the application's failure boundary. Neither
+/// the handle nor its numeric ID proves that escaped descendants have stopped.
+#[derive(Debug)]
+#[must_use = "retry or explicitly report abandoned child ownership"]
+pub struct PendingChild {
+    child: Child,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    group_owned: bool,
+}
+impl PendingChild {
+    /// Numeric direct-child identity retained for failure reporting.
+    #[must_use]
+    pub fn id(&self) -> u32 {
+        self.child.id()
+    }
+    /// Attempt group termination and nonblocking reaping for one more interval.
+    /// A failed attempt returns ownership again, with the first cleanup fault.
+    pub fn retry(self, timeout: Duration) -> Cleanup {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            posix::cleanup(self, timeout)
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            let _ = timeout;
+            Cleanup {
+                exit: None,
+                pending: Some(self),
+                failure: None,
+            }
+        }
+    }
+    /// Explicitly stop owning cleanup and return the unreaped child ID.
+    ///
+    /// This is a failure disposition, never successful termination. It performs
+    /// no hidden wait and must be retained in the application's failure report.
+    #[must_use]
+    pub fn abandon(self) -> u32 {
+        self.child.id()
+    }
+}
+
+/// Result of an explicit bounded cleanup attempt.
+#[derive(Debug)]
+#[must_use = "retain cleanup failure and handle any returned child"]
+pub struct Cleanup {
+    /// Reaped direct-child exit, when established.
+    pub exit: Option<Exit>,
+    /// Ownership returned if reaping was not established.
+    pub pending: Option<PendingChild>,
+    /// First termination or reap failure from this attempt.
+    pub failure: Option<Failure>,
+}
+
+/// Start and capture one invocation under the strong process-group contract.
+///
+/// Environment variables are inherited by `Command`; the caller chooses the
+/// executable and working directory explicitly. No library stdout/stderr writes
+/// occur. Memory retained for pipe bytes is linear in the combined byte ceiling.
+///
+/// # Errors
+/// Returns a typed refusal only before spawning. Every post-spawn failure
+/// returns an [`Outcome`] with partial capture and explicit cleanup ownership.
+pub fn invoke(invocation: Invocation<'_>, limits: Limits) -> Result<Outcome, StartError> {
+    if !invocation.executable.is_absolute() || !invocation.directory.is_absolute() {
+        return Err(StartError::RelativePath);
+    }
     let started = Instant::now();
     let deadline = started
-        .checked_add(timeout)
-        .ok_or("timeout is not representable")?;
-    let executable = if executable.is_absolute() || executable.components().count() == 1 {
-        executable.to_path_buf()
-    } else {
-        std::env::current_dir()
-            .map_err(|error| error.to_string())?
-            .join(executable)
-    };
-    let mut child = Command::new(&executable)
-        .args(arguments)
-        .current_dir(directory)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|error| format!("spawn {}: {error}", executable.display()))?;
-    let remaining = Arc::new(AtomicUsize::new(output_limit));
-    let exceeded = Arc::new(AtomicBool::new(false));
-    let (sender, receiver) = mpsc::channel();
-    drain(
-        child.stdout.take().ok_or("missing child stdout")?,
-        stdout_copy,
-        remaining.clone(),
-        exceeded.clone(),
-        sender.clone(),
-    );
-    drain(
-        child.stderr.take().ok_or("missing child stderr")?,
-        stderr_copy,
-        remaining,
-        exceeded.clone(),
-        sender,
-    );
-    let mut status = "completed";
-    let exit = loop {
-        if exceeded.load(Ordering::Relaxed) {
-            status = "output_limit";
-            let _ = child.kill();
-            break child.wait().map_err(|error| error.to_string())?;
-        }
-        if Instant::now() >= deadline {
-            status = "timeout";
-            let _ = child.kill();
-            break child.wait().map_err(|error| error.to_string())?;
-        }
-        if let Some(exit) = child.try_wait().map_err(|error| error.to_string())? {
-            break exit;
-        }
-        thread::sleep(Duration::from_millis(5));
-    };
-    // Drain completion is bounded separately after killing/exiting. The command
-    // operates on trusted solver executables, without an intermediate shell.
-    for _ in 0..2 {
-        match receiver.recv_timeout(Duration::from_secs(1)) {
-            Ok(Ok(())) => (),
-            Ok(Err(error)) => return Err(format!("child capture: {error}")),
-            Err(_) => return Err("child capture did not close after process termination".into()),
-        }
+        .checked_add(limits.timeout)
+        .ok_or(StartError::DeadlineOverflow)?;
+    deadline
+        .checked_add(limits.cleanup_timeout)
+        .ok_or(StartError::DeadlineOverflow)?;
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        posix::invoke(invocation, limits, started, deadline)
     }
-    if exceeded.load(Ordering::Relaxed) {
-        status = "output_limit";
-    }
-    let output = read_capture(&mut stdout, status == "completed")?;
-    let errors = read_capture(&mut stderr, status == "completed")?;
-    Ok(Capture {
-        status,
-        exit_code: exit.code(),
-        elapsed_ms: started.elapsed().as_millis(),
-        stdout: output,
-        stderr: errors,
-    })
-}
-
-fn drain(
-    mut input: impl Read + Send + 'static,
-    mut output: std::fs::File,
-    remaining: Arc<AtomicUsize>,
-    exceeded: Arc<AtomicBool>,
-    sender: mpsc::Sender<std::io::Result<()>>,
-) {
-    thread::spawn(move || {
-        let result = (|| {
-            let mut buffer = [0u8; 8192];
-            loop {
-                let count = input.read(&mut buffer)?;
-                if count == 0 {
-                    return Ok(());
-                }
-                let previous = remaining
-                    .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |available| {
-                        Some(available.saturating_sub(count))
-                    })
-                    .expect("the atomic update closure always returns Some");
-                let retained = previous.min(count);
-                output.write_all(&buffer[..retained])?;
-                if retained != count {
-                    exceeded.store(true, Ordering::Relaxed);
-                    return Ok(());
-                }
-            }
-        })();
-        let _ = sender.send(result);
-    });
-}
-
-fn read_capture(file: &mut std::fs::File, require_utf8: bool) -> Result<String, String> {
-    file.seek(SeekFrom::Start(0))
-        .map_err(|error| error.to_string())?;
-    let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes)
-        .map_err(|error| error.to_string())?;
-    if require_utf8 {
-        String::from_utf8(bytes)
-            .map_err(|error| format!("solver emitted non-UTF-8 output: {error}"))
-    } else {
-        // A hard byte ceiling can split a multibyte character. Such partial
-        // evidence is never normalized or accepted as a solver result.
-        Ok(String::from_utf8_lossy(&bytes).into_owned())
-    }
-}
-
-#[cfg(all(test, unix))]
-mod tests {
-    use super::invoke;
-    use std::path::Path;
-    use std::time::Duration;
-
-    #[test]
-    fn capture_limit_bounds_both_streams_and_preserves_exit_classification() {
-        let captured = invoke(
-            Path::new("/bin/sh"),
-            &["-c".into(), "printf '%050000d' 0".into()],
-            Path::new("/"),
-            Duration::from_secs(2),
-            128,
-        )
-        .unwrap();
-        assert_eq!(captured.status, "output_limit");
-        assert!(captured.stdout.len() + captured.stderr.len() <= 128);
-    }
-
-    #[test]
-    fn timeout_kills_the_direct_child() {
-        let captured = invoke(
-            Path::new("/bin/sh"),
-            &["-c".into(), "exec sleep 2".into()],
-            Path::new("/"),
-            Duration::from_millis(10),
-            128,
-        )
-        .unwrap();
-        assert_eq!(captured.status, "timeout");
-        assert!(captured.elapsed_ms < 1_000);
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        let _ = deadline;
+        Err(StartError::UnsupportedPlatform)
     }
 }

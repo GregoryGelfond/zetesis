@@ -21,8 +21,10 @@ if [ "$mode" = portable ] || [ "$mode" = full ]; then
     cargo clippy --locked -p zetesis-cli --no-default-features --all-targets -- -D warnings
     RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --all-features --no-deps
     cargo bench --locked -p zetesis-experiments --bench oracles -- --test
+    cargo bench --locked -p zetesis-cpu --bench lazy_joins -- --test
 fi
 if [ "$mode" = oracle ] || [ "$mode" = full ]; then
+    cargo test --locked -p zetesis-themelios --test aggregate_consumers --test structured_witnesses -- --ignored --nocapture
     cargo test --locked -p zetesis-ferraris --test aggregate_clingo -- --ignored --nocapture
     cargo test --locked -p zetesis-ferraris --test extrema_clingo --test value_extrema -- --ignored --nocapture
     cargo test --locked -p zetesis-cli --test clingo --test extended_clingo --test multiple_inputs --test maximize -- --ignored --nocapture

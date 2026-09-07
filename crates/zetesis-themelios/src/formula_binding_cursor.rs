@@ -39,19 +39,32 @@ pub(super) fn target(literal: &LiteralIr) -> Option<usize> {
 }
 
 impl<'a> Cursor<'a> {
-    pub fn new(literals: &'a [LiteralIr], values: Vec<Value>, support: &'a Support) -> Self {
-        let mut generators: Vec<_> = literals
-            .iter()
-            .filter(|literal| {
-                matches!(
-                    literal,
-                    LiteralIr::Bind { .. } | LiteralIr::Range { binder: true, .. }
-                )
-            })
-            .collect();
-        generators.extend(literals.iter().filter(|literal| {
+    pub fn new(
+        literals: &'a [LiteralIr],
+        values: Vec<Value>,
+        support: &'a Support,
+        plan: Option<&'a crate::formula_assignment_plan::Plan>,
+    ) -> Self {
+        let generators = if let Some(plan) = plan {
+            plan.steps
+                .iter()
+                .map(|step| &literals[step.literal])
+                .collect()
+        } else {
+            let mut generators: Vec<_> = literals
+                .iter()
+                .filter(|literal| {
+                    matches!(
+                        literal,
+                        LiteralIr::Bind { .. } | LiteralIr::Range { binder: true, .. }
+                    )
+                })
+                .collect();
+            generators.extend(literals.iter().filter(|literal| {
             matches!(literal, LiteralIr::Aggregate(aggregate) if aggregate.binding.is_some())
         }));
+            generators
+        };
         let states = (0..generators.len()).map(|_| State::Fresh).collect();
         Self {
             generators,
@@ -63,6 +76,10 @@ impl<'a> Cursor<'a> {
         }
     }
 
+    /// At depth d, earlier steps have populated every input of step d.
+    /// Backtracking resets later states before changing an earlier value.
+    /// Aggregate consumers use the compiler's checked plan; established local
+    /// scopes retain their existing scalar dependency order.
     pub fn next(
         &mut self,
         limits: FormulaLimits,

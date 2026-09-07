@@ -169,6 +169,10 @@ models, costs, ties and exhaustion. Describe source loading, preparation,
 grounding, solving, output, transfer and residual work according to the actual
 measured scope. `--stats` has instrumentation overhead; summed worker time and
 wall time are different quantities.
+The [corpus performance protocol](design/corpus-performance.md) requires every
+non-clingcon kr-domains case across eager/lazy and CPU/Metal configurations, with
+matched clingo runs and explicit unsupported/incomplete cells. This full matrix
+has not yet been collected; existing reports retain their narrower scope.
 
 The [scalar ablation](verification/scalar-evaluation-20260907/ablation.md) is an
 example of a controlled admission measurement with matched ordered subjects and

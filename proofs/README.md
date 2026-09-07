@@ -8,7 +8,7 @@ readable before its Lean details. The convention has one deliberately bounded
 pilot so far; it is not a claim of a library-wide rewrite.
 
 
-This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **686 kernel-checked theorems** across fifty semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
+This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **702 kernel-checked theorems** across fifty-three semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
 
 The formalization connects normalized stable-model semantics to candidate seeds, compositional reduct execution, lazy completion, consequence bounds, and completed search certificates. It supplies mathematical contracts for the Rust, wgpu, Rayon, and neuromorphic implementation work. It does not verify those implementations or make Lean a runtime dependency.
 
@@ -21,7 +21,7 @@ lake build
 lake env lean -DautoImplicit=false -DwarningAsError=true Audit.lean
 ```
 
-`lean-toolchain` pins `leanprover/lean4:v4.33.1`. The package has no remote dependencies, so the build itself needs no network once that toolchain exists. `lake build` compiles the umbrella module and all fifty semantic modules. `Audit.lean` requests the transitive axiom dependencies of every project theorem.
+`lean-toolchain` pins `leanprover/lean4:v4.33.1`. The package has no remote dependencies, so the build itself needs no network once that toolchain exists. `lake build` compiles the umbrella module and all fifty-three semantic modules. `Audit.lean` requests the transitive axiom dependencies of every project theorem.
 
 The [verification report](./verification.json) records the checked source hashes and commands. The [axiom audit](./axiom-audit.txt) contains only standard Lean logical axioms where needed: `propext`, `Quot.sound`, and `Classical.choice`. In particular, no theorem depends on `sorryAx` or `Lean.ofReduceBool`.
 
@@ -86,6 +86,9 @@ preserves an earlier inconsistent manifest and explains its repair.
 | [ScalarArithmetic](./Zetesis/ScalarArithmetic.lean) | Checked range/error policies and operation substitution over finite plans preserve first failures |
 | [GateProjection](./Zetesis/GateProjection.lean) | Finite bit-mask gate projection agrees with the Boolean relation under explicit physical-slot aliases |
 | [PositiveArguments](./Zetesis/PositiveArguments.lean) | Independently supplied inputs determine captured-value checks; finite filtering retains complete supporting rows and exact atoms in original/frozen contexts |
+| [AggregateConsumers](./Zetesis/AggregateConsumers.lean) | Ready schedules use only initial or preceding outputs; covered proposals retain their downstream value association and original aggregate clause |
+| [StructuredWitnesses](./Zetesis/StructuredWitnesses.lean) | Compatible positive witnesses retain complete source atoms and completed condition bindings; identical complete row collections preserve contextual stability |
+| [OrderedProbes](./Zetesis/OrderedProbes.lean) | A monotone finite boundary search partitions rows exactly; certified windows retain every full match under an explicit key implication |
 | [Examples](./Zetesis/Examples.lean) | Choices break Gamma antimonotonicity; omitting a constraint gate can lose a stable model |
 
 [theorems.json](./theorems.json) indexes every theorem by qualified name, source file, and line. All theorem assumptions remain explicit in the Lean declarations.
@@ -307,11 +310,44 @@ resource completion and Rust refinement remain separate obligations.
 The execution tranche adds 40 checked laws in five independently importable
 modules: signed singleton heads, constructor patterns, checked scalar plans,
 finite Boolean gate projection and consuming positive arguments. The complete
-library now has 686 theorems in 50 semantic modules. These are scoped mathematical
+execution checkpoint had 686 theorems in 50 semantic modules. These are scoped mathematical
 contracts; source compilation,
 Rust execution, memory/resource accounting and physical shader refinement remain
-separate obligations. The [current audit](verification/positive-arguments-20260907/README.md)
+separate obligations. The [execution audit](verification/positive-arguments-20260907/README.md)
 identifies the exact proof sources and commands and preserves the prior
 677-theorem record. Positive argument checks assume independently established
 inputs and complete support rows; they do not prove source binding inference,
 Rust joins, arithmetic inversion or resource refinement.
+
+## Dependency and ordered-probe laws
+
+The [current audit](verification/dependency-tranche-20260907/README.md) adds sixteen
+laws in three modules, bringing the complete library to 702 theorems in 53
+semantic modules. It preserves the previous 686-theorem record and all fifty
+prior semantic source files unchanged.
+
+`AggregateConsumers.lean` gives eight laws over an already chosen finite schedule
+and an explicitly covering aggregate proposal carrier. A ready instruction reads
+only initial slots or earlier outputs. An accepted actual proposal keeps its
+computed consumer value, and each clause retains the original aggregate formula;
+proposal membership itself asserts neither that formula nor the head. The frozen
+identity law assumes equal computed values. These laws do not prove the Rust
+sorter, source readiness, actual aggregate coverage, machine evaluation, cursor
+backtracking or resource completion.
+
+`StructuredWitnesses.lean` gives six laws for supplied constructor-shape tests and
+named-slot constraints over finite positive witness rows. Matching preserves the
+completed condition binding or rolls back on refusal. Original and frozen truth
+require the retained complete source atom, and the condition remains the logical
+antecedent. Complete row-collection identity preserves stability in unchanged
+context. Faithful shape/extraction, actual support coverage, source scope and
+Rust traversal are separate obligations; negative quantifiers and arithmetic
+inversion are outside these laws.
+
+`OrderedProbes.lean` gives two laws for an immutable Boolean predicate whose true
+positions form an initial segment. Width-decreasing binary search establishes a
+complete finite partition. A pair of certified boundaries retains every full
+match when full matching implies the key conditions. Relating Rust's storage
+order and parent binding to those predicates remains an explicit representation
+obligation. The laws do not establish ASP value order, source-carrier completion,
+matcher rollback, Rust resource/cancellation behavior or physical execution.

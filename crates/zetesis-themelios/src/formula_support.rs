@@ -181,14 +181,7 @@ pub(crate) fn build(
             if matches!(rule.head, HeadIr::Normal(None)) {
                 continue;
             }
-            let mut outer = Join::new(
-                &rule.body,
-                &[],
-                rule.variables,
-                &support,
-                budget,
-                rule.location,
-            )?;
+            let mut outer = Join::rule(rule, &support, budget)?;
             while let Some(binding) = match &rule.head {
                 HeadIr::Normal(Some(head)) => {
                     outer.next_support(head, &delta, limits, budget, counters, rule.location)?
@@ -329,6 +322,7 @@ impl PositivePattern<'_> {
 /// The cursor owns only its current assignment and undo trails. Negative gates
 /// never restrict this upper relation; the emitted formulas still retain them.
 pub(crate) struct Join<'a> {
+    bindings: Option<&'a crate::formula_assignment_plan::Plan>,
     literals: &'a [LiteralIr],
     generated: bool,
     comparisons: Comparisons,
@@ -346,6 +340,23 @@ pub(crate) struct Join<'a> {
     finished: bool,
 }
 impl<'a> Join<'a> {
+    pub(super) fn rule(
+        rule: &'a crate::formula_ir::RuleIr,
+        support: &'a Support,
+        budget: &mut Budget,
+    ) -> Result<Self, FormulaFailure> {
+        let mut join = Self::new(
+            &rule.body,
+            &[],
+            rule.variables,
+            support,
+            budget,
+            rule.location,
+        )?;
+        join.bindings = rule.bindings.as_ref();
+        Ok(join)
+    }
+
     pub(super) fn component(
         literals: &'a [LiteralIr],
         variables: usize,
@@ -401,6 +412,7 @@ impl<'a> Join<'a> {
             *slot = Some(copy(value, budget, location)?);
         }
         Ok(Self {
+            bindings: None,
             literals,
             generated: literals
                 .iter()
@@ -490,6 +502,7 @@ impl<'a> Join<'a> {
                 self.literals,
                 binding,
                 self.support,
+                self.bindings,
             ));
         }
     }

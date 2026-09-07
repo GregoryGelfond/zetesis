@@ -17,16 +17,29 @@ use crate::stage;
 
 pub(crate) fn run(options: &Options, loaded: &Loaded) -> (Value, bool) {
     let mut cases = Vec::new();
+    let mut pending = Vec::new();
     let mut counts = BTreeMap::<String, usize>::new();
     for case in &loaded.manifest.cases {
-        let result = check_case(options, loaded, case);
+        let result = check_case(options, loaded, case, &mut pending);
         let status = result["status"]
             .as_str()
             .expect("authored case result has a status");
         *counts.entry(status.to_owned()).or_default() += 1;
         eprintln!("{status}: {}", case.path);
         cases.push(result);
+        if !pending.is_empty() {
+            break;
+        }
     }
+    // Stop launching cases after unresolved cleanup. One bounded retry is made
+    // before the command's failure-report boundary; unreaped ownership is then
+    // explicitly abandoned and its numeric identity retained, never hidden in Drop.
+    let cleanup: Vec<_> = pending.into_iter().map(|child: zetesis_validation::process::PendingChild| {
+        let id = child.id();
+        let result = child.retry(Duration::from_secs(1));
+        let abandoned = result.pending.map(zetesis_validation::process::PendingChild::abandon);
+        json!({ "child_id": id, "exit": result.exit, "failure": result.failure.map(|error| error.to_string()), "abandoned_unreaped_child": abandoned })
+    }).collect();
     let expected = if options.reference_only {
         "reference_pass"
     } else {
@@ -60,6 +73,7 @@ pub(crate) fn run(options: &Options, loaded: &Loaded) -> (Value, bool) {
     (
         json!({
             "schema_version": 1,
+            "child_cleanup": cleanup,
             "mode": if options.reference_only { "reference_only" } else { "native_full_target" },
             "native_oracle": options.native_oracle.label(),
             "native_backend": options.native_backend.label(),
@@ -114,7 +128,12 @@ fn retain_timings(result: &mut Value, stderr: &str) {
     }
 }
 
-fn check_case(options: &Options, loaded: &Loaded, case: &Case) -> Value {
+fn check_case(
+    options: &Options,
+    loaded: &Loaded,
+    case: &Case,
+    pending: &mut Vec<zetesis_validation::process::PendingChild>,
+) -> Value {
     let input = loaded.root.join(&case.path);
     let reference_args = vec![
         "--models=0".into(),
@@ -127,6 +146,12 @@ fn check_case(options: &Options, loaded: &Loaded, case: &Case) -> Value {
         Ok(capture) => capture,
         Err(error) => return failure(result, "reference_invocation_error", error),
     };
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    let mut reference = reference;
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    if let Some(child) = reference.pending.take() {
+        pending.push(child);
+    }
     result["reference_process"] = json!(reference);
     if reference.status != "completed" {
         return failure(
@@ -154,7 +179,7 @@ fn check_case(options: &Options, loaded: &Loaded, case: &Case) -> Value {
         result["status"] = "reference_pass".into();
         return result;
     }
-    check_native(options, loaded, case, &answer, result)
+    check_native(options, loaded, case, &answer, result, pending)
 }
 
 fn check_native(
@@ -163,6 +188,7 @@ fn check_native(
     case: &Case,
     answer: &normalize::Answer,
     mut result: Value,
+    pending: &mut Vec<zetesis_validation::process::PendingChild>,
 ) -> Value {
     let input = loaded.root.join(&case.path);
     let mut native_args = vec![
@@ -191,6 +217,14 @@ fn check_native(
         Ok(capture) => capture,
         Err(error) => return failure(result, "native_invocation_error", error),
     };
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    let mut native = native;
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    if let Some(child) = native.pending.take() {
+        pending.push(child);
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    let _ = pending;
     result["native_process"] = json!(native);
     retain_timings(&mut result, &native.stderr);
     if native.status != "completed" {

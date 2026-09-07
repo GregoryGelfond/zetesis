@@ -125,3 +125,9 @@ planning dimensions with checked compatibility. Pure value/binding operations,
 immutable plans and bounded batches should support Rayon and GPU kernels as
 their implementations become available. CPU references and eager paths retain
 qualification/fallback roles; they do not replace the lazy/GPU/reduct objective.
+
+Physical Metal execution while retaining lazy grounding is required before
+version 1.0. The current explicit lazy/Metal refusal is an implementation gap,
+not a semantic requirement. The [current tranche plan](dependency-tranche-20260907.md#required-before-version-10-lazy-metal-execution)
+records complete candidate/source accounting, useful device work, bounded
+execution and CPU/oracle/device qualification as acceptance obligations.

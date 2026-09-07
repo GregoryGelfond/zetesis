@@ -8,10 +8,15 @@ use zetesis_core::{
 
 use crate::{Control, Stop};
 
+mod window;
+
 /// Exact checking budgets, applied before the next charged operation/insertion.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Limits {
     /// Maximum charged template, tuple-probe, gate/filter, and output operations.
+    /// Lazy joins also charge bound-prefix inspections and ordered comparisons,
+    /// including both compared values' referenced payload bytes. Work counts can
+    /// change with the execution algorithm; they are not ground-instance counts.
     pub max_work: u64,
     /// Maximum distinct derived atoms, including pending round outputs.
     pub max_derived_atoms: usize,
@@ -123,6 +128,9 @@ impl Work<'_> {
     }
 }
 
+// The closure's Atom order groups signatures, then orders each relation by the
+// tuple's Value storage order. Window lookup relies on this construction order;
+// ASP term comparison is a different order and must not be used here.
 type Relations<'a> = BTreeMap<&'a Predicate, Vec<&'a Atom>>;
 
 /// Compute the exact least positive closure selected by a sparse frozen seed.
@@ -239,7 +247,9 @@ fn visit(
         work.statistics.bindings += 1;
         return emit(&assignment, work);
     }
-    let mut cursors = vec![0; count];
+    // None means this depth has not yet been opened for the current parent
+    // assignment. A retained range advances in the original relation order.
+    let mut cursors = vec![None; count];
     let mut undo: Vec<Vec<usize>> = vec![Vec::new(); count];
     let mut depth = 0;
     loop {
@@ -258,17 +268,20 @@ fn visit(
         let tuples = relations
             .get(pattern.predicate())
             .map_or(&[][..], Vec::as_slice);
-        if cursors[depth] == tuples.len() {
-            cursors[depth] = 0;
+        let cursor = &mut cursors[depth];
+        if cursor.is_none() {
+            *cursor = Some(window::matching_prefix(pattern, tuples, &assignment, work)?);
+        }
+        let Some(index) = cursor.as_mut().and_then(Iterator::next) else {
+            *cursor = None;
             if depth == 0 {
                 return Ok(());
             }
             depth -= 1;
             clear(&mut assignment, &mut undo[depth]);
             continue;
-        }
-        let atom = tuples[cursors[depth]];
-        cursors[depth] += 1;
+        };
+        let atom = tuples[index];
         if bind(pattern, atom, &mut assignment, &mut undo[depth], work)?
             && guards(template, &assignment, seed, work)?
         {

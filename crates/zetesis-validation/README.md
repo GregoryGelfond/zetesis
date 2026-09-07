@@ -1,9 +1,95 @@
 # Validation tooling
 
-This package has two commands and a reusable corpus library. `zetesis-corpus`
+This package has two commands and reusable corpus, process-capture and reported-answer libraries. `zetesis-corpus`
 checks the selected clingo fixture's integrity without running a solver.
 `zetesis-validate` runs the separate 94-case kr-domains solver campaign described
 below. Neither command is invoked by the production solver.
+
+## Reusable process and reported-answer boundaries
+
+`zetesis_validation::process::invoke(Invocation, Limits)` accepts an explicitly
+resolved absolute executable, arguments and working directory. It returns raw
+stdout/stderr prefixes, a typed stop reason, direct-child exit evidence, elapsed
+time, and separate capture/cleanup faults. `Stop::Completed` means the direct
+child was reaped and both streams reached EOF; it does not mean a solver completed
+enumeration or returned correct answers. It establishes no descendant-termination
+property: a same-group descendant that closed both pipes may still survive.
+Campaigns must establish trusted solver behavior and coordinate owned jobs
+separately; process completion is not a system-quiescence certificate.
+Nonzero exit codes remain ordinary
+process evidence for the caller's exit policy. Strict UTF-8 accessors never
+replace invalid bytes.
+
+The strong backend is implemented for Linux and macOS using safe `rustix` APIs.
+It starts a fresh process group, alternates bounded nonblocking reads, and waits
+only when neither stream progresses. The direct child remains waitable until
+after any required group signal, so the runner does not signal a reused numeric
+group ID after reaping. Normal completion only reaps; deadline, byte-limit and
+capture failures attempt group termination. No reader thread or blocking wait
+can outlive the call. Descendants that leave the process group are outside those
+termination attempts. Normal completion does not attempt group termination,
+including for same-group descendants with closed pipes. Callers must not
+independently reap the child.
+
+The shared raw byte ceiling is inclusive and checked before retention. Vectors
+use fallible amortized growth; capacity and OS pipe storage are separate from
+retained bytes. A main deadline and a separate cleanup interval bound authored
+polling, not OS-call or allocator latency. If cleanup cannot establish reaping,
+the returned `PendingChild` retains ownership. A caller must retry for an explicit
+interval or report explicit abandonment; `Drop` performs no wait or background
+work. The validator stops launching cases, retries once, and records any
+unreaped child ID at its failure-report boundary.
+
+The older Rust validator retains its previous backend on other platforms; that
+backend has weaker direct-child and pipe-thread cleanup guarantees. It has not
+been newly qualified by this change. The stronger reusable operation returns
+`UnsupportedPlatform` there. This platform distinction does not silently remove
+the older command's path, and is separate from the existing Python upstream
+campaign's POSIX requirement.
+
+`zetesis_validation::answers::clingo_json` and `native_text` return immutable
+`ReportedAnswers` under explicit input, witness, symbol-occurrence and objective
+dimension ceilings. Producer grammars are separate from corpus annotations and
+from process execution. The native text entry point is explicitly a legacy
+presentation adapter. The result reconciles reported status, costs, counts and
+display multiplicities; it does not reconstruct hidden full interpretations or
+certify the producer's claims. `same_displays` compares exactly that evidence.
+The library preserves repeated symbols inside a display and repeated equal
+displays, including optN's exact single-incumbent removal. Malformed discarded
+incumbents remain refusals. Input bytes bound initial JSON decoding; these limits
+are not heap/RSS accounting.
+
+`answers::native_json::parse` separately checks native schema-1 full-model
+records. It returns core `Atom`/`Value` data and retains shown atom positions,
+shown terms and priority/cost pairs as distinct views. It reconciles exhausted
+coverage, publication/verification counts, exact optimum and all retained ties;
+a failed envelope cannot qualify through retained optimality data. These are
+checked producer claims, not an independent solver-correctness proof.
+
+The raw typed decoder accepts the core's broader name domain.
+`NativeAnswers::full_model_symbols` validates predicate, symbol and function names
+with the pinned themelios identifier lexer before exposing an ASP comparison
+view. Ambiguous names such as a nullary predicate named `p(a)` are refused rather
+than confused with the atom `p(a)`. Structural spelling reuses the core's cached
+renderer; a small outer/scalar view supplies predicate punctuation and the same
+string escaping where core `Atom` and scalar `Value` have no `Display` implementation.
+The view preflights exact output bytes. Identifier validation temporarily holds
+two copies of one admitted name, separately from retained output and value data.
+
+Native value construction uses the core's shape/depth/payload checks. Initial
+JSON and temporary decoded node/text storage are bounded by the report bytes and
+node ceilings; per-value limits are not a pre-allocation or RSS ceiling for the
+whole decoder. JSON object decoding follows serde's last-key-wins behavior;
+duplicate object keys are not currently refused. Integer costs remain exact
+signed 64-bit values; consumers of serialized evidence need lossless integer
+handling rather than JavaScript floating-point coercion.
+
+The current 94-case command uses these shared implementations on Linux/macOS and
+keeps its historical report fields through adapters. Invalid UTF-8 cannot become
+completed text: a failed record labels its lossy legacy view and retains the
+original bytes. The selected 24-case Rust solver campaign remains follow-on work.
+The old Python comparison and retained C++ import
+fixtures are still required by their existing callers.
 
 ## Selected clingo corpus
 
@@ -136,8 +222,10 @@ count. Equal display sets and equal total counts alone are insufficient.
 Raw witness counts must reconcile with the JSON summary. The supported clingo
 5.8 optN format has exactly one final-cost incumbent replay in addition to its
 declared optimal enumeration; incompatible output is refused explicitly.
-`@expect`, `@cost`, `@count`, `@model`, `@optimal` and `@cautious optimal`
-contracts are checked; unknown semantic tags fail explicitly. Notes are prose.
+The elenctic test expectations `@expect`, `@cost`, `@count`, `@model`, `@optimal`
+and `@cautious optimal` are checked by the validator; unknown expectation tags
+fail explicitly. They are ASP comments to the solver, not native source-language
+semantics. Notes are prose.
 Strings with spaces, commas and escaped quotes remain whole atom values.
 Within one display, symbols are sorted and every occurrence is retained: an atom
 and a shown term can print the same symbol twice. Hidden atom identities
@@ -247,15 +335,12 @@ exact reproduction of the pinned solver environment. All 94 reference contracts
 passed in that run, while the native full-target run returned 94 source refusals
 and a failing exit status.
 
-Child stdout and stderr are drained concurrently into temporary files under
-one combined byte ceiling, checked before each write. Buffers are fixed-size;
-there is no `wait_with_output` accumulation or undrained pipe wait. The direct
-child is killed at its deadline or output ceiling, then stream closure has at
-most two one-second cleanup waits. This runner expects trusted solver
-executables, without an intermediate shell or detached subprocess trees.
-Captured reports themselves scale with the fixed case count and configured
-per-child byte limit; allocator and operating-system overhead are not included
-in that byte accounting.
+Linux/macOS child capture uses the reusable process contract above, with a
+one-second initial cleanup interval and one further second if reaping remains
+unresolved. The compatibility backend on other platforms retains the older
+temporary-file/thread mechanism and its separate pipe-closure waits. Captured
+reports scale with the fixed case count and configured per-child byte ceiling;
+allocator and operating-system overhead are not included in that measure.
 
 The upstream corpus remains MIT-licensed, Copyright (c) 2026 Gregory Gelfond;
 its full notice is retained under `validation/corpus/kr-domains/LICENSE`.

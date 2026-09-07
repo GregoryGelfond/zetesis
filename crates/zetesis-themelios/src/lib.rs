@@ -41,6 +41,7 @@ mod formula_analysis;
 mod formula_pool;
 mod formula_assignment_ir;
 mod formula_assignment;
+mod formula_assignment_plan;
 mod formula_objective_dependencies;
 mod formula_ground;
 mod grounding_observer;

@@ -72,14 +72,7 @@ pub(crate) fn ground(
                 if crate::formula_factor::rule(&mut builder, rule, &support)? {
                     return Ok(());
                 }
-                let mut outer = Join::new(
-                    &rule.body,
-                    &[],
-                    rule.variables,
-                    &support,
-                    builder.budget,
-                    rule.location,
-                )?;
+                let mut outer = Join::rule(rule, &support, builder.budget)?;
                 while let Some(binding) =
                     outer.next(limits, builder.budget, &mut builder.counters, rule.location)?
                 {

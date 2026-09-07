@@ -1,9 +1,8 @@
 //! Canonical completed results and explicit original contract checks.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use serde::Serialize;
-use serde_json::Value;
 
 use crate::corpus::Case;
 
@@ -23,238 +22,37 @@ pub(crate) struct Answer {
 }
 
 pub(crate) fn reference(text: &str) -> Result<Answer, String> {
-    let document: Value =
-        serde_json::from_str(text).map_err(|error| format!("clingo JSON: {error}"))?;
-    let result = document["Result"].as_str().ok_or("missing clingo Result")?;
-    if !matches!(result, "SATISFIABLE" | "UNSATISFIABLE" | "OPTIMUM FOUND")
-        || document["Models"]["More"] != "no"
-    {
-        return Err("reference did not complete enumeration/optimization".into());
-    }
-    let optimum = result == "OPTIMUM FOUND";
-    if optimum && document["Models"]["Optimum"] != "yes" {
-        return Err("reference lacks completed optimality evidence".into());
-    }
-    let cost = if optimum {
-        Some(costs(&document["Models"]["Costs"])?)
-    } else {
-        None
-    };
-    if !optimum && document["Models"].get("Costs").is_some() {
-        return Err("nonoptimized reference result contains objective costs".into());
-    }
-    let mut selected = Vec::new();
-    let mut raw_count = 0u64;
-    let mut best_count = 0u64;
-    for call in document["Call"].as_array().ok_or("missing clingo calls")? {
-        let call = call.as_object().ok_or("invalid clingo call")?;
-        let Some(witnesses) = call.get("Witnesses") else {
-            continue;
-        };
-        let witnesses = witnesses.as_array().ok_or("invalid clingo witnesses")?;
-        for witness in witnesses {
-            raw_count = raw_count.checked_add(1).ok_or("witness count overflow")?;
-            let model = witness_symbols(&witness["Value"])?;
-            if let Some(best) = &cost {
-                let actual = costs(&witness["Costs"])?;
-                if actual.len() != best.len() || actual < *best {
-                    return Err("witness contradicts the reported final cost vector".into());
-                }
-                if actual != *best {
-                    if best_count != 0 {
-                        return Err("nonoptimal witness follows the final incumbent".into());
-                    }
-                    continue;
-                }
-            } else if witness.get("Costs").is_some() {
-                return Err("unexpected objective vector in nonoptimized witness".into());
-            }
-            best_count = best_count.checked_add(1).ok_or("witness count overflow")?;
-            selected.push(model);
-        }
-    }
-    let satisfiable = result != "UNSATISFIABLE";
-    let count_key = if optimum { "Optimal" } else { "Number" };
-    let model_count = document["Models"][count_key]
-        .as_u64()
-        .ok_or("missing completed model count")?;
-    if document["Models"]["Number"].as_u64() != Some(raw_count) {
-        return Err("reference witness count disagrees with Models.Number".into());
-    }
-    if optimum && model_count.checked_add(1) != Some(best_count) {
-        return Err(
-            "reference optN requires final optimal witnesses plus one incumbent replay".into(),
-        );
-    }
-    if optimum {
-        let (incumbent, optimal) = selected.split_first().ok_or("missing final incumbent")?;
-        if !optimal.contains(incumbent) {
-            return Err("final incumbent is absent from optimal enumeration".into());
-        }
-    }
-    // optN first discovers the final incumbent, then enumerates every optimal
-    // model. Remove precisely that first discovery, never every equal display.
-    let model_multiplicities = multiplicities(selected.into_iter().skip(usize::from(optimum)))?;
-    let models: BTreeSet<_> = model_multiplicities
-        .iter()
-        .map(|(model, _)| model.clone())
-        .collect();
-    if satisfiable == models.is_empty()
-        || (satisfiable && model_count == 0)
-        || (!satisfiable && model_count != 0)
-    {
-        return Err("inconsistent clingo status, witnesses, or counts".into());
-    }
-    Ok(Answer {
-        satisfiable,
-        cost,
-        models,
-        model_multiplicities,
-        model_count,
-        solver: document["Solver"]
-            .as_str()
-            .unwrap_or("unreported")
-            .to_owned(),
-    })
-}
-
-fn witness_symbols(value: &Value) -> Result<Model, String> {
-    let mut symbols = value
-        .as_array()
-        .ok_or("missing witness atoms")?
-        .iter()
-        .map(|atom| {
-            atom.as_str()
-                .map(str::to_owned)
-                .ok_or_else(|| "non-string witness atom".to_owned())
-        })
-        .collect::<Result<Model, _>>()?;
-    symbols.sort_unstable();
-    Ok(symbols)
-}
-
-fn costs(value: &Value) -> Result<Vec<i64>, String> {
-    value
-        .as_array()
-        .ok_or_else(|| "missing cost vector".to_owned())?
-        .iter()
-        .map(|cost| {
-            cost.as_i64()
-                .ok_or_else(|| "cost outside signed 64-bit report representation".to_owned())
-        })
-        .collect()
+    zetesis_validation::answers::clingo_json(
+        text.as_bytes(),
+        zetesis_validation::answers::Limits::for_bytes(text.len()),
+    )
+    .map(|answer| adapt(&answer))
+    .map_err(|error| error.to_string())
 }
 
 pub(crate) fn native(text: &str, optimized: bool) -> Result<Answer, String> {
-    let (satisfiable, reported_count) = native_summary(text, optimized)?;
-    let mut witnesses: Vec<(Model, Option<Vec<i64>>)> = Vec::new();
-    let mut lines = text.lines();
-    while let Some(line) = lines.next() {
-        if line.starts_with("Answer:") {
-            let model = split_atoms(lines.next().ok_or("missing native model line")?, false)?;
-            witnesses.push((model, None));
-        } else if let Some(raw) = line.strip_prefix("Optimization:") {
-            if !optimized {
-                return Err("unexpected objective vector in nonoptimized native output".into());
-            }
-            let cost = integers(raw)?;
-            let witness = witnesses
-                .last_mut()
-                .ok_or("cost without preceding native model")?;
-            if witness.1.replace(cost).is_some() {
-                return Err("duplicate native cost record".into());
-            }
-        }
-    }
-    if satisfiable == witnesses.is_empty() {
-        return Err("native model/status mismatch".into());
-    }
-    if u64::try_from(witnesses.len()).map_err(|error| error.to_string())? != reported_count {
-        return Err("native answer count disagrees with Models summary".into());
-    }
-    let cost = if optimized && satisfiable {
-        if witnesses.iter().any(|(_, cost)| cost.is_none()) {
-            return Err(
-                "native optimized output requires an Optimization: vector for every model".into(),
-            );
-        }
-        let dimensions = witnesses[0].1.as_ref().map(Vec::len);
-        if witnesses
+    zetesis_validation::answers::native_text(
+        text.as_bytes(),
+        optimized,
+        zetesis_validation::answers::Limits::for_bytes(text.len()),
+    )
+    .map(|answer| adapt(&answer))
+    .map_err(|error| error.to_string())
+}
+
+fn adapt(answer: &zetesis_validation::answers::ReportedAnswers) -> Answer {
+    Answer {
+        satisfiable: answer.satisfiable(),
+        cost: answer.cost().map(<[i64]>::to_vec),
+        models: answer
+            .displays()
             .iter()
-            .any(|(_, cost)| cost.as_ref().map(Vec::len) != dimensions)
-        {
-            return Err("native objective vectors have inconsistent dimensions".into());
-        }
-        witnesses
-            .iter()
-            .filter_map(|(_, cost)| cost.as_ref())
-            .min()
-            .cloned()
-    } else {
-        None
-    };
-    let selected: Vec<_> = witnesses
-        .into_iter()
-        .filter(|(_, value)| cost.is_none() || value == &cost)
-        .collect();
-    let model_count = u64::try_from(selected.len()).map_err(|error| error.to_string())?;
-    let model_multiplicities = multiplicities(selected.into_iter().map(|(model, _)| model))?;
-    Ok(Answer {
-        satisfiable,
-        cost,
-        models: model_multiplicities
-            .iter()
-            .map(|(model, _)| model.clone())
+            .map(|(display, _)| display.clone())
             .collect(),
-        model_multiplicities,
-        model_count,
-        solver: "zetesis native output".into(),
-    })
-}
-
-fn multiplicities(models: impl Iterator<Item = Model>) -> Result<Vec<(Model, u64)>, String> {
-    let mut counts = BTreeMap::<Model, u64>::new();
-    for model in models {
-        let count = counts.entry(model).or_default();
-        *count = count
-            .checked_add(1)
-            .ok_or("display multiplicity overflow")?;
+        model_multiplicities: answer.displays().to_vec(),
+        model_count: answer.model_count(),
+        solver: answer.solver().to_owned(),
     }
-    Ok(counts.into_iter().collect())
-}
-
-fn native_summary(text: &str, optimized: bool) -> Result<(bool, u64), String> {
-    let coverage: Vec<_> = text
-        .lines()
-        .filter(|line| line.starts_with("Coverage:"))
-        .collect();
-    if coverage != ["Coverage: exhausted"]
-        || text.lines().any(|line| line.starts_with("INCOMPLETE:"))
-    {
-        return Err("native output requires exactly one exhausted coverage record".into());
-    }
-    let statuses: Vec<_> = text
-        .lines()
-        .filter(|line| matches!(*line, "SATISFIABLE" | "UNSATISFIABLE" | "OPTIMUM FOUND"))
-        .collect();
-    if statuses.len() != 1 || (!optimized && statuses[0] == "OPTIMUM FOUND") {
-        return Err("native status is missing, contradictory, or unexpectedly optimized".into());
-    }
-    let summaries: Vec<_> = text
-        .lines()
-        .filter_map(|line| line.strip_prefix("Models:"))
-        .collect();
-    if summaries.len() != 1 {
-        return Err("native output requires exactly one Models summary".into());
-    }
-    let count = summaries[0]
-        .split(';')
-        .next()
-        .ok_or("missing Models count")?
-        .trim()
-        .parse()
-        .map_err(|error| format!("invalid Models count: {error}"))?;
-    Ok((statuses[0] != "UNSATISFIABLE", count))
 }
 
 pub(crate) fn same(reference: &Answer, native: &Answer) -> bool {
@@ -263,6 +61,22 @@ pub(crate) fn same(reference: &Answer, native: &Answer) -> bool {
         && reference.models == native.models
         && reference.model_multiplicities == native.model_multiplicities
         && reference.model_count == native.model_count
+}
+
+fn integers(text: &str) -> Result<Vec<i64>, String> {
+    zetesis_validation::answers::parse_costs(
+        text,
+        zetesis_validation::answers::Limits::for_bytes(text.len()),
+    )
+    .map_err(|error| error.to_string())
+}
+fn split_atoms(text: &str, comma_separated: bool) -> Result<Vec<String>, String> {
+    zetesis_validation::answers::split_display(
+        text,
+        comma_separated,
+        zetesis_validation::answers::Limits::for_bytes(text.len()),
+    )
+    .map_err(|error| error.to_string())
 }
 
 pub(crate) fn contracts(case: &Case, answer: &Answer) -> Result<(), String> {
@@ -329,60 +143,6 @@ fn braces(text: &str) -> Result<&str, String> {
         .and_then(|value| value.strip_suffix('}'))
         .map(str::trim)
         .ok_or_else(|| "contract needs a braced value".to_owned())
-}
-
-fn integers(text: &str) -> Result<Vec<i64>, String> {
-    text.split_whitespace()
-        .map(|value| {
-            value
-                .parse()
-                .map_err(|error| format!("cost integer: {error}"))
-        })
-        .collect()
-}
-
-fn split_atoms(text: &str, comma_separated: bool) -> Result<Model, String> {
-    let mut result = Model::new();
-    let mut atom = String::new();
-    let mut depth = 0usize;
-    let mut quoted = false;
-    let mut escaped = false;
-    for character in text.chars() {
-        if quoted {
-            atom.push(character);
-            if escaped {
-                escaped = false;
-            } else if character == '\\' {
-                escaped = true;
-            } else if character == '"' {
-                quoted = false;
-            }
-        } else if character == '"' {
-            quoted = true;
-            atom.push(character);
-        } else if character == '(' {
-            depth = depth.checked_add(1).ok_or("atom nesting overflow")?;
-            atom.push(character);
-        } else if character == ')' {
-            depth = depth.checked_sub(1).ok_or("unmatched atom parenthesis")?;
-            atom.push(character);
-        } else if depth == 0 && (character.is_whitespace() || (comma_separated && character == ','))
-        {
-            if !atom.is_empty() {
-                result.push(std::mem::take(&mut atom));
-            }
-        } else {
-            atom.push(character);
-        }
-    }
-    if quoted || depth != 0 {
-        return Err("unterminated quoted atom or tuple".into());
-    }
-    if !atom.is_empty() {
-        result.push(atom);
-    }
-    result.sort_unstable();
-    Ok(result)
 }
 
 #[cfg(test)]

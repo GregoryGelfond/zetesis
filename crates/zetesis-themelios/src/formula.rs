@@ -179,6 +179,21 @@ pub enum FormulaFailure {
         /// Original enclosing rule span.
         location: Location,
     },
+    /// A finite value instruction has no independent producer for an input.
+    UnboundValueInput {
+        /// Dense input slot in the enclosing rule.
+        variable: usize,
+        /// Original enclosing rule span.
+        location: Location,
+    },
+    /// Finite value instructions have a cyclic input dependency. This is a
+    /// native scheduling refusal, not an impossibility claim about ASP recursion.
+    CyclicValueInput {
+        /// An input slot in the unscheduled dependency component.
+        variable: usize,
+        /// Original enclosing rule span.
+        location: Location,
+    },
     /// A bounded finite aggregate translation was refused.
     Aggregate {
         /// Typed constructor failure with partial accounting.
@@ -232,6 +247,8 @@ impl FormulaFailure {
             Self::Limit { location, .. }
             | Self::UnsafeVariable { location, .. }
             | Self::UnboundArgumentInput { location, .. }
+            | Self::UnboundValueInput { location, .. }
+            | Self::CyclicValueInput { location, .. }
             | Self::Theory { location, .. }
             | Self::Objective { location, .. }
             | Self::Aggregate { location, .. } => vec![crate::diagnostic::diagnostic(
@@ -259,6 +276,14 @@ impl fmt::Display for FormulaFailure {
             Self::UnboundArgumentInput { variable, .. } => write!(
                 f,
                 "evaluated positive argument requires independently bound input {variable}; arithmetic inversion is unsupported"
+            ),
+            Self::UnboundValueInput { variable, .. } => write!(
+                f,
+                "finite value instruction requires independently produced input {variable}"
+            ),
+            Self::CyclicValueInput { variable, .. } => write!(
+                f,
+                "cyclic finite value dependency through input {variable} is unsupported"
             ),
             Self::Theory { error, .. } => error.fmt(f),
             Self::Objective { error, .. } => error.fmt(f),

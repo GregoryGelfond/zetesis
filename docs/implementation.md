@@ -30,11 +30,27 @@ all source profiles and execution plans.
 | `zetesis-cli` | Prepared-input sessions, typed solve configuration/outcomes, bounded human/JSON views and process adaptation |
 | `zetesis-telemetry` | Optional typed host stage measurements, independent of rendered diagnostics |
 | `zetesis-experiments` | Standalone static and general-formula membership qualifications, explicit CPU residual measurements and Criterion regression benchmarks |
-| `zetesis-validation` | External-oracle corpus comparisons; separate from every solver execution path |
+| `zetesis-validation` | Curated fixtures, bounded process capture, typed reported answers and external-oracle corpus comparisons; separate from production acceptance |
 
-Public types document their contracts and error conditions. Libraries do not
+Public types document their contracts and error conditions. Solver libraries do not
 invoke an external ASP solver. The optional clingo campaign uses one only as an
 independent test oracle.
+
+The first reusable Rust validation boundary is integrated. On Linux/macOS,
+`process::invoke` retains bounded raw output, typed process/cleanup failures and
+ownership of an unreaped direct child. Process completion means direct-child
+reaping and pipe EOF; it proves neither descendant termination nor semantic
+completion. The separate `answers` operations check complete reported displays,
+costs and multiplicities under input/occurrence limits. They do not recover
+hidden full interpretations or certify producer claims. Native JSON decoding
+separately retains typed full atoms, shown selections and exact objective vectors,
+reconciling reported completion and counts. Its ASP comparison view validates
+names through pinned themelios before rendering; it cannot infer full models
+from a display. The existing 94-case
+validator uses these APIs through compatibility adapters; its older platform
+fallback remains separately scoped. The selected-upstream Rust solver campaign
+is still pending. Existing Python qualification tools and retained C++ import
+provenance have not been retired. See the [validation contract](../crates/zetesis-validation/README.md#reusable-process-and-reported-answer-boundaries).
 
 ## Signed identity and source coherence
 
@@ -148,9 +164,12 @@ can derive a head never suggested by the generator and can reject a constraint
 that the generator did not inspect. This separation is the central experiment.
 
 The current CPU joins use predicate-indexed relations and repeated source
-rounds. Bound-column indexing in the relational lazy engine, semi-naive delta
-scheduling, shared joins across candidate batches and selectivity planning remain
-optimization work. Formula eager support already has its own column indexes;
+rounds. Leading bound arguments narrow a scan to a contiguous window in the
+relation's existing storage order. Full matching, remaining argument checks and
+frozen gates still apply, and each parent binding owns its window cursor. This
+does not use ASP term order or change source literal order. Arbitrary bound-column
+indexes, semi-naive delta scheduling, shared joins across candidate batches and
+selectivity planning remain optimization work. Formula eager support already has its own column indexes;
 the three grounding paths must be measured separately. The implementation avoids
 an upfront ground rule store, but does not imply that every lazy workload is fast.
 
@@ -209,10 +228,12 @@ GPU crate. This is a bounded single-program cache, not an unbounded residency ma
 
 The CLI exposes independent `--grounder auto|lazy|eager` and `--backend` policies.
 Explicit eager CPU retains its compiled graph even across automatic GPU fallback;
-lazy mode never materializes a rule store. A forced GPU/lazy pair is refused.
+explicit lazy mode never materializes a rule store. A forced GPU/lazy pair is refused.
 The default CLI uses lazy CPU for the first candidate and small batches. Later
 batches with at least 32 candidates may initialize a physical GPU and admit the
-static profile. Auto fallback reports a reason; explicit backend/vendor requests
+static profile. That switch performs eager lowering; it is not lazy device
+execution. Actual lazy Metal work remains required before version 1.0.
+Auto fallback reports a reason; explicit backend/vendor requests
 never fall back. The threshold is an initial heuristic with no claimed speedup.
 `zetesis devices` separates advertised capabilities from actual initialization
 and shader execution. Metal, Vulkan, DirectX 12 and GL selection is restricted
@@ -332,10 +353,18 @@ conjunctions of original condition-to-consequent implications. Completed
 possible-positive support precedes all local joins. Each condition assignment
 retains a disjunction of signed consequent alternatives; finite positive
 consequent-only variables/anonymous slots can select local support witnesses.
-These cannot bind the outer rule, repair condition safety or provide support.
+Structured positive witnesses such as `p(f(X,_)):#true` now use the existing
+transactional constructor/tuple matcher inside each alternative. Complete
+supporting atoms retain predicate and constructor signs, repeated/prebound
+agreement and anonymous values; a failed match preserves the completed condition
+binding. The retained capture copy is charged before allocation. These witnesses
+cannot bind the outer rule, repair condition safety or provide support.
 Empty alternative families are false; completed empty condition domains are true.
 Resource exhaustion remains a refusal. Objective-reachable conditional producers
-and broader structured witness patterns remain outside this bounded extension.
+remain outside this bounded extension, as do evaluated positions mixed with local
+witness extraction, arithmetic inversion and negative anonymous witnesses. The
+[structured-witness record](verification/structured-witnesses-20260907/README.md)
+retains complete-model, arbitrary original/frozen, scope and exact-limit checks.
 Pooled analysis input carries `AnalysisBasis::DependencyProjection`; its safety
 and class verdicts are not original-source certificates. Candidate-specific
 omission is formalized, but the compiler still builds these families eagerly.
@@ -380,8 +409,26 @@ Sum functions ignore nonnumeric/empty tuples; sum+ also ignores negative weights
 Broader assignments and conditions remain outside the profile. Numeric min/max
 source endpoints implicated in six recorded clingo discrepancies remain refused.
 Independent multiple aggregate assignments stream products through the existing
-bounded cursor while retaining every original equality. Dependent generators and
-objective-relevant multiple-assignment producers remain outside that extension.
+bounded cursor while retaining every original equality. Their values can now feed
+scalar/tuple comparisons, Boolean guards, scalar equalities and evaluated or
+constructed head arguments. A private plan records required and produced slots;
+relational bindings establish initial readiness, and consumers run after their
+inputs exist. The prior scalar/range-before-aggregate priority remains wherever
+dependencies allow it. The plan changes evaluation order while source body order
+and original aggregate equalities/guard formulas remain intact.
+
+These are covering value proposals, not certificates of aggregate truth. Final
+filters inspect completed rows. Undefined or overflowing consumer arithmetic
+still refuses admission, even when a proposal would later prove unrealizable.
+The bounded plan charges dependency scans and input/readiness/instruction storage
+under existing expansion limits. Aggregate-free rules keep their previous
+accounting. New aggregate-generated body-atom/evaluated-positive checks, dependent
+ranges, conditional/choice scopes and objective producers remain refused.
+Dependencies between assignment generators are refused even through scalar
+descendants; previously admitted comparison scopes remain available. See the
+[aggregate-consumer record](verification/aggregate-consumers-20260907/README.md)
+for exact boundaries, finite-ground comparisons and schedule-bypass evidence.
+The total-assignment objective observer described below is unchanged.
 The main CLI supports both S0 GPU closure and explicitly selected hybrid formula
 propagation. The separate formula experiment compares scalar CPU, Rayon and
 hybrid membership; exact GPU residual search remains future work.
@@ -417,11 +464,14 @@ construction; original priorities, tuple components and source direction remain
 available. Equal keys across all three source forms combine eligibility.
 The [mixed-direction campaign](verification/objective-directions-20260905/README.md)
 checks complete costs, unchanged reduct formulas and explicit numeric boundaries.
-The preceding fully qualified [93d2575 checkpoint](verification/grounder-tranche-20260907/README.md)
+The dated [93d2575 checkpoint](verification/grounder-tranche-20260907/README.md)
 passed all 94 unchanged entry graphs under default limits, preserving their
 original display/count/cost and optimum contracts. Hidden full models are not
-reconstructed from `#show`. The [new integration record](verification/execution-tranche-20260907/README.md)
-tracks qualification of the newer source separately. General factored body construction, retained candidate traversal, root
+reconstructed from `#show`. The later [execution checkpoint](verification/execution-tranche-20260907/README.md)
+records its own completed qualification. The current
+[dependency checkpoint](verification/dependency-tranche-20260907/README.md)
+passes final workspace/CPU tests, strict gates, both coverage floors and fresh
+94/24 release replays. General factored body construction, retained candidate traversal, root
 failed-literal propagation, indexed exact semantic blocks and optional objective
 bounds reduce repeated work without changing the original reduct. The
 [objective-pruning protocol](design/objective-pruning.md) keeps dominance and
@@ -461,6 +511,17 @@ composition laws, final-coverage lazy bridge, supplied complete search certifica
 and abstract legal event traces. The independent reference campaign and production
 conformance tests supply executable evidence separately. No theorem currently
 connects the concrete Rust structs, source adapter or shader to the Lean types.
+
+The [current clean audit](../proofs/verification/dependency-tranche-20260907/README.md)
+checks 702 theorems in 53 modules. The sixteen additions cover ready aggregate
+consumers, positive structured witnesses and ordered finite boundaries. Complete
+carriers, faithful extraction and match-to-key implications are explicit premises;
+the laws do not establish source coverage, Rust scheduling/matching, machine
+resource behavior or device execution. Prior theorem sources and axiom sets are
+preserved. The completed local runtime gates and any new physical qualification
+are separate from this proof check. Release formalization focuses on foundations
+and implementation correspondence needed by the solver; a broader mathematical
+ASP library remains an adjacent direction.
 
 The native neuromorphic specification includes exact support counters, frozen
 epochs, reliable or fault-detecting transport and semantic termination checks.
