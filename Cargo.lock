@@ -1968,10 +1968,16 @@ dependencies = [
  "clap",
  "criterion",
  "rayon",
+ "serde",
+ "serde_json",
+ "sha2",
+ "themelios-base",
  "zetesis-core",
  "zetesis-cpu",
  "zetesis-ferraris",
+ "zetesis-objective",
  "zetesis-sat",
+ "zetesis-themelios",
  "zetesis-wgpu",
 ]
 

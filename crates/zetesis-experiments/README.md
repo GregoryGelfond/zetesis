@@ -1,5 +1,11 @@
 # zetesis-experiments
 
+This crate contains bounded development experiments, with reusable library entry
+points and a `zetesis-bench` command adapter. It does not replace ordinary solver
+qualification. The command has three independent profiles: static reduct oracles
+(the default), `formula` for general reduct checking, and `grounding` for fresh
+original-source formula admission.
+
 Reproducible measurements of exact static reduct oracles. `zetesis-bench`
 defaults to a physical Metal device and fails if one cannot be used. Select
 `--backend cpu` explicitly for CPU measurements alone.
@@ -64,3 +70,87 @@ records remaining full-GPU work. Ordinary CLI formula solving can explicitly
 select the same GPU primitive; this experiment alone does not qualify that
 end-to-end integration. The dated M4 Pro record predates the Rayon baseline
 and retains its original two-backend measurements.
+
+## Original-source grounding
+
+Build once, then run the binary in a quiet measurement window. From the repository
+root, for example:
+
+```sh
+cargo +1.97.1 build -p zetesis-experiments --bin zetesis-bench --release --locked --offline
+target/release/zetesis-bench grounding \
+  validation/corpus/kr-domains/standalone/send-money/send-money.lp \
+  --repetitions 3 > target/send-grounding.json
+```
+
+If `CARGO_TARGET_DIR` is set, use that directory's `release/zetesis-bench` instead.
+Keep the command, source revision, toolchain, executable SHA-256 and raw JSON
+together. The report records the exact original file SHA-256 values and all
+numeric native/capture limits; it cannot identify the executable or host of a
+caller embedding the library. Raw captures belong in ignored target storage.
+
+The library entry point is `grounding::profile(path, Configuration)`. It loads the
+original include graph, makes one unmeasured reference admission and complete
+native enumeration, then runs three conditions per round. Round zero uses
+`unobserved`, `boundary`, `detailed`; subsequent rounds rotate that order. Every
+condition reloads and parses the original files before timing, checks their exact
+bytes and include identities, and uses the same native limits. The reference
+subject stays live during all samples. These are repeated fresh admissions in
+one process, with source pages already accessed, rather than cold process starts.
+
+`admission_elapsed_ns` starts after loading/parsing, source comparison and observer
+record preallocation. It covers native raising, normalization, analysis and
+actual grounding through the returned admitted subject. No observer is passed in
+`unobserved`, so `grounding_elapsed_ns` is null. The other modes time the existing
+actual-ground enter/exit boundary. Only `detailed` retains phase-local work and
+phase durations, with original source byte spans for per-rule instantiation.
+Repeated expanded rules may share a span. Rule instantiation still interleaves
+joins, comparisons and formula emission; it is not arithmetic-only time. Selected
+work counts are not a count of every operation, allocation or byte.
+
+After each timer, the driver compares complete ordered atom/node/root catalogs,
+metadata, formula origins and objective origins/templates/declarations. It then
+uses native stable-model enumeration with an optional complete-theory tight
+certificate, falling back to the exact reduct route when ineligible. Search,
+certificate setup, comparison, model copying and sorting are outside admission
+timing. The JSON atom catalog contains full signed identities; each model is a
+vector of true atom indices into that catalog. Hidden atoms remain present and
+model multiplicities are retained. Native exhaustion is required, including for
+an inconsistent source with zero models. This internal parity is not independent
+clingo agreement, a compiler proof, or qualification of a physical backend.
+
+Objectives, including inactive/empty declarations, are explicitly refused; this
+experiment does not silently enumerate past an optimization contract. Native
+admission/search refusals and capture exhaustion yield `complete: false`, retain
+available phase/model prefixes, and make the command exit with status 2. A phase
+record ceiling never changes native grounding; it refuses the experiment after
+the attempted admission. Native failure and capture refusal remain separate.
+There is no panic recovery or hard wall-clock deadline; each native operation
+has its finite resource limits and external campaigns can impose a process limit.
+
+The command accepts 1–11 rounds and these independent inclusive capture ceilings:
+
+| Option | Default | Counted resource |
+| --- | ---: | --- |
+| `--max-phase-records` | 4096 | Records per detailed admission |
+| `--max-models` | 256 | Retained models per enumeration |
+| `--max-model-atoms` | 65536 | True-atom indices across one enumeration |
+| `--max-atom-text-bytes` | 1048576 | Full catalog spelling bytes |
+| `--max-source-path-bytes` | 1048576 | Retained native source path bytes |
+| `--max-output-bytes` | 16777216 | Entire JSON record and newline |
+
+Zero is a real ceiling. The command uses unchanged native defaults; the public
+`Configuration` exposes all native limits for controlled library experiments.
+The JSON schema serializes every configured numeric field through reporting-local
+views; adding a native limit requires updating those views. Report serialization
+preflights the byte ceiling before touching an external writer. Writer failure
+can retain a byte prefix and never returns success. `write_report` leaves the
+typed report available to its caller.
+
+This driver measures the formula eager path only. It supplies no evidence about
+relational full-carrier eager grounding or the separate relational lazy engine;
+SEND is not a supported lazy input. Compare detailed records to locate work, then
+use unobserved conditions for performance claims. Boundary-only and detailed
+records expose observer overhead, but rotating order does not eliminate thermal,
+allocator, cache or scheduling effects. No evaluator optimization or measured
+improvement is established by adding this driver.
