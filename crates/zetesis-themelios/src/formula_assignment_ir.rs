@@ -116,10 +116,13 @@ impl Compiler<'_> {
                         | LiteralIr::TupleCompare(..)
                         | LiteralIr::Guard(_)
                         | LiteralIr::Bind { .. }
+                        | LiteralIr::Range { .. }
                 ) {
                     // Negative gates read completed values without binding or
                     // pruning possible rows. Grounding retains their original
                     // polarity, including the existential projection formula.
+                    // Range generators follow the checked plan; a previously
+                    // bound range target remains a completed-row membership test.
                     consumed |= self.literal_uses(literal, target)?;
                     continue;
                 }

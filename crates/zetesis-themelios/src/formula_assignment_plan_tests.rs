@@ -192,3 +192,51 @@ fn aggregate_inputs_exclude_local_witnesses() {
     assert_eq!(plan.steps[0].required, [1]);
     assert_eq!(plan.steps[0].produced, 0);
 }
+
+#[test]
+fn dependent_ranges_follow_complete_endpoint_bindings() {
+    let body = [
+        LiteralIr::Range {
+            target: 0,
+            lower: variable(1),
+            upper: variable(2),
+            binder: true,
+        },
+        LiteralIr::Bind {
+            target: 2,
+            value: variable(1),
+        },
+        aggregate(1),
+    ];
+    let plan = plan(&body, 3, ExpansionLimits::default()).unwrap();
+    assert_eq!(
+        plan.steps
+            .iter()
+            .map(|step| step.literal)
+            .collect::<Vec<_>>(),
+        [2, 1, 0]
+    );
+    assert_eq!(plan.steps[2].required, [1, 2]);
+    assert!(plan.consumers);
+}
+
+#[test]
+fn range_filters_do_not_produce_already_bound_targets() {
+    let body = [
+        aggregate(0),
+        LiteralIr::Atom(
+            DefaultNegation::None,
+            AtomPattern::new(Predicate::new("d", 1).unwrap(), vec![CoreTerm::Variable(1)]).unwrap(),
+        ),
+        LiteralIr::Range {
+            target: 1,
+            lower: variable(0),
+            upper: variable(0),
+            binder: false,
+        },
+    ];
+    let plan = plan(&body, 2, ExpansionLimits::default()).unwrap();
+    assert_eq!(plan.steps.len(), 1);
+    assert_eq!(plan.steps[0].produced, 0);
+    assert!(plan.consumers);
+}

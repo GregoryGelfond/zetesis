@@ -1,11 +1,12 @@
-//! Completed outer values select original negative formulas, never support tests.
+//! Dependent outer ranges retain complete rows and original frozen equalities.
 
-#[path = "support/outer_negative_consumers.rs"]
+#[path = "support/outer_ranges.rs"]
 mod cases;
 #[path = "support/finite_bindings.rs"]
 mod reference;
 
 use std::collections::BTreeSet;
+use std::fmt::Write as _;
 
 use cases::CASES;
 use reference::{Models, atom_text, exhaustive, external, holds, native, values};
@@ -16,7 +17,7 @@ use zetesis_themelios::{
     admit_formula, prepare_formula,
 };
 
-const SOURCE: SourceId = SourceId::new(149);
+const SOURCE: SourceId = SourceId::new(151);
 
 fn options() -> AdmissionOptions {
     AdmissionOptions {
@@ -37,14 +38,14 @@ fn input(source: &str) -> AdmittedFormula {
 
 #[test]
 fn models_match_finite_substitutions() {
-    for &(source, expanded) in CASES {
+    for &(source, expanded) in CASES.iter().chain(cases::BOUNDARIES) {
         assert_eq!(native(&input(source)), native(&input(expanded)), "{source}");
     }
 }
 
 #[test]
 fn stability_matches_subset_enumeration() {
-    for &(source, _) in CASES {
+    for &(source, _) in CASES.iter().chain(cases::BOUNDARIES) {
         let admitted = input(source);
         assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
     }
@@ -53,7 +54,7 @@ fn stability_matches_subset_enumeration() {
 #[test]
 fn frozen_truth_matches_finite_substitutions() {
     let mut pairs = 0;
-    for &(source, expanded) in CASES {
+    for &(source, expanded) in CASES.iter().chain(cases::BOUNDARIES) {
         let left = input(source);
         let right = input(expanded);
         let names: Vec<_> = left.atoms().iter().map(atom_text).collect();
@@ -92,7 +93,10 @@ fn frozen_truth_matches_finite_substitutions() {
             }
         }
     }
-    println!("source_pairs={} frozen_pairs={pairs}", CASES.len());
+    println!(
+        "source_pairs={} frozen_pairs={pairs}",
+        CASES.len() + cases::BOUNDARIES.len()
+    );
 }
 
 #[test]
@@ -129,39 +133,79 @@ fn original_sources_match_clingo_full_models() {
 }
 
 #[test]
-fn negative_gates_cannot_read_possible_support() {
-    let source = "{p(0)}.q(N):-N=#count{},not p(N).";
+fn range_success_cannot_replace_original_equality() {
+    let source = "{d}.q(K):-N=#count{1:d},K=N..N.";
     let expected = Models::from([
-        BTreeSet::from(["p(0)".into()]),
         BTreeSet::from(["q(0)".into()]),
+        BTreeSet::from(["d".into(), "q(1)".into()]),
     ]);
     assert_eq!(native(&input(source)), expected);
-    // p(0) is possible in both candidates. Treating possibility as truth
-    // would discard the q(0) clause even when the candidate omits p(0).
-    assert_ne!(native(&input("{p(0)}.")), expected);
+    assert_ne!(native(&input("{d}.q(0).q(1).")), expected);
 }
 
 #[test]
-fn double_negation_cannot_be_replaced_by_positive_truth() {
-    let expected = Models::from([BTreeSet::new(), BTreeSet::from(["p(0)".into()])]);
-    assert_eq!(native(&input("p(N):-N=#count{},not not p(N).")), expected);
-    assert_ne!(native(&input("p(0):-0=#count{},p(0).")), expected);
+fn repeated_predecessor_values_restart_range_cursors() {
+    let source = "i(1..2).q(I,K):-i(I),N=#count{},K=N..N+1.";
+    let expected = Models::from([BTreeSet::from([
+        "i(1)".into(),
+        "i(2)".into(),
+        "q(1,0)".into(),
+        "q(1,1)".into(),
+        "q(2,0)".into(),
+        "q(2,1)".into(),
+    ])]);
+    assert_eq!(native(&input(source)), expected);
 }
 
 #[test]
-fn negative_success_cannot_replace_original_equalities() {
-    let source = "{d}.q(N):-N=#count{1:d},not p(N).";
-    let unguarded = "{d}.q(0):-not p(0).q(1):-not p(1).";
-    assert_ne!(native(&input(source)), native(&input(unguarded)));
+fn bound_range_targets_remain_membership_tests() {
+    let source = "d(0..2).q(K):-d(K),N=#count{},K=N..N+1.";
+    let expected = Models::from([BTreeSet::from([
+        "d(0)".into(),
+        "d(1)".into(),
+        "d(2)".into(),
+        "q(0)".into(),
+        "q(1)".into(),
+    ])]);
+    assert_eq!(native(&input(source)), expected);
+    assert_ne!(native(&input("d(0..2).q(K):-d(K),0=#count{}.")), expected);
 }
 
 #[test]
-fn negative_atoms_cannot_supply_missing_bindings() {
+fn range_width_is_checked_before_enumeration() {
+    for (source, width) in [
+        ("q(K):-N=#count{},K=N..N+3.", 4_u128),
+        (
+            "q(K):-N=#count{},K=(-2147483647-1)..(2147483647+N).",
+            4_294_967_296,
+        ),
+    ] {
+        let error = admit_formula(
+            source.into(),
+            options(),
+            ExpansionLimits::default(),
+            FormulaLimits {
+                max_assignment_values: 3,
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+        assert!(
+            matches!(error, FormulaFailure::Limit {
+            resource: FormulaResource::AssignmentValues, limit: 3, observed, ..
+        } if observed == width),
+            "{source}: {error}"
+        );
+        assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+    }
+}
+
+#[test]
+fn range_membership_cannot_bind_missing_endpoints() {
     for source in [
-        "q(N):-N=#count{},not p(N,X).",
-        "q(N):-N=#count{},not not p(N,X).",
-        "q(N):-N=#count{},not p(X,_).",
-        "q(N):-N=#count{},not -p(N,_).",
+        "d(1).q(K):-d(K),N=#count{},K=N..X.",
+        "q(K):-N=#count{},K=N..X.",
+        "q(K):-N=#count{},not p(X),K=N..X.",
     ] {
         let error = prepare_formula(
             source.into(),
@@ -179,38 +223,50 @@ fn negative_atoms_cannot_supply_missing_bindings() {
 }
 
 #[test]
-fn unsupported_dependencies_remain_located_refusals() {
-    for source in [
-        "q(M):-N=#count{},M=#count{N:p}.",
-        "q(N):-N=#count{},p(N):d.",
-    ] {
-        let error = prepare_formula(
-            source.into(),
-            options(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_err();
-        assert!(
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                    feature: ProfileFeature::AggregateAssignment,
-                    ..
-                }))
-            ),
-            "{source}: {error}"
-        );
-        assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
-    }
+fn ranges_cannot_supply_cyclic_aggregate_inputs() {
+    let source = "q(K):-N=#count{X:p(X,K)},K=N..N.";
+    let error = prepare_formula(
+        source.into(),
+        options(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap_err();
+    assert!(
+        matches!(error, FormulaFailure::CyclicValueInput { .. }),
+        "{error}"
+    );
+    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
 }
 
 #[test]
-fn negative_consumers_retain_objective_restrictions() {
+fn aggregate_generators_cannot_consume_range_outputs() {
+    let source = "q(M):-N=#count{},K=N..N+1,M=#count{K:p}.";
+    let error = prepare_formula(
+        source.into(),
+        options(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap_err();
+    assert!(
+        matches!(
+            error,
+            FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
+                feature: ProfileFeature::AggregateAssignment,
+                ..
+            }))
+        ),
+        "{error}"
+    );
+}
+
+#[test]
+fn range_consumers_retain_objective_restrictions() {
     for source in [
-        "q(N):-N=#count{},not p(N).#minimize{1,N:q(N)}.",
-        "{q}:-N=#count{},not not p(N).#minimize{1:q}.",
-        "#count{1:q}:-N=#count{},not p(N,_).#minimize{1:q}.",
+        "q(K):-N=#count{},K=N..N+1.#minimize{1,K:q(K)}.",
+        "K{q}:-N=#count{},K=N..N+1.#minimize{1:q}.",
+        "K#count{1:q}:-N=#count{},K=N..N+1.#minimize{1:q}.",
     ] {
         let error = prepare_formula(
             source.into(),
@@ -229,40 +285,57 @@ fn negative_consumers_retain_objective_restrictions() {
             ),
             "{source}: {error}"
         );
+    }
+}
+
+#[test]
+fn false_filters_cannot_hide_undefined_endpoints() {
+    for source in [
+        "q(K):-N=#count{},N>0,K=N..1/N.",
+        "q(K):-N=#count{},N>0,K=N..2147483647+1.",
+    ] {
+        let error = admit_formula(
+            source.into(),
+            options(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(
+                error,
+                FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })
+            ),
+            "{source}: {error}"
+        );
         assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
     }
 }
 
 #[test]
-fn false_gates_cannot_hide_undefined_arguments() {
-    let source = "p(0).q(N):-N=#count{},not p(N),not p(1/N).";
-    let error = admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_err();
-    assert!(
-        matches!(
-            error,
-            FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })
-        ),
-        "{error}"
-    );
-    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
-}
-
-#[test]
 fn original_sources_remain_owned() {
-    for &(source, _) in CASES {
+    for &(source, _) in CASES.iter().chain(cases::BOUNDARIES) {
         assert_eq!(input(source).source().text(), source);
     }
 }
 
+proptest::proptest! {
+    #![proptest_config(proptest::test_runner::Config::with_cases(32))]
+    #[test]
+    fn affine_ranges_match_finite_substitutions(offset in -2_i32..3, width in 0_i32..3) {
+        let source = format!("{{d}}.q(K):-K=Y..Y+{width},Y=N+({offset}),N=#count{{1:d}}.");
+        let mut expanded = "{d}.".to_owned();
+        for count in 0..=1 {
+            for value in count+offset..=count+offset+width {
+                write!(expanded, "q({value}):-{count}=#count{{1:d}}.").unwrap();
+            }
+        }
+        proptest::prop_assert_eq!(native(&input(&source)), native(&input(&expanded)));
+    }
+}
 #[test]
 fn grounding_limits_are_inclusive() {
-    let source = "{p(0,a);p(0,b)}.q(Y):-N=#count{},Y=N+1,not p(N,_).";
+    let source = "q(K):-N=#count{},K=N..N+2.";
     for resource in [
         FormulaResource::AssignmentValues,
         FormulaResource::Substitutions,
@@ -337,7 +410,7 @@ fn grounding_limits_are_inclusive() {
 
 #[test]
 fn scalar_storage_limit_is_inclusive() {
-    let source = "{p(0,a)}.q(N):-N=#count{},not p(N,_).";
+    let source = "q(K):-N=#count{},K=N..N+2.";
     let limits = |ceiling| ExpansionLimits {
         max_scalar_bytes: ceiling,
         ..Default::default()

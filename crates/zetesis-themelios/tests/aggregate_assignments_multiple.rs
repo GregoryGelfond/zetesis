@@ -233,7 +233,6 @@ fn unsupported_aggregate_dependencies_remain_refused() {
         "r(N,M):-N=#count{X:p(X),not q(M,_)},M=#count{}.",
         "r(N,M):-N=#count{X:p(X),Y=M+1},M=#count{}.",
         "r(N,M):-N=#count{X:p(X),X=1..M},M=#count{}.",
-        "r(N,M):-N=#count{},M=#count{},K=1..M.",
         "r(N,M):-N=#count{},M=#count{},M<=#count{}.",
         "r(N,M):-N=#count{},M=#count{},M=#sum{}.",
     ] {

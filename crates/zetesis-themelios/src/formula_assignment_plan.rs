@@ -15,7 +15,7 @@ use crate::{ExpansionResource, FormulaFailure, ProfileFeature};
 
 pub(crate) struct Plan {
     pub steps: Vec<Step>,
-    /// An outer filter, negative truth gate, scalar binding or head bound reads
+    /// An outer filter, negative gate, scalar/range binding or head bound reads
     /// an aggregate proposal or a value derived from one. Objective admission
     /// consumes this fact; scheduling does not certify a total objective observer.
     pub consumers: bool,
