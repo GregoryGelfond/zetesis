@@ -28,6 +28,7 @@ pub(crate) fn ground(
     budget: &mut Budget,
     location: Location,
     observer: Option<&dyn crate::GroundingObserver>,
+    count_plan: Option<crate::formula_count_plan::Request<'_>>,
 ) -> Result<Compiled, FormulaFailure> {
     use crate::GroundingPhase;
 
@@ -59,6 +60,8 @@ pub(crate) fn ground(
             cached_elements: 0,
             cached_key_bytes: 0,
             cached_roots: 0,
+            count_plan: count_plan
+                .map(|request| crate::formula_count_plan::Collector::new(request, location)),
         };
         builder.node(Node::False, location)?;
         builder.node(Node::Implies(0, 0), location)?;
@@ -95,7 +98,12 @@ pub(crate) fn ground(
         )
         .map_err(|error| FormulaFailure::Theory { error, location })
     })?;
+    let count_plan = builder.count_plan.map_or(
+        crate::formula_count_plan::Outcome::NotRequested,
+        |collector| collector.finish(&theory),
+    );
     Ok(Compiled {
+        count_plan,
         analysis_basis: prepared.analysis_basis,
         analysis: prepared.analysis,
         analyzed: prepared.analyzed,
@@ -197,6 +205,7 @@ pub(super) struct Builder<'a> {
     cached_elements: usize,
     cached_key_bytes: u128,
     cached_roots: usize,
+    count_plan: Option<crate::formula_count_plan::Collector>,
 }
 
 struct CachedAggregate {
@@ -581,11 +590,9 @@ impl Builder<'_> {
         support: &Support,
     ) -> Result<(), FormulaFailure> {
         let ChoiceIr {
-            measure,
-            guards,
-            elements,
+            measure, guards, ..
         } = group;
-        crate::formula_head_aggregate::validate_group(
+        let keys = crate::formula_head_aggregate::validate_group(
             group,
             assignment,
             support,
@@ -594,6 +601,83 @@ impl Builder<'_> {
             &mut self.counters,
             rule.location,
         )?;
+        let keys = if self.count_plan.is_some() && *measure == HeadMeasure::Count {
+            Some(keys)
+        } else {
+            drop(keys);
+            None
+        };
+        let eligible = self.choice_eligibility(group, assignment, support, rule)?;
+        let retaining =
+            self.count_plan.is_some() && *measure == HeadMeasure::Count && !guards.is_empty();
+        let mut count_bounds =
+            retaining.then(|| crate::formula_count_plan::Bounds::new(eligible.len()));
+        let kind = match measure {
+            HeadMeasure::Min => Some(AggregateExtremum::Min),
+            HeadMeasure::Max => Some(AggregateExtremum::Max),
+            _ => None,
+        };
+        let (ordinary, retained) = if retaining {
+            (BTreeMap::new(), Some((eligible, keys)))
+        } else {
+            drop(keys);
+            (eligible, None)
+        };
+        let selected = if let Some((eligible, _)) = &retained {
+            self.choice_permissions(
+                eligible.iter().map(|(&head, &entry)| (head, entry)),
+                body,
+                rule,
+                kind,
+                !guards.is_empty(),
+            )?
+        } else {
+            self.choice_permissions(ordinary.into_iter(), body, rule, kind, !guards.is_empty())?
+        };
+        if !guards.is_empty() {
+            let within = self.aggregate_guards_with_capture(
+                &selected.finish(),
+                guards,
+                assignment,
+                kind,
+                rule.location,
+                count_bounds.as_mut(),
+            )?;
+            let outside = self.neg(within, rule.location)?;
+            let violated = self.and(body, outside, rule.location)?;
+            let constraint = self.node(Node::Implies(violated, 0), rule.location)?;
+            self.root(constraint, rule)?;
+            if let (Some(collector), Some((eligible, Some(keys))), Some(bounds)) =
+                (&mut self.count_plan, retained, count_bounds)
+            {
+                collector.capture_group(
+                    crate::formula_count_plan::Input {
+                        body,
+                        eligible: &eligible,
+                        tuple_keys: keys,
+                        nodes: &self.nodes,
+                        atoms: &self.atoms,
+                        bounds,
+                        origins: &rule.origins,
+                        location: rule.location,
+                    },
+                    within,
+                    constraint,
+                );
+            }
+        }
+        Ok(())
+    }
+    fn choice_eligibility(
+        &mut self,
+        group: &ChoiceIr,
+        assignment: &[Value],
+        support: &Support,
+        rule: &RuleIr,
+    ) -> Result<HeadEligibility, FormulaFailure> {
+        let ChoiceIr {
+            measure, elements, ..
+        } = group;
         let mut eligible = BTreeMap::new();
         for element in elements {
             let mut local = Join::new(
@@ -624,11 +708,17 @@ impl Builder<'_> {
                 eligible.insert(head, (weight, self.or(previous, condition, rule.location)?));
             }
         }
-        let kind = match measure {
-            HeadMeasure::Min => Some(AggregateExtremum::Min),
-            HeadMeasure::Max => Some(AggregateExtremum::Max),
-            _ => None,
-        };
+        Ok(eligible)
+    }
+
+    fn choice_permissions(
+        &mut self,
+        eligible: impl Iterator<Item = (usize, (Option<i32>, usize))>,
+        body: usize,
+        rule: &RuleIr,
+        kind: Option<AggregateExtremum>,
+        measured: bool,
+    ) -> Result<HeadContributions, FormulaFailure> {
         let mut selected = HeadContributions::new(kind);
         for (head, (weight, condition)) in eligible {
             let antecedent = self.and(body, condition, rule.location)?;
@@ -637,9 +727,7 @@ impl Builder<'_> {
             let support = self.node(Node::Implies(antecedent, choice), rule.location)?;
             self.root(support, rule)?;
             self.producer(head, antecedent, rule)?;
-            if !guards.is_empty()
-                && let Some(weight) = weight
-            {
+            if measured && let Some(weight) = weight {
                 ceiling(
                     FormulaResource::AggregateElements,
                     selected.len() as u128 + 1,
@@ -649,17 +737,12 @@ impl Builder<'_> {
                 selected.push(weight, self.and(condition, head, rule.location)?);
             }
         }
-        if !guards.is_empty() {
-            let within =
-                self.aggregate_guards(&selected.finish(), guards, assignment, kind, rule.location)?;
-            let outside = self.neg(within, rule.location)?;
-            let violated = self.and(body, outside, rule.location)?;
-            let constraint = self.node(Node::Implies(violated, 0), rule.location)?;
-            self.root(constraint, rule)?;
-        }
-        Ok(())
+        Ok(selected)
     }
 }
+
+/// Distinct head-node identities with fixed measure and coalesced eligibility.
+type HeadEligibility = BTreeMap<usize, (Option<i32>, usize)>;
 
 /// One storage family for head contributions. Each entry retains the conjunction
 /// of its head and eligibility formulas; no candidate truth is assumed here.
@@ -1086,6 +1169,17 @@ impl Builder<'_> {
         kind: Option<AggregateExtremum>,
         location: Location,
     ) -> Result<usize, FormulaFailure> {
+        self.aggregate_guards_with_capture(elements, guards, assignment, kind, location, None)
+    }
+    fn aggregate_guards_with_capture(
+        &mut self,
+        elements: &GroundAggregate,
+        guards: &[AggregateGuard],
+        assignment: &[Value],
+        kind: Option<AggregateExtremum>,
+        location: Location,
+        mut capture: Option<&mut crate::formula_count_plan::Bounds>,
+    ) -> Result<usize, FormulaFailure> {
         let mut result = 1;
         for guard in guards {
             let bound = formula_support::expression(
@@ -1120,6 +1214,9 @@ impl Builder<'_> {
                 )
                 .into());
             };
+            if let Some(capture) = capture.as_deref_mut() {
+                capture.guard(aggregate_comparison(guard.relation), bound);
+            }
             let limits = self.aggregate_limits();
             let first = self.nodes.len();
             let build = append_aggregate(

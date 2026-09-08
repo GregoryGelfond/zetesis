@@ -340,6 +340,12 @@ impl AdmittedFormula {
     pub fn theory(&self) -> &Theory {
         &self.compiled.theory
     }
+    /// Optional source-derived candidate consequences. The original theory is
+    /// unchanged; an incomplete optional plan never denotes a source refusal.
+    #[must_use]
+    pub fn count_plan(&self) -> crate::CountPlanStatus<'_> {
+        self.compiled.count_plan.view()
+    }
     /// Semantic atom identities in exactly the theory's dense index order.
     #[must_use]
     pub fn atoms(&self) -> &[Atom] {
@@ -411,6 +417,12 @@ impl AdmittedFormulaBundle {
     #[must_use]
     pub fn theory(&self) -> &Theory {
         &self.compiled.theory
+    }
+    /// Optional source-derived candidate consequences. The original theory is
+    /// unchanged; an incomplete optional plan never denotes a source refusal.
+    #[must_use]
+    pub fn count_plan(&self) -> crate::CountPlanStatus<'_> {
+        self.compiled.count_plan.view()
     }
     /// Semantic atom identities in theory index order.
     #[must_use]
@@ -499,6 +511,7 @@ pub(crate) struct Compiled {
     pub analysis: themelios_analysis::Analysis,
     pub analyzed: SourceProgram,
     pub theory: Theory,
+    pub count_plan: crate::formula_count_plan::Outcome,
     pub atoms: Vec<Atom>,
     pub origins: Vec<Vec<Location>>,
     pub objectives: zetesis_objective::ObjectiveProgram,

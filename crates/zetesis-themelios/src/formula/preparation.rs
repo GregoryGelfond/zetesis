@@ -35,6 +35,7 @@ impl Preparation {
     fn ground(
         mut self,
         observer: Option<&dyn GroundingObserver>,
+        count_plan: Option<crate::formula_count_plan::Request<'_>>,
     ) -> Result<Compiled, FormulaFailure> {
         grounding_observer::observe(observer, || {
             formula_ground::ground(
@@ -43,6 +44,7 @@ impl Preparation {
                 &mut self.budget,
                 self.location,
                 observer,
+                count_plan,
             )
         })
     }
@@ -120,6 +122,33 @@ impl PreparedFormula {
         self.ground_with_observer(None)
     }
 
+    /// Materialize the same original theory while independently attempting
+    /// bounded source-count partition consequences. Planning is opt-in; its
+    /// status is retained by [`AdmittedFormula::count_plan`]. Its control applies
+    /// only to planning, not to existing source materialization. No solver runs.
+    /// Capture reuses complete source joins and canonical guard evaluations;
+    /// [`crate::CountPlan`] describes the bounded applicability and cost model.
+    /// The outer observer boundary includes optional planning; source phase work
+    /// counters remain separate from [`crate::CountPlanStatistics`].
+    ///
+    /// # Errors
+    /// Returns existing source-grounding failures. Optional planning failures
+    /// retain the successfully admitted original and an incomplete plan status.
+    pub fn ground_with_count_plan(
+        self,
+        limits: crate::CountPlanLimits,
+        control: &zetesis_cpu::Control,
+        observer: Option<&dyn GroundingObserver>,
+    ) -> Result<AdmittedFormula, FormulaFailure> {
+        let request = crate::formula_count_plan::Request { limits, control };
+        let compiled = self.preparation.ground(observer, Some(request))?;
+        Ok(AdmittedFormula {
+            compiled,
+            source: self.source,
+            metadata: self.metadata,
+        })
+    }
+
     /// Like [`Self::ground`], observing only the actual eager-grounding interval.
     /// No clock is read by this API; the caller retains its observer on failure.
     ///
@@ -129,7 +158,7 @@ impl PreparedFormula {
         self,
         observer: Option<&dyn GroundingObserver>,
     ) -> Result<AdmittedFormula, FormulaFailure> {
-        let compiled = self.preparation.ground(observer)?;
+        let compiled = self.preparation.ground(observer, None)?;
         Ok(AdmittedFormula {
             compiled,
             source: self.source,
@@ -211,6 +240,32 @@ impl PreparedFormulaBundle {
         self.ground_with_observer(None)
     }
 
+    /// Bundle counterpart of [`PreparedFormula::ground_with_count_plan`], with
+    /// the same independent planning status and immutable original identity.
+    ///
+    /// # Errors
+    /// Retains original bundle ownership on source-grounding failure. Planning
+    /// failure alone does not discard a successfully admitted bundle.
+    pub fn ground_with_count_plan(
+        self,
+        limits: crate::CountPlanLimits,
+        control: &zetesis_cpu::Control,
+        observer: Option<&dyn GroundingObserver>,
+    ) -> Result<AdmittedFormulaBundle, FormulaBundleFailure> {
+        let request = crate::formula_count_plan::Request { limits, control };
+        match self.preparation.ground(observer, Some(request)) {
+            Ok(compiled) => Ok(AdmittedFormulaBundle {
+                compiled,
+                bundle: self.bundle,
+                metadata: self.metadata,
+            }),
+            Err(error) => Err(FormulaBundleFailure {
+                bundle: self.bundle,
+                error: Box::new(error),
+            }),
+        }
+    }
+
     /// Like [`Self::ground`], observing only the actual eager-grounding interval.
     ///
     /// # Errors
@@ -219,7 +274,7 @@ impl PreparedFormulaBundle {
         self,
         observer: Option<&dyn GroundingObserver>,
     ) -> Result<AdmittedFormulaBundle, FormulaBundleFailure> {
-        match self.preparation.ground(observer) {
+        match self.preparation.ground(observer, None) {
             Ok(compiled) => Ok(AdmittedFormulaBundle {
                 compiled,
                 bundle: self.bundle,

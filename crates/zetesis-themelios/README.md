@@ -31,6 +31,47 @@ semantics. Neither basis establishes that a lazy implementation exists. The
 [grounding-selection contract](../../docs/design/grounding-selection.md) separates
 class facts, implementation availability and strategy preference.
 
+## Optional count consequences
+
+`PreparedFormula::ground_with_count_plan` and its bundle counterpart attempt a
+bounded source-derived candidate restriction while returning the same admitted
+original theory. `count_plan()` distinguishes `NotRequested`, `NoPlan`, `Ready`
+and `Incomplete`. A stopped optional attempt leaves the original usable; it is
+neither a source refusal nor an inconsistency result. The ordinary grounding
+APIs retain no planning descriptors and spend no optional planning budget.
+
+For example, the complete choice groups in
+
+```asp
+2 { a; b; c; d } 2.
+{ a; b } 1.
+{ c; d } 1.
+```
+
+entail that at least one atom from each pair must be selected. A ready `CountPlan`
+provides a separate restriction over the original semantic atom indices, its
+source origins, the shared immutable original theory identity and bounded work
+statistics. A candidate enumerator can install that restriction before proposal;
+all acceptance and reduct checks still use the original theory.
+
+The initial profile requires unconditional coalesced element eligibility and a
+complete tuple/atom bijection for function count heads. Upper-bounded partition
+groups must be unconditional or have exactly the global group's activation;
+consequences retain that activation. This also covers negated activation without
+reinterpreting it as positive support. The planner discovers covers greedily in
+retained grounding order and can miss a useful alternative: `NoPlan` describes
+that policy's outcome, not absence of an entailed consequence. Weighted/extremal
+heads, body-count recognition, nontrivial eligibility and arbitrary activation
+implication are outside this planning profile, while retaining their existing
+source admission behavior.
+
+The [source-count record](../../docs/verification/source-count-plans-20260908/README.md)
+tracks exact original/frozen semantics, complete model comparisons, optional
+failure and source ownership controls. The library capability is opt-in; no
+ordinary route/default changes or CPU/GPU speedup are claimed. It is separate
+from retained native aggregate evaluation. The mathematical partition law does
+not prove this Rust source-to-premise bridge or its allocation accounting.
+
 ## Structural values and finite construction
 
 Bounded closed functions and tuples are logical values, including `f(1,g(2))`,

@@ -100,7 +100,7 @@ pub(super) fn validate_group(
     budget: &mut Budget,
     counters: &mut Counters,
     location: Location,
-) -> Result<(), FormulaFailure> {
+) -> Result<BTreeMap<Atom, Vec<Value>>, FormulaFailure> {
     let ChoiceIr {
         measure, elements, ..
     } = group;
@@ -119,7 +119,7 @@ pub(super) fn validate_group(
         if *measure != HeadMeasure::Count && !elements.is_empty() {
             return Err(unsupported(ProfileFeature::HeadAggregateAlias, location).into());
         }
-        return Ok(());
+        return Ok(BTreeMap::new());
     }
     let mut tuples = BTreeMap::<Vec<Value>, Atom>::new();
     let mut atoms = BTreeMap::<Atom, Vec<Value>>::new();
@@ -187,7 +187,7 @@ pub(super) fn validate_group(
             }
         }
     }
-    Ok(())
+    Ok(atoms)
 }
 
 /// Numeric contribution is independent of permission to select the head.
@@ -259,6 +259,7 @@ mod tests {
             &mut Counters::default(),
             location,
         )
+        .map(|_| ())
     }
 
     #[test]

@@ -102,6 +102,11 @@ pub use formula::{
     admit_bundle_formula_with_grounding_observer, admit_formula,
     admit_formula_with_grounding_observer, prepare_bundle_formula, prepare_formula,
 };
+mod formula_count_plan;
+pub use formula_count_plan::{
+    CountPlan, CountPlanFailure, CountPlanFailureKind, CountPlanLimits, CountPlanResource,
+    CountPlanStatistics, CountPlanStatus,
+};
 pub use grounding_observer::{GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork};
 pub use metadata::{
     AtomSelection, AtomSelectionError, AtomSelectionLimits, LocatedDirective, MetadataError,
