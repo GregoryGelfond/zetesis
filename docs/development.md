@@ -4,6 +4,9 @@ This guide takes a collaborator from a checkout to a reviewed change. Read the
 [contribution contract](../CONTRIBUTING.md) for the estate's naming, API and testing
 standards. The [implementation map](implementation.md) describes current code;
 the broader [specification](design/zetesis.md) also includes future capabilities.
+For grounding work, start with the [comparison with clingo](design/grounding-compared-with-clingo.md):
+it distinguishes materialization, candidate coverage and reduct checking, with
+links to each implementation boundary.
 
 ## First checkout and first run
 
@@ -162,10 +165,15 @@ Coverage requires the pinned instrumentation tools:
 rustup component add llvm-tools --toolchain 1.97.1
 cargo install cargo-llvm-cov --version 0.8.7 --locked
 ./scripts/check.sh coverage
+# With accessible physical Metal; includes the four tight-oracle device tests.
+./scripts/check.sh coverage --metal
 ```
 
 Workspace and CPU-only CLI each meet an independent 91% line floor. Inspect
 uncovered behavior before adding tests; retain per-crate and feature scopes.
+Metal mode retains portable-stage coverage separately. Its device execution
+adds host coverage to the same workspace configuration; it never merges the
+independent CPU-only CLI profile or qualifies every GPU path.
 Concurrent coverage runs must not share a report directory. See
 [coverage instructions](verification/coverage.md).
 

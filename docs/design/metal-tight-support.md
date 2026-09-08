@@ -1,8 +1,10 @@
 # Certified tight support on Metal
 
 Status: standalone Rust/WGSL primitive and matched measurement harness implemented,
-2026-09-08. Local integration qualification is in progress; physical Metal
-qualification and matched device timing remain pending. Ordinary solve dispatch
+2026-09-08. Four instrumented physical tests pass on Apple M4 Pro. Matched
+uninstrumented measurements and local coverage qualification are complete.
+Workspace coverage includes actual Metal execution; its portable stage is
+reported separately. Ordinary solve dispatch
 and the previously measured `7690475` binaries are unchanged. The
 [physical matrix](../verification/dependencies-measurement-tranche-20260908/physical/README.md)
 is the motivation, not evidence of this new kernel's performance.
@@ -31,9 +33,16 @@ This is not an ordinary solve, shader-only timer or process-memory measurement.
 Portable tests cover admission, packing, malformed receipts, cache accounting,
 independent small-theory semantics and benchmark failure boundaries. Four
 compiled physical tests cover small theories, duplicate producers, nonmonotone
-root order, resizing, bit-word boundaries, limits and cancellation. They remain
-unrun in the local integration context. No GPU speedup or ordinary solver benefit
-is claimed before the physical results are retained and audited.
+root order, resizing, bit-word boundaries, limits and cancellation. The [physical record](../verification/tight-metal-experiment-20260908/README.md)
+retains all four passes and separate host execution coverage. These instrumented
+tests establish no GPU speedup or ordinary solver benefit.
+
+The [matched physical measurements](../verification/tight-metal-experiment-20260908/measurements/README.md)
+retain 18 cases and 1,080 observations. Resident Metal is faster than fresh Metal
+in every case median, but both remain slower than scalar and Rayon checking.
+There is therefore no measured range here for selecting this primitive
+automatically during ordinary solving. The qualified primitive and its evidence
+remain useful for larger, more varied workloads and further execution work.
 
 ## Why the current comparison uses different membership algorithms
 

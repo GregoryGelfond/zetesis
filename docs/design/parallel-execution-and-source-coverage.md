@@ -7,6 +7,16 @@ implementation step. The remaining steps below are not yet implemented by this
 plan. They supersede earlier tranche priorities without changing historical
 qualification records.
 
+The [matched device measurements](../verification/tight-metal-experiment-20260908/measurements/README.md)
+now complete the first experiment: residency helps, but Metal tight-support
+checking remains slower than both CPU routes in all 18 case medians. Keep its
+ordinary dispatch integration deferred until a useful range is demonstrated.
+The 12-case lazy experiment supports shared source scans and selective per-world
+filtering: Metal improves over independent CPU checks in some larger batches,
+while portable batching remains faster. Subsequent execution work should retain
+that stronger CPU comparator and investigate repeated transport costs without
+assuming a universal GPU or mask preference.
+
 The original program and its frozen Ferraris reduct remain the acceptance
 criterion. A certificate can discharge a reduct obligation for a checked class;
 it cannot change the program being solved. Source analysis, grounding strategy,

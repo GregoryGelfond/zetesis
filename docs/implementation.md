@@ -510,7 +510,10 @@ The new standalone `GpuTightOracle` checks complete `TightPlan` certificates and
 preserves exact ordered original-failure and unsupported-atom witnesses.
 `zetesis-bench tight` measures that procedure on scalar, Rayon and fresh/resident
 Metal paths with exact CPU residual completion. It has no ordinary dispatch
-integration yet; local integration and physical qualification remain pending.
+integration yet. Four instrumented Metal tests pass. Matched measurements retain
+all 18 case medians; resident Metal improves over fresh Metal but remains slower
+than both CPU routes. Local coverage qualification passes with actual Metal
+execution in the workspace profile and a separate CPU-only CLI profile.
 See the [experiment contract](design/metal-tight-support.md).
 
 The independent `zetesis-domain` crate analyzes the exact borrowed themelios

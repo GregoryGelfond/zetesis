@@ -148,6 +148,10 @@ zetesis devices
 
 `zetesis devices` is an optional inventory command, not a setup step.
 
+The [grounder comparison](docs/design/grounding-compared-with-clingo.md) explains
+how zetesis's eager and lazy routes differ from clingo's grounder, including
+their current language coverage and hardware boundaries.
+
 | Control | Current behavior |
 |---|---|
 | `--grounder auto\|lazy\|eager` | Relational execution can join source templates lazily or lower eagerly. Explicit lazy GPU execution composes host joins with per-world device consequences. Formula execution currently requires eager materialization. |
@@ -207,7 +211,7 @@ the rule applies. Similarly, `{d}.q(K):-N=#count{1:d},K=1..N.` has the empty
 answer set and `{d,q(1)}`. Each generated row retains the original aggregate
 equality and rule activation; a proposed value never certifies aggregate truth.
 
-The [last complete local qualification](docs/verification/dependencies-measurement-tranche-20260908/README.md)
+The [ordinary release qualification](docs/verification/dependencies-measurement-tranche-20260908/README.md)
 passes **1,958 workspace test/doc checks**, **317 CPU-only CLI checks** and
 **62 external-oracle tests**. Both independent line-coverage profiles exceed their
 unchanged 91% floors: **91.0170% workspace / 92.3345% CPU-only CLI**. The frozen
@@ -219,8 +223,13 @@ checks **783 laws across 67 modules**; Rust and WGSL correspondence remains unpr
 A standalone [tight-support Metal experiment](docs/design/metal-tight-support.md)
 now applies the CPU class certificate through a bounded GPU checker. Its matched
 scalar/Rayon/fresh-Metal/resident-Metal harness preserves exact CPU completion of
-residuals. Integration checks and physical device qualification are pending;
-ordinary backend selection and published performance numbers are unchanged.
+residuals. Four [physical Metal tests](docs/verification/tight-metal-experiment-20260908/README.md)
+pass on Apple M4 Pro. [Matched measurements](docs/verification/tight-metal-experiment-20260908/measurements/README.md)
+now show that residency helps, but this primitive remains slower than scalar and
+Rayon checking in all 18 tested case medians. Its local qualification passes with
+**91.9969% workspace coverage including physical Metal tests / 93.3300% CPU-only
+CLI**. The portable workspace stage remains separately visible at 90.7634%; it
+does not pass the 91% floor. Ordinary backend selection is unchanged.
 The [approved work sequence](docs/design/parallel-execution-and-source-coverage.md)
 then addresses bounded lazy choices, aggregate consumers/heads and measured host
 costs.
@@ -285,8 +294,12 @@ also make this a different output protocol from the earlier CPU comparison.
 retain their individual timings and scopes.
 
 The separate `zetesis-bench lazy` compares matched frozen batches across scalar,
-Rayon, portable and Metal source rounds. It has portable and frozen CPU
-qualification; its physical measurement remains pending.
+Rayon, portable and Metal source rounds. The [physical measurement](docs/verification/tight-metal-experiment-20260908/measurements/README.md)
+now retains all 12 case medians. For sparse width-8/128-world batches, per-world
+filtering reduces Metal time from 3.059 ms to 0.754 ms; the corresponding portable
+route takes 0.136 ms. For dense width-8/128-world batches, Metal takes 7.244 ms
+against independent Rayon checks at 14.950 ms, while portable union batching
+is faster at 4.934 ms. No Metal route is fastest among all six in this matrix.
 See the [matrix contract](crates/zetesis-validation/README.md) and
 [lazy experiment](crates/zetesis-experiments/README.md) for output, timing and
 resource scopes. Compact saved reports preserve every captured byte; they do
@@ -312,8 +325,8 @@ remain in the records.
 
 Earlier [scalar arithmetic measurements](docs/verification/scalar-evaluation-20260907/ablation.md)
 and [whole-process results](docs/verification/execution-performance-20260907/README.md)
-retain their original sources and scope. Physical GPU microbenchmarks have mixed
-results; no new GPU speedup is claimed here.
+retain their original sources and scope. These physical oracle measurements do
+not establish a faster ordinary solver or an automatic GPU crossover.
 The broader [corpus performance protocol](docs/design/corpus-performance.md)
 still requires additional repetitions, worker configurations, parameterized
 sizes and memory measurements. The first instrumented matrix covers every
@@ -381,12 +394,15 @@ prerequisites:
 ./scripts/check.sh oracle    # external clingo 5.8.2 on PATH
 ./scripts/check.sh proofs    # pinned Lean 4.33.1 through Elan
 ./scripts/check.sh coverage  # cargo-llvm-cov and llvm-tools
+./scripts/check.sh coverage --metal # optional actual tight-oracle Metal tests
 ```
 
 Workspace and CPU-only CLI coverage each retain an independent **91% line
-floor**. Coverage does not measure assertion strength, Lean correspondence or
-physical shader execution. GPU qualification is a separate test group on an
-accessible device. The retained [CI workflow](.github/workflows/checks.yml) defines
+floor**. The explicit Metal mode retains portable-stage coverage, then adds four
+physical tight-oracle tests within the workspace profile; it never merges the
+CPU-only CLI profile. Coverage does not measure assertion strength, Lean
+correspondence or shader execution. Other GPU paths require their own physical
+test groups. The retained [CI workflow](.github/workflows/checks.yml) defines
 portable gates on Linux/macOS, proofs and Linux coverage. Hosted execution is
 temporarily disabled under the [local macOS policy](docs/verification/local-macos-ci-20260908/README.md).
 A hosted runner does not establish NVIDIA or Metal hardware qualification.
