@@ -1,6 +1,6 @@
 //! Pre-raise source restrictions and bounded iterative syntax traversal.
 
-use themelios_syntax::ast::{self, HasGuards};
+use themelios_syntax::ast::{self, AstToken, HasGuards};
 use themelios_syntax::parse::Parse;
 use themelios_syntax::tree::{AstNode, SyntaxKind, SyntaxNode, WalkEvent};
 
@@ -45,6 +45,10 @@ fn check_profile(
 ) -> Result<usize, AdmissionFailure> {
     let nodes = check_traversal(parsed, options, extended, formula)?;
     for statement in parsed.tree().statements() {
+        if let ast::Statement::ProgramPart(part) = &statement {
+            check_program_part(part, parsed)?;
+            continue;
+        }
         if extended && matches!(statement, ast::Statement::Const(_)) {
             continue;
         }
@@ -131,6 +135,25 @@ fn check_profile(
         }
     }
     Ok(nodes)
+}
+
+fn check_program_part(
+    part: &ast::ProgramStatement,
+    parsed: &Parse<ast::Program>,
+) -> Result<(), AdmissionFailure> {
+    // Raising merges repeated base sections and may erase empty parts.
+    // Check every original delimiter before that representation change.
+    let base = part.name().is_some_and(|name| name.text() == "base");
+    let parameterless = part
+        .parameters()
+        .is_none_or(|parameters| parameters.names().next().is_none());
+    if !base || !parameterless {
+        return Err(unsupported(
+            ProfileFeature::ProgramPart,
+            parsed.location(part.syntax().text_range()),
+        ));
+    }
+    Ok(())
 }
 
 fn check_traversal(

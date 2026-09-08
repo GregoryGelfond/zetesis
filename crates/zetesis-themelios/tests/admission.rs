@@ -92,9 +92,9 @@ fn numeral_boundaries_follow_the_actual_raiser() {
 }
 
 #[test]
-fn erased_program_delimiters_are_refused_in_the_source_tree() {
+fn nonbase_delimiters_are_refused_before_raising() {
     for text in [
-        "#program base.",
+        "#program base(x).",
         "#program step(t).",
         "p. #program empty.",
         "#program empty. #program base. p.",
@@ -103,7 +103,7 @@ fn erased_program_delimiters_are_refused_in_the_source_tree() {
             matches!(
                 admit(text.to_owned(), AdmissionOptions::default()),
                 Err(AdmissionFailure::Profile {
-                    feature: ProfileFeature::Statement,
+                    feature: ProfileFeature::ProgramPart,
                     ..
                 })
             ),

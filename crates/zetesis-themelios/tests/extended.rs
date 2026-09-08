@@ -216,7 +216,7 @@ fn unsupported_forms_never_disappear_behind_empty_intervals() {
         "p(1;2) :- q.",
         "p(X+1) :- q(X).",
         "p :- X=1.",
-        "#program base. p.",
+        "#program base(x). p.",
         "#include \"x.lp\".",
         "{p;q}.",
         "p :- #count{X:q(X)}=1.",

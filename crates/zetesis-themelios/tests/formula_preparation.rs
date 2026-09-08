@@ -387,6 +387,37 @@ fn bundle_grounding_refusals_retain_source_evidence() {
 }
 
 #[test]
+fn explicit_base_preserves_prepared_bundle_semantics() {
+    let fixture = bundle_fixture();
+    fs::write(
+        fixture.path().join("entry.lp"),
+        "#program base. #include \"child.lp\". #show q/1. q(X):-p(X). #program base.",
+    )
+    .unwrap();
+    fs::write(fixture.path().join("child.lp"), "#program base. p(1..2).").unwrap();
+    let prepared = prepare_bundle_formula(
+        load(&fixture),
+        BundleAdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap();
+    assert_eq!(prepared.bundle().sources().len(), 2);
+    let actual = prepared.ground().unwrap();
+    let expected = admit_formula(
+        "p(1..2). #show q/1. q(X):-p(X).".into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap();
+    assert_eq!(actual.atoms(), expected.atoms());
+    assert_eq!(actual.theory().nodes(), expected.theory().nodes());
+    assert_eq!(actual.theory().roots(), expected.theory().roots());
+    assert_eq!(actual.metadata().output(), expected.metadata().output());
+}
+
+#[test]
 fn bundle_preparation_refusals_retain_source_evidence() {
     let fixture = bundle_fixture();
     let error = prepare_bundle_formula(

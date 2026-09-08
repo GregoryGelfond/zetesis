@@ -234,8 +234,9 @@ impl std::error::Error for BundleAdmissionFailure {
 }
 
 /// Admit the extended profile across an original include graph, interpreting
-/// its ordered roots and captured include resolutions. Rules remain in the implicit base
-/// part. Every file is checked before raising; owned statements are combined
+/// its ordered roots and captured include resolutions. Rules remain in the
+/// parameter-free base part, whether implicit or explicitly declared. Every file
+/// is checked before raising; owned statements are combined
 /// through themelios's provenance-merging constructor without concatenating or
 /// regenerating text. Scalar constants are global, unambiguous, and acyclic.
 ///
@@ -243,8 +244,8 @@ impl std::error::Error for BundleAdmissionFailure {
 /// Alias paths and symlink redirections are conservatively refused because the
 /// canonical loader cannot recover their separate parse occurrences. Ordinary
 /// `..` traversal to a unique source is supported. Positive `#defined` and
-/// signature/empty `#show` are global source/display metadata. Explicit
-/// `#program`, other directives, and unsupported constructs are refused.
+/// signature/empty `#show` are global source/display metadata. Named or
+/// parameterized `#program` parts and other unsupported constructs are refused.
 /// No external engine is invoked.
 ///
 /// # Errors

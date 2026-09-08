@@ -210,7 +210,7 @@ fn formula_mode_does_not_silently_broaden_extended_or_accept_other_syntax() {
     );
     for source in [
         "a|b:c.",
-        "#program base. a.",
+        "#program base(x). a.",
         "#maximize{1:not a}.",
         "1{not a}1.",
     ] {

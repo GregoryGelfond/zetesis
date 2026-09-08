@@ -113,6 +113,44 @@ fn global_forward_constants_and_nested_includes_produce_native_templates() {
 }
 
 #[test]
+fn base_sections_preserve_included_rules() {
+    let fixture = Fixture::new();
+    fixture.write(
+        "entry.lp",
+        "#program base. p. #include \"child.lp\". #program base. r :- q.",
+    );
+    fixture.write("child.lp", "#program base. q :- p. #program base().");
+    let admitted = fixture.admit().unwrap();
+    assert_eq!(native(admitted.program()), explicit("p. q. r."));
+    for origins in admitted.template_origins() {
+        assert!(!origins.is_empty());
+        for location in origins {
+            let text = admitted
+                .bundle()
+                .get(location.source)
+                .unwrap()
+                .source()
+                .slice(location.span)
+                .unwrap();
+            assert!(matches!(text, "p." | "q :- p." | "r :- q."), "{text}");
+        }
+    }
+}
+
+#[test]
+fn base_sections_preserve_global_metadata() {
+    let fixture = Fixture::new();
+    fixture.write(
+        "entry.lp",
+        "#program base. #include \"child.lp\". p(n). #show p/1.",
+    );
+    fixture.write("child.lp", "#program base. #const n=2. #defined d/1.");
+    let admitted = fixture.admit().unwrap();
+    assert_eq!(native(admitted.program()), explicit("p(2)."));
+    assert_eq!(admitted.metadata().directives().len(), 2);
+}
+
+#[test]
 fn rule_variables_remain_local_across_files_and_positive_cycles() {
     let fixture = Fixture::new();
     fixture.write(
@@ -244,7 +282,7 @@ fn unsupported_directives_and_child_raiser_failures_do_not_return_partial_progra
     let fixture = Fixture::new();
     fixture.write("entry.lp", "p. #include \"child.lp\".");
     for child in [
-        "#program base. q.",
+        "#program base(x). q.",
         "#program step(t). q(t).",
         "#show p.",
         "{p;q}.",
