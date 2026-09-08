@@ -299,7 +299,9 @@ remains distinct from outer default negation; neither substitutes for the other.
    against `i32` bounds before reassociation; nonnumeric extrema and unsupported
    guards return typed capability failures. CPU acquisition, wire preparation,
    reduction and readback retain separate limits/accounting. Portable controls
-   pass; physical Metal/Vulkan execution and matched measurements remain pending.
+   pass, and the [integrated qualification](../verification/aggregate-primitives-tranche-20260908/README.md)
+   passes the physical Metal tests. Vulkan execution and matched performance
+   measurements remain pending.
 4. The separate opt-in CountPlan provides a source-derived candidate consequence
    consumer. Ordinary aggregate model/reduct evaluation is still Boolean. A mixed
    native source/solver route must retain original head permissions, exact

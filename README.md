@@ -251,16 +251,21 @@ has mixed results; it does not establish a general GPU speedup.
 The [current Lean audit](proofs/verification/aggregate-ranges-20260908/README.md)
 checks **819 laws across 72 modules**; Rust and WGSL correspondence remains unproved.
 
-The working tranche has integrated the following scoped changes. These are not
-yet the installed/main baseline; final combined gates, coverage, physical Metal
-qualification, release comparisons and remaining controlled measurements remain pending.
+The working tranche has integrated the following scoped changes. Its
+[qualification](docs/verification/aggregate-primitives-tranche-20260908/README.md)
+passes 2,352 workspace tests, 339 CPU-only CLI tests, 68 external-oracle tests and
+all 25 frozen Metal tests on Apple M4 Pro. Coverage is 93.5816% for workspace with
+the physical profiles and 93.3546% for the independent CPU-only CLI profile;
+both unchanged 91% floors pass. The frozen release passes the 94 clean corpus
+and 24 selected upstream comparisons. These changes are not yet the installed/main
+baseline; controlled GPU measurements and final promotion remain pending.
 
 | Working-tranche capability | Boundary and evidence |
 |---|---|
 | Completed-value aggregate guards and numeric min/max heads | [Guard checks](docs/verification/nonbinding-guards-20260908/README.md) retain 46 originals / 88 complete models / 7,312 frozen pairs; [extrema heads](docs/verification/extrema-heads-20260908/README.md) retain 51 originals / 94 models / 5,439 frozen pairs. Tuple/head bijection, original eligibility and numeric endpoint limits remain. |
-| Native aggregate operations | The [CPU library](docs/verification/native-aggregates-20260908/README.md) and [numeric GPU primitive](docs/verification/native-aggregate-gpu-20260908/README.md) compute count, sum, sum+, min and max over complete tuple eligibility. Ordinary solving still uses Boolean aggregate lowering; GPU mask acquisition remains on the host, and device qualification is pending. |
+| Native aggregate operations | The [CPU library](docs/verification/native-aggregates-20260908/README.md) and [numeric GPU primitive](docs/verification/native-aggregate-gpu-20260908/README.md) compute count, sum, sum+, min and max over complete tuple eligibility. Ordinary solving still uses Boolean aggregate lowering; GPU mask acquisition remains on the host. Frozen Metal qualification passes; Vulkan remains unqualified. |
 | Source count consequences | An opt-in [CountPlan](docs/verification/source-count-plans-20260908/README.md) derives guarded partition bounds for candidate generation while preserving the original reduct subject. Its 10 originals match 53 complete clingo models. Greedy discovery can miss a cover; `NoPlan` does not prove that no consequence exists. It does not recognize queens02's body-count/pairwise encoding. |
-| Transport execution | [Selective lazy input retention](docs/verification/lazy-transport-retention-20260908/README.md) has portable ownership/resource controls; changed-device qualification and controlled comparisons remain pending. |
+| Transport execution | [Selective lazy input retention](docs/verification/lazy-transport-retention-20260908/README.md) passes portable ownership/resource controls and the integrated Metal tests; controlled comparisons remain pending. |
 
 The [numeric-prefix experiment](docs/verification/numeric-prefix-20260908/measurements/README.md)
 was declined after controlled comparisons showed mixed effects and regressions;
@@ -458,15 +463,16 @@ prerequisites:
 ./scripts/check.sh oracle    # external clingo 5.8.2 on PATH
 ./scripts/check.sh proofs    # pinned Lean 4.33.1 through Elan
 ./scripts/check.sh coverage  # cargo-llvm-cov and llvm-tools
-./scripts/check.sh coverage --metal # optional actual tight-oracle Metal tests
+./scripts/check.sh coverage --metal # include 25 exact physical Metal tests
 ```
 
 Workspace and CPU-only CLI coverage each retain an independent **91% line
-floor**. The explicit Metal mode retains portable-stage coverage, then adds four
-physical tight-oracle tests within the workspace profile; it never merges the
-CPU-only CLI profile. Coverage does not measure assertion strength, Lean
-correspondence or shader execution. Other GPU paths require their own physical
-test groups. The retained [CI workflow](.github/workflows/checks.yml) defines
+floor**. The explicit Metal mode retains portable-stage coverage, then adds 25
+named aggregate, lazy, tight, formula and ordinary-solving tests within the
+workspace profile; it never merges the CPU-only CLI profile. Each group requires
+its exact passing outcomes. Coverage does not measure assertion strength, Lean
+correspondence or shader execution. Unlisted GPU paths and Vulkan require their
+own physical test groups. The retained [CI workflow](.github/workflows/checks.yml) defines
 portable gates on Linux/macOS, proofs and Linux coverage. Hosted execution is
 temporarily disabled under the [local macOS policy](docs/verification/local-macos-ci-20260908/README.md).
 A hosted runner does not establish NVIDIA or Metal hardware qualification.

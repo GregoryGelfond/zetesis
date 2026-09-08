@@ -129,10 +129,15 @@ Use `scripts/check.sh portable` for portable Rust/Python tests, lint, strict doc
 and benchmark correctness. Run `scripts/check.sh oracle` for the relevant external
 clingo comparisons, `scripts/check.sh coverage` for both independent 91% line
 coverage floors, and `scripts/check.sh proofs` when proof sources or records change.
-Local `scripts/check.sh coverage --metal` explicitly adds the four tight-oracle
-physical tests within workspace coverage, retaining the portable stage and the
-independent CPU-only CLI profile. It changes neither floor nor filename filters;
-other changed GPU paths still require their own physical qualification.
+Local `scripts/check.sh coverage --metal` adds 25 exact physical tests within
+workspace coverage: native aggregate reduction and measurement, lazy transport
+and source closure, tight and formula oracles, and ordinary lazy/formula CLI
+paths. Every target group must report its expected named passing tests. The
+portable report is retained separately; the CPU-only CLI profile stays
+independent. `target/coverage/toolchain.json` records the finite selection, with
+per-group logs and status files under `target/coverage/workspace`. Neither floor
+nor filename filters change. Unlisted GPU paths and Vulkan still require their
+own physical qualification.
 See [verification instructions](README.md#build-and-check) for the exact scopes
 and prerequisites. Tests should exercise semantics and failure boundaries,
 including property and adversarial cases; do not mirror the implementation or
