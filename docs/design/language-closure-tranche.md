@@ -118,3 +118,29 @@ Completion requires a reviewed language ledger, current README/API guides, a
 qualified checkpoint and a bounded optimization plan. The resulting
 claim is closure of that explicit source-language profile, not all clingo APIs,
 unbounded resource guarantees or a fully formally verified solver.
+
+## Library integration after language closure
+
+The dedicated API-cleanup rounds should make zetesis an idiomatic estate library
+and an eventual backend for `themelios-solve`. Review the interfaces against the
+then-current themelios program and solving contracts, with keryx and morphe as
+read-only examples of estate conventions. Preserve the logic programmer's
+vocabulary and reuse themelios abstractions wherever their semantics fit. The
+future solving API is still developing; this is an integration criterion, not a
+claim that a backend adapter already exists.
+
+Exercise grounding alone, solving an admitted program, and their composition
+through small in-process Rust clients. Program/source ownership, prepared
+representations, candidate streams and reduct outcomes should have explicit
+contracts. Include diagnostics, resource limits, cancellation, completion,
+statistics and model observations in the review. CLI rendering and serialization
+remain consumers of typed library results, and hardware resources and scheduling
+policy should be supplied through clear boundaries.
+
+The desired integration has a small adapter with no duplicate grounding or
+acceptance logic. Source admission, native ground-program views and interchange
+views must state their information loss and supported semantics. Keep future
+Rust-function and theory-extension boundaries in view without adding those
+implementations to this cleanup round. The
+[library-first design](library-first-20260907.md) remains the architectural basis;
+concrete alignment should follow the actual `themelios-solve` API when available.
