@@ -9,7 +9,6 @@ and theorem hypotheses are authoritative; prose is a reading aid.
 | Question | Reading path |
 | --- | --- |
 | Can an aggregate be evaluated directly through the reduct? | [AggregateReduct](../Zetesis/AggregateReduct.lean) formalizes Ferraris Proposition 7: retain the original guard and evaluate the same guard over frozen eligibility. Whole-tuple grouping and concrete arithmetic remain separate obligations. |
-| When is parallel signed addition safe from intermediate overflow? | [AggregateRanges](../Zetesis/AggregateRanges.lean) bounds every mathematical intermediate sum by separate positive and negative carrier totals. The actual execution must preserve contribution occurrences and implement the admitted arithmetic. |
 | When do total and group capacities imply stronger local bounds? | [PartitionCapacities](../Zetesis/PartitionCapacities.lean) separates the counting argument from the caller's coverage and theory-entailment premises. |
 | What makes an interpretation a stable model? | [Ferraris](../Zetesis/Ferraris.lean): formula truth, the frozen reduct, minimality and their connection. |
 | Why does least closure suffice for the normal-rule specialization? | [Semantics](../Zetesis/Semantics.lean), [Iteration](../Zetesis/Iteration.lean), then the normal/lifted bridge modules listed in the full map. |

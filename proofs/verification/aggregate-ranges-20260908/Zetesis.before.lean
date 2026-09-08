@@ -69,4 +69,3 @@ import Zetesis.ConditionalConsumers
 import Zetesis.HeadMeasures
 import Zetesis.AggregateReduct
 import Zetesis.PartitionCapacities
-import Zetesis.AggregateRanges

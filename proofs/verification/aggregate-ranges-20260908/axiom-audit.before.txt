@@ -35,13 +35,6 @@
 'Zetesis.AggregateDependencies.frozen_rows' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AggregateDependencies.original_rows' depends on axioms: [propext, Quot.sound]
 'Zetesis.AggregateDependencies.row_membership' depends on axioms: [propext, Quot.sound]
-'Zetesis.AggregateRanges.bounded_total_is_insufficient' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.AggregateRanges.parallel_reduction_range' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.AggregateRanges.permutation_sum' depends on axioms: [propext, Quot.sound]
-'Zetesis.AggregateRanges.reduction_sum' depends on axioms: [propext]
-'Zetesis.AggregateRanges.subcollection_of_sublist' does not depend on any axioms
-'Zetesis.AggregateRanges.subcollection_range' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.AggregateRanges.sublist_envelope' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AggregateReduct.all_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AggregateReduct.clause_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AggregateReduct.clause_mask' depends on axioms: [propext, Classical.choice, Quot.sound]

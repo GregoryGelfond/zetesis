@@ -185,41 +185,6 @@
     "line": 35
   },
   {
-    "name": "Zetesis.AggregateRanges.bounded_total_is_insufficient",
-    "file": "Zetesis/AggregateRanges.lean",
-    "line": 165
-  },
-  {
-    "name": "Zetesis.AggregateRanges.parallel_reduction_range",
-    "file": "Zetesis/AggregateRanges.lean",
-    "line": 140
-  },
-  {
-    "name": "Zetesis.AggregateRanges.permutation_sum",
-    "file": "Zetesis/AggregateRanges.lean",
-    "line": 64
-  },
-  {
-    "name": "Zetesis.AggregateRanges.reduction_sum",
-    "file": "Zetesis/AggregateRanges.lean",
-    "line": 127
-  },
-  {
-    "name": "Zetesis.AggregateRanges.subcollection_of_sublist",
-    "file": "Zetesis/AggregateRanges.lean",
-    "line": 88
-  },
-  {
-    "name": "Zetesis.AggregateRanges.subcollection_range",
-    "file": "Zetesis/AggregateRanges.lean",
-    "line": 74
-  },
-  {
-    "name": "Zetesis.AggregateRanges.sublist_envelope",
-    "file": "Zetesis/AggregateRanges.lean",
-    "line": 45
-  },
-  {
     "name": "Zetesis.AggregateReduct.all_frozen",
     "file": "Zetesis/AggregateReduct.lean",
     "line": 106

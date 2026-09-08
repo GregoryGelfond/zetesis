@@ -37,13 +37,6 @@ import Zetesis
 #print axioms Zetesis.AggregateDependencies.frozen_rows
 #print axioms Zetesis.AggregateDependencies.original_rows
 #print axioms Zetesis.AggregateDependencies.row_membership
-#print axioms Zetesis.AggregateRanges.bounded_total_is_insufficient
-#print axioms Zetesis.AggregateRanges.parallel_reduction_range
-#print axioms Zetesis.AggregateRanges.permutation_sum
-#print axioms Zetesis.AggregateRanges.reduction_sum
-#print axioms Zetesis.AggregateRanges.subcollection_of_sublist
-#print axioms Zetesis.AggregateRanges.subcollection_range
-#print axioms Zetesis.AggregateRanges.sublist_envelope
 #print axioms Zetesis.AggregateReduct.all_frozen
 #print axioms Zetesis.AggregateReduct.clause_frozen
 #print axioms Zetesis.AggregateReduct.clause_mask

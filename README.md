@@ -242,8 +242,8 @@ upstream cases**, preserving their recorded display/cost and full-model contract
 respectively. The [current CPU and Metal measurements](docs/verification/language-execution-tranche-20260908/timing/README.md)
 retain complete populations and timing limitations. The new transport comparison
 has mixed results; it does not establish a general GPU speedup.
-The [current Lean audit](proofs/verification/aggregate-primitives-20260908/README.md)
-checks **812 laws across 71 modules**; Rust and WGSL correspondence remains unproved.
+The [current Lean audit](proofs/verification/aggregate-ranges-20260908/README.md)
+checks **819 laws across 72 modules**; Rust and WGSL correspondence remains unproved.
 
 The next tranche has integrated [completed-value aggregate guards](docs/verification/nonbinding-guards-20260908/README.md):
 46 originals matched 88 complete clingo models, with 7,312 frozen interpretation
