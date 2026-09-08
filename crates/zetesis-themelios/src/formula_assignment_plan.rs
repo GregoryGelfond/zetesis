@@ -15,7 +15,9 @@ use crate::{ExpansionResource, FormulaFailure, ProfileFeature};
 
 pub(crate) struct Plan {
     pub steps: Vec<Step>,
-    /// True when admission used the new post-assignment consumer boundary.
+    /// An outer filter, scalar binding or head bound reads an aggregate proposal
+    /// or a value derived from one. Objective admission consumes this fact;
+    /// scheduling a value does not certify a total objective observer.
     pub consumers: bool,
 }
 
@@ -38,7 +40,6 @@ impl Compiler<'_> {
         body: &[LiteralIr],
         variables: usize,
         guards: &[AggregateGuard],
-        consumers: bool,
     ) -> Result<Option<Plan>, FormulaFailure> {
         // Preserve the established source-work charge on aggregate-free rules.
         self.scope_work(body.len())?;
@@ -120,7 +121,7 @@ impl Compiler<'_> {
             aggregate_values[step.produced] = aggregate || dependent;
             steps.push(step);
         }
-        let consumers = self.assignment_context(body, guards, &aggregate_values, consumers)?;
+        let consumers = self.assignment_context(body, guards, &aggregate_values)?;
         Ok(Some(Plan { steps, consumers }))
     }
 

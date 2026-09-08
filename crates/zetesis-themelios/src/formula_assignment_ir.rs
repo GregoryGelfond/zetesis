@@ -85,7 +85,6 @@ impl Compiler<'_> {
         body: &[LiteralIr],
         choice_guards: &[AggregateGuard],
         aggregate_values: &[bool],
-        consumers: bool,
     ) -> Result<bool, FormulaFailure> {
         let mut consumed = false;
         for (target, dependent) in aggregate_values.iter().enumerate() {
@@ -101,18 +100,18 @@ impl Compiler<'_> {
             }
             for literal in body {
                 self.scope_work(1)?;
-                // These operations only consume completed proposal values.
-                // The original aggregate equality and static guards remain.
-                if consumers
-                    && matches!(
-                        literal,
-                        LiteralIr::Compare(..)
-                            | LiteralIr::ArgumentCheck { .. }
-                            | LiteralIr::TupleCompare(..)
-                            | LiteralIr::Guard(_)
-                            | LiteralIr::Bind { .. }
-                    )
-                {
+                // Outer body consumers share one contract across all heads:
+                // consume completed proposal values while retaining the
+                // original equality and body activation. Local element scopes
+                // are compiled separately from this completed outer frame.
+                if matches!(
+                    literal,
+                    LiteralIr::Compare(..)
+                        | LiteralIr::ArgumentCheck { .. }
+                        | LiteralIr::TupleCompare(..)
+                        | LiteralIr::Guard(_)
+                        | LiteralIr::Bind { .. }
+                ) {
                     consumed |= self.literal_uses(literal, target)?;
                     continue;
                 }

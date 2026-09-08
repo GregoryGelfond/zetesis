@@ -308,8 +308,6 @@ fn unsupported_consumers_remain_profile_refusals() {
         "q(K):-N=#count{},K=1..N.",
         "q(M):-N=#count{},Y=N+1,M=#count{Y:p}.",
         "q(N):-N=#count{},Y=N+1,p(Y):d.",
-        "Y{p}:-N=#count{},Y=N+1.",
-        "{p}:-N=#count{},N>0.",
     ] {
         let error = prepare_formula(
             source.into(),

@@ -620,8 +620,7 @@ impl Compiler<'_> {
         variables.safety(self.location)?;
         self.body_aggregates(rule, aggregate_guards, assignments, &variables, &mut body)?;
         self.body_conditionals(rule, &variables, &mut body)?;
-        let bindings =
-            self.assignment_plan(&body, variables.count, &choice_guards, ordinary.is_some())?;
+        let bindings = self.assignment_plan(&body, variables.count, &choice_guards)?;
         let head = if let Some(head) = ordinary {
             head
         } else {
