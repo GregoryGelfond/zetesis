@@ -1,7 +1,10 @@
 # Conditional partition consequences
 
-The `zetesis_sat::partition` library derives local cardinality bounds from an
+The `zetesis_ferraris::partition` library derives local cardinality bounds from an
 explicit finite partition. It is an experimental candidate-planning primitive.
+`zetesis_sat::partition` re-exports the same types for existing consumers. The
+pure planning and formula-emission implementation has no candidate-search
+dependency, so a source compiler can reuse it without depending on a solver.
 Ordinary source admission, candidate search defaults and reduct acceptance are
 unchanged. Automatic recognition of the required source facts is still absent.
 
@@ -20,7 +23,7 @@ well-defined; overlapping, missing, repeated or undeclared members are refused.
 
 ## What validation establishes
 
-[`Premises`](../../crates/zetesis-sat/src/partition.rs) contains semantic atom IDs,
+[`Premises`](../../crates/zetesis-ferraris/src/partition.rs) contains semantic atom IDs,
 the declared member set, a total lower bound and ordered group capacities.
 `Plan::new` verifies the finite universe and exact partition shape, then computes
 the conditional consequence. It does not inspect a `Theory` or certify that a
@@ -35,7 +38,7 @@ subject-bound theory certificate. A future source bridge must retain the actual
 group, activation and original-theory evidence; it must not infer those facts from
 a filename or assume that visually similar Boolean gates represent the same group.
 
-[`Plan::restriction`](../../crates/zetesis-sat/src/partition/restriction.rs) emits
+[`Plan::restriction`](../../crates/zetesis-ferraris/src/partition/restriction.rs) emits
 only derived local lower bounds through the existing exact cardinality
 translator. It returns a separate Boolean theory, including falsum for
 inconsistent premises. This is a candidate-only view. Applying it through

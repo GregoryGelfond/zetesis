@@ -15,7 +15,7 @@ mod encoding;
 mod ferraris;
 mod timing;
 mod checked;
-pub mod partition;
+pub use zetesis_ferraris::partition;
 
 pub use checked::{CheckedInterpretation, StableInterpretation, check_interpretation};
 

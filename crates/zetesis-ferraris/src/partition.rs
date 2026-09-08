@@ -9,8 +9,7 @@
 
 use std::fmt;
 
-use crate::Control;
-use zetesis_cpu::Stop;
+use zetesis_cpu::{Control, Stop};
 
 mod restriction;
 pub use restriction::{Restriction, RestrictionError, RestrictionErrorKind, RestrictionLimits};

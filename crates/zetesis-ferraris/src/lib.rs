@@ -15,6 +15,7 @@ mod normal;
 mod aggregate;
 mod tight;
 mod checked;
+pub mod partition;
 
 pub use checked::{CheckedInterpretation, StableInterpretation, check_interpretation};
 

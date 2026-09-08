@@ -2,14 +2,13 @@
 
 use std::fmt;
 
-use zetesis_cpu::Stop;
-use zetesis_ferraris::{
+use crate::{
     AdmissionLimits, AggregateComparison, AggregateElement, AggregateError, AggregateLimits, Node,
     Theory, append_aggregate,
 };
+use zetesis_cpu::{Control, Stop};
 
 use super::Plan;
-use crate::Control;
 
 /// Bounds for emitting a separate consequence theory, excluding the borrowed plan.
 /// The existing aggregate translator also bounds each temporary state frontier.
@@ -52,7 +51,7 @@ pub enum RestrictionErrorKind {
     /// The independent exact cardinality translator refused its bounded work.
     Aggregate(AggregateError),
     /// Final theory admission refused the constructed shape.
-    Theory(zetesis_ferraris::AdmissionError),
+    Theory(crate::AdmissionError),
     /// Control or fallible allocation stopped emission.
     Stopped(Stop),
 }
@@ -126,7 +125,7 @@ impl Plan {
     ///
     /// Inconsistent stated premises emit falsum, even for an empty partition.
     /// Otherwise zero lower bounds emit no root. The original theory is neither
-    /// read nor changed. Applying this view to [`crate::StableModels`] preserves
+    /// read nor changed. Applying this view to a candidate generator preserves
     /// complete original enumeration only if the original theory entails the
     /// supplied premises with exactly the same atom index meanings. The original
     /// theory must remain the subject of every frozen-reduct check.
@@ -239,7 +238,7 @@ impl Builder<'_> {
             .checked_add(work)
             .ok_or(RestrictionErrorKind::Overflow)?;
         result
-            .map(zetesis_ferraris::AggregateBuild::root)
+            .map(crate::AggregateBuild::root)
             .map_err(RestrictionErrorKind::Aggregate)
     }
 
