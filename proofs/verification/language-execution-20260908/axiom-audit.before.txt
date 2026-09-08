@@ -162,11 +162,6 @@
 'Zetesis.ClauseValidation.scan_work_bound' depends on axioms: [propext, Quot.sound]
 'Zetesis.ClauseValidation.validate_accepts_iff' depends on axioms: [propext, Quot.sound]
 'Zetesis.ClauseValidation.validate_work_bound' depends on axioms: [propext, Quot.sound]
-'Zetesis.ConditionalConsumers.covered_conditionals' depends on axioms: [propext, Quot.sound]
-'Zetesis.ConditionalConsumers.empty_body_equivalent' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.ConditionalConsumers.frozen_body' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.ConditionalConsumers.original_body' depends on axioms: [propext, Quot.sound]
-'Zetesis.ConditionalConsumers.unrealized_rule_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ConsequentAlternatives.alternative_collection_keeps_stability' depends on axioms: [propext,
  Classical.choice,
  Quot.sound]

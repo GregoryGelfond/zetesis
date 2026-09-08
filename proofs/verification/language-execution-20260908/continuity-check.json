@@ -1,0 +1,59 @@
+{
+  "prior_theorems": 783,
+  "current_theorems": 788,
+  "prior_module_sources_byte_identical": true,
+  "prior_name_file_line_entries_unchanged": true,
+  "prior_transitive_axiom_sets_unchanged": true,
+  "added_theorems": [
+    {
+      "name": "Zetesis.ConditionalConsumers.covered_conditionals",
+      "file": "Zetesis/ConditionalConsumers.lean",
+      "line": 82
+    },
+    {
+      "name": "Zetesis.ConditionalConsumers.empty_body_equivalent",
+      "file": "Zetesis/ConditionalConsumers.lean",
+      "line": 53
+    },
+    {
+      "name": "Zetesis.ConditionalConsumers.frozen_body",
+      "file": "Zetesis/ConditionalConsumers.lean",
+      "line": 40
+    },
+    {
+      "name": "Zetesis.ConditionalConsumers.original_body",
+      "file": "Zetesis/ConditionalConsumers.lean",
+      "line": 28
+    },
+    {
+      "name": "Zetesis.ConditionalConsumers.unrealized_rule_frozen",
+      "file": "Zetesis/ConditionalConsumers.lean",
+      "line": 66
+    }
+  ],
+  "added_axioms": {
+    "Zetesis.ConditionalConsumers.covered_conditionals": [
+      "Quot.sound",
+      "propext"
+    ],
+    "Zetesis.ConditionalConsumers.empty_body_equivalent": [
+      "Classical.choice",
+      "Quot.sound",
+      "propext"
+    ],
+    "Zetesis.ConditionalConsumers.frozen_body": [
+      "Classical.choice",
+      "Quot.sound",
+      "propext"
+    ],
+    "Zetesis.ConditionalConsumers.original_body": [
+      "Quot.sound",
+      "propext"
+    ],
+    "Zetesis.ConditionalConsumers.unrealized_rule_frozen": [
+      "Classical.choice",
+      "Quot.sound",
+      "propext"
+    ]
+  }
+}

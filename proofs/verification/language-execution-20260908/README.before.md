@@ -8,7 +8,7 @@ readable before its Lean details. The convention has one deliberately bounded
 pilot so far; it is not a claim of a library-wide rewrite.
 
 
-This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **788 kernel-checked theorems** across 68 semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
+This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **783 kernel-checked theorems** across 67 semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
 
 The formalization connects normalized stable-model semantics to candidate seeds, compositional reduct execution, lazy completion, consequence bounds, and completed search certificates. It supplies mathematical contracts for the Rust, wgpu, Rayon, and neuromorphic implementation work. It does not verify those implementations or make Lean a runtime dependency.
 
@@ -21,7 +21,7 @@ lake build
 lake env lean -DautoImplicit=false -DwarningAsError=true Audit.lean
 ```
 
-`lean-toolchain` pins `leanprover/lean4:v4.33.1`. The package has no remote dependencies, so the build itself needs no network once that toolchain exists. `lake build` compiles the umbrella module and all 68 semantic modules. `Audit.lean` requests the transitive axiom dependencies of every project theorem.
+`lean-toolchain` pins `leanprover/lean4:v4.33.1`. The package has no remote dependencies, so the build itself needs no network once that toolchain exists. `lake build` compiles the umbrella module and all 67 semantic modules. `Audit.lean` requests the transitive axiom dependencies of every project theorem.
 
 The [verification report](./verification.json) records the checked source hashes and commands. The [axiom audit](./axiom-audit.txt) contains only standard Lean logical axioms where needed: `propext`, `Quot.sound`, and `Classical.choice`. In particular, no theorem depends on `sorryAx` or `Lean.ofReduceBool`.
 
@@ -41,7 +41,6 @@ preserves an earlier inconsistent manifest and explains its repair.
 | [AggregateDependencies](./Zetesis/AggregateDependencies.lean) | Complete dependent aggregate families retain each predecessor association and equality in original and frozen clause rows; complete carriers remain premises |
 | [BinaryWatch](./Zetesis/BinaryWatch.lean) | Two distinct binary watch positions exhaust every possible replacement position, independently of literal availability and inspection order |
 | [OuterNegativeConsumers](./Zetesis/OuterNegativeConsumers.lean) | Default/double-negative outer gates retain aggregate equality and activation in the frozen reduct; projected gates quantify over the complete supplied witness family |
-| [ConditionalConsumers](./Zetesis/ConditionalConsumers.lean) | Completed outer proposals retain aggregate equality, activation and every universal conditional implication; empty and unrealized cases keep those obligations separate |
 | [OuterRanges](./Zetesis/OuterRanges.lean) | Complete outer carriers retain their own inclusive integer ranges, occurrence-preserving concatenation and original/frozen clause associations under total endpoint functions |
 | [JoinFrames](./Zetesis/JoinFrames.lean) | Root reset and complete child overwrites make positive-prefix membership independent of retained frame contents; an unreset root can erase current truth |
 | [ChoiceConsumers](./Zetesis/ChoiceConsumers.lean) | Completed scalar filters retain aggregate equality, whole-group activation and natural bounds under explicit proposal coverage and evaluation assumptions |

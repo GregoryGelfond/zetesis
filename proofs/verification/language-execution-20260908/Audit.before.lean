@@ -154,11 +154,6 @@ import Zetesis
 #print axioms Zetesis.ClauseValidation.scan_work_bound
 #print axioms Zetesis.ClauseValidation.validate_accepts_iff
 #print axioms Zetesis.ClauseValidation.validate_work_bound
-#print axioms Zetesis.ConditionalConsumers.covered_conditionals
-#print axioms Zetesis.ConditionalConsumers.empty_body_equivalent
-#print axioms Zetesis.ConditionalConsumers.frozen_body
-#print axioms Zetesis.ConditionalConsumers.original_body
-#print axioms Zetesis.ConditionalConsumers.unrealized_rule_frozen
 #print axioms Zetesis.ConsequentAlternatives.alternative_collection_keeps_stability
 #print axioms Zetesis.ConsequentAlternatives.empty_alternatives_frozen
 #print axioms Zetesis.ConsequentAlternatives.empty_alternatives_original
