@@ -232,7 +232,7 @@ frozen interpretation pairs, plus generated arithmetic properties. Negative
 `#sum+` head weights remain an internal limitation with a recorded reference
 discrepancy; they are not labeled modeling errors.
 
-The [current integrated qualification](docs/verification/language-execution-tranche-20260908/README.md)
+The [last completed integrated qualification](docs/verification/language-execution-tranche-20260908/README.md)
 passes **2,178 workspace test/doc checks**, **339 CPU-only CLI checks** and
 **65 external-oracle tests**. Both unchanged 91% coverage floors pass:
 **91.9033% workspace with the four designated Metal tests / 93.1998% independent
@@ -242,8 +242,14 @@ upstream cases**, preserving their recorded display/cost and full-model contract
 respectively. The [current CPU and Metal measurements](docs/verification/language-execution-tranche-20260908/timing/README.md)
 retain complete populations and timing limitations. The new transport comparison
 has mixed results; it does not establish a general GPU speedup.
-The [current Lean audit](proofs/verification/weighted-heads-20260908/README.md)
-checks **794 laws across 69 modules**; Rust and WGSL correspondence remains unproved.
+The [current Lean audit](proofs/verification/aggregate-primitives-20260908/README.md)
+checks **812 laws across 71 modules**; Rust and WGSL correspondence remains unproved.
+
+The next tranche has integrated [completed-value aggregate guards](docs/verification/nonbinding-guards-20260908/README.md):
+46 originals matched 88 complete clingo models, with 7,312 frozen interpretation
+pairs checked separately. Its [partition experiment](docs/design/partition-consequences.md)
+derives candidate bounds from supplied premises; automatic source recognition
+and performance qualification remain open. The full tranche is still in development.
 
 A standalone [tight-support Metal experiment](docs/design/metal-tight-support.md)
 now applies the CPU class certificate through a bounded GPU checker. Its matched

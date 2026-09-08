@@ -6,6 +6,15 @@ with reviewed evidence and artifact identities. This plan adds native
 aggregate primitives and a foundation-wide research exploration alongside the
 existing language, CPU, GPU and Vulkan work. It adds no performance evidence.
 
+Implementation is in progress. Completed-value nonbinding guards, checked lazy
+transport replacement observations, conditional partition planning and the
+aggregate/capacity Lean laws are implemented. The
+[guard record](../verification/nonbinding-guards-20260908/README.md) and
+[partition experiment](partition-consequences.md) state their bounded evidence.
+Native aggregate execution, scoped min/max heads, Vulkan qualification and final
+integrated gates remain in progress. The acceptance criteria below still govern
+those deliverables; this progress note is not a release qualification.
+
 Accepted-language gaps take priority. CPU and GPU work proceed concurrently as
 bounded, general operations whose applicability and costs are explicit. The
 original program and its frozen reduct remain the acceptance foundation;
@@ -28,8 +37,8 @@ Independent changes retain separate proof and measurement scopes.
 
 **Completed-value nonbinding aggregate guards** are the smallest continuation of
 the current assignment planner. For example,
-`q(M):-N=#count{},M=#sum{N},M<=#count{}.` still reaches the explicit
-`AggregateAssignment` refusal. The new consumer would read the completed row;
+`q(M):-N=#count{},M=#sum{N},M<=#count{}.` reached the explicit
+`AggregateAssignment` refusal at the starting checkpoint. The new consumer reads the completed row;
 it must not become a second producer of `M`. Preserve every original equality,
 comparison, default-negation sign and rule activation. Mark the consumer in the
 shared plan so existing objective restrictions remain effective.
