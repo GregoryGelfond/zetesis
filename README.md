@@ -57,7 +57,7 @@ facts and recursive consequences. The solver rejects unsupported reachability
 and a plan requiring both repairs. The regression suite compares complete models
 with clingo, rather than just their displayed repair choices.
 
-An unchanged [kr-domains task-allocation scenario](validation/corpus/kr-domains/scenarios/task-allocation/variant-01/01-basic.lp)
+A [kr-domains task-allocation scenario](examples/kr-domains/scenarios/task-allocation/variant-01/01-basic.lp)
 adds an objective:
 
 ```clingo
@@ -66,15 +66,22 @@ adds an objective:
 ```
 
 ```sh
-zetesis validation/corpus/kr-domains/scenarios/task-allocation/variant-01/01-basic.lp
+zetesis examples/kr-domains/scenarios/task-allocation/variant-01/01-basic.lp
 ```
 
 Its optimum assigns `a1` to `t1` and `a2` to `t2`, with cost **5**. Objectives
 score verified stable models; they supply no atom support. Exact bounds may
 prune candidates that cannot improve or tie an incumbent. `OPTIMUM FOUND`
 requires complete search, and `--models 0` displays every tied optimum.
-The [eight-queens example](validation/corpus/kr-domains/standalone/n-queens/variant-01.lp)
+The [eight-queens example](examples/kr-domains/standalone/n-queens/variant-01.lp)
 likewise preserves all **92 answer sets**.
+
+The self-contained [kr-domains collection](examples/kr-domains/README.md) contains
+all 94 non-clingcon cases and their 14 shared encodings. Only elenctic annotation
+comments have been removed; a pinned manifest retains their test contracts,
+original and cleaned source hashes, and exact deletion provenance. Rust validation
+uses these examples by default. The independent original/clean clingo comparison
+passes every case with the same costs and selected display multiplicities.
 
 ## Install and run
 
@@ -136,7 +143,7 @@ zetesis devices
 
 | Control | Current behavior |
 |---|---|
-| `--grounder auto\|lazy\|eager` | Normal-rule CPU execution can join source templates lazily or lower eagerly. Formula execution currently requires eager materialization. Unsupported explicit combinations are refused. |
+| `--grounder auto\|lazy\|eager` | Relational execution can join source templates lazily or lower eagerly. Explicit lazy GPU execution composes host joins with per-world device consequences. Formula execution currently requires eager materialization. |
 | `--backend auto` | The closure route starts on lazy CPU; later eligible batches may use an accessible GPU. Formula solving selects CPU automatically. The closure batch threshold is provisional, not a measured crossover. |
 | Explicit backend | `cpu`, `metal`, `vulkan`, `dx12`, `gl`, `nvidia` or `gpu`. An unavailable required device is an error. NVIDIA uses a supported wgpu API, not CUDA. |
 | `--completion-workers N` | Bounded Rayon completion of independent formula-reduct queries, including GPU residuals. Defaults to one worker. |
@@ -147,8 +154,12 @@ Metal has been physically qualified on an Apple M4 Pro for the recorded builds.
 The static closure oracle uses a bounded ground graph; general formula execution
 batches GPU propagation and exact CPU residual completion. Source loading,
 parsing, materialization, candidate generation and objective work still run on
-the host. Lazy execution on Metal is required before version 1.0 and remains an
-implementation gap. CUDA, multi-GPU execution and neuromorphic backends are
+the host. Seven [physical lazy Metal tests](docs/verification/lazy-device-integration-20260907/physical/README.md)
+pass for the prepared debug executables, including complete model comparisons,
+catalog growth and bounded failure accounting. They do not establish release-binary
+qualification or a speedup. Lazy general-formula execution remains an implementation
+gap. Broader lazy Metal qualification is required before version 1.0. CUDA,
+multi-GPU execution and neuromorphic backends are
 future work. See [execution boundaries](docs/implementation.md) and the
 [hardware evidence](docs/verification/metal-requalification-20260907/README.md).
 
@@ -166,10 +177,10 @@ syntax, raising and evaluation errors from zetesis implementation refusals.
 |---|---|
 | Normal rules | Safe finite rules, constraints, default/double negation, strong negation with coherence, and relational lazy checking in the admitted normal-rule profile. |
 | Formula rules | Bounded choices, signed singleton/disjunctive heads, finite rule/head pools, evaluated heads, scalar/range bindings, comparisons and admitted universal body conditionals. |
-| Aggregates | Body count/sum/sum+ and complete-value min/max comparisons; independent assignments feeding scalar/tuple filters, scalar equalities and evaluated or constructed heads; a restricted finite function-count head profile. |
+| Aggregates | Body count/sum/sum+ and complete-value min/max comparisons; independent assignments feeding scalar/tuple filters, scalar equalities, evaluated positive arguments and heads, and integer choice bounds; function-count heads with positive eligibility and checked tuple/atom correspondence. |
 | Logical values | Closed signed functions and tuples; finite construction from bound inputs; positive tuple/function patterns, including local conditional-consequent witnesses; evaluated positive arguments with independently bound inputs; evaluated already-safe negative arguments. |
 | Objectives and observations | Admitted minimize/maximize/weak constraints; complete tuple keys and optimal ties; signature, term and conditional `#show`; `#defined`; original include bundles and constants. |
-| Refusal boundaries | Cross-aggregate assignment dependencies, new aggregate-generated body-atom/range/conditional/choice consumers, broader conditioned heads, objective-dependent disjunction/conditionals, broader directives and exact clingo undefined-arithmetic behavior remain incomplete. |
+| Refusal boundaries | Cross-aggregate assignment dependencies, generated ranges and remaining conditional/choice-body consumers, weighted/extremal function heads and broader conditioned heads, objective-dependent disjunction/conditionals, broader directives and exact clingo undefined-arithmetic behavior remain incomplete. |
 
 These rows summarize profiles; they are not a grammar specification. The
 [source API guide](crates/zetesis-themelios/README.md) describes composition,
@@ -195,6 +206,15 @@ condition safety, and matching possible support does not make an atom true.
 Mixed evaluated/witness arguments, arithmetic inversion and negative anonymous
 witnesses remain refused.
 
+The [aggregate-bounds slice](docs/verification/aggregate-bounds-20260907/README.md)
+adds evaluated positive arguments, independent integer choice-bound proposals and
+positive count-head eligibility. For example,
+`d(1).N{a;b}N:-N=#count{X:d(X)}.` retains the original equality around each
+proposed bound, and `q(1).1#count{X:p(X):q(X)}1.` retains `q(1)` as a condition.
+Neither proposed values nor possible-support membership establish truth.
+The current [Lean audit](proofs/verification/aggregate-bounds-lazy-metal-20260907/README.md)
+checks 723 laws across 57 modules; Rust and WGSL correspondence remains unproved.
+
 The **2026-09-07 dependency checkpoint** passes **94 unchanged
 non-clingcon kr-domains cases**,
 checking answer contracts, costs, counts and optimum ties. All **24 selected
@@ -214,8 +234,8 @@ preserve the prior semantic sources and theorem/axiom records. These are checked
 semantic laws, not a proof of the Rust/GPU implementation. Physical-device
 qualification retains its separately dated executable identity.
 
-The [current end-to-end CPU comparison](docs/verification/dependency-performance-20260907/README.md)
-uses the final installed build, 21 timed alternating pairs per case, one worker
+The [last qualified end-to-end CPU comparison](docs/verification/dependency-performance-20260907/README.md)
+uses the installed dependency-checkpoint build, 21 timed alternating pairs per case, one worker
 per solver and complete answer/optimal-tie enumeration. All three native routes
 select eager grounding and certified tight-support checking automatically:
 
@@ -232,6 +252,12 @@ results, not a general ranking or a controlled change from the previous release.
 Separate single `--stats` observations put SEND grounding at **19.74 ms** and
 solving at **16.83 ms**. Queens and task allocation spend most of their measured
 driver time solving. These instrumented observations are not phase medians.
+
+The current [bounded expression-storage experiment](docs/verification/evaluation-scratch-20260907/README.md)
+reduces median eager admission by 4.89% for SEND and 8.92% for queens02 in a
+controlled comparison. It reuses empty storage within a join cursor and preserves
+the checked arithmetic operations. These measurements exclude parsing and solving;
+the end-to-end comparison above predates that change.
 
 The new [matched lazy CPU oracle experiment](docs/verification/ordered-joins-20260907/README.md)
 measures 61.9–62.7% less time for sparse scalar joins at 256 rows and

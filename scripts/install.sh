@@ -33,7 +33,8 @@ install -m 755 "$target_dir/$host_target/release/zetesis" "$install_dir/zetesis"
 install -m 755 "$target_dir/$host_target/release/zetesis-bench" "$install_dir/zetesis-bench"
 install -m 755 "$target_dir/$host_target/release/zetesis-validate" "$install_dir/zetesis-validate"
 install -m 755 "$target_dir/$host_target/release/zetesis-corpus" "$install_dir/zetesis-corpus"
-printf 'Installed %s, %s, %s and %s\n' "$install_dir/zetesis" "$install_dir/zetesis-bench" "$install_dir/zetesis-validate" "$install_dir/zetesis-corpus"
+install -m 755 "$target_dir/$host_target/release/zetesis-perf" "$install_dir/zetesis-perf"
+printf 'Installed %s, %s, %s, %s and %s\n' "$install_dir/zetesis" "$install_dir/zetesis-bench" "$install_dir/zetesis-validate" "$install_dir/zetesis-corpus" "$install_dir/zetesis-perf"
 case ":$PATH:" in
     *":$install_dir:"*) ;;
     *) printf 'Add this directory to PATH: %s\n' "$install_dir" ;;

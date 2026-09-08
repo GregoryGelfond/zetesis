@@ -3,8 +3,14 @@
 Status: required comparison, with runner migration and execution pending. The
 existing three-case CPU measurements are not this matrix. This protocol applies
 the broader [evaluation contract](zetesis.md#required-cpugpu-evaluation-contract)
-to every original non-clingcon kr-domains input in the sealed corpus manifest
+to every non-clingcon kr-domains input in the sealed corpus manifest
 (currently 94 cases).
+
+New campaigns use the self-contained `examples/kr-domains` collection. Its
+manifest records cleaned and original hashes, unchanged ASP bytes outside
+deleted annotation comments, and typed contracts. Historical original-source
+measurements retain their own hashes; this cleaning is not a byte-identical
+replacement in an existing benchmark record.
 
 ## Requested configurations and actual execution
 
@@ -37,9 +43,13 @@ auto and refuse explicit Metal. Some formula sources also refuse lazy grounding.
 Those cells must appear as unsupported until implementation and qualification
 change that fact. Never relabel eager fallback as a lazy run. No speedup ratio is
 defined against an unsupported, incomplete or failed cell.
-Removing the blanket lazy/Metal refusal through qualified lazy device execution
-is required before version 1.0; this pending state is not an intended product
-restriction.
+The current implementation removes the blanket lazy/Metal refusal for relational
+sources using bounded source scans and per-world device consequences. Seven
+[physical Metal tests](../verification/lazy-device-integration-20260907/physical/README.md)
+qualify the prepared debug artifacts for their recorded cases. The full matrix
+and release-binary qualification remain pending. General formula sources continue
+to refuse lazy execution. Broader lazy Metal qualification is required before
+version 1.0.
 
 ## Comparable semantic tasks and output
 

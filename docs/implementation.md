@@ -232,11 +232,21 @@ GPU crate. This is a bounded single-program cache, not an unbounded residency ma
 
 The CLI exposes independent `--grounder auto|lazy|eager` and `--backend` policies.
 Explicit eager CPU retains its compiled graph even across automatic GPU fallback;
-explicit lazy mode never materializes a rule store. A forced GPU/lazy pair is refused.
+explicit lazy mode never materializes a rule store. Explicit GPU/lazy requests
+use the [lazy source device route](verification/lazy-device-integration-20260907/README.md)
+for admitted relational programs. Host joins enumerate bounded instances over
+immutable union snapshots; per-world GPU checks evaluate positive antecedents and
+frozen gates, then produce deltas and constraint flags. A round commits only
+after complete source coverage. Demand-driven atom IDs and packed world storage
+grow under explicit budgets. No complete static graph or CPU-completed closure
+is uploaded. General formula sources still refuse lazy execution.
 The default CLI uses lazy CPU for the first candidate and small batches. Later
 batches with at least 32 candidates may initialize a physical GPU and admit the
 static profile. That switch performs eager lowering; it is not lazy device
-execution. Actual lazy Metal work remains required before version 1.0.
+execution. The explicit lazy route passes seven
+[physical Metal tests](verification/lazy-device-integration-20260907/physical/README.md)
+for its prepared debug artifacts. Broader corpus and release qualification remain
+requirements before version 1.0; no lazy GPU speedup is established.
 Auto fallback reports a reason; explicit backend/vendor requests
 never fall back. The threshold is an initial heuristic with no claimed speedup.
 `zetesis devices` separates advertised capabilities from actual initialization
@@ -414,8 +424,10 @@ Broader assignments and conditions remain outside the profile. Numeric min/max
 source endpoints implicated in six recorded clingo discrepancies remain refused.
 Independent multiple aggregate assignments stream products through the existing
 bounded cursor while retaining every original equality. Their values can now feed
-scalar/tuple comparisons, Boolean guards, scalar equalities and evaluated or
-constructed head arguments. A private plan records required and produced slots;
+scalar/tuple comparisons, Boolean guards, scalar equalities, evaluated positive
+arguments and evaluated or constructed head arguments. Independent proposals
+also supply integer choice/count-head bounds while retaining their original
+aggregate equality and rule activation. A private plan records required and produced slots;
 relational bindings establish initial readiness, and consumers run after their
 inputs exist. The prior scalar/range-before-aggregate priority remains wherever
 dependencies allow it. The plan changes evaluation order while source body order
@@ -426,13 +438,21 @@ filters inspect completed rows. Undefined or overflowing consumer arithmetic
 still refuses admission, even when a proposal would later prove unrealizable.
 The bounded plan charges dependency scans and input/readiness/instruction storage
 under existing expansion limits. Aggregate-free rules keep their previous
-accounting. New aggregate-generated body-atom/evaluated-positive checks, dependent
-ranges, conditional/choice scopes and objective producers remain refused.
+accounting. Dependent ranges, generated negative arguments, remaining conditional
+and choice/count-head body consumers, and objective producers retain their
+explicit profile boundaries.
 Dependencies between assignment generators are refused even through scalar
 descendants; previously admitted comparison scopes remain available. See the
 [aggregate-consumer record](verification/aggregate-consumers-20260907/README.md)
 for exact boundaries, finite-ground comparisons and schedule-bypass evidence.
 The total-assignment objective observer described below is unchanged.
+Positive ordinary atoms may now bind local count-head witnesses and supply
+eligibility, including recursive and structured patterns. The complete
+tuple/atom bijection check precedes choice lowering. Duplicate witnesses retain
+their disjoined eligibility formulas; support membership never asserts them.
+Negative eligibility, tuple aliases and weighted/extremal function heads remain
+refused. The [bounds and eligibility record](verification/aggregate-bounds-20260907/README.md)
+contains independent original/frozen comparisons and exact resource checks.
 The main CLI supports both S0 GPU closure and explicitly selected hybrid formula
 propagation. The separate formula experiment compares scalar CPU, Rayon and
 hybrid membership; exact GPU residual search remains future work.
@@ -516,10 +536,11 @@ and abstract legal event traces. The independent reference campaign and producti
 conformance tests supply executable evidence separately. No theorem currently
 connects the concrete Rust structs, source adapter or shader to the Lean types.
 
-The [current clean audit](../proofs/verification/dependency-tranche-20260907/README.md)
-checks 702 theorems in 53 modules. The sixteen additions cover ready aggregate
-consumers, positive structured witnesses and ordered finite boundaries. Complete
-carriers, faithful extraction and match-to-key implications are explicit premises;
+The [current clean audit](../proofs/verification/aggregate-bounds-lazy-metal-20260907/README.md)
+checks 723 theorems in 57 modules. The latest twenty-one additions cover aggregate
+bounds, positive count-head eligibility, evaluation prefixes and immutable lazy
+rounds. Complete carriers, faithful extraction, exact tuple/atom correspondence
+and complete source rounds are explicit premises where required;
 the laws do not establish source coverage, Rust scheduling/matching, machine
 resource behavior or device execution. Prior theorem sources and axiom sets are
 preserved. The completed local runtime gates and any new physical qualification

@@ -31,7 +31,7 @@ would leave the checkout and development workflow unchanged.
 | `crates/` | Solver libraries, the CLI, reusable validation libraries and Rust development commands. |
 | `proofs/` | Current Lean modules, pinned toolchain, theorem catalog and current verification manifest. |
 | `validation/` | Curated ASP programs and data, expected semantic outcomes, provenance and licenses. |
-| `examples/` | Small, runnable examples used by the public documentation. |
+| `examples/` | Runnable documentation examples and the self-contained kr-domains regression collection with sealed provenance. |
 | `docs/design/` | Current architecture, semantics, API contracts and decisions. |
 | `docs/verification/` | Concise assessments and indexes identifying immutable evidence artifacts. |
 | `experiments/` | Clearly scoped, reproducible experiments with named hypotheses and current relevance. |
@@ -87,6 +87,15 @@ Replace Python in this order:
 2. Proof-record validation and coverage-floor checks used by CI.
 3. Matched correctness/performance campaigns and their process-memory observers.
 4. Still-relevant experiment preparation and device diagnostics.
+
+The selected-upstream comparison now runs through the Rust `selected` library
+and `zetesis-corpus compare`; its Python comparator, decoder and matching test
+module have been removed. The new Rust `performance` library and `zetesis-perf`
+command provide bounded three-case CPU measurements. They do not yet replace
+the complete historical benchmark or process-memory tooling. The annotation-free
+kr-domains collection and its typed contracts also have Rust integrity and
+regression consumers. Remaining Python gates and C++ import provenance are still
+tracked; this is not a completed foreign-source cleanup.
 
 Every replacement preserves the existing contract: deadlines and output ceilings,
 partial process evidence, failure classification, input/output alias protection,

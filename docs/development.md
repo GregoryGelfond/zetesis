@@ -36,6 +36,34 @@ or a supplied binary directory. Add it to `PATH`; normal solving needs no Cargo
 invocation or qualification step. A CPU-only development build uses
 `cargo build --locked -p zetesis-cli --no-default-features`.
 
+The installed commands are `zetesis`, `zetesis-bench`, `zetesis-validate`,
+`zetesis-corpus` and `zetesis-perf`. Only `zetesis` is needed to solve programs.
+The others expose development qualification and measurement libraries.
+
+## Reproduce the public corpus
+
+`examples/kr-domains` contains all 94 non-clingcon cases and their 14 shared
+encodings. Elenctic annotations have been removed from the source comments;
+their typed test contracts and exact deletion provenance remain in the sealed
+manifest. Solver execution never interprets those annotations.
+
+```sh
+zetesis-corpus verify-examples examples/kr-domains \
+  --originals validation/corpus/kr-domains
+zetesis-validate --repo . --zetesis /absolute/path/to/zetesis \
+  --clingo /absolute/path/to/clingo --report target/new-corpus-comparison.json
+zetesis-perf examples/kr-domains --zetesis /absolute/path/to/zetesis \
+  --clingo /absolute/path/to/clingo --report target/new-cpu-comparison.json
+```
+
+The first command checks integrity without running a solver. The second checks
+all 94 answer contracts; the third measures the three established CPU cases
+using complete paired comparisons. Keep the corpus unchanged during the 94-case
+run. Performance and selected-upstream campaigns also use private source copies
+and before/after seals. Run timing campaigns after builds, tests and competing
+solves stop. See the [validation guide](../crates/zetesis-validation/README.md)
+for resource limits, output interpretation and library entry points.
+
 ## Find the relevant boundary
 
 | Location | Responsibility |
@@ -155,6 +183,8 @@ zetesis devices
 cargo test --locked -p zetesis-wgpu --test hardware -- --ignored --nocapture
 cargo test --locked -p zetesis-cli -p zetesis-wgpu --all-features \
   --test formula_gpu --test hardware_formula -- --ignored --nocapture
+cargo test --locked -p zetesis-cli -p zetesis-wgpu --all-features \
+  --test lazy_gpu --test hardware_lazy -- --ignored --nocapture
 ```
 
 These named groups include Metal qualification. Shader compilation, CPU fallback

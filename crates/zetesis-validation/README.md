@@ -1,9 +1,31 @@
 # Validation tooling
 
-This package has two commands and reusable corpus, process-capture and reported-answer libraries. `zetesis-corpus`
+This package has three commands and reusable corpus, process-capture and reported-answer libraries. `zetesis-corpus`
 verifies the selected clingo fixture or compares its complete solver results.
 `zetesis-validate` runs the separate 94-case kr-domains solver campaign described
-below. Neither command is invoked by the production solver.
+below. `zetesis-perf` characterizes the three established CPU comparison cases
+using sealed inputs, complete answer families and a fixed paired schedule.
+None of these commands is invoked by the production solver.
+
+## Ordinary CPU performance characterization
+
+```sh
+zetesis-perf examples/kr-domains --zetesis /absolute/path/to/zetesis \
+  --clingo /absolute/path/to/clingo --report target/new-cpu-comparison.json
+```
+
+`performance::run(&Request)` composes the clean-corpus loader, private source
+copies, bounded process capture, display contracts and sealed input identities.
+It retains every launched sample, including failed attempts. The default schedule
+has three warmups and 21 alternating timed pairs per case, following a complete
+qualification pair. Separate `--stats` invocations observe grounding and solving
+without adding their instrumentation to the ordinary timing population.
+Publication is a separate bounded, no-clobber operation.
+
+The [protocol](../../docs/verification/ordinary-cpu-refresh-20260907/PROTOCOL.md)
+states the exact execution order, worker settings, process/output limits and
+comparison scope. This is a three-case CPU characterization; peak RSS and the
+full eager/lazy × CPU/Metal matrix remain unmeasured by this command.
 
 ## Reusable process and reported-answer boundaries
 
@@ -255,6 +277,10 @@ goes to stderr.
 The exact manifest SHA-256 is pinned in the validator; changing its whitespace,
 paths, hashes, includes or contracts requires a deliberate trusted-target update.
 Every referenced source is SHA-256 checked before any child is spawned.
+The 94-case command then executes source paths; callers must keep the collection
+unchanged during execution. It neither reserves those paths nor reseals them
+afterward. The selected and performance libraries separately use private source
+copies and before/after identity checks.
 Relative paths must stay within the corpus; include hashes must match the
 pinned schema entries. The report records the manifest hash, source hashes,
 actual reference version, process exit codes, timing, captured diagnostics,
@@ -282,9 +308,10 @@ symbols within each display.
 
 Native runs default to `zetesis --backend cpu --oracle auto --models 0 --batch-size 64
 --completion-workers 1 --max-completion-scratch-bytes 268435456` on each complete
-source graph. The previously qualified full campaign passes all 94 original cases
-under the default limits; the clean-source native campaign is a separate
-integration obligation. These results cover the pinned non-clingcon corpus and
+source graph. The integrated release campaign passes all 94 cleaned cases,
+preserving 1,931 selected model occurrences and the original contracts. The
+previously qualified campaign on original sources remains a separate historical
+record. These results cover the pinned non-clingcon corpus and
 its original contracts; broader clingo language coverage is a separate target. Optimized
 answers require per-model cost vectors and exhausted search coverage; comparison
 preserves full optimal model counts, repeated displays and repeated symbols within

@@ -4,6 +4,19 @@ Exact GPU reduct primitives for zetesis. The original static profile compiles a
 `GroundProgram` under separate grounding limits before checking candidates.
 `check_batch` performs no source grounding or lazy tuple discovery.
 
+The distinct `GpuLazyOracle` accepts a relational `Program` and frozen seed
+occurrences. It composes bounded host source scans with per-world GPU consequence
+evaluation over immutable rounds, without a complete ground-rule store.
+Demand-driven packed catalogs preserve separate world truth and frozen gates.
+Source progress and device work have separate typed statistics; failures publish
+no completed batch. Its
+[implementation and qualification boundary](../../docs/verification/lazy-device-integration-20260907/README.md)
+documents the budgets and seven explicit physical tests. All seven pass on
+Apple M4 Pro / Metal for the [recorded debug executables](../../docs/verification/lazy-device-integration-20260907/physical/README.md).
+This establishes device execution and correctness for those cases, without a
+performance or release-binary claim. The static-profile description below retains
+its narrower scope.
+
 One 64-invocation workgroup owns one frozen candidate and its 4096-atom maximum
 closure. Worlds share immutable rules, antecedent lists, and gate-carrier bits.
 Each world starts from the empty positive interpretation. Integer seed gates
@@ -210,3 +223,7 @@ in the explicit `hardware_formula` test above. A paired engineering command is
 qualification command are in the [experiment guide](../zetesis-experiments/README.md#paired-gate-projections).
 Historical hardware records qualify the retained enumerated implementation;
 they establish neither physical qualification nor performance of Bitwise.
+The later [paired physical experiment](../../docs/verification/gate-projection-20260907/physical/README.md)
+qualifies both variants for its recorded synthetic batches and executable.
+Its mixed timing results do not establish an ordinary-solver speedup or change
+the default projection.

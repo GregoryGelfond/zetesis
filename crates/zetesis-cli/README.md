@@ -278,17 +278,29 @@ For the closure specialization:
 | Grounder | CPU | Automatic hardware | Explicit GPU |
 |---|---|---|---|
 | `auto` | Lazy source joins | Lazy CPU first; possible later static GPU batches | Static lowering |
-| `lazy` | Source joins without a complete ground-rule store | CPU throughout | Refused |
+| `lazy` | Source joins without a complete ground-rule store | CPU throughout | Host source joins and per-world GPU consequences |
 | `eager` | Packed static closure scans | Retains the same static graph across GPU attempts and CPU fallback | Static lowering |
 
 Static lowering is bounded by `--max-atoms`, `--max-substitutions` and
-`--max-ground-rules`. GPU closure currently supports at most 4,096 atoms. Lazy
+`--max-ground-rules`. Static GPU closure supports at most 4,096 atoms. Lazy
 CPU checking instead uses `--max-work`, `--max-atoms` and candidate/carrier bounds.
 Its charged operations differ from eager scans. General formula execution uses
 eager admission on both CPU and explicit GPUs. `--backend auto` keeps the CPU
-formula route pending a measured scheduling crossover. Lazy GPU templates,
-GPU candidate search, exact GPU residual search and GPU objective scoring remain
+formula route pending a measured scheduling crossover. GPU candidate search,
+exact GPU residual search and GPU objective scoring remain
 future work; the current formula GPU route is explicitly hybrid.
+
+The explicit lazy GPU route scans source instances on the host and evaluates
+immutable per-world consequences on the device. It grows the demanded catalog
+under `--max-atoms`, shares `--max-work` across each batch's source rounds, and
+splits `--max-batch-bytes` between coordinator payload and transport. Neither
+allowance is an RSS cap. `LazyExecutionStatistics` exposes source work, actual
+dispatches, transfers and candidate accounting independently of output formatting.
+Four ordinary CLI tests pass on Apple M4 Pro / Metal for the prepared debug
+artifact, including model parity and partial-result accounting. The
+[physical record](../../docs/verification/lazy-device-integration-20260907/physical/README.md)
+states its executable identity and limits; it is not release-binary or performance
+qualification.
 
 ## Source and objectives
 
