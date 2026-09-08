@@ -52,7 +52,7 @@ pub struct Case {
 pub struct Configuration {
     /// One through 24 cases, in caller order.
     pub cases: Vec<Case>,
-    /// Require physical Metal or explicitly select only the two CPU routes.
+    /// Require physical Metal/Vulkan or explicitly select only the two CPU routes.
     pub backend: Backend,
     /// Preparation iterations per route, zero through six.
     pub warmups: usize,
@@ -107,7 +107,7 @@ impl Configuration {
 /// Installed command view of matched certificate execution.
 #[derive(Clone, Debug, Args)]
 pub struct Options {
-    /// Require Metal or explicitly select scalar/Rayon checking only.
+    /// Require Metal/Vulkan or explicitly select scalar/Rayon checking only.
     #[arg(long, value_enum, default_value_t)]
     pub backend: Backend,
     /// Total atoms; widths above eight use general exact reduct references.

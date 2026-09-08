@@ -33,7 +33,7 @@ fn cpu_selection_cannot_claim_projection_qualification() {
     let error = run_formula_projection(&projection_options("cpu"), &mut output).unwrap_err();
     assert!(matches!(
         error,
-        FormulaBenchmarkError::ProjectionRequiresMetal
+        FormulaBenchmarkError::ProjectionRequiresGpu
     ));
     assert!(output.is_empty());
 }
@@ -79,7 +79,7 @@ fn projection_help_states_the_execution_scope() {
     let text = help.to_string();
     for scope in [
         "per-candidate CPU quotas",
-        "Requires physical Metal",
+        "Requires physical Metal or Vulkan",
         "Hybrid residual checks stay serial",
         "cumulative-budget",
     ] {
@@ -124,25 +124,35 @@ fn partial_projection_headers_never_qualify_execution() {
     // Six scope/configuration lines precede the pool record and device setup.
     // Every injected failure therefore occurs before hardware discovery.
     const CONFIGURATION_LINES: usize = 6;
-    let mut options = projection_options("metal");
-    options.cpu_workers = std::num::NonZeroUsize::new(1).unwrap();
-    for retained_lines in 1..=CONFIGURATION_LINES {
-        let mut output = HeaderPrefix {
-            remaining_lines: retained_lines,
-            bytes: Vec::new(),
-        };
-        let error = run_formula_projection(&options, &mut output).unwrap_err();
-        let FormulaBenchmarkError::Output(cause) = &error else {
-            panic!("header failure reached device initialization: {error}");
-        };
-        assert_eq!(cause.kind(), io::ErrorKind::BrokenPipe);
-        assert_eq!(
-            error.source().unwrap().to_string(),
-            "projection header closed"
-        );
-        let text = String::from_utf8(output.bytes).unwrap();
-        assert_eq!(text.lines().count(), retained_lines);
-        assert!(!text.contains("status=PASS"));
-        assert!(!text.contains("device_init_ns="));
+    for backend in ["metal", "vulkan"] {
+        let mut options = projection_options(backend);
+        options.cpu_workers = std::num::NonZeroUsize::new(1).unwrap();
+        for retained_lines in 1..=CONFIGURATION_LINES {
+            let mut output = HeaderPrefix {
+                remaining_lines: retained_lines,
+                bytes: Vec::new(),
+            };
+            let error = run_formula_projection(&options, &mut output).unwrap_err();
+            let FormulaBenchmarkError::Output(cause) = &error else {
+                panic!("header failure reached device initialization: {error}");
+            };
+            assert_eq!(cause.kind(), io::ErrorKind::BrokenPipe);
+            assert_eq!(
+                error.source().unwrap().to_string(),
+                "projection header closed"
+            );
+            let text = String::from_utf8(output.bytes).unwrap();
+            assert_eq!(text.lines().count(), retained_lines);
+            if retained_lines >= 2 {
+                assert!(text.contains(&format!(
+                    "projection_enumerated={backend}-with-cpu-residuals"
+                )));
+                assert!(text.contains(&format!(
+                    "projection_bitwise={backend}-bitwise-with-cpu-residuals"
+                )));
+            }
+            assert!(!text.contains("status=PASS"));
+            assert!(!text.contains("device_init_ns="));
+        }
     }
 }

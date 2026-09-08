@@ -15,6 +15,10 @@ pub enum Route {
     MetalFresh,
     /// A separate GPU instance retained across this case's observations.
     MetalResident,
+    /// Dedicated Vulkan instance cleared before every sample; clearing is untimed.
+    VulkanFresh,
+    /// A separate Vulkan instance retained across this case's observations.
+    VulkanResident,
 }
 
 /// Disjoint sample populations; initial is not a process-cold cache claim.
@@ -425,7 +429,7 @@ fn duration<S: Serializer>(value: &std::time::Duration, serializer: S) -> Result
 impl Serialize for Configuration {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         ConfigurationView {
-            cases: &self.cases, backend: match self.backend { crate::Backend::Cpu => "cpu", crate::Backend::Metal => "metal" },
+            cases: &self.cases, backend: self.backend.label(),
             warmups: self.warmups, repetitions: self.repetitions.get(), workers: self.workers.get(),
             residual_policy: "serial occurrence-ordered native general reduct queries on every route",
             plan_limits: &self.plan_limits, certificate_limits: &self.certificate_limits,

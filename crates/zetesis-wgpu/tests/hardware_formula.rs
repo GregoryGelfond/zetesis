@@ -1,5 +1,8 @@
-//! Explicit Metal qualification of the partial frozen-query primitive.
+//! Explicit physical API qualification of the partial frozen-query primitive.
 //! No adapter absence or residual query is replaced by a CPU GPU-result claim.
+
+#[path = "support/physical.rs"]
+mod physical;
 
 use zetesis_cpu::Control;
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Limits, Node, Theory, Verdict, check};
@@ -7,6 +10,18 @@ use zetesis_wgpu::{
     FormulaLimits, FormulaVerdict, GateProjection, GpuErrorKind, GpuFormulaOracle, GpuOptions,
     ResidualReason,
 };
+
+fn oracle(backend: physical::Backend, projection: GateProjection) -> GpuFormulaOracle {
+    let oracle = GpuFormulaOracle::new_selected_with_projection(
+        GpuOptions::default(),
+        backend.selection(),
+        projection,
+    )
+    .unwrap();
+    assert_eq!(oracle.projection(), projection);
+    backend.verify(oracle.info());
+    oracle
+}
 
 fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
     Theory::new(atoms, nodes, roots, AdmissionLimits::default()).unwrap()
@@ -93,16 +108,12 @@ fn compare(oracle: &mut GpuFormulaOracle, theory: &Theory) -> (usize, usize) {
 #[ignore = "requires an actual Metal GPU; explicit hardware qualification only"]
 fn metal_formula_queries_preserve_exact_frozen_semantics_and_residency() {
     for projection in GateProjection::ALL {
-        qualify_frozen_queries(projection);
+        qualify_frozen_queries(physical::Backend::Metal, projection);
     }
 }
 
-fn qualify_frozen_queries(projection: GateProjection) {
-    let mut oracle =
-        GpuFormulaOracle::new_metal_with_projection(GpuOptions::default(), projection).unwrap();
-    assert_eq!(oracle.projection(), projection);
-    assert_eq!(oracle.info().backend(), "Metal");
-    assert!(oracle.info().is_hardware_gpu());
+fn qualify_frozen_queries(backend: physical::Backend, projection: GateProjection) {
+    let mut oracle = oracle(backend, projection);
     println!(
         "formula projection={} adapter={}",
         projection.label(),
@@ -194,13 +205,12 @@ fn qualify_frozen_queries(projection: GateProjection) {
 #[ignore = "requires an actual Metal GPU; explicit hardware qualification only"]
 fn metal_formula_limits_resize_identity_and_word_boundaries_remain_explicit() {
     for projection in GateProjection::ALL {
-        qualify_resources(projection);
+        qualify_resources(physical::Backend::Metal, projection);
     }
 }
 
-fn qualify_resources(projection: GateProjection) {
-    let mut oracle =
-        GpuFormulaOracle::new_metal_with_projection(GpuOptions::default(), projection).unwrap();
+fn qualify_resources(backend: physical::Backend, projection: GateProjection) {
+    let mut oracle = oracle(backend, projection);
     let graph = theory(1, vec![Node::Atom(0)], vec![0]);
     let inputs = candidates(&graph);
     for (limits, expected) in [
@@ -298,4 +308,20 @@ fn qualify_resources(projection: GateProjection) {
         .propagate_batch(&graph, &inputs, FormulaLimits::default())
         .unwrap();
     assert!(oracle.last_batch_stats().unwrap().theory_uploaded);
+}
+
+#[test]
+#[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
+fn vulkan_formula_queries_preserve_frozen_semantics() {
+    for projection in GateProjection::ALL {
+        qualify_frozen_queries(physical::Backend::Vulkan, projection);
+    }
+}
+
+#[test]
+#[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
+fn vulkan_formula_resource_boundaries_remain_explicit() {
+    for projection in GateProjection::ALL {
+        qualify_resources(physical::Backend::Vulkan, projection);
+    }
 }

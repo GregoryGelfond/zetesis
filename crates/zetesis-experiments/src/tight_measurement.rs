@@ -40,7 +40,7 @@ pub enum Error {
     /// Physical setup failed; no fallback is used.
     Device(zetesis_wgpu::GpuError),
     /// Physical classification stopped or failed.
-    Metal(zetesis_wgpu::TightGpuError),
+    Gpu(zetesis_wgpu::TightGpuError),
     /// Complete status, certificate witness or reduct counterexample disagrees.
     Parity,
     /// Successful device activity violates the declared route/cache contract.
@@ -59,7 +59,7 @@ impl fmt::Display for Error {
             Self::Residual(error) => error.fmt(formatter),
             Self::Pool(error) => error.fmt(formatter),
             Self::Device(error) => error.fmt(formatter),
-            Self::Metal(error) => error.fmt(formatter),
+            Self::Gpu(error) => error.fmt(formatter),
             Self::Parity => {
                 formatter.write_str("tight checks disagree with complete reduct references")
             }
@@ -79,7 +79,7 @@ impl std::error::Error for Error {
             Self::Residual(error) => Some(error),
             Self::Pool(error) => Some(error),
             Self::Device(error) => Some(error),
-            Self::Metal(error) => Some(error),
+            Self::Gpu(error) => Some(error),
             Self::Output(error) => Some(error),
             Self::Configuration(_) | Self::Parity | Self::DeviceWork => None,
         }

@@ -1,7 +1,8 @@
 # Fedora 44 / Radeon 780M qualification plan
 
-Updated 2026-09-08 against the qualified compiled source at
-`990104309b13641ee907e9b799f9e2566cfdf18f`.
+Updated 2026-09-08. This includes the prepared Vulkan benchmark/fixture-selection
+interfaces following the `990104309b13641ee907e9b799f9e2566cfdf18f` checkpoint.
+Portable qualification of those interfaces is distinct from physical execution.
 This is a preparation plan, not a laptop execution or qualification record.
 The eventual campaign must identify its frozen Linux source and binaries.
 
@@ -116,13 +117,34 @@ independent CPU oracle and prints the selected API. It uses automatic selection;
 only a retained result actually naming Vulkan can support a Vulkan claim. This
 single test does not qualify formula, lazy or tight execution.
 
-## Gaps before a complete, correctly labelled campaign
+## Qualification and remaining campaign interfaces
 
-| Boundary | Current gap | Bounded extension |
+All five device experiment selections now accept `zetesis-bench --backend vulkan`
+(the flag follows a subcommand when one is used). Static/formula TSV output uses
+Vulkan labels; lazy JSON uses `vulkan-union`/`vulkan-worlds`, and tight JSON uses
+`vulkan-fresh`/`vulkan-resident`. Actual adapter metadata remains in setup records.
+Existing Metal labels/defaults are preserved. CPU selection constructs no GPU;
+formula-projection requires an explicit physical API.
+
+The wgpu fixtures expose 15 named Vulkan checks sharing their semantic, resource,
+residency and lifecycle assertions with the Metal checks:
+
+```sh
+cargo test --locked -p zetesis-wgpu --lib --test hardware --test hardware_formula \
+  --test hardware_tight --test hardware_lazy vulkan -- --ignored --nocapture
+```
+
+This selects Vulkan explicitly, verifies the actual API and hardware category,
+and fails on an unavailable adapter. A portable test listing is not a hardware
+pass. Run the frozen native binaries on the laptop before claiming qualification.
+Do not run all ignored tests unfiltered on Linux: the retained Metal checks
+intentionally continue to require Metal.
+
+| Boundary | Current status | Remaining work |
 | --- | --- | --- |
-| Repeated end-to-end matrix | `zetesis-perf` profiles and `selected::Backend` admit CPU/Metal only; matrix telemetry explicitly parses Metal | Add explicit Vulkan eager/lazy profiles, actual Vulkan route validation and negative controls; keep old Metal identities/results intact |
-| Matched primitive benchmarks | `zetesis-bench` static, formula, lazy and tight use CPU/Metal configuration; lazy/tight routes explicitly name Metal | Parameterize requested native API and retain actual API/adapter in each device result; introduce Vulkan-specific or backend-neutral truthful route identities rather than writing Vulkan data under a Metal label |
-| Physical regression tests | Formula, tight, lazy, the new transport tests and CLI physical groups construct Metal explicitly | Factor fixture assertions from selected-adapter creation; add an explicit hard-failing Vulkan qualification selection and check actual API/category. Preserve Metal coverage |
+| Repeated end-to-end matrix | `zetesis-perf` profiles and `selected::Backend` still admit CPU/Metal only; matrix telemetry explicitly parses Metal | Add explicit Vulkan eager/lazy profiles, actual Vulkan route validation and negative controls; keep old Metal identities/results intact |
+| Matched primitive benchmarks | Static, formula, projection, lazy and tight accept explicit Vulkan with distinct labels and unchanged Metal defaults | Run frozen Linux qualification and matched quiet measurements; parser support is not execution evidence |
+| Physical regression tests | All four wgpu oracle profiles and private lazy transport have explicit Vulkan wrappers | Qualify the laptop; ordinary CLI physical fixture adaptation is a separate integration item |
 | Hardware evidence | Inventory gives a static eligibility summary; no single installed command produces the entire qualification archive | Compose the existing commands into a qualification archive preserving every log, exit and report |
 
 Source locations: `crates/zetesis-cli/src/{options,devices}.rs`,
@@ -134,8 +156,9 @@ Source locations: `crates/zetesis-cli/src/{options,devices}.rs`,
 and `crates/zetesis-wgpu/tests/hardware*.rs`.
 
 Do not run `--backend metal` on Fedora or force a software/Noop adapter to make
-these checks appear successful. The existing constructors already support a
-proper Vulkan adaptation; unsupported benchmark enums are measurement-tool gaps.
+these checks appear successful. The constructors and primitive benchmarks support
+explicit Vulkan; the remaining repeated whole-solve matrix restriction is a
+measurement-tool gap.
 
 ## One manually transferable result bundle
 

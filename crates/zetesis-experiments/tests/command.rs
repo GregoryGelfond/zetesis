@@ -160,7 +160,7 @@ fn grounding_command_retains_complete_model_evidence() {
 }
 
 #[test]
-fn projection_command_cannot_qualify_without_metal() {
+fn projection_command_refuses_cpu_only_selection() {
     let capture = invoke(&["formula-projection", "--backend", "cpu"]);
     assert_eq!(capture.exit().unwrap().code, Some(2));
     assert!(capture.stdout().is_empty());
@@ -168,7 +168,7 @@ fn projection_command_cannot_qualify_without_metal() {
         capture
             .stderr_text()
             .unwrap()
-            .contains("formula-projection requires --backend metal")
+            .contains("formula-projection requires --backend metal or vulkan")
     );
 }
 

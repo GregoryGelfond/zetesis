@@ -3,9 +3,8 @@ use zetesis_cpu::lazy;
 use zetesis_wgpu::LazyGpuStatistics;
 
 use super::{Case, Configuration};
-use crate::Backend;
 
-/// Measured execution strategy; only Metal variants submit physical device work.
+/// Measured execution strategy; only Metal/Vulkan variants submit physical device work.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Route {
@@ -21,6 +20,19 @@ pub enum Route {
     MetalUnion,
     /// World-filtered source scans with physical Metal consequences.
     MetalWorlds,
+    /// Union source scans with physical Vulkan consequences.
+    VulkanUnion,
+    /// World-filtered source scans with physical Vulkan consequences.
+    VulkanWorlds,
+}
+
+impl Route {
+    pub(super) const fn is_device(self) -> bool {
+        matches!(
+            self,
+            Self::MetalUnion | Self::MetalWorlds | Self::VulkanUnion | Self::VulkanWorlds
+        )
+    }
 }
 
 /// Sample population; warmups and initial cases are never timed repetitions.
@@ -71,7 +83,7 @@ impl From<lazy::Progress> for SourceWork {
     }
 }
 
-/// Actual submitted Metal work; transfers and retained buffer capacity are
+/// Actual submitted device work; transfers and retained buffer capacity are
 /// separate quantities. Neither measures driver storage or process RSS.
 #[derive(Clone, Copy, Debug, Serialize)]
 pub struct DeviceWork {
@@ -212,7 +224,7 @@ pub enum Event<'a> {
         message: String,
         /// Charged incomplete source progress, if available.
         source: Option<SourceWork>,
-        /// Submitted physical work before failure, if this was a Metal route.
+        /// Submitted physical work before failure, if this was a physical GPU route.
         device: Option<DeviceWork>,
     },
     /// All requested routes, cases and populations completed.
@@ -276,10 +288,7 @@ impl Serialize for Configuration {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         ConfigurationView {
             cases: &self.cases,
-            backend: match self.backend {
-                Backend::Metal => "metal",
-                Backend::Cpu => "cpu",
-            },
+            backend: self.backend.label(),
             warmups: self.warmups,
             repetitions: self.repetitions,
             workers: self.workers,

@@ -4,21 +4,23 @@ use super::*;
 use crate::lazy_measurement::{Case, Family};
 
 #[test]
-fn six_iterations_balance_metal_route_positions() {
+fn six_iterations_balance_physical_route_positions() {
     let (_, mut configuration) = fixture();
     configuration.repetitions = NonZeroUsize::new(6).unwrap();
-    let slots = schedule(&configuration, &METAL_ROUTES)
-        .filter(|slot| slot.phase == Phase::Timed)
-        .collect::<Vec<_>>();
-    assert_eq!(slots.len(), 36);
-    for route in METAL_ROUTES {
-        let mut positions = slots
-            .iter()
-            .filter(|slot| slot.route == route)
-            .map(|slot| slot.position)
+    for routes in [METAL_ROUTES, VULKAN_ROUTES] {
+        let slots = schedule(&configuration, &routes)
+            .filter(|slot| slot.phase == Phase::Timed)
             .collect::<Vec<_>>();
-        positions.sort_unstable();
-        assert_eq!(positions, [0, 1, 2, 3, 4, 5]);
+        assert_eq!(slots.len(), 36);
+        for route in routes {
+            let mut positions = slots
+                .iter()
+                .filter(|slot| slot.route == route)
+                .map(|slot| slot.position)
+                .collect::<Vec<_>>();
+            positions.sort_unstable();
+            assert_eq!(positions, [0, 1, 2, 3, 4, 5]);
+        }
     }
 }
 
@@ -167,6 +169,7 @@ fn inconsistent_device_counters_refuse_qualification() {
 #[test]
 fn device_observations_preserve_recorded_units() {
     let work = view::DeviceWork::from(zetesis_wgpu::LazyGpuStatistics {
+        transport_replacements: zetesis_wgpu::LazyTransportReplacements::default(),
         dispatches: 2,
         world_instances: 3,
         uploaded_bytes: 4,

@@ -2,7 +2,7 @@ use std::{io, time::Instant};
 
 use zetesis_cpu::Control;
 use zetesis_ferraris::TightVerdict;
-use zetesis_wgpu::{GpuOptions, GpuTightOracle};
+use zetesis_wgpu::{GpuOptions, GpuSelection, GpuTightOracle};
 
 use super::{
     Activity, Configuration, DeviceWork, Error, Event, Observation, Phase, Route, Sample,
@@ -17,6 +17,13 @@ const METAL_ROUTES: &[Route] = &[
     Route::Rayon,
     Route::MetalFresh,
     Route::MetalResident,
+];
+
+const VULKAN_ROUTES: &[Route] = &[
+    Route::Scalar,
+    Route::Rayon,
+    Route::VulkanFresh,
+    Route::VulkanResident,
 ];
 
 struct Resources {
@@ -50,9 +57,15 @@ impl Resources {
             fresh: None,
             resident: None,
         };
-        if configuration.backend == crate::Backend::Metal {
-            let fresh = device(Route::MetalFresh, control, emit)?;
-            let resident = device(Route::MetalResident, control, emit)?;
+        let physical_routes = match configuration.backend {
+            crate::Backend::Cpu => None,
+            crate::Backend::Metal => Some((Route::MetalFresh, Route::MetalResident)),
+            crate::Backend::Vulkan => Some((Route::VulkanFresh, Route::VulkanResident)),
+        };
+        if let Some((fresh_route, resident_route)) = physical_routes {
+            let selection = configuration.backend.selection().ok_or(Error::DeviceWork)?;
+            let fresh = device(fresh_route, selection, control, emit)?;
+            let resident = device(resident_route, selection, control, emit)?;
             if fresh.info().metadata() != resident.info().metadata() {
                 return Err(Error::DeviceWork);
             }
@@ -65,12 +78,14 @@ impl Resources {
 
 fn device(
     route: Route,
+    selection: GpuSelection,
     control: &Control,
     emit: &mut impl FnMut(&Event<'_>) -> io::Result<()>,
 ) -> Result<GpuTightOracle, Error> {
     control.poll().map_err(Error::Cpu)?;
     let start = Instant::now();
-    let oracle = GpuTightOracle::new_metal(GpuOptions::default()).map_err(Error::Device)?;
+    let oracle =
+        GpuTightOracle::new_selected(GpuOptions::default(), selection).map_err(Error::Device)?;
     publish(
         emit,
         &Event::Setup {
@@ -133,10 +148,10 @@ pub fn measure_with_control(
     )?;
     control.poll().map_err(Error::Cpu)?;
     let mut resources = Resources::new(configuration, control, &mut emit)?;
-    let routes = if configuration.backend == crate::Backend::Cpu {
-        CPU_ROUTES
-    } else {
-        METAL_ROUTES
+    let routes = match configuration.backend {
+        crate::Backend::Cpu => CPU_ROUTES,
+        crate::Backend::Metal => METAL_ROUTES,
+        crate::Backend::Vulkan => VULKAN_ROUTES,
     };
     let mut samples = 0;
     for (case_index, &case) in configuration.cases.iter().enumerate() {
@@ -243,7 +258,7 @@ fn observe(
     emit: &mut impl FnMut(&Event<'_>) -> io::Result<()>,
 ) -> Result<Sample, Error> {
     // A dedicated fresh instance cannot invalidate the other route's residency.
-    if observation.route == Route::MetalFresh {
+    if matches!(observation.route, Route::MetalFresh | Route::VulkanFresh) {
         resources
             .fresh
             .as_mut()
@@ -328,9 +343,9 @@ fn classify(
             control,
             &mut observation.activity,
         ),
-        Route::MetalFresh | Route::MetalResident => {
+        Route::MetalFresh | Route::MetalResident | Route::VulkanFresh | Route::VulkanResident => {
             let oracle = match observation.route {
-                Route::MetalFresh => resources.fresh.as_mut(),
+                Route::MetalFresh | Route::VulkanFresh => resources.fresh.as_mut(),
                 _ => resources.resident.as_mut(),
             }
             .ok_or(Error::DeviceWork)?;
@@ -341,7 +356,7 @@ fn classify(
                 control,
             );
             observation.activity.device = Some(device_work(oracle));
-            let checks = result.map_err(Error::Metal)?;
+            let checks = result.map_err(Error::Gpu)?;
             let mut verdicts = reserve(checks.len())?;
             verdicts.extend(checks.iter().map(zetesis_wgpu::TightGpuCheck::verdict));
             observation.activity.classified = verdicts.len();
@@ -408,10 +423,12 @@ fn validate_device(
         || device.scheduled_work != device.completed_work
         || device.uploaded_bytes == 0
         || device.downloaded_bytes == 0
-        || (observation.route == Route::MetalFresh
+        || (matches!(observation.route, Route::MetalFresh | Route::VulkanFresh)
             && (!residency.theory_uploaded || !residency.transport_allocated))
-        || (observation.route == Route::MetalResident
-            && observation.phase != Phase::Initial
+        || (matches!(
+            observation.route,
+            Route::MetalResident | Route::VulkanResident
+        ) && observation.phase != Phase::Initial
             && (residency.theory_uploaded || residency.transport_allocated))
     {
         return Err(Error::DeviceWork);

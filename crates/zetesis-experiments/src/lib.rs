@@ -8,6 +8,7 @@
 //! exact source/subject comparison and complete native solving outside its timer.
 #![forbid(unsafe_code)]
 
+mod backend;
 mod fixtures;
 mod formula_completion;
 mod formula_fixtures;
@@ -18,12 +19,13 @@ pub mod grounding;
 pub mod lazy_measurement;
 pub mod tight_measurement;
 
+pub use backend::Backend;
 pub use fixtures::{BenchmarkFixture, Family};
 pub use formula_fixtures::{FormulaFamily, FormulaFixture};
 pub use formula_measurement::{
     FormulaBenchmarkError, FormulaOptions, run_formula, run_formula_projection,
 };
-pub use measurement::{Backend, BenchmarkError, Options, run};
+pub use measurement::{BenchmarkError, Options, run};
 
 /// Standalone experiment selection, retaining the existing static command.
 #[derive(Debug, clap::Parser)]
@@ -52,7 +54,7 @@ pub enum Experiment {
     Formula(FormulaOptions),
     /// Compare exact gate projections with per-candidate CPU quotas.
     ///
-    /// Requires physical Metal. Hybrid residual checks stay serial; ordinary
+    /// Requires physical Metal or Vulkan. Hybrid residual checks stay serial; ordinary
     /// cumulative-budget scheduling, outer search and grounding are excluded.
     FormulaProjection(FormulaOptions),
     /// Attribute bounded original-source formula admission on CPU.

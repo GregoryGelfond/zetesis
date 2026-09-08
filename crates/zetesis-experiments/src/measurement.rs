@@ -1,5 +1,5 @@
-use crate::{Family, fixtures};
-use clap::{Parser, ValueEnum};
+use crate::{Backend, Family, fixtures};
+use clap::Parser;
 use std::fmt;
 use std::hint::black_box;
 use std::io::{self, Write};
@@ -9,21 +9,11 @@ use zetesis_core::{GroundProgram, Seed};
 use zetesis_cpu::{BatchOracle, Control, Limits, StaticCheck, check_static};
 use zetesis_wgpu::{GpuCheck, GpuLimits, GpuOptions, GpuOracle, MAX_ATOMS};
 
-/// Physical Metal qualification is the default; CPU-only measurements are explicit.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
-pub enum Backend {
-    /// Require a hardware GPU through Metal; never fall back to CPU.
-    #[default]
-    Metal,
-    /// Measure CPU baselines only, making no GPU measurement claim.
-    Cpu,
-}
-
 /// Explicitly bounded experiment dimensions. All timings use a monotonic clock.
 #[derive(Clone, Debug, Parser)]
 #[command(
     name = "zetesis-bench",
-    about = "Exact static-oracle parity and CPU/Metal measurements"
+    about = "Exact static-oracle parity and CPU/GPU measurements"
 )]
 pub struct Options {
     /// Backend qualification to run.
@@ -71,7 +61,7 @@ pub enum BenchmarkError {
     Batch(zetesis_cpu::BatchError),
     /// CPU logical work was incomplete.
     Stop(zetesis_cpu::Stop),
-    /// Metal adapter, command, capacity or transport failure.
+    /// Selected physical adapter, command, capacity or transport failure.
     Gpu(zetesis_wgpu::GpuError),
     /// A backend returned a different result for an identical frozen candidate.
     Parity,
@@ -204,7 +194,7 @@ impl Row<'_> {
     }
 }
 
-/// Require Metal when selected, compare all results, and write TSV timings.
+/// Require the selected physical API, compare all results, and write TSV timings.
 /// Fixture/static compilation, pool/device initialization and initial-case dispatch are
 /// reported separately. Warm dispatch timings include host packing and readback;
 /// correctness comparison is outside each timed region. This is an oracle
@@ -225,14 +215,20 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<(), BenchmarkEr
     )?;
     writeln!(
         output,
-        "# timing_order=cpu-scalar,cpu-rayon,metal scope=static-oracle-host-through-readback"
+        "# timing_order=cpu-scalar,cpu-rayon{} scope=static-oracle-host-through-readback",
+        match options.backend {
+            Backend::Cpu => "",
+            Backend::Metal => ",metal",
+            Backend::Vulkan => ",vulkan",
+        }
     )?;
     let started = Instant::now();
-    let mut gpu = if options.backend == Backend::Metal {
-        Some(GpuOracle::new_metal(GpuOptions::default()).map_err(BenchmarkError::Gpu)?)
-    } else {
-        None
-    };
+    let mut gpu = options
+        .backend
+        .selection()
+        .map(|selection| GpuOracle::new_selected(GpuOptions::default(), selection))
+        .transpose()
+        .map_err(BenchmarkError::Gpu)?;
     if let Some(oracle) = &gpu {
         writeln!(
             output,
@@ -332,7 +328,7 @@ impl Case<'_> {
             atoms: graph.atom_count(),
             rules: graph.rules().len(),
             batch,
-            backend: "metal",
+            backend: options.backend.label(),
         };
         let gpu_limits = GpuLimits {
             max_candidates: batch,
@@ -351,7 +347,7 @@ impl Case<'_> {
                 writeln!(output, "# residency {stats:?}")?;
             }
         }
-        // Warm all CPU paths before timing; the first frozen batch already warmed Metal.
+        // Warm all CPU paths before timing; the first frozen batch already warmed the selected device.
         cpu_parity(&expected, &parallel(pool, graph, &seeds, limits, control)?)?;
         for repetition in 0..options.repetitions.get() {
             let seeds = fixtures::seeds(graph, batch, repetition + 1);
@@ -379,7 +375,7 @@ impl Case<'_> {
                 {
                     return Err(BenchmarkError::Residency);
                 }
-                row.backend = "metal";
+                row.backend = options.backend.label();
                 row.emit(output, "warm", repetition, elapsed)?;
                 if let Some(stats) = oracle.last_batch_stats() {
                     writeln!(output, "# residency {stats:?}")?;

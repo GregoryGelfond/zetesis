@@ -35,7 +35,7 @@ pub struct Case {
 pub struct Configuration {
     /// At most 64 cases, in caller order.
     pub cases: Vec<Case>,
-    /// Require physical Metal, or explicitly measure CPU routes only.
+    /// Require physical Metal/Vulkan, or explicitly measure CPU routes only.
     pub backend: Backend,
     /// Warm iterations per case, zero through six.
     pub warmups: usize,
@@ -45,7 +45,7 @@ pub struct Configuration {
     pub workers: NonZeroUsize,
     /// Scalar/Rayon budget per candidate.
     pub cpu_limits: Limits,
-    /// Round-source budget per whole batch; shared by portable and Metal routes.
+    /// Round-source budget per whole batch; shared by portable and GPU routes.
     pub source_limits: lazy::Limits,
     /// Physical transport budget per nonempty chunk.
     pub gpu_limits: GpuLimits,
@@ -77,7 +77,7 @@ impl Configuration {
 /// Command-line view of a bounded matched-source measurement configuration.
 #[derive(Clone, Debug, Args)]
 pub struct Options {
-    /// Require Metal, or explicitly select CPU-only measurement.
+    /// Require Metal/Vulkan, or explicitly select CPU-only measurement.
     #[arg(long, value_enum, default_value_t)]
     pub backend: Backend,
     /// Values per positive predicate; the union join can contain width cubed rows.
@@ -103,7 +103,7 @@ pub struct Options {
     /// Threads in the independently owned scalar-checking Rayon pool.
     #[arg(long, default_value = "4")]
     pub workers: NonZeroUsize,
-    /// Maximum source instances in one portable/Metal consequence chunk.
+    /// Maximum source instances in one portable/GPU consequence chunk.
     #[arg(long, default_value = "256")]
     pub chunk_rules: NonZeroUsize,
     /// Work per scalar candidate and, separately, per whole round-source batch.

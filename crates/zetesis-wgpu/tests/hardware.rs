@@ -1,8 +1,12 @@
 //! Explicit hardware qualification, separate from portable unit tests.
-//! Run with `cargo test -p zetesis-wgpu --test hardware -- --ignored --nocapture`.
+//! Select the intended API, for example with
+//! `cargo test -p zetesis-wgpu --test hardware vulkan -- --ignored --nocapture`.
 //! Adapter absence/refusal fails this requested qualification rather than
 //! silently replacing it with a CPU simulation.
 #![forbid(unsafe_code)]
+
+#[path = "support/physical.rs"]
+mod physical;
 
 use std::collections::BTreeSet;
 
@@ -160,11 +164,19 @@ fn compare(oracle: &mut GpuOracle, graph: &GroundProgram) -> usize {
 #[test]
 #[ignore = "requires an actual Metal GPU; run this hardware qualification explicitly"]
 fn metal_constructor_executes_resident_batches_without_fallback() {
-    let mut oracle =
-        GpuOracle::new_metal(GpuOptions::default()).expect("physical Metal adapter is available");
-    assert_eq!(oracle.info().backend(), "Metal");
-    assert!(oracle.info().is_hardware_gpu());
-    println!("Metal adapter={}", oracle.info().name());
+    qualify_constructor_executes_resident_batches_without_fallback(physical::Backend::Metal);
+}
+
+#[test]
+#[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
+fn vulkan_constructor_executes_resident_batches_without_fallback() {
+    qualify_constructor_executes_resident_batches_without_fallback(physical::Backend::Vulkan);
+}
+
+fn qualify_constructor_executes_resident_batches_without_fallback(backend: physical::Backend) {
+    let mut oracle = GpuOracle::new_selected(GpuOptions::default(), backend.selection())
+        .expect("requested physical GPU must be available");
+    backend.verify(oracle.info());
     let graph = compile(vec![
         rule(Some("a"), &[], &["a"], &[]),
         rule(Some("b"), &["a"], &[], &[]),
@@ -178,8 +190,21 @@ fn metal_constructor_executes_resident_batches_without_fallback() {
 #[test]
 #[ignore = "requires an actual GPU; run this hardware qualification explicitly"]
 fn exact_static_oracle_matches_independent_cpu_closures() {
-    let mut oracle =
-        GpuOracle::new(GpuOptions::default()).expect("physical GPU adapter is available");
+    let oracle = GpuOracle::new(GpuOptions::default()).expect("physical GPU adapter is available");
+    qualify_static(oracle);
+}
+
+#[test]
+#[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
+fn vulkan_static_oracle_matches_independent_closures() {
+    let backend = physical::Backend::Vulkan;
+    let oracle = GpuOracle::new_selected(GpuOptions::default(), backend.selection())
+        .expect("requested physical Vulkan adapter must be available");
+    backend.verify(oracle.info());
+    qualify_static(oracle);
+}
+
+fn qualify_static(mut oracle: GpuOracle) {
     assert!(oracle.info().is_hardware_gpu());
     println!(
         "adapter={} backend={} type={}",

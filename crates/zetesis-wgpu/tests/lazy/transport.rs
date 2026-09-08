@@ -136,15 +136,22 @@ fn transport_observation_counters_refuse_overflow() {
     });
 }
 
-fn metal() -> GpuLazyOracle {
+fn oracle(backend: GpuBackendPreference) -> GpuLazyOracle {
     let oracle = GpuLazyOracle::new_selected(
         GpuOptions::default(),
         GpuSelection {
-            backend: GpuBackendPreference::Metal,
+            backend,
             vendor_id: None,
         },
     )
-    .expect("physical Metal is required for this explicit transport qualification");
+    .expect("requested physical API is required for this transport qualification");
+    let expected = match backend {
+        GpuBackendPreference::Metal => "Metal",
+        GpuBackendPreference::Vulkan => "Vulkan",
+        _ => panic!("transport qualification requires an explicit Metal or Vulkan API"),
+    };
+    assert_eq!(oracle.info().backend(), expected);
+    assert!(oracle.info().is_hardware_gpu());
     eprintln!("lazy transport adapter={:?}", oracle.info());
     oracle
 }
@@ -272,9 +279,19 @@ fn source_sequence_exercises_transport_resize_boundaries() {
 #[test]
 #[ignore = "requires a physical Metal adapter"]
 fn metal_lazy_transport_reuse_preserves_round_truth() {
+    qualify_lazy_transport_reuse_preserves_round_truth(GpuBackendPreference::Metal);
+}
+
+#[test]
+#[ignore = "requires a physical Vulkan adapter"]
+fn vulkan_lazy_transport_reuse_preserves_round_truth() {
+    qualify_lazy_transport_reuse_preserves_round_truth(GpuBackendPreference::Vulkan);
+}
+
+fn qualify_lazy_transport_reuse_preserves_round_truth(backend: GpuBackendPreference) {
     let program = growth_program();
     let seeds = growth_seeds(&program);
-    let mut oracle = metal();
+    let mut oracle = oracle(backend);
     for selection in [lazy::SourceSelection::Union, lazy::SourceSelection::Worlds] {
         oracle.statistics = LazyGpuStatistics::default();
         let mut cached = None;
@@ -361,7 +378,17 @@ fn metal_lazy_transport_reuse_preserves_round_truth() {
 #[test]
 #[ignore = "requires a physical Metal adapter"]
 fn metal_lazy_transport_refusal_preserves_reuse() {
-    let mut oracle = metal();
+    qualify_lazy_transport_refusal_preserves_reuse(GpuBackendPreference::Metal);
+}
+
+#[test]
+#[ignore = "requires a physical Vulkan adapter"]
+fn vulkan_lazy_transport_refusal_preserves_reuse() {
+    qualify_lazy_transport_refusal_preserves_reuse(GpuBackendPreference::Vulkan);
+}
+
+fn qualify_lazy_transport_refusal_preserves_reuse(backend: GpuBackendPreference) {
+    let mut oracle = oracle(backend);
     let mut ran = false;
     inspect(|chunk| {
         if ran {
@@ -424,7 +451,17 @@ fn metal_lazy_transport_refusal_preserves_reuse() {
 #[test]
 #[ignore = "requires a physical Metal adapter"]
 fn metal_lazy_transport_cancelled_read_discards_capacity() {
-    let mut oracle = metal();
+    qualify_lazy_transport_cancelled_read_discards_capacity(GpuBackendPreference::Metal);
+}
+
+#[test]
+#[ignore = "requires a physical Vulkan adapter"]
+fn vulkan_lazy_transport_cancelled_read_discards_capacity() {
+    qualify_lazy_transport_cancelled_read_discards_capacity(GpuBackendPreference::Vulkan);
+}
+
+fn qualify_lazy_transport_cancelled_read_discards_capacity(backend: GpuBackendPreference) {
+    let mut oracle = oracle(backend);
     let mut ran = false;
     inspect(|chunk| {
         if ran {

@@ -137,3 +137,44 @@ fn cpu_route_cannot_claim_device_activity() {
         Err(Error::DeviceWork)
     ));
 }
+
+#[test]
+fn vulkan_samples_require_complete_device_activity() {
+    for route in [Route::VulkanFresh, Route::VulkanResident] {
+        let mut observation = observation();
+        observation.route = route;
+        assert!(validate_device(&observation, 3, 20).is_ok());
+        observation.activity.device = None;
+        assert!(matches!(
+            validate_device(&observation, 3, 20),
+            Err(Error::DeviceWork)
+        ));
+    }
+}
+
+#[test]
+fn vulkan_residency_obeys_the_selected_route() {
+    let mut observation = observation();
+    observation.route = Route::VulkanResident;
+    observation.phase = Phase::Timed;
+    assert!(matches!(
+        validate_device(&observation, 3, 20),
+        Err(Error::DeviceWork)
+    ));
+    let residency = observation
+        .activity
+        .device
+        .as_mut()
+        .unwrap()
+        .residency
+        .as_mut()
+        .unwrap();
+    residency.theory_uploaded = false;
+    residency.transport_allocated = false;
+    assert!(validate_device(&observation, 3, 20).is_ok());
+    observation.route = Route::VulkanFresh;
+    assert!(matches!(
+        validate_device(&observation, 3, 20),
+        Err(Error::DeviceWork)
+    ));
+}

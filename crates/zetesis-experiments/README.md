@@ -10,7 +10,11 @@ with exact reduct completion.
 
 Reproducible measurements of exact static reduct oracles. `zetesis-bench`
 defaults to a physical Metal device and fails if one cannot be used. Select
-`--backend cpu` explicitly for CPU measurements alone.
+`--backend cpu` explicitly for CPU measurements alone, or `--backend vulkan`
+for a physical Vulkan adapter. All five device experiment commands accept Vulkan;
+`grounding` remains CPU-only. Explicit APIs never fall back to a different API,
+a CPU or a software adapter. Adapter metadata reports the actual selected device.
+This interface support does not establish Linux/Radeon qualification.
 
 ```sh
 zetesis-bench --atoms 64,256 --batches 1,64,256 --repetitions 5 > metal.tsv
@@ -35,8 +39,8 @@ transfers, execution and readback. Comparison runs outside timed regions.
 
 These are microbenchmarks of the same explicitly compiled static program.
 They exclude source parsing and complete candidate search. Scalar CPU, Rayon,
-and Metal run in that order; thermal and ordering effects have not been
-controlled. CPU allocations are included per call whereas Metal can reuse its
+and the selected GPU run in that order; thermal and ordering effects have not been
+controlled. CPU allocations are included per call whereas the GPU can reuse its
 resident buffers. These limitations must accompany any reported measurements.
 Use release builds. No speedup, energy benefit, or full-domain result follows
 from portable tests or the CPU-only mode.
@@ -51,7 +55,7 @@ zetesis-bench lazy --backend metal --widths 4,8 --batches 1,32,128 \
 The library-owned `lazy_measurement::Configuration` selects finite cases and
 independent candidate, source and transport limits. `measure` emits typed events
 to a synchronous consumer; the command derives a JSON-lines view. Each run owns
-one Rayon pool and, when requested, one physical Metal oracle. A missing device
+one Rayon pool and, when requested, one physical Metal or Vulkan oracle. A missing device
 fails explicitly. Use `--backend cpu` for the four portable routes alone.
 
 Each fixture derives `a(I)`, `b(I)` and `c(I)` from frozen `pick(I)` choices and
@@ -63,8 +67,9 @@ remain separate. The experiment does not enumerate the outer candidate carrier
 or parse a source file.
 
 The six physical-run routes are independent scalar checks, the same checks
-scheduled by Rayon, portable Union rounds, portable Worlds rounds, Metal Union
-rounds and Metal Worlds rounds. Each successful sample agrees with the same
+scheduled by Rayon, portable Union rounds, portable Worlds rounds, GPU Union
+rounds and GPU Worlds rounds. Metal uses `metal-union`/`metal-worlds` labels;
+Vulkan uses `vulkan-union`/`vulkan-worlds`. Each successful sample agrees with the same
 complete scalar closures and rejection reasons in exact occurrence order.
 Different routes may perform different source work; matching candidates does
 not mean identical algorithms or resource charges. Scalar/Rayon limits apply
@@ -79,7 +84,7 @@ scans, checking, result construction, transfers and readback are inside. Parity
 comparison and JSON serialization are outside. Host wait is not shader time.
 
 Source observations retain rounds, offered instances, source/mask work, pruned
-prefixes and peak requested mask bytes. Metal observations require positive
+prefixes and peak requested mask bytes. Device observations require positive
 submitted work consistent with the completed chunks and candidate occurrences.
 Transfers are byte totals, not resident allocation or process RSS. Lazy source
 state and transport are rebuilt per call; device/pipeline ownership alone is
@@ -95,7 +100,7 @@ admitted dimension. Numeric configuration is emitted before setup. Record the
 command, executable/source hashes, toolchain and host with the complete output;
 the embedded library cannot identify its caller's executable or control thermal
 state. Stop task-owned compute before timing. Portable tests alone provide no
-physical Metal result or performance claim.
+physical device result or performance claim.
 
 ## Complete tight certificates
 
@@ -109,7 +114,7 @@ zetesis-bench tight --backend metal --atoms 4,64,256 --batches 1,32,128 \
 `Configuration` and synchronous event consumer. `measure_with_control` also
 accepts caller-owned cancellation/deadline control. The CLI is a JSON-lines view;
 `--backend cpu` explicitly selects only scalar and Rayon classification. Physical
-Metal is required otherwise, with no CPU fallback. No ordinary solver route is
+Metal or Vulkan is required when selected, with no CPU fallback. No ordinary solver route is
 changed or qualified by this experiment.
 
 Every case owns one complete immutable original `Theory`, its checked
@@ -138,13 +143,15 @@ reduct. Different valid countermodels may be returned by the two reference
 instruments; they are retained, not required to be identical.
 
 The four routes are scalar certificate classification, indexed Rayon
-classification, fresh Metal transport and resident Metal transport. All residuals
+classification, fresh GPU transport and resident GPU transport. The selected API
+prefixes its routes: `metal-fresh`/`metal-resident` or
+`vulkan-fresh`/`vulkan-resident`. All residuals
 receive serial, occurrence-ordered exact native CPU completion on every route.
 Rayon therefore parallelizes classification only. Whole-call elapsed,
 classification and residual-completion intervals are directly measured with the
 host monotonic clock; the latter two are nested within the first. Do not add them
 together as separate costs or infer a GPU classification gain from blended total
-time. Classification includes result allocation and, for Metal, packing,
+time. Classification includes result allocation and, for GPU routes, packing,
 transfers, execution, wait and readback. Residual completion includes its result
 allocation, even with no residuals. These are not shader timestamps.
 
@@ -224,7 +231,7 @@ and retains its original two-backend measurements.
 
 ## Paired gate projections
 
-Build the engineering binary once, then use a quiet physical Metal session:
+Build the engineering binary once, then use a quiet session with the selected physical API:
 
 ```sh
 cargo +1.97.1 build -p zetesis-experiments --bin zetesis-bench --release --locked --offline
@@ -235,7 +242,7 @@ target/release/zetesis-bench formula-projection --backend metal \
 
 With `CARGO_TARGET_DIR`, use its `release/zetesis-bench`. Record the revision,
 binary SHA-256, toolchain, host and command with the raw output. The command fails
-if physical Metal is unavailable; `--backend cpu` is explicitly refused. The
+if the requested physical API is unavailable; `--backend cpu` is explicitly refused. The
 existing `formula` command and ordinary solver keep the Enumerated default.
 
 The reusable `run_formula_projection(&FormulaOptions, &mut Write)` entry point
@@ -249,7 +256,8 @@ every candidate and reuse their graph/transport during warm samples. The default
 five formula families include shared children and false-masked implications.
 
 TSV rows use `metal-with-cpu-residuals` for Enumerated and
-`metal-bitwise-with-cpu-residuals` for Bitwise. `dispatch_host_ns` measures the full
+`metal-bitwise-with-cpu-residuals` for Bitwise. Vulkan selects the corresponding
+`vulkan-with-cpu-residuals` and `vulkan-bitwise-with-cpu-residuals` rows. `dispatch_host_ns` measures the full
 host dispatch boundary, including packing, transfer, execution and readback;
 it is not a device timestamp. Hybrid time includes serial native completion of
 every residual. Residual and sweep counts can vary with device scheduling;
@@ -370,3 +378,24 @@ use unobserved conditions for performance claims. Boundary-only and detailed
 records expose observer overhead, but rotating order does not eliminate thermal,
 allocator, cache or scheduling effects. No evaluator optimization or measured
 improvement is established by adding this driver.
+
+## Explicit Vulkan qualification
+
+The wgpu regression fixtures have explicit ignored Vulkan entry points that
+share assertions with their Metal counterparts. This command requests all 15
+Vulkan checks for static, formula, tight, lazy and transport behavior:
+
+```sh
+cargo test --locked -p zetesis-wgpu --lib --test hardware --test hardware_formula \
+  --test hardware_tight --test hardware_lazy vulkan -- --ignored --nocapture
+```
+
+Missing hardware or an unexpected API fails; it never becomes a skipped pass.
+Portable selector/label tests are separate and construct no adapter. Preserve
+source/binary/toolchain identities and the test log before measurements. Use
+`--backend vulkan` in the examples above and distinct report paths to measure
+that API after physical qualification. The existing Metal default and route
+labels remain unchanged. Ordinary CLI physical tests and the repeated
+`zetesis-perf` matrix have their own qualification scope; these primitive
+interfaces do not qualify those consumers or a Linux laptop. See the
+[Fedora plan](../../docs/design/linux-vulkan-qualification.md).

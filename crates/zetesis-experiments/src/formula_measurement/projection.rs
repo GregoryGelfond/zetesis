@@ -1,14 +1,16 @@
 //! Paired gate-projection measurements share membership and residency checks.
 
-use super::{Backend, FormulaBenchmarkError, FormulaCase, FormulaOptions, FormulaPool, validate};
+use super::{
+    FormulaBenchmarkError, FormulaCase, FormulaOptions, FormulaPool, hybrid_label, validate,
+};
 use crate::FormulaFixture;
 use std::io::Write;
 use std::time::Instant;
-use zetesis_wgpu::{GateProjection, GpuFormulaOracle, GpuOptions};
+use zetesis_wgpu::{GateProjection, GpuFormulaOracle, GpuOptions, GpuSelection};
 
 /// Compare both exact gate projections on the same immutable synthetic batches.
 ///
-/// The command requires physical Metal, keeps separate resident oracles, and
+/// The command requires physical Metal or Vulkan, keeps separate resident oracles, and
 /// checks their reported metadata for equality. Metadata equality is not a
 /// physical-device identity certificate. Scalar and Rayon native membership
 /// precede each pair; warm projection order alternates. Candidate construction,
@@ -33,9 +35,10 @@ pub fn run_formula_projection(
     output: &mut impl Write,
 ) -> Result<(), FormulaBenchmarkError> {
     validate(options)?;
-    if options.backend != Backend::Metal {
-        return Err(FormulaBenchmarkError::ProjectionRequiresMetal);
-    }
+    let selection = options
+        .backend
+        .selection()
+        .ok_or(FormulaBenchmarkError::ProjectionRequiresGpu)?;
     header(options, output)?;
     let max_candidates = options
         .batches
@@ -53,8 +56,8 @@ pub fn run_formula_projection(
         started.elapsed().as_nanos()
     )?;
     let mut oracles = [
-        create(GateProjection::Enumerated, output)?,
-        create(GateProjection::Bitwise, output)?,
+        create(selection, GateProjection::Enumerated, output)?,
+        create(selection, GateProjection::Bitwise, output)?,
     ];
     if oracles[0].info().metadata() != oracles[1].info().metadata() {
         return Err(FormulaBenchmarkError::AdapterMismatch);
@@ -116,7 +119,9 @@ fn header(options: &FormulaOptions, output: &mut impl Write) -> Result<(), Formu
     )?;
     writeln!(
         output,
-        "# projection_enumerated=metal-with-cpu-residuals projection_bitwise=metal-bitwise-with-cpu-residuals"
+        "# projection_enumerated={} projection_bitwise={}",
+        hybrid_label(options.backend, GateProjection::Enumerated),
+        hybrid_label(options.backend, GateProjection::Bitwise)
     )?;
     writeln!(
         output,
@@ -156,12 +161,17 @@ fn header(options: &FormulaOptions, output: &mut impl Write) -> Result<(), Formu
 }
 
 fn create(
+    selection: GpuSelection,
     projection: GateProjection,
     output: &mut impl Write,
 ) -> Result<GpuFormulaOracle, FormulaBenchmarkError> {
     let started = Instant::now();
-    let oracle = GpuFormulaOracle::new_metal_with_projection(GpuOptions::default(), projection)
-        .map_err(FormulaBenchmarkError::Gpu)?;
+    let oracle = GpuFormulaOracle::new_selected_with_projection(
+        GpuOptions::default(),
+        selection,
+        projection,
+    )
+    .map_err(FormulaBenchmarkError::Gpu)?;
     let metadata = oracle.info().metadata();
     writeln!(
         output,

@@ -22,7 +22,7 @@ pub use projection::run_formula_projection;
 /// This experiment does not enumerate source answer sets or measure a full solve.
 #[derive(Clone, Debug, Args)]
 pub struct FormulaOptions {
-    /// Physical Metal or CPU-only baselines; formula-projection requires Metal.
+    /// Physical Metal/Vulkan or CPU baselines; projection requires a physical GPU.
     #[arg(long, value_enum, default_value_t)]
     pub backend: Backend,
     /// Semantic atom counts for the synthetic, unrewritten original theories.
@@ -62,8 +62,8 @@ pub struct FormulaOptions {
 /// An experiment failure, distinct from an unresolved GPU query.
 #[derive(Debug)]
 pub enum FormulaBenchmarkError {
-    /// A paired projection experiment requires explicit physical Metal execution.
-    ProjectionRequiresMetal,
+    /// A paired projection experiment requires explicit physical GPU execution.
+    ProjectionRequiresGpu,
     /// The two selected adapters reported different identifying metadata.
     AdapterMismatch,
     /// The requested fixture or measurement dimensions were refused.
@@ -89,7 +89,7 @@ pub enum FormulaBenchmarkError {
 impl fmt::Display for FormulaBenchmarkError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::ProjectionRequiresMetal => f.write_str("formula-projection requires --backend metal"),
+            Self::ProjectionRequiresGpu => f.write_str("formula-projection requires --backend metal or vulkan"),
             Self::AdapterMismatch => f.write_str("projection adapters report different metadata"),
             Self::Dimensions => f.write_str(
                 "require nonempty families, 1..4096 atoms/worlds, 1..100 repetitions, and 1..64 CPU workers",
@@ -119,7 +119,7 @@ impl std::error::Error for FormulaBenchmarkError {
             | Self::Allocation
             | Self::Parity
             | Self::Residency
-            | Self::ProjectionRequiresMetal
+            | Self::ProjectionRequiresGpu
             | Self::AdapterMismatch => None,
         }
     }
@@ -144,8 +144,8 @@ fn validate(options: &FormulaOptions) -> Result<(), FormulaBenchmarkError> {
     Ok(())
 }
 
-/// Run explicit Metal-assisted membership and scalar/parallel CPU baselines.
-/// Every Metal verdict is compared with independent native membership. GPU
+/// Run explicit GPU-assisted membership and scalar/parallel CPU baselines.
+/// Every device verdict is compared with independent native membership. GPU
 /// residuals run that native checker inside the measured hybrid interval;
 /// quiescence or a device round/work stop never becomes a stability verdict.
 /// Timings exclude source admission and outer candidate generation. All sample
@@ -155,7 +155,7 @@ fn validate(options: &FormulaOptions) -> Result<(), FormulaBenchmarkError> {
 ///
 /// # Errors
 /// Refuses malformed dimensions, incomplete CPU checks, device/transport
-/// failures, semantic mismatches or output errors. Explicit Metal never falls
+/// failures, semantic mismatches or output errors. Explicit physical selection never falls
 /// back after a device error, and a failed run has no final success marker.
 pub fn run_formula(
     options: &FormulaOptions,
@@ -168,7 +168,12 @@ pub fn run_formula(
     )?;
     writeln!(
         output,
-        "# timing_order=cpu-native,cpu-rayon,metal-with-cpu-residuals candidate_stream=synthetic cpu_workers={} scalar_workers=1 residual_cpu_workers=1",
+        "# timing_order=cpu-native,cpu-rayon{} candidate_stream=synthetic cpu_workers={} scalar_workers=1 residual_cpu_workers=1",
+        match options.backend {
+            Backend::Cpu => "",
+            Backend::Metal => ",metal-with-cpu-residuals",
+            Backend::Vulkan => ",vulkan-with-cpu-residuals",
+        },
         options.cpu_workers
     )?;
     writeln!(
@@ -196,14 +201,12 @@ pub fn run_formula(
         started.elapsed().as_nanos()
     )?;
     let started = Instant::now();
-    let mut gpu = if options.backend == Backend::Metal {
-        Some(
-            GpuFormulaOracle::new_metal(GpuOptions::default())
-                .map_err(FormulaBenchmarkError::Gpu)?,
-        )
-    } else {
-        None
-    };
+    let mut gpu = options
+        .backend
+        .selection()
+        .map(|selection| GpuFormulaOracle::new_selected(GpuOptions::default(), selection))
+        .transpose()
+        .map_err(FormulaBenchmarkError::Gpu)?;
     if let Some(oracle) = &gpu {
         writeln!(
             output,
@@ -357,10 +360,7 @@ impl FormulaCase<'_> {
         verify(&completed, expected)?;
         self.emit(
             output,
-            match oracle.projection() {
-                zetesis_wgpu::GateProjection::Enumerated => "metal-with-cpu-residuals",
-                zetesis_wgpu::GateProjection::Bitwise => "metal-bitwise-with-cpu-residuals",
-            },
+            &hybrid_label(self.options.backend, oracle.projection()),
             sample.0,
             sample.1,
             [elapsed, device, residual],
@@ -395,4 +395,12 @@ impl FormulaCase<'_> {
             residuals
         )
     }
+}
+
+fn hybrid_label(backend: Backend, projection: zetesis_wgpu::GateProjection) -> String {
+    let projection = match projection {
+        zetesis_wgpu::GateProjection::Enumerated => "",
+        zetesis_wgpu::GateProjection::Bitwise => "-bitwise",
+    };
+    format!("{}{projection}-with-cpu-residuals", backend.label())
 }

@@ -1,4 +1,4 @@
-//! Matched relational programs and frozen candidate batches across CPU and Metal.
+//! Matched relational programs and frozen candidate batches across CPU and physical GPUs.
 //!
 //! Source scans, complete reduct closure checking and result construction are
 //! inside each sample. Fixture preparation, parity comparisons, pool/device
@@ -36,10 +36,10 @@ pub enum Error {
     Pool(zetesis_cpu::BatchError),
     /// An injected portable round evaluator did not complete.
     Source(zetesis_cpu::lazy::Failure<zetesis_cpu::Stop>),
-    /// Physical Metal setup failed; no CPU fallback occurs.
+    /// Physical device setup failed; no CPU fallback occurs.
     Device(zetesis_wgpu::GpuError),
     /// A physical round batch did not complete.
-    Metal(zetesis_cpu::lazy::Failure<zetesis_wgpu::GpuError>),
+    Gpu(zetesis_cpu::lazy::Failure<zetesis_wgpu::GpuError>),
     /// Complete ordered closures or rejection reasons disagree.
     Parity,
     /// The physical route did not record its required submitted work.
@@ -59,12 +59,12 @@ impl fmt::Display for Error {
             Self::Pool(error) => error.fmt(formatter),
             Self::Source(error) => error.fmt(formatter),
             Self::Device(error) => error.fmt(formatter),
-            Self::Metal(error) => error.fmt(formatter),
+            Self::Gpu(error) => error.fmt(formatter),
             Self::Parity => {
                 formatter.write_str("complete lazy checks disagree with scalar checking")
             }
             Self::DeviceWork => {
-                formatter.write_str("lazy Metal work does not match completed chunks")
+                formatter.write_str("lazy device work does not match completed chunks")
             }
             Self::Output(error) => error.fmt(formatter),
         }
@@ -81,7 +81,7 @@ impl std::error::Error for Error {
             Self::Pool(error) => Some(error),
             Self::Source(error) => Some(error),
             Self::Device(error) => Some(error),
-            Self::Metal(error) => Some(error),
+            Self::Gpu(error) => Some(error),
             Self::Output(error) => Some(error),
             Self::Configuration(_) | Self::Parity | Self::DeviceWork => None,
         }

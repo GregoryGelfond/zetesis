@@ -1,7 +1,7 @@
 use std::{io, num::NonZeroUsize, time::Instant};
 
 use zetesis_cpu::{BatchOracle, Check, Control, lazy};
-use zetesis_wgpu::{GpuBackendPreference, GpuLazyOracle, GpuOptions, GpuSelection};
+use zetesis_wgpu::{GpuLazyOracle, GpuOptions};
 
 use super::{Configuration, Error, Event, Phase, Route, Sample, fixture, view};
 use crate::Backend;
@@ -21,10 +21,19 @@ const METAL_ROUTES: [Route; 6] = [
     Route::MetalWorlds,
 ];
 
+const VULKAN_ROUTES: [Route; 6] = [
+    Route::Scalar,
+    Route::Rayon,
+    Route::PortableUnion,
+    Route::PortableWorlds,
+    Route::VulkanUnion,
+    Route::VulkanWorlds,
+];
+
 /// Execute a fixed rotating schedule and synchronously publish typed events.
 /// Every route is checked against the same precomputed scalar reference outside
 /// its timer. Each phase starts with the declared route order; iteration i
-/// rotates it left by i. Six Metal repetitions balance all six route positions.
+/// rotates it left by i. Six GPU repetitions balance all six route positions.
 /// Programs, seeds and reference checks remain live during the samples.
 ///
 /// The pool/device are reused across cases; lazy catalog/source/transport state
@@ -55,6 +64,7 @@ pub fn measure(
     let routes = match configuration.backend {
         Backend::Cpu => &CPU_ROUTES[..],
         Backend::Metal => &METAL_ROUTES[..],
+        Backend::Vulkan => &VULKAN_ROUTES[..],
     };
     let mut emitted = 0;
     for (case_index, case) in configuration.cases.iter().copied().enumerate() {
@@ -81,12 +91,12 @@ pub fn measure(
                 Err(error) => {
                     let source = match &error {
                         Error::Source(failure) => Some(failure.progress.into()),
-                        Error::Metal(failure) => Some(failure.progress.into()),
+                        Error::Gpu(failure) => Some(failure.progress.into()),
                         _ => None,
                     };
-                    let device = if matches!(route, Route::MetalUnion | Route::MetalWorlds) {
+                    let device = if route.is_device() {
                         execution
-                            .metal
+                            .gpu
                             .as_ref()
                             .map(|oracle| oracle.statistics().into())
                     } else {
@@ -157,7 +167,7 @@ fn schedule<'a>(
 
 struct Execution {
     pool: BatchOracle,
-    metal: Option<GpuLazyOracle>,
+    gpu: Option<GpuLazyOracle>,
 }
 
 struct Measured {
@@ -176,32 +186,24 @@ impl Execution {
         let pool = BatchOracle::new(configuration.workers, maximum).map_err(Error::Pool)?;
         let pool_init_ns = started.elapsed().as_nanos();
         let started = Instant::now();
-        let metal = if configuration.backend == Backend::Metal {
-            Some(
-                GpuLazyOracle::new_selected(
-                    GpuOptions::default(),
-                    GpuSelection {
-                        backend: GpuBackendPreference::Metal,
-                        vendor_id: None,
-                    },
-                )
-                .map_err(Error::Device)?,
-            )
-        } else {
-            None
-        };
-        let device_init_ns = metal.as_ref().map(|_| started.elapsed().as_nanos());
+        let gpu = configuration
+            .backend
+            .selection()
+            .map(|selection| GpuLazyOracle::new_selected(GpuOptions::default(), selection))
+            .transpose()
+            .map_err(Error::Device)?;
+        let device_init_ns = gpu.as_ref().map(|_| started.elapsed().as_nanos());
         observe(&Event::Setup {
             workers: configuration.workers.get(),
             pool_init_ns,
-            adapter: metal.as_ref().map(|oracle| oracle.info().name().to_owned()),
-            backend: metal
+            adapter: gpu.as_ref().map(|oracle| oracle.info().name().to_owned()),
+            backend: gpu
                 .as_ref()
                 .map(|oracle| oracle.info().backend().to_owned()),
             device_init_ns,
         })
         .map_err(Error::Output)?;
-        Ok(Self { pool, metal })
+        Ok(Self { pool, gpu })
     }
 
     fn check(
@@ -249,16 +251,20 @@ impl Execution {
             Route::PortableUnion
             | Route::PortableWorlds
             | Route::MetalUnion
-            | Route::MetalWorlds => {
+            | Route::MetalWorlds
+            | Route::VulkanUnion
+            | Route::VulkanWorlds => {
                 let selection = match route {
-                    Route::PortableWorlds | Route::MetalWorlds => lazy::SourceSelection::Worlds,
+                    Route::PortableWorlds | Route::MetalWorlds | Route::VulkanWorlds => {
+                        lazy::SourceSelection::Worlds
+                    }
                     _ => lazy::SourceSelection::Union,
                 };
-                let (batch, device) = if matches!(route, Route::MetalUnion | Route::MetalWorlds) {
+                let (batch, device) = if route.is_device() {
                     let oracle = self
-                        .metal
+                        .gpu
                         .as_mut()
-                        .ok_or(Error::Configuration("Metal route has no device"))?;
+                        .ok_or(Error::Configuration("physical route has no device"))?;
                     let batch = oracle
                         .check_batch_with_source(
                             &fixture.program,
@@ -268,7 +274,7 @@ impl Execution {
                             selection,
                             &control,
                         )
-                        .map_err(Error::Metal)?;
+                        .map_err(Error::Gpu)?;
                     (batch, Some(oracle.statistics()))
                 } else {
                     (
