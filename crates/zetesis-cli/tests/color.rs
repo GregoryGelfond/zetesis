@@ -4,7 +4,10 @@ use std::io::{self, Write};
 use std::process::{Command, Stdio};
 
 use clap::Parser;
-use zetesis_cli::{ColorMode, Completion, Options, RunError, run_detailed_with_diagnostics};
+use zetesis_cli::{
+    ColorMode, Completion, Options, RunError, run_detailed_with_diagnostics,
+    run_finalized_with_diagnostics,
+};
 use zetesis_cpu::Control;
 
 fn options(arguments: &[&str]) -> Options {
@@ -59,11 +62,13 @@ fn styled_model_headings_leave_atom_lines_plain() {
     for source in ["a.", "a. #show seen : a."] {
         let plain = output(source, &options(&["--color", "never"]));
         let colored = output(source, &options(&["--color", "always"]));
-        let expected = plain.replacen(
-            "Answer: 1\n",
-            "\u{1b}[1;36mAnswer:\u{1b}[22;36m 1\u{1b}[0m\n",
-            1,
-        );
+        let expected = plain
+            .replacen(
+                "Answer: 1\n",
+                "\u{1b}[1;36mAnswer:\u{1b}[22;36m 1\u{1b}[0m\n",
+                1,
+            )
+            .replacen("SATISFIABLE\n", "\u{1b}[1;3;90mSATISFIABLE\u{1b}[0m\n", 1);
         assert_eq!(colored, expected);
     }
 }
@@ -98,18 +103,91 @@ fn automatic_library_output_is_plain() {
 
 #[test]
 fn color_policy_cannot_change_json() {
-    let plain = output(
-        "a. #minimize{2:a}.",
-        &options(&["--json", "--color", "never"]),
-    );
-    let colored = output(
-        "a. #minimize{2:a}.",
-        &options(&["--json", "--color", "always"]),
-    );
-    let value: serde_json::Value = serde_json::from_str(&colored).unwrap();
-    assert_eq!(value["outcome"]["completion"], "exhausted");
-    assert_eq!(colored, plain);
-    assert!(!colored.contains('\u{1b}'));
+    for source in ["a.", ":-.", "a. #minimize{2:a}."] {
+        let plain = output(source, &options(&["--json", "--color", "never"]));
+        let colored = output(source, &options(&["--json", "--color", "always"]));
+        let value: serde_json::Value = serde_json::from_str(&colored).unwrap();
+        assert_eq!(value["outcome"]["completion"], "exhausted");
+        assert_eq!(colored, plain);
+        assert!(!colored.contains('\u{1b}'));
+    }
+}
+
+#[test]
+fn satisfiable_status_is_untagged_styled_metadata() {
+    for source in ["a.", "a|b."] {
+        let rendered = output(source, &options(&["--color", "always"]));
+        assert!(
+            rendered
+                .lines()
+                .any(|line| line == "\u{1b}[1;3;90mSATISFIABLE\u{1b}[0m")
+        );
+        assert!(rendered.contains("\u{1b}[0m\nCoverage: exhausted\n"));
+    }
+}
+
+#[test]
+fn unsatisfiable_status_is_untagged_styled_metadata() {
+    for source in [":-.", "1{}1."] {
+        let rendered = output(source, &options(&["--color", "always"]));
+        assert!(
+            rendered.starts_with("\u{1b}[1;3;90mUNSATISFIABLE\u{1b}[0m\nCoverage: exhausted\n")
+        );
+    }
+}
+
+#[test]
+fn requested_model_completion_styles_its_status() {
+    let mut settings = options(&["--color", "always"]);
+    settings.models = 1;
+    for source in ["a.", "a|b."] {
+        let mut bytes = Vec::new();
+        let report = run_detailed_with_diagnostics(
+            source.into(),
+            &settings,
+            &mut bytes,
+            &mut io::sink(),
+            &Control::default(),
+        )
+        .unwrap();
+        assert_eq!(report.completion, Completion::RequestedModels);
+        assert!(
+            String::from_utf8(bytes)
+                .unwrap()
+                .contains("\u{1b}[1;3;90mSATISFIABLE\u{1b}[0m\nCoverage: partial")
+        );
+    }
+}
+
+#[test]
+fn partial_status_output_cannot_acknowledge_summary() {
+    let settings = options(&["--color", "always"]);
+    for source in ["a.", ":-.", "a|b.", "1{}1."] {
+        let complete = output(source, &settings);
+        let start = complete.find("\u{1b}[1;3;90m").unwrap();
+        let end = complete[start..].find('\n').unwrap() + start + 1;
+        for maximum in start..end {
+            let mut prefix = Prefix {
+                maximum,
+                bytes: Vec::new(),
+            };
+            let failure = run_finalized_with_diagnostics(
+                source.into(),
+                &settings,
+                &mut prefix,
+                &mut io::sink(),
+                &Control::default(),
+            )
+            .unwrap_err();
+            assert!(matches!(*failure.cause, RunError::Output(_)));
+            assert_eq!(
+                failure.semantic().unwrap().completion(),
+                Some(Completion::Exhausted)
+            );
+            assert!(!failure.publication().unwrap().summary());
+            assert_eq!(prefix.bytes, complete.as_bytes()[..maximum]);
+        }
+    }
 }
 
 #[test]

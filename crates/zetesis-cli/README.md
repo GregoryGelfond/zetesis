@@ -34,7 +34,8 @@ Human output defaults to `--color auto`: eligible stdout terminals receive cyan
 answer headings with a bold `Answer:` label and italic green optimization
 metadata. Eligible stderr terminals receive blue `Source:`, `Oracle:`,
 `Grounding:`, `Backend:` and `Auto:` labels with italic gray values. Standard ANSI
-palette colors inherit the terminal's configured theme; atom lines, statistics
+palette colors inherit the terminal's configured theme. The untagged
+`SATISFIABLE` and `UNSATISFIABLE` verdicts use bold italic gray; atom lines, statistics
 and errors stay plain. `--color always` forces the human styles, while
 `--color never` disables them. Automatic mode resolves stdout and stderr
 independently, respects a nonempty `NO_COLOR` and `TERM=dumb`, and leaves each

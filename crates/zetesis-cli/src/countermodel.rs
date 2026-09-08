@@ -120,6 +120,7 @@ impl FormulaRun<'_> {
             progress,
             phases,
             self.display.options.json,
+            self.display.options.color,
         )
     }
 }
@@ -191,7 +192,15 @@ pub(crate) fn check_control(
                 formula_execution: None,
                 lazy_execution: None,
             });
-            complete(output, diagnostics, progress, phases, json).map(Some)
+            complete(
+                output,
+                diagnostics,
+                progress,
+                phases,
+                json,
+                crate::ColorMode::Never,
+            )
+            .map(Some)
         }
     }
 }
@@ -214,6 +223,7 @@ fn complete(
     mut progress: Progress,
     phases: &Recorder,
     json: bool,
+    color: crate::ColorMode,
 ) -> Result<Progress, SolveFailure> {
     let _output = phases.start(SolvePhase::ObservationOutput);
     let result = (|| {
@@ -228,7 +238,7 @@ fn complete(
                 statistics.countermodels
             )?;
         }
-        finish(output, &progress.report, json)
+        finish(output, &progress.report, json, color)
     })();
     match result {
         Ok(()) => {

@@ -84,9 +84,18 @@ impl ColorMode {
         }
         writeln!(output)
     }
+
+    pub(crate) fn status(self, output: &mut impl Write, text: &str) -> io::Result<()> {
+        if self == Self::Always {
+            writeln!(output, "{BOLD_ITALIC_GRAY}{text}{RESET}")
+        } else {
+            writeln!(output, "{text}")
+        }
+    }
 }
 
 const BOLD_CYAN: &str = "\u{1b}[1;36m";
 const CYAN: &str = "\u{1b}[22;36m";
 const ITALIC_GREEN: &str = "\u{1b}[3;32m";
+const BOLD_ITALIC_GRAY: &str = "\u{1b}[1;3;90m";
 const RESET: &str = "\u{1b}[0m";

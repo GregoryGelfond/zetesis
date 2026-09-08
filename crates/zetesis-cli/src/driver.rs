@@ -604,7 +604,7 @@ pub(crate) fn solve_program(
         }
     }
     let finished = phases.measure(SolvePhase::ObservationOutput, || {
-        finish(output, &progress.report, options.json)
+        finish(output, &progress.report, options.json, options.color)
     });
     match finished {
         Ok(()) => {
@@ -670,28 +670,29 @@ fn write_string(output: &mut impl Write, value: &str) -> io::Result<()> {
     write!(output, "\"")
 }
 
-pub(crate) fn finish(output: &mut impl Write, report: &Report, json: bool) -> Result<(), RunError> {
+pub(crate) fn finish(
+    output: &mut impl Write,
+    report: &Report,
+    json: bool,
+    color: crate::ColorMode,
+) -> Result<(), RunError> {
     // JSON emits one final outcome after statistics and failure accounting.
     if json {
         return Ok(());
     }
     match report.completion {
         Completion::Exhausted => {
-            writeln!(
-                output,
-                "{}",
-                if report.models == 0 {
-                    "UNSATISFIABLE"
-                } else if report.optimization.is_some() {
-                    "OPTIMUM FOUND"
-                } else {
-                    "SATISFIABLE"
-                }
-            )?;
+            if report.models == 0 {
+                color.status(output, "UNSATISFIABLE")?;
+            } else if report.optimization.is_some() {
+                writeln!(output, "OPTIMUM FOUND")?;
+            } else {
+                color.status(output, "SATISFIABLE")?;
+            }
             writeln!(output, "Coverage: exhausted")?;
         }
         Completion::RequestedModels => {
-            writeln!(output, "SATISFIABLE")?;
+            color.status(output, "SATISFIABLE")?;
             writeln!(output, "Coverage: partial (requested model count reached)")?;
         }
         Completion::Interrupted => {
