@@ -293,7 +293,7 @@ impl Execution {
                 let elapsed_ns = started.elapsed().as_nanos();
                 compare(expected, &batch)?;
                 if let Some(statistics) = device {
-                    verify_device_work(statistics, batch.progress, fixture.seeds.len())?;
+                    verify_device_work(&statistics, batch.progress, fixture.seeds.len())?;
                 }
                 Ok(Measured {
                     elapsed_ns,
@@ -331,7 +331,7 @@ fn compare(expected: &[Check], batch: &lazy::Batch) -> Result<(), Error> {
 }
 
 fn verify_device_work(
-    statistics: zetesis_wgpu::LazyGpuStatistics,
+    statistics: &zetesis_wgpu::LazyGpuStatistics,
     progress: lazy::Progress,
     worlds: usize,
 ) -> Result<(), Error> {
@@ -350,10 +350,33 @@ fn verify_device_work(
             .transport_allocations
             .checked_add(statistics.transport_reuses)
             != Some(statistics.dispatches)
+        || !valid_transport_usage(statistics)
     {
         return Err(Error::DeviceWork);
     }
     Ok(())
+}
+
+fn valid_transport_usage(statistics: &zetesis_wgpu::LazyGpuStatistics) -> bool {
+    let usage = statistics.transport_usage;
+    [
+        usage.uniform,
+        usage.offsets,
+        usage.records,
+        usage.snapshots,
+        usage.seeds,
+        usage.output,
+        usage.readback,
+    ]
+    .into_iter()
+    .all(|binding| {
+        binding.allocations > 0
+            && binding.allocations <= statistics.transport_allocations
+            && binding.reuses >= statistics.transport_reuses
+            && binding.allocations.checked_add(binding.reuses) == Some(statistics.dispatches)
+    }) && usage.output == usage.readback
+        && usage.budget_releases <= statistics.transport_allocations
+        && usage.accounting_overflow_releases <= statistics.transport_allocations
 }
 
 #[cfg(test)]

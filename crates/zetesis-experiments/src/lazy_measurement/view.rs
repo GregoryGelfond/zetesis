@@ -95,15 +95,18 @@ pub struct DeviceWork {
     pub uploaded_bytes: u64,
     /// Successfully decoded readback bytes.
     pub downloaded_bytes: u64,
-    /// Submitted chunks requesting a fresh complete set of transport buffers.
+    /// Submitted chunks requesting at least one fresh transport buffer.
     pub transport_allocations: u64,
-    /// Submitted chunks reusing capacity from an earlier chunk of the batch.
+    /// Submitted chunks reusing every buffer from an earlier chunk of the batch.
     pub transport_reuses: u64,
     /// Maximum requested GPU buffer payload, including inactive capacity.
     pub peak_transport_bytes: u64,
-    /// Overlapping reasons for allocating complete transport buffer sets.
+    /// Overlapping reasons the previous complete buffer set could not be reused.
     #[serde(serialize_with = "replacement_view")]
     pub transport_replacements: zetesis_wgpu::LazyTransportReplacements,
+    /// Per-binding requests and prospective slack-release causes.
+    #[serde(serialize_with = "usage_view")]
+    pub transport_usage: zetesis_wgpu::LazyTransportUsage,
     /// Host submission/readback wait, not a shader timestamp.
     pub host_wait_ns: u128,
 }
@@ -119,6 +122,7 @@ impl From<LazyGpuStatistics> for DeviceWork {
             transport_reuses: statistics.transport_reuses,
             peak_transport_bytes: statistics.peak_transport_bytes,
             transport_replacements: statistics.transport_replacements,
+            transport_usage: statistics.transport_usage,
             host_wait_ns: statistics.host_wait.as_nanos(),
         }
     }
@@ -139,6 +143,46 @@ fn replacement_view<S: Serializer>(
     record.serialize_field("budget", &reasons.budget)?;
     record.serialize_field("accounting_overflow", &reasons.accounting_overflow)?;
     record.end()
+}
+
+fn usage_view<S: Serializer>(
+    usage: &zetesis_wgpu::LazyTransportUsage,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    use serde::ser::SerializeStruct;
+    let mut record = serializer.serialize_struct("LazyTransportUsage", 9)?;
+    for (name, binding) in [
+        ("uniform", usage.uniform),
+        ("offsets", usage.offsets),
+        ("records", usage.records),
+        ("snapshots", usage.snapshots),
+        ("seeds", usage.seeds),
+        ("output", usage.output),
+        ("readback", usage.readback),
+    ] {
+        record.serialize_field(name, &BufferUsage::from(binding))?;
+    }
+    record.serialize_field("budget_releases", &usage.budget_releases)?;
+    record.serialize_field(
+        "accounting_overflow_releases",
+        &usage.accounting_overflow_releases,
+    )?;
+    record.end()
+}
+
+#[derive(Serialize)]
+struct BufferUsage {
+    allocations: u64,
+    reuses: u64,
+}
+
+impl From<zetesis_wgpu::LazyBufferUsage> for BufferUsage {
+    fn from(usage: zetesis_wgpu::LazyBufferUsage) -> Self {
+        Self {
+            allocations: usage.allocations,
+            reuses: usage.reuses,
+        }
+    }
 }
 
 /// One successful route observation, after complete ordered scalar agreement.

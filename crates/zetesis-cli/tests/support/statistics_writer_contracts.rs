@@ -112,7 +112,8 @@ fn lazy_metadata_rendering_preserves_every_writer_failure() {
     assert!(text.contains("requested=metal; observed=Metal"));
     assert!(text.contains("submitted=7; completed=4; stopped=3; queued results=2"));
     assert!(text.contains("kernel time unmeasured"));
-    assert!(text.contains("buffer sets allocated=2; reused chunks=3; peak requested device bytes=1024 (RSS unmeasured)"));
+    assert!(text.contains("chunks allocating buffers=2; complete-set reuses=3; peak requested device bytes=1024 (RSS unmeasured)"));
+    assert!(text.contains("buffer requests (allocated/reused): uniform=1/4; offsets=1/4; records=2/3; snapshots=1/4; seeds=1/4; output=2/3; readback=2/3; slack releases: budget=0; accounting overflow=0"));
     assert!(text.contains("FORMAT FIXTURE: no physical execution"));
 }
 

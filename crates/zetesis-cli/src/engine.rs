@@ -55,7 +55,7 @@ impl Engine {
     pub(crate) fn lazy_statistics(&self) -> Option<crate::LazyExecutionStatistics> {
         match &self.executor {
             #[cfg(feature = "gpu")]
-            Executor::LazyGpu { statistics, .. } => Some(statistics.clone()),
+            Executor::LazyGpu(executor) => Some(executor.statistics.clone()),
             _ => None,
         }
     }
@@ -219,10 +219,15 @@ enum Executor {
         ground: Arc<GroundProgram>,
     },
     #[cfg(feature = "gpu")]
-    LazyGpu {
-        oracle: Box<zetesis_wgpu::GpuLazyOracle>,
-        statistics: crate::LazyExecutionStatistics,
-    },
+    LazyGpu(Box<LazyGpu>),
+}
+
+/// Keep device execution and its cumulative observations under one owner.
+/// The enum uses one allocation for this state, leaving CPU variants compact.
+#[cfg(feature = "gpu")]
+struct LazyGpu {
+    oracle: zetesis_wgpu::GpuLazyOracle,
+    statistics: crate::LazyExecutionStatistics,
 }
 
 impl Executor {
@@ -283,7 +288,7 @@ impl Executor {
             #[cfg(feature = "gpu")]
             Self::Gpu { ground, .. } => Some(Arc::clone(ground)),
             #[cfg(feature = "gpu")]
-            Self::LazyGpu { .. } => None,
+            Self::LazyGpu(_) => None,
         }
     }
 
@@ -291,7 +296,7 @@ impl Executor {
         match self {
             Self::Cpu(_) | Self::SharedCpu { .. } | Self::StaticCpu { .. } => false,
             #[cfg(feature = "gpu")]
-            Self::Gpu { .. } | Self::LazyGpu { .. } => true,
+            Self::Gpu { .. } | Self::LazyGpu(_) => true,
         }
     }
 
@@ -335,10 +340,7 @@ impl Executor {
                     oracle.info().vendor_id()
                 ),
             )?;
-            return Ok(Self::LazyGpu {
-                oracle: Box::new(oracle),
-                statistics,
-            });
+            return Ok(Self::LazyGpu(Box::new(LazyGpu { oracle, statistics })));
         }
 
         // Discover hardware before any new static materialization. Eager CPU
@@ -413,7 +415,8 @@ impl Executor {
                 crate::shared_execution::batch_results(result, statistics)
             }
             #[cfg(feature = "gpu")]
-            Self::LazyGpu { oracle, statistics } => {
+            Self::LazyGpu(executor) => {
+                let LazyGpu { oracle, statistics } = executor.as_mut();
                 let bytes = usize::try_from(options.max_batch_bytes / 2).unwrap_or(usize::MAX);
                 let source_limits = zetesis_cpu::lazy::Limits {
                     max_candidates: options.batch_size.get(),
@@ -436,7 +439,7 @@ impl Executor {
                     Ok(batch) => batch.progress,
                     Err(failure) => failure.progress,
                 };
-                statistics.record(seeds.len(), result.is_ok(), progress, oracle.statistics())?;
+                statistics.record(seeds.len(), result.is_ok(), progress, &oracle.statistics())?;
                 crate::lazy_execution::batch_results(result)
             }
             Self::Cpu(oracle) => Ok(oracle

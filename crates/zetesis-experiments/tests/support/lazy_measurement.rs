@@ -93,9 +93,10 @@ fn inconsistent_device_counters_refuse_qualification() {
         transport_allocations: 1,
         transport_reuses: 2,
         peak_transport_bytes: 256,
+        transport_usage: usage(1, 2),
         ..Default::default()
     };
-    verify_device_work(actual, progress, 2).unwrap();
+    verify_device_work(&actual, progress, 2).unwrap();
     for forged in [
         zetesis_wgpu::LazyGpuStatistics {
             dispatches: 0,
@@ -135,13 +136,13 @@ fn inconsistent_device_counters_refuse_qualification() {
         },
     ] {
         assert!(matches!(
-            verify_device_work(forged, progress, 2),
+            verify_device_work(&forged, progress, 2),
             Err(Error::DeviceWork)
         ));
     }
     assert!(matches!(
         verify_device_work(
-            actual,
+            &actual,
             lazy::Progress {
                 instances: u64::MAX,
                 ..progress
@@ -152,7 +153,7 @@ fn inconsistent_device_counters_refuse_qualification() {
     ));
     assert!(matches!(
         verify_device_work(
-            zetesis_wgpu::LazyGpuStatistics {
+            &zetesis_wgpu::LazyGpuStatistics {
                 world_instances: 0,
                 ..actual
             },
@@ -164,6 +165,74 @@ fn inconsistent_device_counters_refuse_qualification() {
         ),
         Err(Error::DeviceWork)
     ));
+}
+
+fn usage(allocations: u64, reuses: u64) -> zetesis_wgpu::LazyTransportUsage {
+    let binding = zetesis_wgpu::LazyBufferUsage {
+        allocations,
+        reuses,
+    };
+    zetesis_wgpu::LazyTransportUsage {
+        uniform: binding,
+        offsets: binding,
+        records: binding,
+        snapshots: binding,
+        seeds: binding,
+        output: binding,
+        readback: binding,
+        budget_releases: 0,
+        accounting_overflow_releases: 0,
+    }
+}
+
+#[test]
+fn inconsistent_binding_counts_refuse_qualification() {
+    type Field = fn(&mut zetesis_wgpu::LazyTransportUsage) -> &mut zetesis_wgpu::LazyBufferUsage;
+    let fields: [Field; 7] = [
+        |value| &mut value.uniform,
+        |value| &mut value.offsets,
+        |value| &mut value.records,
+        |value| &mut value.snapshots,
+        |value| &mut value.seeds,
+        |value| &mut value.output,
+        |value| &mut value.readback,
+    ];
+    let progress = lazy::Progress {
+        chunks: 3,
+        instances: 5,
+        ..Default::default()
+    };
+    let actual = zetesis_wgpu::LazyGpuStatistics {
+        dispatches: 3,
+        world_instances: 10,
+        uploaded_bytes: 64,
+        downloaded_bytes: 48,
+        transport_allocations: 1,
+        transport_reuses: 2,
+        peak_transport_bytes: 256,
+        transport_usage: usage(1, 2),
+        ..Default::default()
+    };
+    verify_device_work(&actual, progress, 2).unwrap();
+    for field in fields {
+        for (allocations, reuses) in [(0, 3), (1, 1), (2, 1), (u64::MAX, 2)] {
+            let mut forged = actual;
+            *field(&mut forged.transport_usage) = zetesis_wgpu::LazyBufferUsage {
+                allocations,
+                reuses,
+            };
+            assert!(verify_device_work(&forged, progress, 2).is_err());
+        }
+    }
+    for overflow in [false, true] {
+        let mut forged = actual;
+        if overflow {
+            forged.transport_usage.accounting_overflow_releases = 2;
+        } else {
+            forged.transport_usage.budget_releases = 2;
+        }
+        assert!(verify_device_work(&forged, progress, 2).is_err());
+    }
 }
 
 #[test]
@@ -181,6 +250,7 @@ fn device_observations_preserve_recorded_units() {
             initial: 1,
             ..Default::default()
         },
+        transport_usage: usage(1, 1),
     });
     assert_eq!(
         serde_json::to_value(work).unwrap(),
@@ -202,6 +272,17 @@ fn device_observations_preserve_recorded_units() {
                 "result_shape": 0,
                 "budget": 0,
                 "accounting_overflow": 0
+            },
+            "transport_usage": {
+                "uniform": {"allocations": 1, "reuses": 1},
+                "offsets": {"allocations": 1, "reuses": 1},
+                "records": {"allocations": 1, "reuses": 1},
+                "snapshots": {"allocations": 1, "reuses": 1},
+                "seeds": {"allocations": 1, "reuses": 1},
+                "output": {"allocations": 1, "reuses": 1},
+                "readback": {"allocations": 1, "reuses": 1},
+                "budget_releases": 0,
+                "accounting_overflow_releases": 0
             }
         })
     );

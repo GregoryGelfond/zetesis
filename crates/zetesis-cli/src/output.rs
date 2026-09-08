@@ -797,7 +797,43 @@ fn lazy_statistics(
         stats.transport_replacements.accounting_overflow,
     )?;
     out.text("}")?;
+    out.text(",\"transport_usage\":")?;
+    lazy_transport_usage(out, stats.transport_usage)?;
     out.number_field("host_wait_ns", stats.host_wait.as_nanos())?;
+    out.text("}")
+}
+
+fn lazy_transport_usage(
+    out: &mut Buffer,
+    usage: crate::LazyTransportUsage,
+) -> Result<(), RunError> {
+    out.text("{")?;
+    for (index, (name, binding)) in [
+        ("uniform", usage.uniform),
+        ("offsets", usage.offsets),
+        ("records", usage.records),
+        ("snapshots", usage.snapshots),
+        ("seeds", usage.seeds),
+        ("output", usage.output),
+        ("readback", usage.readback),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        if index > 0 {
+            out.text(",")?;
+        }
+        out.string(name)?;
+        out.text(":{\"allocations\":")?;
+        out.text(&binding.allocations.to_string())?;
+        out.number_field("reuses", binding.reuses)?;
+        out.text("}")?;
+    }
+    out.number_field("budget_releases", usage.budget_releases)?;
+    out.number_field(
+        "accounting_overflow_releases",
+        usage.accounting_overflow_releases,
+    )?;
     out.text("}")
 }
 
@@ -833,6 +869,20 @@ mod lazy_tests {
                 "result_shape": 1,
                 "budget": 0,
                 "accounting_overflow": 0
+            })
+        );
+        assert_eq!(
+            value["transport_usage"],
+            serde_json::json!({
+                "uniform": {"allocations": 1, "reuses": 4},
+                "offsets": {"allocations": 1, "reuses": 4},
+                "records": {"allocations": 2, "reuses": 3},
+                "snapshots": {"allocations": 1, "reuses": 4},
+                "seeds": {"allocations": 1, "reuses": 4},
+                "output": {"allocations": 2, "reuses": 3},
+                "readback": {"allocations": 2, "reuses": 3},
+                "budget_releases": 0,
+                "accounting_overflow_releases": 0
             })
         );
     }

@@ -29,6 +29,38 @@ pub(crate) fn fixture() -> LazyExecutionStatistics {
             result_shape: 1,
             ..Default::default()
         },
+        transport_usage: crate::LazyTransportUsage {
+            uniform: crate::LazyBufferUsage {
+                allocations: 1,
+                reuses: 4,
+            },
+            offsets: crate::LazyBufferUsage {
+                allocations: 1,
+                reuses: 4,
+            },
+            records: crate::LazyBufferUsage {
+                allocations: 2,
+                reuses: 3,
+            },
+            snapshots: crate::LazyBufferUsage {
+                allocations: 1,
+                reuses: 4,
+            },
+            seeds: crate::LazyBufferUsage {
+                allocations: 1,
+                reuses: 4,
+            },
+            output: crate::LazyBufferUsage {
+                allocations: 2,
+                reuses: 3,
+            },
+            readback: crate::LazyBufferUsage {
+                allocations: 2,
+                reuses: 3,
+            },
+            budget_releases: 0,
+            accounting_overflow_releases: 0,
+        },
         host_wait: std::time::Duration::from_nanos(123),
     }
 }
@@ -42,7 +74,7 @@ fn completed_batches_count_duplicate_candidate_occurrences() {
             3,
             true,
             zetesis_cpu::lazy::Progress::default(),
-            zetesis_wgpu::LazyGpuStatistics::default(),
+            &zetesis_wgpu::LazyGpuStatistics::default(),
         )
         .unwrap();
     assert_eq!(stats.completed_candidates, 7);
@@ -66,7 +98,7 @@ fn failed_batches_retain_submitted_work() {
                 catalog_atoms: 66,
                 ..zetesis_cpu::lazy::Progress::default()
             },
-            zetesis_wgpu::LazyGpuStatistics {
+            &zetesis_wgpu::LazyGpuStatistics {
                 dispatches: 2,
                 world_instances: 9,
                 uploaded_bytes: 11,
@@ -79,6 +111,7 @@ fn failed_batches_retain_submitted_work() {
                     ..Default::default()
                 },
                 host_wait: std::time::Duration::from_nanos(9),
+                ..Default::default()
             },
         )
         .unwrap();
@@ -113,7 +146,7 @@ fn transport_peak_is_the_largest_attempted_batch() {
                 1,
                 true,
                 zetesis_cpu::lazy::Progress::default(),
-                zetesis_wgpu::LazyGpuStatistics {
+                &zetesis_wgpu::LazyGpuStatistics {
                     peak_transport_bytes: peak,
                     ..Default::default()
                 },
@@ -153,7 +186,7 @@ fn replacement_overflow_preserves_the_previous_record() {
         let mut device = zetesis_wgpu::LazyGpuStatistics::default();
         *field(&mut device.transport_replacements) = u64::MAX;
         let error = stats
-            .record(1, true, zetesis_cpu::lazy::Progress::default(), device)
+            .record(1, true, zetesis_cpu::lazy::Progress::default(), &device)
             .unwrap_err();
         assert!(matches!(error, crate::RunError::LazyStatisticsOverflow));
         assert_eq!(stats, before);
@@ -169,7 +202,7 @@ fn failed_batches_retain_replacement_reasons() {
             1,
             false,
             zetesis_cpu::lazy::Progress::default(),
-            zetesis_wgpu::LazyGpuStatistics {
+            &zetesis_wgpu::LazyGpuStatistics {
                 transport_replacements: zetesis_wgpu::LazyTransportReplacements {
                     initial: 1,
                     offsets_growth: 2,
@@ -210,7 +243,7 @@ fn transport_overflow_preserves_the_previous_record() {
                 1,
                 true,
                 zetesis_cpu::lazy::Progress::default(),
-                zetesis_wgpu::LazyGpuStatistics {
+                &zetesis_wgpu::LazyGpuStatistics {
                     transport_allocations: allocations,
                     transport_reuses: reuses,
                     ..Default::default()
@@ -224,6 +257,142 @@ fn transport_overflow_preserves_the_previous_record() {
 
 #[cfg(feature = "gpu")]
 #[test]
+fn binding_overflow_preserves_the_previous_record() {
+    type Field = fn(&mut zetesis_wgpu::LazyTransportUsage) -> &mut zetesis_wgpu::LazyBufferUsage;
+    let fields: [Field; 7] = [
+        |value| &mut value.uniform,
+        |value| &mut value.offsets,
+        |value| &mut value.records,
+        |value| &mut value.snapshots,
+        |value| &mut value.seeds,
+        |value| &mut value.output,
+        |value| &mut value.readback,
+    ];
+    for field in fields {
+        for (allocations, reuses) in [(u64::MAX, 0), (0, u64::MAX)] {
+            let mut stats = fixture();
+            let before = stats.clone();
+            let mut device = zetesis_wgpu::LazyGpuStatistics::default();
+            *field(&mut device.transport_usage) = zetesis_wgpu::LazyBufferUsage {
+                allocations,
+                reuses,
+            };
+            let error = stats
+                .record(1, true, zetesis_cpu::lazy::Progress::default(), &device)
+                .unwrap_err();
+            assert!(matches!(error, crate::RunError::LazyStatisticsOverflow));
+            assert_eq!(stats, before);
+        }
+    }
+}
+
+#[cfg(feature = "gpu")]
+#[test]
+fn release_overflow_preserves_the_previous_record() {
+    for overflow in [false, true] {
+        let mut stats = fixture();
+        stats.transport_usage.budget_releases = 1;
+        stats.transport_usage.accounting_overflow_releases = 1;
+        let before = stats.clone();
+        let usage = zetesis_wgpu::LazyTransportUsage {
+            budget_releases: if overflow { 0 } else { u64::MAX },
+            accounting_overflow_releases: if overflow { u64::MAX } else { 0 },
+            ..Default::default()
+        };
+        let device = zetesis_wgpu::LazyGpuStatistics {
+            transport_usage: usage,
+            ..Default::default()
+        };
+        let error = stats
+            .record(1, true, zetesis_cpu::lazy::Progress::default(), &device)
+            .unwrap_err();
+        assert!(matches!(error, crate::RunError::LazyStatisticsOverflow));
+        assert_eq!(stats, before);
+    }
+}
+
+#[cfg(feature = "gpu")]
+#[test]
+fn failed_batches_retain_binding_observations() {
+    let mut stats = fixture();
+    let usage = zetesis_wgpu::LazyTransportUsage {
+        uniform: zetesis_wgpu::LazyBufferUsage {
+            allocations: 1,
+            reuses: 2,
+        },
+        offsets: zetesis_wgpu::LazyBufferUsage {
+            allocations: 2,
+            reuses: 1,
+        },
+        records: zetesis_wgpu::LazyBufferUsage {
+            allocations: 3,
+            reuses: 0,
+        },
+        snapshots: zetesis_wgpu::LazyBufferUsage {
+            allocations: 1,
+            reuses: 2,
+        },
+        seeds: zetesis_wgpu::LazyBufferUsage {
+            allocations: 1,
+            reuses: 2,
+        },
+        output: zetesis_wgpu::LazyBufferUsage {
+            allocations: 2,
+            reuses: 1,
+        },
+        readback: zetesis_wgpu::LazyBufferUsage {
+            allocations: 2,
+            reuses: 1,
+        },
+        budget_releases: 1,
+        accounting_overflow_releases: 2,
+    };
+    let device = zetesis_wgpu::LazyGpuStatistics {
+        transport_usage: usage,
+        ..Default::default()
+    };
+    stats
+        .record(1, false, zetesis_cpu::lazy::Progress::default(), &device)
+        .unwrap();
+    assert_eq!(
+        stats.transport_usage,
+        crate::LazyTransportUsage {
+            uniform: crate::LazyBufferUsage {
+                allocations: 2,
+                reuses: 6
+            },
+            offsets: crate::LazyBufferUsage {
+                allocations: 3,
+                reuses: 5
+            },
+            records: crate::LazyBufferUsage {
+                allocations: 5,
+                reuses: 3
+            },
+            snapshots: crate::LazyBufferUsage {
+                allocations: 2,
+                reuses: 6
+            },
+            seeds: crate::LazyBufferUsage {
+                allocations: 2,
+                reuses: 6
+            },
+            output: crate::LazyBufferUsage {
+                allocations: 4,
+                reuses: 4
+            },
+            readback: crate::LazyBufferUsage {
+                allocations: 4,
+                reuses: 4
+            },
+            budget_releases: 1,
+            accounting_overflow_releases: 2,
+        }
+    );
+}
+
+#[cfg(feature = "gpu")]
+#[test]
 fn counter_overflow_preserves_the_previous_record() {
     let mut stats = fixture();
     stats.downloaded_bytes = u64::MAX;
@@ -233,7 +402,7 @@ fn counter_overflow_preserves_the_previous_record() {
             3,
             true,
             zetesis_cpu::lazy::Progress::default(),
-            zetesis_wgpu::LazyGpuStatistics {
+            &zetesis_wgpu::LazyGpuStatistics {
                 downloaded_bytes: 1,
                 ..Default::default()
             },
@@ -254,7 +423,7 @@ fn duration_overflow_preserves_the_previous_record() {
             3,
             true,
             zetesis_cpu::lazy::Progress::default(),
-            zetesis_wgpu::LazyGpuStatistics {
+            &zetesis_wgpu::LazyGpuStatistics {
                 host_wait: std::time::Duration::from_nanos(1),
                 ..Default::default()
             },

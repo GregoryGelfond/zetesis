@@ -152,6 +152,7 @@ mod physical {
                         .checked_add(stats.transport_reuses),
                     Some(stats.dispatches)
                 );
+                qualify_transport_usage(&stats);
                 assert_eq!(stats.requested_backend, backend.requested());
                 assert_eq!(stats.backend, backend.name());
                 assert!(diagnostics.contains("effective=lazy"));
@@ -172,6 +173,30 @@ mod physical {
                 eprintln!("{}", actual["statistics"]["lazy_execution"]);
             }
         }
+    }
+
+    fn qualify_transport_usage(stats: &zetesis_cli::LazyExecutionStatistics) {
+        let usage = stats.transport_usage;
+        for binding in [
+            usage.uniform,
+            usage.offsets,
+            usage.records,
+            usage.snapshots,
+            usage.seeds,
+            usage.output,
+            usage.readback,
+        ] {
+            assert_eq!(
+                binding.allocations.checked_add(binding.reuses),
+                Some(stats.dispatches)
+            );
+            assert!(binding.allocations > 0);
+            assert!(binding.allocations <= stats.transport_allocations);
+            assert!(binding.reuses >= stats.transport_reuses);
+        }
+        assert_eq!(usage.output, usage.readback);
+        assert!(usage.budget_releases <= stats.transport_allocations);
+        assert!(usage.accounting_overflow_releases <= stats.transport_allocations);
     }
 
     #[test]

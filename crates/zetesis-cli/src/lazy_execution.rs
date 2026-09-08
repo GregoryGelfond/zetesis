@@ -1,5 +1,8 @@
 //! Typed ordinary lazy execution accounting, independent of rendered output.
 
+mod transport;
+pub use transport::{LazyBufferUsage, LazyTransportUsage};
+
 /// Cumulative work from the explicitly selected lazy device executor. A selected
 /// adapter does not establish execution: actual dispatch and transfer counts do.
 /// Source work is shared across candidate occurrences, not a per-world CPU cost.
@@ -38,15 +41,17 @@ pub struct LazyExecutionStatistics {
     pub uploaded_bytes: u64,
     /// Successfully decoded result bytes.
     pub downloaded_bytes: u64,
-    /// Submitted chunks requesting a new complete transport buffer set.
+    /// Submitted chunks requesting at least one new transport buffer.
     pub transport_allocations: u64,
-    /// Submitted chunks reusing capacity within the same source batch.
+    /// Submitted chunks reusing every buffer within the same source batch.
     pub transport_reuses: u64,
     /// Maximum requested device buffer payload, including inactive capacity.
     /// This excludes host payload, driver storage and process RSS.
     pub peak_transport_bytes: u64,
-    /// Overlapping reasons for replacing complete transport buffer sets.
+    /// Overlapping reasons the previous complete buffer set could not be reused.
     pub transport_replacements: LazyTransportReplacements,
+    /// Per-binding allocation/reuse observations and slack-release causes.
+    pub transport_usage: LazyTransportUsage,
     /// Host wait plus readback decoding; this is not a kernel-only timer.
     pub host_wait: std::time::Duration,
 }
@@ -127,6 +132,7 @@ impl LazyExecutionStatistics {
             transport_reuses: 0,
             peak_transport_bytes: 0,
             transport_replacements: LazyTransportReplacements::default(),
+            transport_usage: LazyTransportUsage::default(),
             host_wait: std::time::Duration::ZERO,
         }
     }
@@ -136,7 +142,7 @@ impl LazyExecutionStatistics {
         candidates: usize,
         complete: bool,
         source: zetesis_cpu::lazy::Progress,
-        device: zetesis_wgpu::LazyGpuStatistics,
+        device: &zetesis_wgpu::LazyGpuStatistics,
     ) -> Result<(), crate::RunError> {
         let add = |left: u64, right: u64| {
             left.checked_add(right)
@@ -170,6 +176,10 @@ impl LazyExecutionStatistics {
             transport_replacements: self
                 .transport_replacements
                 .record(device.transport_replacements)
+                .ok_or(crate::RunError::LazyStatisticsOverflow)?,
+            transport_usage: self
+                .transport_usage
+                .record(device.transport_usage)
                 .ok_or(crate::RunError::LazyStatisticsOverflow)?,
             host_wait: self
                 .host_wait

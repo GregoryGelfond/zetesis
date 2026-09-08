@@ -314,7 +314,7 @@ fn lazy(sink: &mut impl Write, stats: &crate::LazyExecutionStatistics) -> io::Re
     )?;
     writeln!(
         sink,
-        "  lazy transport: buffer sets allocated={}; reused chunks={}; peak requested device bytes={} (RSS unmeasured)",
+        "  lazy transport: chunks allocating buffers={}; complete-set reuses={}; peak requested device bytes={} (RSS unmeasured)",
         stats.transport_allocations, stats.transport_reuses, stats.peak_transport_bytes
     )?;
     let reasons = stats.transport_replacements;
@@ -329,6 +329,27 @@ fn lazy(sink: &mut impl Write, stats: &crate::LazyExecutionStatistics) -> io::Re
         reasons.result_shape,
         reasons.budget,
         reasons.accounting_overflow
+    )?;
+    lazy_buffer_usage(sink, stats.transport_usage)
+}
+
+fn lazy_buffer_usage(sink: &mut impl Write, usage: crate::LazyTransportUsage) -> io::Result<()> {
+    write!(sink, "  lazy buffer requests (allocated/reused):")?;
+    for (name, binding) in [
+        ("uniform", usage.uniform),
+        ("offsets", usage.offsets),
+        ("records", usage.records),
+        ("snapshots", usage.snapshots),
+        ("seeds", usage.seeds),
+        ("output", usage.output),
+        ("readback", usage.readback),
+    ] {
+        write!(sink, " {name}={}/{};", binding.allocations, binding.reuses)?;
+    }
+    writeln!(
+        sink,
+        " slack releases: budget={}; accounting overflow={}",
+        usage.budget_releases, usage.accounting_overflow_releases
     )
 }
 
