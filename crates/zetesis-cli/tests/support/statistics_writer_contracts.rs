@@ -116,6 +116,32 @@ fn lazy_metadata_rendering_preserves_every_writer_failure() {
 }
 
 #[test]
+fn lazy_gpu_statistics_name_the_observed_grounder() {
+    // This tests the view of an explicit device report, not physical execution.
+    let mut options = options(&["--grounder", "lazy"]);
+    let mut report = actual("p.", &options, &Control::default()).unwrap();
+    options.backend = Backend::Metal;
+    report.lazy_execution = Some(crate::lazy_execution::tests::fixture());
+    let text = every_prefix(&options, &Ok(report));
+    assert!(text.contains(
+        "effective execution: oracle=closure; backend=requested GPU policy; grounder=lazy"
+    ));
+    assert!(!text.contains("grounder=eager"));
+}
+
+#[test]
+fn static_gpu_statistics_retain_eager_grounding() {
+    // No physical device is invoked by this formatting control.
+    let mut options = options(&["--grounder", "eager"]);
+    let report = actual("p.", &options, &Control::default()).unwrap();
+    options.backend = Backend::Metal;
+    let text = every_prefix(&options, &Ok(report));
+    assert!(text.contains(
+        "effective execution: oracle=closure; backend=requested GPU policy; grounder=eager"
+    ));
+}
+
+#[test]
 fn every_partial_or_cancelled_statistics_prefix_preserves_incomplete_qualification() {
     let mut requested = options(&[]);
     requested.models = 1;
