@@ -408,3 +408,91 @@ fn notes_do_not_impose_hidden_assertions() {
             .is_ok()
     );
 }
+
+#[test]
+fn exposed_coordinates_reconstruct_clean_sources() {
+    for source in verified().files() {
+        let original = fs::read_to_string(originals().join(source.path())).unwrap();
+        let mut cleaned = String::new();
+        let mut retained_start = 0;
+        for annotation in source.removed_annotations() {
+            cleaned.push_str(&original[retained_start..annotation.start_byte()]);
+            retained_start = annotation.end_byte();
+        }
+        cleaned.push_str(&original[retained_start..]);
+        assert_eq!(cleaned, source.source(), "{}", source.path());
+    }
+}
+
+#[test]
+fn exposed_case_includes_match_source_dependencies() {
+    let corpus = verified();
+    for case in corpus.cases() {
+        let source = corpus
+            .files()
+            .iter()
+            .find(|source| source.path() == case.path())
+            .unwrap();
+        assert_eq!(
+            case.includes(),
+            source
+                .includes()
+                .iter()
+                .map(examples::Include::path)
+                .collect::<Vec<_>>()
+        );
+    }
+}
+
+#[test]
+fn exposed_provenance_preserves_upstream_identity() {
+    assert_eq!(
+        verified().upstream(),
+        "https://github.com/GregoryGelfond/kr-domains"
+    );
+}
+
+#[test]
+fn contract_notes_preserve_explanatory_spelling() {
+    let text = "A note may describe a witness without requiring it.";
+    assert_eq!(contract(json!({"notes":[text]})).notes(), [text]);
+}
+
+#[test]
+fn missing_original_roots_retain_the_input_path() {
+    let directory = tempfile::tempdir().unwrap();
+    let absent = directory.path().join("absent");
+    let error = examples::verify_originals(&verified(), &absent, Limits::default()).unwrap_err();
+    assert!(
+        matches!(error, Error::Io {path, source} if path == absent && source.kind() == std::io::ErrorKind::NotFound)
+    );
+}
+
+#[test]
+fn original_license_identity_is_independently_checked() {
+    let directory = tempfile::tempdir().unwrap();
+    fs::write(directory.path().join("LICENSE"), b"different license").unwrap();
+    assert!(
+        matches!(examples::verify_originals(&verified(), directory.path(), Limits::default()),
+        Err(Error::Digest {path, ..}) if path == "LICENSE")
+    );
+}
+
+#[test]
+fn missing_original_sources_retain_the_input_path() {
+    let directory = tempfile::tempdir().unwrap();
+    copy(
+        &originals().join("LICENSE"),
+        &directory.path().join("LICENSE"),
+    );
+    let corpus = verified();
+    let first = directory
+        .path()
+        .canonicalize()
+        .unwrap()
+        .join(corpus.files()[0].path());
+    assert!(
+        matches!(examples::verify_originals(&corpus, directory.path(), Limits::default()),
+        Err(Error::Io {path, source}) if path == first && source.kind() == std::io::ErrorKind::NotFound)
+    );
+}

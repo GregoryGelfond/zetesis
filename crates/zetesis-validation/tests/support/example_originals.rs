@@ -117,3 +117,61 @@ fn annotation_spans_cannot_extend_past_the_source() {
     record.end_byte = usize::MAX;
     assert!(remove_annotations("% @expect sat\n", &[record]).is_err());
 }
+
+#[test]
+fn conflicting_satisfiability_annotations_are_refused() {
+    assert!(translate(&[annotation("% @expect sat"), annotation("% @expect unsat")]).is_err());
+}
+
+#[test]
+fn conflicting_count_annotations_are_refused() {
+    assert!(
+        translate(&[
+            annotation("% @expect sat"),
+            annotation("% @count 1"),
+            annotation("% @count 2"),
+        ])
+        .is_err()
+    );
+}
+
+#[test]
+fn conflicting_cost_annotations_are_refused() {
+    assert!(
+        translate(&[
+            annotation("% @expect sat"),
+            annotation("% @cost { 1 }"),
+            annotation("% @cost { 2 }"),
+        ])
+        .is_err()
+    );
+}
+
+#[test]
+fn witnesses_cannot_mix_selected_families() {
+    assert!(
+        translate(&[
+            annotation("% @expect sat"),
+            annotation("% @model { p }"),
+            annotation("% @optimal { p }"),
+        ])
+        .is_err()
+    );
+}
+
+#[test]
+fn required_symbols_cannot_reclassify_ordinary_models() {
+    assert!(
+        translate(&[
+            annotation("% @expect sat"),
+            annotation("% @model { p }"),
+            annotation("% @cautious optimal { p }"),
+        ])
+        .is_err()
+    );
+}
+
+#[test]
+fn satisfiable_annotations_cannot_require_no_models() {
+    assert!(translate(&[annotation("% @expect sat"), annotation("% @count 0")]).is_err());
+}
