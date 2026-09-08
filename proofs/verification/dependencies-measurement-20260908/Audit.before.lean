@@ -30,13 +30,6 @@ import Zetesis
 #print axioms Zetesis.AggregateConsumers.proposal_does_not_assert_head
 #print axioms Zetesis.AggregateConsumers.ready_split
 #print axioms Zetesis.AggregateConsumers.scheduled_input_has_prior_producer
-#print axioms Zetesis.AggregateDependencies.appended_predecessors
-#print axioms Zetesis.AggregateDependencies.covered_continuation
-#print axioms Zetesis.AggregateDependencies.covered_extension
-#print axioms Zetesis.AggregateDependencies.covered_sum
-#print axioms Zetesis.AggregateDependencies.frozen_rows
-#print axioms Zetesis.AggregateDependencies.original_rows
-#print axioms Zetesis.AggregateDependencies.row_membership
 #print axioms Zetesis.BatchAccounting.commit_accounted
 #print axioms Zetesis.BatchAccounting.commit_preserves_coverage
 #print axioms Zetesis.BatchAccounting.commit_preserves_occurrences
@@ -54,8 +47,6 @@ import Zetesis
 #print axioms Zetesis.BatchAccounting.proposal_preserves_occurrences
 #print axioms Zetesis.BatchAccounting.proposal_preserves_soundness
 #print axioms Zetesis.BatchAccounting.propose_accounted
-#print axioms Zetesis.BinaryWatch.positions_exhausted
-#print axioms Zetesis.BinaryWatch.replacement_absent
 #print axioms Zetesis.Bounds.acceptance_survives_narrowing
 #print axioms Zetesis.Bounds.accepted_seed_agrees
 #print axioms Zetesis.Bounds.closed_upper_sound

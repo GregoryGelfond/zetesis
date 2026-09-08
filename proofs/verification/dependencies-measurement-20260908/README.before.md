@@ -8,7 +8,7 @@ readable before its Lean details. The convention has one deliberately bounded
 pilot so far; it is not a claim of a library-wide rewrite.
 
 
-This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **772 kernel-checked theorems** across 66 semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
+This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **763 kernel-checked theorems** across 64 semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
 
 The formalization connects normalized stable-model semantics to candidate seeds, compositional reduct execution, lazy completion, consequence bounds, and completed search certificates. It supplies mathematical contracts for the Rust, wgpu, Rayon, and neuromorphic implementation work. It does not verify those implementations or make Lean a runtime dependency.
 
@@ -21,7 +21,7 @@ lake build
 lake env lean -DautoImplicit=false -DwarningAsError=true Audit.lean
 ```
 
-`lean-toolchain` pins `leanprover/lean4:v4.33.1`. The package has no remote dependencies, so the build itself needs no network once that toolchain exists. `lake build` compiles the umbrella module and all 66 semantic modules. `Audit.lean` requests the transitive axiom dependencies of every project theorem.
+`lean-toolchain` pins `leanprover/lean4:v4.33.1`. The package has no remote dependencies, so the build itself needs no network once that toolchain exists. `lake build` compiles the umbrella module and all 64 semantic modules. `Audit.lean` requests the transitive axiom dependencies of every project theorem.
 
 The [verification report](./verification.json) records the checked source hashes and commands. The [axiom audit](./axiom-audit.txt) contains only standard Lean logical axioms where needed: `propext`, `Quot.sound`, and `Classical.choice`. In particular, no theorem depends on `sorryAx` or `Lean.ofReduceBool`.
 
@@ -37,8 +37,6 @@ preserves an earlier inconsistent manifest and explains its repair.
 
 | Module | What is proved |
 |---|---|
-| [AggregateDependencies](./Zetesis/AggregateDependencies.lean) | Complete dependent aggregate families retain each predecessor association and equality in original and frozen clause rows; complete carriers remain premises |
-| [BinaryWatch](./Zetesis/BinaryWatch.lean) | Two distinct binary watch positions exhaust every possible replacement position, independently of literal availability and inspection order |
 | [OuterNegativeConsumers](./Zetesis/OuterNegativeConsumers.lean) | Default/double-negative outer gates retain aggregate equality and activation in the frozen reduct; projected gates quantify over the complete supplied witness family |
 | [OuterRanges](./Zetesis/OuterRanges.lean) | Complete outer carriers retain their own inclusive integer ranges, occurrence-preserving concatenation and original/frozen clause associations under total endpoint functions |
 | [JoinFrames](./Zetesis/JoinFrames.lean) | Root reset and complete child overwrites make positive-prefix membership independent of retained frame contents; an unreset root can erase current truth |
@@ -435,7 +433,7 @@ preserve the original theory and its reduct as the acceptance criterion.
 
 ## Outer values and reusable positive-join frames
 
-The [preceding clean audit](verification/consumer-execution-20260908/README.md)
+The [current clean audit](verification/consumer-execution-20260908/README.md)
 adds 15 laws in three modules, reaching **763 theorems in 64 modules**. All 748
 prior declaration locations and axiom sets and all 61 prior semantic source
 modules are unchanged. The declined compact-trail experiment contributes no
@@ -461,27 +459,3 @@ that schedule. Packed bits, tail masks, array bounds, Rust visitor scheduling,
 allocation lifetime/budgets and WGSL correspondence remain separate obligations.
 These additions strengthen the reduct-based foundation without claiming formal
 verification of the concrete solver.
-
-## Dependent aggregate producers and binary replacement
-
-The [current clean audit](verification/dependencies-measurement-20260908/README.md)
-adds nine laws in two modules, reaching **772 theorems in 66 modules**. All 763
-prior declaration names, source locations and transitive axiom sets and all 64
-prior semantic source modules are unchanged.
-
-`AggregateDependencies` composes supplied complete aggregate candidate families
-indexed by their completed predecessor rows. Equal child values do not erase
-parent association. A signed-sum specialization retains complete full-tuple
-coverage, and emitted clauses retain both predecessor activation/equalities and
-the dependent equality in original truth and every frozen M/J pair. Total
-mathematical value functions and complete carriers remain premises. Rust safety,
-input analysis, topological scheduling, local joins, caches, cursor resets,
-fixed-width arithmetic and resource completion are not proved.
-
-`BinaryWatch` shows that two distinct valid positions exhaust a binary clause,
-so an unwatched replacement search returns none under any availability predicate
-and inspection order. Rust must still establish the watch invariant and preserve
-unit/conflict decisions. Registry maintenance, candidate order, work charging,
-CNF encoding, reduct construction and executable refinement are not proved.
-Neither addition weakens the original-theory and frozen-reduct acceptance
-foundation or claims that the concrete solver is formally verified.

@@ -28,13 +28,6 @@
 'Zetesis.AggregateConsumers.proposal_does_not_assert_head' depends on axioms: [propext]
 'Zetesis.AggregateConsumers.ready_split' depends on axioms: [propext]
 'Zetesis.AggregateConsumers.scheduled_input_has_prior_producer' depends on axioms: [propext]
-'Zetesis.AggregateDependencies.appended_predecessors' depends on axioms: [propext]
-'Zetesis.AggregateDependencies.covered_continuation' depends on axioms: [propext, Quot.sound]
-'Zetesis.AggregateDependencies.covered_extension' depends on axioms: [propext, Quot.sound]
-'Zetesis.AggregateDependencies.covered_sum' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.AggregateDependencies.frozen_rows' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.AggregateDependencies.original_rows' depends on axioms: [propext, Quot.sound]
-'Zetesis.AggregateDependencies.row_membership' depends on axioms: [propext, Quot.sound]
 'Zetesis.BatchAccounting.commit_accounted' depends on axioms: [propext]
 'Zetesis.BatchAccounting.commit_preserves_coverage' depends on axioms: [propext]
 'Zetesis.BatchAccounting.commit_preserves_occurrences' depends on axioms: [propext, Quot.sound]
@@ -52,8 +45,6 @@
 'Zetesis.BatchAccounting.proposal_preserves_occurrences' depends on axioms: [propext, Quot.sound]
 'Zetesis.BatchAccounting.proposal_preserves_soundness' does not depend on any axioms
 'Zetesis.BatchAccounting.propose_accounted' depends on axioms: [propext]
-'Zetesis.BinaryWatch.positions_exhausted' depends on axioms: [propext, Quot.sound]
-'Zetesis.BinaryWatch.replacement_absent' depends on axioms: [propext, Quot.sound]
 'Zetesis.Bounds.acceptance_survives_narrowing' does not depend on any axioms
 'Zetesis.Bounds.accepted_seed_agrees' does not depend on any axioms
 'Zetesis.Bounds.closed_upper_sound' does not depend on any axioms

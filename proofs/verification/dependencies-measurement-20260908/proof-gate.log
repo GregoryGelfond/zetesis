@@ -1,3 +1,4 @@
+Build completed successfully (69 jobs).
 'Zetesis.AggregateAssignment.active_tuples_nodup' depends on axioms: [propext]
 'Zetesis.AggregateAssignment.actual_tuple_sum_is_candidate' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AggregateAssignment.coalesced_active_tuples' depends on axioms: [propext, Quot.sound]
@@ -822,3 +823,4 @@
 'Zetesis.sub_antisymm' depends on axioms: [propext, Quot.sound]
 'Zetesis.sub_refl' does not depend on any axioms
 'Zetesis.sub_trans' does not depend on any axioms
+Proof record: PASS: 772 theorems; 66 semantic modules; 71 source/configuration files

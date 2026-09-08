@@ -77,14 +77,3 @@ finite execution schedule: reset the root, overwrite each child, then use it as
 the next parent. Its resulting membership is independent of old frame contents.
 This permits a mathematical storage-reuse argument while leaving packed Rust
 storage, exact allocation accounting and physical GPU correspondence explicit.
-
-[AggregateDependencies](../Zetesis/AggregateDependencies.lean) continues the
-outer-value path through complete families indexed by predecessor rows. Its
-coverage laws compose without treating proposed values as realized aggregate
-results; original activation and every equality remain in frozen clauses.
-Source scheduling and concrete carrier completeness remain unproved bridges.
-
-[BinaryWatch](../Zetesis/BinaryWatch.lean) is a small algorithmic specialization:
-two distinct positions exhaust a binary clause, leaving no replacement to find.
-The mathematical result requires valid distinct watches; the Rust registry,
-propagation order, charged work and reduct encoding remain separate obligations.

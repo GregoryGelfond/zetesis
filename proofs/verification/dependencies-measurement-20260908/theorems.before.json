@@ -150,41 +150,6 @@
     "line": 60
   },
   {
-    "name": "Zetesis.AggregateDependencies.appended_predecessors",
-    "file": "Zetesis/AggregateDependencies.lean",
-    "line": 82
-  },
-  {
-    "name": "Zetesis.AggregateDependencies.covered_continuation",
-    "file": "Zetesis/AggregateDependencies.lean",
-    "line": 70
-  },
-  {
-    "name": "Zetesis.AggregateDependencies.covered_extension",
-    "file": "Zetesis/AggregateDependencies.lean",
-    "line": 47
-  },
-  {
-    "name": "Zetesis.AggregateDependencies.covered_sum",
-    "file": "Zetesis/AggregateDependencies.lean",
-    "line": 55
-  },
-  {
-    "name": "Zetesis.AggregateDependencies.frozen_rows",
-    "file": "Zetesis/AggregateDependencies.lean",
-    "line": 114
-  },
-  {
-    "name": "Zetesis.AggregateDependencies.original_rows",
-    "file": "Zetesis/AggregateDependencies.lean",
-    "line": 96
-  },
-  {
-    "name": "Zetesis.AggregateDependencies.row_membership",
-    "file": "Zetesis/AggregateDependencies.lean",
-    "line": 35
-  },
-  {
     "name": "Zetesis.BatchAccounting.commit_accounted",
     "file": "Zetesis/BatchAccounting.lean",
     "line": 103
@@ -268,16 +233,6 @@
     "name": "Zetesis.BatchAccounting.propose_accounted",
     "file": "Zetesis/BatchAccounting.lean",
     "line": 61
-  },
-  {
-    "name": "Zetesis.BinaryWatch.positions_exhausted",
-    "file": "Zetesis/BinaryWatch.lean",
-    "line": 20
-  },
-  {
-    "name": "Zetesis.BinaryWatch.replacement_absent",
-    "file": "Zetesis/BinaryWatch.lean",
-    "line": 45
   },
   {
     "name": "Zetesis.Bounds.acceptance_survives_narrowing",
