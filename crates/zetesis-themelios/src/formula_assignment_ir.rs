@@ -1,4 +1,4 @@
-//! Explicit scope checks for independent finite aggregate equality binders.
+//! Explicit scope checks for finite aggregate equality binders and consumers.
 
 use themelios_program::program::{
     Aggregate, AggregateFunction, BodyElement, DefaultNegation, Relation, Rule,
@@ -126,14 +126,21 @@ impl Compiler<'_> {
                     consumed |= self.literal_uses(literal, target)?;
                     continue;
                 }
-                // Its own single equality guard supplies the target. Every
-                // other binder must also have independent tuples/conditions.
-                // Non-binding aggregate comparisons run after the complete
-                // generated row, so their established element dependencies
-                // remain valid. Other scopes retain their restrictions.
-                if matches!(literal, LiteralIr::Aggregate(other) if other.binding == Some(target)) {
-                    continue;
+                if let LiteralIr::Aggregate(other) = literal {
+                    // Its own equality guard supplies the target; scope checks
+                    // forbid reading that target inside its own elements.
+                    // Another producer may read it only after the checked plan
+                    // completes its inputs. Such a dependency is still a value
+                    // consumer for the objective-observer admission contract.
+                    if let Some(produced) = other.binding {
+                        if produced != target {
+                            consumed |= self.literal_uses(literal, target)?;
+                        }
+                        continue;
+                    }
                 }
+                // Non-binding comparisons retain their established completed-
+                // row element scopes. Other consumers keep their restrictions.
                 if self.literal_uses(literal, target)? {
                     return Err(
                         unsupported(ProfileFeature::AggregateAssignment, self.location).into(),

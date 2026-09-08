@@ -80,38 +80,37 @@ fn recursive_assignment_conditions_do_not_become_extensional_facts() {
 }
 
 #[test]
-fn outer_bindings_local_scopes_and_previously_bound_targets_are_preserved() {
+fn outer_bindings_limit_aggregate_eligibility() {
     assert_eq!(
         models(&input(
             "g(a).p(a,2).p(b,3).total(G,N):-g(G),N=#sum{W:p(G,W)}."
         )),
         expected(&["g(a).p(a,2).p(b,3).total(a,2)."])
     );
+}
+
+#[test]
+fn bound_targets_remain_aggregate_tests() {
     assert_eq!(
         models(&input("d(2).p.n(N):-d(N),N=#sum{2:p}.")),
         expected(&["d(2).p.n(2)."])
     );
+}
+
+#[test]
+fn own_targets_cannot_bind_local_witnesses() {
     for source in ["n(N):-N=#count{X:p(N,X)}.", "n(N):-N=#count{N:p}."] {
         assert!(
             matches!(admit(source), Err(FormulaFailure::UnsafeVariable { .. })),
             "{source}"
         );
     }
-    {
-        let source = "n(A,B):-A=#count{},B=#count{A:p}.";
-        assert!(
-            matches!(
-                admit(source),
-                Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
-                    AdmissionFailure::Profile {
-                        feature: ProfileFeature::AggregateAssignment,
-                        ..
-                    }
-                )))
-            ),
-            "{source}"
-        );
-    }
+}
+
+#[test]
+fn aggregate_producers_consume_prior_values() {
+    let source = "n(A,B):-A=#count{},B=#count{A:p}.";
+    assert_eq!(models(&input(source)), expected(&["n(0,0)."]));
 }
 
 #[test]

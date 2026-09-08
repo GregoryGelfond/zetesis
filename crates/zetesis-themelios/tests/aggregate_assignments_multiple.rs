@@ -225,14 +225,8 @@ fn profile(error: &FormulaFailure, expected: ProfileFeature) {
 }
 
 #[test]
-fn unsupported_aggregate_dependencies_remain_refused() {
+fn extra_aggregate_guards_remain_refused() {
     for source in [
-        "r(N,M):-N=#count{M:p},M=#count{}.",
-        "r(N,M):-N=#count{},M=#count{N:p}.",
-        "r(N,M):-N=#count{X:p(X),X=M},M=#count{}.",
-        "r(N,M):-N=#count{X:p(X),not q(M,_)},M=#count{}.",
-        "r(N,M):-N=#count{X:p(X),Y=M+1},M=#count{}.",
-        "r(N,M):-N=#count{X:p(X),X=1..M},M=#count{}.",
         "r(N,M):-N=#count{},M=#count{},M<=#count{}.",
         "r(N,M):-N=#count{},M=#count{},M=#sum{}.",
     ] {

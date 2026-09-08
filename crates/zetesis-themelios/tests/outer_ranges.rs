@@ -240,25 +240,10 @@ fn ranges_cannot_supply_cyclic_aggregate_inputs() {
 }
 
 #[test]
-fn aggregate_generators_cannot_consume_range_outputs() {
+fn aggregate_generators_consume_complete_range_outputs() {
     let source = "q(M):-N=#count{},K=N..N+1,M=#count{K:p}.";
-    let error = prepare_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_err();
-    assert!(
-        matches!(
-            error,
-            FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                feature: ProfileFeature::AggregateAssignment,
-                ..
-            }))
-        ),
-        "{error}"
-    );
+    let expanded = "q(0):-0=#count{},0=#count{0:p}.q(0):-0=#count{},0=#count{1:p}.";
+    assert_eq!(native(&input(source)), native(&input(expanded)));
 }
 
 #[test]

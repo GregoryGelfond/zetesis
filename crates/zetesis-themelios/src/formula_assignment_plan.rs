@@ -8,16 +8,16 @@
 use themelios_program::program::DefaultNegation;
 use zetesis_core::Term;
 
-use crate::diagnostic::unsupported;
 use crate::formula_binding_cursor::target;
 use crate::formula_ir::{AggregateGuard, Compiler, LiteralIr};
-use crate::{ExpansionResource, FormulaFailure, ProfileFeature};
+use crate::{ExpansionResource, FormulaFailure};
 
 pub(crate) struct Plan {
     pub steps: Vec<Step>,
-    /// An outer filter, negative gate, scalar/range binding or head bound reads
-    /// an aggregate proposal or a value derived from one. Objective admission
-    /// consumes this fact; scheduling does not certify a total objective observer.
+    /// An outer filter, negative gate, scalar/range binding, aggregate producer
+    /// or head bound reads an aggregate proposal or a value derived from one.
+    /// Objective admission consumes this fact; scheduling does not certify a
+    /// total objective observer.
     pub consumers: bool,
 }
 
@@ -114,9 +114,10 @@ impl Compiler<'_> {
             self.scope_work(step.required.len())?;
             let dependent = step.required.iter().any(|input| aggregate_values[*input]);
             let aggregate = matches!(body[step.literal], LiteralIr::Aggregate(_));
-            if aggregate && dependent {
-                return Err(unsupported(ProfileFeature::AggregateAssignment, self.location).into());
-            }
+            // A dependent aggregate selects its own candidate carrier from
+            // this completed predecessor row. The cursor resets that carrier
+            // before any predecessor changes; original equalities still
+            // determine whether the full proposal row is realized.
             ready[step.produced] = true;
             aggregate_values[step.produced] = aggregate || dependent;
             steps.push(step);

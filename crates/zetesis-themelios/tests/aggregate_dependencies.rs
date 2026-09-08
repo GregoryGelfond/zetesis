@@ -1,6 +1,6 @@
-//! Completed outer values select original negative formulas, never support tests.
+//! Dependent aggregate proposals retain their original equality and frozen truth.
 
-#[path = "support/outer_negative_consumers.rs"]
+#[path = "support/aggregate_dependencies.rs"]
 mod cases;
 #[path = "support/finite_bindings.rs"]
 mod reference;
@@ -10,13 +10,14 @@ use std::collections::BTreeSet;
 use cases::CASES;
 use reference::{Models, atom_text, exhaustive, external, holds, native, values};
 use themelios_base::source::SourceId;
+use themelios_program::term::EvalError;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
     ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
     admit_formula, prepare_formula,
 };
 
-const SOURCE: SourceId = SourceId::new(149);
+const SOURCE: SourceId = SourceId::new(157);
 
 fn options() -> AdmissionOptions {
     AdmissionOptions {
@@ -129,39 +130,114 @@ fn original_sources_match_clingo_full_models() {
 }
 
 #[test]
-fn negative_gates_cannot_read_possible_support() {
-    let source = "{p(0)}.q(N):-N=#count{},not p(N).";
+fn every_producer_equality_remains_semantic() {
+    let source = "{p}.q(N,M):-N=#count{1:p},M=#sum{N}.";
     let expected = Models::from([
-        BTreeSet::from(["p(0)".into()]),
-        BTreeSet::from(["q(0)".into()]),
+        BTreeSet::from(["q(0,0)".into()]),
+        BTreeSet::from(["p".into(), "q(1,1)".into()]),
     ]);
     assert_eq!(native(&input(source)), expected);
-    // p(0) is possible in both candidates. Treating possibility as truth
-    // would discard the q(0) clause even when the candidate omits p(0).
-    assert_ne!(native(&input("{p(0)}.")), expected);
+    for weakened in [
+        "{p}.q(0,M):-M=#sum{0}.q(1,M):-M=#sum{1}.",
+        "{p}.q(0,0):-0=#count{1:p}.q(1,0):-1=#count{1:p}.q(1,1):-1=#count{1:p}.",
+    ] {
+        assert_ne!(native(&input(weakened)), expected);
+    }
 }
 
 #[test]
-fn double_negation_cannot_be_replaced_by_positive_truth() {
-    let expected = Models::from([BTreeSet::new(), BTreeSet::from(["p(0)".into()])]);
-    assert_eq!(native(&input("p(N):-N=#count{},not not p(N).")), expected);
-    assert_ne!(native(&input("p(0):-0=#count{},p(0).")), expected);
+fn source_order_preserves_dependent_values() {
+    let instructions = ["N=#count{1:p}", "Y=N+1", "M=#sum{Y}"];
+    let expected = Models::from([
+        BTreeSet::from(["q(1)".into()]),
+        BTreeSet::from(["p".into(), "q(2)".into()]),
+    ]);
+    for order in [
+        [0, 1, 2],
+        [0, 2, 1],
+        [1, 0, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+        [2, 1, 0],
+    ] {
+        let body = order.map(|index| instructions[index]).join(",");
+        assert_eq!(native(&input(&format!("{{p}}.q(M):-{body}."))), expected);
+    }
 }
 
 #[test]
-fn negative_success_cannot_replace_original_equalities() {
-    let source = "{d}.q(N):-N=#count{1:d},not p(N).";
-    let unguarded = "{d}.q(0):-not p(0).q(1):-not p(1).";
-    assert_ne!(native(&input(source)), native(&input(unguarded)));
+fn repeated_predecessors_restart_dependent_carriers() {
+    let source = "i(1..2).q(I,M):-i(I),N=#count{},M=#sum{N}.";
+    assert_eq!(
+        native(&input(source)),
+        Models::from([BTreeSet::from([
+            "i(1)".into(),
+            "i(2)".into(),
+            "q(1,0)".into(),
+            "q(2,0)".into(),
+        ])])
+    );
 }
 
 #[test]
-fn negative_atoms_cannot_supply_missing_bindings() {
+fn full_outer_values_distinguish_cached_families() {
+    let source = "{p}.q(N,M):-N=#count{1:p},M=#count{N:p;0:p}.";
+    assert_eq!(
+        native(&input(source)),
+        Models::from([
+            BTreeSet::from(["q(0,0)".into()]),
+            BTreeSet::from(["p".into(), "q(1,2)".into()]),
+        ])
+    );
+    // N=0 coalesces the keys; N=1 keeps two. Reusing the first
+    // family's eligibility or equality roots would lose q(1,2).
+    assert_ne!(
+        native(&input("{p}.q(N,M):-N=#count{1:p},M=#count{0:p;0:p}.")),
+        native(&input(source))
+    );
+}
+
+#[test]
+fn choice_activation_keeps_the_complete_dependent_group() {
+    let source = "{e}.M{a;b}M:-e,N=#count{},Y=N+1,M=#sum{Y}.";
+    let expected = Models::from([
+        BTreeSet::new(),
+        BTreeSet::from(["e".into(), "a".into()]),
+        BTreeSet::from(["e".into(), "b".into()]),
+    ]);
+    assert_eq!(native(&input(source)), expected);
+    assert_ne!(native(&input("{e}.1{a}1:-e.1{b}1:-e.")), expected);
+}
+
+#[test]
+fn cyclic_producers_have_located_refusals() {
     for source in [
-        "q(N):-N=#count{},not p(N,X).",
-        "q(N):-N=#count{},not not p(N,X).",
-        "q(N):-N=#count{},not p(X,_).",
-        "q(N):-N=#count{},not -p(N,_).",
+        "q(N,M):-N=#count{M:p},M=#count{N:q}.",
+        "q(M):-N=#count{Y:p},M=#sum{N},Y=M+1.",
+        "q(M):-N=#count{K:p},K=M..M+1,M=#sum{N}.",
+    ] {
+        let error = prepare_formula(
+            source.into(),
+            options(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(error, FormulaFailure::CyclicValueInput { .. }),
+            "{source}: {error}"
+        );
+        assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+    }
+}
+
+#[test]
+fn producer_inputs_require_independent_bindings() {
+    for source in [
+        "q(N):-N=#count{N:p}.",
+        "q(N,M):-N=#count{},M=#count{X:p(M,X)}.",
+        "q(M):-N=#count{},M=#count{X:not p(X,N)}.",
+        "q(M):-N=#count{},M=#count{X:p(X),X<Y}.",
     ] {
         let error = prepare_formula(
             source.into(),
@@ -178,61 +254,53 @@ fn negative_atoms_cannot_supply_missing_bindings() {
     }
 }
 
-#[test]
-fn conditional_consumers_remain_located_refusals() {
-    for source in ["q(N):-N=#count{},p(N):d.", "q(N):-N=#count{},not p(N):d."] {
-        let error = prepare_formula(
-            source.into(),
-            options(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_err();
-        assert!(
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                    feature: ProfileFeature::AggregateAssignment,
-                    ..
-                }))
-            ),
-            "{source}: {error}"
-        );
-        assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
-    }
+fn profile(source: &str, expected: ProfileFeature) {
+    let error = prepare_formula(
+        source.into(),
+        options(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap_err();
+    assert!(
+        matches!(error, FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile { feature, .. })) if feature == expected),
+        "{source}: {error}"
+    );
+    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
 }
 
 #[test]
-fn negative_consumers_retain_objective_restrictions() {
+fn additional_guards_do_not_become_duplicate_producers() {
     for source in [
-        "q(N):-N=#count{},not p(N).#minimize{1,N:q(N)}.",
-        "{q}:-N=#count{},not not p(N).#minimize{1:q}.",
-        "#count{1:q}:-N=#count{},not p(N,_).#minimize{1:q}.",
+        "q(M):-N=#count{},M=#sum{N},M=#count{}.",
+        "q(M):-N=#count{},M=#sum{N},M<=#count{}.",
     ] {
-        let error = prepare_formula(
-            source.into(),
-            options(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_err();
-        assert!(
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                    feature: ProfileFeature::ObjectiveAggregateDependency,
-                    ..
-                }))
-            ),
-            "{source}: {error}"
-        );
-        assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+        profile(source, ProfileFeature::AggregateAssignment);
     }
 }
 
 #[test]
-fn false_gates_cannot_hide_undefined_arguments() {
-    let source = "p(0).q(N):-N=#count{},not p(N),not p(1/N).";
+fn dependent_producers_preserve_objective_restrictions() {
+    for source in [
+        "q(M):-N=#count{},M=#sum{N}.#minimize{M:q(M)}.",
+        "M{q}M:-N=#count{},M=#sum{N}.#minimize{1:q}.",
+        "M#count{1:q}M:-N=#count{},M=#sum{N}.#minimize{1:q}.",
+    ] {
+        profile(source, ProfileFeature::ObjectiveAggregateDependency);
+    }
+}
+
+#[test]
+fn unrelated_objectives_keep_their_priority() {
+    let source = "{p}.q(M):-N=#count{},M=#sum{N}.#minimize{1@3:p}.";
+    assert_eq!(input(source).objectives().priorities(), &[3]);
+}
+
+#[test]
+fn proposal_arithmetic_errors_refuse_the_source() {
+    // The first aggregate actually equals one. Its unrealizable zero proposal
+    // must not suppress the established whole-admission arithmetic policy.
+    let source = "q(M):-N=#count{1},Y=1/N,M=#sum{Y}.";
     let error = admit_formula(
         source.into(),
         options(),
@@ -243,7 +311,10 @@ fn false_gates_cannot_hide_undefined_arguments() {
     assert!(
         matches!(
             error,
-            FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })
+            FormulaFailure::Expansion(ExpansionFailure::Evaluation {
+                error: EvalError::Undefined,
+                ..
+            })
         ),
         "{error}"
     );
@@ -258,12 +329,37 @@ fn original_sources_remain_owned() {
 }
 
 #[test]
+fn predicate_recursion_cannot_bootstrap_positive_support() {
+    let admitted = input("q(M):-N=#count{1:q(1)},M=#count{N:q(1)}.");
+    assert_eq!(
+        native(&admitted),
+        Models::from([BTreeSet::from(["q(0)".into()])])
+    );
+    assert_eq!(native(&admitted), exhaustive(&admitted));
+}
+
+proptest::proptest! {
+    #![proptest_config(proptest::test_runner::Config::with_cases(32))]
+    #[test]
+    fn affine_weights_preserve_dependent_sums(offset in -2_i32..3) {
+        let source = format!("{{p}}.q(N,M):-M=#sum{{Y}},Y=N+({offset}),N=#count{{1:p}}.");
+        let expected = Models::from([
+            BTreeSet::from([format!("q(0,{offset})")]),
+            BTreeSet::from(["p".into(), format!("q(1,{})", offset + 1)]),
+        ]);
+        proptest::prop_assert_eq!(native(&input(&source)), expected);
+    }
+}
+
+#[test]
 fn grounding_limits_are_inclusive() {
-    let source = "{p(0,a);p(0,b)}.q(Y):-N=#count{},Y=N+1,not p(N,_).";
+    let source = "q(M):-N=#count{},Y=N+1,M=#sum{Y}.";
     for resource in [
         FormulaResource::AssignmentValues,
         FormulaResource::Substitutions,
         FormulaResource::Work,
+        FormulaResource::AggregateCacheRows,
+        FormulaResource::AggregateCacheRoots,
     ] {
         let limits = |ceiling| {
             let mut limits = FormulaLimits::default();
@@ -273,6 +369,12 @@ fn grounding_limits_are_inclusive() {
                 }
                 FormulaResource::Substitutions => limits.max_substitutions = ceiling,
                 FormulaResource::Work => limits.max_work = ceiling,
+                FormulaResource::AggregateCacheRows => {
+                    limits.max_aggregate_cache_rows = usize::try_from(ceiling).unwrap();
+                }
+                FormulaResource::AggregateCacheRoots => {
+                    limits.max_aggregate_cache_roots = usize::try_from(ceiling).unwrap();
+                }
                 _ => unreachable!(),
             }
             limits
@@ -327,14 +429,16 @@ fn grounding_limits_are_inclusive() {
             matches!(error, FormulaFailure::Limit { resource: actual, limit, observed, .. } if actual == resource && limit == u128::from(lower-1) && observed == u128::from(lower)),
             "{error}"
         );
-        assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+        let location = error.diagnostics()[0].primary().location;
+        assert_eq!(location.source, SOURCE);
+        assert_eq!(input(source).source().slice(location.span).unwrap(), source);
         println!("inclusive_{resource:?}={lower}");
     }
 }
 
 #[test]
 fn scalar_storage_limit_is_inclusive() {
-    let source = "{p(0,a)}.q(N):-N=#count{},not p(N,_).";
+    let source = "q(M):-N=#count{},Y=N+1,M=#sum{Y}.";
     let limits = |ceiling| ExpansionLimits {
         max_scalar_bytes: ceiling,
         ..Default::default()

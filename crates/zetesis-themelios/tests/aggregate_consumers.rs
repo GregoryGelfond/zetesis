@@ -303,8 +303,8 @@ fn original_sources_match_clingo_full_models() {
 #[test]
 fn unsupported_consumers_remain_profile_refusals() {
     for source in [
-        "q(M):-N=#count{},Y=N+1,M=#count{Y:p}.",
         "q(N):-N=#count{},Y=N+1,p(Y):d.",
+        "q(N):-N=#count{},not p(N):d.",
     ] {
         let error = prepare_formula(
             source.into(),

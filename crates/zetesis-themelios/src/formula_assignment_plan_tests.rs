@@ -240,3 +240,58 @@ fn range_filters_do_not_produce_already_bound_targets() {
     assert_eq!(plan.steps[0].produced, 0);
     assert!(plan.consumers);
 }
+
+fn reading_aggregate(target: usize, input: usize) -> LiteralIr {
+    let mut literal = aggregate(target);
+    let LiteralIr::Aggregate(aggregate) = &mut literal else {
+        unreachable!()
+    };
+    aggregate.elements.push(AggregateElementIr {
+        key: AggregateKey::Tuple(vec![CoreTerm::Variable(input)]),
+        condition: Vec::new(),
+        variables: target.max(input) + 1,
+    });
+    literal
+}
+
+#[test]
+fn aggregate_producers_follow_complete_inputs() {
+    let body = [
+        reading_aggregate(0, 1),
+        LiteralIr::Bind {
+            target: 1,
+            value: variable(2),
+        },
+        aggregate(2),
+    ];
+    let plan = plan(&body, 3, ExpansionLimits::default()).unwrap();
+    assert_eq!(
+        plan.steps
+            .iter()
+            .map(|step| (step.literal, step.required.as_slice()))
+            .collect::<Vec<_>>(),
+        [(2, &[][..]), (1, &[2][..]), (0, &[1][..])]
+    );
+    assert!(plan.consumers);
+}
+
+#[test]
+fn direct_aggregate_dependencies_are_objective_consumers() {
+    let body = [reading_aggregate(0, 1), aggregate(1)];
+    let plan = plan(&body, 2, ExpansionLimits::default()).unwrap();
+    assert_eq!(
+        plan.steps
+            .iter()
+            .map(|step| step.literal)
+            .collect::<Vec<_>>(),
+        [1, 0]
+    );
+    assert!(plan.consumers);
+}
+
+#[test]
+fn cyclic_aggregate_inputs_have_a_typed_refusal() {
+    let body = [reading_aggregate(0, 1), reading_aggregate(1, 0)];
+    let error = plan(&body, 2, ExpansionLimits::default()).err().unwrap();
+    assert!(matches!(error, FormulaFailure::CyclicValueInput { .. }));
+}
