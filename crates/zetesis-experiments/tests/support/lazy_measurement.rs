@@ -169,7 +169,6 @@ fn inconsistent_device_counters_refuse_qualification() {
 #[test]
 fn device_observations_preserve_recorded_units() {
     let work = view::DeviceWork::from(zetesis_wgpu::LazyGpuStatistics {
-        transport_replacements: zetesis_wgpu::LazyTransportReplacements::default(),
         dispatches: 2,
         world_instances: 3,
         uploaded_bytes: 4,
@@ -193,8 +192,8 @@ fn device_observations_preserve_recorded_units() {
             "transport_allocations": 1,
             "transport_reuses": 1,
             "peak_transport_bytes": 256,
-            "host_wait_ns": 6
-            ,"transport_replacements": {
+            "host_wait_ns": 6,
+            "transport_replacements": {
                 "initial": 1,
                 "offsets_growth": 0,
                 "records_growth": 0,

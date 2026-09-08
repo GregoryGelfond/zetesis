@@ -73,7 +73,12 @@ fn physical_fixtures_belong_to_the_lazy_source_profile() {
 }
 
 #[cfg(feature = "gpu")]
+#[path = "support/physical_backend.rs"]
+mod physical_backend;
+
+#[cfg(feature = "gpu")]
 mod physical {
+    use super::physical_backend::Backend;
     use super::{Completion, Control, options, run_with_diagnostics};
     use zetesis_cli::{Interruption, RunError};
     use zetesis_cpu::Stop;
@@ -101,6 +106,16 @@ mod physical {
     #[test]
     #[ignore = "requires physical Metal through the ordinary lazy solver"]
     fn ordinary_lazy_metal_preserves_complete_cpu_models() {
+        qualify_lazy_models(Backend::Metal);
+    }
+
+    #[test]
+    #[ignore = "requires actual Vulkan through the ordinary solver"]
+    fn ordinary_lazy_vulkan_matches_cpu_models() {
+        qualify_lazy_models(Backend::Vulkan);
+    }
+
+    fn qualify_lazy_models(backend: Backend) {
         for source in [
             WORLDS,
             "p(1). p(2). q(X):-p(X).",
@@ -114,7 +129,7 @@ mod physical {
                     source,
                     &[
                         "--backend",
-                        "metal",
+                        backend.argument(),
                         "--batch-size",
                         batch,
                         "--stats",
@@ -137,8 +152,8 @@ mod physical {
                         .checked_add(stats.transport_reuses),
                     Some(stats.dispatches)
                 );
-                assert_eq!(stats.requested_backend, zetesis_cli::Backend::Metal);
-                assert_eq!(stats.backend, "Metal");
+                assert_eq!(stats.requested_backend, backend.requested());
+                assert_eq!(stats.backend, backend.name());
                 assert!(diagnostics.contains("effective=lazy"));
                 assert!(!diagnostics.contains("effective=eager"));
                 assert!(diagnostics.contains("effective execution: oracle=closure; backend=requested GPU policy; grounder=lazy; see backend diagnostics for actual adapter"));
@@ -162,11 +177,21 @@ mod physical {
     #[test]
     #[ignore = "requires physical Metal through the ordinary lazy solver"]
     fn requested_model_limit_retains_completed_lazy_candidates() {
+        qualify_model_limit(Backend::Metal);
+    }
+
+    #[test]
+    #[ignore = "requires actual Vulkan through the ordinary solver"]
+    fn vulkan_model_limit_retains_completed_candidates() {
+        qualify_model_limit(Backend::Vulkan);
+    }
+
+    fn qualify_model_limit(backend: Backend) {
         let (report, value, _) = solve(
             WORLDS,
             &[
                 "--backend",
-                "metal",
+                backend.argument(),
                 "--batch-size",
                 "3",
                 "--models",
@@ -188,9 +213,26 @@ mod physical {
     #[test]
     #[ignore = "requires physical Metal through the ordinary lazy solver"]
     fn lazy_source_stop_preserves_unfinished_candidate_counts() {
+        qualify_source_stop(Backend::Metal);
+    }
+
+    #[test]
+    #[ignore = "requires actual Vulkan through the ordinary solver"]
+    fn vulkan_source_stop_retains_unfinished_candidates() {
+        qualify_source_stop(Backend::Vulkan);
+    }
+
+    fn qualify_source_stop(backend: Backend) {
         let (report, value, _) = solve(
             WORLDS,
-            &["--backend", "metal", "--max-work", "0", "--stats", "--json"],
+            &[
+                "--backend",
+                backend.argument(),
+                "--max-work",
+                "0",
+                "--stats",
+                "--json",
+            ],
         );
         assert_eq!(report.completion, Completion::Interrupted);
         assert_eq!(
@@ -218,9 +260,25 @@ mod physical {
     #[test]
     #[ignore = "requires physical Metal through the ordinary lazy solver"]
     fn lazy_writer_failure_preserves_completed_device_work() {
+        qualify_writer_failure(Backend::Metal);
+    }
+
+    #[test]
+    #[ignore = "requires actual Vulkan through the ordinary solver"]
+    fn vulkan_writer_failure_retains_completed_work() {
+        qualify_writer_failure(Backend::Vulkan);
+    }
+
+    fn qualify_writer_failure(backend: Backend) {
         let error = zetesis_cli::run_detailed_with_diagnostics(
             WORLDS.into(),
-            &options(&["--backend", "metal", "--batch-size", "3", "--stats"]),
+            &options(&[
+                "--backend",
+                backend.argument(),
+                "--batch-size",
+                "3",
+                "--stats",
+            ]),
             &mut BrokenWriter,
             &mut Vec::new(),
             &Control::default(),

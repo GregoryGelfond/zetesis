@@ -193,16 +193,20 @@ Physical device tests run separately on an accessible adapter:
 
 ```sh
 zetesis devices
-cargo test --locked -p zetesis-wgpu --test hardware -- --ignored --nocapture
+cargo test --locked -p zetesis-wgpu --test hardware metal -- --ignored --nocapture
 cargo test --locked -p zetesis-cli -p zetesis-wgpu --all-features \
-  --test formula_gpu --test hardware_formula -- --ignored --nocapture
+  --test formula_gpu --test hardware_formula -- --ignored --skip vulkan --nocapture
 cargo test --locked -p zetesis-cli -p zetesis-wgpu --all-features \
-  --test lazy_gpu --test hardware_lazy -- --ignored --nocapture
+  --test lazy_gpu --test hardware_lazy -- --ignored --skip vulkan --nocapture
 ```
 
-These named groups include Metal qualification. Shader compilation, CPU fallback
-and hosted CI do not qualify a physical GPU. Retain the actual adapter, binary
-identity and observed device work; do not relabel old results for a new build.
+These commands select Metal qualification on macOS. The shared groups also have
+explicit Vulkan counterparts; use the `vulkan` test-name filter on Linux, as
+described in the [laptop qualification plan](design/linux-vulkan-qualification.md).
+Unfiltered ignored tests deliberately require both APIs. Shader compilation,
+CPU fallback and hosted CI do not qualify a physical GPU. Retain the actual
+adapter, binary identity and observed device work; do not relabel old results
+for a new build.
 
 ## Measure and document the result
 

@@ -107,7 +107,12 @@ fn cpu_only_formula_hardware_request_is_explicitly_unavailable() {
 }
 
 #[cfg(feature = "gpu")]
+#[path = "support/physical_backend.rs"]
+mod physical_backend;
+
+#[cfg(feature = "gpu")]
 mod physical {
+    use super::physical_backend::Backend;
     use super::{Completion, Control, options, run_with_diagnostics};
 
     fn records(output: &[u8]) -> Vec<(Vec<String>, Option<String>)> {
@@ -139,6 +144,16 @@ mod physical {
     #[test]
     #[ignore = "requires actual Metal; executes the ordinary solver and never substitutes CPU"]
     fn ordinary_metal_formula_batches_match_complete_cpu_models_costs_and_displays() {
+        qualify_formula_results(Backend::Metal);
+    }
+
+    #[test]
+    #[ignore = "requires actual Vulkan through the ordinary solver"]
+    fn ordinary_vulkan_formula_results_match_cpu() {
+        qualify_formula_results(Backend::Vulkan);
+    }
+
+    fn qualify_formula_results(backend: Backend) {
         for source in [
             "a | b.",
             "{a;b;c;d}. x:-x. :-a,b. #show.",
@@ -169,7 +184,7 @@ mod physical {
                     source.into(),
                     &options(&[
                         "--backend",
-                        "metal",
+                        backend.argument(),
                         "--oracle",
                         "countermodel",
                         "--batch-size",
@@ -189,7 +204,7 @@ mod physical {
                     "{source} batch={batch}"
                 );
                 let stats = report.formula_execution.unwrap();
-                assert!(stats.adapter.contains("Metal"));
+                assert!(stats.adapter.contains(backend.name()));
                 assert!(stats.gpu_batches > 0);
                 assert_eq!(stats.gpu_candidates, report.checked);
                 assert_eq!(stats.gpu_decided + stats.cpu_residuals, report.checked);
@@ -204,13 +219,23 @@ mod physical {
     #[test]
     #[ignore = "requires actual Metal; checks resource and diagnostic failures in ordinary solving"]
     fn ordinary_metal_formula_limits_preserve_partial_coverage_and_writer_errors() {
+        qualify_formula_limits(Backend::Metal);
+    }
+
+    #[test]
+    #[ignore = "requires actual Vulkan through the ordinary solver"]
+    fn ordinary_vulkan_formula_retains_bounded_outcomes() {
+        qualify_formula_limits(Backend::Vulkan);
+    }
+
+    fn qualify_formula_limits(backend: Backend) {
         let source = "{a;b;c;d}.";
         let mut output = Vec::new();
         let report = run_with_diagnostics(
             source.into(),
             &options(&[
                 "--backend",
-                "metal",
+                backend.argument(),
                 "--oracle",
                 "countermodel",
                 "--batch-size",
@@ -230,7 +255,7 @@ mod physical {
                 .unwrap()
                 .contains("coverage=exhausted")
         );
-        let mut limited = options(&["--backend", "metal", "--oracle", "countermodel"]);
+        let mut limited = options(&["--backend", backend.argument(), "--oracle", "countermodel"]);
         limited.max_batch_bytes = 0;
         let report = run_with_diagnostics(
             source.into(),
@@ -247,7 +272,7 @@ mod physical {
         let mut broken = super::bounded_writer::BoundedWriter::new(0);
         let error = run_with_diagnostics(
             source.into(),
-            &options(&["--backend", "metal", "--oracle", "countermodel"]),
+            &options(&["--backend", backend.argument(), "--oracle", "countermodel"]),
             &mut output,
             &mut broken,
             &Control::default(),

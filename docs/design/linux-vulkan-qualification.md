@@ -132,9 +132,13 @@ residency and lifecycle assertions with the Metal checks:
 ```sh
 cargo test --locked -p zetesis-wgpu --lib --test hardware --test hardware_formula \
   --test hardware_tight --test hardware_lazy vulkan -- --ignored --nocapture
+cargo test --locked -p zetesis-cli --all-features --test formula_gpu \
+  --test lazy_gpu vulkan -- --ignored --nocapture
 ```
 
-This selects Vulkan explicitly, verifies the actual API and hardware category,
+The six ordinary CLI counterparts cover eager formula and lazy source solves,
+including complete results, limits and retained work after output failures.
+The commands select Vulkan explicitly, verify the actual API and hardware category,
 and fails on an unavailable adapter. A portable test listing is not a hardware
 pass. Run the frozen native binaries on the laptop before claiming qualification.
 Do not run all ignored tests unfiltered on Linux: the retained Metal checks
@@ -144,7 +148,7 @@ intentionally continue to require Metal.
 | --- | --- | --- |
 | Repeated end-to-end matrix | `zetesis-perf` profiles and `selected::Backend` still admit CPU/Metal only; matrix telemetry explicitly parses Metal | Add explicit Vulkan eager/lazy profiles, actual Vulkan route validation and negative controls; keep old Metal identities/results intact |
 | Matched primitive benchmarks | Static, formula, projection, lazy and tight accept explicit Vulkan with distinct labels and unchanged Metal defaults | Run frozen Linux qualification and matched quiet measurements; parser support is not execution evidence |
-| Physical regression tests | All four wgpu oracle profiles and private lazy transport have explicit Vulkan wrappers | Qualify the laptop; ordinary CLI physical fixture adaptation is a separate integration item |
+| Physical regression tests | All four wgpu oracle profiles, private lazy transport and ordinary eager/lazy CLI fixtures have explicit Vulkan wrappers | Qualify the laptop and retain actual device evidence |
 | Hardware evidence | Inventory gives a static eligibility summary; no single installed command produces the entire qualification archive | Compose the existing commands into a qualification archive preserving every log, exit and report |
 
 Source locations: `crates/zetesis-cli/src/{options,devices}.rs`,
