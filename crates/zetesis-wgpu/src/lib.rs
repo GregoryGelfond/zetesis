@@ -18,6 +18,7 @@ mod runtime;
 mod selection;
 mod adapter;
 mod lazy;
+mod tight;
 
 use std::fmt;
 use std::time::Duration;
@@ -35,6 +36,10 @@ pub use formula::{
 
 pub use adapter::{AdapterBackend, AdapterCategory, AdapterMetadata};
 pub use lazy::{GpuLazyOracle, LazyGpuStatistics};
+pub use tight::{
+    GpuTightOracle, TightGpuActivity, TightGpuBatchStats, TightGpuCheck, TightGpuError,
+    TightGpuLimits,
+};
 
 pub use selection::{
     GpuBackendPreference, GpuInfo, GpuSelection, NVIDIA_VENDOR_ID, compiled_backends,
