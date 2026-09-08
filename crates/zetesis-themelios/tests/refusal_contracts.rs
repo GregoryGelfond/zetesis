@@ -600,20 +600,14 @@ fn observation_bindings_preserve_symbol_string_and_infinite_value_identity() {
 }
 
 #[test]
-fn aggregate_guards_require_independent_inputs() {
-    {
-        let source = "p(1). n(N) :- N=#count{X:p(X)}, N<=#count{X:p(X)}.";
-        let error = formula(source, FormulaLimits::default()).unwrap_err();
-        assert!(
-            error.to_string().contains("aggregate assignment"),
-            "{source}: {error}"
-        );
-        assert!(
-            error
-                .diagnostics()
-                .iter()
-                .all(|diagnostic| diagnostic.primary().location.source == SOURCE)
-        );
-    }
-    assert!(formula("p(1). n(N) :- N=#count{X:p(X)}.", FormulaLimits::default()).is_ok());
+fn nonbinding_aggregate_guards_require_safe_inputs() {
+    let source = "p(1). n(N) :- N<=#count{X:p(X)}.";
+    let error = formula(source, FormulaLimits::default()).unwrap_err();
+    assert!(matches!(error, FormulaFailure::UnsafeVariable { .. }));
+    assert!(
+        error
+            .diagnostics()
+            .iter()
+            .all(|diagnostic| diagnostic.primary().location.source == SOURCE)
+    );
 }

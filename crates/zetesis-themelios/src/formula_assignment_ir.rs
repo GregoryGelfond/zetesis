@@ -136,15 +136,16 @@ impl Compiler<'_> {
                     // Another producer may read it only after the checked plan
                     // completes its inputs. Such a dependency is still a value
                     // consumer for the objective-observer admission contract.
-                    if let Some(produced) = other.binding {
-                        if produced != target {
-                            consumed |= self.literal_uses(literal, target)?;
-                        }
-                        continue;
+                    // A nonbinding aggregate reads guard values only after
+                    // the complete proposal row. Its comparison and default
+                    // negation remain separate original formula operations;
+                    // the guard neither generates values nor filters support.
+                    if other.binding != Some(target) {
+                        consumed |= self.literal_uses(literal, target)?;
                     }
+                    continue;
                 }
-                // Non-binding comparisons retain their established completed-
-                // row element scopes. Other consumers keep their restrictions.
+                // Other consumers keep their established restrictions.
                 if self.literal_uses(literal, target)? {
                     return Err(
                         unsupported(ProfileFeature::AggregateAssignment, self.location).into(),

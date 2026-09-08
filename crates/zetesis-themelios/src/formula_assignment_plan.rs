@@ -15,8 +15,8 @@ use crate::{ExpansionResource, FormulaFailure};
 pub(crate) struct Plan {
     pub steps: Vec<Step>,
     /// An outer filter, negative gate, conditional, scalar/range binding,
-    /// aggregate producer or head bound reads an aggregate proposal or a value
-    /// derived from one.
+    /// aggregate producer, nonbinding aggregate guard or head bound reads an
+    /// aggregate proposal or a value derived from one.
     /// Objective admission consumes this fact; scheduling does not certify a
     /// total objective observer.
     pub consumers: bool,

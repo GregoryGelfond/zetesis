@@ -275,7 +275,10 @@ fn additional_guards_do_not_become_duplicate_producers() {
         "q(M):-N=#count{},M=#sum{N},M=#count{}.",
         "q(M):-N=#count{},M=#sum{N},M<=#count{}.",
     ] {
-        profile(source, ProfileFeature::AggregateAssignment);
+        assert_eq!(
+            native(&input(source)),
+            Models::from([BTreeSet::from(["q(0)".into()])])
+        );
     }
 }
 

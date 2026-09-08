@@ -225,14 +225,14 @@ fn profile(error: &FormulaFailure, expected: ProfileFeature) {
 }
 
 #[test]
-fn extra_aggregate_guards_remain_refused() {
+fn extra_aggregate_guards_test_completed_values() {
     for source in [
         "r(N,M):-N=#count{},M=#count{},M<=#count{}.",
         "r(N,M):-N=#count{},M=#count{},M=#sum{}.",
     ] {
-        profile(
-            &input(source).unwrap_err(),
-            ProfileFeature::AggregateAssignment,
+        assert_eq!(
+            native(&input(source).unwrap()),
+            Models::from([BTreeSet::from(["r(0,0)".into()])]),
         );
     }
 }

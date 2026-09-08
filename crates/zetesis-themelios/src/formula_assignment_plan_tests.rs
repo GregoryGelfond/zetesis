@@ -334,3 +334,60 @@ fn conditional_local_reads_do_not_alias_outer_slots() {
     assert_eq!(plan.steps.len(), 1);
     assert_eq!(plan.steps[0].produced, 0);
 }
+
+fn comparison_guard(bounds: &[usize]) -> LiteralIr {
+    LiteralIr::Aggregate(AggregateIr {
+        id: 9,
+        binding: None,
+        negation: DefaultNegation::NotNot,
+        function: AggregateFunction::Count,
+        guards: bounds
+            .iter()
+            .map(|&slot| AggregateGuard {
+                relation: Relation::Neq,
+                bound: variable(slot),
+            })
+            .collect(),
+        elements: Vec::new(),
+    })
+}
+
+#[test]
+fn nonbinding_guards_do_not_add_plan_steps() {
+    let body = [
+        comparison_guard(&[0, 1]),
+        LiteralIr::Bind {
+            target: 0,
+            value: variable(1),
+        },
+        aggregate(1),
+    ];
+    let plan = plan(&body, 2, ExpansionLimits::default()).unwrap();
+    assert_eq!(
+        plan.steps
+            .iter()
+            .map(|step| (step.literal, step.produced, step.required.as_slice()))
+            .collect::<Vec<_>>(),
+        [(2, 1, &[][..]), (1, 0, &[1][..])]
+    );
+}
+
+#[test]
+fn every_nonbinding_guard_can_mark_an_objective_consumer() {
+    for bounds in [[0, 1], [1, 0]] {
+        let body = [
+            aggregate(0),
+            comparison_guard(&bounds),
+            LiteralIr::Atom(
+                DefaultNegation::None,
+                AtomPattern::new(Predicate::new("d", 1).unwrap(), vec![CoreTerm::Variable(1)])
+                    .unwrap(),
+            ),
+        ];
+        assert!(
+            plan(&body, 2, ExpansionLimits::default())
+                .unwrap()
+                .consumers
+        );
+    }
+}
