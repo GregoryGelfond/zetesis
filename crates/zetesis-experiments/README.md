@@ -4,7 +4,8 @@ This crate contains bounded development experiments, with reusable library entry
 points and a `zetesis-bench` command adapter. It does not replace ordinary solver
 qualification. Profiles are static reduct oracles (the default), `formula` for
 general reduct checking, `formula-projection` for paired opt-in gate comparison,
-and `grounding` for fresh original-source formula admission.
+`grounding` for fresh original-source formula admission, and `lazy` for matched
+source-round measurements.
 
 Reproducible measurements of exact static reduct oracles. `zetesis-bench`
 defaults to a physical Metal device and fails if one cannot be used. Select
@@ -38,6 +39,62 @@ controlled. CPU allocations are included per call whereas Metal can reuse its
 resident buffers. These limitations must accompany any reported measurements.
 Use release builds. No speedup, energy benefit, or full-domain result follows
 from portable tests or the CPU-only mode.
+
+## Lazy relational source rounds
+
+```sh
+zetesis-bench lazy --backend metal --widths 4,8 --batches 1,32,128 \
+  --workers 4 --warmups 2 --repetitions 12 > lazy-metal.jsonl
+```
+
+The library-owned `lazy_measurement::Configuration` selects finite cases and
+independent candidate, source and transport limits. `measure` emits typed events
+to a synchronous consumer; the command derives a JSON-lines view. Each run owns
+one Rayon pool and, when requested, one physical Metal oracle. A missing device
+fails explicitly. Use `--backend cpu` for the four portable routes alone.
+
+Each fixture derives `a(I)`, `b(I)` and `c(I)` from frozen `pick(I)` choices and
+joins `triple(X,Y,Z)`. A constraint rejects the all-zero triple. Sparse occurrences
+select one value each, repeating after the configured width; dense occurrences
+select every value. These are deterministic synthetic sources, with their source
+construction supplied by the sealed executable. Sparse and dense populations
+remain separate. The experiment does not enumerate the outer candidate carrier
+or parse a source file.
+
+The six physical-run routes are independent scalar checks, the same checks
+scheduled by Rayon, portable Union rounds, portable Worlds rounds, Metal Union
+rounds and Metal Worlds rounds. Each successful sample agrees with the same
+complete scalar closures and rejection reasons in exact occurrence order.
+Different routes may perform different source work; matching candidates does
+not mean identical algorithms or resource charges. Scalar/Rayon limits apply
+per candidate; source-round limits apply to the whole batch.
+
+Preparation and initial observations are retained separately from warmups and
+timed repetitions. Each population starts in the declared route order, then
+rotates left by one position per iteration. Twelve repetitions balance all six
+physical routes and all four CPU-only routes. Fixtures and references stay live
+during samples. Pool/device setup is outside the intervals; complete source
+scans, checking, result construction, transfers and readback are inside. Parity
+comparison and JSON serialization are outside. Host wait is not shader time.
+
+Source observations retain rounds, offered instances, source/mask work, pruned
+prefixes and peak requested mask bytes. Metal observations require positive
+submitted work consistent with the completed chunks and candidate occurrences.
+Transfers are byte totals, not resident allocation or process RSS. Lazy source
+state and transport are rebuilt per call; device/pipeline ownership alone is
+reused. A route failure emits available source/device progress and returns a typed
+error; it is not a successful timed sample. Setup/reference failures return an
+error after the preceding events without a route-failure event. Neither failure
+path produces a completion record. A writer can retain a prefix. Preserve stderr
+and process exit with the JSON lines; failed attempts carry no elapsed-time claim.
+
+The finite protocol permits up to 64 cases, width 16, 256 occurrences, six
+warmups, sixty repetitions and 64 workers. Native limits can still refuse an
+admitted dimension. Numeric configuration is emitted before setup. Record the
+command, executable/source hashes, toolchain and host with the complete output;
+the embedded library cannot identify its caller's executable or control thermal
+state. Stop task-owned compute before timing. Portable tests alone provide no
+physical Metal result or performance claim.
 
 ## General Ferraris formulas
 

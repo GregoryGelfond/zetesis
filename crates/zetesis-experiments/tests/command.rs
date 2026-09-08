@@ -68,6 +68,57 @@ fn formula_command_publishes_only_qualified_membership() {
 }
 
 #[test]
+fn lazy_command_publishes_complete_checked_batches() {
+    let capture = invoke(&[
+        "lazy",
+        "--backend",
+        "cpu",
+        "--widths",
+        "1",
+        "--batches",
+        "1",
+        "--families",
+        "sparse",
+        "--warmups",
+        "0",
+        "--repetitions",
+        "1",
+    ]);
+    assert_eq!(capture.exit().unwrap().code, Some(0));
+    assert!(capture.stderr().is_empty());
+    let records = capture
+        .stdout_text()
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .collect::<Vec<_>>();
+    let complete = records.last().unwrap();
+    assert_eq!(complete["event"], "complete");
+    assert_eq!(complete["samples"], 8);
+}
+
+#[test]
+fn lazy_command_cannot_hide_incomplete_reference_work() {
+    let capture = invoke(&[
+        "lazy",
+        "--backend",
+        "cpu",
+        "--widths",
+        "1",
+        "--batches",
+        "1",
+        "--families",
+        "sparse",
+        "--max-work",
+        "0",
+    ]);
+    assert_eq!(capture.exit().unwrap().code, Some(2));
+    assert!(!capture.stderr().is_empty());
+    let output = capture.stdout_text().unwrap();
+    assert!(!output.contains("\"event\":\"complete\""));
+}
+
+#[test]
 fn static_command_publishes_only_qualified_membership() {
     let capture = invoke(&[
         "--backend",

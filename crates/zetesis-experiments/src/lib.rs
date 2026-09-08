@@ -15,6 +15,7 @@ mod formula_measurement;
 mod formula_parallel;
 mod measurement;
 pub mod grounding;
+pub mod lazy_measurement;
 
 pub use fixtures::{BenchmarkFixture, Family};
 pub use formula_fixtures::{FormulaFamily, FormulaFixture};
@@ -42,6 +43,8 @@ pub struct CommandOptions {
 /// Independently qualified execution profiles.
 #[derive(Debug, clap::Subcommand)]
 pub enum Experiment {
+    /// Compare exact lazy source rounds on matched sparse and dense candidates.
+    Lazy(lazy_measurement::Options),
     /// Compare resident GPU reduct propagation plus exact CPU residual search.
     Formula(FormulaOptions),
     /// Compare exact gate projections with per-candidate CPU quotas.
