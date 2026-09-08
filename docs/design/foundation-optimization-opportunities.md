@@ -286,6 +286,47 @@ Keep the language slices independent. Both experiments must preserve the exact
 reduct contract and account for complete source/candidate coverage, including
 all retained failure outcomes; neither is a replacement solving semantics.
 
+## First column-oriented grounder experiment
+
+The eager grounder already keeps predicate-local atom rows and per-column
+`Value` indexes, probes a short available posting list and schedules positive
+joins by relation size. Its cursor retains a scalar assignment and undo trail.
+The lazy grounder already uses borrowed predicate relations, bound-prefix
+interval lookup and packed per-world membership intersection. Ready comparison
+filters and some independent-witness factorization also exist. Column-oriented
+work must compare against these mechanisms, rather than claiming indexing or
+predicate pushdown is absent.
+
+Start with one positive-pattern extension whose numeric equality/order filter
+becomes ready. Preserve existing candidate row IDs, join order and source
+snapshot. Compare the current row/`Value` evaluation with a bounded contiguous
+`i32` tile, a selection mask and ordered reconstruction of surviving bindings.
+Only required fields enter the tile. This does not require replacing the whole
+relation store. Measure scalar rows, scalar columns and Rayon columns with
+conversion, selection storage and reconstruction included. Vary relation arity,
+selectivity, skew and tile size; tiny inputs are an explicit negative control.
+
+Add checked arithmetic only after comparison-only selection preserves error
+behavior. Existing partial filters can defer undefined arithmetic because a
+prefix may have no complete extension. A new mask cannot convert that deferred
+condition, or a complete-row fault, into Boolean false. Structured term identity
+and ASP term order also remain distinct from internal canonical storage order.
+SEND belongs to this later arithmetic slice; corpus queens and shortest-path
+cases can serve as unchanged inputs where the initial profile applies.
+
+The representation law should preserve complete tuples and ordered binding
+occurrences. Support relations remain set-valued while source-instance
+multiplicity is retained. Original/frozen interpretation identity, cancellation,
+deterministic publication and source-exhaustion receipts remain unchanged.
+`FiniteBindings`, `JoinFrames` and `ScalarArithmetic` supply starting points for
+these Lean obligations, not a proof of the proposed implementation.
+
+GPU tiles become a separate experiment when enough independent numeric rows
+can remain resident across several operators. A single tiny comparison followed
+by immediate readback must be measured as such. This is a route toward reducing
+grounding intermediates; column storage alone does not bound their number or
+establish complete lazy formula grounding.
+
 ## Selection and acceptance
 
 Native aggregates, candidate cardinality and numeric tiles have the clearest
