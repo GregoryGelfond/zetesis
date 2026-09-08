@@ -207,14 +207,23 @@ the rule applies. Similarly, `{d}.q(K):-N=#count{1:d},K=1..N.` has the empty
 answer set and `{d,q(1)}`. Each generated row retains the original aggregate
 equality and rule activation; a proposed value never certifies aggregate truth.
 
-The [current local qualification](docs/verification/dependencies-measurement-tranche-20260908/README.md)
+The [last complete local qualification](docs/verification/dependencies-measurement-tranche-20260908/README.md)
 passes **1,958 workspace test/doc checks**, **317 CPU-only CLI checks** and
 **62 external-oracle tests**. Both independent line-coverage profiles exceed their
 unchanged 91% floors: **91.0170% workspace / 92.3345% CPU-only CLI**. The frozen
 release passes all **94 clean kr-domains cases** and **24 selected upstream
 comparisons**, preserving the respective answer contracts and full-model checks.
-The [Lean audit](proofs/verification/dependencies-measurement-20260908/README.md)
-checks **772 laws across 66 modules**; Rust and WGSL correspondence remains unproved.
+The [current Lean audit](proofs/verification/tight-metal-20260908/README.md)
+checks **783 laws across 67 modules**; Rust and WGSL correspondence remains unproved.
+
+A standalone [tight-support Metal experiment](docs/design/metal-tight-support.md)
+now applies the CPU class certificate through a bounded GPU checker. Its matched
+scalar/Rayon/fresh-Metal/resident-Metal harness preserves exact CPU completion of
+residuals. Integration checks and physical device qualification are pending;
+ordinary backend selection and published performance numbers are unchanged.
+The [approved work sequence](docs/design/parallel-execution-and-source-coverage.md)
+then addresses bounded lazy choices, aggregate consumers/heads and measured host
+costs.
 
 The [September CI policy](docs/verification/local-macos-ci-20260908/README.md)
 uses local macOS qualification while GitHub Actions is paused through September

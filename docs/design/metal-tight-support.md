@@ -1,9 +1,39 @@
 # Certified tight support on Metal
 
-Status: proposed next experiment, based on inspection of the qualified `7690475`
-implementation on 2026-09-08. The [physical matrix](../verification/dependencies-measurement-tranche-20260908/physical/README.md)
-and measured binaries remain unchanged. No device support checker or speedup is
-established by this proposal.
+Status: standalone Rust/WGSL primitive and matched measurement harness implemented,
+2026-09-08. Local integration qualification is in progress; physical Metal
+qualification and matched device timing remain pending. Ordinary solve dispatch
+and the previously measured `7690475` binaries are unchanged. The
+[physical matrix](../verification/dependencies-measurement-tranche-20260908/physical/README.md)
+is the motivation, not evidence of this new kernel's performance.
+
+## Implemented experiment
+
+[`GpuTightOracle`](../../crates/zetesis-wgpu/src/tight/mod.rs) accepts an existing
+complete `TightPlan` and ordered candidate occurrences. One workgroup evaluates
+the original formula DAG, checks roots in original order and reduces producer
+support before scanning present atoms. The API preserves exact scalar witnesses,
+checked subject identity, finite storage/work limits and separate submitted versus
+completed device activity. Failed or cancelled calls do not commit membership.
+Decoded device activity alone is not a successful acceptance receipt.
+
+[`zetesis-bench tight`](../../crates/zetesis-experiments/README.md#complete-tight-certificates)
+compares scalar, Rayon, fresh Metal and resident Metal classification, followed
+by the same serial exact CPU residual completion. Two separately owned GPU
+instances keep fresh clearing from invalidating the resident route. The full
+DAG, ranks, producers, ordered candidates and independent complete references are
+emitted before a rotated initial/warmup/timed schedule. Host whole-call,
+classification and residual intervals are measured directly; nested intervals
+are not additive. Device setup, reference preparation, witness validation,
+publication and fresh cache clearing are explicitly outside these intervals.
+This is not an ordinary solve, shader-only timer or process-memory measurement.
+
+Portable tests cover admission, packing, malformed receipts, cache accounting,
+independent small-theory semantics and benchmark failure boundaries. Four
+compiled physical tests cover small theories, duplicate producers, nonmonotone
+root order, resizing, bit-word boundaries, limits and cancellation. They remain
+unrun in the local integration context. No GPU speedup or ordinary solver benefit
+is claimed before the physical results are retained and audited.
 
 ## Why the current comparison uses different membership algorithms
 
@@ -21,7 +51,7 @@ These conditions are independent of CPU versus GPU execution. They also preserve
 
 ## Smallest useful experiment
 
-Add a bounded library primitive for batched checking of an existing `TightPlan`, initially exercised outside ordinary backend selection. Compile the plan once on the host and feed the same ordered candidate occurrences to scalar `TightPlan::check_accounted`, a Rayon execution of that operation, and a Metal implementation. Retain exact CPU completion for every residual. Use candidates before membership filtering, including nonmodels and unsupported candidates, not only already accepted answer sets.
+The implemented first slice is a bounded library primitive for batched checking of an existing `TightPlan`, exercised outside ordinary backend selection. Compile the plan once on the host and feed the same ordered candidate occurrences to scalar `TightPlan::check_accounted`, a Rayon execution of that operation, and a Metal implementation. Retain exact CPU completion for every residual. Use candidates before membership filtering, including nonmodels and unsupported candidates, not only already accepted answer sets.
 
 The existing [`formula.wgsl`](../../crates/zetesis-wgpu/src/formula.wgsl#L64) provides a useful starting point: one workgroup per candidate, packed candidate input, topological original-DAG evaluation by lane zero, and cooperative root checks. A dedicated support kernel could reuse those operations and add producer-head support reduction plus a present-atom support scan. It would omit the general proper-subset domain construction and repeated propagation sweeps. Reuse the surrounding resident buffers, identity checks, bounded transport and ordered readback where their contracts fit. Account for new producer/support storage explicitly.
 
@@ -42,6 +72,6 @@ First establish verdict and witness parity, then measure fresh and resident batc
 
 [`TightPlans`](../../proofs/Zetesis/TightPlans.lean#L187) already proves ranked-support stability; its equivalence theorem states the additional coverage hypotheses. [`CertifiedExecution`](../../proofs/Zetesis/CertifiedExecution.lean) handles sound certificate verdicts, exact residual completion and interruption. [`BatchAccounting`](../../proofs/Zetesis/BatchAccounting.lean#L175) supplies the composition boundary for complete occurrence accounting.
 
-Useful new laws would connect ordered DAG evaluation to original truth, producer reduction to the support predicate, and independent candidate batches to the scalar classifier. These can compose with the existing stability result. Rank extraction, complete source coverage, Rust/WGSL representation, barriers, readback and resource accounting still require explicit implementation correspondence; the current proofs do not constitute verification of a Metal kernel or the entire solver.
+[`TightEvaluation`](../../proofs/Zetesis/TightEvaluation.lean) now connects ordered Boolean DAG evaluation to unfolded original-formula truth, indexed producer reduction to support, and ranked classification to exact residual completion. Its eleven laws compose with the existing stability and execution results. Rank extraction, complete source coverage, Rust/WGSL representation, barriers, readback and resource accounting still require explicit implementation correspondence; the current proofs do not constitute verification of a Metal kernel or the entire solver.
 
-**Recommendation:** implement the same-certificate batched support experiment before changing ordinary Metal dispatch. It isolates the missing primitive and prevents both a misleading algorithm comparison and misattributed GPU work. Lazy certificate execution remains a separately justified extension.
+**Next step:** physically qualify and measure the implemented same-certificate experiment before changing ordinary Metal dispatch. It isolates the missing primitive and prevents both a misleading algorithm comparison and misattributed GPU work. Lazy certificate execution remains a separately justified extension.

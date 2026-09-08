@@ -28,10 +28,10 @@ all source profiles and execution plans.
 | `zetesis-ferraris` | Finite formula DAG transforms, exhaustive reduct checking, checked tight support plans and normal-rule formula translation |
 | `zetesis-objective` | Lifted positive objective joins, global tuple coalescing, checked costs and explicit per-model limits |
 | `zetesis-sat` | Native bounded candidate and frozen-reduct countermodel search with independent witness validation |
-| `zetesis-wgpu` | Bounded static integer oracle, relational lazy source execution and general Ferraris propagation primitive; native adapter selection, resident buffers and GPU result transport |
+| `zetesis-wgpu` | Bounded static integer oracle, relational lazy source execution , general Ferraris propagation and standalone ranked-support primitives; native adapter selection, resident buffers and GPU result transport |
 | `zetesis-cli` | Prepared-input sessions, typed solve configuration/outcomes, bounded human/JSON views and process adaptation |
 | `zetesis-telemetry` | Optional typed host stage measurements, independent of rendered diagnostics |
-| `zetesis-experiments` | Standalone static, lazy-source and general-formula membership qualifications, explicit CPU residual measurements and Criterion regression benchmarks |
+| `zetesis-experiments` | Standalone static, lazy-source, general-formula and matched tight-certificate qualifications, explicit CPU residual measurements and Criterion regression benchmarks |
 | `zetesis-validation` | Curated fixtures, bounded process capture, typed reported answers, external-oracle comparisons and explicit CPU/Metal performance matrices; separate from production acceptance |
 
 Public types document their contracts and error conditions. Solver libraries do not
@@ -506,6 +506,12 @@ contains independent original/frozen comparisons and exact resource checks.
 The main CLI supports both S0 GPU closure and explicitly selected hybrid formula
 propagation. The separate formula experiment compares scalar CPU, Rayon and
 hybrid membership; exact GPU residual search remains future work.
+The new standalone `GpuTightOracle` checks complete `TightPlan` certificates and
+preserves exact ordered original-failure and unsupported-atom witnesses.
+`zetesis-bench tight` measures that procedure on scalar, Rayon and fresh/resident
+Metal paths with exact CPU residual completion. It has no ordinary dispatch
+integration yet; local integration and physical qualification remain pending.
+See the [experiment contract](design/metal-tight-support.md).
 
 The independent `zetesis-domain` crate analyzes the exact borrowed themelios
 `Program` before construction. Its first lattice uses bounded borrowed symbol
