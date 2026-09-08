@@ -1,13 +1,14 @@
 //! Finite count heads enter ordinary choice lowering only after a complete
 //! tuple/atom correspondence check. Neither count bounds nor tuple values supply
 //! bindings or support; both alias directions remain explicit profile refusals.
-//! Positive conditions enumerate possible eligibility, retained as a formula by
-//! choice lowering. Support-table membership is never interpreted as truth.
+//! Positive conditions enumerate possible eligibility; default-negated gates
+//! consume established bindings. Choice lowering retains every eligibility
+//! formula. Support-table membership is never interpreted as truth.
 
 use std::collections::BTreeMap;
 
 use themelios_base::span::Location;
-use themelios_program::program::{AggregateFunction, DefaultNegation, HeadAggregate, LiteralInner};
+use themelios_program::program::{AggregateFunction, HeadAggregate};
 use zetesis_core::{Atom, Value};
 
 use crate::diagnostic::unsupported;
@@ -29,18 +30,12 @@ impl Compiler<'_> {
         let mut elements = Vec::new();
         for element in aggregate.elements() {
             let element = element.get();
-            // Positive atoms may bind local witnesses through possible support.
-            // Default-negated eligibility retains its separate profile refusal.
-            for literal in element.condition().literals() {
+            // Preserve the existing per-literal preflight before compiling the
+            // shared choice-condition profile. Negative gates supply no inputs;
+            // their original polarity survives both support and final lowering.
+            for _ in element.condition().literals() {
                 self.budget
                     .charge(ExpansionResource::TermWork, 1, self.location)?;
-                if matches!(literal.get().inner, LiteralInner::Atom(_))
-                    && literal.get().negation != DefaultNegation::None
-                {
-                    return Err(
-                        unsupported(ProfileFeature::HeadAggregateCondition, self.location).into(),
-                    );
-                }
             }
             let mut local = variables.clone();
             let mut condition = self.condition(element.condition(), &mut local)?;
@@ -55,7 +50,8 @@ impl Compiler<'_> {
             debug_assert!(condition.iter().all(|literal| matches!(
                 literal,
                 LiteralIr::Bind { .. }
-                    | LiteralIr::Atom(DefaultNegation::None, _)
+                    | LiteralIr::Atom(..)
+                    | LiteralIr::ProjectedAtom(..)
                     | LiteralIr::PatternAtom(_)
                     | LiteralIr::ArgumentCheck { .. }
                     | LiteralIr::Range { .. }

@@ -202,11 +202,13 @@ fn unsupported_outer_consumers_remain_refused() {
 }
 
 #[test]
-fn negative_count_eligibility_remains_refused() {
+fn negative_count_eligibility_uses_outer_consumers() {
     for condition in ["not b", "not not b"] {
-        assert_profile(
-            &format!("Y#count{{1:a:{condition}}}Y:-N=#count{{}},Y=N+1."),
-            ProfileFeature::HeadAggregateCondition,
+        assert_eq!(
+            native(&input(&format!(
+                "{{b}}.Y#count{{1:a:{condition}}}Y:-N=#count{{}},Y=N+1."
+            ))),
+            native(&input(&format!("{{b}}.1{{a:{condition}}}1:-0=#count{{}}."))),
         );
     }
 }
