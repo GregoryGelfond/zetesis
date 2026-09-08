@@ -577,3 +577,73 @@ fn spelling_byte_refusal_precedes_identifier_copying() {
         other => panic!("invalid identifier was not retained: {other:?}"),
     }
 }
+
+#[test]
+fn selected_view_preserves_hidden_model_multiplicity() {
+    let mut value = document(vec![
+        record(vec![atom("hidden_a", vec![])], 1),
+        record(vec![atom("hidden_b", vec![])], 2),
+    ]);
+    for record in value["models"].as_array_mut().unwrap() {
+        record["model"]["shown"]["atom_indices"] = json!([]);
+    }
+    let selected = parse(&value).unwrap().reported_displays(0).unwrap();
+    assert_eq!(selected.model_count(), 2);
+    assert_eq!(selected.displays(), [(Vec::<String>::new(), 2)]);
+}
+
+#[test]
+fn selected_symbols_retain_atom_term_collisions() {
+    let mut value = one();
+    value["models"][0]["model"]["shown"]["terms"] = json!([[{"kind":"symbol","value":"a"}]]);
+    let selected = parse(&value).unwrap().reported_displays(2).unwrap();
+    assert_eq!(selected.displays(), [(vec!["a".into(), "a".into()], 1)]);
+}
+
+#[test]
+fn selected_spelling_obeys_its_exact_byte_ceiling() {
+    let answer = parse(&one()).unwrap();
+    assert!(answer.reported_displays(1).is_ok());
+    assert!(matches!(
+        answer.reported_displays(0),
+        Err(Error::Limit {
+            resource: Resource::SpellingBytes,
+            limit: 0,
+            attempted: 1
+        })
+    ));
+}
+
+#[test]
+fn selected_terms_validate_nested_identifier_names() {
+    let mut value = one();
+    value["models"][0]["model"]["shown"]["terms"] =
+        json!([[{"kind":"function","name":"invalid name","sign":"positive","arity":0}]]);
+    assert!(matches!(
+        parse(&value).unwrap().reported_displays(100),
+        Err(Error::Identifier(_))
+    ));
+}
+
+#[test]
+fn selected_term_kinds_keep_their_canonical_spelling() {
+    let mut value = one();
+    value["models"][0]["model"]["shown"]["terms"] = json!([
+        [{"kind":"string","value":"quoted\"value"}],
+        [{"kind":"tuple","arity":1},{"kind":"number","value":2}],
+        [{"kind":"supremum"}]
+    ]);
+    let selected = parse(&value).unwrap().reported_displays(100).unwrap();
+    assert_eq!(
+        selected.displays(),
+        [(
+            vec![
+                "\"quoted\\\"value\"".into(),
+                "#sup".into(),
+                "(2,)".into(),
+                "a".into()
+            ],
+            1
+        )]
+    );
+}

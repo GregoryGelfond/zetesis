@@ -3,7 +3,7 @@
 This package has three commands and reusable corpus, process-capture and reported-answer libraries. `zetesis-corpus`
 verifies the selected clingo fixture or compares its complete solver results.
 `zetesis-validate` runs the separate 94-case kr-domains solver campaign described
-below. `zetesis-perf` characterizes a finite CPU input suite using sealed inputs,
+below. `zetesis-perf` characterizes CPU suites and explicit execution matrices using sealed inputs,
 complete answer families and a fixed paired schedule. Its default remains the
 three established comparison cases.
 None of these commands is invoked by the production solver.
@@ -25,8 +25,8 @@ Publication is a separate bounded, no-clobber operation.
 
 The [protocol](../../docs/verification/ordinary-cpu-refresh-20260907/PROTOCOL.md)
 states the exact execution order, worker settings, process/output limits and
-comparison scope. Peak RSS and the full eager/lazy × CPU/Metal matrix remain
-unmeasured by this command.
+comparison scope. Peak RSS remains unavailable. This legacy protocol does not execute the
+instrumented matrix described below.
 
 `--suite queens` selects all six real N-Queens source encodings in variant order,
 at their existing eight-queen setting. Variant 01 uses literal bounds; variants
@@ -41,6 +41,97 @@ Library clients use `Schedule::for_suite(Suite::Queens, warmups, repetitions)`.
 and its order. `Case::Queens02` preserves the historical serialized identifier
 `"queens"`. Baseline schedules retain their original JSON representation and exact
 slot order; an explicit queens schedule additionally records `"suite":"queens"`.
+
+## Instrumented grounding/backend matrix
+
+```sh
+zetesis-perf examples/kr-domains --suite corpus \
+  --zetesis /absolute/path/to/zetesis --clingo /absolute/path/to/clingo \
+  --workers 4 --completion-workers 4 --clingo-workers 1 \
+  --repetitions 5 --warmups 1 --campaign-seconds 1800 \
+  --sample-bytes 33554432 --native-report-bytes 33554432 \
+  --capture-bytes 536870912 --report-bytes 2147483648 \
+  --report target/new-instrumented-matrix.json
+```
+
+`performance::matrix::run(&Request)` accepts a typed `Plan`, independent of the
+command. `--suite corpus` requests all 94 clean cases and the four explicit
+CPU/eager, CPU/lazy, Metal/eager and Metal/lazy profiles. Repeat `--profile
+cpu-eager`, `cpu-lazy`, `metal-eager` or `metal-lazy` to choose a bounded subset;
+these profiles also work with `--suite baseline` or `--suite queens`. Matrix
+native worker defaults are four for both closure and formula completion; clingo
+uses one. This unequal allocation is recorded. Explicit worker/batch controls
+require a matrix request and never silently alter the legacy one-worker protocol.
+
+Every native invocation uses `--json --stats --models 0`. Native time therefore
+includes instrumentation and full typed JSON publication, while clingo time
+includes its JSON publication. These are **instrumented end-to-end observations**,
+not replacements for the historical uninstrumented CPU timings or fulfillment
+of every condition of the [full protocol](../../docs/design/corpus-performance.md).
+Native JSON retains full atoms while clingo JSON exposes selected displays, so
+their measured output volumes are asymmetric. CPU/Metal profiles of the same
+native source use the same output contract. Clingo provides parity and a recorded
+wall-time reference here; this matrix does not isolate algorithm performance
+between solvers.
+The example presets 3,290 positions: 94 cases, five producers, one census, one
+warmup and five timed rounds. Each producer occupies each timed position once.
+The matrix defaults to 20 timed rounds and three warmups. Reference-first census
+positions precede later rounds; case and configuration positions then rotate.
+With four native profiles, each configuration occupies every timed position four
+times. Source constants and output directives are never rewritten.
+
+A cell's first refusal, timeout, capture stop, mismatch or invalid observation
+retains the raw invocation and disables only that cell's later launches. Every
+scheduled position remains represented; skipped positions refer to the earlier
+failed sample where applicable. Other cells continue until the shared campaign
+or capture bound, unresolved-child cleanup or reference failure prevents them.
+No replacement samples are taken. `accounted` means every schedule position is
+represented; `passed` requires every requested observation to pass. Exit 1 and
+`non-pass cells retained` are expected when unsupported lazy combinations appear;
+setup/publication errors exit 2. Results are held until bounded no-clobber
+publication; the runner does not provide crash recovery or campaign resumption.
+
+Native typed full atoms, shown terms, objective priorities and raw statistics
+remain in captured JSON. The checked cross-solver contract is **complete selected
+displays, symbol/model multiplicities, final costs and optimum ties**. Hidden
+clingo interpretations are unavailable through its ordinary JSON output; this is
+not full-model parity. `NativeAnswers::reported_displays` is a bounded library
+view that retains collisions between shown atoms/terms and equal displays from
+different hidden models.
+
+Matrix capture streams serialize as `{"encoding":"utf8","data":"..."}`
+when the complete captured prefix is valid UTF-8, or
+`{"encoding":"bytes","data":[...]}` otherwise. Both views preserve every
+byte, including empty streams, NUL/control characters and malformed UTF-8.
+This borrowed publication view avoids expanding ordinary JSON into integer
+arrays; the legacy capture schema is unchanged. Serialization occurs after
+measured invocations and remains subject to the publication ceiling.
+
+Each complete native observation reconciles the existing authored route text
+with typed JSON statistics and the strict phase/stage parsers. Requested and
+actual grounding/backend remain distinct; conflicting or missing route evidence
+invalidates the observation. Lazy grounding stays interleaved with solving.
+Lazy device dispatch/transfer counts and formula propagation/CPU residual counts
+are retained where reported. The static closure driver currently exposes its
+adapter but does not accumulate device work/transfer totals; those quantities
+remain explicitly unavailable. A measured zero is retained as zero and does not
+establish acceleration. Generic GPU failures are not relabeled as unavailable
+adapters. Instrumented producer telemetry is evidence from a trusted executable,
+not independent hardware attestation or a GPU kernel timer.
+
+`--timeout-seconds`, `--campaign-seconds`, `--sample-bytes`, `--capture-bytes` and
+`--report-bytes` independently bound capture and publication. Matrix-only
+`--native-report-bytes` sets native JSON decoding's input ceiling independently
+of process capture; its default remains 8 MiB. Library requests
+also own typed answer/value and spelling limits. Large full-model JSON families
+may reach those limits; raw failures remain evidence and no ceiling is silently
+increased. The report records source/include and binary hashes before/after,
+private-copy identities, exact arguments, every capture and all configured
+normalization limits. Peak RSS remains unavailable: the shared safe process
+boundary does not retain per-child rusage, and logical host/GPU counters cannot
+substitute for it. Measurement requires a qualified binary, a quiet host window
+and a context exposing the requested Metal device. No physical or timing result
+is implied by portable tests of the runner.
 
 ## Reusable process and reported-answer boundaries
 

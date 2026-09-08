@@ -110,7 +110,7 @@ pub enum Phase {
     Qualification,
     /// Retained preparation pairs, excluded from timed summaries.
     Warmup,
-    /// Uninstrumented ordinary one-shot process observation.
+    /// Ordinary one-shot process observation; the campaign defines instrumentation.
     Timed,
     /// Separate native `--stats` invocation.
     Diagnostics,

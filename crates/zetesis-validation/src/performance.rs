@@ -12,7 +12,9 @@
 //! and executable seals do not cover dynamic libraries, hardware, environment,
 //! transient file changes or thermal state. Trusted solvers are required.
 
+mod capture;
 mod config;
+pub mod matrix;
 mod record;
 mod run;
 mod timing;

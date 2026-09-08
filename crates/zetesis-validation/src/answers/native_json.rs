@@ -112,6 +112,52 @@ impl NativeAnswers {
     pub fn satisfiable(&self) -> bool {
         !self.records.is_empty()
     }
+    /// Canonical selected displays, preserving symbol and model multiplicities.
+    /// Full hidden interpretations are deliberately not part of this view.
+    /// `max_bytes` bounds the combined produced symbol spelling bytes; typed
+    /// records were already checked by [`parse`].
+    ///
+    /// # Errors
+    /// Refuses invalid identifier spellings, allocation failure or the spelling
+    /// byte ceiling before retaining each new symbol.
+    pub fn reported_displays(&self, max_bytes: usize) -> Result<super::ReportedAnswers, Error> {
+        let mut models = Vec::new();
+        models
+            .try_reserve_exact(self.records.len())
+            .map_err(|_| Error::Allocation)?;
+        let mut used = 0usize;
+        for record in &self.records {
+            let mut symbols = Vec::new();
+            symbols
+                .try_reserve_exact(record.shown_indices.len() + record.shown_terms.len())
+                .map_err(|_| Error::Allocation)?;
+            for &index in &record.shown_indices {
+                let atom = &record.atoms[index];
+                let bytes = spelling::atom_bytes(atom)?;
+                admit_spelling(&mut used, bytes, max_bytes)?;
+                symbols.push(spelling::atom(atom, bytes)?);
+            }
+            for value in &record.shown_terms {
+                let bytes = spelling::value_bytes(value)?;
+                admit_spelling(&mut used, bytes, max_bytes)?;
+                symbols.push(spelling::value(value, bytes)?);
+            }
+            symbols.sort_unstable();
+            models.push(symbols);
+        }
+        Ok(super::ReportedAnswers {
+            satisfiable: self.satisfiable(),
+            cost: self
+                .costs
+                .as_ref()
+                .map(|costs| costs.iter().map(|(_, value)| *value).collect()),
+            model_multiplicities: super::multiplicities(models.into_iter())?,
+            model_count: u64::try_from(self.records.len())
+                .map_err(|_| invalid(Issue::CountOverflow, "native display count"))?,
+            solver: "zetesis".into(),
+        })
+    }
+
     /// Canonical ASP spellings of each full atom set, preserving model multiplicity.
     ///
     /// This is a consumer view of typed atoms, not a parser or an inference from
@@ -161,4 +207,13 @@ impl NativeAnswers {
 /// or inconsistent counts, objective priorities, costs and final ties.
 pub fn parse(bytes: &[u8], limits: Limits) -> Result<NativeAnswers, Error> {
     decode::parse(super::text(bytes, limits.report)?, limits)
+}
+
+fn admit_spelling(used: &mut usize, bytes: usize, maximum: usize) -> Result<(), Error> {
+    let attempted = used
+        .checked_add(bytes)
+        .ok_or_else(|| invalid(Issue::CountOverflow, "display spelling bytes"))?;
+    check(Resource::SpellingBytes, maximum, attempted)?;
+    *used = attempted;
+    Ok(())
 }

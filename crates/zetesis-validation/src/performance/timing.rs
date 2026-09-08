@@ -16,7 +16,7 @@ pub struct Measurement {
 pub struct Diagnostics {
     /// Driver interval excluding source loading and statistics output.
     pub driver_elapsed_ns: u64,
-    /// Actual native grounding mode, checked as eager for this fixed campaign.
+    /// Actual native grounding mode; lazy grounding remains interleaved.
     pub grounding_mode: String,
     /// Exclusive source-preparation, grounding, solving and observation stages.
     pub stages: BTreeMap<String, Option<Measurement>>,
@@ -42,15 +42,20 @@ fn measurements(
         .collect()
 }
 pub(super) fn parse(bytes: &[u8]) -> Result<Diagnostics, String> {
+    let diagnostics = parse_any(bytes)?;
+    if diagnostics.grounding_mode != "eager" {
+        return Err("native phase/stage evidence is incomplete or not eager".into());
+    }
+    Ok(diagnostics)
+}
+
+pub(super) fn parse_any(bytes: &[u8]) -> Result<Diagnostics, String> {
     let text = std::str::from_utf8(bytes).map_err(|error| error.to_string())?;
     let phases = phase::parse(text)?.ok_or("missing native phase timings")?;
     let stages = stage::parse(text)?.ok_or("missing native stage timings")?;
-    if !phases.complete
-        || !stages.complete
-        || phases.driver_elapsed_ns != stages.driver_elapsed_ns
-        || stages.grounding_mode != "eager"
+    if !phases.complete || !stages.complete || phases.driver_elapsed_ns != stages.driver_elapsed_ns
     {
-        return Err("native phase/stage evidence is incomplete or not eager".into());
+        return Err("native phase/stage evidence is incomplete".into());
     }
     Ok(Diagnostics {
         driver_elapsed_ns: stages.driver_elapsed_ns,

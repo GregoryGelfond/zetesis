@@ -1,26 +1,20 @@
 //! Sequential bounded processes around pure schedule and display comparisons.
+use super::capture::unix_ns;
 use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::path::Path;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::Instant;
 
 use super::{
     Capture, Case, Decision, Error, Fault, Phase, Producer, Report, Request, Sample, Slot, Suite,
     timing,
 };
-use crate::selected::{FileSeal, InvocationFailure, identity, publication};
+use crate::selected::{FileSeal, identity, publication};
 use crate::{answers, examples, process};
 
 #[cfg(test)]
 #[path = "../../tests/support/performance_sources.rs"]
 mod tests;
-
-fn unix_ns() -> Option<u128> {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .ok()
-        .map(|value| value.as_nanos())
-}
 
 pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
     if !cfg!(any(target_os = "linux", target_os = "macos")) {
@@ -37,7 +31,14 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
         unix_ns().ok_or(Error::Configuration("UTC metadata precedes Unix epoch"))?;
     let corpus = examples::load(request.corpus, request.limits.corpus).map_err(Error::Corpus)?;
     let sources = source_paths(&corpus, request.schedule.suite())?;
-    let before = seals(&corpus, &sources, request)?;
+    let before = seals(
+        &corpus,
+        &sources,
+        request.corpus,
+        request.native,
+        request.reference,
+        request.limits,
+    )?;
     let destination = publication::prepare(request.report, corpus.root(), &before)?;
     let directory = tempfile::tempdir()
         .map_err(|source| super::io(Path::new("private performance sources"), source))?;
@@ -84,7 +85,10 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
     Ok(report)
 }
 
-fn source_paths(corpus: &examples::Corpus, suite: Suite) -> Result<BTreeSet<&str>, Error> {
+pub(super) fn source_paths(
+    corpus: &examples::Corpus,
+    suite: Suite,
+) -> Result<BTreeSet<&str>, Error> {
     let mut sources = BTreeSet::new();
     for selected in suite.cases() {
         let case = corpus
@@ -111,22 +115,22 @@ fn checked_seal(path: &Path, limit: usize, expected: &str) -> Result<FileSeal, E
     Ok(seal)
 }
 
-fn seals(
+pub(super) fn seals(
     corpus: &examples::Corpus,
     sources: &BTreeSet<&str>,
-    request: &Request<'_>,
+    root: &Path,
+    native: &Path,
+    reference: &Path,
+    limits: super::Limits,
 ) -> Result<Vec<FileSeal>, Error> {
     let mut sealed = Vec::new();
-    for executable in [request.native, request.reference] {
+    for executable in [native, reference] {
         if !executable.is_absolute() {
             return Err(Error::Configuration(
                 "native and reference executable paths must be absolute",
             ));
         }
-        sealed.push(identity::seal(
-            executable,
-            request.limits.max_executable_bytes,
-        )?);
+        sealed.push(identity::seal(executable, limits.max_executable_bytes)?);
     }
     if identity::aliases(&sealed[0], &sealed[1]) {
         return Err(Error::Configuration(
@@ -134,13 +138,13 @@ fn seals(
         ));
     }
     sealed.push(checked_seal(
-        &request.corpus.join("manifest.json"),
-        request.limits.corpus.manifest_bytes,
+        &root.join("manifest.json"),
+        limits.corpus.manifest_bytes,
         examples::MANIFEST_SHA256,
     )?);
     sealed.push(checked_seal(
-        &request.corpus.join("LICENSE"),
-        request.limits.corpus.source_bytes,
+        &root.join("LICENSE"),
+        limits.corpus.source_bytes,
         corpus.license_sha256(),
     )?);
     for source in corpus
@@ -149,15 +153,15 @@ fn seals(
         .filter(|source| sources.contains(source.path()))
     {
         sealed.push(checked_seal(
-            &request.corpus.join(source.path()),
-            request.limits.corpus.source_bytes,
+            &root.join(source.path()),
+            limits.corpus.source_bytes,
             source.source_sha256(),
         )?);
     }
     Ok(sealed)
 }
 
-fn copy_sources(
+pub(super) fn copy_sources(
     corpus: &examples::Corpus,
     sources: &BTreeSet<&str>,
     directory: &Path,
@@ -374,52 +378,13 @@ fn invoke(
         max_output_bytes: report.limits.process.max_output_bytes.min(remaining_bytes),
         ..report.limits.process
     };
-    let mut record = Capture {
-        executable: executable.into(),
-        arguments,
-        directory: directory.into(),
-        started_unix_ns: unix_ns(),
-        elapsed_ns: None,
-        stop: None,
-        exit: None,
-        stdout: Vec::new(),
-        stderr: Vec::new(),
-        failure: None,
-        cleanup_failure: None,
-        unresolved_child: None,
-    };
-    match process::invoke(
-        process::Invocation {
-            executable,
-            arguments: &record.arguments,
-            directory,
-        },
-        limits,
-    ) {
-        Err(error) => record.failure = Some(InvocationFailure::start(&error)),
-        Ok(outcome) => {
-            let (capture, pending) = outcome.into_parts();
-            record.stop = Some(capture.stop());
-            record.exit = capture.exit();
-            record.elapsed_ns = Some(capture.elapsed().as_nanos());
-            record.stdout = capture.stdout().to_vec();
-            record.stderr = capture.stderr().to_vec();
-            record.failure = capture.failure().map(InvocationFailure::capture);
-            record.cleanup_failure = capture.cleanup_failure().map(InvocationFailure::capture);
-            if let Some(child) = pending {
-                let cleanup = child.retry(limits.cleanup_timeout);
-                record.exit = cleanup.exit.or(record.exit);
-                if let Some(failure) = cleanup.failure {
-                    report.faults.push(Fault::ChildCleanup(failure.to_string()));
-                }
-                if let Some(child) = cleanup.pending {
-                    let id = child.abandon();
-                    record.unresolved_child = Some(id);
-                    report.unresolved_children.push(id);
-                }
-            }
-            report.total_capture_bytes += record.stdout.len() + record.stderr.len();
-        }
+    let (record, cleanup_fault) = super::capture::invoke(executable, arguments, directory, limits);
+    if let Some(fault) = cleanup_fault {
+        report.faults.push(Fault::ChildCleanup(fault));
     }
+    if let Some(id) = record.unresolved_child {
+        report.unresolved_children.push(id);
+    }
+    report.total_capture_bytes += record.stdout.len() + record.stderr.len();
     Some(record)
 }

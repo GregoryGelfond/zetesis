@@ -34,20 +34,25 @@ pub(super) fn atom(atom: &Atom, bytes: usize) -> Result<String, Error> {
 fn validate_names(atom: &Atom) -> Result<(), Error> {
     name(atom.predicate().name())?;
     for value in atom.values() {
-        match value {
-            Value::Symbol(symbol) => name(symbol)?,
-            Value::Structured(value) => {
-                for node in value.nodes() {
-                    match node {
-                        ValueNode::Symbol(symbol) | ValueNode::Function { name: symbol, .. } => {
-                            name(symbol)?;
-                        }
-                        _ => {}
+        validate_value(value)?;
+    }
+    Ok(())
+}
+
+fn validate_value(value: &Value) -> Result<(), Error> {
+    match value {
+        Value::Symbol(symbol) => name(symbol)?,
+        Value::Structured(value) => {
+            for node in value.nodes() {
+                match node {
+                    ValueNode::Symbol(symbol) | ValueNode::Function { name: symbol, .. } => {
+                        name(symbol)?;
                     }
+                    _ => {}
                 }
             }
-            _ => {}
         }
+        _ => {}
     }
     Ok(())
 }
@@ -108,4 +113,21 @@ fn write_value(output: &mut impl Write, value: &Value) -> fmt::Result {
             output.write_str("\"")
         }
     }
+}
+
+pub(super) fn value_bytes(value: &Value) -> Result<usize, Error> {
+    let mut size = Size(0);
+    write_value(&mut size, value)
+        .map_err(|_| invalid(Issue::CountOverflow, "value spelling byte count"))?;
+    Ok(size.0)
+}
+
+pub(super) fn value(value: &Value, bytes: usize) -> Result<String, Error> {
+    validate_value(value)?;
+    let mut output = String::new();
+    output
+        .try_reserve_exact(bytes)
+        .map_err(|_| Error::Allocation)?;
+    write_value(&mut output, value).map_err(|_| Error::Allocation)?;
+    Ok(output)
 }
