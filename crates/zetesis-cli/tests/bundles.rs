@@ -1,6 +1,7 @@
 //! Original-file bundle invocation shares solver behavior and keeps refusals located.
 
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -60,6 +61,139 @@ fn options(arguments: &[&str]) -> Options {
             .chain(arguments.iter().copied()),
     )
     .unwrap()
+}
+
+const MALFORMED_CHOICE: &str = "{a,b :- q.\nq :- c.\n";
+
+#[test]
+fn stdin_syntax_failure_renders_each_diagnostic_once() {
+    for arguments in [
+        vec!["--backend", "cpu", "--color", "never"],
+        vec![
+            "--backend",
+            "cpu",
+            "--color",
+            "never",
+            "--oracle",
+            "countermodel",
+        ],
+    ] {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_zetesis"))
+            .args(arguments)
+            .arg("-")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(MALFORMED_CHOICE.as_bytes())
+            .unwrap();
+        let result = child.wait_with_output().unwrap();
+        assert_eq!(result.status.code(), Some(2));
+        assert!(result.stdout.is_empty());
+        let text = String::from_utf8(result.stderr).unwrap();
+        assert_eq!(text.matches("error[syntax::").count(), 3, "{text}");
+        assert!(text.contains("<input>:1:3"), "{text}");
+        assert!(text.contains("1 | {a,b :- q."), "{text}");
+        assert!(!text.contains("bytes "), "{text}");
+    }
+}
+
+#[test]
+fn syntax_failure_exposes_each_original_diagnostic() {
+    let fixture = Fixture::new();
+    fixture.write("entry.lp", MALFORMED_CHOICE);
+    let result = fixture.process(&["--color", "never"]);
+    assert_eq!(result.status.code(), Some(2));
+    assert!(result.stdout.is_empty());
+    let text = String::from_utf8(result.stderr).unwrap();
+    assert_eq!(text.matches("error[syntax::").count(), 3, "{text}");
+    assert!(text.contains("entry.lp:1:"), "{text}");
+    assert!(text.contains("1 | {a,b :- q."), "{text}");
+    assert!(text.contains('^'), "{text}");
+    assert!(!text.contains("UNSATISFIABLE"));
+}
+
+#[test]
+fn included_syntax_failure_resolves_the_child_source() {
+    let fixture = Fixture::new();
+    fixture.write("entry.lp", "#include \"child.lp\". q.");
+    fixture.write("child.lp", "% original é\r\n{a,b :- q.\r\n");
+    let result = fixture.process(&["--color", "never"]);
+    let text = String::from_utf8(result.stderr).unwrap();
+    assert_eq!(result.status.code(), Some(2));
+    assert!(text.contains("child.lp:2:"), "{text}");
+    assert!(text.contains("2 | {a,b :- q."), "{text}");
+    assert!(!text.contains("unknown source"), "{text}");
+}
+
+#[test]
+fn later_root_syntax_failure_keeps_its_source_identity() {
+    let fixture = Fixture::new();
+    fixture.write("entry.lp", "q.");
+    fixture.write("later.lp", MALFORMED_CHOICE);
+    let result = Command::new(env!("CARGO_BIN_EXE_zetesis"))
+        .args(["--backend", "cpu", "--color", "never"])
+        .arg(fixture.0.join("entry.lp"))
+        .arg(fixture.0.join("later.lp"))
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let text = String::from_utf8(result.stderr).unwrap();
+    assert_eq!(result.status.code(), Some(2));
+    assert!(text.contains("later.lp:1:"), "{text}");
+    assert!(text.contains("1 | {a,b :- q."), "{text}");
+}
+
+#[test]
+fn syntax_error_styles_preserve_the_canonical_text() {
+    let fixture = Fixture::new();
+    fixture.write("entry.lp", MALFORMED_CHOICE);
+    let plain = fixture.process(&["--color", "never"]);
+    let painted = fixture.process(&["--color", "always"]);
+    let plain = String::from_utf8(plain.stderr).unwrap();
+    let painted = String::from_utf8(painted.stderr).unwrap();
+    assert!(painted.contains("\u{1b}[1;31merror[syntax::"), "{painted}");
+    assert!(painted.contains("\u{1b}[3;90m -->"), "{painted}");
+    let mut unpainted = String::new();
+    let mut chunks = painted.split("\u{1b}[");
+    unpainted.push_str(chunks.next().unwrap());
+    for chunk in chunks {
+        let (style, rest) = chunk.split_once('m').expect("terminated SGR");
+        assert!(
+            style
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || byte == b';')
+        );
+        unpainted.push_str(rest);
+    }
+    assert_eq!(unpainted, plain);
+}
+
+#[test]
+fn redirected_syntax_errors_are_plain_by_default() {
+    let fixture = Fixture::new();
+    fixture.write("entry.lp", MALFORMED_CHOICE);
+    let result = fixture.process(&[]);
+    assert!(!result.stderr.contains(&0x1b));
+}
+
+#[test]
+fn json_syntax_failure_remains_machine_readable() {
+    let fixture = Fixture::new();
+    fixture.write("entry.lp", MALFORMED_CHOICE);
+    let result = fixture.process(&["--json", "--color", "always"]);
+    assert_eq!(result.status.code(), Some(2));
+    let report: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert!(report["models"].as_array().unwrap().is_empty());
+    assert_eq!(report["outcome"]["error"]["kind"], "bundle_load");
+    assert!(String::from_utf8_lossy(&result.stderr).contains("error[syntax::"));
+    assert!(!result.stdout.contains(&0x1b));
+    assert!(!result.stderr.contains(&0x1b));
 }
 
 #[test]

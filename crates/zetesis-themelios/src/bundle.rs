@@ -391,13 +391,23 @@ impl fmt::Display for BundleError {
                 write!(f, "invalid source {}: {error}", path.display())
             }
             Self::Syntax {
-                path, diagnostics, ..
-            } => write!(
-                f,
-                "{} reported {} syntax diagnostic(s)",
-                path.display(),
-                diagnostics.len()
-            ),
+                path,
+                source,
+                diagnostics,
+            } => {
+                write!(
+                    f,
+                    "{} reported {} syntax diagnostic(s)",
+                    path.display(),
+                    diagnostics.len()
+                )?;
+                crate::source_diagnostics::write(
+                    f,
+                    &path.display().to_string(),
+                    source,
+                    diagnostics,
+                )
+            }
             Self::LibraryInclude { name, .. } => {
                 write!(f, "no library include search path is defined for <{name}>")
             }

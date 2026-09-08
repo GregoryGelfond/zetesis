@@ -124,6 +124,12 @@ verdicts use bold italic gray. Colors come from your terminal palette.
 stderr independently, respects a nonempty `NO_COLOR` and `TERM=dumb`, and leaves
 each redirected stream plain. JSON never contains styling.
 
+Malformed source reports the original themelios parser messages with file,
+line, column and marked source excerpts. Error headings and primary markers use
+red; locations and explanatory context use italic gray. Included files retain
+their own locations. Standard input uses the neutral `<input>` label. Diagnostics
+go to stderr; syntax failure never becomes an `UNSATISFIABLE` result.
+
 `--stats` adds host timings and available work counters to stderr. It separates
 source preparation, eager grounding, solving and output. Formula grounding has
 additional attribution for support completion, rule instantiation and other

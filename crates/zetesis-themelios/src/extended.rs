@@ -69,7 +69,10 @@ pub fn admit_extended(
         })?;
     let parsed = parse(&source, Dialect::Clingo);
     if !parsed.diagnostics().is_empty() {
-        return Err(AdmissionFailure::Syntax(parsed.diagnostics().to_vec()).into());
+        let diagnostics = parsed.diagnostics().to_vec();
+        return Err(
+            AdmissionFailure::Syntax(crate::SyntaxFailure::new(source, diagnostics)).into(),
+        );
     }
     profile::check_extended(&parsed, options)?;
     check_definitions(&parsed, limits)?;

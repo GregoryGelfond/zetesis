@@ -25,8 +25,8 @@ impl Label {
     }
 }
 
-// A borrowed or owned writer plus one explicit policy, with no buffered text,
-// environment lookup or terminal discovery. Metadata adds fixed label/style
+// A borrowed or owned writer plus one explicit policy, with no environment
+// lookup or terminal discovery. Metadata adds fixed label/style
 // bytes and delegates value formatting and I/O costs to their implementations.
 // Write calls and their failures remain observable in order.
 pub(crate) struct Diagnostics<W> {
@@ -45,6 +45,10 @@ impl<W: Write> Diagnostics<W> {
         } else {
             writeln!(self.writer, "{label}: {value}")
         }
+    }
+
+    pub(crate) fn error(&mut self, error: &impl fmt::Display) -> io::Result<()> {
+        super::source_error::write(&mut self.writer, self.color, error)
     }
 }
 

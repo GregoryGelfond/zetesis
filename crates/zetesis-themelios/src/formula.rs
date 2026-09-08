@@ -633,7 +633,10 @@ pub fn prepare_formula(
         })?;
     let parsed = parse(&source, Dialect::Clingo);
     if !parsed.diagnostics().is_empty() {
-        return Err(AdmissionFailure::Syntax(parsed.diagnostics().to_vec()).into());
+        let diagnostics = parsed.diagnostics().to_vec();
+        return Err(
+            AdmissionFailure::Syntax(crate::SyntaxFailure::new(source, diagnostics)).into(),
+        );
     }
     profile::check_formula(&parsed, options, false)?;
     extended::check_definitions_in(&parsed, expansion, &mut BTreeMap::new())?;

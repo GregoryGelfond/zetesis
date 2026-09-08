@@ -3,6 +3,7 @@
 use std::io::{self, Write};
 
 mod diagnostics;
+mod source_error;
 pub(crate) use diagnostics::{Diagnostics, Label};
 
 pub(crate) struct Streams {
@@ -39,7 +40,7 @@ pub enum ColorMode {
     /// Style an eligible terminal; leave generic library writers plain.
     #[default]
     Auto,
-    /// Emit ANSI styling in human model headings and solve/objective metadata.
+    /// Emit ANSI styling in human headings, metadata and source diagnostics.
     Always,
     /// Emit plain text.
     Never,

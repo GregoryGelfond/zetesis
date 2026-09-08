@@ -232,6 +232,13 @@ impl fmt::Display for RunError {
 impl RunError {
     fn write_diagnostics(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (bundle, diagnostics) = match self {
+            // Syntax refusals already render the retained source through the
+            // canonical themelios view. Appending byte-only labels duplicates it.
+            Self::Admission(AdmissionFailure::Syntax(_))
+            | Self::Expansion(ExpansionFailure::Admission(AdmissionFailure::Syntax(_)))
+            | Self::FormulaAdmission(zetesis_themelios::FormulaFailure::Expansion(
+                ExpansionFailure::Admission(AdmissionFailure::Syntax(_)),
+            )) => return Ok(()),
             Self::Admission(error) => (None, error.diagnostics()),
             Self::Expansion(error) => (None, error.diagnostics()),
             Self::FormulaAdmission(error) => (None, error.diagnostics()),

@@ -35,8 +35,12 @@ answer headings with a bold `Answer:` label and italic green optimization
 metadata. Eligible stderr terminals receive blue `Source:`, `Oracle:`,
 `Grounding:`, `Backend:` and `Auto:` labels with italic gray values. Standard ANSI
 palette colors inherit the terminal's configured theme. The untagged
-`SATISFIABLE` and `UNSATISFIABLE` verdicts use bold italic gray; atom lines, statistics
-and errors stay plain. `--color always` forces the human styles, while
+`SATISFIABLE` and `UNSATISFIABLE` verdicts use bold italic gray; atom lines and
+statistics stay plain. Fatal error summaries and primary diagnostic markers use
+bold red, with a blue `zetesis:` label. Syntax diagnostics use the original
+themelios messages, source excerpts and locations; locations, notes, help and
+secondary markers use italic gray. Warning and note headings preserve their
+yellow and blue severity styles. `--color always` forces the human styles, while
 `--color never` disables them. Automatic mode resolves stdout and stderr
 independently, respects a nonempty `NO_COLOR` and `TERM=dumb`, and leaves each
 redirected stream plain. JSON ignores color selection on both streams.
@@ -45,7 +49,12 @@ redirected stream plain. JSON ignores color selection on both streams.
 `SolveConfig`. The process resolves terminal/environment capabilities once.
 Library calls with generic injected writers keep `Auto` plain and can request
 `Always` explicitly. Solve metadata is streamed through typed actions; arbitrary
-diagnostic writes are passed through without buffering or text classification.
+diagnostic writes still pass through unchanged. Fatal errors use the canonical
+human diagnostic view with colour applied one line at a time. Numbered source
+rows remain plain; interpretation of the program does not depend on rendered text.
+The colour adapter retains at most the longest line, while the upstream human
+view may allocate one diagnostic rendering. Repeated excerpts increase output
+work but are not collected into a single whole-error string.
 Styling and reset bytes in an Answer record count toward its complete human
 record ceiling before publication. A partial write remains an output failure,
 including when it interrupts an escape sequence; the writer's retained prefix

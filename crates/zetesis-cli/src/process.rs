@@ -28,7 +28,7 @@ pub fn entry() -> ExitCode {
         return match devices(&mut output) {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
-                let _ = writeln!(diagnostics, "zetesis: {error}");
+                let _ = diagnostics.error(&error);
                 ExitCode::from(2)
             }
         };
@@ -38,7 +38,7 @@ pub fn entry() -> ExitCode {
         Ok(report) if report.completion == Completion::Interrupted => ExitCode::from(3),
         Ok(_) => ExitCode::SUCCESS,
         Err(error) => {
-            let _ = writeln!(diagnostics, "zetesis: {error}");
+            let _ = diagnostics.error(&error);
             ExitCode::from(2)
         }
     }

@@ -23,6 +23,7 @@
 #![forbid(unsafe_code)]
 
 mod diagnostic;
+mod source_diagnostics;
 mod profile;
 mod compile;
 mod coherence;
@@ -92,7 +93,7 @@ pub use bundle_admission::{
     AdmittedBundle, BundleAdmissionError, BundleAdmissionFailure, BundleAdmissionOptions,
     admit_bundle_extended,
 };
-pub use diagnostic::{AdmissionFailure, InputLimit, ProfileFeature};
+pub use diagnostic::{AdmissionFailure, InputLimit, ProfileFeature, SyntaxFailure};
 pub use expansion::{ExpansionFailure, ExpansionLimits, ExpansionResource};
 pub use extended::admit_extended;
 pub use formula::{
@@ -211,7 +212,11 @@ pub fn admit(text: String, options: AdmissionOptions) -> Result<Admitted, Admiss
         })?;
     let parsed = parse(&source, Dialect::Clingo);
     if !parsed.diagnostics().is_empty() {
-        return Err(AdmissionFailure::Syntax(parsed.diagnostics().to_vec()));
+        let diagnostics = parsed.diagnostics().to_vec();
+        return Err(AdmissionFailure::Syntax(SyntaxFailure::new(
+            source,
+            diagnostics,
+        )));
     }
     profile::check(&parsed, options)?;
     let raised = raise(&parsed);

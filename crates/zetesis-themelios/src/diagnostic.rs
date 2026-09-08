@@ -3,7 +3,7 @@
 use std::fmt;
 
 use themelios_base::diagnostic::{Diagnostic, DiagnosticId, Label, Severity, ToDiagnostic};
-use themelios_base::source::TooLarge;
+use themelios_base::source::{Source, TooLarge};
 use themelios_base::span::Location;
 use themelios_program::raise::LowerError;
 use themelios_syntax::diagnostic::SyntaxError;
@@ -132,6 +132,51 @@ impl fmt::Display for ProfileFeature {
     }
 }
 
+/// Parser diagnostics together with the original source they describe.
+///
+/// Admission transfers the rejected source here without rereading or reparsing
+/// it. Consumers can derive their own views from the source and diagnostics;
+/// the plain human view uses `<input>` for this unnamed source.
+#[derive(Debug)]
+pub struct SyntaxFailure {
+    source: Source,
+    diagnostics: Vec<SyntaxError>,
+}
+
+impl SyntaxFailure {
+    pub(crate) fn new(source: Source, diagnostics: Vec<SyntaxError>) -> Self {
+        Self {
+            source,
+            diagnostics,
+        }
+    }
+
+    /// Original source identity and UTF-8 bytes, retained only on refusal.
+    #[must_use]
+    pub fn source(&self) -> &Source {
+        &self.source
+    }
+
+    /// Every parser diagnostic, in the order reported by themelios.
+    #[must_use]
+    pub fn diagnostics(&self) -> &[SyntaxError] {
+        &self.diagnostics
+    }
+}
+
+impl fmt::Display for SyntaxFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "source parsing reported {} diagnostic(s)",
+            self.diagnostics.len()
+        )?;
+        crate::source_diagnostics::write(f, "<input>", &self.source, &self.diagnostics)
+    }
+}
+
+impl std::error::Error for SyntaxFailure {}
+
 /// A typed admission refusal. Every arm either carries a source location or
 /// retains the dependency's complete located diagnostic values.
 #[derive(Debug)]
@@ -154,8 +199,8 @@ pub enum AdmissionFailure {
         /// Start of the source that could not be admitted.
         location: Location,
     },
-    /// Every diagnostic returned by the parser; none is silently ignored.
-    Syntax(Vec<SyntaxError>),
+    /// Original source and every parser diagnostic; none is silently ignored.
+    Syntax(SyntaxFailure),
     /// Every diagnostic returned by the best-effort raiser.
     Raise(Vec<LowerError>),
     /// A form excluded by the source profile.
@@ -186,7 +231,11 @@ impl AdmissionFailure {
     #[must_use]
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         match self {
-            Self::Syntax(errors) => errors.iter().map(ToDiagnostic::to_diagnostic).collect(),
+            Self::Syntax(error) => error
+                .diagnostics()
+                .iter()
+                .map(ToDiagnostic::to_diagnostic)
+                .collect(),
             Self::Raise(errors) => errors.iter().map(ToDiagnostic::to_diagnostic).collect(),
             Self::Limit { location, .. } => {
                 vec![diagnostic("input-limit", self.to_string(), *location)]
@@ -222,9 +271,7 @@ impl fmt::Display for AdmissionFailure {
                 )
             }
             Self::Source { error, .. } => error.fmt(f),
-            Self::Syntax(errors) => {
-                write!(f, "source parsing reported {} diagnostic(s)", errors.len())
-            }
+            Self::Syntax(error) => error.fmt(f),
             Self::Raise(errors) => {
                 write!(f, "source raising reported {} diagnostic(s)", errors.len())
             }
@@ -239,6 +286,7 @@ impl std::error::Error for AdmissionFailure {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Source { error, .. } => Some(error),
+            Self::Syntax(error) => Some(error),
             Self::Construction { error, .. } => Some(error),
             Self::Core { error, .. } => Some(error),
             _ => None,
