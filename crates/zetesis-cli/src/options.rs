@@ -116,8 +116,9 @@ pub struct Options {
     pub backend: Backend,
     /// Grounding mode, independent of execution backend.
     ///
-    /// Lazy currently requires
-    /// CPU; eager is bounded by atom, substitution and ground-rule ceilings.
+    /// Lazy uses source joins for the relational profile on CPU or an explicit
+    /// GPU. General formula inputs require eager grounding, bounded by atom,
+    /// substitution and ground-rule ceilings.
     #[arg(long, value_enum, default_value_t)]
     pub grounder: Grounder,
     /// Advanced oracle selection. Auto preserves stable-model semantics while
