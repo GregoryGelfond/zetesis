@@ -484,3 +484,113 @@ fn malformed_candidate_storage_cannot_validate_receipts() {
         GpuErrorKind::Readback
     );
 }
+
+fn empty_graph() -> Graph {
+    let theory = Theory::new(0, vec![], vec![], AdmissionLimits::default()).unwrap();
+    let certificate =
+        TightPlan::compile(&theory, TightPlanLimits::default(), &Control::default()).unwrap();
+    Graph::new(&certificate, &wgpu::Limits::default()).unwrap()
+}
+
+#[test]
+fn empty_storage_padding_never_becomes_a_witness() {
+    let graph = empty_graph();
+    let empty = plan(&graph, 1, false);
+    let control = Control::default();
+    let stable = super::decode(
+        &[7, 0, STATUS_STABLE, 0, 0, RESULT_MAGIC],
+        &graph,
+        &empty,
+        &[0],
+        &control,
+    )
+    .unwrap();
+    assert_eq!(stable[0].verdict(), TightVerdict::Stable);
+    assert_eq!(stable[0].work(), 0);
+    for status in [STATUS_NOT_MODEL, STATUS_RESIDUAL] {
+        let error = super::decode(
+            &[7, 0, status, 0, 0, RESULT_MAGIC],
+            &graph,
+            &empty,
+            &[0],
+            &control,
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), GpuErrorKind::Readback);
+    }
+
+    // Zero is a valid ordinal when an actual asserted root occupies it.
+    let theory = Theory::new(0, vec![Node::False], vec![0], AdmissionLimits::default()).unwrap();
+    let certificate = TightPlan::compile(&theory, TightPlanLimits::default(), &control).unwrap();
+    let graph = Graph::new(&certificate, &wgpu::Limits::default()).unwrap();
+    let asserted = plan(&graph, 1, false);
+    let result = super::decode(
+        &[7, 0, STATUS_NOT_MODEL, 0, 2, RESULT_MAGIC],
+        &graph,
+        &asserted,
+        &[0],
+        &control,
+    )
+    .unwrap();
+    assert_eq!(result[0].verdict(), TightVerdict::NotModel { root: 0 });
+}
+
+#[test]
+fn uniform_storage_requires_its_full_size() {
+    let graph = empty_graph();
+    for (max_buffer_size, admitted) in [(32, true), (31, false)] {
+        let device = wgpu::Limits {
+            max_buffer_size,
+            ..Default::default()
+        };
+        let result = Plan::new(&graph, 1, TightGpuLimits::default(), &device, false, 1);
+        assert_eq!(result.is_ok(), admitted);
+        match result {
+            Ok(plan) => {
+                // Every storage buffer fits even the smaller limit. Only the
+                // uniform's independent 32-byte requirement separates the cases.
+                assert_eq!(
+                    (plan.seeds, plan.truth, plan.support, plan.results),
+                    (4, 4, 4, 24)
+                );
+            }
+            Err(error) => {
+                assert_eq!(error.kind(), GpuErrorKind::Capacity);
+                assert_eq!(
+                    error.detail(),
+                    "tight uniform buffer exceeds granted device limits"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn result_addressing_has_an_independent_ceiling() {
+    let graph = empty_graph();
+    let device = wgpu::Limits {
+        max_compute_workgroups_per_dimension: u32::MAX,
+        max_buffer_size: u64::MAX,
+        max_storage_buffer_binding_size: u64::MAX,
+        ..Default::default()
+    };
+    let limits = TightGpuLimits {
+        max_candidates: usize::MAX,
+        max_batch_bytes: u64::MAX,
+        ..Default::default()
+    };
+    // Only arithmetic plans are created. No candidate or result buffer is
+    // allocated for these deliberately hypothetical device dimensions.
+    let largest = usize::try_from(u32::MAX).unwrap() / RESULT_WORDS;
+    let boundary = Plan::new(&graph, largest, limits, &device, false, 1).unwrap();
+    assert_eq!(boundary.results, u64::try_from(largest).unwrap() * 6 * 4);
+    assert_eq!(
+        (boundary.seeds, boundary.truth, boundary.support),
+        (4, 4, 4)
+    );
+    let error = Plan::new(&graph, largest + 1, limits, &device, false, 1)
+        .err()
+        .unwrap();
+    assert_eq!(error.kind(), GpuErrorKind::Capacity);
+    assert_eq!(error.detail(), "tight world offset exceeds u32");
+}
