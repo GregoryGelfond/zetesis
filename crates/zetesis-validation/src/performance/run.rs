@@ -10,6 +10,10 @@ use super::{
 use crate::selected::{FileSeal, InvocationFailure, identity, publication};
 use crate::{answers, examples, process};
 
+#[cfg(test)]
+#[path = "../../tests/support/performance_sources.rs"]
+mod tests;
+
 fn unix_ns() -> Option<u128> {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

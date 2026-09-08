@@ -2,6 +2,7 @@
 #![cfg(any(target_os = "linux", target_os = "macos"))]
 
 use serde_json::{Value, json};
+use std::error::Error as _;
 use std::fmt::Write as _;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -404,4 +405,437 @@ fn serialized_report_ceiling_refuses_publication() {
     let report = performance::run(&request).unwrap();
     assert!(report.publish().is_err());
     assert!(!fixture.report.exists());
+}
+
+#[test]
+fn schedules_refuse_unbounded_measurement_populations() {
+    for (warmups, repetitions) in [(6, 1), (0, 0), (0, 42), (usize::MAX, usize::MAX)] {
+        let error = Schedule::new(warmups, repetitions).unwrap_err();
+        assert!(matches!(error, performance::Error::Configuration(_)));
+        assert!(
+            error
+                .to_string()
+                .contains("warmups must be 0..=5 and repetitions 1..=41")
+        );
+        assert!(error.source().is_none());
+    }
+}
+
+#[test]
+fn the_largest_schedule_preserves_every_authored_round() {
+    let schedule = Schedule::new(5, 41).unwrap();
+    for (phase, rounds) in [
+        (Phase::Warmup, schedule.warmups()),
+        (Phase::Timed, schedule.repetitions()),
+    ] {
+        for case in Case::ALL {
+            let slots: Vec<_> = schedule
+                .slots()
+                .into_iter()
+                .filter(|slot| slot.phase == phase && slot.case == case)
+                .collect();
+            assert_eq!(slots.len(), rounds * 2);
+            for (round, pair) in slots.chunks_exact(2).enumerate() {
+                assert_eq!(pair[0].round, round);
+                assert_eq!(pair[1].round, round);
+                assert_ne!(pair[0].producer, pair[1].producer);
+            }
+        }
+    }
+}
+
+#[test]
+fn missing_corpus_retains_the_typed_setup_cause() {
+    let fixture = Fixture::new("", |_| {});
+    fs::remove_file(fixture.corpus.join("manifest.json")).unwrap();
+    let error = performance::run(&fixture.request()).unwrap_err();
+    assert!(matches!(error, performance::Error::Corpus(_)));
+    assert!(error.to_string().contains("manifest.json"));
+    assert!(
+        error
+            .source()
+            .unwrap()
+            .downcast_ref::<examples::Error>()
+            .is_some()
+    );
+    assert!(!fixture.report.exists());
+}
+
+#[test]
+fn executable_seal_limits_precede_process_execution() {
+    let fixture = Fixture::new("", |_| {});
+    let mut request = fixture.request();
+    request.limits.max_executable_bytes = 0;
+    let error = performance::run(&request).unwrap_err();
+    assert!(matches!(
+        &error,
+        performance::Error::Boundary(zetesis_validation::selected::Error::Bytes { limit: 0, .. })
+    ));
+    assert!(error.to_string().contains("byte"));
+    assert!(
+        error
+            .source()
+            .unwrap()
+            .downcast_ref::<zetesis_validation::selected::Error>()
+            .is_some()
+    );
+    assert!(!fixture.report.exists());
+}
+
+#[test]
+fn aliased_executables_cannot_claim_independent_comparison() {
+    let fixture = Fixture::new("", |_| {});
+    fs::remove_file(&fixture.reference).unwrap();
+    fs::hard_link(&fixture.native, &fixture.reference).unwrap();
+    let error = performance::run(&fixture.request()).unwrap_err();
+    assert!(matches!(
+        error,
+        performance::Error::Configuration("native and reference executable identities must differ")
+    ));
+}
+
+#[test]
+fn relative_executable_paths_cannot_use_implicit_search() {
+    let fixture = Fixture::new("", |_| {});
+    let mut request = fixture.request();
+    request.native = Path::new("native");
+    assert!(matches!(
+        performance::run(&request),
+        Err(performance::Error::Configuration(
+            "native and reference executable paths must be absolute"
+        ))
+    ));
+}
+
+#[test]
+fn expired_campaigns_launch_no_producers() {
+    let fixture = Fixture::new("", |_| {});
+    let mut request = fixture.request();
+    request.limits.campaign_timeout = Duration::ZERO;
+    let report = performance::run(&request).unwrap();
+    assert!(matches!(report.faults(), [performance::Fault::Deadline]));
+    assert!(report.metadata().is_empty());
+    assert!(report.samples().is_empty());
+    assert!(!report.passed());
+    assert!(
+        report
+            .after()
+            .iter()
+            .all(zetesis_validation::selected::Change::unchanged)
+    );
+}
+
+#[test]
+fn an_unrepresentable_deadline_is_a_configuration_error() {
+    let fixture = Fixture::new("", |_| {});
+    let mut request = fixture.request();
+    request.limits.campaign_timeout = Duration::MAX;
+    assert!(matches!(
+        performance::run(&request),
+        Err(performance::Error::Configuration(
+            "campaign deadline is not representable"
+        ))
+    ));
+}
+
+#[test]
+fn zero_capture_capacity_launches_no_producers() {
+    let fixture = Fixture::new("", |_| {});
+    let mut request = fixture.request();
+    request.limits.max_total_capture_bytes = 0;
+    let report = performance::run(&request).unwrap();
+    assert!(matches!(
+        report.faults(),
+        [performance::Fault::CaptureBudget]
+    ));
+    assert!(report.metadata().is_empty());
+    assert!(report.samples().is_empty());
+    assert_eq!(report.total_capture_bytes(), 0);
+}
+
+#[test]
+fn spawn_failure_cannot_become_a_timed_observation() {
+    let fixture = Fixture::new("", |_| {});
+    fs::set_permissions(&fixture.native, fs::Permissions::from_mode(0o600)).unwrap();
+    let report = fixture.run();
+    assert!(!report.passed());
+    assert!(report.samples().is_empty());
+    assert!(matches!(report.faults(), [performance::Fault::Metadata]));
+    let capture = &report.metadata()[0];
+    assert_eq!(
+        capture.failure().unwrap().kind(),
+        zetesis_validation::selected::InvocationFault::Spawn
+    );
+    assert!(capture.cleanup_failure().is_none());
+    assert!(capture.elapsed_ns().is_none());
+    assert!(capture.stop().is_none());
+    assert!(capture.exit().is_none());
+    report.publish().unwrap();
+    let view: Value = serde_json::from_slice(&fs::read(&fixture.report).unwrap()).unwrap();
+    assert_eq!(view["passed"], false);
+    assert_eq!(view["metadata"][0]["failure"]["kind"]["stage"], "spawn");
+}
+
+#[test]
+fn malformed_native_reports_stop_the_qualification_prefix() {
+    let fixture = Fixture::new("", |text| *text = String::from("SATISFIABLE\n"));
+    let report = fixture.run();
+    let sample = report.samples().last().unwrap();
+    assert_eq!(sample.decision(), Decision::InvalidReport);
+    assert!(sample.detail().is_some());
+    assert!(sample.selected_models().is_none());
+    assert!(
+        report
+            .samples()
+            .iter()
+            .all(|sample| sample.slot().phase == Phase::Qualification)
+    );
+}
+
+#[test]
+fn raw_capture_accounting_includes_separate_metadata() {
+    let fixture = Fixture::new("", |_| {});
+    let mut request = fixture.request();
+    request.limits.max_total_capture_bytes = 1_048_576;
+    let report = performance::run(&request).unwrap();
+    assert!(report.passed());
+    let retained: usize = report
+        .samples()
+        .iter()
+        .map(performance::Sample::capture)
+        .chain(report.metadata())
+        .map(|capture| capture.stdout().len() + capture.stderr().len())
+        .sum();
+    assert_eq!(report.total_capture_bytes(), retained);
+    assert!(retained <= report.limits().max_total_capture_bytes);
+    assert_eq!(
+        report
+            .samples()
+            .iter()
+            .map(performance::Sample::slot)
+            .collect::<Vec<_>>(),
+        report.schedule().slots()
+    );
+    let task = report
+        .samples()
+        .iter()
+        .find(|sample| sample.slot().case == Case::TaskAllocation)
+        .unwrap();
+    assert_eq!(task.cost(), Some([5].as_slice()));
+}
+
+#[test]
+fn observations_retain_their_actual_execution_context() {
+    let fixture = Fixture::new(
+        "printf 'captured-working-directory=%s\\n' \"$PWD\" >&2\n",
+        |_| {},
+    );
+    let report = fixture.run();
+    assert!(report.passed());
+    let finished = report.finished_unix_ns().unwrap();
+    for sample in report.samples() {
+        let capture = sample.capture();
+        let expected = match sample.slot().producer {
+            Producer::Native => &fixture.native,
+            Producer::Reference => &fixture.reference,
+        };
+        assert_eq!(capture.executable(), expected);
+        let source = Path::new(capture.arguments().last().unwrap());
+        assert!(source.starts_with(capture.directory()));
+        assert!(source.ends_with(sample.slot().case.path()));
+        assert!(!capture.directory().exists());
+        let started = capture.started_unix_ns().unwrap();
+        assert!((report.started_unix_ns()..=finished).contains(&started));
+        if sample.slot().producer == Producer::Native {
+            // The shell reports physical PWD; macOS temporary roots may use a
+            // /var spelling whose surviving parent canonicalizes to /private/var.
+            let physical_directory = capture
+                .directory()
+                .parent()
+                .unwrap()
+                .canonicalize()
+                .unwrap()
+                .join(capture.directory().file_name().unwrap());
+            let actual = format!(
+                "captured-working-directory={}\n",
+                physical_directory.display()
+            );
+            assert!(String::from_utf8_lossy(capture.stderr()).contains(&actual));
+        }
+    }
+    assert!(
+        report
+            .before()
+            .iter()
+            .any(|seal| seal.requested() == fixture.native)
+    );
+}
+
+#[test]
+fn invalid_utf8_diagnostics_are_not_silently_replaced() {
+    let fixture = Fixture::new("", |_| {});
+    fs::write(fixture.directory.path().join("statistics.txt"), [0xff]).unwrap();
+    let report = fixture.run();
+    let sample = report.samples().last().unwrap();
+    assert_eq!(sample.decision(), Decision::InvalidDiagnostics);
+    assert_eq!(sample.capture().stderr(), [0xff]);
+    assert!(sample.detail().unwrap().contains("utf-8"));
+}
+
+#[test]
+fn a_phase_record_does_not_substitute_for_exclusive_stages() {
+    let fixture = Fixture::new("", |_| {});
+    fs::write(
+        fixture.directory.path().join("statistics.txt"),
+        include_bytes!("support/phase_statistics.txt"),
+    )
+    .unwrap();
+    let report = fixture.run();
+    let sample = report.samples().last().unwrap();
+    assert_eq!(sample.decision(), Decision::InvalidDiagnostics);
+    assert!(
+        sample
+            .detail()
+            .unwrap()
+            .contains("missing native stage timings")
+    );
+}
+
+#[test]
+fn diagnostics_cannot_change_the_grounding_policy() {
+    let fixture = Fixture::new("", |_| {});
+    let path = fixture.directory.path().join("statistics.txt");
+    let original = fs::read_to_string(&path).unwrap();
+    assert!(original.contains("stage grounding_mode: eager"));
+    fs::write(
+        path,
+        original.replace("stage grounding_mode: eager", "stage grounding_mode: mixed"),
+    )
+    .unwrap();
+    let report = fixture.run();
+    let sample = report.samples().last().unwrap();
+    assert_eq!(sample.decision(), Decision::InvalidDiagnostics);
+    assert!(sample.detail().unwrap().contains("not eager"));
+}
+
+#[test]
+fn phase_and_stage_driver_intervals_must_agree() {
+    let fixture = Fixture::new("", |_| {});
+    let path = fixture.directory.path().join("statistics.txt");
+    let original = fs::read_to_string(&path).unwrap();
+    let changed = original.replace(
+        "phase driver: elapsed_ns=1000",
+        "phase driver: elapsed_ns=1001",
+    );
+    assert_ne!(changed, original);
+    fs::write(path, changed).unwrap();
+    let report = fixture.run();
+    let sample = report.samples().last().unwrap();
+    assert_eq!(sample.decision(), Decision::InvalidDiagnostics);
+    assert!(sample.diagnostics().is_none());
+    assert!(
+        sample
+            .detail()
+            .unwrap()
+            .contains("native phase/stage evidence")
+    );
+}
+
+#[test]
+fn exclusive_stage_totals_cannot_exceed_the_driver_interval() {
+    let fixture = Fixture::new("", |_| {});
+    let path = fixture.directory.path().join("statistics.txt");
+    let original = fs::read_to_string(&path).unwrap();
+    let changed = original.replace(
+        "stage solving: calls=3; elapsed_ns=500",
+        "stage solving: calls=3; elapsed_ns=1500",
+    );
+    assert_ne!(changed, original);
+    fs::write(path, changed).unwrap();
+    let report = fixture.run();
+    let sample = report.samples().last().unwrap();
+    assert_eq!(sample.decision(), Decision::InvalidDiagnostics);
+    assert!(
+        sample
+            .detail()
+            .unwrap()
+            .contains("inconsistent exclusive stage timing partition")
+    );
+}
+
+fn cli(fixture: &Fixture, repetitions: &str) -> zetesis_validation::process::Capture {
+    use zetesis_validation::process::{self, Invocation, Limits};
+    let arguments = [
+        fixture.corpus.clone().into_os_string(),
+        "--zetesis".into(),
+        fixture.native.clone().into_os_string(),
+        "--clingo".into(),
+        fixture.reference.clone().into_os_string(),
+        "--report".into(),
+        fixture.report.clone().into_os_string(),
+        "--warmups".into(),
+        "0".into(),
+        "--repetitions".into(),
+        repetitions.into(),
+    ];
+    let outcome = process::invoke(
+        Invocation {
+            executable: Path::new(env!("CARGO_BIN_EXE_zetesis-perf")),
+            arguments: &arguments,
+            directory: fixture.directory.path(),
+        },
+        Limits {
+            timeout: Duration::from_secs(15),
+            max_output_bytes: 16_384,
+            cleanup_timeout: Duration::from_secs(1),
+        },
+    )
+    .unwrap();
+    let (capture, pending) = outcome.into_parts();
+    assert!(pending.is_none());
+    assert_eq!(capture.stop(), process::Stop::Completed);
+    assert!(capture.failure().is_none());
+    assert!(capture.cleanup_failure().is_none());
+    capture
+}
+
+#[test]
+fn the_cli_publishes_its_complete_selected_campaign() {
+    let fixture = Fixture::new("", |_| {});
+    let capture = cli(&fixture, "1");
+    assert_eq!(capture.exit().unwrap().code, Some(0));
+    assert!(
+        String::from_utf8_lossy(capture.stdout())
+            .starts_with("pass: 15 retained observations; evidence ")
+    );
+    let view: Value = serde_json::from_slice(&fs::read(&fixture.report).unwrap()).unwrap();
+    assert_eq!(view["passed"], true);
+    assert_eq!(view["samples"].as_array().unwrap().len(), 15);
+    assert_eq!(view["schedule"], json!({"warmups":0,"repetitions":1}));
+}
+
+#[test]
+fn the_cli_does_not_publish_an_invalid_schedule() {
+    let fixture = Fixture::new("", |_| {});
+    let capture = cli(&fixture, "0");
+    assert_eq!(capture.exit().unwrap().code, Some(2));
+    assert!(capture.stdout().is_empty());
+    assert!(String::from_utf8_lossy(capture.stderr()).contains("repetitions 1..=41"));
+    assert!(!fixture.report.exists());
+}
+
+#[test]
+fn the_cli_retains_failed_qualification_as_failed_evidence() {
+    let fixture = Fixture::new("", |text| {
+        *text = text.replace("assign(s,9)", "assign(s,8)");
+    });
+    let capture = cli(&fixture, "1");
+    assert_eq!(capture.exit().unwrap().code, Some(1));
+    assert!(
+        String::from_utf8_lossy(capture.stdout())
+            .starts_with("fail: 2 retained observations; evidence ")
+    );
+    let view: Value = serde_json::from_slice(&fs::read(&fixture.report).unwrap()).unwrap();
+    assert_eq!(view["passed"], false);
+    assert_eq!(view["samples"][1]["decision"], "model_mismatch");
 }

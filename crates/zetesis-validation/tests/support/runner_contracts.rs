@@ -859,15 +859,10 @@ fn typed_native_contract_requires_successful_exit() {
     assert!(result.get("native_answer_parity_passed").is_none());
 }
 
-fn delayed(directory: &Path, name: &str, stdout: &str) -> PathBuf {
-    script(
-        directory,
-        name,
-        &format!(
-            "printf '%s' '{}'\nexec sleep 2",
-            stdout.replace('\'', "'\\''")
-        ),
-    )
+fn complete_prefix(stdout: &str) -> String {
+    // Trailing whitespace keeps the report valid while making the shared byte
+    // allowance large enough for the ordinary reference invocation to finish.
+    format!("{stdout}\n{}", " ".repeat(reference().len()))
 }
 
 #[test]
@@ -875,11 +870,13 @@ fn typed_reference_contract_requires_complete_capture() {
     let directory = tempfile::tempdir().unwrap();
     let loaded = typed_loaded(directory.path());
     let mut options = options(directory.path());
-    options.timeout_ms = 400;
-    options.clingo = delayed(directory.path(), "reference", &reference());
+    let prefix = complete_prefix(&reference());
+    super::normalize::reference(&prefix).unwrap();
+    options.max_output_bytes = prefix.len();
+    options.clingo = emitting(directory.path(), "reference", &format!("{prefix}x"), "", 30);
     options.zetesis = directory.path().join("must-not-run");
-    let result = check(&options, &loaded, "reference_timeout");
-    assert_eq!(result["reference_process"]["stdout"], reference());
+    let result = check(&options, &loaded, "reference_output_limit");
+    assert_eq!(result["reference_process"]["stdout"], prefix);
     assert!(result.get("reference_answer").is_none());
     assert!(result.get("native_process").is_none());
 }
@@ -889,10 +886,12 @@ fn typed_native_contract_requires_complete_capture() {
     let directory = tempfile::tempdir().unwrap();
     let loaded = typed_loaded(directory.path());
     let mut options = options(directory.path());
-    options.timeout_ms = 400;
-    options.zetesis = delayed(directory.path(), "native", NATIVE);
-    let result = check(&options, &loaded, "native_timeout");
-    assert_eq!(result["native_process"]["stdout"], NATIVE);
+    let prefix = complete_prefix(NATIVE);
+    super::normalize::native(&prefix, false).unwrap();
+    options.max_output_bytes = prefix.len();
+    options.zetesis = emitting(directory.path(), "native", &format!("{prefix}x"), "", 0);
+    let result = check(&options, &loaded, "native_output_limit");
+    assert_eq!(result["native_process"]["stdout"], prefix);
     assert!(result.get("native_answer").is_none());
     assert!(result.get("native_answer_parity_passed").is_none());
 }

@@ -120,3 +120,70 @@ fn failed_flush_prevents_a_later_json_footer() {
     assert!(error.to_string().contains("original cause"));
     assert_eq!(sink.0, b"{\"schema\":1,\"format\":\"zetesis\",\"models\":[");
 }
+
+#[test]
+fn failure_envelopes_never_invent_search_coverage() {
+    let errors = [
+        (
+            RunError::ObservationOutputLimit {
+                observed: 5,
+                limit: 4,
+            },
+            "observation_output_limit",
+        ),
+        (RunError::MixedStandardInput, "mixed_standard_input"),
+        (RunError::Batch(zetesis_cpu::BatchError::Busy), "batch"),
+        (RunError::BackendUnavailable, "backend_unavailable"),
+        (
+            RunError::UnsupportedCombination {
+                backend: crate::Backend::Metal,
+                grounder: crate::Grounder::Lazy,
+            },
+            "unsupported_combination",
+        ),
+        (
+            RunError::PreparedInput {
+                profile: crate::PreparedProfile::Relational,
+                oracle: crate::Oracle::Countermodel,
+                grounder: crate::Grounder::Lazy,
+            },
+            "prepared_input",
+        ),
+        (
+            RunError::Formula(zetesis_ferraris::AdmissionError::Limit),
+            "formula",
+        ),
+        (
+            RunError::PublicationStopped(zetesis_cpu::Stop::Cancelled),
+            "publication_stopped",
+        ),
+        (RunError::Words(zetesis_core::WordError::TailBits), "words"),
+        (
+            RunError::FormulaBatchShape {
+                expected: 2,
+                actual: 1,
+            },
+            "formula_batch_shape",
+        ),
+        (RunError::LazyStatisticsOverflow, "lazy_statistics_overflow"),
+    ];
+    for (error, kind) in errors {
+        let original = error.to_string();
+        let mut bytes = Vec::new();
+        let retained = input_failure(
+            &mut bytes,
+            error.into(),
+            &Options::parse_from(["zetesis", "--json"]),
+        );
+        assert_eq!(retained.to_string(), original);
+        assert!(retained.partial_report.is_none());
+        assert!(retained.secondary_output.is_none());
+        let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(value["outcome"]["error"]["kind"], kind);
+        assert_eq!(value["outcome"]["status"], "failed");
+        assert_eq!(value["outcome"]["coverage"], "unavailable");
+        assert!(value["outcome"]["checked"].is_null());
+        assert!(value["outcome"]["verified_models"].is_null());
+        assert_eq!(value["models"], serde_json::json!([]));
+    }
+}
