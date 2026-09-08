@@ -202,3 +202,19 @@ fn atom_framing_matches_the_version_one_layout() {
         sha2::Sha256::digest(expected).as_slice()
     );
 }
+
+#[test]
+fn nested_value_kinds_do_not_alias_in_subject_evidence() {
+    let mut seen = std::collections::BTreeSet::new();
+    for node in [
+        ValueNode::Infimum,
+        ValueNode::Supremum,
+        ValueNode::String("#inf".into()),
+        ValueNode::String("#sup".into()),
+        ValueNode::String("a".into()),
+        ValueNode::Symbol("a".into()),
+    ] {
+        let value = function(Sign::Positive, "f", vec![node]);
+        assert!(seen.insert(digest(|encoding| encoding.value(&value))));
+    }
+}

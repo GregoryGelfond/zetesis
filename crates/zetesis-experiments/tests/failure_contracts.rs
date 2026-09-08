@@ -139,3 +139,49 @@ fn incomplete_reference_work_keeps_its_cause_and_cannot_qualify() {
     assert!(error.to_string().contains("work"));
     assert!(!String::from_utf8(output).unwrap().contains("status=PASS"));
 }
+
+#[test]
+fn formula_publication_failure_preserves_completed_rows() {
+    let parsed = zetesis_experiments::CommandOptions::try_parse_from([
+        "zetesis-bench",
+        "formula",
+        "--backend",
+        "cpu",
+        "--atoms",
+        "1",
+        "--batches",
+        "1",
+        "--families",
+        "choices",
+        "--repetitions",
+        "1",
+        "--cpu-workers",
+        "1",
+    ])
+    .unwrap();
+    let Some(zetesis_experiments::Experiment::Formula(options)) = parsed.command else {
+        panic!("formula options")
+    };
+    let mut complete = Vec::new();
+    zetesis_experiments::run_formula(&options, &mut complete).unwrap();
+    let lines = String::from_utf8(complete).unwrap().lines().count();
+    for allowed in 0..lines {
+        let mut output = RefuseAfterLines {
+            allowed,
+            seen: 0,
+            retained: Vec::new(),
+        };
+        let error = zetesis_experiments::run_formula(&options, &mut output).unwrap_err();
+        let zetesis_experiments::FormulaBenchmarkError::Output(cause) = &error else {
+            panic!("unexpected failure: {error}")
+        };
+        assert_eq!(cause.kind(), io::ErrorKind::BrokenPipe);
+        assert_eq!(
+            error.source().unwrap().to_string(),
+            "qualification output closed"
+        );
+        let retained = String::from_utf8(output.retained).unwrap();
+        assert_eq!(retained.lines().count(), allowed);
+        assert!(!retained.contains("status=PASS"));
+    }
+}

@@ -510,3 +510,113 @@ fn incomplete_command_publishes_its_refusal() {
     assert_eq!(report["complete"], false);
     assert_eq!(report["failure"]["code"], "objective_unsupported");
 }
+
+fn published_failure(report: &Report) -> serde_json::Value {
+    assert!(!report.complete);
+    let mut bytes = Vec::new();
+    write_report(report, &mut bytes).unwrap();
+    serde_json::from_slice(&bytes).unwrap()
+}
+
+#[test]
+fn missing_source_retains_its_native_failure() {
+    use std::error::Error as _;
+    let report = profile(source("missing.lp"), configuration()).unwrap();
+    let Some(Error::Source(_)) = report.failure else {
+        panic!("source refusal expected")
+    };
+    assert!(report.failure.as_ref().unwrap().source().is_some());
+    let record = published_failure(&report);
+    assert_eq!(record["failure"]["code"], "source");
+    assert!(
+        record["failure"]["detail"]
+            .as_str()
+            .unwrap()
+            .contains("missing.lp")
+    );
+    assert!(report.sources.is_empty());
+    assert!(report.samples.is_empty());
+}
+
+#[test]
+fn admission_failure_preserves_the_loaded_source_catalog() {
+    use std::error::Error as _;
+    let mut config = configuration();
+    config.formula.max_work = 0;
+    let report = profile(source("arithmetic.lp"), config).unwrap();
+    let Some(Error::Admission(_)) = report.failure else {
+        panic!("admission refusal expected")
+    };
+    assert!(report.failure.as_ref().unwrap().source().is_some());
+    let record = published_failure(&report);
+    assert_eq!(record["failure"]["code"], "admission");
+    assert!(!record["sources"].as_array().unwrap().is_empty());
+    assert!(report.qualification.is_none());
+    assert!(report.samples.is_empty());
+}
+
+#[test]
+fn search_failure_cannot_erase_admitted_subject_evidence() {
+    use std::error::Error as _;
+    let mut config = configuration();
+    config.search.search.max_work = 0;
+    let report = profile(source("identity.lp"), config).unwrap();
+    let Some(Error::Search(_)) = report.failure else {
+        panic!("search refusal expected")
+    };
+    assert!(report.failure.as_ref().unwrap().source().is_some());
+    let record = published_failure(&report);
+    assert_eq!(record["failure"]["code"], "search_incomplete");
+    assert_eq!(record["qualification"]["exhausted"], false);
+    assert_eq!(record["subject_fingerprint"]["status"], "available");
+    assert!(!report.atoms.is_empty());
+}
+
+#[test]
+fn phase_capture_failure_retains_earlier_samples() {
+    let mut config = configuration();
+    config.capture.max_phase_records = 0;
+    let report = profile(source("arithmetic.lp"), config).unwrap();
+    let record = published_failure(&report);
+    assert_eq!(record["failure"]["code"], "capture");
+    assert_eq!(report.samples.len(), 3);
+    assert!(
+        report.samples[..2]
+            .iter()
+            .all(|sample| sample.models.as_ref().unwrap().exhausted)
+    );
+    let failed = &report.samples[2];
+    assert!(failed.admitted);
+    assert_eq!(failed.capture_refusal, Some(CaptureRefusal::RecordLimit));
+    assert!(failed.models.is_none());
+}
+
+fn encoded_limit(report: &mut Report, include_newline: bool) -> usize {
+    // The limit itself is a numeric field in the record. Its digit width must
+    // stabilize before testing the JSON/newline boundary; measured clock digit
+    // widths and source-path lengths cannot then make this test intermittent.
+    for _ in 0..usize::BITS {
+        let bytes = serde_json::to_vec(&report).unwrap().len() + usize::from(include_newline);
+        if report.configuration.capture.max_output_bytes == bytes {
+            return bytes;
+        }
+        report.configuration.capture.max_output_bytes = bytes;
+    }
+    panic!("numeric output-limit framing did not stabilize")
+}
+
+#[test]
+fn output_ceiling_includes_the_terminal_newline() {
+    let mut report = qualified_identity();
+    let complete_bytes = encoded_limit(&mut report, true);
+    let mut bytes = Vec::new();
+    write_report(&report, &mut bytes).unwrap();
+    assert_eq!(bytes.len(), complete_bytes);
+    assert_eq!(bytes.last(), Some(&b'\n'));
+    let json_bytes = encoded_limit(&mut report, false);
+    let mut refused = Vec::new();
+    assert!(
+        matches!(write_report(&report,&mut refused),Err(Error::Limit { resource:"output_bytes",limit }) if limit == json_bytes)
+    );
+    assert!(refused.is_empty());
+}

@@ -126,3 +126,131 @@ fn diagnostic_byte_limit_is_inclusive() {
         })
     ));
 }
+
+#[test]
+fn changed_source_is_refused_before_measurement() {
+    let config = Configuration::default();
+    let bundle = SourceBundle::load(source("identity.lp"), config.bundle).unwrap();
+    let reference = super::admit(bundle, &config, None).unwrap();
+    let mut report = super::Report::new(&config).unwrap();
+    let error = super::sample(
+        &source("values.lp"),
+        &reference,
+        &mut report,
+        0,
+        Mode::Unobserved,
+    )
+    .unwrap_err();
+    assert!(matches!(error, Error::SourceChanged));
+    assert!(report.samples.is_empty());
+}
+
+#[test]
+fn stale_model_reference_retains_the_failed_sample() {
+    let config = Configuration::default();
+    let bundle = SourceBundle::load(source("identity.lp"), config.bundle).unwrap();
+    let reference = super::admit(bundle, &config, None).unwrap();
+    let mut report = super::Report::new(&config).unwrap();
+    let (mut models, failure) = super::semantic::enumerate(&reference, &config);
+    assert!(failure.is_none());
+    models.interpretations.pop();
+    report.qualification = Some(models);
+    let error = super::sample(
+        &source("identity.lp"),
+        &reference,
+        &mut report,
+        0,
+        Mode::Detailed,
+    )
+    .unwrap_err();
+    assert!(matches!(error, Error::ModelsChanged));
+    assert_eq!(report.samples.len(), 1);
+    assert_eq!(report.samples[0].subject_equal, Some(true));
+    let observed = report.samples[0].models.as_ref().unwrap();
+    assert!(observed.exhausted);
+    assert_eq!(observed.interpretations.len(), 2);
+}
+
+#[test]
+fn nested_grounding_boundaries_refuse_complete_capture() {
+    let observer = Observer::new(Mode::Boundary, 0).unwrap();
+    observer.enter();
+    observer.enter();
+    observer.exit();
+    assert_eq!(observer.finish().2, Some(CaptureRefusal::Callbacks));
+}
+
+#[test]
+fn wrong_phase_exit_retains_the_attribution_refusal() {
+    let observer = Observer::new(Mode::Detailed, 1).unwrap();
+    observer.enter();
+    observer.phase_enter(GroundingPhase::RuleInstantiation, None);
+    observer.phase_exit(
+        GroundingPhase::SupportCompletion,
+        None,
+        GroundingOutcome::Completed,
+        GroundingWork::default(),
+    );
+    observer.exit();
+    let (_, records, refusal) = observer.finish();
+    assert_eq!(records.len(), 1);
+    assert_eq!(refusal, Some(CaptureRefusal::Callbacks));
+}
+
+#[test]
+fn unmatched_phase_exit_cannot_fabricate_a_record() {
+    let observer = Observer::new(Mode::Detailed, 1).unwrap();
+    observer.phase_exit(
+        GroundingPhase::RuleInstantiation,
+        None,
+        GroundingOutcome::Completed,
+        GroundingWork::default(),
+    );
+    let (_, records, refusal) = observer.finish();
+    assert!(records.is_empty());
+    assert_eq!(refusal, Some(CaptureRefusal::Callbacks));
+}
+
+#[test]
+fn nested_phase_refusal_survives_later_record_limits() {
+    let observer = Observer::new(Mode::Detailed, 0).unwrap();
+    observer.phase_enter(GroundingPhase::RuleInstantiation, None);
+    observer.phase_enter(GroundingPhase::SupportCompletion, None);
+    observer.phase_exit(
+        GroundingPhase::SupportCompletion,
+        None,
+        GroundingOutcome::Completed,
+        GroundingWork::default(),
+    );
+    assert_eq!(observer.finish().2, Some(CaptureRefusal::Callbacks));
+}
+
+#[test]
+fn byte_refusal_remains_sticky_across_writer_views() {
+    use std::io::Write as _;
+    let mut bytes = super::storage::Bytes::new(3, "test_bytes");
+    bytes.write_all(b"abc").unwrap();
+    assert!(std::fmt::Write::write_str(&mut bytes, "d").is_err());
+    assert!(bytes.write_all(b"e").is_err());
+    assert_eq!(bytes.data, b"abc");
+    assert!(matches!(
+        bytes.refusal,
+        Some(Error::Limit {
+            resource: "test_bytes",
+            limit: 3
+        })
+    ));
+}
+
+#[test]
+fn objectives_cannot_be_omitted_from_fingerprint_claims() {
+    let config = Configuration::default();
+    let bundle = SourceBundle::load(source("objective.lp"), config.bundle).unwrap();
+    let subject = super::admit(bundle, &config, None).unwrap();
+    assert_eq!(
+        super::fingerprint::subject(&subject, config.capture.max_subject_bytes).unwrap(),
+        super::SubjectFingerprint::Unavailable {
+            reason: super::FingerprintUnavailable::Objectives
+        }
+    );
+}
