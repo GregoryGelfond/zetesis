@@ -184,10 +184,10 @@ syntax, raising and evaluation errors from zetesis implementation refusals.
 |---|---|
 | Normal rules | Safe finite rules, constraints, default/double negation, strong negation with coherence, and relational lazy checking in the admitted normal-rule profile. |
 | Formula rules | Bounded choices, signed singleton/disjunctive heads, finite rule/head pools, evaluated heads, scalar/range bindings, comparisons and admitted universal body conditionals. |
-| Aggregates | Body count/sum/sum+ and complete-value min/max comparisons; independent assignments feeding scalar/tuple filters, scalar equalities, evaluated positive arguments and heads, and integer choice bounds; function-count heads with positive or default-negated eligibility and checked tuple/atom correspondence. |
+| Aggregates | Body count/sum/sum+ and complete-value min/max comparisons; independent assignments feeding scalar/tuple filters, scalar equalities, evaluated positive arguments and heads, default/double-negated outer atoms and admitted projections, finite outer ranges and integer choice bounds; function-count heads with positive, default-negated or double-negated eligibility and checked tuple/atom correspondence. |
 | Logical values | Closed signed functions and tuples; finite construction from bound inputs; positive tuple/function patterns, including local conditional-consequent witnesses; evaluated positive arguments with independently bound inputs; evaluated already-safe negative arguments. |
 | Objectives and observations | Admitted minimize/maximize/weak constraints; complete tuple keys and optimal ties; signature, term and conditional `#show`; `#defined`; original include bundles and constants. |
-| Refusal boundaries | Cross-aggregate assignment dependencies, generated ranges and remaining conditional consumers, weighted/extremal function heads and nontrivial conditional disjuncts, objective-dependent disjunction/conditionals, broader directives and exact clingo undefined-arithmetic behavior remain incomplete. |
+| Refusal boundaries | Dependencies between aggregate assignment generators, including through scalar/range descendants; remaining conditional consumers; weighted/extremal function heads and nontrivial conditional disjuncts; unsupported objective-dependent producers; broader directives and exact clingo undefined-arithmetic behavior remain incomplete. |
 
 These rows summarize profiles; they are not a grammar specification. The
 [source API guide](crates/zetesis-themelios/README.md) describes composition,
@@ -219,6 +219,18 @@ positive count-head eligibility. For example,
 `d(1).N{a;b}N:-N=#count{X:d(X)}.` retains the original equality around each
 proposed bound, and `q(1).1#count{X:p(X):q(X)}1.` retains `q(1)` as a condition.
 Neither proposed values nor possible-support membership establish truth.
+
+Completed outer values now feed [negative consumers](docs/verification/outer-negative-consumers-20260908/README.md)
+and [finite dependent ranges](docs/verification/outer-ranges-20260908/README.md)
+in ordinary, choice and checked count-head bodies. For example,
+`{p(0)}.q(N):-N=#count{},not p(N).` has answer sets `{p(0)}` and `{q(0)}`:
+the count supplies an argument, while the original negative atom decides whether
+the rule applies. Similarly, `{d}.q(K):-N=#count{1:d},K=1..N.` has the empty
+answer set and `{d,q(1)}`. Each generated row retains the original aggregate
+equality and rule activation; a proposed value never certifies aggregate truth.
+The dated records distinguish complete clingo comparisons, frozen-reduct checks
+and explicit resource or numeric boundaries.
+
 The current [Lean audit](proofs/verification/consumers-memory-20260908/README.md)
 checks 748 laws across 61 modules; Rust and WGSL correspondence remains unproved.
 

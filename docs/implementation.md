@@ -443,7 +443,8 @@ source endpoints implicated in six recorded clingo discrepancies remain refused.
 Independent multiple aggregate assignments stream products through the existing
 bounded cursor while retaining every original equality. Their values can now feed
 scalar/tuple comparisons, Boolean guards, scalar equalities, evaluated positive
-arguments and evaluated or constructed head arguments. Independent proposals
+arguments, default/double-negated outer atoms and admitted projections, finite
+outer ranges, and evaluated or constructed head arguments. Independent proposals
 also supply integer choice/count-head bounds while retaining their original
 aggregate equality and rule activation. A private plan records required and produced slots;
 relational bindings establish initial readiness, and consumers run after their
@@ -456,26 +457,38 @@ filters inspect completed rows. Undefined or overflowing consumer arithmetic
 still refuses admission, even when a proposal would later prove unrealizable.
 The bounded plan charges dependency scans and input/readiness/instruction storage
 under existing expansion limits. Aggregate-free rules keep their previous
-accounting. Dependent ranges, aggregate-generated outer-body negative argument
-consumers, remaining conditional
-consumers and objective producers retain their
-explicit profile boundaries.
-Dependencies between assignment generators are refused even through scalar
-descendants; previously admitted comparison scopes remain available. See the
+accounting. Remaining conditional consumers and objective producers retain their
+explicit profile boundaries. Dependencies between assignment generators are
+refused even through scalar or range descendants; previously admitted comparison
+scopes remain available. See the
 [aggregate-consumer record](verification/aggregate-consumers-20260907/README.md)
 for exact boundaries, finite-ground comparisons and schedule-bypass evidence.
 The [choice-body extension](verification/choice-consumers-20260908/README.md)
 uses the same completed-row plan for choice and checked count heads, preserving
 whole-group activation and bounds. The total-assignment objective observer
 described below is unchanged.
+
+The [outer negative-consumer extension](verification/outer-negative-consumers-20260908/README.md)
+retains negative atoms and complete existential projections with their original
+polarity. They consume complete values without binding new inputs or filtering
+possible rows by support membership. The [dependent-range extension](verification/outer-ranges-20260908/README.md)
+uses the same plan in ordinary, choice and checked count-head bodies. It streams
+inclusive intervals only after both endpoints are available and resets later
+cursors before earlier bindings advance. An already-bound target is a membership
+filter. Empty or nonnumeric intervals produce no rows under the existing numeric
+policy; arithmetic errors and width/work/value limits retain their typed failures.
+For example, `{d}.q(K):-N=#count{1:d},K=1..N.` has the empty answer set and
+`{d,q(1)}`. Each expanded row retains the original equality and activation,
+including when it instantiates a complete choice group or a head interval.
+
 Positive ordinary atoms may now bind local count-head witnesses and supply
 eligibility, including recursive and structured patterns. The complete
 tuple/atom bijection check precedes choice lowering. Duplicate witnesses retain
 their disjoined eligibility formulas; support membership never asserts them.
 Default-negated and double-negated eligibility consume established inputs
 through the ordinary choice-condition path; they retain their original polarity.
-Head-local eligibility may read completed outer aggregate values; it does not
-share the remaining outer-body negative-consumer restriction.
+Head-local eligibility and outer-body negative gates may both read completed
+outer aggregate values, while retaining their separate source scopes.
 The [negative-eligibility record](verification/negative-count-eligibility-20260908/README.md)
 checks original/frozen truth, projection, safety and complete clingo models.
 Tuple aliases and weighted/extremal function heads remain refused. The [bounds and eligibility record](verification/aggregate-bounds-20260907/README.md)
