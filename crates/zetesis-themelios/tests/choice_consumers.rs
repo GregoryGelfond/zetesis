@@ -186,8 +186,6 @@ fn assert_profile(source: &str, feature: ProfileFeature) {
 #[test]
 fn unsupported_outer_consumers_remain_refused() {
     for body in [
-        "N=#count{},not p(N)",
-        "N=#count{},not not p(f(N))",
         "N=#count{},K=1..N",
         "N=#count{},Y=N+1,M=#count{Y:p}",
         "N=#count{},Y=N+1,p(Y):d",

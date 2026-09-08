@@ -106,12 +106,20 @@ impl Compiler<'_> {
                 // are compiled separately from this completed outer frame.
                 if matches!(
                     literal,
-                    LiteralIr::Compare(..)
+                    LiteralIr::Atom(DefaultNegation::Not | DefaultNegation::NotNot, _)
+                        | LiteralIr::ProjectedAtom(
+                            DefaultNegation::Not | DefaultNegation::NotNot,
+                            _,
+                        )
+                        | LiteralIr::Compare(..)
                         | LiteralIr::ArgumentCheck { .. }
                         | LiteralIr::TupleCompare(..)
                         | LiteralIr::Guard(_)
                         | LiteralIr::Bind { .. }
                 ) {
+                    // Negative gates read completed values without binding or
+                    // pruning possible rows. Grounding retains their original
+                    // polarity, including the existential projection formula.
                     consumed |= self.literal_uses(literal, target)?;
                     continue;
                 }

@@ -225,7 +225,7 @@ fn profile(error: &FormulaFailure, expected: ProfileFeature) {
 }
 
 #[test]
-fn every_target_is_checked_in_other_tuples_conditions_guards_and_filters() {
+fn unsupported_aggregate_dependencies_remain_refused() {
     for source in [
         "r(N,M):-N=#count{M:p},M=#count{}.",
         "r(N,M):-N=#count{},M=#count{N:p}.",
@@ -233,7 +233,6 @@ fn every_target_is_checked_in_other_tuples_conditions_guards_and_filters() {
         "r(N,M):-N=#count{X:p(X),not q(M,_)},M=#count{}.",
         "r(N,M):-N=#count{X:p(X),Y=M+1},M=#count{}.",
         "r(N,M):-N=#count{X:p(X),X=1..M},M=#count{}.",
-        "r(N,M):-N=#count{},M=#count{},not q(M,_).",
         "r(N,M):-N=#count{},M=#count{},K=1..M.",
         "r(N,M):-N=#count{},M=#count{},M<=#count{}.",
         "r(N,M):-N=#count{},M=#count{},M=#sum{}.",
