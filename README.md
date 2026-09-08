@@ -224,6 +224,9 @@ and **59 external-oracle tests**; all 94 clean corpus and 24 selected upstream
 cases still pass. Separate coverage profiles measure **91.1084% / 92.0460%**.
 The [tranche record](docs/verification/consumers-memory-tranche-20260908/README.md)
 keeps source, binary, audit and publication evidence separate.
+The [September CI policy](docs/verification/local-macos-ci-20260908/README.md)
+allows promotion using the completed local macOS gates while GitHub Actions is
+paused through September 30. The new tranche has no executed hosted Linux result.
 
 The [watch arrays](docs/verification/watch-storage-20260908/README.md) use half
 their former element payload on the measured 64-bit build; ordered search traces
@@ -239,10 +242,10 @@ clingo assertions** pass with 73 full-model occurrences. Final local gates pass
 **1,707 workspace test/doc checks** and **300 CPU-only CLI checks**, with explicit
 external/device ignores retained. Corrected production line coverage is
 **91.0705% workspace / 92.0126% CPU-only CLI** before the final status-styling
-slice; both independent floors remain 91%. Hosted CI checks the published revision.
+slice; both independent floors remain 91%. Hosted CI passed for that published revision.
 The [checkpoint](docs/verification/aggregate-bounds-tranche-20260907/README.md)
 records the rebuilt five release commands, source/binary identities, review
-findings and limitations. Hosted CI attaches separately to each published
+findings and limitations. Hosted results attach to their specific source
 revision. The
 [verification record](docs/verification/status.md) indexes historical results.
 
@@ -371,9 +374,10 @@ prerequisites:
 Workspace and CPU-only CLI coverage each retain an independent **91% line
 floor**. Coverage does not measure assertion strength, Lean correspondence or
 physical shader execution. GPU qualification is a separate test group on an
-accessible device. [CI](.github/workflows/checks.yml) runs portable gates on
-Linux/macOS, proofs and Linux coverage; a hosted runner does not establish NVIDIA
-or Metal hardware qualification.
+accessible device. The retained [CI workflow](.github/workflows/checks.yml) defines
+portable gates on Linux/macOS, proofs and Linux coverage. Hosted execution is
+temporarily disabled under the [local macOS policy](docs/verification/local-macos-ci-20260908/README.md).
+A hosted runner does not establish NVIDIA or Metal hardware qualification.
 
 The intended authored implementation is Rust, Lean and WGSL. Repository cleanup
 is in progress. The first reusable Rust process/answer boundary now serves the

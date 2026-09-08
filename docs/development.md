@@ -125,6 +125,11 @@ the pinned arithmetic contract. Their focused evidence remains distinct from the
 
 ## Required checks and prerequisites
 
+Until the October 1, 2026 allowance reset, use the checks below locally on macOS.
+The [temporary CI policy](verification/local-macos-ci-20260908/README.md) replaces
+hosted success as the promotion prerequisite without weakening the local gates.
+Linux execution is unverified for revisions qualified only during this interval.
+
 The portable gate requires Rust and Python 3 for the remaining legacy tooling
 tests; it needs neither clingo nor a physical GPU:
 
@@ -134,7 +139,7 @@ tests; it needs neither clingo nor a physical GPU:
 
 It runs all-feature workspace tests, CPU-only CLI tests, rustfmt, pedantic Clippy,
 strict rustdoc and Criterion correctness smokes. Ignored external/device tests
-are not passes. CI repeats portable checks on Linux and macOS.
+are not passes. When enabled, hosted CI repeats portable checks on Linux and macOS.
 
 Install clingo 5.8.2 independently and put `clingo` on `PATH` for external checks:
 

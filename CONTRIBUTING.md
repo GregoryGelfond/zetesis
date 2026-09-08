@@ -113,6 +113,12 @@ output or admitted control semantics.
 
 ## Verification and review
 
+Through September 30, 2026, local macOS qualification is the promotion gate while
+the GitHub Actions allowance is exhausted. Hosted checks are temporarily disabled;
+the tests and independent coverage floors are unchanged. Follow the
+[temporary CI policy](docs/verification/local-macos-ci-20260908/README.md) for
+required evidence and restoring hosted checks after the October 1 reset.
+
 Follow the workspace's rustfmt, pedantic Clippy, documentation and authored
 unsafe-code gates. Explain local lint exceptions at their point of use. Avoid
 unbounded recursion on foreign input, unchecked arithmetic and hidden allocation
