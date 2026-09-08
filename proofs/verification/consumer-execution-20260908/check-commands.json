@@ -1,0 +1,46 @@
+[
+  {
+    "command": [
+      "python3",
+      "scripts/proof_record.py"
+    ],
+    "cwd": ".",
+    "started_utc": "2026-09-08T12:16:14.248571+00:00",
+    "elapsed_seconds": 0.2581002078950405,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/consumer-execution-20260908/record-check.log"
+  },
+  {
+    "command": [
+      "python3",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "scripts/tests",
+      "-p",
+      "test_proof_record.py",
+      "-v"
+    ],
+    "cwd": ".",
+    "started_utc": "2026-09-08T12:16:14.507160+00:00",
+    "elapsed_seconds": 2.3587858751416206,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/consumer-execution-20260908/record-regressions.log"
+  },
+  {
+    "command": [
+      "sh",
+      "scripts/check.sh",
+      "proofs"
+    ],
+    "cwd": ".",
+    "started_utc": "2026-09-08T12:16:16.866283+00:00",
+    "elapsed_seconds": 5.123788665980101,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/consumer-execution-20260908/proof-gate.log"
+  }
+]

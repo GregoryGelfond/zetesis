@@ -1715,36 +1715,6 @@
     "line": 110
   },
   {
-    "name": "Zetesis.JoinFrames.child_overwrite_exact",
-    "file": "Zetesis/JoinFrames.lean",
-    "line": 55
-  },
-  {
-    "name": "Zetesis.JoinFrames.completed_walk_exact",
-    "file": "Zetesis/JoinFrames.lean",
-    "line": 63
-  },
-  {
-    "name": "Zetesis.JoinFrames.prepared_prefix_exact",
-    "file": "Zetesis/JoinFrames.lean",
-    "line": 85
-  },
-  {
-    "name": "Zetesis.JoinFrames.reset_root_exact",
-    "file": "Zetesis/JoinFrames.lean",
-    "line": 49
-  },
-  {
-    "name": "Zetesis.JoinFrames.retained_frames_irrelevant",
-    "file": "Zetesis/JoinFrames.lean",
-    "line": 97
-  },
-  {
-    "name": "Zetesis.JoinFrames.stale_root_can_erase_current_truth",
-    "file": "Zetesis/JoinFrames.lean",
-    "line": 106
-  },
-  {
     "name": "Zetesis.LazyRounds.chunk_concatenation",
     "file": "Zetesis/LazyRounds.lean",
     "line": 72
@@ -2198,51 +2168,6 @@
     "name": "Zetesis.Outcomes.empty_delivery_can_hide_a_valid_model",
     "file": "Zetesis/Outcomes.lean",
     "line": 67
-  },
-  {
-    "name": "Zetesis.OuterNegativeConsumers.double_negative_body_frozen",
-    "file": "Zetesis/OuterNegativeConsumers.lean",
-    "line": 35
-  },
-  {
-    "name": "Zetesis.OuterNegativeConsumers.double_negative_projection_frozen",
-    "file": "Zetesis/OuterNegativeConsumers.lean",
-    "line": 57
-  },
-  {
-    "name": "Zetesis.OuterNegativeConsumers.negative_body_frozen",
-    "file": "Zetesis/OuterNegativeConsumers.lean",
-    "line": 25
-  },
-  {
-    "name": "Zetesis.OuterNegativeConsumers.negative_projection_frozen",
-    "file": "Zetesis/OuterNegativeConsumers.lean",
-    "line": 45
-  },
-  {
-    "name": "Zetesis.OuterRanges.appended_frames",
-    "file": "Zetesis/OuterRanges.lean",
-    "line": 51
-  },
-  {
-    "name": "Zetesis.OuterRanges.covered_range",
-    "file": "Zetesis/OuterRanges.lean",
-    "line": 43
-  },
-  {
-    "name": "Zetesis.OuterRanges.frozen_rows",
-    "file": "Zetesis/OuterRanges.lean",
-    "line": 78
-  },
-  {
-    "name": "Zetesis.OuterRanges.original_rows",
-    "file": "Zetesis/OuterRanges.lean",
-    "line": 61
-  },
-  {
-    "name": "Zetesis.OuterRanges.row_membership",
-    "file": "Zetesis/OuterRanges.lean",
-    "line": 29
   },
   {
     "name": "Zetesis.PositiveArguments.declared_input_agreement",

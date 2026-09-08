@@ -1,0 +1,150 @@
+{
+  "prior_theorems": 748,
+  "current_theorems": 763,
+  "prior_module_sources_byte_identical": true,
+  "prior_name_file_line_entries_unchanged": true,
+  "prior_transitive_axiom_sets_unchanged": true,
+  "added_theorems": [
+    {
+      "name": "Zetesis.JoinFrames.child_overwrite_exact",
+      "file": "Zetesis/JoinFrames.lean",
+      "line": 55
+    },
+    {
+      "name": "Zetesis.JoinFrames.completed_walk_exact",
+      "file": "Zetesis/JoinFrames.lean",
+      "line": 63
+    },
+    {
+      "name": "Zetesis.JoinFrames.prepared_prefix_exact",
+      "file": "Zetesis/JoinFrames.lean",
+      "line": 85
+    },
+    {
+      "name": "Zetesis.JoinFrames.reset_root_exact",
+      "file": "Zetesis/JoinFrames.lean",
+      "line": 49
+    },
+    {
+      "name": "Zetesis.JoinFrames.retained_frames_irrelevant",
+      "file": "Zetesis/JoinFrames.lean",
+      "line": 97
+    },
+    {
+      "name": "Zetesis.JoinFrames.stale_root_can_erase_current_truth",
+      "file": "Zetesis/JoinFrames.lean",
+      "line": 106
+    },
+    {
+      "name": "Zetesis.OuterNegativeConsumers.double_negative_body_frozen",
+      "file": "Zetesis/OuterNegativeConsumers.lean",
+      "line": 35
+    },
+    {
+      "name": "Zetesis.OuterNegativeConsumers.double_negative_projection_frozen",
+      "file": "Zetesis/OuterNegativeConsumers.lean",
+      "line": 57
+    },
+    {
+      "name": "Zetesis.OuterNegativeConsumers.negative_body_frozen",
+      "file": "Zetesis/OuterNegativeConsumers.lean",
+      "line": 25
+    },
+    {
+      "name": "Zetesis.OuterNegativeConsumers.negative_projection_frozen",
+      "file": "Zetesis/OuterNegativeConsumers.lean",
+      "line": 45
+    },
+    {
+      "name": "Zetesis.OuterRanges.appended_frames",
+      "file": "Zetesis/OuterRanges.lean",
+      "line": 51
+    },
+    {
+      "name": "Zetesis.OuterRanges.covered_range",
+      "file": "Zetesis/OuterRanges.lean",
+      "line": 43
+    },
+    {
+      "name": "Zetesis.OuterRanges.frozen_rows",
+      "file": "Zetesis/OuterRanges.lean",
+      "line": 78
+    },
+    {
+      "name": "Zetesis.OuterRanges.original_rows",
+      "file": "Zetesis/OuterRanges.lean",
+      "line": 61
+    },
+    {
+      "name": "Zetesis.OuterRanges.row_membership",
+      "file": "Zetesis/OuterRanges.lean",
+      "line": 29
+    }
+  ],
+  "added_axioms": {
+    "Zetesis.JoinFrames.child_overwrite_exact": [
+      "propext"
+    ],
+    "Zetesis.JoinFrames.completed_walk_exact": [
+      "Quot.sound",
+      "propext"
+    ],
+    "Zetesis.JoinFrames.prepared_prefix_exact": [
+      "Quot.sound",
+      "propext"
+    ],
+    "Zetesis.JoinFrames.reset_root_exact": [
+      "propext"
+    ],
+    "Zetesis.JoinFrames.retained_frames_irrelevant": [
+      "Quot.sound",
+      "propext"
+    ],
+    "Zetesis.JoinFrames.stale_root_can_erase_current_truth": [
+      "propext"
+    ],
+    "Zetesis.OuterNegativeConsumers.double_negative_body_frozen": [
+      "Classical.choice",
+      "Quot.sound",
+      "propext"
+    ],
+    "Zetesis.OuterNegativeConsumers.double_negative_projection_frozen": [
+      "Classical.choice",
+      "Quot.sound",
+      "propext"
+    ],
+    "Zetesis.OuterNegativeConsumers.negative_body_frozen": [
+      "Classical.choice",
+      "Quot.sound",
+      "propext"
+    ],
+    "Zetesis.OuterNegativeConsumers.negative_projection_frozen": [
+      "Classical.choice",
+      "Quot.sound",
+      "propext"
+    ],
+    "Zetesis.OuterRanges.appended_frames": [
+      "propext"
+    ],
+    "Zetesis.OuterRanges.covered_range": [
+      "Classical.choice",
+      "Quot.sound",
+      "propext"
+    ],
+    "Zetesis.OuterRanges.frozen_rows": [
+      "Classical.choice",
+      "Quot.sound",
+      "propext"
+    ],
+    "Zetesis.OuterRanges.original_rows": [
+      "Classical.choice",
+      "Quot.sound",
+      "propext"
+    ],
+    "Zetesis.OuterRanges.row_membership": [
+      "Classical.choice",
+      "Quot.sound",
+      "propext"
+    ]
+  }
+}

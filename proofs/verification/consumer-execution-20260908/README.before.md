@@ -8,7 +8,7 @@ readable before its Lean details. The convention has one deliberately bounded
 pilot so far; it is not a claim of a library-wide rewrite.
 
 
-This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **763 kernel-checked theorems** across 64 semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
+This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **748 kernel-checked theorems** across 61 semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
 
 The formalization connects normalized stable-model semantics to candidate seeds, compositional reduct execution, lazy completion, consequence bounds, and completed search certificates. It supplies mathematical contracts for the Rust, wgpu, Rayon, and neuromorphic implementation work. It does not verify those implementations or make Lean a runtime dependency.
 
@@ -21,7 +21,7 @@ lake build
 lake env lean -DautoImplicit=false -DwarningAsError=true Audit.lean
 ```
 
-`lean-toolchain` pins `leanprover/lean4:v4.33.1`. The package has no remote dependencies, so the build itself needs no network once that toolchain exists. `lake build` compiles the umbrella module and all 64 semantic modules. `Audit.lean` requests the transitive axiom dependencies of every project theorem.
+`lean-toolchain` pins `leanprover/lean4:v4.33.1`. The package has no remote dependencies, so the build itself needs no network once that toolchain exists. `lake build` compiles the umbrella module and all 61 semantic modules. `Audit.lean` requests the transitive axiom dependencies of every project theorem.
 
 The [verification report](./verification.json) records the checked source hashes and commands. The [axiom audit](./axiom-audit.txt) contains only standard Lean logical axioms where needed: `propext`, `Quot.sound`, and `Classical.choice`. In particular, no theorem depends on `sorryAx` or `Lean.ofReduceBool`.
 
@@ -37,9 +37,6 @@ preserves an earlier inconsistent manifest and explains its repair.
 
 | Module | What is proved |
 |---|---|
-| [OuterNegativeConsumers](./Zetesis/OuterNegativeConsumers.lean) | Default/double-negative outer gates retain aggregate equality and activation in the frozen reduct; projected gates quantify over the complete supplied witness family |
-| [OuterRanges](./Zetesis/OuterRanges.lean) | Complete outer carriers retain their own inclusive integer ranges, occurrence-preserving concatenation and original/frozen clause associations under total endpoint functions |
-| [JoinFrames](./Zetesis/JoinFrames.lean) | Root reset and complete child overwrites make positive-prefix membership independent of retained frame contents; an unreset root can erase current truth |
 | [ChoiceConsumers](./Zetesis/ChoiceConsumers.lean) | Completed scalar filters retain aggregate equality, whole-group activation and natural bounds under explicit proposal coverage and evaluation assumptions |
 | [NegativeEligibility](./Zetesis/NegativeEligibility.lean) | Negated and double-negated eligibility read the frozen candidate; replacing double negation by positive support has a counterexample |
 | [OptionalIndex](./Zetesis/OptionalIndex.lean) | Representable positive-successor identities preserve optional index round trips, absence and link replacement |
@@ -409,7 +406,7 @@ remain separate obligations. These laws provide no physical Metal qualification.
 
 ## Completed consumers and compact execution
 
-The [preceding clean audit](verification/consumers-memory-20260908/README.md)
+The [current clean audit](verification/consumers-memory-20260908/README.md)
 adds 25 laws in four modules, reaching **748 theorems in 61 modules**. All 723
 previous declaration locations, axiom sets and 57 semantic module sources remain
 unchanged. This is a mathematical library supporting solver verification; the
@@ -430,32 +427,3 @@ consequences/constraints under an exhausted scan. It includes cross-world and st
 snapshot counterexamples. Packed bits, concrete traversal, byte/work accounting
 and device execution remain unproved correspondences. These semantic foundations
 preserve the original theory and its reduct as the acceptance criterion.
-
-## Outer values and reusable positive-join frames
-
-The [current clean audit](verification/consumer-execution-20260908/README.md)
-adds 15 laws in three modules, reaching **763 theorems in 64 modules**. All 748
-prior declaration locations and axiom sets and all 61 prior semantic source
-modules are unchanged. The declined compact-trail experiment contributes no
-module or claim to this checkpoint.
-
-`OuterNegativeConsumers` preserves original aggregate equality and activation
-while ordinary and projected negative gates read the frozen candidate. Supplied
-witness families must be complete; possible support cannot substitute for truth.
-The laws do not prove Rust source admission, variable safety, projection coverage,
-cursor readiness, argument evaluation or resource completion.
-
-`OuterRanges` expands each complete outer value into its own inclusive integer
-range. Concatenating outer rows preserves their full occurrence expansions,
-including repeated values, and each clause retains the corresponding original
-or frozen row association. Complete carriers and total mathematical endpoint
-functions are premises; fixed-width arithmetic, nonnumeric endpoint behavior,
-source scheduling, cursor reset and actual support coverage remain unproved.
-
-`JoinFrames` formalizes a finite positive-prefix schedule over world predicates.
-Root reset and child overwrite retain exactly current membership regardless of
-old frame contents. A stale-root example demonstrates why storage reuse requires
-that schedule. Packed bits, tail masks, array bounds, Rust visitor scheduling,
-allocation lifetime/budgets and WGSL correspondence remain separate obligations.
-These additions strengthen the reduct-based foundation without claiming formal
-verification of the concrete solver.

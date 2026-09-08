@@ -64,16 +64,3 @@ optional finite identities. [WorldMasks](../Zetesis/WorldMasks.lean) narrows sou
 coverage to bindings enabled in some immutable world while retaining per-world
 truth checks. These are distinct proof layers: semantic coverage does not itself
 verify a packed representation or concrete source traversal.
-
-[OuterNegativeConsumers](../Zetesis/OuterNegativeConsumers.lean) keeps negative
-tests over completed values tied to the frozen candidate and supplied complete
-projection families. [OuterRanges](../Zetesis/OuterRanges.lean) preserves the
-association between a completed outer value, its finite integer range and each
-original/frozen clause. Both make source binding and coverage assumptions visible
-instead of treating a proposed value as a logical conclusion.
-
-[JoinFrames](../Zetesis/JoinFrames.lean) follows the world-membership path into a
-finite execution schedule: reset the root, overwrite each child, then use it as
-the next parent. Its resulting membership is independent of old frame contents.
-This permits a mathematical storage-reuse argument while leaving packed Rust
-storage, exact allocation accounting and physical GPU correspondence explicit.

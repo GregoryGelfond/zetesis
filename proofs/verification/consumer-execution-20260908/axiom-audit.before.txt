@@ -355,12 +355,6 @@
 'Zetesis.IndexedCandidates.lookup_insert' depends on axioms: [propext]
 'Zetesis.IndexedCandidates.recorded_projection_rejected' depends on axioms: [propext]
 'Zetesis.IndexedCandidates.unseen_projection_allowed' depends on axioms: [propext]
-'Zetesis.JoinFrames.child_overwrite_exact' depends on axioms: [propext]
-'Zetesis.JoinFrames.completed_walk_exact' depends on axioms: [propext, Quot.sound]
-'Zetesis.JoinFrames.prepared_prefix_exact' depends on axioms: [propext, Quot.sound]
-'Zetesis.JoinFrames.reset_root_exact' depends on axioms: [propext]
-'Zetesis.JoinFrames.retained_frames_irrelevant' depends on axioms: [propext, Quot.sound]
-'Zetesis.JoinFrames.stale_root_can_erase_current_truth' depends on axioms: [propext]
 'Zetesis.LazyRounds.chunk_concatenation' depends on axioms: [propext, Quot.sound]
 'Zetesis.LazyRounds.completed_round_closed' does not depend on any axioms
 'Zetesis.LazyRounds.completed_round_exact' depends on axioms: [propext, Quot.sound]
@@ -466,17 +460,6 @@
 'Zetesis.Outcomes.completed_unsatisfiable_iff_empty' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Outcomes.delivered_values_are_valid' does not depend on any axioms
 'Zetesis.Outcomes.empty_delivery_can_hide_a_valid_model' depends on axioms: [propext, Quot.sound]
-'Zetesis.OuterNegativeConsumers.double_negative_body_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.OuterNegativeConsumers.double_negative_projection_frozen' depends on axioms: [propext,
- Classical.choice,
- Quot.sound]
-'Zetesis.OuterNegativeConsumers.negative_body_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.OuterNegativeConsumers.negative_projection_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.OuterRanges.appended_frames' depends on axioms: [propext]
-'Zetesis.OuterRanges.covered_range' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.OuterRanges.frozen_rows' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.OuterRanges.original_rows' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.OuterRanges.row_membership' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PositiveArguments.declared_input_agreement' depends on axioms: [propext]
 'Zetesis.PositiveArguments.empty_plan' depends on axioms: [propext]
 'Zetesis.PositiveArguments.frozen_atom_preserved' depends on axioms: [propext, Classical.choice, Quot.sound]

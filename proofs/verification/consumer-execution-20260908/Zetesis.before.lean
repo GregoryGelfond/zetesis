@@ -59,6 +59,3 @@ import Zetesis.ChoiceConsumers
 import Zetesis.NegativeEligibility
 import Zetesis.OptionalIndex
 import Zetesis.WorldMasks
-import Zetesis.JoinFrames
-import Zetesis.OuterNegativeConsumers
-import Zetesis.OuterRanges
