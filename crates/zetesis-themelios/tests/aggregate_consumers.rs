@@ -301,29 +301,16 @@ fn original_sources_match_clingo_full_models() {
 }
 
 #[test]
-fn unsupported_consumers_remain_profile_refusals() {
-    for source in [
-        "q(N):-N=#count{},Y=N+1,p(Y):d.",
-        "q(N):-N=#count{},not p(N):d.",
+fn conditionals_consume_aggregate_descendants() {
+    for (source, expanded) in [
+        ("q(N):-N=#count{},Y=N+1,p(Y):d.", "q(0):-0=#count{},p(1):d."),
+        (
+            "q(N):-N=#count{},not p(N):d.",
+            "q(0):-0=#count{},not p(0):d.",
+        ),
     ] {
-        let error = prepare_formula(
-            source.into(),
-            options(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_err();
-        assert!(
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                    feature: ProfileFeature::AggregateAssignment,
-                    ..
-                }))
-            ),
-            "{source}: {error}"
-        );
-        assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+        assert_eq!(native(&input(source)), native(&input(expanded)));
+        assert_eq!(input(source).source().text(), source);
     }
 }
 

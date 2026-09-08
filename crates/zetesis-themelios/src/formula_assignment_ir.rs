@@ -117,12 +117,16 @@ impl Compiler<'_> {
                         | LiteralIr::Guard(_)
                         | LiteralIr::Bind { .. }
                         | LiteralIr::Range { .. }
+                        | LiteralIr::Conditional(_)
                 ) {
                     // Negative gates read completed values without binding or
                     // pruning possible rows. Grounding retains their original
                     // polarity, including the existential projection formula.
                     // Range generators follow the checked plan; a previously
                     // bound range target remains a completed-row membership test.
+                    // Universal conditions seed their local joins with this
+                    // complete outer frame. Their implications and consequent
+                    // alternatives remain formulas, never support-row filters.
                     consumed |= self.literal_uses(literal, target)?;
                     continue;
                 }

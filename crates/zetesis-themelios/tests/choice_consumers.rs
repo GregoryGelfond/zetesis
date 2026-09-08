@@ -184,12 +184,15 @@ fn assert_profile(source: &str, feature: ProfileFeature) {
 }
 
 #[test]
-fn unsupported_outer_consumers_remain_refused() {
-    for body in ["N=#count{},not p(N):d", "N=#count{},Y=N+1,p(Y):d"] {
+fn conditional_consumers_preserve_complete_groups() {
+    for (body, expanded) in [
+        ("N=#count{},not p(N):d", "0=#count{},not p(0):d"),
+        ("N=#count{},Y=N+1,p(Y):d", "0=#count{},p(1):d"),
+    ] {
         for head in ["{a}", "#count{1:a}"] {
-            assert_profile(
-                &format!("{head}:-{body}."),
-                ProfileFeature::AggregateAssignment,
+            assert_eq!(
+                native(&input(&format!("{head}:-{body}."))),
+                native(&input(&format!("{head}:-{expanded}."))),
             );
         }
     }

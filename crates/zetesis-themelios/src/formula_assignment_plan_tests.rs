@@ -295,3 +295,42 @@ fn cyclic_aggregate_inputs_have_a_typed_refusal() {
     let error = plan(&body, 2, ExpansionLimits::default()).err().unwrap();
     assert!(matches!(error, FormulaFailure::CyclicValueInput { .. }));
 }
+
+fn conditional_read(slot: usize) -> LiteralIr {
+    LiteralIr::Conditional(crate::formula_conditional_ir::ConditionalIr {
+        consequent: crate::formula_conditional_ir::Consequent::Atoms(
+            DefaultNegation::None,
+            vec![crate::formula_conditional_ir::Alternative {
+                atom: AtomPattern::new(
+                    Predicate::new("p", 1).unwrap(),
+                    vec![CoreTerm::Variable(slot)],
+                )
+                .unwrap(),
+                bindings: Vec::new(),
+                variables: slot + 1,
+            }],
+        ),
+        condition: Vec::new(),
+        variables: slot + 1,
+    })
+}
+
+#[test]
+fn conditional_outer_reads_mark_objective_consumers() {
+    let body = [aggregate(0), conditional_read(0)];
+    let plan = plan(&body, 1, ExpansionLimits::default()).unwrap();
+    assert!(plan.consumers);
+    assert_eq!(plan.steps.len(), 1);
+    assert_eq!(plan.steps[0].literal, 0);
+    assert_eq!(plan.steps[0].produced, 0);
+    assert!(plan.steps[0].required.is_empty());
+}
+
+#[test]
+fn conditional_local_reads_do_not_alias_outer_slots() {
+    let body = [aggregate(0), conditional_read(1)];
+    let plan = plan(&body, 1, ExpansionLimits::default()).unwrap();
+    assert!(!plan.consumers);
+    assert_eq!(plan.steps.len(), 1);
+    assert_eq!(plan.steps[0].produced, 0);
+}

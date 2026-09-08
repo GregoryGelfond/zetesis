@@ -302,7 +302,7 @@ fn original_sources_match_complete_models_or_reviewed_profile_refusals() {
             valid_refused += usize::from(row["valid"] == true);
         }
     }
-    assert_eq!((admitted, refused, models, valid_refused), (79, 12, 223, 8));
+    assert_eq!((admitted, refused, models, valid_refused), (81, 10, 225, 6));
 }
 
 /// A separate tree definition, with no production DAG construction or reduct API.

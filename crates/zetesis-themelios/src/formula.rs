@@ -506,12 +506,16 @@ pub(crate) struct Compiled {
     pub objective_declarations: Vec<Location>,
 }
 
-/// Admit the extended scalar profile, finite conditional choices, and body
-/// count/sum comparisons into a Ferraris theory. Choices may have numeric bounds.
+/// Admit the extended scalar profile, finite conditional choices and body
+/// count/sum/sum+/min/max aggregates into a Ferraris theory. Choices may have
+/// integer bounds; each aggregate retains its separate value/endpoint profile.
 /// Positive ordinary atoms bind variables in global or element-local scopes;
-/// independent positive aggregate equalities may additionally bind named values.
-/// Completed proposals may feed ordinary evaluated arguments or integer choice
-/// bounds while their original equalities remain in every generated rule.
+/// acyclic positive aggregate equalities may additionally bind named values.
+/// Completed aggregate/scalar proposals may feed ordinary evaluated arguments,
+/// signed negative gates, finite ranges, integer choice bounds and admitted
+/// universal body conditionals. Conditional local joins inherit the complete
+/// outer binding; neither local witnesses nor vacuity establishes an aggregate
+/// equality. Every generated rule retains its original equalities.
 /// Ground scalar comparisons use ASP term order; arithmetic expressions
 /// require numeric operands. Flat tuple equality/disequality is also supported.
 ///
@@ -519,8 +523,8 @@ pub(crate) struct Compiled {
 /// grounded head atoms combine eligibility by disjunction and count once.
 /// Choice bounds are constraints, so they do not invent support. Function-count
 /// heads reuse this path after checking a complete per-group
-/// tuple/atom bijection. Positive element conditions retain their eligibility
-/// formulas; default-negated count-head conditions remain outside this profile.
+/// tuple/atom bijection. Positive, default-negated and double-negated ordinary
+/// element conditions retain their original eligibility formulas.
 /// Necessary producer guards are double-negated and therefore leave reduct subsets
 /// unconstrained whenever the candidate passes them. Grounding uses complete
 /// relational joins over a bounded possible-positive closure. Gates are ignored
@@ -541,9 +545,11 @@ pub(crate) struct Compiled {
 /// refuse default-negated producer bodies/choice conditions and general aggregate
 /// producer bodies. Pure total assignment producers admit only structural direct
 /// observers: generated positions are fresh, unshared, unfiltered variables in
-/// objective conditions, and no logical producer depends on their predicates.
-/// This boundary preserves priority presence without asserting value realizability. Negative and aggregate constraints remain
-/// supported. Objectives supply no
+/// objective conditions. Unfiltered total assignments may observe another total
+/// assignment through aggregate tuple sources; other generated-value consumers
+/// and conditional producer dependencies retain explicit refusals. This boundary
+/// preserves priority presence without asserting value realizability. Negative
+/// and aggregate constraints remain supported. Objectives supply no
 /// logical support and are evaluated separately on reduct-verified full models.
 /// This route invokes no solver, changes no existing S0/extended API contract,
 /// and claims no parser-to-Lean refinement.
