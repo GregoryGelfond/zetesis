@@ -51,6 +51,67 @@ pub(super) enum Allowance {
     Overflow,
 }
 
+/// Complete decision before allocation: retained inputs never enlarge the
+/// active prefix, and retained results always have the exact active shape.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct Selection {
+    pub(super) capacity: Capacity,
+    pub(super) transition: Transition,
+    pub(super) retention: Retention,
+    pub(super) slack: Allowance,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct Retention {
+    pub(super) uniform: bool,
+    pub(super) inputs: [bool; 4],
+    pub(super) result: bool,
+}
+
+impl Selection {
+    /// `Plan::new` already admitted the exact shape. Prefer all independently
+    /// fitting inputs; if their slack cannot fit, release slack and return to
+    /// that admitted shape. Exact-fit buffers remain useful in either case.
+    pub(super) fn new(previous: Option<Capacity>, plan: &Plan, maximum: u64) -> Self {
+        let Some(previous) = previous else {
+            return Self {
+                capacity: plan.capacity,
+                transition: Transition::Initial,
+                retention: Retention {
+                    uniform: false,
+                    inputs: [false; 4],
+                    result: false,
+                },
+                slack: Allowance::Fits,
+            };
+        };
+        let prospective = Capacity {
+            inputs: std::array::from_fn(|index| {
+                previous.inputs[index].max(plan.capacity.inputs[index])
+            }),
+            result: plan.result_bytes,
+        };
+        let slack = prospective.allowance(plan, maximum);
+        let capacity = if slack == Allowance::Fits {
+            prospective
+        } else {
+            plan.capacity
+        };
+        Self {
+            capacity,
+            transition: previous.assess(plan, maximum),
+            retention: Retention {
+                uniform: true,
+                inputs: std::array::from_fn(|index| {
+                    previous.inputs[index] == capacity.inputs[index]
+                }),
+                result: previous.result == capacity.result,
+            },
+            slack,
+        }
+    }
+}
+
 impl Capacity {
     /// Uniform, four input buffers, output and readback; excludes driver-owned
     /// staging/retirement and allocator bookkeeping as specified by `GpuLimits`.
@@ -73,11 +134,7 @@ impl Capacity {
         let causes = Replacement {
             growth: std::array::from_fn(|index| self.inputs[index] < plan.capacity.inputs[index]),
             result_shape: self.result != plan.result_bytes,
-            allowance: match self.accounted(plan) {
-                Some(bytes) if bytes <= maximum => Allowance::Fits,
-                Some(_) => Allowance::Exceeded,
-                None => Allowance::Overflow,
-            },
+            allowance: self.allowance(plan, maximum),
         };
         if causes.growth.iter().any(|grew| *grew)
             || causes.result_shape
@@ -86,6 +143,14 @@ impl Capacity {
             Transition::Replace(causes)
         } else {
             Transition::Reuse
+        }
+    }
+
+    fn allowance(self, plan: &Plan, maximum: u64) -> Allowance {
+        match self.accounted(plan) {
+            Some(bytes) if bytes <= maximum => Allowance::Fits,
+            Some(_) => Allowance::Exceeded,
+            None => Allowance::Overflow,
         }
     }
 }

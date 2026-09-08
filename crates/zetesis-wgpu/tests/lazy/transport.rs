@@ -1,4 +1,4 @@
-//! Capacity contracts are portable; execution tests require physical Metal.
+//! Capacity contracts are portable; execution selects a physical API explicitly.
 
 use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, Predicate, Program, Seed, Template, Term, Value,
@@ -7,7 +7,7 @@ use zetesis_cpu::{Control, Limits, Stop, check, lazy};
 
 use crate::{GpuBackendPreference, GpuErrorKind, GpuLimits, GpuOptions, GpuSelection};
 
-use super::{Capacity, GpuLazyOracle, LazyGpuStatistics, Plan, Transition, tests::inspect};
+use super::{Capacity, GpuLazyOracle, LazyGpuStatistics, Plan, Selection, tests::inspect};
 
 #[test]
 fn retained_inputs_count_toward_the_transport_ceiling() {
@@ -60,14 +60,13 @@ fn inactive_input_capacity_does_not_inflate_uploads() {
         let plan = Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
         let mut retained = plan.capacity;
         retained.inputs[1] += 128;
-        let first = LazyGpuStatistics::default()
-            .submitted(&plan, Transition::Initial, retained)
+        let reused = LazyGpuStatistics::default()
+            .submitted(&plan, Selection::new(Some(retained), &plan, u64::MAX))
             .unwrap();
-        let reused = first.submitted(&plan, Transition::Reuse, retained).unwrap();
-        assert_eq!(reused.dispatches, 2);
-        assert_eq!(reused.transport_allocations, 1);
+        assert_eq!(reused.dispatches, 1);
+        assert_eq!(reused.transport_allocations, 0);
         assert_eq!(reused.transport_reuses, 1);
-        assert_eq!(reused.uploaded_bytes, 2 * plan.uploaded_bytes);
+        assert_eq!(reused.uploaded_bytes, plan.uploaded_bytes);
         assert_eq!(reused.downloaded_bytes, 0);
         assert_eq!(reused.peak_transport_bytes, retained.bytes().unwrap());
     });
@@ -121,12 +120,7 @@ fn transport_observation_counters_refuse_overflow() {
                 statistics
                     .submitted(
                         &plan,
-                        if reused {
-                            Transition::Reuse
-                        } else {
-                            Transition::Initial
-                        },
-                        plan.capacity
+                        Selection::new(reused.then_some(plan.capacity), &plan, u64::MAX),
                     )
                     .unwrap_err()
                     .kind(),
@@ -218,12 +212,86 @@ fn growth_seeds(program: &Program) -> Vec<Seed> {
 fn growth_replacements() -> super::LazyTransportReplacements {
     super::LazyTransportReplacements {
         initial: 1,
-        records_growth: 4,
+        records_growth: 2,
         snapshots_growth: 4,
         seeds_growth: 4,
         result_shape: 4,
         ..Default::default()
     }
+}
+
+fn execute_inspected(
+    oracle: &mut GpuLazyOracle,
+    chunk: &lazy::Chunk<'_>,
+    limits: GpuLimits,
+    cached: &mut Option<super::Transport>,
+) -> Result<Vec<u32>, crate::GpuError> {
+    let plan = Plan::new(chunk, limits, &oracle.runtime.limits)?;
+    let selected = Selection::new(
+        cached.as_ref().map(|value| value.capacity),
+        &plan,
+        limits.max_batch_bytes,
+    );
+    let mask = [
+        selected.retention.uniform,
+        selected.retention.inputs[0],
+        selected.retention.inputs[1],
+        selected.retention.inputs[2],
+        selected.retention.inputs[3],
+        selected.retention.result,
+        selected.retention.result,
+    ];
+    // Clone only handles that the admitted selection will keep. Rejected
+    // handles must have no test-owned reference extending their lifetime.
+    let retained: [Option<wgpu::Buffer>; 7] = std::array::from_fn(|index| {
+        mask[index].then(|| cached.as_ref().unwrap().buffers()[index].clone())
+    });
+    let before = oracle.statistics();
+    let expected = lazy::evaluate(chunk).unwrap();
+    let actual = oracle.execute(chunk, limits, &Control::default(), cached)?;
+    assert_eq!(actual, expected);
+    let transport = cached.as_ref().unwrap();
+    assert!(transport.capacity.accounted(&plan).unwrap() <= limits.max_batch_bytes);
+    let expected_sizes = [
+        super::UNIFORM_BYTES,
+        selected.capacity.inputs[0],
+        selected.capacity.inputs[1],
+        selected.capacity.inputs[2],
+        selected.capacity.inputs[3],
+        plan.result_bytes,
+        plan.result_bytes,
+    ];
+    for (index, buffer) in transport.buffers().into_iter().enumerate() {
+        assert_eq!(buffer.size(), expected_sizes[index]);
+        if let Some(previous) = &retained[index] {
+            assert_eq!(buffer, previous);
+        }
+    }
+    let bindings = |usage: super::LazyTransportUsage| {
+        [
+            usage.uniform,
+            usage.offsets,
+            usage.records,
+            usage.snapshots,
+            usage.seeds,
+            usage.output,
+            usage.readback,
+        ]
+    };
+    for (index, (old, new)) in bindings(before.transport_usage)
+        .into_iter()
+        .zip(bindings(oracle.statistics.transport_usage))
+        .enumerate()
+    {
+        assert_eq!(new.allocations, old.allocations + u64::from(!mask[index]));
+        assert_eq!(new.reuses, old.reuses + u64::from(mask[index]));
+        assert_eq!(new.allocations + new.reuses, oracle.statistics.dispatches);
+    }
+    assert_eq!(
+        oracle.statistics.transport_usage.output,
+        oracle.statistics.transport_usage.readback
+    );
+    Ok(actual)
 }
 
 #[test]
@@ -248,21 +316,15 @@ fn source_sequence_exercises_transport_resize_boundaries() {
             |chunk| {
                 let plan =
                     Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
-                let transition = retained.map_or(Transition::Initial, |capacity| {
-                    capacity.assess(&plan, u64::MAX)
-                });
-                let reused = transition.is_reuse();
+                let selected = Selection::new(retained, &plan, u64::MAX);
+                let reused = selected.transition.is_reuse();
                 if let Some(previous) = previous {
                     smaller_reused |= reused && plan.capacity.inputs[0] < previous.inputs[0];
                     later_growth |= smaller_reused && plan.result_bytes > previous.result;
                 }
                 previous = Some(plan.capacity);
-                if !reused {
-                    retained = Some(plan.capacity);
-                }
-                statistics = statistics
-                    .submitted(&plan, transition, retained.unwrap())
-                    .unwrap();
+                retained = Some(selected.capacity);
+                statistics = statistics.submitted(&plan, selected).unwrap();
                 lazy::evaluate(chunk)
             },
         )
@@ -310,12 +372,8 @@ fn qualify_lazy_transport_reuse_preserves_round_truth(backend: GpuBackendPrefere
             |chunk| {
                 let plan = Plan::new(chunk, GpuLimits::default(), &oracle.runtime.limits).unwrap();
                 let reuses = oracle.statistics.transport_reuses;
-                let result = oracle.execute(
-                    chunk,
-                    GpuLimits::default(),
-                    &Control::default(),
-                    &mut cached,
-                )?;
+                let result =
+                    execute_inspected(&mut oracle, chunk, GpuLimits::default(), &mut cached)?;
                 if let Some(previous) = previous {
                     smaller_reused |= plan.capacity.inputs[0] < previous.inputs[0]
                         && oracle.statistics.transport_reuses > reuses;
@@ -372,6 +430,63 @@ fn qualify_lazy_transport_reuse_preserves_round_truth(backend: GpuBackendPrefere
             .unwrap();
         assert_eq!(again.progress.chunks, oracle.statistics.dispatches);
         assert!(oracle.statistics.transport_allocations > 0);
+    }
+}
+
+#[test]
+#[ignore = "requires a physical Metal adapter"]
+fn metal_input_slack_preserves_exact_admission() {
+    qualify_input_slack_preserves_exact_admission(GpuBackendPreference::Metal);
+}
+
+#[test]
+#[ignore = "requires a physical Vulkan adapter"]
+fn vulkan_input_slack_preserves_exact_admission() {
+    qualify_input_slack_preserves_exact_admission(GpuBackendPreference::Vulkan);
+}
+
+fn qualify_input_slack_preserves_exact_admission(backend: GpuBackendPreference) {
+    let program = growth_program();
+    let seeds = growth_seeds(&program);
+    let mut oracle = oracle(backend);
+    for selection in [lazy::SourceSelection::Union, lazy::SourceSelection::Worlds] {
+        oracle.statistics = LazyGpuStatistics::default();
+        let mut cached = None;
+        let batch = lazy::check_with_source(
+            &program,
+            &seeds,
+            lazy::Limits {
+                max_chunk_rules: 8,
+                ..Default::default()
+            },
+            selection,
+            &Control::default(),
+            |chunk| {
+                let plan = Plan::new(chunk, GpuLimits::default(), &oracle.runtime.limits).unwrap();
+                let maximum = plan.capacity.accounted(&plan).unwrap();
+                execute_inspected(
+                    &mut oracle,
+                    chunk,
+                    GpuLimits {
+                        max_batch_bytes: maximum,
+                        ..GpuLimits::default()
+                    },
+                    &mut cached,
+                )
+            },
+        )
+        .unwrap();
+        assert_eq!(batch.checks.len(), seeds.len());
+        assert!(oracle.statistics.transport_usage.budget_releases > 0);
+        assert_eq!(oracle.statistics.transport_usage.uniform.allocations, 1);
+        assert_eq!(oracle.statistics.dispatches, batch.progress.chunks);
+        assert_eq!(
+            oracle
+                .statistics
+                .transport_usage
+                .accounting_overflow_releases,
+            0
+        );
     }
 }
 
@@ -507,4 +622,74 @@ fn qualify_lazy_transport_cancelled_read_discards_capacity(backend: GpuBackendPr
         );
     });
     assert!(ran);
+    qualify_cancelled_replacement(backend);
+}
+
+fn qualify_cancelled_replacement(backend: GpuBackendPreference) {
+    let program = growth_program();
+    let seeds = growth_seeds(&program);
+    let mut oracle = oracle(backend);
+    let mut cached = None;
+    let mut cancelled_replacement = false;
+    let failure = lazy::check_with_source(
+        &program,
+        &seeds,
+        lazy::Limits {
+            max_chunk_rules: 8,
+            ..Default::default()
+        },
+        lazy::SourceSelection::Worlds,
+        &Control::default(),
+        |chunk| {
+            let plan = Plan::new(chunk, GpuLimits::default(), &oracle.runtime.limits).unwrap();
+            let selected = Selection::new(
+                cached
+                    .as_ref()
+                    .map(|value: &super::Transport| value.capacity),
+                &plan,
+                u64::MAX,
+            );
+            if !selected.retention.uniform || selected.transition.is_reuse() {
+                return execute_inspected(&mut oracle, chunk, GpuLimits::default(), &mut cached);
+            }
+            cancelled_replacement = true;
+            let previous = oracle.statistics();
+            let cancelled = Control::default();
+            cancelled.cancel();
+            let error = oracle
+                .execute(chunk, GpuLimits::default(), &cancelled, &mut cached)
+                .unwrap_err();
+            assert_eq!(error.interruption, Some(Stop::Cancelled));
+            assert!(cached.is_none());
+            assert_eq!(oracle.statistics.dispatches, previous.dispatches + 1);
+            assert_eq!(
+                oracle.statistics.transport_allocations,
+                previous.transport_allocations + 1
+            );
+            assert_eq!(
+                oracle.statistics.transport_usage,
+                previous.transport_usage.record(selected).unwrap()
+            );
+            assert_eq!(
+                oracle.statistics.downloaded_bytes,
+                previous.downloaded_bytes
+            );
+            assert_eq!(
+                oracle
+                    .execute(
+                        chunk,
+                        GpuLimits::default(),
+                        &Control::default(),
+                        &mut cached
+                    )
+                    .unwrap_err()
+                    .kind(),
+                GpuErrorKind::Device
+            );
+            Err(error)
+        },
+    )
+    .unwrap_err();
+    assert!(cancelled_replacement);
+    assert!(matches!(failure.cause, lazy::Cause::Execution(_)));
 }

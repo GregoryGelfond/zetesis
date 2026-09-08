@@ -43,7 +43,7 @@ Control and device health are checked even for empty batches. Every failed call
 returns a typed error without a partial result vector. Execution-stage failures
 invalidate the oracle; `clear_residency()` drops handles but does not repair it.
 Portable tests validate the wire layout, limits, cache decisions, malformed
-readback and WGSL. The four ignored `hardware_tight` tests require actual Metal
+readback and WGSL. The four ignored Metal `hardware_tight` tests require actual Metal
 to qualify scalar/frozen-reduct agreement, ordered witnesses, world/atom
 boundaries and resource refusals. They are prepared tests, not a claim of physical
 qualification or a demonstrated speedup. The existing rank/support semantic
@@ -66,26 +66,40 @@ The current lazy host path reuses transport buffers within one candidate batch.
 Each chunk overwrites its active uniform, offsets, records, snapshots and frozen
 seeds, then clears the output before executing the unchanged shader. Input
 capacity can exceed the current chunk; result/readback shapes remain exact.
-Catalog word-stride growth replaces the complete buffer set. Admission counts
-retained capacities, and an oversized cache is dropped before a smaller fresh
-allocation under the same limit. Every batch exit releases the buffers; execution
+Each fitting input can survive another input's growth or a changed result shape;
+the fixed uniform and exactly matching output/readback buffers can survive too.
+Admission checks prospective retained plus replacement capacities and active host
+payload before effects. If input slack would exceed the ceiling, only slack is
+released and the already admitted exact shape remains available. Old bindings
+and discarded handles are dropped before new buffers are requested. Every batch
+exit releases the buffers; execution
 or readback failure also permanently invalidates the device executor.
-`LazyGpuStatistics` separates submitted allocation requests, reuse counts and
-peak requested GPU buffer bytes from active upload and successful readback bytes.
+`LazyGpuStatistics.transport_allocations` counts submitted chunks requesting at
+least one new buffer; `transport_reuses` counts complete transport reuse. Named
+`transport_usage` observations distinguish allocation/reuse of each of the seven
+buffers, and each pair sums to dispatches. Uniform allocation occurs initially;
+output/readback observations agree because they always have exact active size.
+Overlapping historical replacement reasons describe the complete old shape;
+usage also records releases caused by prospective input slack. Peak requested
+GPU bytes remain separate from active upload and successful readback bytes.
 These are authored payload/accounting observations, not RSS or bus-traffic data.
 
 This transport change requires fresh physical qualification; prior executable
-records do not qualify it. The three ignored `metal_lazy_transport` library tests
-cover reused round truth through shrinking chunks and catalog growth, exact
-preflight refusals and cancellation during a submitted read. Existing
+records do not qualify it. Four ignored library checks per physical API cover
+retained handle identity and exact output through shrinking chunks and catalog
+growth, exact byte ceilings, preflight refusals and cancellation after either
+complete reuse or partial replacement. Existing
 `hardware_lazy` tests also check allocation/reuse accounting and source-mask
 isolation. Portable capacity/sequence tests establish neither hardware execution
 nor a performance improvement:
 
 ```sh
-cargo test --locked -p zetesis-wgpu --lib metal_lazy_transport -- --ignored --nocapture
-cargo test --locked -p zetesis-wgpu --test hardware_lazy -- --ignored --nocapture
+cargo test --locked -p zetesis-wgpu --lib metal -- --ignored --nocapture
+cargo test --locked -p zetesis-wgpu --test hardware_lazy metal -- --ignored --nocapture
 ```
+
+Use the `vulkan` filter for the matching Vulkan checks. Do not run these groups
+with an unfiltered `--ignored` on a host supporting only one of the requested APIs.
 
 One 64-invocation workgroup owns one frozen candidate and its 4096-atom maximum
 closure. Worlds share immutable rules, antecedent lists, and gate-carrier bits.

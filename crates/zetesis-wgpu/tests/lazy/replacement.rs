@@ -2,7 +2,7 @@
 
 use crate::{GpuErrorKind, GpuLimits};
 
-use super::{LazyGpuStatistics, Plan, Transition, tests::inspect};
+use super::{LazyGpuStatistics, Plan, Selection, tests::inspect};
 
 #[test]
 fn growth_reasons_identify_undersized_inputs() {
@@ -30,7 +30,7 @@ fn growth_reasons_identify_undersized_inputs() {
             let mut retained = plan.capacity;
             retained.inputs[index] -= 4;
             let observed = LazyGpuStatistics::default()
-                .submitted(&plan, retained.assess(&plan, u64::MAX), plan.capacity)
+                .submitted(&plan, Selection::new(Some(retained), &plan, u64::MAX))
                 .unwrap();
             assert_eq!(observed.transport_replacements, reason);
             assert_eq!(observed.transport_allocations, 1);
@@ -48,7 +48,7 @@ fn replacement_reasons_preserve_simultaneous_causes() {
         retained.result += 4;
         let maximum = plan.capacity.accounted(&plan).unwrap();
         let observed = LazyGpuStatistics::default()
-            .submitted(&plan, retained.assess(&plan, maximum), plan.capacity)
+            .submitted(&plan, Selection::new(Some(retained), &plan, maximum))
             .unwrap();
         assert_eq!(
             observed.transport_replacements,
@@ -71,7 +71,7 @@ fn retention_overflow_is_distinct_from_a_byte_limit() {
         let mut retained = plan.capacity;
         retained.inputs[1] = u64::MAX;
         let observed = LazyGpuStatistics::default()
-            .submitted(&plan, retained.assess(&plan, u64::MAX), plan.capacity)
+            .submitted(&plan, Selection::new(Some(retained), &plan, u64::MAX))
             .unwrap();
         assert_eq!(
             observed.transport_replacements,
@@ -88,7 +88,7 @@ fn reuse_retains_replacement_observations() {
     inspect(|chunk| {
         let plan = Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
         let first = LazyGpuStatistics::default()
-            .submitted(&plan, Transition::Initial, plan.capacity)
+            .submitted(&plan, Selection::new(None, &plan, u64::MAX))
             .unwrap();
         assert_eq!(
             first.transport_replacements,
@@ -98,7 +98,7 @@ fn reuse_retains_replacement_observations() {
             }
         );
         let reused = first
-            .submitted(&plan, Transition::Reuse, plan.capacity)
+            .submitted(&plan, Selection::new(Some(plan.capacity), &plan, u64::MAX))
             .unwrap();
         assert_eq!(reused.transport_replacements, first.transport_replacements);
     });
@@ -119,7 +119,7 @@ fn replacement_counter_overflow_preserves_statistics() {
         let before = statistics;
         assert_eq!(
             statistics
-                .submitted(&plan, Transition::Initial, plan.capacity)
+                .submitted(&plan, Selection::new(None, &plan, u64::MAX))
                 .unwrap_err()
                 .kind(),
             GpuErrorKind::Capacity
@@ -226,6 +226,7 @@ fn three_way_joins_expose_retention_causes() {
     let mut causes = super::LazyTransportReplacements::default();
     let mut submissions = 0;
     let mut allocations = 0;
+    let mut usage = super::LazyTransportUsage::default();
     for dense in [false, true] {
         for width in [4, 8] {
             let program = join_program(width);
@@ -248,15 +249,9 @@ fn three_way_joins_expose_retention_causes() {
                             let plan =
                                 Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default())
                                     .unwrap();
-                            let transition = retained.map_or(Transition::Initial, |capacity| {
-                                capacity.assess(&plan, u64::MAX)
-                            });
-                            if !transition.is_reuse() {
-                                retained = Some(plan.capacity);
-                            }
-                            statistics = statistics
-                                .submitted(&plan, transition, retained.unwrap())
-                                .unwrap();
+                            let selected = Selection::new(retained, &plan, u64::MAX);
+                            retained = Some(selected.capacity);
+                            statistics = statistics.submitted(&plan, selected).unwrap();
                             lazy::evaluate(chunk)
                         },
                     )
@@ -267,6 +262,7 @@ fn three_way_joins_expose_retention_causes() {
                         .unwrap();
                     submissions += statistics.dispatches;
                     allocations += statistics.transport_allocations;
+                    usage = usage.checked_add(statistics.transport_usage).unwrap();
                     assert_eq!(statistics.transport_replacements.initial, 1);
                     assert_eq!(statistics.transport_replacements.budget, 0);
                     assert_eq!(statistics.transport_replacements.accounting_overflow, 0);
@@ -277,17 +273,29 @@ fn three_way_joins_expose_retention_causes() {
             }
         }
     }
-    // The complete fixed family matches the old ABBA structural work: eight
-    // seven-dispatch schedules and sixteen three-dispatch schedules. Causes
-    // overlap, so 48+64+36+36+36 does not count allocations.
+    // The source family still has eight seven-dispatch schedules and sixteen
+    // three-dispatch schedules. Retention changes storage, never source work.
     assert_eq!(submissions, 104);
-    assert_eq!(allocations, 96);
+    assert_eq!(allocations, 80);
+    for (binding, expected_allocations) in [
+        (usage.uniform, 24),
+        (usage.offsets, 64),
+        (usage.records, 72),
+        (usage.snapshots, 60),
+        (usage.seeds, 60),
+        (usage.output, 60),
+        (usage.readback, 60),
+    ] {
+        assert_eq!(binding.allocations, expected_allocations);
+        assert_eq!(binding.allocations + binding.reuses, submissions);
+    }
+    eprintln!("joined retention totals causes={causes:?} usage={usage:?}");
     assert_eq!(
         causes,
         super::LazyTransportReplacements {
             initial: 24,
-            offsets_growth: 48,
-            records_growth: 64,
+            offsets_growth: 40,
+            records_growth: 48,
             snapshots_growth: 36,
             seeds_growth: 36,
             result_shape: 36,
