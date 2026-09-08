@@ -254,6 +254,19 @@ fn metal_source_selections_preserve_each_frozen_closure() {
         vec![],
         vec![],
     ));
+    // The same shared atom gains world 1 one round after gaining world 0.
+    // Reused join storage must read rebuilt membership, including that identity.
+    for (head, positive) in [
+        (constant("shared", 0), vec![constant("a", 0)]),
+        (constant("later", 0), vec![constant("b", 1)]),
+        (constant("shared", 0), vec![constant("later", 0)]),
+        (
+            constant("observed", 0),
+            vec![constant("shared", 0), constant("b", 1)],
+        ),
+    ] {
+        templates.push(Template::new(Some(head), positive, vec![], vec![], vec![]));
+    }
     let program = Program::new(templates, AdmissionLimits::default()).unwrap();
     let seeds: Vec<_> = (0..33)
         .map(|index| {
@@ -280,11 +293,15 @@ fn metal_source_selections_preserve_each_frozen_closure() {
                     &Control::default(),
                 )
                 .unwrap();
+            assert_eq!(batch.checks.len(), seeds.len());
+            assert!(batch.progress.rounds >= 5);
             for (actual, seed) in batch.checks.iter().zip(&seeds) {
                 let expected =
                     check(&program, seed, Limits::default(), &Control::default()).unwrap();
                 assert_eq!(actual.closure(), expected.closure());
                 assert_eq!(actual.accepted(), expected.accepted());
+                assert_eq!(actual.constraint_violated(), expected.constraint_violated());
+                assert_eq!(actual.seed_mismatch(), expected.seed_mismatch());
             }
             let submitted = oracle.statistics();
             assert_eq!(submitted.dispatches, batch.progress.chunks);

@@ -18,6 +18,15 @@ mod tests;
 pub(crate) struct Snapshot {
     atoms: Vec<Atom>,
     membership: Vec<u32>,
+    workspace: Workspace,
+    bytes: usize,
+}
+
+/// Batch-owned join storage. Shape is fixed by the program and candidate
+/// occurrences; contents carry no truth across source scans. A template reset
+/// replaces the root and predicate starts, and extension replaces each child
+/// before the source visitor can use that child as a parent.
+pub(crate) struct Workspace {
     frames: Vec<u32>,
     starts: Vec<Option<usize>>,
     worlds: usize,
@@ -25,33 +34,17 @@ pub(crate) struct Snapshot {
     bytes: usize,
 }
 
-impl Snapshot {
-    /// Caller reserves the one symbolic union copy independently. `available`
-    /// bounds every additional mask/frame/index payload before allocation.
+impl Workspace {
+    /// Reserve the fixed join shape once per batch. Retained payload must remain
+    /// charged between scans and throughout any demanded-catalog growth.
     pub(crate) fn new(
         program: &Program,
-        catalog: &BTreeMap<Atom, u32>,
-        snapshots: &[u32],
-        stride: usize,
         worlds: usize,
         available: usize,
         work: &mut Work<'_>,
     ) -> Result<Self, Stop> {
-        if worlds == 0 || stride == 0 || stride.checked_mul(worlds) != Some(snapshots.len()) {
+        if worlds == 0 {
             return Err(Stop::InvalidProgram);
-        }
-        let mut rows = 0usize;
-        for id in catalog.values() {
-            if *id as usize / 32 >= stride {
-                return Err(Stop::InvalidProgram);
-            }
-            for world in 0..worlds {
-                work.mask_word()?;
-                if present(snapshots, stride, world, *id) {
-                    rows = rows.checked_add(1).ok_or(Stop::Allocation)?;
-                    break;
-                }
-            }
         }
         let mut depth = 0;
         for template in program.templates() {
@@ -59,14 +52,12 @@ impl Snapshot {
             depth = depth.max(template.positive().len());
         }
         let mask_width = worlds.div_ceil(32);
-        let matrix = rows.checked_mul(mask_width).ok_or(Stop::Allocation)?;
         let frame = depth
             .checked_add(1)
             .and_then(|rows| rows.checked_mul(mask_width))
             .ok_or(Stop::Allocation)?;
-        let bytes = matrix
-            .checked_add(frame)
-            .and_then(|words| words.checked_mul(size_of::<u32>()))
+        let bytes = frame
+            .checked_mul(size_of::<u32>())
             .and_then(|bytes| {
                 depth
                     .checked_mul(size_of::<Option<usize>>())
@@ -76,11 +67,6 @@ impl Snapshot {
         if bytes > available {
             return Err(Stop::Allocation);
         }
-        let mut atoms = Vec::new();
-        atoms
-            .try_reserve_exact(rows)
-            .map_err(|_| Stop::Allocation)?;
-        let mut membership = zeros(matrix, work)?;
         let frames = zeros(frame, work)?;
         let mut starts = Vec::new();
         starts
@@ -91,30 +77,7 @@ impl Snapshot {
             work.tick()?;
             starts.push(None);
         }
-        for (atom, id) in catalog {
-            let row = atoms.len();
-            let mut included = false;
-            for world in 0..worlds {
-                work.mask_word()?;
-                if present(snapshots, stride, world, *id) {
-                    work.mask_word()?;
-                    let entry = membership
-                        .get_mut(row * mask_width + world / 32)
-                        .ok_or(Stop::InvalidProgram)?;
-                    *entry |= 1 << (world % 32);
-                    included = true;
-                }
-            }
-            if included {
-                atoms.push(atom.clone());
-            }
-        }
-        if atoms.len() != rows {
-            return Err(Stop::InvalidProgram);
-        }
         Ok(Self {
-            atoms,
-            membership,
             frames,
             starts,
             worlds,
@@ -127,16 +90,97 @@ impl Snapshot {
         self.bytes
     }
 
+    /// Rebuild membership from complete current snapshots, including existing
+    /// atom identities that have gained worlds. The one symbolic union copy is
+    /// reserved independently. `available` includes this workspace's live bytes.
+    pub(crate) fn snapshot(
+        self,
+        catalog: &BTreeMap<Atom, u32>,
+        snapshots: &[u32],
+        stride: usize,
+        available: usize,
+        work: &mut Work<'_>,
+    ) -> Result<Snapshot, Stop> {
+        work.mask_bytes = self.bytes;
+        if stride == 0 || stride.checked_mul(self.worlds) != Some(snapshots.len()) {
+            return Err(Stop::InvalidProgram);
+        }
+        let mut rows = 0usize;
+        for id in catalog.values() {
+            if *id as usize / 32 >= stride {
+                return Err(Stop::InvalidProgram);
+            }
+            for world in 0..self.worlds {
+                work.mask_word()?;
+                if present(snapshots, stride, world, *id) {
+                    rows = rows.checked_add(1).ok_or(Stop::Allocation)?;
+                    break;
+                }
+            }
+        }
+        let matrix = rows.checked_mul(self.words).ok_or(Stop::Allocation)?;
+        let bytes = matrix
+            .checked_mul(size_of::<u32>())
+            .and_then(|bytes| bytes.checked_add(self.bytes))
+            .ok_or(Stop::Allocation)?;
+        if bytes > available {
+            return Err(Stop::Allocation);
+        }
+        let mut atoms = Vec::new();
+        atoms
+            .try_reserve_exact(rows)
+            .map_err(|_| Stop::Allocation)?;
+        let mut membership = zeros(matrix, work)?;
+        for (atom, id) in catalog {
+            let row = atoms.len();
+            let mut included = false;
+            for world in 0..self.worlds {
+                work.mask_word()?;
+                if present(snapshots, stride, world, *id) {
+                    work.mask_word()?;
+                    let entry = membership
+                        .get_mut(row * self.words + world / 32)
+                        .ok_or(Stop::InvalidProgram)?;
+                    *entry |= 1 << (world % 32);
+                    included = true;
+                }
+            }
+            if included {
+                atoms.push(atom.clone());
+            }
+        }
+        if atoms.len() != rows {
+            return Err(Stop::InvalidProgram);
+        }
+        Ok(Snapshot {
+            atoms,
+            membership,
+            workspace: self,
+            bytes,
+        })
+    }
+}
+
+impl Snapshot {
+    pub(crate) const fn bytes(&self) -> usize {
+        self.bytes
+    }
+
+    /// Drop this round's atoms and membership before retaining only join storage.
+    pub(crate) fn into_workspace(self) -> Workspace {
+        self.workspace
+    }
+
     pub(crate) fn parts(&mut self) -> (&[Atom], Join<'_>) {
         (
             &self.atoms,
             Join {
                 atoms: &self.atoms,
                 membership: &self.membership,
-                frames: &mut self.frames,
-                starts: &mut self.starts,
-                worlds: self.worlds,
-                words: self.words,
+                frames: &mut self.workspace.frames,
+                starts: &mut self.workspace.starts,
+                worlds: self.workspace.worlds,
+                words: self.workspace.words,
             },
         )
     }

@@ -14,6 +14,10 @@ use zetesis_core::{Atom, Model, Program, Seed};
 use crate::oracle::{Work, worlds};
 use crate::{Control, Stop, source};
 
+#[cfg(test)]
+#[path = "../tests/support/workspace_lifetime.rs"]
+mod workspace_tests;
+
 /// Rule header words: head tag and three antecedent lengths.
 pub const RECORD_HEADER_WORDS: usize = 4;
 /// A head tag of zero denotes a constraint; atom IDs are encoded plus one.
@@ -96,7 +100,8 @@ pub struct Progress {
     /// Matched positive prefixes with empty current-world membership.
     /// Unvisited extensions are not claimed as enumerated instances.
     pub pruned_prefixes: u64,
-    /// Peak requested membership/frame/index payload held by one source round.
+    /// Peak requested membership/frame/index payload, including join storage
+    /// retained between source rounds.
     /// Symbolic atoms are accounted separately; this is not process RSS.
     pub peak_mask_bytes: usize,
 }
@@ -363,7 +368,9 @@ pub fn check_with<E>(
 /// but deliberately does not exhaust every cross-world union combination.
 ///
 /// Mask construction/intersections consume the batch's cumulative source work.
-/// Their live storage is charged against `max_host_bytes` during catalog growth.
+/// Join frames/indices are reused within the batch; membership is rebuilt from
+/// each immutable round. Live storage is charged against `max_host_bytes` during
+/// catalog growth and between rounds.
 /// This optional optimization can change resource stopping points. The injected
 /// evaluator's exactness contract is identical to [`check_with`].
 ///
@@ -397,7 +404,8 @@ struct State {
     atoms: Vec<Atom>,
     payload_bytes: usize,
     fixed_bytes: usize,
-    round_mask_bytes: usize,
+    source_mask_bytes: usize,
+    world_workspace: Option<worlds::Workspace>,
     words: usize,
     snapshots: Vec<u32>,
     seeds: Vec<u32>,
@@ -515,29 +523,47 @@ impl State {
             .max_host_bytes
             .saturating_sub(self.fixed_bytes)
             .saturating_sub(self.payload_bytes);
-        let result = match worlds::Snapshot::new(
-            program,
-            &self.catalog,
-            &self.snapshots,
-            self.words,
-            candidates,
-            available,
-            &mut work,
-        ) {
+        let workspace = self.world_workspace.take().map_or_else(
+            || worlds::Workspace::new(program, candidates, available, &mut work),
+            Ok,
+        );
+        let snapshot = workspace.and_then(|workspace| {
+            workspace.snapshot(
+                &self.catalog,
+                &self.snapshots,
+                self.words,
+                available,
+                &mut work,
+            )
+        });
+        match snapshot {
             Ok(mut snapshot) => {
-                self.round_mask_bytes = snapshot.bytes();
-                source::scan_worlds(program, &mut snapshot, scan_limits, &mut work, |instance| {
-                    self.offer(&instance, candidates, limits, control, progress, execute)
+                self.source_mask_bytes = snapshot.bytes();
+                let result = source::scan_worlds(
+                    program,
+                    &mut snapshot,
+                    scan_limits,
+                    &mut work,
+                    |instance| {
+                        self.offer(&instance, candidates, limits, control, progress, execute)
+                    },
+                );
+                // Round truth has dropped, but fixed join storage remains live
+                // through flushing, catalog growth and the next snapshot.
+                let workspace = snapshot.into_workspace();
+                self.source_mask_bytes = workspace.bytes();
+                self.world_workspace = Some(workspace);
+                result
+            }
+            Err(stop) => {
+                // Failed preparation consumes and drops the workspace too.
+                self.source_mask_bytes = 0;
+                Err(source::ScanFailure {
+                    cause: source::ScanCause::Source(stop),
+                    statistics: work.source_statistics(0),
                 })
             }
-            Err(stop) => Err(source::ScanFailure {
-                cause: source::ScanCause::Source(stop),
-                statistics: work.source_statistics(0),
-            }),
-        };
-        // The owned source snapshot has dropped before its reservation is released.
-        self.round_mask_bytes = 0;
-        result
+        }
     }
 
     fn conclusions(
@@ -617,7 +643,8 @@ impl State {
             atoms: Vec::new(),
             payload_bytes: 0,
             fixed_bytes,
-            round_mask_bytes: 0,
+            source_mask_bytes: 0,
+            world_workspace: None,
             words,
             snapshots: zeros(bits)?,
             seeds: zeros(bits)?,
@@ -650,7 +677,7 @@ impl State {
         if self
             .fixed_bytes
             .checked_add(total)
-            .and_then(|bytes| bytes.checked_add(self.round_mask_bytes))
+            .and_then(|bytes| bytes.checked_add(self.source_mask_bytes))
             .ok_or(Stop::Allocation)?
             > limits.max_host_bytes
         {
@@ -689,7 +716,7 @@ impl State {
             .checked_mul(GROWTH_MASK_VECTORS * size_of::<u32>())
             .and_then(|n| n.checked_add(base))
             .and_then(|n| n.checked_add(payload_bytes))
-            .and_then(|n| n.checked_add(self.round_mask_bytes))
+            .and_then(|n| n.checked_add(self.source_mask_bytes))
             .ok_or(Stop::Allocation)?;
         if peak > limits.max_host_bytes {
             return Err(Stop::Allocation);

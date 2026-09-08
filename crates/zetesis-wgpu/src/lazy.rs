@@ -116,7 +116,8 @@ impl GpuLazyOracle {
     /// current-world witness before transport. The device still checks every
     /// positive antecedent and frozen gate; its ABI and execution are unchanged.
     /// Source mask storage/work share the supplied source budgets, and their
-    /// progress is distinct from actual submitted device work.
+    /// progress is distinct from actual submitted device work. Host join storage
+    /// is reused only within this batch; each round rebuilds membership truth.
     ///
     /// # Errors
     /// Preserves [`Self::check_batch`]'s failure and incomplete-coverage contract.
