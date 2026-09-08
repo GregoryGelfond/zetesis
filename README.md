@@ -161,10 +161,11 @@ Metal has been physically qualified on an Apple M4 Pro for the recorded builds.
 The static closure oracle uses a bounded ground graph; general formula execution
 batches GPU propagation and exact CPU residual completion. Source loading,
 parsing, materialization, candidate generation and objective work still run on
-the host. Seven [physical lazy Metal tests](docs/verification/lazy-device-integration-20260907/physical/README.md)
-pass for the prepared debug executables, including complete model comparisons,
-catalog growth and bounded failure accounting. They do not establish release-binary
-qualification or a speedup. Lazy general-formula execution remains an implementation
+the host. Eight [physical lazy Metal tests](docs/verification/consumer-execution-tranche-20260908/physical/README.md)
+pass for the frozen debug executables, including complete model comparisons,
+catalog growth, bounded failure accounting and opt-in world-mask joins with
+reused storage. They do not establish release-binary qualification or a speedup.
+Lazy general-formula execution remains an implementation
 gap. Broader lazy Metal qualification is required before version 1.0. CUDA,
 multi-GPU execution and neuromorphic backends are
 future work. See [execution boundaries](docs/implementation.md) and the
@@ -224,9 +225,10 @@ Relational lazy source joins offer an opt-in world-membership filter, which omit
 joins with no common current candidate world. Sparse controls save work; dense
 controls pay overhead. [Reusable join frames](docs/verification/join-workspace-20260908/README.md)
 now reduce repeated preparation while membership is rebuilt every round and
-retained storage stays charged. Defaults remain unchanged. Physical qualification
-of the updated masked path is pending; no GPU speedup or process-RSS claim follows
-from these deterministic work controls.
+retained storage stays charged. Defaults remain unchanged. The updated masked
+path now passes [physical Metal qualification](docs/verification/consumer-execution-tranche-20260908/physical/README.md)
+for the recorded 33-occurrence fixture and chunk sizes one and seven. No GPU
+speedup or process-RSS claim follows from these work and transfer controls.
 
 The [fresh CPU comparison](docs/verification/consumer-execution-tranche-20260908/timing/README.md)
 uses 21 alternating timed pairs per case, one worker per solver and complete
