@@ -2,7 +2,7 @@
 
 The next tranche concentrates on closing the remaining intended source-language
 and observable-semantic gaps. The following tranche concentrates on optimization,
-stronger Lean correspondence and user friendliness. This sequencing follows
+stronger Lean correspondence, API cleanup and user friendliness. This sequencing follows
 the aggregate-primitives qualification.
 
 The reduct remains the acceptance foundation. Language coverage should expose
@@ -94,6 +94,10 @@ execution, alternative truth layouts and their Lean correspondences. The
 proposals and the existing indexing/filtering baseline. New language support
 can change their applicability; do not commit to an optimization before that
 representation and its measurements are ready.
+
+The [grounder research report](../research/grounder-optimization.md) develops
+eager/lazy join, column, incremental and GPU-residency opportunities, with
+semantic obligations and bounded experiment protocols for those later passes.
 
 ## Completion criteria
 

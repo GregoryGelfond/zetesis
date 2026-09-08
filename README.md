@@ -172,9 +172,10 @@ Metal has been physically qualified on an Apple M4 Pro for the recorded builds.
 The static closure oracle uses a bounded ground graph; general formula execution
 batches GPU propagation and exact CPU residual completion. Source loading,
 parsing, materialization, candidate generation and objective work still run on
-the host. The last promoted build's [17 physical Metal regressions](docs/verification/language-execution-tranche-20260908/README.md)
+the host. The current checkpoint's [25 physical Metal regressions](docs/verification/aggregate-primitives-tranche-20260908/README.md)
 pass for frozen instrumented executables, covering lazy transport reuse, complete
-closures, tight support, ordinary solving and admitted weighted heads. They retain
+closures, tight support, native aggregates, ordinary solving and admitted
+weighted heads. They retain
 limits and output-failure accounting. These tests establish neither release
 performance nor an RSS reduction.
 Lazy general-formula execution remains an implementation
@@ -238,34 +239,26 @@ frozen interpretation pairs, plus generated arithmetic properties. Negative
 `#sum+` head weights remain an internal limitation with a recorded reference
 discrepancy; they are not labeled modeling errors.
 
-The [last completed integrated qualification](docs/verification/language-execution-tranche-20260908/README.md)
-passes **2,178 workspace test/doc checks**, **339 CPU-only CLI checks** and
-**65 external-oracle tests**. Both unchanged 91% coverage floors pass:
-**91.9033% workspace with the four designated Metal tests / 93.1998% independent
-CPU-only CLI**. The portable workspace stage remains visible at 90.6927%.
-The frozen release passes **94 clean kr-domains cases** and **24 selected
-upstream cases**, preserving their recorded display/cost and full-model contracts
-respectively. The [current CPU and Metal measurements](docs/verification/language-execution-tranche-20260908/timing/README.md)
-retain complete populations and timing limitations. The new transport comparison
-has mixed results; it does not establish a general GPU speedup.
+The [current integrated qualification](docs/verification/aggregate-primitives-tranche-20260908/README.md)
+passes **2,352 workspace tests/doc checks**, **339 independent CPU-only CLI
+checks**, **68 external-oracle tests** and **25 physical Metal tests** on Apple
+M4 Pro. Both unchanged 91% coverage floors pass: **93.5816% workspace with the
+matching physical profiles / 93.3546% independent CPU-only CLI**. The frozen
+release passes all 94 clean corpus and 24 selected upstream comparisons.
 The [current Lean audit](proofs/verification/aggregate-ranges-20260908/README.md)
-checks **819 laws across 72 modules**; Rust and WGSL correspondence remains unproved.
+checks **819 laws across 72 modules**; concrete Rust/WGSL correspondence remains
+unproved. The five installed commands use the exact qualified release bytes.
 
-The working tranche has integrated the following scoped changes. Its
-[qualification](docs/verification/aggregate-primitives-tranche-20260908/README.md)
-passes 2,352 workspace tests, 339 CPU-only CLI tests, 68 external-oracle tests and
-all 25 frozen Metal tests on Apple M4 Pro. Coverage is 93.5816% for workspace with
-the physical profiles and 93.3546% for the independent CPU-only CLI profile;
-both unchanged 91% floors pass. The frozen release passes the 94 clean corpus
-and 24 selected upstream comparisons. These changes are not yet the installed/main
-baseline; controlled GPU measurements and final promotion remain pending.
+The checkpoint includes the following scoped capabilities. The
+[previous checkpoint](docs/verification/language-execution-tranche-20260908/README.md)
+retains its own qualification, timing populations and limitations.
 
-| Working-tranche capability | Boundary and evidence |
+| Checkpoint capability | Boundary and evidence |
 |---|---|
 | Completed-value aggregate guards and numeric min/max heads | [Guard checks](docs/verification/nonbinding-guards-20260908/README.md) retain 46 originals / 88 complete models / 7,312 frozen pairs; [extrema heads](docs/verification/extrema-heads-20260908/README.md) retain 51 originals / 94 models / 5,439 frozen pairs. Tuple/head bijection, original eligibility and numeric endpoint limits remain. |
 | Native aggregate operations | The [CPU library](docs/verification/native-aggregates-20260908/README.md) and [numeric GPU primitive](docs/verification/native-aggregate-gpu-20260908/README.md) compute count, sum, sum+, min and max over complete tuple eligibility. Ordinary solving still uses Boolean aggregate lowering; GPU mask acquisition remains on the host. Frozen Metal qualification passes; Vulkan remains unqualified. |
 | Source count consequences | An opt-in [CountPlan](docs/verification/source-count-plans-20260908/README.md) derives guarded partition bounds for candidate generation while preserving the original reduct subject. Its 10 originals match 53 complete clingo models. Greedy discovery can miss a cover; `NoPlan` does not prove that no consequence exists. It does not recognize queens02's body-count/pairwise encoding. |
-| Transport execution | [Selective lazy input retention](docs/verification/lazy-transport-retention-20260908/README.md) passes portable ownership/resource controls and the integrated Metal tests; controlled comparisons remain pending. |
+| Transport execution | [Selective lazy input retention](docs/verification/lazy-transport-retention-20260908/README.md) passes portable ownership/resource controls and the integrated Metal tests. [Controlled measurements](docs/verification/aggregate-primitives-tranche-20260908/measurements/lazy.md) show fewer allocation-bearing submissions, with modest and variable timing differences. |
 
 The [numeric-prefix experiment](docs/verification/numeric-prefix-20260908/measurements/README.md)
 was declined after controlled comparisons showed mixed effects and regressions;
@@ -358,21 +351,28 @@ retain their individual timings and scopes.
 
 The separate `zetesis-bench lazy` compares identical frozen candidate batches
 across scalar, independent Rayon, shared CPU and Metal source rounds. The latest
-[audited old/new/new/old comparison](docs/verification/language-execution-tranche-20260908/timing/metal/review/README.md)
-retains all 4,320 samples and 231,840 checked occurrences. Of 24 Metal comparisons,
-four improve in both pairs, four regress and sixteen reverse direction. The new
-transport reuses storage on 240 of 3,120 dispatches; this modest reuse does not
-establish a general speedup or lower process RSS.
+[audited old/new/new/old comparison](docs/verification/aggregate-primitives-tranche-20260908/measurements/lazy.md)
+retains all 4,320 samples. Allocation-bearing submissions fall from 96 to 80
+across the 24 GPU case/route cells, and complete buffer reuse rises from 8 to 24
+of 104 submissions. Metal medians decrease in 19 of 24 cells, but interquartile
+ranges overlap in 21. Build-scope differences and the larger timed statistics
+snapshot prevent attributing these modest differences to retention alone.
+Peak requested payload is unchanged; process RSS was not measured.
 
-For dense width-8/128-world batches, the new per-world Metal route takes a pooled
-median **6.944 ms**, independent Rayon **14.921 ms**, and shared CPU Union
-**4.808 ms**. The fastest observed CPU route beats the fastest Metal route in all
-12 cases. Complete source/reduct-call timers exclude parsing, outer search,
-objectives and device setup; these synthetic repeated-candidate populations are
-separate from ordinary whole solves. See the [matrix contract](crates/zetesis-validation/README.md)
-and [lazy experiment](crates/zetesis-experiments/README.md) for output, timing and
-resource scopes. Compact saved reports preserve every captured byte; their
-compression does not demonstrate lower solver memory use.
+For dense width-8/128-world batches, new Metal Union takes a pooled median
+**7.257 ms**, independent Rayon **14.931 ms**, and shared CPU Union **4.606 ms**.
+The fastest CPU route beats the fastest Metal route in all 12 cases. Complete
+source/reduct-call timers exclude parsing, outer search, objectives and device
+setup; these repeated-candidate populations are separate from ordinary solves.
+The [previous comparison](docs/verification/language-execution-tranche-20260908/timing/metal/review/README.md)
+retains its original build and population rather than being pooled with this run.
+
+The new [native aggregate campaign](docs/verification/aggregate-primitives-tranche-20260908/measurements/aggregate.md)
+retains 2,700 samples across count, sum, sum+, min and max. Resident Metal beats
+scalar reduction in 8 of 45 case medians; four-worker Rayon is faster in all 45.
+At 4,096 tuples and 128 occurrences, resident reduction takes 1.020–1.106 ms,
+with host eligibility acquisition separately taking 0.964–1.044 ms. These
+primitive results do not establish faster ordinary aggregate solving.
 
 The [compact-trail experiment](docs/verification/trail-storage-20260908/README.md)
 was declined: its small storage saving did not establish a reliable runtime

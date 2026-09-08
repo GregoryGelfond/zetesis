@@ -1,17 +1,18 @@
 # Language and execution tranche: plan and progress
 
 The [completed checkpoint](../verification/language-execution-tranche-20260908/README.md)
-at `1dc167beda8549681957cdc34c1cfae8e35043c4` records the baseline,
-with reviewed evidence and artifact identities. This plan adds native
+at `1dc167beda8549681957cdc34c1cfae8e35043c4` records the previous baseline,
+with reviewed evidence and artifact identities. This tranche adds native
 aggregate primitives and a foundation-wide research exploration alongside the
 existing language, CPU, GPU and Vulkan work. It adds no performance evidence.
 
 Implementation and [integrated qualification](../verification/aggregate-primitives-tranche-20260908/README.md)
 are complete for this checkpoint. Combined gates, independent
 coverage floors, frozen release comparisons and 25 physical Metal tests pass.
-Controlled GPU measurements remain incomplete. The following
+The [controlled GPU measurements](../verification/aggregate-primitives-tranche-20260908/measurements/README.md)
+are audited and archived. The following
 [language-closure tranche](language-closure-tranche.md) prioritizes the remaining
-language obligations before a dedicated optimization and Lean-hardening tranche.
+language obligations before dedicated optimization, API-cleanup and Lean-hardening rounds.
 
 | Tranche item | Current scope |
 | --- | --- |
@@ -304,8 +305,8 @@ remains distinct from outer default negation; neither substitutes for the other.
    guards return typed capability failures. CPU acquisition, wire preparation,
    reduction and readback retain separate limits/accounting. Portable controls
    pass, and the [integrated qualification](../verification/aggregate-primitives-tranche-20260908/README.md)
-   passes the physical Metal tests. Vulkan execution and matched performance
-   measurements remain pending.
+   passes the physical Metal tests. Matched performance measurements are archived
+   separately; Vulkan execution remains unqualified.
 4. The separate opt-in CountPlan provides a source-derived candidate consequence
    consumer. Ordinary aggregate model/reduct evaluation is still Boolean. A mixed
    native source/solver route must retain original head permissions, exact
