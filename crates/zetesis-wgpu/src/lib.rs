@@ -19,6 +19,7 @@ mod selection;
 mod adapter;
 mod lazy;
 mod tight;
+mod aggregate;
 
 use std::fmt;
 use std::time::Duration;
@@ -35,6 +36,11 @@ pub use formula::{
 };
 
 pub use adapter::{AdapterBackend, AdapterCategory, AdapterMetadata};
+pub use aggregate::{
+    AggregateGpuActivity, AggregateGpuBatchStats, AggregateGpuCapability, AggregateGpuError,
+    AggregateGpuEvaluation, AggregateGpuLimits, AggregateGpuPlan, AggregateGpuPlanLimits,
+    AggregateGpuReduction, AggregateGpuValue, GpuAggregateOracle,
+};
 pub use lazy::{
     GpuLazyOracle, LazyBufferUsage, LazyGpuStatistics, LazyTransportReplacements,
     LazyTransportUsage,

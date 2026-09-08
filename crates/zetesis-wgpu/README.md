@@ -4,6 +4,70 @@ Exact GPU reduct primitives for zetesis. The original static profile compiles a
 `GroundProgram` under separate grounding limits before checking candidates.
 `check_batch` performs no source grounding or lazy tuple discovery.
 
+The experimental `GpuAggregateOracle` reduces a retained
+`zetesis_ferraris::native_aggregate::Group` through an opaque `AggregateGpuPlan`.
+It accepts ordered, Group-bound `Eligibility` occurrences acquired by the native
+formula evaluator. Count, sum, sum-plus, minimum and maximum preserve tuple
+identity and original/frozen eligibility; a paired result exposes original guard
+truth conjoined with frozen guard truth. This is an aggregate suboperation.
+Source completeness, aggregate head permission and stable-model minimality remain
+the caller's obligations. Ordinary solver dispatch does not yet select it.
+
+Preparation preserves empty and nonnumeric keys as neutral sum contributions;
+count includes them. Extrema ignore empty keys and currently require numeric
+first components. Numeric `Bound::Integer` and `Bound::Term(Number)` guards share
+the same exact representation. Unsupported terms, out-of-range guards or unsafe
+signed carriers return a typed capability failure, permitting the native CPU
+operation without introducing a source refusal. Empty extrema have a separate
+presence bit and genuine `#inf`/`#sup` results; no integer acts as an endpoint.
+
+One 64-lane workgroup reduces each occurrence using strided folds followed by a
+shared-memory tree. Signed addition is admitted only when the complete positive
+carrier fits `i32::MAX` and the complete negative carrier fits `i32::MIN`;
+cancellation in the final sum cannot hide an overflowing intermediate. The Lean
+arithmetic library models occurrence-preserving selected subcollections and
+addition-tree bounds. Actual Rust/WGSL partitioning, packing, synchronization
+and readback remain implementation correspondence obligations. No floating-point
+or optional subgroup operation is used.
+
+Construct `AggregateGpuPlan::new(&Group, AggregateGpuPlanLimits, &Control)` and
+`GpuAggregateOracle::new_selected(GpuOptions, GpuSelection)`, then call
+`check_batch(&AggregateGpuPlan, &[Eligibility], AggregateGpuLimits, &Control)`.
+Plan construction and formula-mask acquisition have independent work/storage
+budgets. Batch work charges identity checks, mask initialization/packing and
+complete readback validation, plus both full tuple/guard scans and two 63-combine
+trees on the device. Original-only records still reserve both phase scans but
+return no frozen result. Every nonempty successful batch submits actual device
+work; an empty Group is a valid executed operation.
+
+One immutable numeric plan and exact occurrence-count transport remain resident.
+Plan clones share identity; independently prepared plans require upload. Before
+packing or allocation, batch admission checks the prospective payload after
+evicting incompatible ownership. Prior large shapes do not require manual cache
+clearing to admit an otherwise valid exact smaller shape. Successful statistics
+separately expose incoming owned residency and prospective active accounting.
+The latter includes retained host wire, GPU group/transport, packed masks, a
+mapped-readback allowance and returned records. It excludes borrowed Group/masks,
+caller-retained plans/results, allocator/driver overhead and deferred retirement;
+these numbers are authored payloads, not RSS or physical bus traffic.
+
+Pure preflight failures preserve residency. Execution/readback failures poison
+the oracle and return no partial result vector. `activity()` retains submitted
+work, while completed occurrence/work/readback counts are committed only after
+the whole result vector validates. Each record carries an epoch and occurrence
+index; guard truth is independently rechecked against its decoded exact measure.
+The four ignored tests per API cover matched CPU reductions, word/lane boundaries,
+empty extrema, numeric endpoints, repeated/reordered batches, exact limits,
+residency changes and malformed submitted readback. They are prepared physical
+controls, without a hardware-pass or speedup claim:
+
+```sh
+cargo test --locked -p zetesis-wgpu --test hardware_aggregate metal -- --ignored --nocapture
+cargo test --locked -p zetesis-wgpu --lib metal_aggregate -- --ignored --nocapture
+```
+
+Use the `vulkan`/`vulkan_aggregate` filters to select actual Vulkan qualification.
+
 The separate experimental `GpuTightOracle` accepts a complete checked
 `zetesis_ferraris::TightPlan` and ordered `Interpretation` occurrences. It evaluates
 original formula truth and producer support on the selected device. Ranked
