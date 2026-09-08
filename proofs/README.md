@@ -37,6 +37,10 @@ preserves an earlier inconsistent manifest and explains its repair.
 
 | Module | What is proved |
 |---|---|
+| [ChoiceConsumers](./Zetesis/ChoiceConsumers.lean) | Completed scalar filters retain aggregate equality, whole-group activation and natural bounds under explicit proposal coverage and evaluation assumptions |
+| [NegativeEligibility](./Zetesis/NegativeEligibility.lean) | Negated and double-negated eligibility read the frozen candidate; replacing double negation by positive support has a counterexample |
+| [OptionalIndex](./Zetesis/OptionalIndex.lean) | Representable positive-successor identities preserve optional index round trips, absence and link replacement |
+| [WorldMasks](./Zetesis/WorldMasks.lean) | Immutable positive-prefix membership and exhausted masked scans preserve per-world consequence and constraint coverage; stale snapshots cannot authorize later omissions |
 | [StructuralBindings](./Zetesis/StructuralBindings.lean) | Consistent finite named-slot matching preserves prebound values, rolls back on refusal and selects exactly compatible rows under complete support coverage; retained source atoms preserve contextual original/frozen truth and stability |
 | [FiniteValues](./Zetesis/FiniteValues.lean) | Declared-input agreement preserves deterministic partial evaluation; single-slot extension and complete constructor identity preserve resolved literal meaning, including every frozen reduct |
 | [ConsequentAlternatives](./Zetesis/ConsequentAlternatives.lean) | Universal condition rows retain existential signed alternatives; completed empty domains have distinct meanings, and complete formula collection equality preserves contextual stability |

@@ -1,16 +1,19 @@
 # World membership masks in lazy source joins
 
-Status: bounded next-tranche proposal. No implementation, theorem or performance
-result is claimed. The scope is the admitted relational profile of immutable
-positive reduct rounds; general lazy Ferraris formulas require another design.
+Status: implemented as an opt-in library source selection, with portable semantic,
+resource and transport checks. The [source-mask record](../verification/source-masks-20260908/README.md)
+records its exact qualification scope. Physical execution of the new selection
+and runtime improvement remain unmeasured. The scope is the admitted relational
+profile of immutable positive reduct rounds; general lazy Ferraris formulas
+require another design.
 
-The current source coordinator joins the union of derived world snapshots. A
+The default source coordinator joins the union of derived world snapshots. A
 join can combine rows from different worlds even when no individual world has
 all of them. The device correctly rejects those combinations. A membership mask
-could avoid some of that source enumeration, instance copying and upload while
+can avoid some of that source enumeration, instance copying and upload while
 leaving per-world reduct inference on the device.
 
-## The proposed transform
+## The transform
 
 For a fixed batch of candidate occurrences and round snapshot `C`, define
 `rowMask(a) = { w | a ∈ C[w] }`. Attach this mask to each source relation row.
@@ -24,7 +27,8 @@ For a completed binding, a nonempty mask establishes only possible positive
 enablement in this round. Source filters and frozen gates still apply. Initially,
 keep all existing per-world positive and gate checks in the device; use masks
 only to discard zero-mask source work. Uploading masks to schedule fewer
-world/instance checks is a separate measured step with its own ABI obligations.
+world/instance checks remains a future step requiring measurement and its own ABI
+obligations.
 The current relational filters are equality/disequality tests. Extending this
 pruning to partial or effectful source evaluation would also need to preserve
 that evaluator's refusal and effect policy; logical consequence equivalence
@@ -70,7 +74,7 @@ Interrupted scans still discard all pending deltas and publish no completed
 checks. The final no-growth conclusion still requires exhaustive coverage of
 every binding that can be enabled in any current world.
 
-Using `Zetesis.LazyRounds` and the existing `Bind` relation, the proposed laws are:
+Using `Zetesis.LazyRounds` and the existing `Bind` relation, the proof obligations are:
 
 1. A world belongs to a binding's mask exactly when its positive snapshot
    satisfies all bound positive antecedents.
@@ -82,6 +86,10 @@ Using `Zetesis.LazyRounds` and the existing `Bind` relation, the proposed laws a
 4. Packed mask construction, stride changes, refresh and zero detection refine
    those set operations. These implementation correspondences are separate
    obligations, not consequences of the abstract laws alone.
+
+`WorldMasks.lean` establishes the abstract set and coverage claims in obligations
+1–3 under its explicit scan premises. Obligation 4 remains unproved: executable
+boundary tests support the implementation but do not supply a Rust/WGSL refinement.
 
 ## Measurement controls
 

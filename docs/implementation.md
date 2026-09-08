@@ -28,7 +28,7 @@ all source profiles and execution plans.
 | `zetesis-ferraris` | Finite formula DAG transforms, exhaustive reduct checking, checked tight support plans and normal-rule formula translation |
 | `zetesis-objective` | Lifted positive objective joins, global tuple coalescing, checked costs and explicit per-model limits |
 | `zetesis-sat` | Native bounded candidate and frozen-reduct countermodel search with independent witness validation |
-| `zetesis-wgpu` | Bounded static integer oracle and general Ferraris propagation primitive, native adapter selection, resident buffers and GPU result transport |
+| `zetesis-wgpu` | Bounded static integer oracle, relational lazy source execution and general Ferraris propagation primitive; native adapter selection, resident buffers and GPU result transport |
 | `zetesis-cli` | Prepared-input sessions, typed solve configuration/outcomes, bounded human/JSON views and process adaptation |
 | `zetesis-telemetry` | Optional typed host stage measurements, independent of rendered diagnostics |
 | `zetesis-experiments` | Standalone static and general-formula membership qualifications, explicit CPU residual measurements and Criterion regression benchmarks |
@@ -137,6 +137,13 @@ pending candidates for exact retry. Failure never becomes UNSAT or exhaustion.
 Statistics distinguish entered, completed, failed and committed candidates,
 residual work, requested/effective workers and the admitted logical workspace.
 Coordinator wall time and summed worker time remain different quantities.
+
+The private candidate-search watch registry represents optional node identities
+with checked positive successors. This halves the element payload of its two
+link arrays on the measured 64-bit build while preserving recorded search order
+and all charged counters. Completion scratch estimates use the actual stored
+type. The [watch-storage record](verification/watch-storage-20260908/README.md)
+measures these arrays; it makes no whole-solver memory, RSS or runtime claim.
 
 ## Candidate generation and laziness
 
@@ -252,6 +259,17 @@ never fall back. The threshold is an initial heuristic with no claimed speedup.
 `zetesis devices` separates advertised capabilities from actual initialization
 and shader execution. Metal, Vulkan, DirectX 12 and GL selection is restricted
 to APIs compiled for the host; NVIDIA filtering does not imply CUDA support.
+
+Library callers can select `lazy::SourceSelection::Worlds` through
+`lazy::check_with_source` or `GpuLazyOracle::check_batch_with_source`. An immutable
+atom-major world-membership matrix intersects positive source prefixes, omitting
+only combinations with no current-world witness. The ordinary visitor still
+binds terms and checks filters, and the evaluator retains all positive and frozen
+gate tests. Existing entry points select `Union`. Each round rebuilds membership;
+live masks remain charged during catalog growth, and stops publish no completed
+checks. [Portable controls](verification/source-masks-20260908/README.md) show both
+sparse pruning and dense overhead. New physical mask execution and wall-time
+benefits remain unqualified; CLI and automatic routing are unchanged.
 
 ## General formula and source extensions
 
@@ -438,20 +456,29 @@ filters inspect completed rows. Undefined or overflowing consumer arithmetic
 still refuses admission, even when a proposal would later prove unrealizable.
 The bounded plan charges dependency scans and input/readiness/instruction storage
 under existing expansion limits. Aggregate-free rules keep their previous
-accounting. Dependent ranges, generated negative arguments, remaining conditional
-and choice/count-head body consumers, and objective producers retain their
+accounting. Dependent ranges, aggregate-generated outer-body negative argument
+consumers, remaining conditional
+consumers and objective producers retain their
 explicit profile boundaries.
 Dependencies between assignment generators are refused even through scalar
 descendants; previously admitted comparison scopes remain available. See the
 [aggregate-consumer record](verification/aggregate-consumers-20260907/README.md)
 for exact boundaries, finite-ground comparisons and schedule-bypass evidence.
-The total-assignment objective observer described below is unchanged.
+The [choice-body extension](verification/choice-consumers-20260908/README.md)
+uses the same completed-row plan for choice and checked count heads, preserving
+whole-group activation and bounds. The total-assignment objective observer
+described below is unchanged.
 Positive ordinary atoms may now bind local count-head witnesses and supply
 eligibility, including recursive and structured patterns. The complete
 tuple/atom bijection check precedes choice lowering. Duplicate witnesses retain
 their disjoined eligibility formulas; support membership never asserts them.
-Negative eligibility, tuple aliases and weighted/extremal function heads remain
-refused. The [bounds and eligibility record](verification/aggregate-bounds-20260907/README.md)
+Default-negated and double-negated eligibility consume established inputs
+through the ordinary choice-condition path; they retain their original polarity.
+Head-local eligibility may read completed outer aggregate values; it does not
+share the remaining outer-body negative-consumer restriction.
+The [negative-eligibility record](verification/negative-count-eligibility-20260908/README.md)
+checks original/frozen truth, projection, safety and complete clingo models.
+Tuple aliases and weighted/extremal function heads remain refused. The [bounds and eligibility record](verification/aggregate-bounds-20260907/README.md)
 contains independent original/frozen comparisons and exact resource checks.
 The main CLI supports both S0 GPU closure and explicitly selected hybrid formula
 propagation. The separate formula experiment compares scalar CPU, Rayon and
@@ -538,10 +565,10 @@ and abstract legal event traces. The independent reference campaign and producti
 conformance tests supply executable evidence separately. No theorem currently
 connects the concrete Rust structs, source adapter or shader to the Lean types.
 
-The [current clean audit](../proofs/verification/aggregate-bounds-lazy-metal-20260907/README.md)
-checks 723 theorems in 57 modules. The latest twenty-one additions cover aggregate
-bounds, positive count-head eligibility, evaluation prefixes and immutable lazy
-rounds. Complete carriers, faithful extraction, exact tuple/atom correspondence
+The [current clean audit](../proofs/verification/consumers-memory-20260908/README.md)
+checks 748 theorems in 61 modules. The latest twenty-five additions cover completed
+choice-body consumers, frozen negative eligibility, optional finite identities
+and immutable-world source membership. Complete carriers, faithful extraction, exact tuple/atom correspondence
 and complete source rounds are explicit premises where required;
 the laws do not establish source coverage, Rust scheduling/matching, machine
 resource behavior or device execution. Prior theorem sources and axiom sets are

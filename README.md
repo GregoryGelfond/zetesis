@@ -178,10 +178,10 @@ syntax, raising and evaluation errors from zetesis implementation refusals.
 |---|---|
 | Normal rules | Safe finite rules, constraints, default/double negation, strong negation with coherence, and relational lazy checking in the admitted normal-rule profile. |
 | Formula rules | Bounded choices, signed singleton/disjunctive heads, finite rule/head pools, evaluated heads, scalar/range bindings, comparisons and admitted universal body conditionals. |
-| Aggregates | Body count/sum/sum+ and complete-value min/max comparisons; independent assignments feeding scalar/tuple filters, scalar equalities, evaluated positive arguments and heads, and integer choice bounds; function-count heads with positive eligibility and checked tuple/atom correspondence. |
+| Aggregates | Body count/sum/sum+ and complete-value min/max comparisons; independent assignments feeding scalar/tuple filters, scalar equalities, evaluated positive arguments and heads, and integer choice bounds; function-count heads with positive or default-negated eligibility and checked tuple/atom correspondence. |
 | Logical values | Closed signed functions and tuples; finite construction from bound inputs; positive tuple/function patterns, including local conditional-consequent witnesses; evaluated positive arguments with independently bound inputs; evaluated already-safe negative arguments. |
 | Objectives and observations | Admitted minimize/maximize/weak constraints; complete tuple keys and optimal ties; signature, term and conditional `#show`; `#defined`; original include bundles and constants. |
-| Refusal boundaries | Cross-aggregate assignment dependencies, generated ranges and remaining conditional/choice-body consumers, weighted/extremal function heads and broader conditioned heads, objective-dependent disjunction/conditionals, broader directives and exact clingo undefined-arithmetic behavior remain incomplete. |
+| Refusal boundaries | Cross-aggregate assignment dependencies, generated ranges and remaining conditional consumers, weighted/extremal function heads and nontrivial conditional disjuncts, objective-dependent disjunction/conditionals, broader directives and exact clingo undefined-arithmetic behavior remain incomplete. |
 
 These rows summarize profiles; they are not a grammar specification. The
 [source API guide](crates/zetesis-themelios/README.md) describes composition,
@@ -213,8 +213,24 @@ positive count-head eligibility. For example,
 `d(1).N{a;b}N:-N=#count{X:d(X)}.` retains the original equality around each
 proposed bound, and `q(1).1#count{X:p(X):q(X)}1.` retains `q(1)` as a condition.
 Neither proposed values nor possible-support membership establish truth.
-The current [Lean audit](proofs/verification/aggregate-bounds-lazy-metal-20260907/README.md)
-checks 723 laws across 57 modules; Rust and WGSL correspondence remains unproved.
+The current [Lean audit](proofs/verification/consumers-memory-20260908/README.md)
+checks 748 laws across 61 modules; Rust and WGSL correspondence remains unproved.
+
+The **2026-09-08 consumer and memory tranche** adds completed aggregate-value
+consumers in choice/count-head outer bodies, default/double-negated count-head
+eligibility, compact private watch links and opt-in immutable-world source masks.
+Local gates pass **1,779 workspace test/doc checks**, **300 CPU-only CLI checks**
+and **59 external-oracle tests**; all 94 clean corpus and 24 selected upstream
+cases still pass. Separate coverage profiles measure **91.1084% / 92.0460%**.
+The [tranche record](docs/verification/consumers-memory-tranche-20260908/README.md)
+keeps source, binary, audit and publication evidence separate.
+
+The [watch arrays](docs/verification/watch-storage-20260908/README.md) use half
+their former element payload on the measured 64-bit build; ordered search traces
+and counters are unchanged. The [source masks](docs/verification/source-masks-20260908/README.md)
+omit joins with no common current world. Sparse controls save work; dense controls
+pay overhead. Existing defaults are unchanged, and new masked physical execution
+remains unqualified. Neither result is a whole-solver RSS or isolated runtime claim.
 
 The **2026-09-07 aggregate-bounds and lazy Metal checkpoint** passes all **94 clean
 non-clingcon kr-domains cases**, checking answer contracts, costs, counts and
@@ -235,38 +251,35 @@ preserve the prior semantic sources and theorem/axiom records. These are checked
 semantic laws, not a proof of the Rust/GPU implementation. Physical-device
 qualification retains its separately dated executable identity.
 
-The [three-case end-to-end CPU comparison](docs/verification/ordinary-cpu-refresh-20260907/README.md)
-records its rebuilt solver binary, 21 alternating timed pairs per case, one worker
+The [updated end-to-end CPU comparison](docs/verification/cpu-refresh-20260908/README.md)
+records the new solver binary, 21 alternating timed pairs per case, one worker
 per solver and complete answer/optimal-tie enumeration. Native runs explicitly
 request eager grounding; automatic oracle selection uses certified tight-support
-checking for these three inputs:
+checking for these inputs:
 
 | Clean input | zetesis median | clingo 5.8.2 median | zetesis / clingo |
 |---|---:|---:|---:|
-| SEND + MORE = MONEY | 40.57 ms | 12.89 ms | 3.148 |
-| Eight queens, variant 02 | 105.63 ms | 121.46 ms | 0.870 |
-| Task allocation, variant 04 / larger mix | 131.55 ms | 183.67 ms | 0.716 |
+| SEND + MORE = MONEY | 37.98 ms | 12.29 ms | 3.090 |
+| Eight queens, variant 02 | 95.26 ms | 119.21 ms | 0.799 |
+| Task allocation, variant 04 / larger mix | 126.98 ms | 182.30 ms | 0.697 |
 
 All 150 comparison invocations and three separate diagnostic runs preserve the
-complete reported-answer contracts. zetesis uses 13.0% less median wall time on
-this queens input and 28.4% less on this task-allocation input;
-clingo remains substantially faster on SEND. These are workload-specific CPU
-results, not a general ranking or a controlled change from the previous release.
-Separate single `--stats` observations put SEND grounding at **18.60 ms** and
-solving at **17.26 ms**. Queens and task allocation spend most of their measured
-driver time solving. These instrumented observations are not phase medians.
-Wall times include process capture with one-millisecond idle polling, startup
-and output. Different human/JSON encoding costs are included. Peak RSS is not
-measured by this command.
+complete reported-answer contracts. zetesis uses 20.1% less median wall time on
+this queens input and 30.3% less on this task-allocation input; clingo remains
+substantially faster on SEND. These are workload-specific CPU results, not a
+general ranking or a controlled change from the previous release. Separate single
+`--stats` observations put SEND grounding at **18.02 ms** and solving at
+**15.22 ms**; these are not phase medians. Wall times include process startup,
+output and capture with one-millisecond idle polling. Peak RSS is not measured.
 
-The separate [six-encoding queens comparison](docs/verification/queens-performance-20260907/README.md)
-uses the final release binary and the same CPU/eager protocol at size eight.
-All 306 observations pass, with 92 displayed boards per encoding. Native/clingo
-median times in milliseconds are **10.84/6.24**, **108.82/126.41**,
-**9.43/6.30**, **9.37/6.24**, **12.36/6.28** and **12.38/6.30** for variants01–06.
-zetesis is faster on variant02; clingo is faster on the other five. This broader
-comparison limits the earlier queens win to that encoding and identifies both
-candidate-search cost and compact-encoding overhead for further measurement.
+The separate six-encoding campaign uses the same new binary and CPU/eager
+protocol at size eight. All 306 observations pass, with the same 92 displayed
+boards per encoding. Native/clingo median milliseconds are **9.21/6.17**,
+**95.13/119.09**, **7.75/6.19**, **7.72/6.17**, **10.72/6.17** and **10.71/6.17**
+for variants01–06. zetesis is faster on variant02; clingo is faster on the other
+five. Both complete campaigns and previous results remain linked in the
+[refresh record](docs/verification/cpu-refresh-20260908/README.md). No watch-only
+speedup, GPU speedup or full-corpus performance ranking follows from these data.
 
 The current [bounded expression-storage experiment](docs/verification/evaluation-scratch-20260907/README.md)
 reduces median eager admission by 4.89% for SEND and 8.92% for queens02 in a
