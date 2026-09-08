@@ -8,7 +8,7 @@ readable before its Lean details. The convention has one deliberately bounded
 pilot so far; it is not a claim of a library-wide rewrite.
 
 
-This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **783 kernel-checked theorems** across 67 semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
+This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **772 kernel-checked theorems** across 66 semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
 
 The formalization connects normalized stable-model semantics to candidate seeds, compositional reduct execution, lazy completion, consequence bounds, and completed search certificates. It supplies mathematical contracts for the Rust, wgpu, Rayon, and neuromorphic implementation work. It does not verify those implementations or make Lean a runtime dependency.
 
@@ -21,7 +21,7 @@ lake build
 lake env lean -DautoImplicit=false -DwarningAsError=true Audit.lean
 ```
 
-`lean-toolchain` pins `leanprover/lean4:v4.33.1`. The package has no remote dependencies, so the build itself needs no network once that toolchain exists. `lake build` compiles the umbrella module and all 67 semantic modules. `Audit.lean` requests the transitive axiom dependencies of every project theorem.
+`lean-toolchain` pins `leanprover/lean4:v4.33.1`. The package has no remote dependencies, so the build itself needs no network once that toolchain exists. `lake build` compiles the umbrella module and all 66 semantic modules. `Audit.lean` requests the transitive axiom dependencies of every project theorem.
 
 The [verification report](./verification.json) records the checked source hashes and commands. The [axiom audit](./axiom-audit.txt) contains only standard Lean logical axioms where needed: `propext`, `Quot.sound`, and `Classical.choice`. In particular, no theorem depends on `sorryAx` or `Lean.ofReduceBool`.
 
@@ -37,7 +37,6 @@ preserves an earlier inconsistent manifest and explains its repair.
 
 | Module | What is proved |
 |---|---|
-| [TightEvaluation](./Zetesis/TightEvaluation.lean) | Topological Boolean evaluation computes unfolded original truth; indexed producer OR reduction computes support; syntactic producer links, complete carrier and positive ranks compose with exact residual checking |
 | [AggregateDependencies](./Zetesis/AggregateDependencies.lean) | Complete dependent aggregate families retain each predecessor association and equality in original and frozen clause rows; complete carriers remain premises |
 | [BinaryWatch](./Zetesis/BinaryWatch.lean) | Two distinct binary watch positions exhaust every possible replacement position, independently of literal availability and inspection order |
 | [OuterNegativeConsumers](./Zetesis/OuterNegativeConsumers.lean) | Default/double-negative outer gates retain aggregate equality and activation in the frozen reduct; projected gates quantify over the complete supplied witness family |
@@ -486,22 +485,3 @@ unit/conflict decisions. Registry maintenance, candidate order, work charging,
 CNF encoding, reduct construction and executable refinement are not proved.
 Neither addition weakens the original-theory and frozen-reduct acceptance
 foundation or claims that the concrete solver is formally verified.
-
-## Boolean evaluation for ranked support
-
-`TightEvaluation` adds 11 laws connecting the actual topological Boolean fold to
-the existing unfolded formula representation. Root and indexed-body checks
-therefore compute original truth; producer-head OR reduction and complete
-present-atom scanning compute supportedness. Exact syntactic producer links,
-original producer membership and a positive rank connect those operations to
-ranked-support stability. Residuals still require exact completion against the
-original theory. The [worked reading](guide/tight-evaluation.md) separates the
-computed correspondence from the supplied compiler/certificate obligations.
-
-This reaches **783 theorems in 67 modules**, with all 772 prior theorem names,
-locations and axiom sets preserved and all 66 prior semantic module sources
-byte-identical. The [dated record](verification/tight-metal-20260908/README.md)
-contains the clean pinned build and complete axiom audit. Mathematical default
-values for invalid references do not establish runtime admission. Rust/WGSL
-lowering, atom representation, atomic operations, barriers, ordered witnesses,
-readback, resource limits and device execution remain unverified.

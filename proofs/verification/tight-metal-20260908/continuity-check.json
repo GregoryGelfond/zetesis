@@ -1,0 +1,106 @@
+{
+  "prior_theorems": 772,
+  "current_theorems": 783,
+  "prior_module_sources_byte_identical": true,
+  "prior_name_file_line_entries_unchanged": true,
+  "prior_transitive_axiom_sets_unchanged": true,
+  "added_theorems": [
+    {
+      "name": "Zetesis.TightEvaluation.body_value_true",
+      "file": "Zetesis/TightEvaluation.lean",
+      "line": 144
+    },
+    {
+      "name": "Zetesis.TightEvaluation.completed_computation_exact",
+      "file": "Zetesis/TightEvaluation.lean",
+      "line": 234
+    },
+    {
+      "name": "Zetesis.TightEvaluation.computed_verdict_sound",
+      "file": "Zetesis/TightEvaluation.lean",
+      "line": 218
+    },
+    {
+      "name": "Zetesis.TightEvaluation.formula_value_true",
+      "file": "Zetesis/TightEvaluation.lean",
+      "line": 44
+    },
+    {
+      "name": "Zetesis.TightEvaluation.head_support_append",
+      "file": "Zetesis/TightEvaluation.lean",
+      "line": 168
+    },
+    {
+      "name": "Zetesis.TightEvaluation.head_support_true",
+      "file": "Zetesis/TightEvaluation.lean",
+      "line": 175
+    },
+    {
+      "name": "Zetesis.TightEvaluation.node_value_decode",
+      "file": "Zetesis/TightEvaluation.lean",
+      "line": 71
+    },
+    {
+      "name": "Zetesis.TightEvaluation.roots_true_iff",
+      "file": "Zetesis/TightEvaluation.lean",
+      "line": 117
+    },
+    {
+      "name": "Zetesis.TightEvaluation.support_true_iff",
+      "file": "Zetesis/TightEvaluation.lean",
+      "line": 197
+    },
+    {
+      "name": "Zetesis.TightEvaluation.value_at",
+      "file": "Zetesis/TightEvaluation.lean",
+      "line": 106
+    },
+    {
+      "name": "Zetesis.TightEvaluation.values_correspond",
+      "file": "Zetesis/TightEvaluation.lean",
+      "line": 89
+    }
+  ],
+  "added_axioms": {
+    "Zetesis.TightEvaluation.body_value_true": [
+      "propext"
+    ],
+    "Zetesis.TightEvaluation.completed_computation_exact": [
+      "Classical.choice",
+      "Quot.sound",
+      "propext"
+    ],
+    "Zetesis.TightEvaluation.computed_verdict_sound": [
+      "Classical.choice",
+      "Quot.sound",
+      "propext"
+    ],
+    "Zetesis.TightEvaluation.formula_value_true": [
+      "propext"
+    ],
+    "Zetesis.TightEvaluation.head_support_append": [
+      "propext"
+    ],
+    "Zetesis.TightEvaluation.head_support_true": [
+      "Quot.sound",
+      "propext"
+    ],
+    "Zetesis.TightEvaluation.node_value_decode": [
+      "propext"
+    ],
+    "Zetesis.TightEvaluation.roots_true_iff": [
+      "Quot.sound",
+      "propext"
+    ],
+    "Zetesis.TightEvaluation.support_true_iff": [
+      "Quot.sound",
+      "propext"
+    ],
+    "Zetesis.TightEvaluation.value_at": [
+      "propext"
+    ],
+    "Zetesis.TightEvaluation.values_correspond": [
+      "propext"
+    ]
+  }
+}

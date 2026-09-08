@@ -12,7 +12,6 @@ and theorem hypotheses are authoritative; prose is a reading aid.
 | Why does least closure suffice for the normal-rule specialization? | [Semantics](../Zetesis/Semantics.lean), [Iteration](../Zetesis/Iteration.lean), then the normal/lifted bridge modules listed in the full map. |
 | When can grounding remain incomplete while work proceeds? | [LiftedBridge](../Zetesis/LiftedBridge.lean): sound intermediate stages and explicit final coverage premises for stable acceptance. |
 | What permits a cheaper exact membership check? | [TightPlans](../Zetesis/TightPlans.lean) and [CertifiedExecution](../Zetesis/CertifiedExecution.lean), with the [worked structured proof](certified-membership.md). |
-| How do Boolean tables and producer reductions implement that certificate? | [TightEvaluation](../Zetesis/TightEvaluation.lean) proves the finite evaluator and support correspondence; [reading the argument](tight-evaluation.md) separates computed truth from unproved device transport. |
 | What does complete batched enumeration require? | [BatchAccounting](../Zetesis/BatchAccounting.lean): proposal, pending work, exact classification and exhaustion under supplied coverage. |
 | Does publishing no answers establish UNSAT? | [Outcomes](../Zetesis/Outcomes.lean): completed semantic absence, sound delivery and a counterexample with no delivered records. |
 | How can candidate feedback preserve the original problem? | [Feedback](../Zetesis/Feedback.lean), [ObjectiveBounds](../Zetesis/ObjectiveBounds.lean) and [SignedObjectiveBounds](../Zetesis/SignedObjectiveBounds.lean). |

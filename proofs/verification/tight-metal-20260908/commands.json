@@ -1,0 +1,69 @@
+[
+  {
+    "command": [
+      "lake",
+      "env",
+      "lean",
+      "--version"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-08T15:12:40.106681+00:00",
+    "elapsed_seconds": 0.40417729085311294,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/tight-metal-20260908/version.log"
+  },
+  {
+    "command": [
+      "lake",
+      "clean"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-08T15:12:40.511402+00:00",
+    "elapsed_seconds": 0.3997558339033276,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/tight-metal-20260908/clean.log"
+  },
+  {
+    "command": [
+      "lake",
+      "build"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-08T15:12:40.911597+00:00",
+    "elapsed_seconds": 6.680641332874075,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/tight-metal-20260908/build.log"
+  },
+  {
+    "command": [
+      "sh",
+      "-c",
+      "for source in Zetesis/*.lean; do printf \"%s\\n\" \"$source\"; lake env lean -DautoImplicit=false -DwarningAsError=true \"$source\" || exit \"$?\"; done"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-08T15:12:47.592722+00:00",
+    "elapsed_seconds": 45.37268070806749,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/tight-metal-20260908/strict-modules.log"
+  },
+  {
+    "command": [
+      "lake",
+      "env",
+      "lean",
+      "-DautoImplicit=false",
+      "-DwarningAsError=true",
+      "Audit.lean"
+    ],
+    "cwd": "proofs",
+    "started_utc": "2026-09-08T15:13:32.966847+00:00",
+    "elapsed_seconds": 0.6418718330096453,
+    "exit_code": 0,
+    "result": "PASS",
+    "log": "verification/tight-metal-20260908/audit.log"
+  }
+]

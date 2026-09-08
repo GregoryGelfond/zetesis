@@ -64,4 +64,3 @@ import Zetesis.OuterNegativeConsumers
 import Zetesis.OuterRanges
 import Zetesis.AggregateDependencies
 import Zetesis.BinaryWatch
-import Zetesis.TightEvaluation

@@ -655,17 +655,6 @@ import Zetesis
 #print axioms Zetesis.Thresholds.threshold_bound_antitone
 #print axioms Zetesis.Thresholds.threshold_query_exact
 #print axioms Zetesis.Thresholds.threshold_sum_monotone
-#print axioms Zetesis.TightEvaluation.body_value_true
-#print axioms Zetesis.TightEvaluation.completed_computation_exact
-#print axioms Zetesis.TightEvaluation.computed_verdict_sound
-#print axioms Zetesis.TightEvaluation.formula_value_true
-#print axioms Zetesis.TightEvaluation.head_support_append
-#print axioms Zetesis.TightEvaluation.head_support_true
-#print axioms Zetesis.TightEvaluation.node_value_decode
-#print axioms Zetesis.TightEvaluation.roots_true_iff
-#print axioms Zetesis.TightEvaluation.support_true_iff
-#print axioms Zetesis.TightEvaluation.value_at
-#print axioms Zetesis.TightEvaluation.values_correspond
 #print axioms Zetesis.TightPlans.body_reduct_of_positive
 #print axioms Zetesis.TightPlans.negation_frozen
 #print axioms Zetesis.TightPlans.original_of_reduct
