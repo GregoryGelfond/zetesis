@@ -8,7 +8,7 @@ readable before its Lean details. The convention has one deliberately bounded
 pilot so far; it is not a claim of a library-wide rewrite.
 
 
-This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **748 kernel-checked theorems** across 61 semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
+This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **723 kernel-checked theorems** across fifty-seven semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
 
 The formalization connects normalized stable-model semantics to candidate seeds, compositional reduct execution, lazy completion, consequence bounds, and completed search certificates. It supplies mathematical contracts for the Rust, wgpu, Rayon, and neuromorphic implementation work. It does not verify those implementations or make Lean a runtime dependency.
 
@@ -21,7 +21,7 @@ lake build
 lake env lean -DautoImplicit=false -DwarningAsError=true Audit.lean
 ```
 
-`lean-toolchain` pins `leanprover/lean4:v4.33.1`. The package has no remote dependencies, so the build itself needs no network once that toolchain exists. `lake build` compiles the umbrella module and all 61 semantic modules. `Audit.lean` requests the transitive axiom dependencies of every project theorem.
+`lean-toolchain` pins `leanprover/lean4:v4.33.1`. The package has no remote dependencies, so the build itself needs no network once that toolchain exists. `lake build` compiles the umbrella module and all fifty-seven semantic modules. `Audit.lean` requests the transitive axiom dependencies of every project theorem.
 
 The [verification report](./verification.json) records the checked source hashes and commands. The [axiom audit](./axiom-audit.txt) contains only standard Lean logical axioms where needed: `propext`, `Quot.sound`, and `Classical.choice`. In particular, no theorem depends on `sorryAx` or `Lean.ofReduceBool`.
 
@@ -359,7 +359,7 @@ matcher rollback, Rust resource/cancellation behavior or physical execution.
 
 ## Aggregate bounds, evaluation storage and lazy rounds
 
-The [preceding audit](verification/aggregate-bounds-lazy-metal-20260907/README.md)
+The [current audit](verification/aggregate-bounds-lazy-metal-20260907/README.md)
 extends the library by 21 laws in four modules to **723 theorems in 57 semantic
 modules**. All 702 prior declaration locations, axiom sets and 53 prior semantic
 source files are unchanged. These modules develop fundamentals needed by the
@@ -399,27 +399,3 @@ completed round has the corresponding closed/exact interpretation only under
 fresh complete coverage. Previous-snapshot exhaustion does not certify a later
 snapshot. Rust traversal, atom-ID encoding, budgets, WGSL, readback and publication
 remain separate obligations. These laws provide no physical Metal qualification.
-
-## Completed consumers and compact execution
-
-The [current clean audit](verification/consumers-memory-20260908/README.md)
-adds 25 laws in four modules, reaching **748 theorems in 61 modules**. All 723
-previous declaration locations, axiom sets and 57 semantic module sources remain
-unchanged. This is a mathematical library supporting solver verification; the
-concrete Rust and WGSL implementations are not thereby verified.
-
-`ChoiceConsumers` preserves the original aggregate equality and whole-group
-activation around completed scalar filters and natural choice bounds. Complete
-proposal carriers and total evaluation are hypotheses. `NegativeEligibility`
-instantiates retained eligibility with negation and double negation, and gives a
-counterexample to replacing double negation with positive support. Neither module
-proves source scheduling, signed machine arithmetic, safety or tuple correspondence.
-
-`OptionalIndex` gives successor bounds, exact optional-index round trips and a
-commuting link replacement. Representability is explicit; Rust's layout, allocator,
-watch relocation and search charging remain outside the proof. `WorldMasks`
-relates positive-prefix intersections to per-world source coverage and exact
-consequences/constraints under an exhausted scan. It includes cross-world and stale
-snapshot counterexamples. Packed bits, concrete traversal, byte/work accounting
-and device execution remain unproved correspondences. These semantic foundations
-preserve the original theory and its reduct as the acceptance criterion.

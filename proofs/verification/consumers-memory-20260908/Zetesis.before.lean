@@ -55,7 +55,3 @@ import Zetesis.AggregateBounds
 import Zetesis.CountEligibility
 import Zetesis.EvaluationPrefix
 import Zetesis.LazyRounds
-import Zetesis.ChoiceConsumers
-import Zetesis.NegativeEligibility
-import Zetesis.OptionalIndex
-import Zetesis.WorldMasks

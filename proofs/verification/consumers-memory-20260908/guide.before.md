@@ -55,12 +55,3 @@ invariant beneath reusable expression storage. [LazyRounds](../Zetesis/LazyRound
 specifies fresh source coverage and separate world truth beneath shared device
 batches. Both are finite execution foundations. Their Rust memory, cursor and
 shader correspondences remain explicit work; neither supplies a device certificate.
-
-[ChoiceConsumers](../Zetesis/ChoiceConsumers.lean) and
-[NegativeEligibility](../Zetesis/NegativeEligibility.lean) specialize those source
-obligations to completed scalar filters and frozen negative eligibility.
-[OptionalIndex](../Zetesis/OptionalIndex.lean) provides a representation law for
-optional finite identities. [WorldMasks](../Zetesis/WorldMasks.lean) narrows source
-coverage to bindings enabled in some immutable world while retaining per-world
-truth checks. These are distinct proof layers: semantic coverage does not itself
-verify a packed representation or concrete source traversal.

@@ -81,12 +81,6 @@
 'Zetesis.CertifiedExecution.ranked_support_verdict_sound' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.CertifiedExecution.restricted_result_original' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.CertifiedExecution.unsupported_requires_completion' does not depend on any axioms
-'Zetesis.ChoiceConsumers.accepted_equivalent' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.ChoiceConsumers.covered_bounds' depends on axioms: [propext, Quot.sound]
-'Zetesis.ChoiceConsumers.equal_bounds_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.ChoiceConsumers.original_bounds' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.ChoiceConsumers.rejected_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.ChoiceConsumers.unrealized_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ChoiceIntervals.all_classical' depends on axioms: [propext, Quot.sound]
 'Zetesis.ChoiceIntervals.all_map_equivalent' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ChoiceIntervals.atLeast_classical' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -391,11 +385,6 @@
 'Zetesis.LiftedBridge.lazy_gamma_ground' depends on axioms: [propext, Quot.sound]
 'Zetesis.LiftedBridge.lazy_stage_sound' depends on axioms: [propext]
 'Zetesis.LiftedBridge.lifted_gamma_ground' depends on axioms: [propext, Quot.sound]
-'Zetesis.NegativeEligibility.double_negative_activity_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.NegativeEligibility.double_negative_gate_is_not_positive' depends on axioms: [propext,
- Classical.choice,
- Quot.sound]
-'Zetesis.NegativeEligibility.negative_activity_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.NegativeHeads.double_negative_literal_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.NegativeHeads.guarded_theory_preserves_stable_models' depends on axioms: [propext,
  Classical.choice,
@@ -448,13 +437,6 @@
 'Zetesis.Optimization.constant_on_stable_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Optimization.optimal_is_minimal_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Optimization.optimal_is_stable' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.OptionalIndex.absence_exact' depends on axioms: [propext, Quot.sound]
-'Zetesis.OptionalIndex.decode_encode' depends on axioms: [propext, Quot.sound]
-'Zetesis.OptionalIndex.encode_decode' depends on axioms: [propext, Quot.sound]
-'Zetesis.OptionalIndex.encode_injective' depends on axioms: [propext, Quot.sound]
-'Zetesis.OptionalIndex.optional_round_trip' depends on axioms: [propext, Quot.sound]
-'Zetesis.OptionalIndex.replacement_commutes' depends on axioms: [propext, Quot.sound]
-'Zetesis.OptionalIndex.successor_fits' depends on axioms: [propext, Quot.sound]
 'Zetesis.OrderedProbes.boundary_partitions' depends on axioms: [propext, Quot.sound]
 'Zetesis.OrderedProbes.complete_match_retained' depends on axioms: [propext, Quot.sound]
 'Zetesis.Outcomes.completed_unsatisfiable_iff_empty' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -737,15 +719,6 @@
 'Zetesis.ValueExtrema.selected_predicate' depends on axioms: [propext, Quot.sound]
 'Zetesis.ValueExtrema.witness_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ValueExtrema.witness_original' depends on axioms: [propext, Quot.sound]
-'Zetesis.WorldMasks.cross_world_union_has_no_common_witness' does not depend on any axioms
-'Zetesis.WorldMasks.empty_prefix_excludes_extension' depends on axioms: [propext, Quot.sound]
-'Zetesis.WorldMasks.masked_consequences_exact' depends on axioms: [propext, Quot.sound]
-'Zetesis.WorldMasks.masked_constraints_exact' depends on axioms: [propext, Quot.sound]
-'Zetesis.WorldMasks.masked_scan_covers_world' depends on axioms: [propext, Quot.sound]
-'Zetesis.WorldMasks.membership_append' depends on axioms: [propext, Quot.sound]
-'Zetesis.WorldMasks.membership_exact' depends on axioms: [propext, Quot.sound]
-'Zetesis.WorldMasks.membership_monotone' depends on axioms: [propext, Quot.sound]
-'Zetesis.WorldMasks.stale_membership_can_omit_current_truth' does not depend on any axioms
 'Zetesis.accepted_sample_does_not_exhaust_region' does not depend on any axioms
 'Zetesis.applyEvents_append' does not depend on any axioms
 'Zetesis.applyEvents_grows' does not depend on any axioms

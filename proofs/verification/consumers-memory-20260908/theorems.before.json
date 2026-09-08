@@ -415,36 +415,6 @@
     "line": 103
   },
   {
-    "name": "Zetesis.ChoiceConsumers.accepted_equivalent",
-    "file": "Zetesis/ChoiceConsumers.lean",
-    "line": 73
-  },
-  {
-    "name": "Zetesis.ChoiceConsumers.covered_bounds",
-    "file": "Zetesis/ChoiceConsumers.lean",
-    "line": 92
-  },
-  {
-    "name": "Zetesis.ChoiceConsumers.equal_bounds_frozen",
-    "file": "Zetesis/ChoiceConsumers.lean",
-    "line": 100
-  },
-  {
-    "name": "Zetesis.ChoiceConsumers.original_bounds",
-    "file": "Zetesis/ChoiceConsumers.lean",
-    "line": 32
-  },
-  {
-    "name": "Zetesis.ChoiceConsumers.rejected_frozen",
-    "file": "Zetesis/ChoiceConsumers.lean",
-    "line": 47
-  },
-  {
-    "name": "Zetesis.ChoiceConsumers.unrealized_frozen",
-    "file": "Zetesis/ChoiceConsumers.lean",
-    "line": 59
-  },
-  {
     "name": "Zetesis.ChoiceIntervals.all_classical",
     "file": "Zetesis/ChoiceIntervals.lean",
     "line": 317
@@ -1895,21 +1865,6 @@
     "line": 82
   },
   {
-    "name": "Zetesis.NegativeEligibility.double_negative_activity_frozen",
-    "file": "Zetesis/NegativeEligibility.lean",
-    "line": 38
-  },
-  {
-    "name": "Zetesis.NegativeEligibility.double_negative_gate_is_not_positive",
-    "file": "Zetesis/NegativeEligibility.lean",
-    "line": 52
-  },
-  {
-    "name": "Zetesis.NegativeEligibility.negative_activity_frozen",
-    "file": "Zetesis/NegativeEligibility.lean",
-    "line": 25
-  },
-  {
     "name": "Zetesis.NegativeHeads.double_negative_literal_reduct",
     "file": "Zetesis/NegativeHeads.lean",
     "line": 53
@@ -2108,41 +2063,6 @@
     "name": "Zetesis.Optimization.optimal_is_stable",
     "file": "Zetesis/Optimization.lean",
     "line": 79
-  },
-  {
-    "name": "Zetesis.OptionalIndex.absence_exact",
-    "file": "Zetesis/OptionalIndex.lean",
-    "line": 68
-  },
-  {
-    "name": "Zetesis.OptionalIndex.decode_encode",
-    "file": "Zetesis/OptionalIndex.lean",
-    "line": 40
-  },
-  {
-    "name": "Zetesis.OptionalIndex.encode_decode",
-    "file": "Zetesis/OptionalIndex.lean",
-    "line": 46
-  },
-  {
-    "name": "Zetesis.OptionalIndex.encode_injective",
-    "file": "Zetesis/OptionalIndex.lean",
-    "line": 55
-  },
-  {
-    "name": "Zetesis.OptionalIndex.optional_round_trip",
-    "file": "Zetesis/OptionalIndex.lean",
-    "line": 61
-  },
-  {
-    "name": "Zetesis.OptionalIndex.replacement_commutes",
-    "file": "Zetesis/OptionalIndex.lean",
-    "line": 78
-  },
-  {
-    "name": "Zetesis.OptionalIndex.successor_fits",
-    "file": "Zetesis/OptionalIndex.lean",
-    "line": 33
   },
   {
     "name": "Zetesis.OrderedProbes.boundary_partitions",
@@ -3443,51 +3363,6 @@
     "name": "Zetesis.ValueExtrema.witness_original",
     "file": "Zetesis/ValueExtrema.lean",
     "line": 122
-  },
-  {
-    "name": "Zetesis.WorldMasks.cross_world_union_has_no_common_witness",
-    "file": "Zetesis/WorldMasks.lean",
-    "line": 149
-  },
-  {
-    "name": "Zetesis.WorldMasks.empty_prefix_excludes_extension",
-    "file": "Zetesis/WorldMasks.lean",
-    "line": 86
-  },
-  {
-    "name": "Zetesis.WorldMasks.masked_consequences_exact",
-    "file": "Zetesis/WorldMasks.lean",
-    "line": 111
-  },
-  {
-    "name": "Zetesis.WorldMasks.masked_constraints_exact",
-    "file": "Zetesis/WorldMasks.lean",
-    "line": 124
-  },
-  {
-    "name": "Zetesis.WorldMasks.masked_scan_covers_world",
-    "file": "Zetesis/WorldMasks.lean",
-    "line": 97
-  },
-  {
-    "name": "Zetesis.WorldMasks.membership_append",
-    "file": "Zetesis/WorldMasks.lean",
-    "line": 58
-  },
-  {
-    "name": "Zetesis.WorldMasks.membership_exact",
-    "file": "Zetesis/WorldMasks.lean",
-    "line": 35
-  },
-  {
-    "name": "Zetesis.WorldMasks.membership_monotone",
-    "file": "Zetesis/WorldMasks.lean",
-    "line": 136
-  },
-  {
-    "name": "Zetesis.WorldMasks.stale_membership_can_omit_current_truth",
-    "file": "Zetesis/WorldMasks.lean",
-    "line": 166
   },
   {
     "name": "Zetesis.accepted_sample_does_not_exhaust_region",
