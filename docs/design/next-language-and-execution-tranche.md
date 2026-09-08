@@ -6,16 +6,20 @@ with reviewed evidence and artifact identities. This plan adds native
 aggregate primitives and a foundation-wide research exploration alongside the
 existing language, CPU, GPU and Vulkan work. It adds no performance evidence.
 
-Implementation is in progress. Scoped source and library gates have passed; final combined gates, coverage, frozen release comparisons, changed-path
-physical Metal qualification and remaining controlled measurements remain pending.
+Implementation and [integrated qualification](../verification/aggregate-primitives-tranche-20260908/README.md)
+are complete for this checkpoint. Combined gates, independent
+coverage floors, frozen release comparisons and 25 physical Metal tests pass.
+Controlled GPU measurements remain incomplete. The following
+[language-closure tranche](language-closure-tranche.md) prioritizes the remaining
+language obligations before a dedicated optimization and Lean-hardening tranche.
 
 | Tranche item | Current scope |
 | --- | --- |
 | [Nonbinding guards](../verification/nonbinding-guards-20260908/README.md) and [numeric min/max heads](../verification/extrema-heads-20260908/README.md) | Complete outer values remain consumers, and head permission stays separate from measured bounds under the existing tuple/head bijection. Full ordered-value head extrema remain outside this numeric slice. |
-| [Native CPU aggregates](../verification/native-aggregates-20260908/README.md) and [numeric GPU aggregates](../verification/native-aggregate-gpu-20260908/README.md) | Standalone complete-group original/frozen operations and portable controls; ordinary source/solver aggregate lowering remains Boolean. Actual eligibility acquisition is host work, and physical aggregate execution is unqualified. |
+| [Native CPU aggregates](../verification/native-aggregates-20260908/README.md) and [numeric GPU aggregates](../verification/native-aggregate-gpu-20260908/README.md) | Standalone complete-group original/frozen operations pass portable and frozen Metal controls; ordinary source/solver aggregate lowering remains Boolean. Actual eligibility acquisition is host work; Vulkan remains unqualified. |
 | [Source CountPlan](../verification/source-count-plans-20260908/README.md) | Optional closed source-to-partition bridge with a real pre-proposal consumer; original theory identity and reduct acceptance are preserved. Greedy discovery is incomplete and does not recognize queens02. |
 | [Numeric-prefix experiment](../verification/numeric-prefix-20260908/measurements/README.md) | Declined after controlled comparisons showed mixed effects and regressions. Evidence is retained; the specialization is not a retained optimization. Source arithmetic remains checked i32. |
-| [Selective lazy retention](../verification/lazy-transport-retention-20260908/README.md) and [Vulkan interfaces](../verification/vulkan-interfaces-20260908/README.md) | Portable ownership/resource and selection controls. Changed Metal transport and Linux hardware still require physical qualification; whole-solve Vulkan matrix profiles remain open. |
+| [Selective lazy retention](../verification/lazy-transport-retention-20260908/README.md) and [Vulkan interfaces](../verification/vulkan-interfaces-20260908/README.md) | Portable ownership/resource and selection controls plus passing changed-path Metal tests. Linux hardware qualification and whole-solve Vulkan matrix profiles remain open. |
 
 The [current Lean audit](../../proofs/verification/aggregate-ranges-20260908/README.md)
 checks 819 laws across 72 modules. It establishes scoped mathematical aggregate,
