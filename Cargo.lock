@@ -2012,6 +2012,7 @@ dependencies = [
  "rayon",
  "zetesis-cpu",
  "zetesis-ferraris",
+ "zetesis-themelios",
 ]
 
 [[package]]

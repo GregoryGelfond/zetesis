@@ -2,6 +2,9 @@ mod cursor;
 mod probe;
 mod quota;
 mod shared_budget;
+mod watch_node;
+
+use watch_node::WatchNode;
 
 pub(crate) use quota::{BoundedQuota, LocalQuota, Quota};
 pub(crate) use shared_budget::SharedBudget;
@@ -9,6 +12,14 @@ pub(crate) use shared_budget::SharedBudget;
 #[cfg(test)]
 #[path = "../tests/support/finish_contracts.rs"]
 mod finish_tests;
+
+#[cfg(test)]
+#[path = "../tests/support/watch_contracts.rs"]
+mod watch_tests;
+
+#[cfg(test)]
+#[path = "../tests/support/watch_traces.rs"]
+mod watch_traces;
 
 pub(crate) use cursor::Cursor;
 
@@ -157,8 +168,8 @@ struct State {
     positions: Vec<[usize; 2]>,
     // Intrusive watch lists use exactly two nodes per clause. Moving a watch
     // neither allocates nor grows historical per-literal list capacities.
-    heads: Vec<Option<usize>>,
-    next: Vec<Option<usize>>,
+    heads: Vec<Option<WatchNode>>,
+    next: Vec<Option<WatchNode>>,
 }
 
 impl State {
@@ -193,8 +204,8 @@ impl State {
         self.values[literal.variable()].map(|value| value == literal.positive())
     }
 
-    fn link(&mut self, node: usize, literal: Literal) {
-        self.next[node] = self.heads[literal.index()];
+    fn link(&mut self, node: WatchNode, literal: Literal) {
+        self.next[node.index()] = self.heads[literal.index()];
         self.heads[literal.index()] = Some(node);
     }
 
@@ -218,8 +229,12 @@ impl State {
                 }
                 _ => {
                     self.positions[clause] = [0, 1];
-                    self.link(clause * 2, cnf.clauses()[clause][0]);
-                    self.link(clause * 2 + 1, cnf.clauses()[clause][1]);
+                    // CNF admission bounds twice the submitted clause count.
+                    // Thus both node indices and their successors fit usize.
+                    let first = WatchNode::new(clause * 2)?;
+                    let second = WatchNode::new(clause * 2 + 1)?;
+                    self.link(first, cnf.clauses()[clause][0]);
+                    self.link(second, cnf.clauses()[clause][1]);
                 }
             }
         }
@@ -235,19 +250,19 @@ impl State {
             budget.tick()?;
             let false_literal = self.trail[self.propagation_head].negated();
             self.propagation_head += 1;
-            let mut previous = None;
+            let mut previous: Option<WatchNode> = None;
             let mut cursor = self.heads[false_literal.index()];
             while let Some(node) = cursor {
                 budget.tick()?;
-                let following = self.next[node];
-                let clause = node / 2;
-                let slot = node % 2;
+                let following = self.next[node.index()];
+                let clause = node.index() / 2;
+                let slot = node.index() % 2;
                 let other_position = self.positions[clause][1 - slot];
                 let other = cnf.clauses()[clause][other_position];
                 if self.value(other) != Some(true) {
                     if let Some(position) = self.replacement(cnf, clause, slot, budget)? {
                         if let Some(prior) = previous {
-                            self.next[prior] = following;
+                            self.next[prior.index()] = following;
                         } else {
                             self.heads[false_literal.index()] = following;
                         }
@@ -406,7 +421,7 @@ pub(crate) fn scratch_bytes(variables: u128, clauses: u128) -> u128 {
                 + size_of::<Decision>()
                 + 4 * size_of::<usize>()
                 + size_of::<u64>()
-                + 2 * size_of::<Option<usize>>()
+                + 2 * size_of::<Option<WatchNode>>()
                 + size_of::<bool>()) as u128
-        + clauses * (size_of::<[usize; 2]>() + 2 * size_of::<Option<usize>>()) as u128
+        + clauses * (size_of::<[usize; 2]>() + 2 * size_of::<Option<WatchNode>>()) as u128
 }
