@@ -3,8 +3,9 @@
 //! The CPU source coordinator offers instances from the union snapshot. The
 //! kernel independently checks each world's positives and frozen gates and
 //! derives its head delta. No completed CPU closure or complete ground graph is
-//! uploaded. Transport is deliberately transient per chunk; residency and an
-//! automatic performance policy require later measurement.
+//! uploaded. One batch reuses bounded transport capacity across chunks/rounds;
+//! every active input and output is refreshed before each dispatch. Automatic
+//! performance selection remains a separate policy.
 
 use std::borrow::Cow;
 use std::time::Duration;
@@ -14,6 +15,12 @@ use zetesis_cpu::{Control, lazy};
 
 use crate::runtime::{self, DeviceProfile, ErrorScopes, Runtime};
 use crate::{GpuError, GpuErrorKind, GpuInfo, GpuLimits, GpuOptions, GpuSelection};
+
+mod plan;
+mod transport;
+
+use plan::{Capacity, Plan};
+use transport::Transport;
 
 const SHADER: &str = include_str!("lazy.wgsl");
 const DIMENSION_WORDS: usize = 4;
@@ -33,13 +40,21 @@ pub struct LazyGpuStatistics {
     pub uploaded_bytes: u64,
     /// Successfully decoded readback bytes.
     pub downloaded_bytes: u64,
+    /// Submitted chunks that requested a new complete set of transport buffers.
+    /// This counts allocation requests, including a later device failure.
+    pub transport_allocations: u64,
+    /// Submitted chunks using capacity from an earlier chunk of this batch.
+    pub transport_reuses: u64,
+    /// Largest requested GPU buffer payload for a submitted chunk, including
+    /// retained inactive capacity. Excludes host payload and driver allocations.
+    pub peak_transport_bytes: u64,
     /// Completed host time waiting for submissions and decoding readback.
     pub host_wait: Duration,
 }
 
 /// Physical-device executor for the admitted relational lazy source profile.
 /// It owns the existing shared wgpu lifecycle and retains no cross-batch atoms,
-/// snapshots, completed closures or instance chunks.
+/// snapshots, completed closures, instance chunks or transport buffers.
 pub struct GpuLazyOracle {
     runtime: Runtime,
     statistics: LazyGpuStatistics,
@@ -86,8 +101,10 @@ impl GpuLazyOracle {
     /// Check the exact seed occurrences using host source joins and useful
     /// per-world device consequences. Source limits are shared across the batch;
     /// transport limits apply to every nonempty chunk. `max_batch_bytes` counts
-    /// all current GPU buffers plus host packing and decoded words; coordinator
-    /// storage is separately bounded by `source_limits.max_host_bytes`.
+    /// all retained GPU buffer capacities plus active host packing and decoded
+    /// words; coordinator storage is separately bounded by
+    /// `source_limits.max_host_bytes`. Buffers are dropped before replacement and
+    /// on every batch exit; driver-private deferred retirement is not counted.
     ///
     /// # Errors
     /// Returns no completed check on interrupted source coverage, capacity,
@@ -133,9 +150,10 @@ impl GpuLazyOracle {
         control: &Control,
     ) -> Result<lazy::Batch, lazy::Failure<GpuError>> {
         self.statistics = LazyGpuStatistics::default();
+        let mut transport = None;
         let result =
             lazy::check_with_source(program, seeds, source_limits, selection, control, |chunk| {
-                self.execute(chunk, limits, control)
+                self.execute(chunk, limits, control, &mut transport)
             });
         if matches!(
             &result,
@@ -161,6 +179,7 @@ impl GpuLazyOracle {
         chunk: &lazy::Chunk<'_>,
         limits: GpuLimits,
         control: &Control,
+        transport: &mut Option<Transport>,
     ) -> Result<Vec<u32>, GpuError> {
         self.runtime.check_health()?;
         let mut plan = Plan::new(chunk, limits, &self.runtime.limits)?;
@@ -170,8 +189,14 @@ impl GpuLazyOracle {
         plan.epoch = epoch;
         self.epoch = epoch;
         let scopes = ErrorScopes::new(&self.runtime.device);
-        let outcome = self.dispatch(chunk, limits, &plan, control);
-        self.runtime.complete(scopes, outcome)
+        let outcome = self.dispatch(chunk, limits, &plan, control, transport);
+        let result = self.runtime.complete(scopes, outcome);
+        if result.is_err() {
+            // A failed or interrupted read can still have live device work.
+            // The invalidated runtime must never reuse its mapped storage.
+            *transport = None;
+        }
+        result
     }
 
     fn dispatch(
@@ -180,24 +205,24 @@ impl GpuLazyOracle {
         limits: GpuLimits,
         plan: &Plan,
         control: &Control,
+        cached: &mut Option<Transport>,
     ) -> Result<Vec<u32>, GpuError> {
         let device = &self.runtime.device;
-        let transport = Transport::new(&self.runtime, chunk, plan);
-        let counters = self.statistics.submitted(plan)?;
-        let submission = runtime::submit(
-            device,
-            &self.runtime.queue,
-            &runtime::Dispatch {
-                command_label: "lazy source consequence command",
-                pass_label: "lazy world consequences",
-                pipeline: &self.runtime.pipeline,
-                group: &transport.group,
-                worlds: plan.dimensions[2],
-                result: &transport.output,
-                readback: &transport.readback,
-                result_bytes: plan.result_bytes,
-            },
-        );
+        let retained = cached
+            .as_ref()
+            .map(|transport| transport.capacity)
+            .filter(|capacity| capacity.reusable(plan, limits.max_batch_bytes));
+        let capacity = retained.unwrap_or(plan.capacity);
+        let counters = self
+            .statistics
+            .submitted(plan, retained.is_some(), capacity)?;
+        if retained.is_none() {
+            // Drop bindings and all old buffers before allocating replacements;
+            // active shapes alone never admit an oversized retained allocation.
+            *cached = None;
+        }
+        let transport = cached.get_or_insert_with(|| Transport::new(&self.runtime, capacity));
+        let submission = transport.submit(&self.runtime, chunk, plan);
         self.statistics = counters;
         let start = std::time::Instant::now();
         let result = runtime::read_polled(
@@ -231,98 +256,8 @@ impl GpuLazyOracle {
     }
 }
 
-struct Plan {
-    dimensions: [u32; DIMENSION_WORDS],
-    result_words: usize,
-    result_bytes: u64,
-    uploaded_bytes: u64,
-    epoch: u32,
-}
-
-struct Transport {
-    group: wgpu::BindGroup,
-    output: wgpu::Buffer,
-    readback: wgpu::Buffer,
-}
-
-impl Transport {
-    fn new(runtime: &Runtime, chunk: &lazy::Chunk<'_>, plan: &Plan) -> Self {
-        let device = &runtime.device;
-        let uniform = runtime::initialized(
-            device,
-            "lazy dimensions",
-            &[
-                plan.dimensions[0],
-                plan.dimensions[1],
-                plan.dimensions[2],
-                plan.dimensions[3],
-                plan.epoch,
-                0,
-                0,
-                0,
-            ],
-            wgpu::BufferUsages::UNIFORM,
-        );
-        let offsets = runtime::initialized(
-            device,
-            "lazy source offsets",
-            chunk.offsets(),
-            wgpu::BufferUsages::STORAGE,
-        );
-        let records = runtime::initialized(
-            device,
-            "lazy source instances",
-            chunk.records(),
-            wgpu::BufferUsages::STORAGE,
-        );
-        let snapshots = runtime::initialized(
-            device,
-            "lazy immutable snapshots",
-            chunk.snapshots(),
-            wgpu::BufferUsages::STORAGE,
-        );
-        let seeds = runtime::initialized(
-            device,
-            "lazy frozen seeds",
-            chunk.seeds(),
-            wgpu::BufferUsages::STORAGE,
-        );
-        // WebGPU guarantees fresh buffer contents are zero initialized. The bind
-        // group retains its input buffers after these local handles are dropped.
-        let output = runtime::buffer(
-            device,
-            "lazy head delta",
-            plan.result_bytes,
-            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
-        );
-        let readback = runtime::buffer(
-            device,
-            "lazy delta readback",
-            plan.result_bytes,
-            wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-        );
-        let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("lazy round chunk"),
-            layout: &runtime.pipeline.get_bind_group_layout(0),
-            entries: &[
-                runtime::entry(0, &uniform),
-                runtime::entry(1, &offsets),
-                runtime::entry(2, &records),
-                runtime::entry(3, &snapshots),
-                runtime::entry(4, &seeds),
-                runtime::entry(5, &output),
-            ],
-        });
-        Self {
-            group,
-            output,
-            readback,
-        }
-    }
-}
-
 impl LazyGpuStatistics {
-    fn submitted(self, plan: &Plan) -> Result<Self, GpuError> {
+    fn submitted(self, plan: &Plan, reused: bool, storage: Capacity) -> Result<Self, GpuError> {
         let capacity = || GpuError::new(GpuErrorKind::Capacity, "lazy submission counter overflow");
         Ok(Self {
             dispatches: self.dispatches.checked_add(1).ok_or_else(capacity)?,
@@ -334,126 +269,19 @@ impl LazyGpuStatistics {
                 .uploaded_bytes
                 .checked_add(plan.uploaded_bytes)
                 .ok_or_else(capacity)?,
+            transport_allocations: self
+                .transport_allocations
+                .checked_add(u64::from(!reused))
+                .ok_or_else(capacity)?,
+            transport_reuses: self
+                .transport_reuses
+                .checked_add(u64::from(reused))
+                .ok_or_else(capacity)?,
+            peak_transport_bytes: self
+                .peak_transport_bytes
+                .max(storage.bytes().ok_or_else(capacity)?),
             ..self
         })
-    }
-}
-
-impl Plan {
-    fn new(
-        chunk: &lazy::Chunk<'_>,
-        limits: GpuLimits,
-        device: &wgpu::Limits,
-    ) -> Result<Self, GpuError> {
-        let capacity = || {
-            GpuError::new(
-                GpuErrorKind::Capacity,
-                "lazy chunk exceeds checked host/device dimensions",
-            )
-        };
-        let dimensions = [
-            chunk.words(),
-            chunk.offsets().len(),
-            chunk.worlds(),
-            chunk.catalog_atoms(),
-        ]
-        .map(u32::try_from);
-        let [words, rules, candidates, atoms] = dimensions;
-        let dimensions = [
-            words.map_err(|_| capacity())?,
-            rules.map_err(|_| capacity())?,
-            candidates.map_err(|_| capacity())?,
-            atoms.map_err(|_| capacity())?,
-        ];
-        u32::try_from(chunk.records().len()).map_err(|_| capacity())?;
-        dimensions[1]
-            .checked_add(crate::WORKGROUP_SIZE)
-            .ok_or_else(capacity)?;
-        if chunk.worlds() > limits.max_candidates
-            || dimensions[2] > device.max_compute_workgroups_per_dimension
-        {
-            return Err(capacity());
-        }
-        let result_words = chunk
-            .words()
-            .checked_add(RESULT_METADATA_WORDS)
-            .and_then(|n| n.checked_mul(chunk.worlds()))
-            .ok_or_else(capacity)?;
-        u32::try_from(result_words).map_err(|_| capacity())?;
-        let bytes = |count: usize| {
-            u64::try_from(count)
-                .ok()
-                .and_then(|n| n.checked_mul(4))
-                .ok_or_else(capacity)
-        };
-        let result_bytes = bytes(result_words)?;
-        let sizes = [
-            bytes(chunk.offsets().len())?,
-            bytes(chunk.records().len())?,
-            bytes(chunk.snapshots().len())?,
-            bytes(chunk.seeds().len())?,
-            result_bytes,
-        ];
-        for size in sizes {
-            if size > device.max_storage_buffer_binding_size || size > device.max_buffer_size {
-                return Err(capacity());
-            }
-        }
-        if UNIFORM_BYTES > device.max_uniform_buffer_binding_size
-            || UNIFORM_BYTES > device.max_buffer_size
-        {
-            return Err(capacity());
-        }
-        if limits.timeout.is_zero() {
-            return Err(capacity());
-        }
-        let uploaded_bytes = sizes[..4]
-            .iter()
-            .try_fold(UNIFORM_BYTES, |sum, size| sum.checked_add(*size))
-            .ok_or_else(capacity)?;
-        // GPU input/output/readback, host input packing and decoded output.
-        let accounted = uploaded_bytes
-            .checked_mul(2)
-            .and_then(|n| result_bytes.checked_mul(3).and_then(|r| n.checked_add(r)))
-            .ok_or_else(capacity)?;
-        if accounted > limits.max_batch_bytes {
-            return Err(capacity());
-        }
-        Ok(Self {
-            dimensions,
-            result_words,
-            result_bytes,
-            uploaded_bytes,
-            epoch: 1,
-        })
-    }
-
-    fn decode(&self, words: &[u32]) -> Result<Vec<u32>, GpuError> {
-        let malformed = || {
-            GpuError::new(
-                GpuErrorKind::Readback,
-                "lazy delta shape or submission/world identity mismatch",
-            )
-        };
-        if words.len() != self.result_words {
-            return Err(malformed());
-        }
-        let width = self.dimensions[0] as usize;
-        let mut decoded = Vec::new();
-        let decoded_words = (width + 1) * self.dimensions[2] as usize;
-        decoded
-            .try_reserve_exact(decoded_words)
-            .map_err(|error| GpuError::new(GpuErrorKind::Allocation, error.to_string()))?;
-        for (world, record) in words
-            .chunks_exact(width + RESULT_METADATA_WORDS)
-            .enumerate()
-        {
-            if record[width + 1] as usize != world || record[width + 2] != self.epoch {
-                return Err(malformed());
-            }
-            decoded.extend_from_slice(&record[..=width]);
-        }
-        Ok(decoded)
     }
 }
 
@@ -463,7 +291,7 @@ mod tests {
     use zetesis_core::{AdmissionLimits, AtomPattern, Predicate, Program, Seed, Template};
     use zetesis_cpu::{Control, lazy};
 
-    fn inspect(mut assertion: impl FnMut(&lazy::Chunk<'_>)) {
+    pub(super) fn inspect(mut assertion: impl FnMut(&lazy::Chunk<'_>)) {
         let a = AtomPattern::new(Predicate::new("a", 0).unwrap(), vec![]).unwrap();
         let program = Program::new(
             vec![Template::new(Some(a), vec![], vec![], vec![], vec![])],
@@ -574,7 +402,10 @@ mod tests {
                 },
             ] {
                 assert_eq!(
-                    statistics.submitted(&plan).unwrap_err().kind(),
+                    statistics
+                        .submitted(&plan, false, plan.capacity)
+                        .unwrap_err()
+                        .kind(),
                     GpuErrorKind::Capacity
                 );
             }
@@ -678,3 +509,7 @@ mod tests {
         assert_eq!(module.entry_points[0].workgroup_size, [64, 1, 1]);
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/lazy/transport.rs"]
+mod transport_tests;

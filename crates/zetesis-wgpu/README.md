@@ -62,6 +62,31 @@ This establishes device execution and correctness for those cases, without a
 performance or release-binary claim. The static-profile description below retains
 its narrower scope.
 
+The current lazy host path reuses transport buffers within one candidate batch.
+Each chunk overwrites its active uniform, offsets, records, snapshots and frozen
+seeds, then clears the output before executing the unchanged shader. Input
+capacity can exceed the current chunk; result/readback shapes remain exact.
+Catalog word-stride growth replaces the complete buffer set. Admission counts
+retained capacities, and an oversized cache is dropped before a smaller fresh
+allocation under the same limit. Every batch exit releases the buffers; execution
+or readback failure also permanently invalidates the device executor.
+`LazyGpuStatistics` separates submitted allocation requests, reuse counts and
+peak requested GPU buffer bytes from active upload and successful readback bytes.
+These are authored payload/accounting observations, not RSS or bus-traffic data.
+
+This transport change requires fresh physical qualification; prior executable
+records do not qualify it. The three ignored `metal_lazy_transport` library tests
+cover reused round truth through shrinking chunks and catalog growth, exact
+preflight refusals and cancellation during a submitted read. Existing
+`hardware_lazy` tests also check allocation/reuse accounting and source-mask
+isolation. Portable capacity/sequence tests establish neither hardware execution
+nor a performance improvement:
+
+```sh
+cargo test --locked -p zetesis-wgpu --lib metal_lazy_transport -- --ignored --nocapture
+cargo test --locked -p zetesis-wgpu --test hardware_lazy -- --ignored --nocapture
+```
+
 One 64-invocation workgroup owns one frozen candidate and its 4096-atom maximum
 closure. Worlds share immutable rules, antecedent lists, and gate-carrier bits.
 Each world starts from the empty positive interpretation. Integer seed gates

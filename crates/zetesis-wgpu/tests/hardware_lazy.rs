@@ -55,6 +55,11 @@ fn compare(oracle: &mut GpuLazyOracle, program: &Program, seeds: &[Seed], limits
     assert!(work.world_instances > 0);
     assert!(work.uploaded_bytes > 0);
     assert!(work.downloaded_bytes > 0);
+    assert_eq!(
+        work.dispatches,
+        work.transport_allocations + work.transport_reuses
+    );
+    assert!(work.peak_transport_bytes > 0);
     eprintln!(
         "adapter={} rounds={} catalog={} instances={} dispatches={} world_instances={} uploaded={} downloaded={} wait_ns={}",
         oracle.info().name(),
@@ -308,6 +313,11 @@ fn metal_source_selections_preserve_each_frozen_closure() {
             assert_eq!(submitted.world_instances, batch.progress.instances * 33);
             assert!(submitted.uploaded_bytes > 0);
             assert!(submitted.downloaded_bytes > 0);
+            assert!(submitted.transport_reuses > 0);
+            assert_eq!(
+                submitted.dispatches,
+                submitted.transport_allocations + submitted.transport_reuses
+            );
             assert_eq!(
                 batch.progress.pruned_prefixes > 0,
                 selection == lazy::SourceSelection::Worlds
