@@ -261,6 +261,11 @@ fn lazy(sink: &mut impl Write, stats: &crate::LazyExecutionStatistics) -> io::Re
         stats.uploaded_bytes,
         stats.downloaded_bytes,
         stats.host_wait.as_secs_f64() * 1000.0
+    )?;
+    writeln!(
+        sink,
+        "  lazy transport: buffer sets allocated={}; reused chunks={}; peak requested device bytes={} (RSS unmeasured)",
+        stats.transport_allocations, stats.transport_reuses, stats.peak_transport_bytes
     )
 }
 

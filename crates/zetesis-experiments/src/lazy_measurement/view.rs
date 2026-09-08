@@ -71,7 +71,8 @@ impl From<lazy::Progress> for SourceWork {
     }
 }
 
-/// Actual submitted Metal work; bytes are transfer quantities, not live residency.
+/// Actual submitted Metal work; transfers and retained buffer capacity are
+/// separate quantities. Neither measures driver storage or process RSS.
 #[derive(Clone, Copy, Debug, Serialize)]
 pub struct DeviceWork {
     /// Successfully submitted nonempty chunks.
@@ -82,6 +83,12 @@ pub struct DeviceWork {
     pub uploaded_bytes: u64,
     /// Successfully decoded readback bytes.
     pub downloaded_bytes: u64,
+    /// Submitted chunks requesting a fresh complete set of transport buffers.
+    pub transport_allocations: u64,
+    /// Submitted chunks reusing capacity from an earlier chunk of the batch.
+    pub transport_reuses: u64,
+    /// Maximum requested GPU buffer payload, including inactive capacity.
+    pub peak_transport_bytes: u64,
     /// Host submission/readback wait, not a shader timestamp.
     pub host_wait_ns: u128,
 }
@@ -93,6 +100,9 @@ impl From<LazyGpuStatistics> for DeviceWork {
             world_instances: statistics.world_instances,
             uploaded_bytes: statistics.uploaded_bytes,
             downloaded_bytes: statistics.downloaded_bytes,
+            transport_allocations: statistics.transport_allocations,
+            transport_reuses: statistics.transport_reuses,
+            peak_transport_bytes: statistics.peak_transport_bytes,
             host_wait_ns: statistics.host_wait.as_nanos(),
         }
     }

@@ -77,7 +77,7 @@ fn missing_checks_fail_parity() {
 }
 
 #[test]
-fn forged_device_counters_cannot_qualify_work() {
+fn inconsistent_device_counters_refuse_qualification() {
     let progress = lazy::Progress {
         chunks: 3,
         instances: 5,
@@ -88,6 +88,9 @@ fn forged_device_counters_cannot_qualify_work() {
         world_instances: 10,
         uploaded_bytes: 64,
         downloaded_bytes: 48,
+        transport_allocations: 1,
+        transport_reuses: 2,
+        peak_transport_bytes: 256,
         ..Default::default()
     };
     verify_device_work(actual, progress, 2).unwrap();
@@ -110,6 +113,22 @@ fn forged_device_counters_cannot_qualify_work() {
         },
         zetesis_wgpu::LazyGpuStatistics {
             downloaded_bytes: 0,
+            ..actual
+        },
+        zetesis_wgpu::LazyGpuStatistics {
+            transport_allocations: 0,
+            ..actual
+        },
+        zetesis_wgpu::LazyGpuStatistics {
+            transport_reuses: 0,
+            ..actual
+        },
+        zetesis_wgpu::LazyGpuStatistics {
+            transport_reuses: u64::MAX,
+            ..actual
+        },
+        zetesis_wgpu::LazyGpuStatistics {
+            peak_transport_bytes: 0,
             ..actual
         },
     ] {
@@ -146,18 +165,28 @@ fn forged_device_counters_cannot_qualify_work() {
 }
 
 #[test]
-fn device_observations_retain_host_wait_units() {
+fn device_observations_preserve_recorded_units() {
     let work = view::DeviceWork::from(zetesis_wgpu::LazyGpuStatistics {
         dispatches: 2,
         world_instances: 3,
         uploaded_bytes: 4,
         downloaded_bytes: 5,
+        transport_allocations: 1,
+        transport_reuses: 1,
+        peak_transport_bytes: 256,
         host_wait: std::time::Duration::from_nanos(6),
     });
     assert_eq!(
         serde_json::to_value(work).unwrap(),
         serde_json::json!({
-            "dispatches": 2, "world_instances": 3, "uploaded_bytes": 4, "downloaded_bytes": 5, "host_wait_ns": 6
+            "dispatches": 2,
+            "world_instances": 3,
+            "uploaded_bytes": 4,
+            "downloaded_bytes": 5,
+            "transport_allocations": 1,
+            "transport_reuses": 1,
+            "peak_transport_bytes": 256,
+            "host_wait_ns": 6
         })
     );
 }

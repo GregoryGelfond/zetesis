@@ -338,6 +338,12 @@ fn verify_device_work(
         || Some(statistics.world_instances) != world_instances
         || statistics.uploaded_bytes == 0
         || statistics.downloaded_bytes == 0
+        || statistics.transport_allocations == 0
+        || statistics.peak_transport_bytes == 0
+        || statistics
+            .transport_allocations
+            .checked_add(statistics.transport_reuses)
+            != Some(statistics.dispatches)
     {
         return Err(Error::DeviceWork);
     }

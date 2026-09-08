@@ -20,6 +20,9 @@ pub(crate) fn fixture() -> LazyExecutionStatistics {
         world_instances: 19,
         uploaded_bytes: 67,
         downloaded_bytes: 23,
+        transport_allocations: 2,
+        transport_reuses: 3,
+        peak_transport_bytes: 1024,
         host_wait: std::time::Duration::from_nanos(123),
     }
 }
@@ -62,6 +65,9 @@ fn failed_batches_retain_submitted_work() {
                 world_instances: 9,
                 uploaded_bytes: 11,
                 downloaded_bytes: 7,
+                transport_allocations: 1,
+                transport_reuses: 1,
+                peak_transport_bytes: 2048,
                 host_wait: std::time::Duration::from_nanos(9),
             },
         )
@@ -79,7 +85,55 @@ fn failed_batches_retain_submitted_work() {
     assert_eq!(stats.peak_catalog_atoms, 66);
     assert_eq!((stats.dispatches, stats.world_instances), (7, 28));
     assert_eq!((stats.uploaded_bytes, stats.downloaded_bytes), (78, 30));
+    assert_eq!(
+        (stats.transport_allocations, stats.transport_reuses),
+        (3, 4)
+    );
+    assert_eq!(stats.peak_transport_bytes, 2048);
     assert_eq!(stats.host_wait.as_nanos(), 132);
+}
+
+#[cfg(feature = "gpu")]
+#[test]
+fn transport_peak_is_the_largest_attempted_batch() {
+    let mut stats = fixture();
+    for (peak, expected) in [(512, 1024), (2048, 2048), (1024, 2048)] {
+        stats
+            .record(
+                1,
+                true,
+                zetesis_cpu::lazy::Progress::default(),
+                zetesis_wgpu::LazyGpuStatistics {
+                    peak_transport_bytes: peak,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(stats.peak_transport_bytes, expected);
+    }
+}
+
+#[cfg(feature = "gpu")]
+#[test]
+fn transport_overflow_preserves_the_previous_record() {
+    for (allocations, reuses) in [(u64::MAX, 0), (0, u64::MAX)] {
+        let mut stats = fixture();
+        let before = stats.clone();
+        let error = stats
+            .record(
+                1,
+                true,
+                zetesis_cpu::lazy::Progress::default(),
+                zetesis_wgpu::LazyGpuStatistics {
+                    transport_allocations: allocations,
+                    transport_reuses: reuses,
+                    ..Default::default()
+                },
+            )
+            .unwrap_err();
+        assert!(matches!(error, crate::RunError::LazyStatisticsOverflow));
+        assert_eq!(stats, before);
+    }
 }
 
 #[cfg(feature = "gpu")]

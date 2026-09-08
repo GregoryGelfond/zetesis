@@ -38,6 +38,13 @@ pub struct LazyExecutionStatistics {
     pub uploaded_bytes: u64,
     /// Successfully decoded result bytes.
     pub downloaded_bytes: u64,
+    /// Submitted chunks requesting a new complete transport buffer set.
+    pub transport_allocations: u64,
+    /// Submitted chunks reusing capacity within the same source batch.
+    pub transport_reuses: u64,
+    /// Maximum requested device buffer payload, including inactive capacity.
+    /// This excludes host payload, driver storage and process RSS.
+    pub peak_transport_bytes: u64,
     /// Host wait plus readback decoding; this is not a kernel-only timer.
     pub host_wait: std::time::Duration,
 }
@@ -69,6 +76,9 @@ impl LazyExecutionStatistics {
             world_instances: 0,
             uploaded_bytes: 0,
             downloaded_bytes: 0,
+            transport_allocations: 0,
+            transport_reuses: 0,
+            peak_transport_bytes: 0,
             host_wait: std::time::Duration::ZERO,
         }
     }
@@ -106,6 +116,9 @@ impl LazyExecutionStatistics {
             world_instances: add(self.world_instances, device.world_instances)?,
             uploaded_bytes: add(self.uploaded_bytes, device.uploaded_bytes)?,
             downloaded_bytes: add(self.downloaded_bytes, device.downloaded_bytes)?,
+            transport_allocations: add(self.transport_allocations, device.transport_allocations)?,
+            transport_reuses: add(self.transport_reuses, device.transport_reuses)?,
+            peak_transport_bytes: self.peak_transport_bytes.max(device.peak_transport_bytes),
             host_wait: self
                 .host_wait
                 .checked_add(device.host_wait)

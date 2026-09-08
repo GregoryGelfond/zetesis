@@ -712,6 +712,9 @@ fn lazy_statistics(
     out.number_field("world_instances", stats.world_instances)?;
     out.number_field("uploaded_bytes", stats.uploaded_bytes)?;
     out.number_field("downloaded_bytes", stats.downloaded_bytes)?;
+    out.number_field("transport_allocations", stats.transport_allocations)?;
+    out.number_field("transport_reuses", stats.transport_reuses)?;
+    out.number_field("peak_transport_bytes", stats.peak_transport_bytes)?;
     out.number_field("host_wait_ns", stats.host_wait.as_nanos())?;
     out.text("}")
 }
@@ -733,6 +736,9 @@ mod lazy_tests {
         assert_eq!(value["completed_candidates"], 4);
         assert_eq!(value["stopped_candidates"], 3);
         assert_eq!(value["queued_results"], 2);
+        assert_eq!(value["transport_allocations"], 2);
+        assert_eq!(value["transport_reuses"], 3);
+        assert_eq!(value["peak_transport_bytes"], 1024);
         assert_eq!(value["host_wait_ns"], 123);
     }
 
