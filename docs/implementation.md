@@ -145,6 +145,16 @@ and all charged counters. Completion scratch estimates use the actual stored
 type. The [watch-storage record](verification/watch-storage-20260908/README.md)
 measures these arrays; it makes no whole-solver memory, RSS or runtime claim.
 
+Binary clauses now bypass replacement scanning: their two distinct watches
+already cover every position. The paid watch visit, unit/conflict decision and
+longer-clause scan remain unchanged. This removes two charged no-op position
+checks per binary attempt without adding storage or changing candidate order.
+The [controlled CPU comparison](verification/binary-propagation-20260908/README.md)
+retains all 612 observations: queens02 and task allocation improve within that
+scope; SEND is flat. Work ceilings count the operations actually performed, so
+the same numeric ceiling can now reach a later search point. The scoped Lean
+laws assume valid distinct watches; they do not establish the Rust registry.
+
 ## Candidate generation and laziness
 
 An admitted program keeps its finite value domain and predicate signatures

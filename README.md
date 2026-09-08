@@ -185,10 +185,10 @@ syntax, raising and evaluation errors from zetesis implementation refusals.
 |---|---|
 | Normal rules | Safe finite rules, constraints, default/double negation, strong negation with coherence, and relational lazy checking in the admitted normal-rule profile. |
 | Formula rules | Bounded choices, signed singleton/disjunctive heads, finite rule/head pools, evaluated heads, scalar/range bindings, comparisons and admitted universal body conditionals. |
-| Aggregates | Body count/sum/sum+ and complete-value min/max comparisons; independent assignments feeding scalar/tuple filters, scalar equalities, evaluated positive arguments and heads, default/double-negated outer atoms and admitted projections, finite outer ranges and integer choice bounds; function-count heads with positive, default-negated or double-negated eligibility and checked tuple/atom correspondence. |
+| Aggregates | Body count/sum/sum+ and complete-value min/max comparisons; acyclic dependent assignments feeding scalar/tuple filters, scalar equalities, evaluated positive arguments and heads, default/double-negated outer atoms and admitted projections, finite outer ranges and integer choice bounds; function-count heads with positive, default-negated or double-negated eligibility and checked tuple/atom correspondence. |
 | Logical values | Closed signed functions and tuples; finite construction from bound inputs; positive tuple/function patterns, including local conditional-consequent witnesses; evaluated positive arguments with independently bound inputs; evaluated already-safe negative arguments. |
 | Objectives and observations | Admitted minimize/maximize/weak constraints; complete tuple keys and optimal ties; signature, term and conditional `#show`; `#defined`; original include bundles and constants. |
-| Refusal boundaries | Dependencies between aggregate assignment generators, including through scalar/range descendants; remaining conditional consumers; weighted/extremal function heads and nontrivial conditional disjuncts; unsupported objective-dependent producers; broader directives and exact clingo undefined-arithmetic behavior remain incomplete. |
+| Refusal boundaries | Cyclic or self-dependent assignment generators; remaining conditional consumers; weighted/extremal function heads and nontrivial conditional disjuncts; unsupported objective-dependent producers; broader directives and exact clingo undefined-arithmetic behavior remain incomplete. |
 
 These rows summarize profiles; they are not a grammar specification. The
 [source API guide](crates/zetesis-themelios/README.md) describes composition,
@@ -207,7 +207,7 @@ the rule applies. Similarly, `{d}.q(K):-N=#count{1:d},K=1..N.` has the empty
 answer set and `{d,q(1)}`. Each generated row retains the original aggregate
 equality and rule activation; a proposed value never certifies aggregate truth.
 
-The [current local checkpoint](docs/verification/consumer-execution-tranche-20260908/README.md)
+The [preceding qualified local checkpoint](docs/verification/consumer-execution-tranche-20260908/README.md)
 passes **1,837 workspace test/doc checks**, **315 CPU-only CLI checks** and
 **61 external-oracle tests**. Both independent line-coverage profiles exceed their
 unchanged 91% floors: **91.1626% workspace / 92.2291% CPU-only CLI**. The frozen
@@ -254,6 +254,15 @@ this checkpoint or a general solver ranking. A separate SEND `--stats` observati
 measures grounding at **17.90 ms** and solving at **15.38 ms**; these are not phase
 medians. Wall timings include process startup, output and capture. Peak RSS,
 lazy/GPU comparisons and the full corpus matrix remain unmeasured.
+
+A subsequent [controlled propagation comparison](docs/verification/binary-propagation-20260908/README.md)
+isolates omission of empty binary-clause replacement scans. Across 42 timed
+native observations per variant, queens02 falls from **98.26 to 92.80 ms** and
+task allocation from **130.05 to 126.38 ms**; SEND is flat at **39.54 / 39.60 ms**.
+All 612 solve observations pass. The ABBA order, full distributions and reference
+drift are retained; this establishes neither a general speedup nor a memory or
+GPU improvement. These source-controlled populations are distinct from the
+preceding workload comparison and must not be combined as one timing series.
 
 The [compact-trail experiment](docs/verification/trail-storage-20260908/README.md)
 was declined: its small storage saving did not establish a reliable runtime
