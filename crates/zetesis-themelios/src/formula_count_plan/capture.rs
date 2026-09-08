@@ -16,7 +16,7 @@ use super::{
 /// atom indices below retain exactly that catalog meaning, never a tuple value.
 pub(crate) struct Input<'a> {
     pub body: usize,
-    pub eligible: &'a BTreeMap<usize, (Option<i32>, usize)>,
+    pub eligible: &'a BTreeMap<usize, usize>,
     pub tuple_keys: BTreeMap<Atom, Vec<Value>>,
     pub nodes: &'a [Node],
     pub atoms: &'a [Atom],
@@ -109,7 +109,7 @@ impl Collector {
         // Complete eligibility is inspected before allocating optional descriptors
         // or copying origins. Existing validated keys are transferred, never
         // reconstructed. Possible support is not an eligibility truth certificate.
-        for &(_, condition) in input.eligible.values() {
+        for &condition in input.eligible.values() {
             self.work.charge(1)?;
             if condition != 1 {
                 return Ok(());

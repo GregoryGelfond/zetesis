@@ -343,7 +343,7 @@ fn profile(error: &FormulaFailure, expected: ProfileFeature) -> bool {
 }
 
 #[test]
-fn mismatched_tuple_atom_aliases_fail_before_any_admitted_theory() {
+fn count_aliases_admit_complete_groups() {
     for source in [
         "1#count{1:a;1:b}1.",
         "1#count{1:a;2:a}1.",
@@ -356,12 +356,7 @@ fn mismatched_tuple_atom_aliases_fail_before_any_admitted_theory() {
         "1#count{1:a:b;1:d:c}1.b.c:-b.",
         "d(1).d(2).1#count{X:a:d(X)}1.",
     ] {
-        let error = input(source).expect_err(source);
-        assert!(
-            profile(&error, ProfileFeature::HeadAggregateAlias),
-            "{source}: {error}"
-        );
-        assert!(!error.diagnostics().is_empty());
+        assert!(input(source).is_ok(), "{source}");
     }
 }
 

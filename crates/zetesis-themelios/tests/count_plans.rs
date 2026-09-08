@@ -531,7 +531,7 @@ fn source_order_preserves_partition_models() {
 }
 
 #[test]
-fn whole_tuple_aliases_keep_the_original_refusal() {
+fn count_aliases_do_not_certify_atom_partitions() {
     for source in ["1#count{same:a;same:b}1.", "1#count{x:a;y:a}1."] {
         let prepare = || {
             prepare_formula(
@@ -542,22 +542,14 @@ fn whole_tuple_aliases_keep_the_original_refusal() {
             )
             .unwrap()
         };
-        let original = prepare().ground().unwrap_err();
+        let original = prepare().ground().unwrap();
         let planned = prepare()
             .ground_with_count_plan(CountPlanLimits::default(), &Control::default(), None)
-            .unwrap_err();
-        assert!(matches!(
-            &planned,
-            zetesis_themelios::FormulaFailure::Expansion(
-                zetesis_themelios::ExpansionFailure::Admission(
-                    zetesis_themelios::AdmissionFailure::Profile {
-                        feature: zetesis_themelios::ProfileFeature::HeadAggregateAlias,
-                        ..
-                    }
-                )
-            )
-        ));
-        assert_eq!(planned.diagnostics(), original.diagnostics());
+            .unwrap();
+        assert!(matches!(planned.count_plan(), CountPlanStatus::NoPlan(_)));
+        assert_eq!(planned.theory().nodes(), original.theory().nodes());
+        assert_eq!(planned.theory().roots(), original.theory().roots());
+        assert_eq!(native(&planned), native(&original));
     }
 }
 

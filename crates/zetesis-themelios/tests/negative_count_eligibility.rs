@@ -8,9 +8,8 @@ use std::collections::BTreeSet;
 use reference::{Models, atom_text, exhaustive, external, holds, native, values};
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
-    admit_formula,
+    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(139);
@@ -232,29 +231,13 @@ fn double_negation_cannot_be_replaced_by_positive_truth() {
 }
 
 #[test]
-fn negative_conditions_cannot_hide_count_aliases() {
+fn negative_conditions_keep_alias_activity() {
     for source in [
         "{b}.1#count{1:a:b;1:c:not b}1.",
         "{b}.1#count{1:a:not b;2:a:not not b}1.",
     ] {
-        let error = admit_formula(
-            source.into(),
-            options(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_err();
-        assert!(
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                    feature: ProfileFeature::HeadAggregateAlias,
-                    ..
-                }))
-            ),
-            "{source}: {error}"
-        );
-        assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+        let admitted = input(source);
+        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
     }
 }
 

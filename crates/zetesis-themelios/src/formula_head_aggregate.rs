@@ -1,7 +1,7 @@
 //! Finite numeric aggregate heads retain separate permission and measure.
-//! A complete tuple/atom correspondence check precedes support or final lowering.
-//! Neither bounds nor tuple weights supply bindings or support; both alias
-//! directions remain explicit profile refusals.
+//! Complete tuple validation precedes support or final lowering. Count permits
+//! either tuple/atom alias direction; measured heads retain their checked
+//! bijection profile. Neither bounds nor tuple weights supply bindings or support.
 //! Positive conditions enumerate possible eligibility; default-negated gates
 //! consume established bindings. Choice lowering retains every eligibility
 //! formula. Support-table membership is never interpreted as truth.
@@ -92,6 +92,9 @@ impl Compiler<'_> {
 /// Validate the entire instantiated group before the caller derives any support
 /// or publishes a formula. The immutable completed support/binding is replayed
 /// afterwards through the ordinary choice path. Both passes charge their work.
+/// A present map certifies the stronger tuple/atom bijection used by optional
+/// count planning. Nonbijective count groups are valid and return no certificate;
+/// an ordinary choice has implicit atom keys and returns a present empty map.
 pub(super) fn validate_group(
     group: &ChoiceIr,
     assignment: &[Value],
@@ -100,7 +103,7 @@ pub(super) fn validate_group(
     budget: &mut Budget,
     counters: &mut Counters,
     location: Location,
-) -> Result<BTreeMap<Atom, Vec<Value>>, FormulaFailure> {
+) -> Result<Option<BTreeMap<Atom, Vec<Value>>>, FormulaFailure> {
     let ChoiceIr {
         measure, elements, ..
     } = group;
@@ -119,10 +122,11 @@ pub(super) fn validate_group(
         if *measure != HeadMeasure::Count && !elements.is_empty() {
             return Err(unsupported(ProfileFeature::HeadAggregateAlias, location).into());
         }
-        return Ok(BTreeMap::new());
+        return Ok(Some(BTreeMap::new()));
     }
     let mut tuples = BTreeMap::<Vec<Value>, Atom>::new();
     let mut atoms = BTreeMap::<Atom, Vec<Value>>::new();
+    let mut bijective = true;
     for element in elements {
         let terms = element.tuple.as_ref().expect("uniform tuple group checked");
         let mut local = Join::new(
@@ -173,7 +177,10 @@ pub(super) fn validate_group(
             if tuples.get(&tuple).is_some_and(|previous| *previous != atom)
                 || atoms.get(&atom).is_some_and(|previous| *previous != tuple)
             {
-                return Err(unsupported(ProfileFeature::HeadAggregateAlias, location).into());
+                if *measure != HeadMeasure::Count {
+                    return Err(unsupported(ProfileFeature::HeadAggregateAlias, location).into());
+                }
+                bijective = false;
             }
             if !tuples.contains_key(&tuple) {
                 ceiling(
@@ -183,11 +190,13 @@ pub(super) fn validate_group(
                     location,
                 )?;
                 tuples.insert(tuple.clone(), atom.clone());
-                atoms.insert(atom, tuple);
             }
+            atoms.entry(atom).or_insert(tuple);
         }
     }
-    Ok(atoms)
+    // This optional certificate is consumed only by CountPlan. Ordinary count
+    // semantics use the complete tuple activities even without a bijection.
+    Ok(bijective.then_some(atoms))
 }
 
 /// Numeric contribution is independent of permission to select the head.

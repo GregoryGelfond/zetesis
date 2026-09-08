@@ -15,7 +15,7 @@ use zetesis_ferraris::{
 use crate::expansion::Budget;
 use crate::formula::{Compiled, ceiling};
 use crate::formula_ir::{
-    AggregateGuard, AggregateIr, AggregateKey, ChoiceIr, HeadIr, HeadMeasure, LiteralIr,
+    AggregateGuard, AggregateIr, AggregateKey, ChoiceIr, Element, HeadIr, HeadMeasure, LiteralIr,
     ObjectiveIr, Prepared, Projection, RuleIr, value_bytes,
 };
 use crate::formula_support::{self, Counters, Join, Support};
@@ -602,14 +602,13 @@ impl Builder<'_> {
             rule.location,
         )?;
         let keys = if self.count_plan.is_some() && *measure == HeadMeasure::Count {
-            Some(keys)
+            keys
         } else {
             drop(keys);
             None
         };
-        let eligible = self.choice_eligibility(group, assignment, support, rule)?;
-        let retaining =
-            self.count_plan.is_some() && *measure == HeadMeasure::Count && !guards.is_empty();
+        let HeadGroup { eligible, activity } = self.head_group(group, assignment, support, rule)?;
+        let retaining = keys.is_some() && !guards.is_empty();
         let mut count_bounds =
             retaining.then(|| crate::formula_count_plan::Bounds::new(eligible.len()));
         let kind = match measure {
@@ -623,18 +622,22 @@ impl Builder<'_> {
             drop(keys);
             (eligible, None)
         };
-        let selected = if let Some((eligible, _)) = &retained {
+        if let Some((eligible, _)) = &retained {
             self.choice_permissions(
                 eligible.iter().map(|(&head, &entry)| (head, entry)),
                 body,
                 rule,
-                kind,
-                !guards.is_empty(),
-            )?
+            )?;
         } else {
-            self.choice_permissions(ordinary.into_iter(), body, rule, kind, !guards.is_empty())?
-        };
+            self.choice_permissions(ordinary.into_iter(), body, rule)?;
+        }
         if !guards.is_empty() {
+            let mut selected = HeadContributions::new(kind);
+            for (weight, condition) in activity.into_values() {
+                if let Some(weight) = weight {
+                    selected.push(weight, condition);
+                }
+            }
             let within = self.aggregate_guards_with_capture(
                 &selected.finish(),
                 guards,
@@ -668,17 +671,17 @@ impl Builder<'_> {
         }
         Ok(())
     }
-    fn choice_eligibility(
+    fn head_group(
         &mut self,
         group: &ChoiceIr,
         assignment: &[Value],
         support: &Support,
         rule: &RuleIr,
-    ) -> Result<HeadEligibility, FormulaFailure> {
+    ) -> Result<HeadGroup, FormulaFailure> {
         let ChoiceIr {
             measure, elements, ..
         } = group;
-        let mut eligible = BTreeMap::new();
+        let mut result = HeadGroup::default();
         for element in elements {
             let mut local = Join::new(
                 &element.condition,
@@ -693,59 +696,94 @@ impl Builder<'_> {
             {
                 let condition = self.body(&element.condition, &binding, rule.location, support)?;
                 let head = self.atom(&element.head, &binding, rule.location)?;
-                let first = element
-                    .tuple
-                    .as_ref()
-                    .and_then(|terms| terms.first())
-                    .map(|term| {
-                        term.resolve(&binding)
-                            .expect("safe aggregate weight assigned")
-                    });
-                let weight = crate::formula_head_aggregate::weight(*measure, first, rule.location)?;
-                let previous = eligible.get(&head).map_or(0, |(_, condition)| *condition);
-                // Complete tuple/atom validation already fixes one weight per
-                // head. Duplicate eligibility still coalesces only by OR.
-                eligible.insert(head, (weight, self.or(previous, condition, rule.location)?));
+                let previous = result.eligible.get(&head).copied().unwrap_or(0);
+                result
+                    .eligible
+                    .insert(head, self.or(previous, condition, rule.location)?);
+                if !group.guards.is_empty() {
+                    let key = self.head_key(element, &binding, head, rule.location)?;
+                    let first = match &key {
+                        HeadKey::Tuple(tuple) => tuple.first(),
+                        HeadKey::Atom(_) => None,
+                    };
+                    let weight =
+                        crate::formula_head_aggregate::weight(*measure, first, rule.location)?;
+                    let previous = result.activity.get(&key).map_or(0, |(_, node)| *node);
+                    if !result.activity.contains_key(&key) {
+                        ceiling(
+                            FormulaResource::AggregateElements,
+                            result.activity.len() as u128 + 1,
+                            self.limits.aggregate.max_elements as u128,
+                            rule.location,
+                        )?;
+                    }
+                    let selected = self.and(head, condition, rule.location)?;
+                    let activity = self.or(previous, selected, rule.location)?;
+                    result.activity.insert(key, (weight, activity));
+                }
             }
         }
-        Ok(eligible)
+        Ok(result)
+    }
+
+    fn head_key(
+        &mut self,
+        element: &Element,
+        assignment: &[Value],
+        head: usize,
+        location: Location,
+    ) -> Result<HeadKey, FormulaFailure> {
+        let Some(terms) = &element.tuple else {
+            return Ok(HeadKey::Atom(head));
+        };
+        let mut tuple = Vec::new();
+        for term in terms {
+            self.work(location)?;
+            let value = term.resolve(assignment).expect("safe head tuple assigned");
+            self.budget.charge(
+                ExpansionResource::ScalarBytes,
+                size_of::<Value>() as u128 + value_bytes(value),
+                location,
+            )?;
+            tuple.push(value.clone());
+        }
+        Ok(HeadKey::Tuple(tuple))
     }
 
     fn choice_permissions(
         &mut self,
-        eligible: impl Iterator<Item = (usize, (Option<i32>, usize))>,
+        eligible: impl Iterator<Item = (usize, usize)>,
         body: usize,
         rule: &RuleIr,
-        kind: Option<AggregateExtremum>,
-        measured: bool,
-    ) -> Result<HeadContributions, FormulaFailure> {
-        let mut selected = HeadContributions::new(kind);
-        for (head, (weight, condition)) in eligible {
+    ) -> Result<(), FormulaFailure> {
+        for (head, condition) in eligible {
             let antecedent = self.and(body, condition, rule.location)?;
             let negative = self.neg(head, rule.location)?;
             let choice = self.or(head, negative, rule.location)?;
             let support = self.node(Node::Implies(antecedent, choice), rule.location)?;
             self.root(support, rule)?;
             self.producer(head, antecedent, rule)?;
-            if measured && let Some(weight) = weight {
-                ceiling(
-                    FormulaResource::AggregateElements,
-                    selected.len() as u128 + 1,
-                    self.limits.aggregate.max_elements as u128,
-                    rule.location,
-                )?;
-                selected.push(weight, self.and(condition, head, rule.location)?);
-            }
         }
-        Ok(selected)
+        Ok(())
     }
 }
 
-/// Distinct head-node identities with fixed measure and coalesced eligibility.
-type HeadEligibility = BTreeMap<usize, (Option<i32>, usize)>;
+/// Permission coalesces by head atom; measure activity coalesces independently
+/// by the complete tuple. An ordinary choice uses its atom as the implicit key.
+#[derive(Default)]
+struct HeadGroup {
+    eligible: BTreeMap<usize, usize>,
+    activity: BTreeMap<HeadKey, (Option<i32>, usize)>,
+}
 
-/// One storage family for head contributions. Each entry retains the conjunction
-/// of its head and eligibility formulas; no candidate truth is assumed here.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+enum HeadKey {
+    Tuple(Vec<Value>),
+    Atom(usize),
+}
+
+/// One storage family for coalesced tuple contributions. Each entry retains
+/// every selected eligible witness; no candidate truth is assumed here.
 enum HeadContributions {
     Numeric(Vec<AggregateElement>),
     Extrema(Vec<ValueExtremumElement>),
@@ -757,13 +795,6 @@ impl HeadContributions {
             Self::Extrema(Vec::new())
         } else {
             Self::Numeric(Vec::new())
-        }
-    }
-
-    fn len(&self) -> usize {
-        match self {
-            Self::Numeric(elements) => elements.len(),
-            Self::Extrema(elements) => elements.len(),
         }
     }
 

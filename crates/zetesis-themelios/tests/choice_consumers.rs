@@ -223,11 +223,13 @@ fn dependent_objective_observers_remain_refused() {
 }
 
 #[test]
-fn count_aliases_are_checked_per_completed_group() {
+fn count_aliases_consume_completed_outer_bindings() {
     for elements in ["1:a;1:b", "1:a;2:a", "1:a:b;2:a:c"] {
-        assert_profile(
-            &format!("{{b;c}}.Y#count{{{elements}}}Y:-N=#count{{}},Y=N+1."),
-            ProfileFeature::HeadAggregateAlias,
+        let source = format!("{{b;c}}.Y#count{{{elements}}}Y:-N=#count{{}},Y=N+1.");
+        assert_eq!(
+            native(&input(&source)),
+            native(&input(&format!("{{b;c}}.1#count{{{elements}}}1."))),
+            "{source}"
         );
     }
 }
