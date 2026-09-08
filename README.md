@@ -151,8 +151,9 @@ zetesis devices
 The [Linux/Vulkan qualification plan](docs/design/linux-vulkan-qualification.md)
 covers a second reported Fedora 44/Radeon 780M machine and a single transferable
 report archive. Vulkan execution is available through explicit selection, but
-that machine has not yet been qualified; repeated benchmark interfaces still
-need an explicit Vulkan route.
+that machine has not yet been qualified. The working tranche adds explicit
+Vulkan selection to the primitive benchmark interfaces; the repeated whole-solve
+matrix still needs Vulkan profiles and telemetry qualification.
 
 The [grounder comparison](docs/design/grounding-compared-with-clingo.md) explains
 how zetesis's eager and lazy routes differ from clingo's grounder, including
@@ -171,7 +172,7 @@ Metal has been physically qualified on an Apple M4 Pro for the recorded builds.
 The static closure oracle uses a bounded ground graph; general formula execution
 batches GPU propagation and exact CPU residual completion. Source loading,
 parsing, materialization, candidate generation and objective work still run on
-the host. The current [17 physical Metal regressions](docs/verification/language-execution-tranche-20260908/README.md)
+the host. The last promoted build's [17 physical Metal regressions](docs/verification/language-execution-tranche-20260908/README.md)
 pass for frozen instrumented executables, covering lazy transport reuse, complete
 closures, tight support, ordinary solving and admitted weighted heads. They retain
 limits and output-failure accounting. These tests establish neither release
@@ -208,6 +209,11 @@ records the broader target. [Numeric semantics](docs/design/numeric-semantics.md
 explains endpoint guards and why an internal refusal does not by itself establish
 a modeling error. Undefined or overflowing admitted arithmetic currently produces
 an explicit refusal rather than reproducing all of clingo's simplifications.
+Source values and arithmetic remain checked `i32`. The new native CPU aggregate
+primitive separately accumulates checked `i128` results; it does not widen source
+terms. Its GPU numeric profile admits only carriers whose intermediate sums fit
+its checked `i32` range. Unsupported device representation is a capability
+failure, not a new source-language refusal.
 
 Completed outer values feed [negative consumers](docs/verification/outer-negative-consumers-20260908/README.md)
 and [finite dependent ranges](docs/verification/outer-ranges-20260908/README.md)
@@ -245,15 +251,28 @@ has mixed results; it does not establish a general GPU speedup.
 The [current Lean audit](proofs/verification/aggregate-ranges-20260908/README.md)
 checks **819 laws across 72 modules**; Rust and WGSL correspondence remains unproved.
 
-The next tranche has integrated [completed-value aggregate guards](docs/verification/nonbinding-guards-20260908/README.md):
-46 originals matched 88 complete clingo models, with 7,312 frozen interpretation
-pairs checked separately. [Numeric min/max heads](docs/verification/extrema-heads-20260908/README.md)
-add 51 originals matching 94 complete clingo models and 5,439 frozen pairs;
-guards retain ASP term order and genuine empty extrema. The first tuple values
-remain numeric under the documented endpoint profile. The
-[partition experiment](docs/design/partition-consequences.md)
-derives candidate bounds from supplied premises; automatic source recognition
-and performance qualification remain open. The full tranche is still in development.
+The working tranche has integrated the following scoped changes. These are not
+yet the installed/main baseline; final combined gates, coverage, physical Metal
+qualification, release comparisons and remaining controlled measurements remain pending.
+
+| Working-tranche capability | Boundary and evidence |
+|---|---|
+| Completed-value aggregate guards and numeric min/max heads | [Guard checks](docs/verification/nonbinding-guards-20260908/README.md) retain 46 originals / 88 complete models / 7,312 frozen pairs; [extrema heads](docs/verification/extrema-heads-20260908/README.md) retain 51 originals / 94 models / 5,439 frozen pairs. Tuple/head bijection, original eligibility and numeric endpoint limits remain. |
+| Native aggregate operations | The [CPU library](docs/verification/native-aggregates-20260908/README.md) and [numeric GPU primitive](docs/verification/native-aggregate-gpu-20260908/README.md) compute count, sum, sum+, min and max over complete tuple eligibility. Ordinary solving still uses Boolean aggregate lowering; GPU mask acquisition remains on the host, and device qualification is pending. |
+| Source count consequences | An opt-in [CountPlan](docs/verification/source-count-plans-20260908/README.md) derives guarded partition bounds for candidate generation while preserving the original reduct subject. Its 10 originals match 53 complete clingo models. Greedy discovery can miss a cover; `NoPlan` does not prove that no consequence exists. It does not recognize queens02's body-count/pairwise encoding. |
+| Transport execution | [Selective lazy input retention](docs/verification/lazy-transport-retention-20260908/README.md) has portable ownership/resource controls; changed-device qualification and controlled comparisons remain pending. |
+
+The [numeric-prefix experiment](docs/verification/numeric-prefix-20260908/measurements/README.md)
+was declined after controlled comparisons showed mixed effects and regressions;
+it is not a retained optimization. Its qualification and measurement evidence
+remain available. Source arithmetic still uses the existing checked evaluator.
+
+These operations preserve the reduct foundation. A native aggregate result is
+neither a source-completeness certificate nor an answer set; a count restriction
+cannot provide logical support. The source planner initially requires canonical
+true element eligibility, not merely an atom known as a domain fact. The
+[partition design](docs/design/partition-consequences.md) separates this bounded
+source bridge from its earlier manually supplied queens experiment.
 
 A standalone [tight-support Metal experiment](docs/design/metal-tight-support.md)
 now applies the CPU class certificate through a bounded GPU checker. Its matched
@@ -263,7 +282,7 @@ pass on Apple M4 Pro. [Matched measurements](docs/verification/tight-metal-exper
 now show that residency helps, but this primitive remains slower than scalar and
 Rayon checking in all 18 tested case medians. Those measurements retain their
 earlier experimental binary identity; ordinary backend selection is unchanged.
-The [next tranche proposal](docs/design/next-language-and-execution-tranche.md)
+The [tranche plan and progress](docs/design/next-language-and-execution-tranche.md)
 prioritizes the remaining admitted-language gaps, with native aggregate
 primitives, bounded CPU/GPU experiments, Linux qualification and a broader
 foundation research survey alongside them.

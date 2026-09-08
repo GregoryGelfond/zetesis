@@ -1,4 +1,4 @@
-# Proposed next language and execution tranche
+# Language and execution tranche: plan and progress
 
 The [completed checkpoint](../verification/language-execution-tranche-20260908/README.md)
 at `1dc167beda8549681957cdc34c1cfae8e35043c4` records the baseline,
@@ -6,16 +6,22 @@ with reviewed evidence and artifact identities. This plan adds native
 aggregate primitives and a foundation-wide research exploration alongside the
 existing language, CPU, GPU and Vulkan work. It adds no performance evidence.
 
-Implementation is in progress. Completed-value nonbinding guards, checked lazy
-transport replacement observations, conditional partition planning and the
-aggregate/capacity Lean laws and numeric min/max heads are implemented. The
-[guard record](../verification/nonbinding-guards-20260908/README.md) and
-[partition experiment](partition-consequences.md) state their bounded evidence.
-The [extrema-head record](../verification/extrema-heads-20260908/README.md) covers
-numeric first values under the existing tuple/head bijection. Native aggregate
-execution, physical Vulkan qualification and final
-integrated gates remain in progress. The acceptance criteria below still govern
-those deliverables; this progress note is not a release qualification.
+Implementation is in progress. Scoped source and library gates have passed; final combined gates, coverage, frozen release comparisons, changed-path
+physical Metal qualification and remaining controlled measurements remain pending.
+
+| Tranche item | Current scope |
+| --- | --- |
+| [Nonbinding guards](../verification/nonbinding-guards-20260908/README.md) and [numeric min/max heads](../verification/extrema-heads-20260908/README.md) | Complete outer values remain consumers, and head permission stays separate from measured bounds under the existing tuple/head bijection. Full ordered-value head extrema remain outside this numeric slice. |
+| [Native CPU aggregates](../verification/native-aggregates-20260908/README.md) and [numeric GPU aggregates](../verification/native-aggregate-gpu-20260908/README.md) | Standalone complete-group original/frozen operations and portable controls; ordinary source/solver aggregate lowering remains Boolean. Actual eligibility acquisition is host work, and physical aggregate execution is unqualified. |
+| [Source CountPlan](../verification/source-count-plans-20260908/README.md) | Optional closed source-to-partition bridge with a real pre-proposal consumer; original theory identity and reduct acceptance are preserved. Greedy discovery is incomplete and does not recognize queens02. |
+| [Numeric-prefix experiment](../verification/numeric-prefix-20260908/measurements/README.md) | Declined after controlled comparisons showed mixed effects and regressions. Evidence is retained; the specialization is not a retained optimization. Source arithmetic remains checked i32. |
+| [Selective lazy retention](../verification/lazy-transport-retention-20260908/README.md) and [Vulkan interfaces](../verification/vulkan-interfaces-20260908/README.md) | Portable ownership/resource and selection controls. Changed Metal transport and Linux hardware still require physical qualification; whole-solve Vulkan matrix profiles remain open. |
+
+The [current Lean audit](../../proofs/verification/aggregate-ranges-20260908/README.md)
+checks 819 laws across 72 modules. It establishes scoped mathematical aggregate,
+partition and signed-range results, not Rust/WGSL or source-compiler refinement.
+The acceptance criteria below still govern each deliverable; this progress note
+is not a release qualification or new performance evidence.
 
 Accepted-language gaps take priority. CPU and GPU work proceed concurrently as
 bounded, general operations whose applicability and costs are explicit. The
@@ -37,8 +43,8 @@ Independent changes retain separate proof and measurement scopes.
 
 ## 1. Close the next two language gaps
 
-**Completed-value nonbinding aggregate guards** are the smallest continuation of
-the current assignment planner. For example,
+**Completed-value nonbinding aggregate guards** are integrated as the first
+continuation of the assignment planner. For example,
 `q(M):-N=#count{},M=#sum{N},M<=#count{}.` reached the explicit
 `AggregateAssignment` refusal at the starting checkpoint. The new consumer reads the completed row;
 it must not become a second producer of `M`. Preserve every original equality,
@@ -54,11 +60,12 @@ AggregateConsumers and AggregateDependencies supply composition lemmas; complete
 carrier enumeration, scheduler/cursor correspondence and Rust refinement remain
 separate obligations.
 
-**Min/max heads under the existing tuple/head bijection** follow next. Retain all
+**Numeric min/max heads under the existing tuple/head bijection** are integrated
+as the second language slice. Retain all
 head permissions independently of the bound, reuse complete-value extremum
-compilation, and define empty groups and `#inf`/`#sup` explicitly. Begin with a
-reviewed numeric profile if a complete ordered-value source contract cannot be
-qualified in one slice; do not label that profile general min/max support.
+compilation, and define empty groups and `#inf`/`#sup` explicitly. The qualified
+slice accepts numeric first tuple values with ASP-term guards and the existing
+endpoint limits; it is not general ordered-value head support.
 HeadMeasures provides permission/bound composition under explicit numeric
 agreement, not a proof of concrete aggregate compilation.
 
@@ -124,16 +131,38 @@ baseline/candidate executable seals are required. Missing inner general-reduct
 time remains unmeasured until explicitly instrumented; do not infer it by
 subtracting enclosing phases.
 
-A separate arithmetic-grounding experiment accompanies these candidate
-consequences. The first bounded implementation evaluates short numeric
-expression prefixes in private integer storage, then resumes the existing
-general evaluator without repeating an operation or binding lookup. It preserves
-the source's checked `i32` arithmetic, failure order and authored work charges.
-Qualify this independently against the unchanged evaluator, with constructors,
-nonnumeric values, capacity transitions and exact resource controls. Freeze
-matched old/new binaries before measuring SEND, all six queens encodings and
-mixed arithmetic controls. Batched numeric execution, prefix-key reuse and
-domain narrowing remain separate experiments with additional obligations.
+The integrated [source CountPlan](../verification/source-count-plans-20260908/README.md)
+now closes one deliberately narrow source-to-consequence path. Complete ordinary
+choice or bijective count-head groups supply integer lower/upper premises.
+Coalesced element eligibility must be the canonical true formula; a positive
+domain atom remains ineligible even if the program entails it. Partition groups
+must be unconditional or share the exact global activation, which every emitted
+consequence retains. Discovery greedily follows retained grounding order;
+`NoPlan` means that policy emitted nothing stronger, not that every valid cover
+was ruled out. Optional failure preserves successful original admission.
+
+This path consumes actual source evidence without depending on the candidate
+solver. Its separate restriction can be installed before proposal; neither
+source defaults nor reduct acceptance change. The earlier
+[manual queens experiment](partition-consequences.md) supplies its own premises.
+Its variant-02 work reduction does not demonstrate automatic recognition: that
+encoding expresses a body count and pairwise exclusions, outside CountPlan's
+initial profile. Time, restriction-construction cost and total memory still need
+matched end-to-end measurement.
+
+The [numeric-prefix experiment](../verification/numeric-prefix-20260908/measurements/README.md)
+completed semantic/resource qualification and a controlled old/new comparison.
+It evaluated short expressions in stack integers and resumed general evaluation
+without replaying an operation or binding lookup. Source checked `i32`
+arithmetic, failure order and authored work charges were preserved. The measured
+mix of small benefits and regressions did not justify retaining the production
+specialization; the negative result and complete evidence remain available.
+
+Arithmetic work remains a priority. A next bounded experiment should remove
+actual repeated work or batch binding evaluation, rather than assume that a
+smaller temporary representation improves runtime. Batched numeric execution,
+prefix-key reuse and domain narrowing still need separate semantic, resource
+and complete-population measurement obligations. This progress update establishes no further arithmetic implementation.
 
 ## 4. Trace GPU input replacement before expanding retention
 
@@ -144,14 +173,15 @@ justify changing ordinary defaults or claiming a general GPU speedup. The next
 question is which input/result-shape/budget condition causes each whole transport
 replacement, not how to pool only favorable observations.
 
-Add bounded typed per-buffer replacement reasons and retained/active payload
-accounting to the existing library result and measurement views. Keep logical
+The integrated slices add bounded typed replacement reasons, per-buffer
+allocation/reuse observations and retained/active payload accounting to library
+results and measurement views. Keep logical
 payload distinct from driver allocation and RSS. Trace the same sparse/dense,
 growth and shrinking-chunk controls before proposing selective input reuse or
 bounded geometric capacity.
 
-If the trace justifies it, retain unaffected **input** buffers in one subsequent
-slice. Preserve exact-capacity admission when slack would exceed a limit, checked
+The trace justified the bounded selective-retention slice: individually fitting
+**input** buffers now survive other binding replacements. Preserve exact-capacity admission when slack would exceed a limit, checked
 growth before allocation, obsolete bind-group ownership, fresh active truth and
 every output clear. Keep output/readback exact-sized initially: larger buffers
 need a separate active-range readback and decoder contract. Failed attempts must
@@ -168,8 +198,8 @@ allocations prove concrete device correctness or a runtime benefit.
 
 The [Fedora/Vulkan plan](linux-vulkan-qualification.md) identifies measurement and
 test-selection gaps; ordinary explicit Vulkan construction already exists.
-Parameterize backend selection in reusable qualification APIs before adapting
-the CLI. Preserve requested and actual API/device metadata, typed failures and
+Reusable primitive qualification APIs and their CLI views now expose explicit
+Vulkan selection; the repeated whole-solve matrix remains a separate extension. Preserve requested and actual API/device metadata, typed failures and
 backend-specific route identities; never publish Vulkan observations under a
 Metal label or substitute a software adapter.
 
@@ -194,10 +224,14 @@ The current [formula representation](../../crates/zetesis-ferraris/src/theory.rs
 contains only atoms, falsum and Boolean connectives. Aggregate lowering uses
 [threshold or subset-implication graphs](../../crates/zetesis-ferraris/src/aggregate/lower.rs)
 and [extremum witnesses](../../crates/zetesis-ferraris/src/aggregate/value_extremum.rs).
-The [GPU packing](../../crates/zetesis-wgpu/src/formula/packing.rs) therefore
-receives no native aggregate operation. Preserve these exact routes as reference
-and fallback while adding the new representation through library APIs; avoid
-reconstructing aggregate intent from an arbitrary Boolean graph.
+Ordinary [GPU formula packing](../../crates/zetesis-wgpu/src/formula/packing.rs)
+therefore still receives no native aggregate operation. The new
+[retained Group API](native-aggregates.md) and dedicated GPU aggregate wire
+provide a separate library route, without changing `Theory::Node` or substituting
+shared Boolean roots. Preserve the original lowering as a reference and fallback;
+source-to-native mixed evaluation still needs its own coherent consumer and
+coverage/identity contract. CountPlan retains private source premises for a
+different purpose and does not replace aggregate evaluation.
 
 | Operation | CPU execution candidates | GPU execution candidates |
 | --- | --- | --- |
@@ -231,7 +265,7 @@ coverage proof.
 The semantic basis is an existing result: Ferraris's [*Answer Sets for
 Propositional Theories*, Proposition 7(b)](https://www.cs.utexas.edu/~ai-lab/pubs/proptheories.pdf)
 gives direct reduct evaluation for finite numeric aggregates without expanding
-their canonical subset formulas. Formalize that result in Lean. For the intended
+their canonical subset formulas. The scoped result has now been formalized in Lean. For the intended
 abstract interface `A_P(F)`, let `P` be the exact guard predicate on selected
 tuple indices, `a_i` eligibility truth in candidate `M`, and `b_i` truth of the
 recursively frozen eligibility in interpretation `J`. The target contract is:
@@ -251,24 +285,32 @@ remains distinct from outer default negation; neither substitutes for the other.
 
 ### Incremental delivery and acceptance
 
-1. Establish the retained group/eligibility interface, its origin and resource
-   accounting, and the scalar reference contract. Formalize the required
-   aggregate/reduct laws and record their precise scope.
-2. Introduce a bounded native count path, initially for candidate-only head bounds
-   with head permission unchanged. Existing [HeadMeasures](../../proofs/Zetesis/HeadMeasures.lean)
-   laws compose original numeric agreement with permission equivalence; they do
-   not prove counting, tuple coverage or the device implementation. Preserve the
-   original candidate theory and exact checking throughout integration.
-3. Add CPU and GPU sums and extrema through the same interface. Begin with
-   arithmetic ranges and value profiles that can be proved exact. Every possible
-   intermediate reduction value must fit its accumulator under the chosen
-   reassociation; correct final values alone do not justify wrapping intermediates.
-   An unavailable fast path retains the existing exact route and does not narrow
-   source admission. Negative sum+ head behavior remains its existing separate
-   refusal until source semantics is resolved.
-4. Generalize to body aggregates and frozen checking only after the corresponding
-   semantic contract passes. Keep candidate-only, original-model and frozen-reduct
-   execution capabilities explicit; success in one role does not qualify another.
+1. The retained `Group`/`Eligibility` library boundary is integrated. It validates
+   shape, whole-tuple uniqueness, guards and original theory identity. The caller
+   still supplies complete OR-coalesced tuples and the source relation; shape
+   admission does not prove that the original program entails an aggregate.
+2. CPU count/sum/sum+/ordered-extremum reductions are integrated for original and
+   frozen formula observations, using `P(A) ∧ P(B)` for the reduct. Numeric results
+   use checked `i128`; source terms and arithmetic remain checked `i32`. A future
+   `i64` source profile requires coordinated value/evaluation/interchange changes,
+   not merely a wider accumulator or lazy grounding.
+3. The integrated GPU primitive accepts actual Group-bound eligibility records.
+   Its numeric profile checks complete positive and negative totals separately
+   against `i32` bounds before reassociation; nonnumeric extrema and unsupported
+   guards return typed capability failures. CPU acquisition, wire preparation,
+   reduction and readback retain separate limits/accounting. Portable controls
+   pass; physical Metal/Vulkan execution and matched measurements remain pending.
+4. The separate opt-in CountPlan provides a source-derived candidate consequence
+   consumer. Ordinary aggregate model/reduct evaluation is still Boolean. A mixed
+   native source/solver route must retain original head permissions, exact
+   coalescing/coverage, activation and theory identity. Constant/shared/previous
+   root IDs cannot be replaced by assuming one root uniquely names one group.
+   `HeadMeasures` supplies a scoped composition law, not that compiler bridge.
+5. Future complete-group lazy acquisition must establish tuple coverage before an
+   exact aggregate verdict. Partial-group bounds need their own approximation
+   laws. Wider device representations and negative sum+ head admission remain
+   separate obligations; no primitive capability may silently narrow source
+   acceptance or change ordinary defaults.
 
 Use independently authored finite aggregate semantics, original clingo programs,
 arbitrary `M/J` checks and generated tuple/weight/eligibility cases. Include empty
