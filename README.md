@@ -254,8 +254,9 @@ now show that residency helps, but this primitive remains slower than scalar and
 Rayon checking in all 18 tested case medians. Those measurements retain their
 earlier experimental binary identity; ordinary backend selection is unchanged.
 The [next tranche proposal](docs/design/next-language-and-execution-tranche.md)
-prioritizes the remaining admitted-language gaps, with bounded CPU/GPU experiments
-and Linux qualification work alongside them.
+prioritizes the remaining admitted-language gaps, with native aggregate
+primitives, bounded CPU/GPU experiments, Linux qualification and a broader
+foundation research survey alongside them.
 
 The [September CI policy](docs/verification/local-macos-ci-20260908/README.md)
 uses local macOS qualification while GitHub Actions is paused through September
