@@ -22,6 +22,35 @@ pub(super) struct Capacity {
     pub(super) result: u64,
 }
 
+/// One capacity decision. Reasons describe the previous retained allocation;
+/// several independent conditions may prevent its reuse on the same submission.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Transition {
+    Initial,
+    Reuse,
+    Replace(Replacement),
+}
+
+impl Transition {
+    pub(super) const fn is_reuse(self) -> bool {
+        matches!(self, Self::Reuse)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct Replacement {
+    pub(super) growth: [bool; 4],
+    pub(super) result_shape: bool,
+    pub(super) allowance: Allowance,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Allowance {
+    Fits,
+    Exceeded,
+    Overflow,
+}
+
 impl Capacity {
     /// Uniform, four input buffers, output and readback; excludes driver-owned
     /// staging/retirement and allocator bookkeeping as specified by `GpuLimits`.
@@ -40,16 +69,24 @@ impl Capacity {
             .checked_add(plan.result_bytes)
     }
 
-    pub(super) fn reusable(self, plan: &Plan, maximum: u64) -> bool {
-        // A batch's occurrence count is fixed and its word stride only grows.
-        // Keeping readback exact preserves the complete-shape decoder contract.
-        self.result == plan.result_bytes
-            && self
-                .inputs
-                .iter()
-                .zip(plan.capacity.inputs)
-                .all(|(available, required)| *available >= required)
-            && self.accounted(plan).is_some_and(|bytes| bytes <= maximum)
+    pub(super) fn assess(self, plan: &Plan, maximum: u64) -> Transition {
+        let causes = Replacement {
+            growth: std::array::from_fn(|index| self.inputs[index] < plan.capacity.inputs[index]),
+            result_shape: self.result != plan.result_bytes,
+            allowance: match self.accounted(plan) {
+                Some(bytes) if bytes <= maximum => Allowance::Fits,
+                Some(_) => Allowance::Exceeded,
+                None => Allowance::Overflow,
+            },
+        };
+        if causes.growth.iter().any(|grew| *grew)
+            || causes.result_shape
+            || causes.allowance != Allowance::Fits
+        {
+            Transition::Replace(causes)
+        } else {
+            Transition::Reuse
+        }
     }
 }
 

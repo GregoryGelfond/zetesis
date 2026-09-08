@@ -35,7 +35,7 @@ pub use formula::{
 };
 
 pub use adapter::{AdapterBackend, AdapterCategory, AdapterMetadata};
-pub use lazy::{GpuLazyOracle, LazyGpuStatistics};
+pub use lazy::{GpuLazyOracle, LazyGpuStatistics, LazyTransportReplacements};
 pub use tight::{
     GpuTightOracle, TightGpuActivity, TightGpuBatchStats, TightGpuCheck, TightGpuError,
     TightGpuLimits,

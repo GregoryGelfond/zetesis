@@ -7,7 +7,7 @@ use zetesis_cpu::{Control, Limits, Stop, check, lazy};
 
 use crate::{GpuBackendPreference, GpuErrorKind, GpuLimits, GpuOptions, GpuSelection};
 
-use super::{Capacity, GpuLazyOracle, LazyGpuStatistics, Plan, tests::inspect};
+use super::{Capacity, GpuLazyOracle, LazyGpuStatistics, Plan, Transition, tests::inspect};
 
 #[test]
 fn retained_inputs_count_toward_the_transport_ceiling() {
@@ -18,10 +18,10 @@ fn retained_inputs_count_toward_the_transport_ceiling() {
         retained.inputs[1] += 128;
         let accounted = retained.accounted(&plan).unwrap();
         assert_eq!(accounted, plan.capacity.accounted(&plan).unwrap() + 192);
-        assert!(retained.reusable(&plan, accounted));
-        assert!(!retained.reusable(&plan, accounted - 1));
+        assert!(retained.assess(&plan, accounted).is_reuse());
+        assert!(!retained.assess(&plan, accounted - 1).is_reuse());
         // Replacement can use the exact active shape under the tighter limit.
-        assert!(plan.capacity.reusable(&plan, accounted - 1));
+        assert!(plan.capacity.assess(&plan, accounted - 1).is_reuse());
     });
 }
 
@@ -32,7 +32,7 @@ fn every_input_binding_must_fit_before_reuse() {
         for index in 0..4 {
             let mut retained = plan.capacity;
             retained.inputs[index] -= 4;
-            assert!(!retained.reusable(&plan, u64::MAX));
+            assert!(!retained.assess(&plan, u64::MAX).is_reuse());
         }
     });
 }
@@ -47,7 +47,8 @@ fn result_shape_changes_require_replacement() {
                     result,
                     ..plan.capacity
                 }
-                .reusable(&plan, u64::MAX)
+                .assess(&plan, u64::MAX)
+                .is_reuse()
             );
         }
     });
@@ -60,9 +61,9 @@ fn inactive_input_capacity_does_not_inflate_uploads() {
         let mut retained = plan.capacity;
         retained.inputs[1] += 128;
         let first = LazyGpuStatistics::default()
-            .submitted(&plan, false, retained)
+            .submitted(&plan, Transition::Initial, retained)
             .unwrap();
-        let reused = first.submitted(&plan, true, retained).unwrap();
+        let reused = first.submitted(&plan, Transition::Reuse, retained).unwrap();
         assert_eq!(reused.dispatches, 2);
         assert_eq!(reused.transport_allocations, 1);
         assert_eq!(reused.transport_reuses, 1);
@@ -91,7 +92,7 @@ fn retained_capacity_arithmetic_refuses_overflow() {
             },
         ] {
             assert!(retained.accounted(&plan).is_none());
-            assert!(!retained.reusable(&plan, u64::MAX));
+            assert!(!retained.assess(&plan, u64::MAX).is_reuse());
         }
     });
 }
@@ -118,7 +119,15 @@ fn transport_observation_counters_refuse_overflow() {
         ] {
             assert_eq!(
                 statistics
-                    .submitted(&plan, reused, plan.capacity)
+                    .submitted(
+                        &plan,
+                        if reused {
+                            Transition::Reuse
+                        } else {
+                            Transition::Initial
+                        },
+                        plan.capacity
+                    )
                     .unwrap_err()
                     .kind(),
                 GpuErrorKind::Capacity
@@ -199,6 +208,17 @@ fn growth_seeds(program: &Program) -> Vec<Seed> {
         .collect()
 }
 
+fn growth_replacements() -> super::LazyTransportReplacements {
+    super::LazyTransportReplacements {
+        initial: 1,
+        records_growth: 4,
+        snapshots_growth: 4,
+        seeds_growth: 4,
+        result_shape: 4,
+        ..Default::default()
+    }
+}
+
 #[test]
 fn source_sequence_exercises_transport_resize_boundaries() {
     let program = growth_program();
@@ -206,6 +226,7 @@ fn source_sequence_exercises_transport_resize_boundaries() {
     for selection in [lazy::SourceSelection::Union, lazy::SourceSelection::Worlds] {
         let mut retained: Option<Capacity> = None;
         let mut previous: Option<Capacity> = None;
+        let mut statistics = LazyGpuStatistics::default();
         let mut smaller_reused = false;
         let mut later_growth = false;
         lazy::check_with_source(
@@ -220,7 +241,10 @@ fn source_sequence_exercises_transport_resize_boundaries() {
             |chunk| {
                 let plan =
                     Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
-                let reused = retained.is_some_and(|capacity| capacity.reusable(&plan, u64::MAX));
+                let transition = retained.map_or(Transition::Initial, |capacity| {
+                    capacity.assess(&plan, u64::MAX)
+                });
+                let reused = transition.is_reuse();
                 if let Some(previous) = previous {
                     smaller_reused |= reused && plan.capacity.inputs[0] < previous.inputs[0];
                     later_growth |= smaller_reused && plan.result_bytes > previous.result;
@@ -229,6 +253,9 @@ fn source_sequence_exercises_transport_resize_boundaries() {
                 if !reused {
                     retained = Some(plan.capacity);
                 }
+                statistics = statistics
+                    .submitted(&plan, transition, retained.unwrap())
+                    .unwrap();
                 lazy::evaluate(chunk)
             },
         )
@@ -237,6 +264,8 @@ fn source_sequence_exercises_transport_resize_boundaries() {
         // No buffer allocation or device execution is claimed by this control.
         assert!(smaller_reused);
         assert!(later_growth);
+        assert_eq!(statistics.transport_replacements, growth_replacements());
+        eprintln!("portable shape trace selection={selection:?} statistics={statistics:?}");
     }
 }
 
@@ -296,6 +325,10 @@ fn metal_lazy_transport_reuse_preserves_round_truth() {
             assert_eq!(actual.seed_mismatch(), expected.seed_mismatch());
             assert_eq!(actual.accepted(), expected.accepted());
         }
+        assert_eq!(
+            oracle.statistics.transport_replacements,
+            growth_replacements()
+        );
         assert!(oracle.statistics.transport_reuses > oracle.statistics.transport_allocations);
         assert_eq!(
             oracle.statistics.dispatches,

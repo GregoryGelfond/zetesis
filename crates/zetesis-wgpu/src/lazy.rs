@@ -18,8 +18,11 @@ use crate::{GpuError, GpuErrorKind, GpuInfo, GpuLimits, GpuOptions, GpuSelection
 
 mod plan;
 mod transport;
+mod statistics;
 
-use plan::{Capacity, Plan};
+pub use statistics::LazyTransportReplacements;
+
+use plan::{Capacity, Plan, Transition};
 use transport::Transport;
 
 const SHADER: &str = include_str!("lazy.wgsl");
@@ -48,6 +51,8 @@ pub struct LazyGpuStatistics {
     /// Largest requested GPU buffer payload for a submitted chunk, including
     /// retained inactive capacity. Excludes host payload and driver allocations.
     pub peak_transport_bytes: u64,
+    /// Overlapping reasons why submitted chunks required fresh transport.
+    pub transport_replacements: LazyTransportReplacements,
     /// Completed host time waiting for submissions and decoding readback.
     pub host_wait: Duration,
 }
@@ -208,15 +213,19 @@ impl GpuLazyOracle {
         cached: &mut Option<Transport>,
     ) -> Result<Vec<u32>, GpuError> {
         let device = &self.runtime.device;
-        let retained = cached
-            .as_ref()
-            .map(|transport| transport.capacity)
-            .filter(|capacity| capacity.reusable(plan, limits.max_batch_bytes));
-        let capacity = retained.unwrap_or(plan.capacity);
-        let counters = self
-            .statistics
-            .submitted(plan, retained.is_some(), capacity)?;
-        if retained.is_none() {
+        let transition = cached.as_ref().map_or(Transition::Initial, |transport| {
+            transport.capacity.assess(plan, limits.max_batch_bytes)
+        });
+        let capacity = if transition.is_reuse() {
+            cached
+                .as_ref()
+                .expect("retained transport was assessed")
+                .capacity
+        } else {
+            plan.capacity
+        };
+        let counters = self.statistics.submitted(plan, transition, capacity)?;
+        if !transition.is_reuse() {
             // Drop bindings and all old buffers before allocating replacements;
             // active shapes alone never admit an oversized retained allocation.
             *cached = None;
@@ -257,7 +266,12 @@ impl GpuLazyOracle {
 }
 
 impl LazyGpuStatistics {
-    fn submitted(self, plan: &Plan, reused: bool, storage: Capacity) -> Result<Self, GpuError> {
+    fn submitted(
+        self,
+        plan: &Plan,
+        transition: Transition,
+        storage: Capacity,
+    ) -> Result<Self, GpuError> {
         let capacity = || GpuError::new(GpuErrorKind::Capacity, "lazy submission counter overflow");
         Ok(Self {
             dispatches: self.dispatches.checked_add(1).ok_or_else(capacity)?,
@@ -271,15 +285,16 @@ impl LazyGpuStatistics {
                 .ok_or_else(capacity)?,
             transport_allocations: self
                 .transport_allocations
-                .checked_add(u64::from(!reused))
+                .checked_add(u64::from(!transition.is_reuse()))
                 .ok_or_else(capacity)?,
             transport_reuses: self
                 .transport_reuses
-                .checked_add(u64::from(reused))
+                .checked_add(u64::from(transition.is_reuse()))
                 .ok_or_else(capacity)?,
             peak_transport_bytes: self
                 .peak_transport_bytes
                 .max(storage.bytes().ok_or_else(capacity)?),
+            transport_replacements: self.transport_replacements.record(transition)?,
             ..self
         })
     }
@@ -403,7 +418,7 @@ mod tests {
             ] {
                 assert_eq!(
                     statistics
-                        .submitted(&plan, false, plan.capacity)
+                        .submitted(&plan, super::Transition::Initial, plan.capacity)
                         .unwrap_err()
                         .kind(),
                     GpuErrorKind::Capacity
@@ -513,3 +528,7 @@ mod tests {
 #[cfg(test)]
 #[path = "../tests/lazy/transport.rs"]
 mod transport_tests;
+
+#[cfg(test)]
+#[path = "../tests/lazy/replacement.rs"]
+mod replacement_tests;
