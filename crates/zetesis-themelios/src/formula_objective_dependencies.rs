@@ -1,8 +1,16 @@
 //! Structural objective observers over total scalar aggregate assignments.
 
+mod forwarding;
+mod presence;
+
+pub(crate) use presence::check as check_presence;
+
 use std::collections::{BTreeMap, BTreeSet};
 
-use themelios_analysis::{Analysis, depend::DependencyKind};
+use themelios_analysis::{
+    Analysis,
+    depend::{DependencyGraph, DependencyKind},
+};
 use themelios_base::span::Location;
 use themelios_program::program::{DefaultNegation, Program, Statement};
 use themelios_program::symbol::{Name, Signature};
@@ -18,28 +26,18 @@ pub(crate) fn check(
     analysis: &Analysis,
     source: &Program,
     fallback: Location,
-) -> Result<(), FormulaFailure> {
+) -> Result<BTreeSet<usize>, FormulaFailure> {
+    if objectives.is_empty() {
+        return Ok(BTreeSet::new());
+    }
     let graph = analysis.dependencies();
-    let mut relevant = BTreeSet::new();
-    let mut pending = Vec::new();
-    for atom in objectives
-        .iter()
-        .flat_map(|objective| objective.template.positive())
-    {
-        let predicate = signature(atom.predicate());
-        if relevant.insert(predicate.clone()) {
-            pending.push(predicate);
-        }
-    }
-    // Each predicate and edge is visited at most once after bounded analysis.
-    // Only producers that can feed an objective affect its slot-presence policy.
-    while let Some(predicate) = pending.pop() {
-        for (_, dependency) in graph.edges_from(&predicate) {
-            if relevant.insert(dependency.clone()) {
-                pending.push(dependency.clone());
-            }
-        }
-    }
+    let relevant = dependency_closure(
+        graph,
+        objectives
+            .iter()
+            .flat_map(|objective| objective.template.positive())
+            .map(|atom| signature(atom.predicate())),
+    );
     let mut generated = BTreeMap::<Signature, BTreeSet<usize>>::new();
     for rule in rules {
         if !relevant_head(&rule.head, &relevant) {
@@ -97,6 +95,7 @@ pub(crate) fn check(
             .or_default()
             .extend(positions);
     }
+    let forwarded = forwarding::certify(rules, graph, &relevant, &mut generated);
     for producer in graph.predicates() {
         if !relevant.contains(producer) {
             continue;
@@ -109,10 +108,11 @@ pub(crate) fn check(
                 )
                 .into());
             }
-            // A total assignment may consume another total assignment through
-            // an unfiltered aggregate tuple source. Ordinary producer joins and
-            // comparisons over generated values still require a broader contract.
+            // Generated positions follow certified argument permutations before
+            // downstream consumers are checked. The original rules and aggregate
+            // equalities remain responsible for realization in each model.
             if generated.contains_key(dependency)
+                && !forwarded.contains(producer)
                 && !total_dependency(rules, producer, dependency, &generated)
             {
                 return Err(refusal(origin(source, producer, dependency, fallback)));
@@ -122,8 +122,32 @@ pub(crate) fn check(
     for objective in objectives {
         observer(objective, &generated)?;
     }
-    Ok(())
+    Ok(presence::required(rules, objectives, graph, &generated))
 }
+
+/// Include the roots and every producer that can feed them. Each analyzed
+/// predicate and edge is visited at most once; cycles need no recursive stack.
+fn dependency_closure(
+    graph: &DependencyGraph,
+    roots: impl IntoIterator<Item = Signature>,
+) -> BTreeSet<Signature> {
+    let mut relevant = BTreeSet::new();
+    let mut pending = Vec::new();
+    for predicate in roots {
+        if relevant.insert(predicate.clone()) {
+            pending.push(predicate);
+        }
+    }
+    while let Some(predicate) = pending.pop() {
+        for (_, dependency) in graph.edges_from(&predicate) {
+            if relevant.insert(dependency.clone()) {
+                pending.push(dependency.clone());
+            }
+        }
+    }
+    relevant
+}
+
 fn head_profile(rule: &RuleIr) -> Result<(), FormulaFailure> {
     if matches!(rule.head, HeadIr::Disjunction(_)) {
         return Err(unsupported(

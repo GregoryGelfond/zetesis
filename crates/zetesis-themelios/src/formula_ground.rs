@@ -124,6 +124,9 @@ fn activate_objectives(
     counters: &mut Counters,
     location: Location,
 ) -> Result<(zetesis_objective::ObjectiveProgram, Vec<Vec<Location>>), FormulaFailure> {
+    crate::formula_objective_dependencies::check_presence(
+        prepared, support, limits, budget, counters,
+    )?;
     let mut active = Vec::new();
     let mut objective_origins = Vec::new();
     for objective in &prepared.objectives {

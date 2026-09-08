@@ -52,7 +52,7 @@ fn costs(values: &Json) -> Option<Vec<i64>> {
         .as_array()
         .map(|values| values.iter().map(|v| v.as_i64().unwrap()).collect())
 }
-fn canonical(atom: &Atom) -> String {
+pub(super) fn canonical(atom: &Atom) -> String {
     let arguments: Vec<_> = atom
         .values()
         .iter()

@@ -36,6 +36,9 @@ pub(crate) struct Prepared {
     pub rules: Vec<RuleIr>,
     pub objectives: Vec<ObjectiveIr>,
     pub objective_declarations: Vec<Location>,
+    /// Extrema tuple carriers whose mixed value classes lack a qualified
+    /// numeric-objective presence contract. Checked after support completion.
+    pub objective_extrema: BTreeSet<usize>,
 }
 pub(crate) struct ObjectiveIr {
     pub template: ObjectiveTemplate,
@@ -245,15 +248,13 @@ pub(crate) fn prepare(
     }
     let analyzed = SourceProgram::of(analyzed);
     let analysis = crate::formula_analysis::analyze(&analyzed, limits, compiler.budget, fallback)?;
-    if !objective_declarations.is_empty() {
-        crate::formula_objective_dependencies::check(
-            &rules,
-            &objectives,
-            &analysis,
-            &analyzed,
-            fallback,
-        )?;
-    }
+    let objective_extrema = crate::formula_objective_dependencies::check(
+        &rules,
+        &objectives,
+        &analysis,
+        &analyzed,
+        fallback,
+    )?;
     validate_objectives(&objectives, limits, fallback)?;
     let analysis_basis = if compiler.dependency_projection {
         crate::AnalysisBasis::DependencyProjection
@@ -267,6 +268,7 @@ pub(crate) fn prepare(
         rules,
         objectives,
         objective_declarations,
+        objective_extrema,
     })
 }
 

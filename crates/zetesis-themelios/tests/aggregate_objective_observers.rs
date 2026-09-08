@@ -136,7 +136,7 @@ fn exhaustive(input: &AdmittedFormula) -> Records {
 }
 
 #[test]
-fn admitted_observers_preserve_all_model_costs_and_refusals_are_explicit() {
+fn observer_cases_preserve_recorded_contracts() {
     let cases = cases();
     assert_eq!(cases.len(), 92);
     let mut admitted = 0;
@@ -173,7 +173,7 @@ fn admitted_observers_preserve_all_model_costs_and_refusals_are_explicit() {
             admitted += 1;
         }
     }
-    assert_eq!((admitted, refused), (72, 20));
+    assert_eq!((admitted, refused), (73, 19));
 }
 
 static NEXT: AtomicU64 = AtomicU64::new(0);

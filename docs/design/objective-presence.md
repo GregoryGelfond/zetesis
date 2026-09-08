@@ -1,10 +1,84 @@
 # Objective presence and activation
 
-This is a proposed library boundary for admitting a total aggregate producer
-followed by scalar filters on a path to a positive objective. It does not remove
-the current `ObjectiveAggregateDependency` refusal. Negative, disjunctive and
-conditional dependencies, several producers and dynamic priorities remain
-outside the initial scope.
+Total aggregate producers can feed positive objectives through acyclic ordinary
+predicate renamings and argument permutations. The broader completed-layout
+boundary below remains a proposal for admitting scalar filters and other
+consumers. Negative, disjunctive and conditional dependencies, more general
+producer combinations and dynamic priorities retain their separate gaps.
+
+## Implemented total relation renamings
+
+`n(N):-N=#count{}.p(X):-n(X).#minimize{X@7:p(X)}.` is admitted with `n(0)` and
+`p(0)` and a present priority-7 zero cost. Each forwarded predicate has one
+ordinary rule, one positive body atom, and a bijection between the body's distinct
+argument variables and the head's argument variables. This includes renamed
+variables, argument permutations and finite chains. The relevant component of
+the themelios dependency graph must be acyclic. Constants, repeated variables,
+projections, joins, filters, alternative producers and constructed arguments do
+not acquire this certificate.
+
+The certificate transports aggregate-generated argument positions before checking
+the final observer. An objective cannot evade the original generated-value
+restrictions by adding a renaming predicate. The source rule, original aggregate
+equality, formula theory, objective tuple, priority and direction remain intact.
+No optimization objective supplies support or changes reduct-based acceptance.
+
+The predicate walk and retained position sets are bounded by the existing
+structural-analysis allowances. Argument matching uses finite variable sets;
+transport costs at most the product of head arity and generated-position count
+for each certified rule. This is source classification, not an added execution
+representation. The library still exposes grounding independently of solving.
+
+## Mixed-extrema presence boundary
+
+The new adversarial campaign exposed a pre-existing direct-observer defect:
+
+```asp
+b. {a}.
+n(N) :- N = #max {2:a; foo:b}.
+#minimize {X@7:n(X)}.
+```
+
+Every answer set contains `n(foo)`. clingo reports no objective cost vector, but
+the old possible-support test saw the unrealizable numeric proposal `n(2)` and
+reported a present zero slot. Correct full models do not excuse this observable
+cost difference. The [recorded counterexample](../verification/objective-forwarding-20260908/direct-extremum-counterexample.json)
+retains both installed pre-change and external outputs with executable hashes.
+
+Direct and forwarded observers now return a located
+`ObjectiveAggregateDependency` refusal for the unqualified mixed carrier. A
+generated argument used as a variable objective weight seeds predicate dependency
+reachability. After support completes, each relevant extrema assignment's raw
+tuple carrier is inspected separately for each complete outer binding. Both
+numeric and nonnumeric first values in that carrier trigger the refusal. Whole
+tuple duplicates have the same first-value class, so this inspection needs no
+alternate coalescing rule. The implicit empty endpoint is not a tuple; it does
+not cause all optional numeric extrema to be refused.
+
+Numeric-only and nonnumeric-only carriers, constant-weight observers, numeric
+zero weights, fixed dominating numeric extrema with numeric-only tuples and
+different value classes in disjoint outer bindings remain admitted. A mixed
+carrier whose numeric value dominates is conservatively refused too. Dependency
+reachability also crosses intervening numeric reductions: such a reduction may
+remove the concern, but no value-class certificate currently discharges it.
+These are internal zetesis implementation gaps, not themelios rejections or
+claims that the source is a modeling error.
+
+Preparation records only bounded aggregate IDs; successful preparation does not
+claim completed objective presence. The check runs during objective activation
+before an objective program is published. It uses the existing complete joins,
+work/substitution counters and scalar-copy budgets, with original producer
+locations on refusal. It retains two class flags per inspected carrier and no
+second tuple store. Repeated assignment proposals currently repeat this bounded
+inspection, so its work is visible and can exhaust the caller's allowance.
+Separating one outer binding from its proposal enumeration is a future shared
+grounding improvement, not a claimed optimization in this slice.
+
+The [forwarding qualification](../verification/objective-forwarding-20260908/README.md)
+distinguishes admitted parity, conservative refusal controls and the historical
+defect. `ObjectiveTransport` proves finite presence and contribution transport
+laws under explicit carrier/activation correspondence. It does not establish
+clingo's presence carrier, the Rust recognizer or the broader layout proposal.
 
 ## The distinction the representation must retain
 
@@ -23,10 +97,9 @@ Activation is model-relative; the priority layout is fixed for the completed
 grounding contract and shared by every returned model.
 
 Current `formula_ground::objective_active` joins against completed possible
-support and checks for a numeric weight. `formula_objective_dependencies`
-restricts aggregate producers to total observers for which that boundary has
-been qualified. An ordered binding plan alone cannot justify removing this
-restriction. In particular, exact aggregate tuple coalescing can erase information
+support and checks for a numeric weight after the structural and mixed-extrema
+boundaries above. An ordered binding plan alone cannot justify removing those
+restrictions. In particular, exact aggregate tuple coalescing can erase information
 that clingo's observable objective layout retains.
 
 ## Reference observations
@@ -117,8 +190,9 @@ Only then connect a checked layout producer to the existing objective library
 and relax the particular admission refusal it discharges. Reuse the recorded
 sources for full model/cost and optimal-tie comparisons, add source-order and
 duplicate-template controls, and test every exact/one-short resource boundary.
-The current implementation and existing objective tests remain unchanged by
-this design record.
+The total-renaming slice does not implement this broader completed-layout
+proposal. Its separate tests and conservative presence boundary are described
+above.
 
 Existing objective and head-measure Lean laws support ordering and activation
 composition. They do not prove the required presence carrier, clingo layout

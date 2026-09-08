@@ -1,0 +1,10 @@
+{"name":"mixed_extremum_weights","source":"{a;b}.n(N):-N=#max{2:a;foo:b}.p(X):-n(X).#minimize{X@7:p(X)}.","records":[[["a","b","n(foo)","p(foo)"],[0]],[["a","n(2)","p(2)"],[2]],[["b","n(foo)","p(foo)"],[0]],[["n(#inf)","p(#inf)"],[0]]]}
+{"name":"fixed_symbol_dominates_numeric","source":"b.{a}.n(N):-N=#max{2:a;foo:b}.p(X):-n(X).#minimize{X@7:p(X)}.","records":[[["a","b","n(foo)","p(foo)"],null],[["b","n(foo)","p(foo)"],null]]}
+{"name":"fixed_numeric_dominates_symbol","source":"b.{a}.n(N):-N=#min{2:b;foo:a}.p(X):-n(X).#minimize{X@7:p(X)}.","records":[[["a","b","n(2)","p(2)"],[2]],[["b","n(2)","p(2)"],[2]]]}
+{"name":"direct_symbol_dominates_numeric","source":"b.{a}.n(N):-N=#max{2:a;foo:b}.#minimize{X@7:n(X)}.","records":[[["a","b","n(foo)"],null],[["b","n(foo)"],null]]}
+{"name":"direct_numeric_dominates_symbol","source":"b.{a}.n(N):-N=#min{2:b;foo:a}.#minimize{X@7:n(X)}.","records":[[["a","b","n(2)"],[2]],[["b","n(2)"],[2]]]}
+{"name":"explicit_infimum_dominates_numeric","source":"b.{a}.n(N):-N=#min{2:a;#inf:b}.p(X):-n(X).#minimize{X@7:p(X)}.","records":[[["a","b","n(#inf)","p(#inf)"],null],[["b","n(#inf)","p(#inf)"],null]]}
+{"name":"explicit_supremum_dominates_numeric","source":"b.{a}.n(N):-N=#max{2:a;#sup:b}.p(X):-n(X).#minimize{X@7:p(X)}.","records":[[["a","b","n(#sup)","p(#sup)"],null],[["b","n(#sup)","p(#sup)"],null]]}
+{"name":"permuted_dominated_weight","source":"d(k).b.{a}.n(G,N):-d(G),N=#max{2:a;foo:b}.p(X,Y):-n(Y,X).#minimize{X@7,Y:p(X,Y)}.","records":[[["a","b","d(k)","n(k,foo)","p(foo,k)"],null],[["b","d(k)","n(k,foo)","p(foo,k)"],null]]}
+{"name":"nested_mixed_carrier","source":"b.{a}.n(N):-N=#max{2:a;foo:b}.p(X):-n(X).m(M):-M=#max{Y:p(Y)}.#minimize{M@7:m(M)}.","records":[[["a","b","m(foo)","n(foo)","p(foo)"],null],[["b","m(foo)","n(foo)","p(foo)"],null]]}
+{"name":"numeric_reduction_after_mixed_carrier","source":"b.{a}.n(N):-N=#max{2:a;foo:b}.p(X):-n(X).m(M):-M=#count{Y:p(Y)}.#minimize{M@7:m(M)}.","records":[[["a","b","m(1)","n(foo)","p(foo)"],[1]],[["b","m(1)","n(foo)","p(foo)"],[1]]]}

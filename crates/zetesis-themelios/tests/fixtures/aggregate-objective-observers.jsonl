@@ -38,7 +38,7 @@
 {"name":"output_join","source":"{a}.d(0).n(N):-N=#count{1:a}.#minimize{X@7:n(X),d(X)}.","refusal":"ObjectiveAggregateDependency","models":[[["a","d(0)","n(1)"],[0]],[["d(0)","n(0)"],[0]]]}
 {"name":"union_generated_literal","source":"{a}.p(N,7):-N=#sum{2:a}.p(5,N):-N=#count{1:a}.#minimize{X@1:p(X,7)}.","refusal":"ObjectiveAggregateDependency","models":[[["a","p(2,7)","p(5,1)"],[2]],[["p(0,7)","p(5,0)"],[0]]]}
 {"name":"union_generated_filtered","source":"{a}.p(N,7):-N=#sum{2:a}.p(5,N):-N=#count{1:a}.#minimize{X@1,Y:p(X,Y),Y!=0}.","refusal":"ObjectiveAggregateDependency","models":[[["a","p(2,7)","p(5,1)"],[7]],[["p(0,7)","p(5,0)"],[0]]]}
-{"name":"ordinary_downstream","source":"n(N):-N=#count{}.p(X):-n(X).#minimize{X@7:p(X)}.","refusal":"ObjectiveAggregateDependency","models":[[["n(0)","p(0)"],[0]]]}
+{"name":"ordinary_downstream","source":"n(N):-N=#count{}.p(X):-n(X).#minimize{X@7:p(X)}.","refusal":null,"models":[[["n(0)","p(0)"],[0]]]}
 {"name":"choice_downstream","source":"n(N):-N=#count{}.{p(X):n(X)}.#minimize{X@7:p(X)}.","refusal":"ObjectiveAggregateDependency","models":[[["n(0)"],[0]],[["n(0)","p(0)"],[0]]]}
 {"name":"negative_producer","source":"{a}.b:-not a.n(N):-N=#count{1:b}.#minimize{N@7:n(N)}.","refusal":"ObjectiveNegativeDependency","models":[[["a","n(0)"],[0]],[["b","n(1)"],[1]]]}
 {"name":"negative_element","source":"{a}.n(N):-N=#count{1:not a}.#minimize{N@7:n(N)}.","refusal":"ObjectiveNegativeDependency","models":[[["a","n(0)"],[0]],[["n(1)"],[1]]]}
