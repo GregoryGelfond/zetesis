@@ -8,10 +8,12 @@ existing language, CPU, GPU and Vulkan work. It adds no performance evidence.
 
 Implementation is in progress. Completed-value nonbinding guards, checked lazy
 transport replacement observations, conditional partition planning and the
-aggregate/capacity Lean laws are implemented. The
+aggregate/capacity Lean laws and numeric min/max heads are implemented. The
 [guard record](../verification/nonbinding-guards-20260908/README.md) and
 [partition experiment](partition-consequences.md) state their bounded evidence.
-Native aggregate execution, scoped min/max heads, Vulkan qualification and final
+The [extrema-head record](../verification/extrema-heads-20260908/README.md) covers
+numeric first values under the existing tuple/head bijection. Native aggregate
+execution, physical Vulkan qualification and final
 integrated gates remain in progress. The acceptance criteria below still govern
 those deliverables; this progress note is not a release qualification.
 
@@ -82,6 +84,12 @@ dependencies, several producers and dynamic priorities outside the initial
 contract. Implementation becomes a subsequent reviewed slice once its semantic
 and representation obligations are concrete. No CLI-only workaround or extra
 fixed priority may conceal missing presence information.
+
+The [presence contract](objective-presence.md) now records that boundary and 15
+original clingo/ASPIF references. It identifies an additional requirement:
+impossible aggregate proposals can retain a reported zero priority slot.
+Neither exact tuple coalescing nor accepted-model inspection alone determines
+that layout. The existing admission refusal remains in force.
 
 ## 3. Use CPU evidence to choose one general operation
 
@@ -221,9 +229,11 @@ recursively frozen eligibility in interpretation `J`. The target contract is:
 J satisfies (A_P(F))^M  iff  P(a) and P(b).
 ```
 
-This published result is not yet encoded in our Lean library. The source-tuple
-and ordered-value extensions, correspondence with existing lowering, and concrete
-Rust/WGSL refinement remain separate obligations. Re-evaluating original
+The canonical finite-mask result is now encoded in
+[`AggregateReduct`](../../proofs/Zetesis/AggregateReduct.lean), under an arbitrary
+guard predicate over distinct tuple positions. Source-tuple coalescing,
+ordered-value and arithmetic implementations, correspondence with existing
+lowering, and concrete Rust/WGSL refinement remain separate obligations. Re-evaluating original
 eligibility directly in `J` would change the contract. Head permission remains
 separate from the numeric or ordered guard. Comparison complement (`!=`) also
 remains distinct from outer default negation; neither substitutes for the other.

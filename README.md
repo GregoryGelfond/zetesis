@@ -196,10 +196,10 @@ syntax, raising and evaluation errors from zetesis implementation refusals.
 |---|---|
 | Normal rules | Safe finite rules, constraints, default/double negation, strong negation with coherence, and relational lazy checking in the admitted normal-rule profile. |
 | Formula rules | Bounded choices, signed singleton/disjunctive heads, finite rule/head pools, evaluated heads, scalar/range bindings, comparisons and admitted universal body conditionals. |
-| Aggregates | Body count/sum/sum+ and complete-value min/max comparisons; acyclic dependent assignments feeding scalar/tuple filters, scalar equalities, evaluated positive arguments and heads, default/double-negated outer atoms and admitted projections, finite outer ranges, integer choice bounds and existing universal conditional scopes; count heads, signed numeric sum heads and nonnegative numeric sum+ heads with retained eligibility and checked tuple/atom correspondence. |
+| Aggregates | Body count/sum/sum+ and complete-value min/max comparisons; acyclic dependent assignments feeding scalar/tuple filters, scalar equalities, evaluated positive arguments and heads, default/double-negated outer atoms and admitted projections, finite outer ranges, integer choice bounds, nonbinding aggregate guards and existing universal conditional scopes; count, signed numeric sum, nonnegative numeric sum+ and numeric min/max heads with retained eligibility and checked tuple/atom correspondence. |
 | Logical values | Closed signed functions and tuples; finite construction from bound inputs; positive tuple/function patterns, including local conditional-consequent witnesses; evaluated positive arguments with independently bound inputs; evaluated already-safe negative arguments. |
 | Objectives and observations | Admitted minimize/maximize/weak constraints; complete tuple keys and optimal ties; signature, term and conditional `#show`; `#defined`; original include bundles and constants; explicit parameter-free `#program base` sections. |
-| Refusal boundaries | Cyclic or self-dependent assignment generators; unsupported local conditional generators; negative sum+ head weights, extremal function heads and broader tuple aliases; nontrivial conditional disjuncts; unsupported objective-dependent producers; broader directives and exact clingo undefined-arithmetic behavior remain incomplete. |
+| Refusal boundaries | Cyclic or self-dependent assignment generators; unsupported local conditional generators; negative sum+ head weights, nonnumeric measured heads and broader tuple aliases; nontrivial conditional disjuncts; unsupported objective-dependent producers; broader directives and exact clingo undefined-arithmetic behavior remain incomplete. |
 
 These rows summarize profiles; they are not a grammar specification. The
 [source API guide](crates/zetesis-themelios/README.md) describes composition,
@@ -247,7 +247,11 @@ checks **812 laws across 71 modules**; Rust and WGSL correspondence remains unpr
 
 The next tranche has integrated [completed-value aggregate guards](docs/verification/nonbinding-guards-20260908/README.md):
 46 originals matched 88 complete clingo models, with 7,312 frozen interpretation
-pairs checked separately. Its [partition experiment](docs/design/partition-consequences.md)
+pairs checked separately. [Numeric min/max heads](docs/verification/extrema-heads-20260908/README.md)
+add 51 originals matching 94 complete clingo models and 5,439 frozen pairs;
+guards retain ASP term order and genuine empty extrema. The first tuple values
+remain numeric under the documented endpoint profile. The
+[partition experiment](docs/design/partition-consequences.md)
 derives candidate bounds from supplied premises; automatic source recognition
 and performance qualification remain open. The full tranche is still in development.
 
