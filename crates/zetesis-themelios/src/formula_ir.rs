@@ -80,6 +80,8 @@ pub(crate) enum HeadMeasure {
     Count,
     Sum,
     SumPlus,
+    Min,
+    Max,
 }
 pub(crate) struct Element {
     /// Function heads carry a full tuple on every element; ordinary choices carry none.

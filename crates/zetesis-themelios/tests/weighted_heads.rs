@@ -187,10 +187,7 @@ fn weighted_heads_retain_objective_restrictions() {
 }
 
 #[test]
-fn unsupported_head_forms_keep_located_refusals() {
-    for source in ["0#min{0:a}0.", "0#max{0:a}0."] {
-        profile(source, ProfileFeature::Head);
-    }
+fn negative_weighted_heads_keep_located_refusals() {
     for source in ["0#sum{0:not a}0.", "0#sum+{0:not not a}0."] {
         profile(source, ProfileFeature::NegatedHead);
     }

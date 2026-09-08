@@ -31,9 +31,8 @@ impl Compiler<'_> {
             AggregateFunction::Count => HeadMeasure::Count,
             AggregateFunction::Sum => HeadMeasure::Sum,
             AggregateFunction::SumPlus => HeadMeasure::SumPlus,
-            AggregateFunction::Min | AggregateFunction::Max => {
-                return Err(unsupported(ProfileFeature::Head, self.location).into());
-            }
+            AggregateFunction::Min => HeadMeasure::Min,
+            AggregateFunction::Max => HeadMeasure::Max,
         };
         let mut elements = Vec::new();
         for element in aggregate.elements() {
@@ -192,7 +191,7 @@ pub(super) fn validate_group(
 }
 
 /// Numeric contribution is independent of permission to select the head.
-/// Count ignores tuple values; sum requires a numeric first term. Zero sum+
+/// Count ignores tuple values; other measures require a numeric first term. Zero sum+
 /// contributes nothing but never removes an eligible head. Negative sum+ values
 /// retain an explicit profile refusal pending a separate semantic contract.
 pub(super) fn weight(
@@ -206,6 +205,9 @@ pub(super) fn weight(
     let Some(Value::Number(value)) = first else {
         return Err(unsupported(ProfileFeature::HeadAggregateWeight, location).into());
     };
+    if matches!(measure, HeadMeasure::Min | HeadMeasure::Max) {
+        crate::formula_assignment::extremum_value(&Value::Number(*value), location)?;
+    }
     if measure == HeadMeasure::SumPlus && *value < 0 {
         return Err(unsupported(ProfileFeature::HeadAggregateWeight, location).into());
     }
@@ -289,8 +291,13 @@ mod tests {
     }
 
     #[test]
-    fn weighted_groups_require_tuple_keys() {
-        for measure in [HeadMeasure::Sum, HeadMeasure::SumPlus] {
+    fn measured_groups_require_tuple_keys() {
+        for measure in [
+            HeadMeasure::Sum,
+            HeadMeasure::SumPlus,
+            HeadMeasure::Min,
+            HeadMeasure::Max,
+        ] {
             let error = validate_measure(measure, vec![element(false)]).unwrap_err();
             assert!(matches!(
                 error,
@@ -305,8 +312,13 @@ mod tests {
     }
 
     #[test]
-    fn empty_weighted_groups_satisfy_the_key_invariant() {
-        for measure in [HeadMeasure::Sum, HeadMeasure::SumPlus] {
+    fn empty_measured_groups_satisfy_the_key_invariant() {
+        for measure in [
+            HeadMeasure::Sum,
+            HeadMeasure::SumPlus,
+            HeadMeasure::Min,
+            HeadMeasure::Max,
+        ] {
             validate_measure(measure, vec![]).unwrap();
         }
     }

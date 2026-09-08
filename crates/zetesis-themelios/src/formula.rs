@@ -524,12 +524,15 @@ pub(crate) struct Compiled {
 /// Eligibility remains a formula even for recursive conditions. Duplicate
 /// grounded head atoms combine eligibility by disjunction and count once.
 /// Head bounds are constraints, so they do not invent support. Count, signed
-/// numeric sum and nonnegative numeric sum+ heads reuse this permission path
-/// after checking a complete per-group tuple/atom bijection. Numeric measure is
-/// separate from permission: zero-weight heads remain selectable. Missing or
-/// nonnumeric weights and negative sum+ head weights have an explicit zetesis
-/// profile refusal, including closed weights in statically inactive rules. Positive, default-negated and double-negated ordinary
-/// element conditions retain their original eligibility formulas.
+/// numeric sum, nonnegative numeric sum+ and numeric-valued min/max heads reuse
+/// this permission path after checking a complete per-group tuple/atom bijection.
+/// Numeric measure is separate from permission: zero-weight heads remain
+/// selectable. Missing or nonnumeric weights and negative sum+ head weights
+/// have an explicit zetesis profile refusal, including closed weights in
+/// statically inactive rules. Positive, default-negated and double-negated
+/// ordinary element conditions retain their original eligibility formulas.
+/// Min/max guards use ASP term order and real empty extrema; first tuple values
+/// remain numeric, with the existing internal integer-endpoint limitation.
 /// Necessary producer guards are double-negated and therefore leave reduct subsets
 /// unconstrained whenever the candidate passes them. Grounding uses complete
 /// relational joins over a bounded possible-positive closure. Gates are ignored

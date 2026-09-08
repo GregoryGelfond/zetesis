@@ -46,7 +46,7 @@ pub enum ProfileFeature {
     ConditionalDisjunction,
     /// A finite function-head group aliases complete tuple and atom identities.
     HeadAggregateAlias,
-    /// A sum head weight is absent/nonnumeric, or negative for the sum+ profile.
+    /// A numeric function-head weight is absent/nonnumeric, or negative for sum+.
     /// This is an implementation boundary, not a clingo syntax error.
     HeadAggregateWeight,
     /// A choice with a lower or upper bound.

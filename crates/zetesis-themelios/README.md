@@ -8,7 +8,7 @@ The library keeps three explicit admission contracts:
 |---|---|---|
 | `admit` | Relational `Program` | Strict S0 normal rules, constraints, singleton unconditioned choices, scalar/closed structural terms, ordinary positive/default-negated literals, scalar equality/disequality |
 | `admit_extended` / `admit_bundle_extended` | Relational `Program` and source evidence | S0 plus acyclic closed constants, checked ground scalar arithmetic, finite fact-head pools/intervals, `#defined`, signature/empty `#show`, and original include graphs for the bundle API |
-| `admit_formula` / `admit_bundle_formula` | Ferraris `Theory`, dense original `Atom` identities, lifted objectives, and source evidence | Extended closed-value forms plus evaluated signed disjunctive heads with empty/explicitly true Boolean conditions, finite rule/head pools preserving whole-rule products and local choice groups, finite conditional choices, numeric choice bounds, positive function `#count`, numeric signed `#sum` and nonnegative numeric `#sum+` heads with signed eligibility and checked tuple/atom correspondence, top-level numeric/dependent intervals in positive disjunctive and choice heads, body count/sum/sum+ and complete-value min/max comparisons and acyclic finite equality assignments, finite comparison-generated bindings, bounded universal body conditionals, and the bounded `#minimize`/`#maximize`/positive weak-constraint profile below |
+| `admit_formula` / `admit_bundle_formula` | Ferraris `Theory`, dense original `Atom` identities, lifted objectives, and source evidence | Extended closed-value forms plus evaluated signed disjunctive heads with empty/explicitly true Boolean conditions, finite rule/head pools preserving whole-rule products and local choice groups, finite conditional choices, numeric choice bounds, positive function `#count`, numeric signed `#sum`, nonnegative numeric `#sum+` and numeric-valued `#min`/`#max` heads with signed eligibility and checked tuple/atom correspondence, top-level numeric/dependent intervals in positive disjunctive and choice heads, body count/sum/sum+ and complete-value min/max comparisons and acyclic finite equality assignments, finite comparison-generated bindings, bounded universal body conditionals, and the bounded `#minimize`/`#maximize`/positive weak-constraint profile below |
 
 The CLI chooses an admitted source route automatically. The library APIs remain explicit so callers can require a relational or formula result. `ExpansionFailure::needs_formula_admission()` permits a formula retry only for an unsupported profile or a scalar operation that stopped at a variable. Syntax errors, arithmetic undefinedness/overflow, exceeded budgets, and independent core failures are not profile retries.
 
@@ -169,9 +169,21 @@ The [weighted-head record](../../docs/verification/weighted-heads-20260908/READM
 keeps the negative-`#sum+` clingo observations separate from the admitted subset.
 Closed unsupported weights are refused before a static outer guard can hide
 them; variable weights are checked on complete possible local rows. Default-negated
-derived head literals, extremal heads, aliases and objective-relevant function
+derived head literals, nonnumeric extremal head values, aliases and objective-relevant function
 head producers retain explicit refusals. The [count-head record](../../docs/verification/count-heads-20260907/README.md) gives the initial correspondence, resource and frozen-reduct contracts; the [eligibility extension](../../docs/verification/aggregate-bounds-20260907/README.md) records the admitted positive conditions. The [negative-eligibility extension](../../docs/verification/negative-count-eligibility-20260908/README.md) records default/double negation, complete clingo comparisons and the removal of the now-unused `HeadAggregateCondition` error variant from this unreleased Rust API.
 
+Numeric `#min`/`#max` heads use the same checked permission groups. For example,
+`1#min{1:a;2:b}1.` admits `{a}` and `{a,b}`. The bound measures selected eligible
+heads; it cannot create support, and zero or negative values never remove
+permission. First tuple values are numeric in this initial profile. Guards use
+the existing ASP term order, with an empty minimum equal to `#sup` and an empty
+maximum equal to `#inf`. The inherited zetesis endpoint limitation still refuses
+numeric `i32::MIN`/`i32::MAX` first values or bounds; it is an implementation
+boundary, not a mathematical requirement or a reclassification of themelios
+diagnostics. Complete nonnumeric head extrema remain a separate gap. The
+[numeric extrema-head record](../../docs/verification/extrema-heads-20260908/README.md)
+retains complete clingo models, arbitrary original/frozen comparisons and the
+exact numeric profile.
 
 ## Scalar and interval bindings
 

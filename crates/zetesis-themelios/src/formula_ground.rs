@@ -15,8 +15,8 @@ use zetesis_ferraris::{
 use crate::expansion::Budget;
 use crate::formula::{Compiled, ceiling};
 use crate::formula_ir::{
-    AggregateGuard, AggregateIr, AggregateKey, ChoiceIr, HeadIr, LiteralIr, ObjectiveIr, Prepared,
-    Projection, RuleIr, value_bytes,
+    AggregateGuard, AggregateIr, AggregateKey, ChoiceIr, HeadIr, HeadMeasure, LiteralIr,
+    ObjectiveIr, Prepared, Projection, RuleIr, value_bytes,
 };
 use crate::formula_support::{self, Counters, Join, Support};
 use crate::grounding_observer::Event;
@@ -624,7 +624,12 @@ impl Builder<'_> {
                 eligible.insert(head, (weight, self.or(previous, condition, rule.location)?));
             }
         }
-        let mut selected = Vec::new();
+        let kind = match measure {
+            HeadMeasure::Min => Some(AggregateExtremum::Min),
+            HeadMeasure::Max => Some(AggregateExtremum::Max),
+            _ => None,
+        };
+        let mut selected = HeadContributions::new(kind);
         for (head, (weight, condition)) in eligible {
             let antecedent = self.and(body, condition, rule.location)?;
             let negative = self.neg(head, rule.location)?;
@@ -641,26 +646,59 @@ impl Builder<'_> {
                     self.limits.aggregate.max_elements as u128,
                     rule.location,
                 )?;
-                selected.push(AggregateElement {
-                    weight,
-                    condition: self.and(condition, head, rule.location)?,
-                });
+                selected.push(weight, self.and(condition, head, rule.location)?);
             }
         }
         if !guards.is_empty() {
-            let within = self.aggregate_guards(
-                &GroundAggregate::Numeric(selected.into()),
-                guards,
-                assignment,
-                None,
-                rule.location,
-            )?;
+            let within =
+                self.aggregate_guards(&selected.finish(), guards, assignment, kind, rule.location)?;
             let outside = self.neg(within, rule.location)?;
             let violated = self.and(body, outside, rule.location)?;
             let constraint = self.node(Node::Implies(violated, 0), rule.location)?;
             self.root(constraint, rule)?;
         }
         Ok(())
+    }
+}
+
+/// One storage family for head contributions. Each entry retains the conjunction
+/// of its head and eligibility formulas; no candidate truth is assumed here.
+enum HeadContributions {
+    Numeric(Vec<AggregateElement>),
+    Extrema(Vec<ValueExtremumElement>),
+}
+
+impl HeadContributions {
+    fn new(kind: Option<AggregateExtremum>) -> Self {
+        if kind.is_some() {
+            Self::Extrema(Vec::new())
+        } else {
+            Self::Numeric(Vec::new())
+        }
+    }
+
+    fn len(&self) -> usize {
+        match self {
+            Self::Numeric(elements) => elements.len(),
+            Self::Extrema(elements) => elements.len(),
+        }
+    }
+
+    fn push(&mut self, weight: i32, condition: usize) {
+        match self {
+            Self::Numeric(elements) => elements.push(AggregateElement { weight, condition }),
+            Self::Extrema(elements) => elements.push(ValueExtremumElement {
+                value: Value::Number(weight),
+                condition,
+            }),
+        }
+    }
+
+    fn finish(self) -> GroundAggregate {
+        match self {
+            Self::Numeric(elements) => GroundAggregate::Numeric(elements.into()),
+            Self::Extrema(elements) => GroundAggregate::Extrema(elements.into()),
+        }
     }
 }
 
