@@ -18,6 +18,7 @@ mod checked;
 
 pub use checked::{CheckedInterpretation, StableInterpretation, check_interpretation};
 
+pub use aggregate::native as native_aggregate;
 pub use aggregate::{
     AggregateBuild, AggregateComparison, AggregateElement, AggregateError, AggregateErrorKind,
     AggregateExtremum, AggregateFamilyBuild, AggregateFamilyLimits, AggregateGuard,

@@ -1988,6 +1988,7 @@ dependencies = [
 name = "zetesis-ferraris"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "proptest",
  "serde_json",
  "tempfile",

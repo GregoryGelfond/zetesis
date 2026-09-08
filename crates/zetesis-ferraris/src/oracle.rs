@@ -71,13 +71,13 @@ impl Check {
     }
 }
 
-struct Work<'a> {
-    limits: Limits,
-    control: &'a Control,
-    statistics: Statistics,
+pub(super) struct Work<'a> {
+    pub(super) limits: Limits,
+    pub(super) control: &'a Control,
+    pub(super) statistics: Statistics,
 }
 impl Work<'_> {
-    fn tick(&mut self) -> Result<(), Stop> {
+    pub(super) fn tick(&mut self) -> Result<(), Stop> {
         self.control.poll()?;
         if self.statistics.work >= self.limits.max_work {
             return Err(Stop::WorkLimit);
@@ -103,7 +103,7 @@ fn reserve<T>(count: usize) -> Result<Vec<T>, Stop> {
     Ok(vector)
 }
 
-fn evaluate(
+pub(super) fn evaluate(
     theory: &Theory,
     interpretation: &Interpretation,
     frozen: Option<&[bool]>,

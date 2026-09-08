@@ -4,6 +4,7 @@ mod lower;
 mod extremum;
 mod family;
 mod value_extremum;
+pub mod native;
 
 use std::fmt;
 
