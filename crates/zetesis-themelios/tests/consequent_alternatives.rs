@@ -45,6 +45,30 @@ fn corpus_models() -> Models {
 // Independent finite substitutions. OR consequents distribute into the complete
 // rule family below; conditions retain their own universal rows.
 const CASES: &[(&str, &str)] = &[
+    (
+        "{p(-1);p(-2)}.q:-p(-(X..X+1)):X=1.",
+        "{p(-1);p(-2)}.q:-p(-1).q:-p(-2).",
+    ),
+    (
+        "{p(0);p(1)}.q:-p(|(X..X+1)|):X=-1.",
+        "{p(0);p(1)}.q:-p(0).q:-p(1).",
+    ),
+    (
+        "{p(f(1));p(f(2))}.q:-p(--f(X..X+1)):X=1.",
+        "{p(f(1));p(f(2))}.q:-p(f(1)).q:-p(f(2)).",
+    ),
+    (
+        "{p((1,));p((2,))}.q:-p((X..X+1,)):X=1.",
+        "{p((1,));p((2,))}.q:-p((1,)).q:-p((2,)).",
+    ),
+    (
+        "{p(f(1,-1));p(f(1,-2));p(f(3,-1));p(f(3,-2))}.q:-p(f(2*(X..X+1)-1,-(X..X+1))):X=1.",
+        "{p(f(1,-1));p(f(1,-2));p(f(3,-1));p(f(3,-2))}.q:-p(f(1,-1)).q:-p(f(1,-2)).q:-p(f(3,-1)).q:-p(f(3,-2)).",
+    ),
+    (
+        "{p((1,()));p((2,()))}.q:-p((X..X+1,())):X=1.",
+        "{p((1,()));p((2,()))}.q:-p((1,())).q:-p((2,())).",
+    ),
     ("{p(1..2)}.q:-p(X):#true.", "{p(1..2)}.q:-p(1).q:-p(2)."),
     ("{p(1..2)}.q:-p(X):X=1..2.", "{p(1..2)}.q:-p(1),p(2)."),
     (
