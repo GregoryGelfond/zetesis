@@ -106,7 +106,7 @@ pub struct TightGpuActivity {
     pub scheduled_work: u64,
     /// Occurrences whose complete records were validated before return.
     pub completed_candidates: u64,
-    /// Full-scan work attested by those validated records.
+    /// Full-scan work reported by those validated device records.
     pub completed_work: u64,
     /// Authored initialization/write-buffer bytes issued in this attempt.
     pub uploaded_bytes: u64,

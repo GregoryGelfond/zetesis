@@ -36,6 +36,18 @@ fn plan(graph: &Graph, count: usize, fresh: bool) -> Plan {
     .unwrap()
 }
 
+// The wire-decoder tests below use candidates containing this fixture's entire
+// carrier; dedicated controls supply absent bits and malformed seed shapes.
+fn decode_present(
+    records: &[u32],
+    graph: &Graph,
+    plan: &Plan,
+    control: &Control,
+) -> Result<Vec<TightGpuCheck>, GpuError> {
+    let seeds = vec![7; usize::try_from(plan.seeds / 4).unwrap()];
+    super::decode(records, graph, plan, &seeds, control)
+}
+
 #[test]
 fn certificate_packing_retains_original_formula_structure() {
     let certificate = certificate();
@@ -341,8 +353,8 @@ fn zero_epoch_cannot_alias_cleared_result_storage() {
 fn false_root_witnesses_use_assertion_order() {
     let graph = graph();
     let plan = plan(&graph, 2, false);
-    let records = [7, 0, 1, 0, 22, MAGIC, 7, 1, 1, 3, 22, MAGIC];
-    let result = decode(&records, &graph, &plan, &Control::default()).unwrap();
+    let records = [7, 0, 1, 0, 22, RESULT_MAGIC, 7, 1, 1, 3, 22, RESULT_MAGIC];
+    let result = decode_present(&records, &graph, &plan, &Control::default()).unwrap();
     assert_eq!(result[0].verdict(), TightVerdict::NotModel { root: 8 });
     assert_eq!(result[1].verdict(), TightVerdict::NotModel { root: 1 });
     assert_eq!(result[0].work(), 22);
@@ -353,9 +365,26 @@ fn all_verdict_kinds_decode_without_losing_witnesses() {
     let graph = graph();
     let plan = plan(&graph, 3, false);
     let records = [
-        7, 0, 0, 0, 22, MAGIC, 7, 1, 2, 2, 22, MAGIC, 7, 2, 1, 1, 22, MAGIC,
+        7,
+        0,
+        0,
+        0,
+        22,
+        RESULT_MAGIC,
+        7,
+        1,
+        2,
+        2,
+        22,
+        RESULT_MAGIC,
+        7,
+        2,
+        1,
+        1,
+        22,
+        RESULT_MAGIC,
     ];
-    let result = decode(&records, &graph, &plan, &Control::default()).unwrap();
+    let result = decode_present(&records, &graph, &plan, &Control::default()).unwrap();
     assert_eq!(
         result
             .iter()
@@ -375,19 +404,19 @@ fn all_verdict_kinds_decode_without_losing_witnesses() {
 fn corrupt_records_never_produce_a_partial_batch() {
     let graph = graph();
     let plan = plan(&graph, 2, false);
-    let valid = [7, 0, 0, 0, 22, MAGIC, 7, 1, 2, 2, 22, MAGIC];
+    let valid = [7, 0, 0, 0, 22, RESULT_MAGIC, 7, 1, 2, 2, 22, RESULT_MAGIC];
     for (index, value) in [(6, 0), (7, 0), (8, 3), (9, 3), (10, 21), (11, 0), (8, 0)] {
         let mut corrupt = valid;
         corrupt[index] = value;
         assert_eq!(
-            decode(&corrupt, &graph, &plan, &Control::default())
+            decode_present(&corrupt, &graph, &plan, &Control::default())
                 .unwrap_err()
                 .kind(),
             GpuErrorKind::Readback
         );
     }
     assert_eq!(
-        decode(&valid[..11], &graph, &plan, &Control::default())
+        decode_present(&valid[..11], &graph, &plan, &Control::default())
             .unwrap_err()
             .kind(),
         GpuErrorKind::Readback
@@ -399,15 +428,20 @@ fn out_of_range_root_ordinals_are_readback_failures() {
     let graph = graph();
     let plan = plan(&graph, 1, false);
     assert_eq!(
-        decode(&[7, 0, 1, 4, 22, MAGIC], &graph, &plan, &Control::default())
-            .unwrap_err()
-            .kind(),
+        decode_present(
+            &[7, 0, 1, 4, 22, RESULT_MAGIC],
+            &graph,
+            &plan,
+            &Control::default()
+        )
+        .unwrap_err()
+        .kind(),
         GpuErrorKind::Readback
     );
 }
 
 #[test]
-fn cancellation_prevents_packing_or_decoding_results() {
+fn cancellation_prevents_completed_results() {
     let certificate = certificate();
     let graph = Graph::new(&certificate, &wgpu::Limits::default()).unwrap();
     let plan = plan(&graph, 1, true);
@@ -417,8 +451,36 @@ fn cancellation_prevents_packing_or_decoding_results() {
     for error in [
         graph.pack(&certificate, &control).err().unwrap(),
         plan.pack(&graph, &input, &control).unwrap_err(),
-        decode(&[7, 0, 0, 0, 22, MAGIC], &graph, &plan, &control).unwrap_err(),
+        decode_present(&[7, 0, 0, 0, 22, RESULT_MAGIC], &graph, &plan, &control).unwrap_err(),
     ] {
         assert_eq!(error.interruption, Some(zetesis_cpu::Stop::Cancelled));
     }
+}
+
+#[test]
+fn absent_residual_witnesses_are_readback_failures() {
+    let graph = graph();
+    let plan = plan(&graph, 2, false);
+    let records = [7, 0, 2, 2, 22, RESULT_MAGIC, 7, 1, 2, 2, 22, RESULT_MAGIC];
+    let error = super::decode(&records, &graph, &plan, &[7, 3], &Control::default()).unwrap_err();
+    assert_eq!(error.kind(), GpuErrorKind::Readback);
+    assert!(super::decode(&records, &graph, &plan, &[7, 4], &Control::default()).is_ok());
+}
+
+#[test]
+fn malformed_candidate_storage_cannot_validate_receipts() {
+    let graph = graph();
+    let plan = plan(&graph, 1, false);
+    assert_eq!(
+        super::decode(
+            &[7, 0, 0, 0, 22, RESULT_MAGIC],
+            &graph,
+            &plan,
+            &[],
+            &Control::default()
+        )
+        .unwrap_err()
+        .kind(),
+        GpuErrorKind::Readback
+    );
 }

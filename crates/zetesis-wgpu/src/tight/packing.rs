@@ -7,7 +7,18 @@ use zetesis_ferraris::{Interpretation, Node, Theory, TightPlan, TightVerdict};
 
 pub(super) const PARAM_BYTES: u64 = 32;
 pub(super) const RESULT_WORDS: usize = 6;
-pub(super) const MAGIC: u32 = 0x5453_5031;
+pub(super) const RESULT_MAGIC: u32 = 0x5453_5031;
+
+// Wire tags mirror check.wgsl. Producer presence has its own explicit field;
+// an absent body never borrows a node identifier as a sentinel.
+const NODE_FALSE: u32 = 0;
+const NODE_ATOM: u32 = 1;
+const NODE_AND: u32 = 2;
+const NODE_OR: u32 = 3;
+const NODE_IMPLIES: u32 = 4;
+const STATUS_STABLE: u32 = 0;
+const STATUS_NOT_MODEL: u32 = 1;
+const STATUS_RESIDUAL: u32 = 2;
 
 fn capacity(detail: &str) -> GpuError {
     GpuError::new(GpuErrorKind::Capacity, detail)
@@ -113,11 +124,11 @@ impl Graph {
         for node in self.theory.nodes() {
             poll(control)?;
             nodes.extend(match *node {
-                Node::False => [0, 0, 0, 0],
-                Node::Atom(atom) => [1, address(atom)?, 0, 0],
-                Node::And(a, b) => [2, address(a)?, address(b)?, 0],
-                Node::Or(a, b) => [3, address(a)?, address(b)?, 0],
-                Node::Implies(a, b) => [4, address(a)?, address(b)?, 0],
+                Node::False => [NODE_FALSE, 0, 0, 0],
+                Node::Atom(atom) => [NODE_ATOM, address(atom)?, 0, 0],
+                Node::And(a, b) => [NODE_AND, address(a)?, address(b)?, 0],
+                Node::Or(a, b) => [NODE_OR, address(a)?, address(b)?, 0],
+                Node::Implies(a, b) => [NODE_IMPLIES, address(a)?, address(b)?, 0],
             });
         }
         if nodes.is_empty() {
@@ -273,10 +284,16 @@ pub(super) fn decode(
     words: &[u32],
     graph: &Graph,
     plan: &Plan,
+    seeds: &[u32],
     control: &Control,
 ) -> Result<Vec<TightGpuCheck>, GpuError> {
     let fail = || GpuError::new(GpuErrorKind::Readback, "invalid tight result record");
-    if words.len() != plan.worlds as usize * RESULT_WORDS {
+    if words.len() != plan.worlds as usize * RESULT_WORDS
+        || u64::try_from(seeds.len())
+            .ok()
+            .and_then(|n| n.checked_mul(4))
+            != Some(plan.seeds)
+    {
         return Err(fail());
     }
     let mut output = vector(plan.worlds as usize)?;
@@ -285,18 +302,25 @@ pub(super) fn decode(
         if row[0] != plan.epoch
             || row[1] as usize != world
             || row[4] != plan.work
-            || row[5] != MAGIC
+            || row[5] != RESULT_MAGIC
         {
             return Err(fail());
         }
         let verdict = match (row[2], row[3]) {
-            (0, 0) => TightVerdict::Stable,
-            (1, ordinal) if ordinal < graph.roots => TightVerdict::NotModel {
+            (STATUS_STABLE, 0) => TightVerdict::Stable,
+            (STATUS_NOT_MODEL, ordinal) if ordinal < graph.roots => TightVerdict::NotModel {
                 root: graph.theory.roots()[ordinal as usize],
             },
-            (2, atom) if atom < graph.atoms => TightVerdict::Residual {
-                unsupported_atom: atom as usize,
-            },
+            (STATUS_RESIDUAL, atom)
+                if atom < graph.atoms
+                    && seeds[world * graph.words as usize + atom as usize / 32]
+                        & (1 << (atom % 32))
+                        != 0 =>
+            {
+                TightVerdict::Residual {
+                    unsupported_atom: atom as usize,
+                }
+            }
             _ => return Err(fail()),
         };
         output.push(TightGpuCheck {

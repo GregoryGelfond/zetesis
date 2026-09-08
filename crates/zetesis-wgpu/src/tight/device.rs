@@ -18,6 +18,13 @@ use zetesis_ferraris::{Interpretation, TightPlan};
 /// completion, objectives and CPU fallback remain the caller's responsibilities.
 /// Every nonempty successful call executes the support kernel on the selected
 /// adapter. This is a separate primitive, not ordinary solver dispatch policy.
+///
+/// Work is linear in candidates times nodes, roots, producers and atoms. Each
+/// workgroup evaluates its DAG sequentially, then shares root/support scans
+/// across 64 invocations. Candidate truth/support storage is linear in candidates
+/// times nodes/atoms; shared graph and packed seed storage have explicit byte
+/// bounds. The oracle retains one shared theory handle and one exact transport
+/// shape, without cloning the caller's certificate or storing its ranks.
 pub struct GpuTightOracle {
     runtime: Runtime,
     resident: Option<Resident>,

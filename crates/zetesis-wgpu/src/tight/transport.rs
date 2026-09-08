@@ -97,7 +97,7 @@ impl Resident {
             submission,
             timeout,
             || poll(control),
-            |words| packing::decode(words, &self.graph, plan, control),
+            |words| packing::decode(words, &self.graph, plan, seeds, control),
         );
         if result.is_ok() {
             activity.completed_candidates = u64::from(plan.worlds);

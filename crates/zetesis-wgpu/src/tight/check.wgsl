@@ -1,5 +1,17 @@
 // Complete original truth plus ranked producer support, one candidate/workgroup.
 // The host accepts only an opaque, checked TightPlan for the complete theory.
+// Wire constants mirror tight/packing.rs. Zero remains ordinary Boolean false.
+const WORKGROUP_SIZE: u32 = 64u;
+const NODE_FALSE: u32 = 0u;
+const NODE_ATOM: u32 = 1u;
+const NODE_AND: u32 = 2u;
+const NODE_OR: u32 = 3u;
+const NODE_IMPLIES: u32 = 4u;
+const STATUS_STABLE: u32 = 0u;
+const STATUS_NOT_MODEL: u32 = 1u;
+const STATUS_RESIDUAL: u32 = 2u;
+const RESULT_WORDS: u32 = 6u;
+const RESULT_MAGIC: u32 = 0x54535031u;
 struct Params {
     atoms: u32, nodes: u32, roots: u32, producers: u32,
     words: u32, worlds: u32, work: u32, epoch: u32,
@@ -21,12 +33,12 @@ fn contains(world: u32, atom: u32) -> bool {
     return (candidates[world * params.words + atom / 32u] & (1u << (atom % 32u))) != 0u;
 }
 fn operation(tag: u32, left: bool, right: bool) -> bool {
-    if (tag == 2u) { return left && right; }
-    if (tag == 3u) { return left || right; }
+    if (tag == NODE_AND) { return left && right; }
+    if (tag == NODE_OR) { return left || right; }
     return !left || right;
 }
 
-@compute @workgroup_size(64)
+@compute @workgroup_size(WORKGROUP_SIZE)
 fn check(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lane: u32) {
     let world = group.x;
     let values = world * params.nodes;
@@ -38,25 +50,25 @@ fn check(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_inde
         for (var index = 0u; index < params.nodes; index += 1u) {
             let node = nodes[index];
             var value = false;
-            if (node.tag == 1u) { value = contains(world, node.left); }
-            if (node.tag >= 2u) {
+            if (node.tag == NODE_ATOM) { value = contains(world, node.left); }
+            if (node.tag >= NODE_AND) {
                 value = operation(node.tag, truth[values + node.left] != 0u,
                     truth[values + node.right] != 0u);
             }
             truth[values + index] = select(0u, 1u, value);
         }
     }
-    for (var atom = lane; atom < params.atoms; atom += 64u) {
+    for (var atom = lane; atom < params.atoms; atom += WORKGROUP_SIZE) {
         atomicStore(&support[supported + atom], 0u);
     }
     storageBarrier();
     workgroupBarrier();
-    for (var ordinal = lane; ordinal < params.roots; ordinal += 64u) {
+    for (var ordinal = lane; ordinal < params.roots; ordinal += WORKGROUP_SIZE) {
         if (truth[values + roots[ordinal]] == 0u) {
             atomicMin(&first_root, ordinal);
         }
     }
-    for (var index = lane; index < params.producers; index += 64u) {
+    for (var index = lane; index < params.producers; index += WORKGROUP_SIZE) {
         let producer = producers[index];
         var enabled = true;
         if (producer.has_body != 0u) { enabled = truth[values + producer.body] != 0u; }
@@ -64,7 +76,7 @@ fn check(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_inde
     }
     storageBarrier();
     workgroupBarrier();
-    for (var atom = lane; atom < params.atoms; atom += 64u) {
+    for (var atom = lane; atom < params.atoms; atom += WORKGROUP_SIZE) {
         if (contains(world, atom) && atomicLoad(&support[supported + atom]) == 0u) {
             atomicMin(&first_atom, atom);
         }
@@ -73,16 +85,16 @@ fn check(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_inde
     if (lane == 0u) {
         let root = atomicLoad(&first_root);
         let atom = atomicLoad(&first_atom);
-        var status = 0u;
+        var status = STATUS_STABLE;
         var witness = 0u;
-        if (root < params.roots) { status = 1u; witness = root; }
-        else if (atom < params.atoms) { status = 2u; witness = atom; }
-        let base = world * 6u;
+        if (root < params.roots) { status = STATUS_NOT_MODEL; witness = root; }
+        else if (atom < params.atoms) { status = STATUS_RESIDUAL; witness = atom; }
+        let base = world * RESULT_WORDS;
         results[base] = params.epoch;
         results[base + 1u] = world;
         results[base + 2u] = status;
         results[base + 3u] = witness;
         results[base + 4u] = params.work;
-        results[base + 5u] = 0x54535031u;
+        results[base + 5u] = RESULT_MAGIC;
     }
 }

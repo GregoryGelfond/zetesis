@@ -4,6 +4,51 @@ Exact GPU reduct primitives for zetesis. The original static profile compiles a
 `GroundProgram` under separate grounding limits before checking candidates.
 `check_batch` performs no source grounding or lazy tuple discovery.
 
+The separate experimental `GpuTightOracle` accepts a complete checked
+`zetesis_ferraris::TightPlan` and ordered `Interpretation` occurrences. It evaluates
+original formula truth and producer support on the selected device. Ranked
+support discharges the proper-subset reduct obligation for that certified class;
+the original theory, equality conditions and choice activation remain intact.
+Ordinary solver dispatch does not select this primitive yet.
+
+Construct it with `new_metal(GpuOptions)` or
+`new_selected(GpuOptions, GpuSelection)`, then call
+`check_batch(&TightPlan, &[Interpretation], TightGpuLimits, &Control)`.
+Results retain the scalar certificate's `TightVerdict`, including the first false
+root in original assertion order or the lowest unsupported present atom.
+Residuals remain the caller's exact reduct-completion responsibility. No CPU
+certificate evaluation is hidden behind GPU results, and an incomplete lazy
+registry cannot supply the required complete-theory certificate.
+
+Each candidate has a separate 64-invocation workgroup. One invocation evaluates
+its topological DAG; cooperative root checks and producer support reduction follow.
+All scans run to completion, charging `nodes + roots + producers + 2*atoms`
+logical operations per candidate, including support initialization. This fixed
+charge differs from the scalar checker's early exits and is not a hardware
+instruction count. Runtime work and scratch storage are linear in the candidate
+count and graph/carrier sizes. Passing typed preflight limits does not guarantee
+that device allocation or execution succeeds.
+
+Immutable graph storage is reused only for the same theory instance: every
+accepted plan for that instance derives the same producers from the complete
+original roots, irrespective of valid rank choices. Candidate-count changes
+replace exact-shape transport. `last_batch_stats()` reports successful nonempty
+batches; `activity()` separately retains submitted and validated work on failure.
+Scheduled work is not claimed completed after a timeout. Transfer counters count
+authored initialized/write-buffer and decoded readback payload, not physical bus
+traffic. Byte budgets exclude caller-owned shared inputs, allocator overhead,
+driver-private storage and deferred retirement; they are not RSS ceilings.
+
+Control and device health are checked even for empty batches. Every failed call
+returns a typed error without a partial result vector. Execution-stage failures
+invalidate the oracle; `clear_residency()` drops handles but does not repair it.
+Portable tests validate the wire layout, limits, cache decisions, malformed
+readback and WGSL. The four ignored `hardware_tight` tests require actual Metal
+to qualify scalar/frozen-reduct agreement, ordered witnesses, world/atom
+boundaries and resource refusals. They are prepared tests, not a claim of physical
+qualification or a demonstrated speedup. The existing rank/support semantic
+proofs do not verify Rust packing, synchronization or device execution.
+
 The distinct `GpuLazyOracle` accepts a relational `Program` and frozen seed
 occurrences. It composes bounded host source scans with per-world GPU consequence
 evaluation over immutable rounds, without a complete ground-rule store.
