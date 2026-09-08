@@ -31,8 +31,8 @@ all source profiles and execution plans.
 | `zetesis-wgpu` | Bounded static integer oracle, relational lazy source execution and general Ferraris propagation primitive; native adapter selection, resident buffers and GPU result transport |
 | `zetesis-cli` | Prepared-input sessions, typed solve configuration/outcomes, bounded human/JSON views and process adaptation |
 | `zetesis-telemetry` | Optional typed host stage measurements, independent of rendered diagnostics |
-| `zetesis-experiments` | Standalone static and general-formula membership qualifications, explicit CPU residual measurements and Criterion regression benchmarks |
-| `zetesis-validation` | Curated fixtures, bounded process capture, typed reported answers and external-oracle corpus comparisons; separate from production acceptance |
+| `zetesis-experiments` | Standalone static, lazy-source and general-formula membership qualifications, explicit CPU residual measurements and Criterion regression benchmarks |
+| `zetesis-validation` | Curated fixtures, bounded process capture, typed reported answers, external-oracle comparisons and explicit CPU/Metal performance matrices; separate from production acceptance |
 
 Public types document their contracts and error conditions. Solver libraries do not
 invoke an external ASP solver. The optional clingo campaign uses one only as an

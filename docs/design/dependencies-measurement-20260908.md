@@ -2,8 +2,9 @@
 
 This tranche starts from `974de9395d1fe0f4a4d4aa30f3268198a5c7b1a1`, after
 the eight scoped physical Metal tests passed. The original theory and its
-frozen reduct remain the solver's semantic foundation. The following work is
-planned; this document does not establish implementation or measured gains.
+frozen reduct remain the solver's semantic foundation. The slices below are implemented and locally qualified; the new physical
+measurement campaign is pending. The [qualification record](../verification/dependencies-measurement-tranche-20260908/README.md)
+states the results and their scope.
 
 ## Independent slices
 

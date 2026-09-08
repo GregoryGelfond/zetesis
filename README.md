@@ -207,14 +207,14 @@ the rule applies. Similarly, `{d}.q(K):-N=#count{1:d},K=1..N.` has the empty
 answer set and `{d,q(1)}`. Each generated row retains the original aggregate
 equality and rule activation; a proposed value never certifies aggregate truth.
 
-The [preceding qualified local checkpoint](docs/verification/consumer-execution-tranche-20260908/README.md)
-passes **1,837 workspace test/doc checks**, **315 CPU-only CLI checks** and
-**61 external-oracle tests**. Both independent line-coverage profiles exceed their
-unchanged 91% floors: **91.1626% workspace / 92.2291% CPU-only CLI**. The frozen
+The [current local qualification](docs/verification/dependencies-measurement-tranche-20260908/README.md)
+passes **1,958 workspace test/doc checks**, **317 CPU-only CLI checks** and
+**62 external-oracle tests**. Both independent line-coverage profiles exceed their
+unchanged 91% floors: **91.0170% workspace / 92.3345% CPU-only CLI**. The frozen
 release passes all **94 clean kr-domains cases** and **24 selected upstream
 comparisons**, preserving the respective answer contracts and full-model checks.
-The [Lean audit](proofs/verification/consumer-execution-20260908/README.md)
-checks **763 laws across 64 modules**; Rust and WGSL correspondence remains unproved.
+The [Lean audit](proofs/verification/dependencies-measurement-20260908/README.md)
+checks **772 laws across 66 modules**; Rust and WGSL correspondence remains unproved.
 
 The [September CI policy](docs/verification/local-macos-ci-20260908/README.md)
 uses local macOS qualification while GitHub Actions is paused through September
@@ -230,7 +230,7 @@ path now passes [physical Metal qualification](docs/verification/consumer-execut
 for the recorded 33-occurrence fixture and chunk sizes one and seven. No GPU
 speedup or process-RSS claim follows from these work and transfer controls.
 
-The [fresh CPU comparison](docs/verification/consumer-execution-tranche-20260908/timing/README.md)
+The [preceding CPU comparison](docs/verification/consumer-execution-tranche-20260908/timing/README.md)
 uses 21 alternating timed pairs per case, one worker per solver and complete
 answer/optimal-tie enumeration. Native runs explicitly request eager grounding;
 automatic oracle selection uses certified tight-support checking on these inputs:
@@ -263,6 +263,16 @@ All 612 solve observations pass. The ABBA order, full distributions and referenc
 drift are retained; this establishes neither a general speedup nor a memory or
 GPU improvement. These source-controlled populations are distinct from the
 preceding workload comparison and must not be combined as one timing series.
+
+The instrumented `zetesis-perf --suite corpus` matrix now records explicit
+CPU/Metal and eager/lazy requests over all 94 clean examples, including refused
+cells. The separate `zetesis-bench lazy` compares matched frozen batches across
+scalar, Rayon, portable and Metal source rounds. Both have portable and frozen
+CPU qualification; their new physical measurement campaign remains pending.
+See the [matrix contract](crates/zetesis-validation/README.md) and
+[lazy experiment](crates/zetesis-experiments/README.md) for output, timing and
+resource scopes. Compact saved reports preserve every captured byte; they do
+not demonstrate lower solver memory use or peak process RSS.
 
 The [compact-trail experiment](docs/verification/trail-storage-20260908/README.md)
 was declined: its small storage saving did not establish a reliable runtime
