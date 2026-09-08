@@ -647,3 +647,261 @@ fn selected_term_kinds_keep_their_canonical_spelling() {
         )]
     );
 }
+
+#[test]
+fn malformed_record_fields_never_become_default_values() {
+    for (path, malformed) in [
+        ("/models", Json::Null),
+        ("/outcome/checked", json!(-1)),
+        ("/models/0/model/full_model", json!({})),
+        ("/models/0/model/full_model/0/arguments", json!("()")),
+        ("/models/0/model/full_model/0/predicate", json!(1)),
+        ("/models/0/model/full_model/0/sign", json!("unknown")),
+        ("/models/0/model/shown/atom_indices", Json::Null),
+        ("/models/0/model/shown/terms", Json::Null),
+    ] {
+        let mut value = one();
+        *value.pointer_mut(path).unwrap() = malformed;
+        assert!(
+            matches!(
+                parse(&value),
+                Err(Error::Invalid {
+                    issue: Issue::MalformedField,
+                    ..
+                })
+            ),
+            "{path}"
+        );
+    }
+}
+
+#[test]
+fn contradictory_publication_counts_are_refused() {
+    for (field, contradictory) in [
+        ("published_models", json!(0)),
+        ("checked", json!(0)),
+        ("verified_models", json!(0)),
+        ("status", json!("unsatisfiable")),
+    ] {
+        let mut value = one();
+        value["outcome"][field] = contradictory;
+        assert!(
+            matches!(
+                parse(&value),
+                Err(Error::Invalid {
+                    issue: Issue::Contradiction,
+                    ..
+                })
+            ),
+            "{field}"
+        );
+    }
+}
+
+#[test]
+fn discarded_unoptimized_models_prevent_complete_publication() {
+    let mut value = one();
+    value["outcome"]["checked"] = json!(2);
+    value["outcome"]["verified_models"] = json!(2);
+    assert!(matches!(
+        parse(&value),
+        Err(Error::Invalid {
+            issue: Issue::Contradiction,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn publication_numbers_must_cover_the_report_in_order() {
+    let mut value = one();
+    value["models"][0]["number"] = json!(2);
+    assert!(matches!(
+        parse(&value),
+        Err(Error::Invalid {
+            issue: Issue::Contradiction,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn missing_cost_declarations_do_not_mean_unoptimized() {
+    for path in ["/outcome", "/models/0/model"] {
+        let mut value = one();
+        let field = if path == "/outcome" {
+            "optimization"
+        } else {
+            "costs"
+        };
+        value
+            .pointer_mut(path)
+            .unwrap()
+            .as_object_mut()
+            .unwrap()
+            .remove(field);
+        assert!(matches!(
+            parse(&value),
+            Err(Error::Invalid {
+                issue: Issue::MissingField,
+                ..
+            })
+        ));
+    }
+}
+
+#[test]
+fn malformed_native_values_are_refused_before_spelling() {
+    for malformed in [
+        json!([{"kind":"unknown"}]),
+        json!([{"kind":null}]),
+        json!([{"kind":"string","value":0}]),
+        json!([{"kind":"symbol","value":false}]),
+        json!([{"kind":"tuple","arity":-1}]),
+        json!([{"kind":"function","name":"f","sign":"unknown","arity":0}]),
+    ] {
+        let value = document(vec![record(vec![atom("a", vec![malformed])], 1)]);
+        assert!(matches!(
+            parse(&value),
+            Err(Error::Invalid {
+                issue: Issue::MalformedField,
+                ..
+            })
+        ));
+    }
+}
+
+#[test]
+fn empty_predicate_names_fail_atom_construction() {
+    let value = document(vec![record(vec![atom("", vec![])], 1)]);
+    assert!(matches!(parse(&value), Err(Error::Atom(_))));
+}
+
+#[test]
+fn malformed_objective_fields_cannot_establish_an_optimum() {
+    for (path, malformed) in [
+        ("/outcome/optimization/work", json!(-1)),
+        ("/outcome/optimization/costs/0/priority", json!(i64::MAX)),
+        ("/outcome/optimization/costs/0/value", json!(u64::MAX)),
+    ] {
+        let mut value = optimal();
+        *value.pointer_mut(path).unwrap() = malformed;
+        assert!(
+            matches!(
+                parse(&value),
+                Err(Error::Invalid {
+                    issue: Issue::MalformedField,
+                    ..
+                })
+            ),
+            "{path}"
+        );
+    }
+}
+
+#[test]
+fn objective_ties_must_match_published_occurrences() {
+    let mut value = optimal();
+    value["outcome"]["optimization"]["tied_models"] = json!(1);
+    assert!(matches!(
+        parse(&value),
+        Err(Error::Invalid {
+            issue: Issue::Contradiction,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn shown_indices_must_follow_full_model_order() {
+    let mut value = document(vec![record(vec![atom("a", vec![]), atom("b", vec![])], 1)]);
+    value["models"][0]["model"]["shown"]["atom_indices"] = json!([1, 0]);
+    assert!(matches!(
+        parse(&value),
+        Err(Error::Invalid {
+            issue: Issue::Contradiction,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn per_value_node_limits_precede_flat_value_construction() {
+    let value = document(vec![record(
+        vec![atom(
+            "a",
+            vec![json!([
+                {"kind":"tuple","arity":1}, {"kind":"number","value":1}
+            ])],
+        )],
+        1,
+    )]);
+    let bytes = serde_json::to_vec(&value).unwrap();
+    let mut limits = native_json::Limits::default();
+    limits.value.max_nodes = 2;
+    assert!(native_json::parse(&bytes, limits).is_ok());
+    limits.value.max_nodes = 1;
+    assert!(matches!(
+        native_json::parse(&bytes, limits),
+        Err(Error::Value(ValueError::Limit {
+            resource: ValueResource::Nodes,
+            observed: 2,
+            limit: 1
+        }))
+    ));
+}
+
+#[test]
+fn publication_limits_count_duplicate_model_records() {
+    let bytes = serde_json::to_vec(&document(vec![record(vec![], 1), record(vec![], 2)])).unwrap();
+    let mut limits = native_json::Limits::default();
+    limits.report.max_witnesses = 2;
+    assert!(native_json::parse(&bytes, limits).is_ok());
+    limits.report.max_witnesses = 1;
+    assert!(matches!(
+        native_json::parse(&bytes, limits),
+        Err(Error::Limit {
+            resource: Resource::Witnesses,
+            attempted: 2,
+            limit: 1
+        })
+    ));
+}
+
+#[test]
+fn shown_occurrence_limits_span_all_records() {
+    let bytes = serde_json::to_vec(&document(vec![
+        record(vec![atom("a", vec![])], 1),
+        record(vec![atom("b", vec![])], 2),
+    ]))
+    .unwrap();
+    let mut limits = native_json::Limits::default();
+    limits.report.max_symbols = 2;
+    assert!(native_json::parse(&bytes, limits).is_ok());
+    limits.report.max_symbols = 1;
+    assert!(matches!(
+        native_json::parse(&bytes, limits),
+        Err(Error::Limit {
+            resource: Resource::Symbols,
+            attempted: 2,
+            limit: 1
+        })
+    ));
+}
+
+#[test]
+fn objective_dimension_limits_include_the_exact_vector() {
+    let bytes = serde_json::to_vec(&optimal()).unwrap();
+    let mut limits = native_json::Limits::default();
+    limits.report.max_cost_dimensions = 2;
+    assert!(native_json::parse(&bytes, limits).is_ok());
+    limits.report.max_cost_dimensions = 1;
+    assert!(matches!(
+        native_json::parse(&bytes, limits),
+        Err(Error::Limit {
+            resource: Resource::CostDimensions,
+            attempted: 2,
+            limit: 1
+        })
+    ));
+}

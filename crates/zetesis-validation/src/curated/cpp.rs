@@ -284,3 +284,7 @@ pub(super) fn identity(text: &str, target: usize) -> Result<(String, usize), Err
         "byte span does not start at a selected REQUIRE".into(),
     ))
 }
+
+#[cfg(test)]
+#[path = "../../tests/support/curated_literals.rs"]
+mod tests;

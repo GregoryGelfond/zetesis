@@ -489,3 +489,198 @@ fn the_verify_command_does_not_publish_success_for_a_missing_corpus() {
     assert!(output.stdout.is_empty());
     assert!(!output.stderr.is_empty());
 }
+
+fn change_first_legacy(directory: &Path, field: &str, value: Value) {
+    let path = directory.join("cases.jsonl");
+    let catalog = fs::read_to_string(&path).unwrap();
+    let mut cases = catalog
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap());
+    let mut first = cases.next().unwrap();
+    first[field] = value;
+    let mut changed = serde_json::to_string(&first).unwrap();
+    changed.push('\n');
+    for case in cases {
+        changed.push_str(&serde_json::to_string(&case).unwrap());
+        changed.push('\n');
+    }
+    fs::write(path, changed).unwrap();
+}
+
+#[test]
+fn altered_original_authority_cannot_be_imported() {
+    for (field, value) in [
+        ("source_file", Value::from("unknown.cc")),
+        ("byte_end", Value::from(u64::MAX)),
+        ("file_sha256", Value::from("0".repeat(64))),
+        ("section", Value::from("different section")),
+        ("assertion_ordinal", Value::from(999)),
+    ] {
+        let directory = copied_legacy();
+        change_first_legacy(directory.path(), field, value);
+        let destination = directory.path().join("new-corpus");
+        assert!(
+            matches!(
+                curated::import_legacy(directory.path(), &destination, Limits::default()),
+                Err(Error::Contract(_))
+            ),
+            "{field}"
+        );
+        assert!(!destination.exists());
+    }
+}
+
+#[test]
+fn altered_decoded_assertions_cannot_be_imported() {
+    for (field, value) in [
+        ("source", Value::from("different.")),
+        ("helper_arguments", serde_json::json!(["{\"different\"}"])),
+        ("expected_helper_output", Value::from("([],[])")),
+        ("filters", serde_json::json!(["different"])),
+        ("expected_helper_models", serde_json::json!([])),
+    ] {
+        let directory = copied_legacy();
+        change_first_legacy(directory.path(), field, value);
+        let destination = directory.path().join("new-corpus");
+        assert!(
+            matches!(
+                curated::import_legacy(directory.path(), &destination, Limits::default()),
+                Err(Error::Contract(_))
+            ),
+            "{field}"
+        );
+        assert!(!destination.exists());
+    }
+}
+
+#[test]
+fn unknown_catalog_fields_cannot_change_import_policy() {
+    let directory = copied_legacy();
+    change_first_legacy(directory.path(), "skip_verification", Value::Bool(true));
+    let destination = directory.path().join("new-corpus");
+    let error =
+        curated::import_legacy(directory.path(), &destination, Limits::default()).unwrap_err();
+    assert!(matches!(error, Error::Json(_)));
+    assert!(
+        std::error::Error::source(&error)
+            .unwrap()
+            .is::<serde_json::Error>()
+    );
+    assert!(!destination.exists());
+}
+
+#[test]
+fn invalid_catalog_utf8_never_creates_output() {
+    let directory = copied_legacy();
+    fs::write(directory.path().join("cases.jsonl"), [0xff]).unwrap();
+    let destination = directory.path().join("new-corpus");
+    assert!(matches!(
+        curated::import_legacy(directory.path(), &destination, Limits::default()),
+        Err(Error::Contract(_))
+    ));
+    assert!(!destination.exists());
+}
+
+#[test]
+fn original_byte_limits_include_the_largest_authority() {
+    let length = verified()
+        .origins()
+        .map(|origin| {
+            fs::read(legacy().join("originals").join(origin.path()))
+                .unwrap()
+                .len()
+        })
+        .chain([fs::read(legacy().join("originals/LICENSE.md"))
+            .unwrap()
+            .len()])
+        .max()
+        .unwrap();
+    let parent = tempfile::tempdir().unwrap();
+    let limits = Limits {
+        original_bytes: length,
+        ..Limits::default()
+    };
+    curated::import_legacy(&legacy(), &parent.path().join("fits"), limits).unwrap();
+    let refused = parent.path().join("refused");
+    assert_limit(
+        &curated::import_legacy(
+            &legacy(),
+            &refused,
+            Limits {
+                original_bytes: length - 1,
+                ..limits
+            },
+        )
+        .unwrap_err(),
+        Resource::OriginalBytes,
+        length,
+        length - 1,
+    );
+    assert!(!refused.exists());
+}
+
+#[test]
+fn full_model_limits_preserve_every_recorded_occurrence() {
+    let count = verified()
+        .cases()
+        .iter()
+        .map(|case| case.contract().full_models().len())
+        .sum::<usize>();
+    assert!(
+        curated::open(
+            &curated_root(),
+            Limits {
+                models: count,
+                ..Limits::default()
+            }
+        )
+        .is_ok()
+    );
+    assert_limit(
+        &curated::open(
+            &curated_root(),
+            Limits {
+                models: count - 1,
+                ..Limits::default()
+            },
+        )
+        .unwrap_err(),
+        Resource::Models,
+        count,
+        count - 1,
+    );
+}
+
+#[test]
+fn full_atom_limits_count_occurrences_across_models() {
+    let corpus = verified();
+    let count = corpus
+        .cases()
+        .iter()
+        .flat_map(|case| case.contract().full_models())
+        .map(Vec::len)
+        .sum::<usize>();
+    assert!(
+        curated::open(
+            &curated_root(),
+            Limits {
+                atoms: count,
+                ..Limits::default()
+            }
+        )
+        .is_ok()
+    );
+    assert_limit(
+        &curated::open(
+            &curated_root(),
+            Limits {
+                atoms: count - 1,
+                ..Limits::default()
+            },
+        )
+        .unwrap_err(),
+        Resource::Atoms,
+        count,
+        count - 1,
+    );
+}
