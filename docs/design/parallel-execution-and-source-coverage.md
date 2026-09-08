@@ -1,11 +1,56 @@
 # Parallel execution and source coverage
 
-Status: design sequence following the `7690475` release and its
+Status: design sequence, revised after checkpoint `62664db`.
+The execution measurements follow the `7690475` release and its
 [instrumented M4 Pro matrix](../verification/dependencies-measurement-tranche-20260908/physical/README.md).
-The isolated [certified Metal experiment](metal-tight-support.md) is the first
-implementation step. The remaining steps below are not yet implemented by this
-plan. They supersede earlier tranche priorities without changing historical
-qualification records.
+The isolated [certified Metal experiment](metal-tight-support.md) is complete.
+The remaining steps below describe work to implement and qualify; this plan
+does not establish their completion or change historical qualification records.
+
+## Scope and dependencies
+
+Admitted-language correctness and coverage govern the shared source
+representations used by the CPU and GPU proposals. No feature may borrow the
+qualification of an earlier implementation.
+
+| Capability | First deliverable | Acceptance obligation |
+| --- | --- | --- |
+| Aggregate source | Completed aggregate/scalar outputs in existing conditional consumer scopes | Preserve each original implication and aggregate equality; complete local bindings; arbitrary original/frozen interpretation checks, clingo models and exact stops |
+| Source sections | Explicit parameter-free `#program base` sections | Preserve all base statements, provenance, metadata and budgets across source/prepared/bundle APIs; continue located refusals for unimplemented named/parameterized sections |
+| CPU execution | Library-owned shared source batches using Union/Worlds | Ordered complete occurrence accounting, explicit shared versus per-world budgets, ordinary-solve composition and comparison against independent Rayon |
+| GPU execution | Bounded reusable lazy transport | Fresh membership truth, exact catalog/epoch identity, checked growth and failure semantics; physical Metal qualification and inclusive measurements |
+| Lazy source coverage | Lazy bounded choices and subsequent aggregate-head/objective slices | Reuse established source/binding foundations; each slice needs its own representation and preservation argument |
+
+The current integration contains checked source slices for
+[base sections](../verification/base-sections-20260908/README.md),
+[conditional consumers](../verification/conditional-consumers-20260908/README.md)
+and [numeric sum heads](../verification/weighted-heads-20260908/README.md).
+[Shared CPU rounds](shared-source-cpu.md) and
+[lazy transport reuse](../verification/lazy-transport-20260908/README.md) are
+implemented with scoped portable checks. Final integrated coverage, changed-path
+physical qualification and comparative measurements remain separate obligations.
+The broader lazy-choice, objective and aggregate-head items below remain work.
+
+Conditional consumers, weighted heads and objective consumers are distinct
+contracts. Weighted heads must separate permission for a head atom from its
+numeric tuple contribution: a zero contribution can still permit a head. The
+implemented source slice admits signed numeric `#sum` and nonnegative
+numeric `#sum+` weights only; negative `#sum+` heads have a recorded reference
+discrepancy and require a separate semantic resolution. Objective consumers need an explicit activation and priority-presence
+contract. Neither extension consists of removing the existing refusal alone.
+General tuple aliases and extremal heads follow the checked weighted fragment.
+
+The [lazy bounded-choice design](lazy-bounded-choices.md) remains part of the
+work sequence, even though integer-bounded choices already admit eagerly.
+Track source-language admission and grounder/backend eligibility separately.
+Closing one does not establish the other, and source parity alone does not
+complete the v1 requirement for useful lazy Metal execution.
+
+Shared CPU and GPU transport changes retain the current defaults until ordinary
+and matched measurements establish a useful range. Further general arithmetic
+or binding optimization requires refreshed grounding attribution for SEND. File size, charged payload and peak process memory remain
+separate measurements. A speed hypothesis without an identified expensive
+operation does not displace a concrete language gap.
 
 The [matched device measurements](../verification/tight-metal-experiment-20260908/measurements/README.md)
 now complete the first experiment: residency helps, but Metal tight-support

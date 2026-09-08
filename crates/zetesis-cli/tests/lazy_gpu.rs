@@ -129,6 +129,14 @@ mod physical {
                 assert_eq!(stats.queued_results, 0);
                 assert!(stats.dispatches > 0);
                 assert!(stats.world_instances > 0);
+                assert!(stats.transport_allocations > 0);
+                assert!(stats.peak_transport_bytes > 0);
+                assert_eq!(
+                    stats
+                        .transport_allocations
+                        .checked_add(stats.transport_reuses),
+                    Some(stats.dispatches)
+                );
                 assert_eq!(stats.requested_backend, zetesis_cli::Backend::Metal);
                 assert_eq!(stats.backend, "Metal");
                 assert!(diagnostics.contains("effective=lazy"));
@@ -137,6 +145,14 @@ mod physical {
                 assert_eq!(
                     actual["statistics"]["lazy_execution"]["dispatches"],
                     stats.dispatches
+                );
+                assert_eq!(
+                    actual["statistics"]["lazy_execution"]["transport_reuses"],
+                    stats.transport_reuses
+                );
+                assert_eq!(
+                    actual["statistics"]["lazy_execution"]["peak_transport_bytes"],
+                    stats.peak_transport_bytes
                 );
                 eprintln!("{}", actual["statistics"]["lazy_execution"]);
             }

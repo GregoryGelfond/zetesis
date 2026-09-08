@@ -435,7 +435,8 @@ the shared finite-value evaluator; nested pool/interval forms keep their own
 admission limits. A dedicated
 head-element ceiling bounds this source profile.
 An assignment introduces one fresh named target, absent from its own tuple and
-conditions; other outer variables require ordinary positive bindings. Finite
+conditions; its other inputs must be established by ordinary bindings or earlier
+acyclic producers. Finite
 count ranges and signed subset sums generate possible values, and each retained
 value keeps its exact equality formula. Correlated, unrealizable values can enter
 this upper approximation but cannot bypass reduct checking. Incomplete support
@@ -447,7 +448,7 @@ reuse coalesced elements and equality roots for the same aggregate and outer
 binding. A shared aggregate-family kernel builds nonnegative thresholds once
 for related bounds; signed formulas retain cumulative subset/work limits and
 transactional rollback. Numeric min/max assignments preserve real empty extrema.
-Sum functions ignore nonnumeric/empty tuples; sum+ also ignores negative weights.
+Body sum functions ignore nonnumeric/empty tuples; body sum+ also ignores negative weights.
 Broader assignments and conditions remain outside the profile. Numeric min/max
 source endpoints implicated in six recorded clingo discrepancies remain refused.
 Independent multiple aggregate assignments stream products through the existing
@@ -467,10 +468,12 @@ filters inspect completed rows. Undefined or overflowing consumer arithmetic
 still refuses admission, even when a proposal would later prove unrealizable.
 The bounded plan charges dependency scans and input/readiness/instruction storage
 under existing expansion limits. Aggregate-free rules keep their previous
-accounting. Remaining conditional consumers and objective producers retain their
-explicit profile boundaries. Dependencies between assignment generators are
-refused even through scalar or range descendants; previously admitted comparison
-scopes remain available. See the
+accounting. Existing universal conditional scopes now consume completed outer
+values while preserving every original implication and aggregate equality. Local
+witness/binding restrictions and objective producers retain their explicit
+profile boundaries. Acyclic dependencies between assignment generators can pass
+through scalar and range descendants; cyclic and self-dependent generators remain
+refused. Previously admitted comparison scopes remain available. See the
 [aggregate-consumer record](verification/aggregate-consumers-20260907/README.md)
 for exact boundaries, finite-ground comparisons and schedule-bypass evidence.
 The [choice-body extension](verification/choice-consumers-20260908/README.md)
@@ -501,7 +504,14 @@ Head-local eligibility and outer-body negative gates may both read completed
 outer aggregate values, while retaining their separate source scopes.
 The [negative-eligibility record](verification/negative-count-eligibility-20260908/README.md)
 checks original/frozen truth, projection, safety and complete clingo models.
-Tuple aliases and weighted/extremal function heads remain refused. The [bounds and eligibility record](verification/aggregate-bounds-20260907/README.md)
+Signed numeric `#sum` and nonnegative numeric `#sum+` heads reuse the checked
+correspondence. Permission rules retain every coalesced eligibility formula;
+separate activated constraints inspect the numeric guard. Zero weights cannot
+erase permission. Negative `#sum+` head weights, nonnumeric sum weights, tuple
+aliases and extremal function heads retain located internal refusals. See the
+[weighted-head record](verification/weighted-heads-20260908/README.md) and
+[composition laws](../proofs/Zetesis/HeadMeasures.lean); numeric compiler and
+source/refinement obligations remain explicit. The [bounds and eligibility record](verification/aggregate-bounds-20260907/README.md)
 contains independent original/frozen comparisons and exact resource checks.
 The main CLI supports both S0 GPU closure and explicitly selected hybrid formula
 propagation. The separate formula experiment compares scalar CPU, Rayon and

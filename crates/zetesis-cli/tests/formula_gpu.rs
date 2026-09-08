@@ -146,6 +146,11 @@ mod physical {
             "{a;b;c;d}. #maximize{2@1,k:a;2@1,k:b;1@1,c:c}. #show a/0.",
             "{p;-p}. q:-not p,not -p. #show x:q.",
             "{e(1);e(2)}. n(N):-N=#sum{X:e(X)}. #show n/1.",
+            // Original sources also occur in weighted_heads' external clingo corpus.
+            "1#sum{-1:a;2:b}1.",
+            "{d}.0#sum{0:a:not d}0.",
+            "{d}.1#sum+{1:a:not d}1.",
+            "0#sum+{0:a}0.",
         ] {
             let mut expected = Vec::new();
             let cpu = run_with_diagnostics(

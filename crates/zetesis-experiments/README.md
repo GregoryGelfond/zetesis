@@ -279,7 +279,7 @@ root, for example:
 ```sh
 cargo +1.97.1 build -p zetesis-experiments --bin zetesis-bench --release --locked --offline
 target/release/zetesis-bench grounding \
-  validation/corpus/kr-domains/standalone/send-money/send-money.lp \
+  examples/kr-domains/standalone/send-money/send-money.lp \
   --repetitions 3 > target/send-grounding.json
 ```
 

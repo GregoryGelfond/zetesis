@@ -90,7 +90,9 @@ The existing `run` and diagnostic convenience APIs retain their
 Failure evidence separates verified stable models, pending batch candidates,
 verified queued models and completely published Answer records. Closure verification
 includes all accepted members of a completed batch, while its `checked` counter
-retains the existing count of results consumed by the driver. A cost-bearing
+retains the existing count of result/control records consumed by the driver.
+A whole-batch stop contributes one such control record; shared execution's
+submitted/completed/stopped counters retain the full occurrence accounting. A cost-bearing
 Answer is counted only after its cost line also succeeds. An output sink can
 accept a partial record, but that record is excluded from `published_models`.
 `completion: None` means no search stopping classification was established;
@@ -311,6 +313,23 @@ artifact, including model parity and partial-result accounting. The
 [physical record](../../docs/verification/lazy-device-integration-20260907/physical/README.md)
 states its executable identity and limits; it is not release-binary or performance
 qualification.
+
+Advanced `--source-batching independent|union|worlds` can select shared source
+rounds on the owned Rayon pool. Independent candidate joins remain the default.
+Union and Worlds require relational closure with lazy/auto grounding and CPU/auto
+backend; an explicit shared policy resolves auto to CPU without GPU discovery.
+`--max-source-work` bounds the shared source work, while `--max-work` bounds each
+world's evaluation. A stopped world makes the whole batch incomplete. The typed
+`SharedExecutionStatistics` and JSON `shared_execution` record retain separate
+source/world work and candidate occurrence counts. See the
+[library and execution contract](../../docs/design/shared-source-cpu.md).
+
+Lazy device statistics additionally record fresh transport buffer sets, reuse
+within a candidate batch, and peak requested device-buffer bytes. Those quantities
+are distinct from active transfers, driver storage and process RSS. Reuse rewrites
+every active input and clears output before dispatch; it changes allocation
+behavior, not the frozen-reduct check. The changed transport requires its own
+[physical qualification](../../docs/verification/lazy-transport-20260908/README.md).
 
 ## Source and objectives
 

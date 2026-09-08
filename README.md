@@ -148,6 +148,12 @@ zetesis devices
 
 `zetesis devices` is an optional inventory command, not a setup step.
 
+The [Linux/Vulkan qualification plan](docs/design/linux-vulkan-qualification.md)
+covers a second reported Fedora 44/Radeon 780M machine and a single transferable
+report archive. Vulkan execution is available through explicit selection, but
+that machine has not yet been qualified; repeated benchmark interfaces still
+need an explicit Vulkan route.
+
 The [grounder comparison](docs/design/grounding-compared-with-clingo.md) explains
 how zetesis's eager and lazy routes differ from clingo's grounder, including
 their current language coverage and hardware boundaries.
@@ -189,10 +195,10 @@ syntax, raising and evaluation errors from zetesis implementation refusals.
 |---|---|
 | Normal rules | Safe finite rules, constraints, default/double negation, strong negation with coherence, and relational lazy checking in the admitted normal-rule profile. |
 | Formula rules | Bounded choices, signed singleton/disjunctive heads, finite rule/head pools, evaluated heads, scalar/range bindings, comparisons and admitted universal body conditionals. |
-| Aggregates | Body count/sum/sum+ and complete-value min/max comparisons; acyclic dependent assignments feeding scalar/tuple filters, scalar equalities, evaluated positive arguments and heads, default/double-negated outer atoms and admitted projections, finite outer ranges and integer choice bounds; function-count heads with positive, default-negated or double-negated eligibility and checked tuple/atom correspondence. |
+| Aggregates | Body count/sum/sum+ and complete-value min/max comparisons; acyclic dependent assignments feeding scalar/tuple filters, scalar equalities, evaluated positive arguments and heads, default/double-negated outer atoms and admitted projections, finite outer ranges, integer choice bounds and existing universal conditional scopes; count heads, signed numeric sum heads and nonnegative numeric sum+ heads with retained eligibility and checked tuple/atom correspondence. |
 | Logical values | Closed signed functions and tuples; finite construction from bound inputs; positive tuple/function patterns, including local conditional-consequent witnesses; evaluated positive arguments with independently bound inputs; evaluated already-safe negative arguments. |
-| Objectives and observations | Admitted minimize/maximize/weak constraints; complete tuple keys and optimal ties; signature, term and conditional `#show`; `#defined`; original include bundles and constants. |
-| Refusal boundaries | Cyclic or self-dependent assignment generators; remaining conditional consumers; weighted/extremal function heads and nontrivial conditional disjuncts; unsupported objective-dependent producers; broader directives and exact clingo undefined-arithmetic behavior remain incomplete. |
+| Objectives and observations | Admitted minimize/maximize/weak constraints; complete tuple keys and optimal ties; signature, term and conditional `#show`; `#defined`; original include bundles and constants; explicit parameter-free `#program base` sections. |
+| Refusal boundaries | Cyclic or self-dependent assignment generators; unsupported local conditional generators; negative sum+ head weights, extremal function heads and broader tuple aliases; nontrivial conditional disjuncts; unsupported objective-dependent producers; broader directives and exact clingo undefined-arithmetic behavior remain incomplete. |
 
 These rows summarize profiles; they are not a grammar specification. The
 [source API guide](crates/zetesis-themelios/README.md) describes composition,
@@ -211,14 +217,28 @@ the rule applies. Similarly, `{d}.q(K):-N=#count{1:d},K=1..N.` has the empty
 answer set and `{d,q(1)}`. Each generated row retains the original aggregate
 equality and rule activation; a proposed value never certifies aggregate truth.
 
+Completed values also feed the existing universal conditional scopes, with every
+original implication retained. The [conditional-consumer record](docs/verification/conditional-consumers-20260908/README.md)
+compares 33 original sources, 146 complete clingo models and 9,876 original/frozen
+interpretation pairs. Explicit parameter-free `#program base` declarations now
+work across [source and bundle boundaries](docs/verification/base-sections-20260908/README.md);
+named or parameterized sections remain located implementation refusals.
+
+[Numeric sum heads](docs/verification/weighted-heads-20260908/README.md) now keep
+head permission separate from the numeric bound, including zero-weight heads.
+The scoped checks retain 27 originals, 43 complete clingo models and 846 arbitrary
+frozen interpretation pairs, plus generated arithmetic properties. Negative
+`#sum+` head weights remain an internal limitation with a recorded reference
+discrepancy; they are not labeled modeling errors.
+
 The [ordinary release qualification](docs/verification/dependencies-measurement-tranche-20260908/README.md)
 passes **1,958 workspace test/doc checks**, **317 CPU-only CLI checks** and
 **62 external-oracle tests**. Both independent line-coverage profiles exceed their
 unchanged 91% floors: **91.0170% workspace / 92.3345% CPU-only CLI**. The frozen
 release passes all **94 clean kr-domains cases** and **24 selected upstream
 comparisons**, preserving the respective answer contracts and full-model checks.
-The [current Lean audit](proofs/verification/tight-metal-20260908/README.md)
-checks **783 laws across 67 modules**; Rust and WGSL correspondence remains unproved.
+The [current Lean audit](proofs/verification/weighted-heads-20260908/README.md)
+checks **794 laws across 69 modules**; Rust and WGSL correspondence remains unproved.
 
 A standalone [tight-support Metal experiment](docs/design/metal-tight-support.md)
 now applies the CPU class certificate through a bounded GPU checker. Its matched
