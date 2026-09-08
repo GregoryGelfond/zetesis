@@ -1,0 +1,14 @@
+[
+  {
+    "command": [
+      "python3",
+      "scripts/proof_record.py"
+    ],
+    "cwd": ".",
+    "started_utc": "2026-09-08T17:47:58.408067+00:00",
+    "elapsed_seconds": 0.17909600003622472,
+    "exit_code": 1,
+    "result": "FAIL",
+    "log": "verification/weighted-heads-20260908/record-check.log"
+  }
+]

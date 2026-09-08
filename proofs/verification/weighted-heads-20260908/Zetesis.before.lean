@@ -66,4 +66,3 @@ import Zetesis.AggregateDependencies
 import Zetesis.BinaryWatch
 import Zetesis.TightEvaluation
 import Zetesis.ConditionalConsumers
-import Zetesis.HeadMeasures

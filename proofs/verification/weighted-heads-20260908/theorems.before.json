@@ -1730,36 +1730,6 @@
     "line": 157
   },
   {
-    "name": "Zetesis.HeadMeasures.bound_equivalent",
-    "file": "Zetesis/HeadMeasures.lean",
-    "line": 50
-  },
-  {
-    "name": "Zetesis.HeadMeasures.bound_frozen",
-    "file": "Zetesis/HeadMeasures.lean",
-    "line": 41
-  },
-  {
-    "name": "Zetesis.HeadMeasures.bound_original",
-    "file": "Zetesis/HeadMeasures.lean",
-    "line": 34
-  },
-  {
-    "name": "Zetesis.HeadMeasures.group_equivalent",
-    "file": "Zetesis/HeadMeasures.lean",
-    "line": 77
-  },
-  {
-    "name": "Zetesis.HeadMeasures.permission_equivalent",
-    "file": "Zetesis/HeadMeasures.lean",
-    "line": 60
-  },
-  {
-    "name": "Zetesis.HeadMeasures.stable_in_context",
-    "file": "Zetesis/HeadMeasures.lean",
-    "line": 94
-  },
-  {
     "name": "Zetesis.IndexedCandidates.block_exact",
     "file": "Zetesis/IndexedCandidates.lean",
     "line": 75

@@ -20,7 +20,6 @@ and theorem hypotheses are authoritative; prose is a reading aid.
 | What are the traps in otherwise plausible optimizations? | [Examples](../Zetesis/Examples.lean) and the counterexamples in [Feedback](../Zetesis/Feedback.lean): choices and candidate-relative reasoning matter. |
 | How do finite source values and local alternatives preserve meaning? | [StructuralBindings](../Zetesis/StructuralBindings.lean) and [FiniteValues](../Zetesis/FiniteValues.lean) state matching/construction laws; [ConsequentAlternatives](../Zetesis/ConsequentAlternatives.lean) separates universal condition rows from their existential signed consequents. Compiler coverage and local scope remain explicit unproved bridges. |
 | How may an aggregate result feed a universal conditional? | [ConditionalConsumers](../Zetesis/ConditionalConsumers.lean) retains the original equality, activation and complete local implications under every frozen interpretation. A proposed value is not an established aggregate result. |
-| How does a weighted head separate permission from its bound? | [HeadMeasures](../Zetesis/HeadMeasures.lean) keeps the eligibility reduct in permission rules and numeric agreement in a candidate constraint. Numeric compilation and complete head carriers remain separate obligations. |
 
 The intended layering is: logical definitions → reusable semantic laws → justified
 algorithmic specializations → representation and execution obligations. Existing

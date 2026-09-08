@@ -346,12 +346,6 @@ import Zetesis
 #print axioms Zetesis.GroundGuards.negative_chain_scope
 #print axioms Zetesis.GroundGuards.replacement_in_formula_context
 #print axioms Zetesis.GroundGuards.replacement_preserves_stability
-#print axioms Zetesis.HeadMeasures.bound_equivalent
-#print axioms Zetesis.HeadMeasures.bound_frozen
-#print axioms Zetesis.HeadMeasures.bound_original
-#print axioms Zetesis.HeadMeasures.group_equivalent
-#print axioms Zetesis.HeadMeasures.permission_equivalent
-#print axioms Zetesis.HeadMeasures.stable_in_context
 #print axioms Zetesis.IndexedCandidates.block_exact
 #print axioms Zetesis.IndexedCandidates.failed_literal_forced
 #print axioms Zetesis.IndexedCandidates.failed_literal_query_exact
