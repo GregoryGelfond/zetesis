@@ -1,6 +1,7 @@
 //! Frozen candidate traces from the unpacked watch implementation at 78a069b.
 //! These fixtures compare ordered semantic candidates, every cumulative search
-//! counter, and terminal outcomes. They do not assert stable-model membership.
+//! counter, and terminal outcomes under the explicit reference cost map below.
+//! They do not assert stable-model membership.
 
 use std::fmt::Write as _;
 
@@ -64,7 +65,20 @@ fn report_queens_watch_storage() {
     }
 }
 
+// Historical fixtures charge both watched positions in every binary
+// replacement attempt. The new path inspects neither. Restore exactly these
+// omitted charges for comparison; actual solver statistics remain untouched.
+fn reference_statistics(mut actual: SearchStatistics) -> SearchStatistics {
+    let omitted = super::propagation_profile::snapshot()
+        .binary_attempts
+        .checked_mul(2)
+        .unwrap();
+    actual.work = actual.work.checked_add(omitted).unwrap();
+    actual
+}
+
 fn trace(source: &str, refined: bool, limits: SearchLimits) -> String {
+    super::propagation_profile::reset();
     let admitted = admit_formula(
         source.into(),
         AdmissionOptions::default(),
@@ -108,16 +122,26 @@ fn trace(source: &str, refined: bool, limits: SearchLimits) -> String {
                     record,
                     "model {:?}; {:?}",
                     candidate.atoms().collect::<Vec<_>>(),
-                    charged.statistics
+                    reference_statistics(charged.statistics)
                 )
                 .unwrap();
                 if let Err(error) = encoding::block(&mut cnf, &candidate, &mut charged) {
-                    writeln!(record, "block {error:?}; {:?}", charged.statistics).unwrap();
+                    writeln!(
+                        record,
+                        "block {error:?}; {:?}",
+                        reference_statistics(charged.statistics)
+                    )
+                    .unwrap();
                     return record;
                 }
             }
             terminal => {
-                writeln!(record, "{terminal:?}; {:?}", charged.statistics).unwrap();
+                writeln!(
+                    record,
+                    "{terminal:?}; {:?}",
+                    reference_statistics(charged.statistics)
+                )
+                .unwrap();
                 return record;
             }
         }
@@ -126,7 +150,17 @@ fn trace(source: &str, refined: bool, limits: SearchLimits) -> String {
 }
 
 #[test]
-fn queens_candidate_traces_match_the_frozen_baseline() {
+#[ignore = "bounded refined-cursor work profile; no clock or stable-model claim"]
+fn profile_refined_choice_trace() {
+    let record = trace(CHOICES, true, SearchLimits::default());
+    println!(
+        "REFERENCE_COST_TRACE (omitted binary positions restored)\n{record}PROFILE {:?}",
+        super::propagation_profile::snapshot()
+    );
+}
+
+#[test]
+fn binary_elision_preserves_queens_reference_traces() {
     let expected = [
         include_str!("../fixtures/watch-traces/queens-01.txt"),
         include_str!("../fixtures/watch-traces/queens-02.txt"),
@@ -141,7 +175,7 @@ fn queens_candidate_traces_match_the_frozen_baseline() {
 }
 
 #[test]
-fn refined_candidate_trace_matches_the_frozen_baseline() {
+fn binary_elision_preserves_the_refined_reference_trace() {
     assert_eq!(
         trace(CHOICES, true, SearchLimits::default()),
         include_str!("../fixtures/watch-traces/refined.txt")
@@ -149,9 +183,11 @@ fn refined_candidate_trace_matches_the_frozen_baseline() {
 }
 
 #[test]
-fn exact_search_ceilings_preserve_the_frozen_trace() {
+fn reduced_work_ceiling_permits_the_complete_trace() {
+    // Frozen baseline: 2294 charges, including two no-op positions in each
+    // of 36 binary replacement attempts. The exact new ceiling is 2222.
     let limits = SearchLimits {
-        max_work: 2294,
+        max_work: 2222,
         max_decisions: 9,
     };
     assert_eq!(
@@ -161,9 +197,9 @@ fn exact_search_ceilings_preserve_the_frozen_trace() {
 }
 
 #[test]
-fn short_work_ceiling_preserves_the_frozen_stop() {
+fn reduced_work_ceiling_stops_one_tick_short() {
     let limits = SearchLimits {
-        max_work: 2293,
+        max_work: 2221,
         max_decisions: 9,
     };
     assert_eq!(
@@ -173,9 +209,9 @@ fn short_work_ceiling_preserves_the_frozen_stop() {
 }
 
 #[test]
-fn short_decision_ceiling_preserves_the_frozen_stop() {
+fn binary_elision_preserves_the_decision_stop() {
     let limits = SearchLimits {
-        max_work: 2294,
+        max_work: 2222,
         max_decisions: 8,
     };
     assert_eq!(

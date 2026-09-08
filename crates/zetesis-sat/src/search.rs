@@ -21,6 +21,14 @@ mod watch_tests;
 #[path = "../tests/support/watch_traces.rs"]
 mod watch_traces;
 
+#[cfg(test)]
+#[path = "../tests/support/propagation_profile.rs"]
+mod propagation_profile;
+
+#[cfg(test)]
+#[path = "../tests/support/binary_watch_contracts.rs"]
+mod binary_watch_tests;
+
 pub(crate) use cursor::Cursor;
 
 use crate::{Assignment, Cnf, Control, Incomplete, Literal};
@@ -30,6 +38,8 @@ use crate::{Assignment, Cnf, Control, Incomplete, Literal};
 pub struct SearchLimits {
     /// Initialization, watch visits, literal tests, branching scans and undo steps.
     /// Stable-model enumeration also charges optional certificate work here.
+    /// Binary clauses have no replacement candidates, so propagation charges
+    /// their watch visit without a replacement-position scan.
     pub max_work: u64,
     /// Maximum fresh decision frames; flipping an existing frame is backtracking.
     pub max_decisions: u64,
@@ -254,6 +264,8 @@ impl State {
             let mut cursor = self.heads[false_literal.index()];
             while let Some(node) = cursor {
                 budget.tick()?;
+                #[cfg(test)]
+                propagation_profile::visit();
                 let following = self.next[node.index()];
                 let clause = node.index() / 2;
                 let slot = node.index() % 2;
@@ -293,6 +305,14 @@ impl State {
         slot: usize,
         budget: &mut Budget<'_, impl Quota>,
     ) -> Result<Option<usize>, Incomplete> {
+        #[cfg(test)]
+        propagation_profile::replacement_attempt(cnf.clauses()[clause].len());
+        // Two distinct watches cover every position of a binary clause. The
+        // calling watch visit has already polled control and charged its work;
+        // there is no replacement position to examine or watch to relocate.
+        if cnf.clauses()[clause].len() == 2 {
+            return Ok(None);
+        }
         for position in 0..cnf.clauses()[clause].len() {
             budget.tick()?;
             if position != self.positions[clause][slot]
