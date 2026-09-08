@@ -246,7 +246,9 @@ fn lower_layer_failures_preserve_typed_causes_at_the_public_cli_boundary() {
     );
     let diagnostic = error.to_string();
     assert!(diagnostic.starts_with("source admission:"));
-    assert!(diagnostic.contains("bytes "), "{diagnostic}");
+    assert!(diagnostic.contains("<input>:1:3"), "{diagnostic}");
+    assert!(diagnostic.contains("1 | p(."), "{diagnostic}");
+    assert!(diagnostic.contains("to close this `(`"), "{diagnostic}");
 
     let admitted = zetesis_themelios::admit(
         "p.".to_owned(),
