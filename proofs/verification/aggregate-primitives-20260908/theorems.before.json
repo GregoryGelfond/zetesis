@@ -185,66 +185,6 @@
     "line": 35
   },
   {
-    "name": "Zetesis.AggregateReduct.all_frozen",
-    "file": "Zetesis/AggregateReduct.lean",
-    "line": 106
-  },
-  {
-    "name": "Zetesis.AggregateReduct.clause_frozen",
-    "file": "Zetesis/AggregateReduct.lean",
-    "line": 148
-  },
-  {
-    "name": "Zetesis.AggregateReduct.clause_mask",
-    "file": "Zetesis/AggregateReduct.lean",
-    "line": 116
-  },
-  {
-    "name": "Zetesis.AggregateReduct.clause_original",
-    "file": "Zetesis/AggregateReduct.lean",
-    "line": 138
-  },
-  {
-    "name": "Zetesis.AggregateReduct.direct_reduct",
-    "file": "Zetesis/AggregateReduct.lean",
-    "line": 215
-  },
-  {
-    "name": "Zetesis.AggregateReduct.evaluator_refinement",
-    "file": "Zetesis/AggregateReduct.lean",
-    "line": 224
-  },
-  {
-    "name": "Zetesis.AggregateReduct.excluded_masks",
-    "file": "Zetesis/AggregateReduct.lean",
-    "line": 163
-  },
-  {
-    "name": "Zetesis.AggregateReduct.frozen",
-    "file": "Zetesis/AggregateReduct.lean",
-    "line": 189
-  },
-  {
-    "name": "Zetesis.AggregateReduct.masks_complete",
-    "file": "Zetesis/AggregateReduct.lean",
-    "line": 45
-  },
-  {
-    "name": "Zetesis.AggregateReduct.original",
-    "file": "Zetesis/AggregateReduct.lean",
-    "line": 177
-  },
-  {
-    "name": "Zetesis.AggregateReduct.selected_exists",
-    "file": "Zetesis/AggregateReduct.lean",
-    "line": 77
-  },
-  {
-    "name": "Zetesis.AggregateReduct.selected_forall",
-    "file": "Zetesis/AggregateReduct.lean",
-    "line": 69
-  },
-  {
     "name": "Zetesis.BatchAccounting.commit_accounted",
     "file": "Zetesis/BatchAccounting.lean",
     "line": 103
@@ -2403,36 +2343,6 @@
     "name": "Zetesis.OuterRanges.row_membership",
     "file": "Zetesis/OuterRanges.lean",
     "line": 29
-  },
-  {
-    "name": "Zetesis.PartitionCapacities.capacity_bounds",
-    "file": "Zetesis/PartitionCapacities.lean",
-    "line": 50
-  },
-  {
-    "name": "Zetesis.PartitionCapacities.count_append",
-    "file": "Zetesis/PartitionCapacities.lean",
-    "line": 35
-  },
-  {
-    "name": "Zetesis.PartitionCapacities.count_members",
-    "file": "Zetesis/PartitionCapacities.lean",
-    "line": 41
-  },
-  {
-    "name": "Zetesis.PartitionCapacities.full_capacity",
-    "file": "Zetesis/PartitionCapacities.lean",
-    "line": 84
-  },
-  {
-    "name": "Zetesis.PartitionCapacities.inconsistent_premises",
-    "file": "Zetesis/PartitionCapacities.lean",
-    "line": 75
-  },
-  {
-    "name": "Zetesis.PartitionCapacities.local_lower",
-    "file": "Zetesis/PartitionCapacities.lean",
-    "line": 63
   },
   {
     "name": "Zetesis.PositiveArguments.declared_input_agreement",
