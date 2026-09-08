@@ -111,7 +111,7 @@ impl Serialize for Batch<'_> {
 pub struct Activity {
     /// Scalar/Rayon reductions invoked, including errors from joined tasks.
     pub cpu_attempts: usize,
-    /// Native reductions completed before any joined error; no partial sample.
+    /// Successfully completed joined reductions; no partial sample is accepted.
     pub cpu_completed: usize,
     /// Actual charged native reduction work, including failed prefixes.
     pub cpu_work: u64,

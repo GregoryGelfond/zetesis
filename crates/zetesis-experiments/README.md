@@ -81,7 +81,8 @@ allocation, upload, dispatch, readback and result construction. `device-resident
 owns a separate device/pipeline; its initial sample primes this case, and all
 subsequent samples must reuse its numeric group and exact transport. Both routes
 execute new reductions every time. Fresh clearing, pipeline setup, parity checks,
-publication and destruction are outside clocks. These labels describe upload
+publication and returned sample destruction are outside clocks. Temporary result
+destruction inside the reduction call remains timed. These labels describe upload
 boundaries, not process-cold execution or hardware timestamps.
 
 `fixture_version = 1` defines a complete deterministic grammar. The two atoms are

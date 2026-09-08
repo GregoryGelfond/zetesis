@@ -200,7 +200,7 @@ pub fn measure_with_control(
         &Event::Configuration {
             schema: 1,
             configuration,
-            scope: "one complete native Group; identical acquired original/frozen Eligibility occurrences; fixture, actual mask acquisition, numeric preparation and native reference have separate setup intervals; reduction clocks include result allocation/conversion and actual GPU upload/dispatch/readback; pool/two-device pipeline setup, fresh cache clearing, parity checks, destruction and publication excluded; CPU and GPU retain distinct work units; no grounding, outer search, stable-membership, shader timestamps, process RSS or ordinary solver speedup claim",
+            scope: "one complete native Group; identical acquired original/frozen Eligibility occurrences; fixture, actual mask acquisition, numeric preparation and native reference have separate setup intervals; reduction clocks include result allocation/conversion, temporary result destruction and actual GPU upload/dispatch/readback; pool/two-device pipeline setup, fresh cache clearing, parity checks, returned sample destruction and publication excluded; CPU and GPU retain distinct work units; no grounding, outer search, stable-membership, shader timestamps, process RSS or ordinary solver speedup claim",
         },
     )?;
     let mut resources = Resources::new(configuration, control, &mut emit)?;
