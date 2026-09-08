@@ -65,6 +65,38 @@ impl Grounder {
     }
 }
 
+/// Relational CPU source traversal across candidate occurrences.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+pub enum SourceBatching {
+    /// Each candidate owns an independent relational join traversal.
+    #[default]
+    Independent,
+    /// Share the union carrier; evaluate each frozen candidate on Rayon.
+    Union,
+    /// Prune source prefixes with per-world membership; evaluate on Rayon.
+    Worlds,
+}
+
+impl SourceBatching {
+    /// Stable policy spelling for diagnostics and machine-readable reports.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Independent => "independent",
+            Self::Union => "union",
+            Self::Worlds => "worlds",
+        }
+    }
+
+    pub(crate) const fn selection(self) -> Option<zetesis_cpu::lazy::SourceSelection> {
+        match self {
+            Self::Independent => None,
+            Self::Union => Some(zetesis_cpu::lazy::SourceSelection::Union),
+            Self::Worlds => Some(zetesis_cpu::lazy::SourceSelection::Worlds),
+        }
+    }
+}
+
 /// Exact stable-model oracle selection, independent of language support.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum Oracle {
@@ -121,6 +153,11 @@ pub struct Options {
     /// substitution and ground-rule ceilings.
     #[arg(long, value_enum, default_value_t)]
     pub grounder: Grounder,
+    /// Advanced relational CPU source batching. Union/worlds require lazy or
+    /// auto grounding and select CPU when backend is auto. A stopped shared
+    /// batch publishes no candidate checks; independent remains the default.
+    #[arg(long, value_enum, default_value_t, hide_short_help = true)]
+    pub source_batching: SourceBatching,
     /// Advanced oracle selection. Auto preserves stable-model semantics while
     /// selecting an applicable reduct procedure. Explicit hardware and grounder
     /// requests are always honored or refused.
@@ -223,10 +260,16 @@ pub struct Options {
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_carrier_atoms, hide_short_help = true)]
     pub max_carrier_atoms: usize,
     /// Maximum charged oracle operations per CPU candidate, or shared source
-    /// operations per lazy GPU batch. Join/copy and eager scan units differ.
+    /// operations per lazy GPU batch. Shared CPU worlds count record visits
+    /// plus antecedent tests. Join/copy and eager scan units differ.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_work, hide_short_help = true)]
     pub max_work: u64,
-    /// Maximum derived CPU atoms, demanded lazy GPU catalog atoms or eager atoms.
+    /// Collective source work per shared CPU batch. Separate from max-work,
+    /// which bounds record visits plus antecedent tests per shared CPU world.
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_source_work, hide_short_help = true)]
+    pub max_source_work: u64,
+    /// Maximum derived independent CPU atoms, shared CPU/GPU catalog atoms or
+    /// eager atoms. A shared catalog cap is collective across the batch.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_atoms, hide_short_help = true)]
     pub max_atoms: usize,
     /// Maximum bytes in each original file or standard input before parsing.
@@ -250,8 +293,9 @@ pub struct Options {
     /// Maximum rules retained during eager CPU/GPU lowering.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_ground_rules, hide_short_help = true)]
     pub max_ground_rules: usize,
-    /// Maximum accounted GPU batch bytes, excluding allocator/driver overhead.
+    /// Maximum accounted batch bytes, excluding allocator/driver overhead.
     /// Lazy GPU reserves half for source state and half for transient transport.
+    /// Shared CPU rounds use the full allowance for source/world state.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_batch_bytes, hide_short_help = true)]
     pub max_batch_bytes: u64,
 }

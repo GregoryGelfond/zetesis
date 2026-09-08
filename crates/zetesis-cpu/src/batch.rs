@@ -66,6 +66,39 @@ impl BatchOracle {
         }))
     }
 
+    /// Share source traversal across ordered candidate occurrences, evaluating
+    /// each immutable chunk on this oracle's owned pool. Source limits are
+    /// collective; world evaluation has its own work ceiling. No static
+    /// grounding, retry, or independent-oracle fallback occurs.
+    ///
+    /// # Errors
+    /// Admission uses the same nonblocking slot as the independent methods.
+    /// Any source or world failure invalidates the entire batch and retains
+    /// separate source/world progress through [`crate::lazy::shared::Error`].
+    pub fn check_shared(
+        &self,
+        program: &Program,
+        seeds: &[Seed],
+        limits: crate::lazy::shared::Limits,
+        selection: crate::lazy::SourceSelection,
+        control: &Control,
+    ) -> Result<crate::lazy::shared::Batch, crate::lazy::shared::Error> {
+        use crate::lazy::shared::Error;
+        if seeds.len() > self.max_candidates {
+            return Err(Error::Admission(BatchError::Capacity {
+                limit: self.max_candidates,
+                actual: seeds.len(),
+            }));
+        }
+        let _admission = self.admission.try_lock().map_err(|error| {
+            Error::Admission(match error {
+                TryLockError::WouldBlock => BatchError::Busy,
+                TryLockError::Poisoned(_) => BatchError::Poisoned,
+            })
+        })?;
+        crate::lazy::shared::check(&self.pool, program, seeds, limits, selection, control)
+    }
+
     /// Check a bounded slice against an explicitly compiled graph, preserving
     /// input order. Limits apply independently per candidate; cancellation and
     /// deadline are shared. Uses the same admission slot as [`Self::check_batch`].
@@ -261,5 +294,88 @@ mod tests {
             assert!(matches!(dense, Err(BatchError::Busy)));
         });
         exact_results(&pool, &graph, &seeds);
+    }
+
+    #[test]
+    fn shared_false_gates_preserve_ordered_mismatches() {
+        let (graph, seeds) = fixture();
+        let pool = BatchOracle::new(
+            NonZeroUsize::new(2).unwrap(),
+            NonZeroUsize::new(seeds.len()).unwrap(),
+        )
+        .unwrap();
+        let expected = [
+            (model(&["b"]), true, false, false),
+            (model(&["a", "b", "c"]), false, true, true),
+            (model(&["a", "c"]), true, false, false),
+            (model(&[]), false, false, true),
+        ];
+        for selection in [
+            crate::lazy::SourceSelection::Union,
+            crate::lazy::SourceSelection::Worlds,
+        ] {
+            let batch = pool
+                .check_shared(
+                    graph.program(),
+                    &seeds,
+                    crate::lazy::shared::Limits::default(),
+                    selection,
+                    &Control::default(),
+                )
+                .unwrap();
+            assert_eq!(batch.checks.len(), expected.len());
+            for (check, (closure, accepted, constraint, mismatch)) in
+                batch.checks.iter().zip(&expected)
+            {
+                assert_eq!(check.closure(), closure);
+                assert_eq!(check.accepted(), *accepted);
+                assert_eq!(check.constraint_violated(), *constraint);
+                assert_eq!(check.seed_mismatch(), *mismatch);
+            }
+        }
+    }
+
+    #[test]
+    fn occupied_pool_refuses_shared_submission_without_waiting() {
+        let (graph, seeds) = fixture();
+        let pool = BatchOracle::new(
+            NonZeroUsize::new(2).unwrap(),
+            NonZeroUsize::new(seeds.len()).unwrap(),
+        )
+        .unwrap();
+        let admission = pool.admission.lock().unwrap();
+        thread::scope(|scope| {
+            let (sender, receiver) = sync_channel(1);
+            let (pool, graph, seeds) = (&pool, &graph, &seeds);
+            let worker = scope.spawn(move || {
+                let result = pool.check_shared(
+                    graph.program(),
+                    seeds,
+                    crate::lazy::shared::Limits::default(),
+                    crate::lazy::SourceSelection::Union,
+                    &Control::default(),
+                );
+                sender.send(result).unwrap();
+            });
+            let completed = receiver.recv_timeout(Duration::from_secs(5));
+            // Release before joining: a blocking-lock regression must fail,
+            // rather than leave the test process deadlocked.
+            drop(admission);
+            worker.join().unwrap();
+            assert!(matches!(
+                completed.unwrap(),
+                Err(crate::lazy::shared::Error::Admission(BatchError::Busy))
+            ));
+        });
+        assert!(
+            pool.check_shared(
+                graph.program(),
+                &seeds,
+                crate::lazy::shared::Limits::default(),
+                crate::lazy::SourceSelection::Union,
+                &Control::default()
+            )
+            .is_ok()
+        );
     }
 }

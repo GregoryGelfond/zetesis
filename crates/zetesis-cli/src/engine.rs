@@ -8,12 +8,18 @@ use zetesis_core::{GroundProgram, Model, Program, Seed, StaticLimits};
 use zetesis_cpu::{BatchOracle, Control, Limits, Stop};
 
 use crate::phase_timing::{Recorder, SolvePhase};
-use crate::{Backend, Grounder, Oracle, RunError, SolveConfig};
+use crate::{Backend, Grounder, Oracle, RunError, SolveConfig, SourceBatching};
 
 /// An initial scheduling heuristic, not a measured performance crossover.
 pub(crate) const AUTO_GPU_MIN_BATCH: usize = 32;
 
 pub(crate) fn validate_combination(options: &SolveConfig) -> Result<(), RunError> {
+    if options.source_batching != SourceBatching::Independent
+        && (!matches!(options.backend, Backend::Auto | Backend::Cpu)
+            || options.grounder == Grounder::Eager)
+    {
+        return Err(RunError::UnsupportedSourceBatching);
+    }
     if options.oracle == Oracle::Countermodel {
         validate_countermodel(options)?;
     }
@@ -21,6 +27,9 @@ pub(crate) fn validate_combination(options: &SolveConfig) -> Result<(), RunError
 }
 
 pub(crate) fn validate_countermodel(options: &SolveConfig) -> Result<(), RunError> {
+    if options.source_batching != SourceBatching::Independent {
+        return Err(RunError::UnsupportedSourceBatching);
+    }
     if options.grounder == Grounder::Lazy {
         return Err(RunError::UnsupportedOracle {
             backend: options.backend,
@@ -37,6 +46,12 @@ pub(crate) struct Engine {
 }
 
 impl Engine {
+    pub(crate) fn shared_statistics(&self) -> Option<crate::SharedExecutionStatistics> {
+        match &self.executor {
+            Executor::SharedCpu { statistics, .. } => Some(statistics.clone()),
+            _ => None,
+        }
+    }
     pub(crate) fn lazy_statistics(&self) -> Option<crate::LazyExecutionStatistics> {
         match &self.executor {
             #[cfg(feature = "gpu")]
@@ -66,7 +81,9 @@ impl Engine {
             Backend::Auto | Backend::Cpu => {
                 let cpu = Executor::cpu(options, program, cached, diagnostics, phases)?;
                 if options.backend == Backend::Auto {
-                    if options.grounder == Grounder::Lazy {
+                    if options.source_batching != SourceBatching::Independent {
+                        diagnostics.metadata(Label::Auto, format_args!("explicit shared source batching selects CPU without device discovery."))?;
+                    } else if options.grounder == Grounder::Lazy {
                         diagnostics.metadata(
                             Label::Auto,
                             format_args!("--grounder lazy requires source joins; using CPU without device discovery."),
@@ -92,6 +109,7 @@ impl Engine {
         Ok(Self {
             executor,
             automatic: options.backend == Backend::Auto
+                && options.source_batching == SourceBatching::Independent
                 && options.grounder != Grounder::Lazy
                 && cfg!(feature = "gpu"),
             attempted_gpu: false,
@@ -187,6 +205,10 @@ fn cpu_mode(options: &SolveConfig) -> &'static str {
 
 enum Executor {
     Cpu(BatchOracle),
+    SharedCpu {
+        oracle: BatchOracle,
+        statistics: crate::SharedExecutionStatistics,
+    },
     StaticCpu {
         oracle: BatchOracle,
         ground: Arc<GroundProgram>,
@@ -236,17 +258,27 @@ impl Executor {
                     options.grounder.label()
                 ),
             )?;
-            diagnostics.metadata(
-                Label::Backend,
-                format_args!("cpu (lazy source joins, {} workers)", options.workers),
-            )?;
-            Ok(Self::Cpu(oracle))
+            if let Some(selection) = options.source_batching.selection() {
+                diagnostics.metadata(Label::Backend, format_args!(
+                    "cpu (shared {} source rounds, {} workers; collective source and per-world evaluation budgets)",
+                    options.source_batching.label(), options.workers))?;
+                Ok(Self::SharedCpu {
+                    oracle,
+                    statistics: crate::SharedExecutionStatistics::new(options, selection),
+                })
+            } else {
+                diagnostics.metadata(
+                    Label::Backend,
+                    format_args!("cpu (lazy source joins, {} workers)", options.workers),
+                )?;
+                Ok(Self::Cpu(oracle))
+            }
         }
     }
 
     fn ground(&self) -> Option<Arc<GroundProgram>> {
         match self {
-            Self::Cpu(_) => None,
+            Self::Cpu(_) | Self::SharedCpu { .. } => None,
             Self::StaticCpu { ground, .. } => Some(Arc::clone(ground)),
             #[cfg(feature = "gpu")]
             Self::Gpu { ground, .. } => Some(Arc::clone(ground)),
@@ -257,7 +289,7 @@ impl Executor {
 
     fn is_gpu(&self) -> bool {
         match self {
-            Self::Cpu(_) | Self::StaticCpu { .. } => false,
+            Self::Cpu(_) | Self::SharedCpu { .. } | Self::StaticCpu { .. } => false,
             #[cfg(feature = "gpu")]
             Self::Gpu { .. } | Self::LazyGpu { .. } => true,
         }
@@ -357,6 +389,29 @@ impl Executor {
             max_derived_atoms: options.max_atoms,
         };
         match self {
+            Self::SharedCpu { oracle, statistics } => {
+                let source = zetesis_cpu::lazy::Limits {
+                    max_candidates: options.batch_size.get(),
+                    max_atoms: options.max_atoms,
+                    max_source_work: options.max_source_work,
+                    max_rounds: u64::try_from(options.max_atoms)
+                        .unwrap_or(u64::MAX)
+                        .saturating_add(1),
+                    max_host_bytes: usize::try_from(options.max_batch_bytes).unwrap_or(usize::MAX),
+                    ..Default::default()
+                };
+                let result = oracle.check_shared(
+                    program,
+                    seeds,
+                    zetesis_cpu::lazy::shared::Limits {
+                        source,
+                        max_world_work: options.max_work,
+                    },
+                    statistics.selection,
+                    control,
+                );
+                crate::shared_execution::batch_results(result, statistics)
+            }
             #[cfg(feature = "gpu")]
             Self::LazyGpu { oracle, statistics } => {
                 let bytes = usize::try_from(options.max_batch_bytes / 2).unwrap_or(usize::MAX);

@@ -2,10 +2,11 @@
 
 use std::num::NonZeroUsize;
 
-use crate::{Backend, Grounder, Options, Oracle};
+use crate::{Backend, Grounder, Options, Oracle, SourceBatching};
 
 /// Policy for one semantic session. Budgets retain their existing ownership:
-/// formula search/objective work is cumulative; exact closure limits are per candidate.
+/// Formula search/objective work is cumulative. Independent closure work is per
+/// candidate; shared CPU rounds separate collective source and per-world work.
 /// No field selects an output format, file path, source loader or writer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SolveConfig {
@@ -13,6 +14,8 @@ pub struct SolveConfig {
     pub backend: Backend,
     /// Materialization policy for relational programs.
     pub grounder: Grounder,
+    /// Relational CPU source traversal; explicit sharing pins auto backend to CPU.
+    pub source_batching: SourceBatching,
     /// Exact membership policy; prepared formula inputs retain their original theory.
     pub oracle: Oracle,
     /// Enable optional host timing; semantic/resource counters remain independent.
@@ -52,16 +55,21 @@ pub struct SolveConfig {
     /// Maximum incrementally retained gate atoms.
     pub max_carrier_atoms: usize,
     /// Maximum charged CPU oracle work per candidate, or shared host source
-    /// work per lazy GPU batch. The source and device units are distinct.
+    /// work per lazy GPU batch. Shared CPU rounds count record visits plus
+    /// antecedent tests per world; independent joins and device units differ.
     pub max_work: u64,
-    /// Maximum derived CPU atoms, demanded lazy GPU catalog atoms or eager atoms.
+    /// Collective source work per shared CPU batch, distinct from per-world work.
+    pub max_source_work: u64,
+    /// Maximum derived independent CPU atoms, demanded shared CPU/GPU batch
+    /// catalog atoms or eager atoms. Shared catalogs are collective, not per world.
     pub max_atoms: usize,
     /// Maximum substitutions in explicit static lowering.
     pub max_substitutions: usize,
     /// Maximum rules in explicit static lowering.
     pub max_ground_rules: usize,
     /// Maximum accounted pending/GPU batch payload bytes. Lazy GPU splits this
-    /// allowance equally between source coordination and transient transport;
+    /// allowance equally between source coordination and transient transport.
+    /// Shared CPU rounds use the full allowance for source and world state;
     /// allocator, tree and driver overhead are outside the payload bound.
     pub max_batch_bytes: u64,
 }
@@ -71,6 +79,7 @@ impl SolveConfig {
     pub const DEFAULT: Self = Self {
         backend: Backend::Auto,
         grounder: Grounder::Auto,
+        source_batching: SourceBatching::Independent,
         oracle: Oracle::Auto,
         stats: false,
         models: 1,
@@ -91,6 +100,7 @@ impl SolveConfig {
         max_candidates: 1_000_000,
         max_carrier_atoms: 4_096,
         max_work: 10_000_000,
+        max_source_work: 10_000_000,
         max_atoms: 1_000_000,
         max_substitutions: 10_000_000,
         max_ground_rules: 1_000_000,
@@ -109,6 +119,7 @@ impl From<&Options> for SolveConfig {
         Self {
             backend: options.backend,
             grounder: options.grounder,
+            source_batching: options.source_batching,
             oracle: options.oracle,
             stats: options.stats,
             models: options.models,
@@ -129,6 +140,7 @@ impl From<&Options> for SolveConfig {
             max_candidates: options.max_candidates,
             max_carrier_atoms: options.max_carrier_atoms,
             max_work: options.max_work,
+            max_source_work: options.max_source_work,
             max_atoms: options.max_atoms,
             max_substitutions: options.max_substitutions,
             max_ground_rules: options.max_ground_rules,

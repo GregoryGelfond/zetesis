@@ -14,7 +14,8 @@ pub struct PartialReport {
     /// Stable models from completed membership, including queued formula models
     /// and all accepted closure-batch results, even before their consumption.
     pub verified_models: u64,
-    /// Closure results consumed by the driver, or formula candidates proposed.
+    /// Closure result/control records consumed, or formula candidates proposed.
+    /// A shared batch stop is one control record, not one completed candidate.
     /// A completed closure batch can verify more models than the driver consumes.
     pub checked: u64,
     /// Established search stopping classification, if the loop reached one.
@@ -32,6 +33,8 @@ pub struct PartialReport {
     pub formula_execution: Option<crate::FormulaExecutionStatistics>,
     /// Actual lazy device work, including incomplete batch progress.
     pub lazy_execution: Option<crate::LazyExecutionStatistics>,
+    /// Shared CPU source/world work, including incomplete batch progress.
+    pub shared_execution: Option<crate::SharedExecutionStatistics>,
     /// Retained incumbent metadata, independent of how many ties were published.
     pub optimization: Option<Optimization>,
 }
@@ -110,6 +113,7 @@ impl Progress {
                 countermodel_statistics: None,
                 formula_execution: None,
                 lazy_execution: None,
+                shared_execution: None,
                 optimization: None,
                 phase_timings: None,
             },
@@ -134,6 +138,7 @@ impl Progress {
         self.report.countermodel_statistics = semantic.countermodel_statistics().copied();
         self.report.formula_execution = semantic.formula_execution().cloned();
         self.report.lazy_execution = semantic.lazy_execution().cloned();
+        self.report.shared_execution = semantic.shared_execution().cloned();
         self.report.optimization = semantic.incumbent().cloned();
         self.semantic = Some(semantic);
     }
@@ -171,6 +176,7 @@ impl Progress {
                 countermodel_statistics: report.countermodel_statistics,
                 formula_execution: report.formula_execution,
                 lazy_execution: report.lazy_execution,
+                shared_execution: report.shared_execution,
                 optimization: report.optimization,
             })),
             secondary_output: None,

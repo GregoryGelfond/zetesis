@@ -177,6 +177,19 @@ impl<'a> ClosureSession<'a> {
             gate_atoms: self.candidates.discovered_atoms(),
             countermodel_statistics: None,
             formula_execution: None,
+            shared_execution: self
+                .engine
+                .as_ref()
+                .ok()
+                .and_then(Engine::shared_statistics)
+                .map(|mut statistics| {
+                    statistics.queued_results = if statistics.last_stop.is_none() {
+                        self.ready.len()
+                    } else {
+                        0
+                    };
+                    statistics
+                }),
             lazy_execution: self
                 .engine
                 .as_ref()

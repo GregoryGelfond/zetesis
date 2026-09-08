@@ -19,6 +19,7 @@ pub struct SemanticOutcome {
     pub(crate) countermodel_statistics: Option<zetesis_sat::Statistics>,
     pub(crate) formula_execution: Option<crate::FormulaExecutionStatistics>,
     pub(crate) lazy_execution: Option<crate::LazyExecutionStatistics>,
+    pub(crate) shared_execution: Option<crate::SharedExecutionStatistics>,
 }
 
 impl SemanticOutcome {
@@ -29,7 +30,8 @@ impl SemanticOutcome {
         self.subject.as_ref()
     }
 
-    /// Closure results consumed, or formula candidates proposed.
+    /// Closure result/control records consumed, or formula candidates proposed.
+    /// One shared-batch stop record can represent several interrupted occurrences.
     #[must_use]
     pub const fn candidate_progress(&self) -> u64 {
         self.checked
@@ -56,6 +58,11 @@ impl SemanticOutcome {
     #[must_use]
     pub const fn lazy_execution(&self) -> Option<&crate::LazyExecutionStatistics> {
         self.lazy_execution.as_ref()
+    }
+    /// Shared CPU accounting, including complete but unconsumed checks.
+    #[must_use]
+    pub const fn shared_execution(&self) -> Option<&crate::SharedExecutionStatistics> {
+        self.shared_execution.as_ref()
     }
     /// Completed exact stable-model memberships, including still-queued results.
     #[must_use]

@@ -128,6 +128,11 @@ impl<'a> PreparedInput<'a> {
         }
     }
     fn configure(self, mut config: SolveConfig) -> Result<SolveConfig, RunError> {
+        if !matches!(self.input, Prepared::Relational(_))
+            && config.source_batching != crate::SourceBatching::Independent
+        {
+            return Err(RunError::UnsupportedSourceBatching);
+        }
         let compatible = match self.input {
             Prepared::Relational(_) => config.oracle != Oracle::Countermodel,
             Prepared::Formula(_) => {
@@ -292,6 +297,7 @@ impl<'a> Session<'a> {
                     countermodel_statistics: None,
                     formula_execution: None,
                     lazy_execution: None,
+                    shared_execution: None,
                 })),
                 config,
             ));

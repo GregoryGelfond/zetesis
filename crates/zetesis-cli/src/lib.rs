@@ -46,10 +46,12 @@ pub use failure::{PartialReport, RunFailure};
 pub use formula_execution::{CompletionAccounting, FormulaExecutionStatistics};
 mod lazy_execution;
 pub use lazy_execution::LazyExecutionStatistics;
-pub use options::{Backend, Command, Grounder, Options, Oracle};
+mod shared_execution;
+pub use options::{Backend, Command, Grounder, Options, Oracle, SourceBatching};
 pub use presentation::ColorMode;
 pub use process::entry;
 pub use semantic_outcome::SemanticOutcome;
+pub use shared_execution::SharedExecutionStatistics;
 pub use solve_config::SolveConfig;
 
 mod grounding_timing;

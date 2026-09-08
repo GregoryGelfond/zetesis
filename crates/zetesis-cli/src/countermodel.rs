@@ -191,6 +191,7 @@ pub(crate) fn check_control(
                 countermodel_statistics: None,
                 formula_execution: None,
                 lazy_execution: None,
+                shared_execution: None,
             });
             complete(
                 output,

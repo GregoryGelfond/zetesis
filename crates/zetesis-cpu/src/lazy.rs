@@ -14,6 +14,8 @@ use zetesis_core::{Atom, Model, Program, Seed};
 use crate::oracle::{Work, worlds};
 use crate::{Control, Stop, source};
 
+pub mod shared;
+
 #[cfg(test)]
 #[path = "../tests/support/workspace_lifetime.rs"]
 mod workspace_tests;
@@ -299,37 +301,57 @@ impl Chunk<'_> {
 pub fn evaluate(chunk: &Chunk<'_>) -> Result<Vec<u32>, Stop> {
     let mut output = zeros(chunk.worlds * chunk.result_words())?;
     for world in 0..chunk.worlds {
-        let snapshot = &chunk.snapshots[world * chunk.words..][..chunk.words];
-        let seed = &chunk.seeds[world * chunk.words..][..chunk.words];
-        for offset in chunk.offsets {
-            let record = &chunk.records[*offset as usize..];
-            let counts = [record[1] as usize, record[2] as usize, record[3] as usize];
-            let mut start = RECORD_HEADER_WORDS;
-            let mut enabled = true;
-            for (count, truth, required) in [
-                (counts[0], snapshot, true),
-                (counts[1], seed, true),
-                (counts[2], seed, false),
-            ] {
-                for atom in &record[start..start + count] {
-                    enabled &= contains(truth, *atom as usize) == required;
-                }
-                start += count;
+        let result = &mut output[world * chunk.result_words()..][..chunk.result_words()];
+        evaluate_world(chunk, world, result, &mut |_| Ok(()))?;
+    }
+    Ok(output)
+}
+
+#[derive(Clone, Copy)]
+enum EvaluationStep {
+    Instance,
+    Antecedent,
+}
+
+/// One world's pure consequence relation, with an injected work boundary.
+/// Output is private until every world and the source round have completed.
+fn evaluate_world(
+    chunk: &Chunk<'_>,
+    world: usize,
+    result: &mut [u32],
+    step: &mut impl FnMut(EvaluationStep) -> Result<(), Stop>,
+) -> Result<(), Stop> {
+    let snapshot = &chunk.snapshots[world * chunk.words..][..chunk.words];
+    let seed = &chunk.seeds[world * chunk.words..][..chunk.words];
+    for offset in chunk.offsets {
+        step(EvaluationStep::Instance)?;
+        let record = &chunk.records[*offset as usize..];
+        let counts = [record[1] as usize, record[2] as usize, record[3] as usize];
+        let mut start = RECORD_HEADER_WORDS;
+        let mut enabled = true;
+        for (count, truth, required) in [
+            (counts[0], snapshot, true),
+            (counts[1], seed, true),
+            (counts[2], seed, false),
+        ] {
+            for atom in &record[start..start + count] {
+                step(EvaluationStep::Antecedent)?;
+                enabled &= contains(truth, *atom as usize) == required;
             }
-            if enabled {
-                let result = &mut output[world * chunk.result_words()..][..chunk.result_words()];
-                if record[0] == CONSTRAINT_HEAD {
-                    result[chunk.violation_offset()] = 1;
-                } else {
-                    let head = (record[0] - 1) as usize;
-                    if !contains(snapshot, head) {
-                        insert(result, head);
-                    }
+            start += count;
+        }
+        if enabled {
+            if record[0] == CONSTRAINT_HEAD {
+                result[chunk.violation_offset()] = 1;
+            } else {
+                let head = (record[0] - 1) as usize;
+                if !contains(snapshot, head) {
+                    insert(result, head);
                 }
             }
         }
     }
-    Ok(output)
+    Ok(())
 }
 
 /// Compute complete per-world reduct closures by bounded immutable rounds.

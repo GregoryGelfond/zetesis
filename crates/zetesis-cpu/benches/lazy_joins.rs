@@ -5,6 +5,9 @@
 //! Repeated empty seeds deliberately isolate membership work; this is neither
 //! an enumeration benchmark nor an end-to-end source/CLI comparison.
 
+#[path = "support/shared_source.rs"]
+mod shared_source;
+
 use std::{
     hint::black_box,
     num::NonZeroUsize,
@@ -157,5 +160,6 @@ fn main() {
         }
         group.finish();
     }
+    shared_source::benchmarks(&mut criterion);
     criterion.final_summary();
 }

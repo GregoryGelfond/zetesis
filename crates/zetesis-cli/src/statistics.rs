@@ -62,6 +62,7 @@ pub(crate) fn write_detailed(
                     countermodel_statistics: partial.countermodel_statistics,
                     formula_execution: partial.formula_execution.clone(),
                     lazy_execution: partial.lazy_execution.clone(),
+                    shared_execution: partial.shared_execution.clone(),
                     optimization: partial.optimization.clone(),
                     phase_timings: failure.phase_timings.as_deref().copied(),
                 };
@@ -78,6 +79,13 @@ pub(crate) fn write_detailed(
 }
 
 fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
+    if o.source_batching != crate::SourceBatching::Independent {
+        writeln!(
+            sink,
+            "  shared CPU limits: source work/batch={}; record visits plus antecedent tests/world={}; collective catalog atoms={}; host payload bytes={}",
+            o.max_source_work, o.max_work, o.max_atoms, o.max_batch_bytes
+        )?;
+    }
     writeln!(
         sink,
         "  search limits: candidates={}; formula work={}; decisions={}; CPU candidate/lazy GPU batch source work={}",
@@ -141,12 +149,20 @@ fn completed(sink: &mut impl Write, options: &Options, report: &Report) -> io::R
 }
 
 fn details(sink: &mut impl Write, options: &Options, report: &Report) -> io::Result<()> {
+    if let Some(stats) = &report.shared_execution {
+        shared(sink, stats)?;
+    }
     if let Some(stats) = &report.lazy_execution {
         lazy(sink, stats)?;
     }
+    let examined = if report.shared_execution.is_some() {
+        "closure result/control records examined"
+    } else {
+        "candidates examined"
+    };
     writeln!(
         sink,
-        "  results: displayed models={}; candidates examined={}",
+        "  results: displayed models={}; {examined}={}",
         report.models, report.checked
     )?;
     if let Some(reason) = report.interruption {
@@ -224,6 +240,40 @@ fn details(sink: &mut impl Write, options: &Options, report: &Report) -> io::Res
             sink,
             "  objective: no retained score; evaluation counters=unavailable"
         )?;
+    }
+    Ok(())
+}
+
+fn shared(sink: &mut impl Write, stats: &crate::SharedExecutionStatistics) -> io::Result<()> {
+    writeln!(
+        sink,
+        "  shared CPU: source={:?}; workers={}; batches={}; submitted={}; completed={}; stopped={}; queued={}",
+        stats.selection,
+        stats.workers,
+        stats.batches,
+        stats.submitted_candidates,
+        stats.completed_candidates,
+        stats.stopped_candidates,
+        stats.queued_results
+    )?;
+    writeln!(
+        sink,
+        "  shared source: rounds={}; work={}; instances={}; peak catalog atoms={}; mask words={}; pruned prefixes={}; peak mask payload bytes={}",
+        stats.source_rounds,
+        stats.source_work,
+        stats.source_instances,
+        stats.peak_catalog_atoms,
+        stats.mask_words,
+        stats.pruned_prefixes,
+        stats.peak_mask_bytes
+    )?;
+    writeln!(
+        sink,
+        "  CPU world evaluation: record visits plus antecedent tests={}; record visits={}",
+        stats.world_work, stats.world_instances
+    )?;
+    if let Some(cause) = stats.last_stop {
+        writeln!(sink, "  shared batch interruption: {cause}")?;
     }
     Ok(())
 }
@@ -370,7 +420,8 @@ fn formula_gpu(
 }
 
 fn closure(sink: &mut impl Write, options: &Options, report: &Report) -> io::Result<()> {
-    let cpu = options.backend == Backend::Cpu
+    let cpu = report.shared_execution.is_some()
+        || options.backend == Backend::Cpu
         || (options.backend == Backend::Auto
             && (options.grounder == Grounder::Lazy || !cfg!(feature = "gpu")));
     if cpu {
@@ -399,7 +450,7 @@ fn closure(sink: &mut impl Write, options: &Options, report: &Report) -> io::Res
             "  auto selection: may change between batches; see backend diagnostics for actual adapter and fallback events"
         )?;
     } else {
-        let grounder = if report.lazy_execution.is_some() {
+        let grounder = if report.lazy_execution.is_some() || report.shared_execution.is_some() {
             "lazy"
         } else {
             "eager"
@@ -409,11 +460,19 @@ fn closure(sink: &mut impl Write, options: &Options, report: &Report) -> io::Res
             "  effective execution: oracle=closure; backend=requested GPU policy; grounder={grounder}; see backend diagnostics for actual adapter"
         )?;
     }
-    writeln!(
-        sink,
-        "  discovered gate tuples: {}; oracle work=unavailable (not accumulated by this driver)",
-        report.discovered_gate_atoms
-    )
+    if report.shared_execution.is_some() {
+        writeln!(
+            sink,
+            "  discovered gate tuples: {}; source and world work reported separately above",
+            report.discovered_gate_atoms
+        )
+    } else {
+        writeln!(
+            sink,
+            "  discovered gate tuples: {}; oracle work=unavailable (not accumulated by this driver)",
+            report.discovered_gate_atoms
+        )
+    }
 }
 
 #[cfg(test)]

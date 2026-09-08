@@ -59,8 +59,10 @@ pub struct Report {
     /// Partial writes are excluded; sink acceptance does not establish durability.
     /// This count can be smaller than the number of verified stable models.
     pub models: usize,
-    /// Closure candidate results examined, or classical formula candidates
-    /// proposed (including explicitly retained pending batch work).
+    /// Closure result/control records examined, or classical formula candidates
+    /// proposed (including explicitly retained pending batch work). A whole-batch
+    /// closure interruption is one control record; shared statistics separately
+    /// count every submitted occurrence without a complete check.
     pub checked: u64,
     /// Coverage classification independent of satisfiability.
     pub completion: Completion,
@@ -77,6 +79,8 @@ pub struct Report {
     /// Actual lazy device execution, including shared source work and failed
     /// batch progress. Absent when no lazy device executor was initialized.
     pub lazy_execution: Option<crate::LazyExecutionStatistics>,
+    /// Shared CPU source and per-world work, including failed-batch prefixes.
+    pub shared_execution: Option<crate::SharedExecutionStatistics>,
     /// Best retained objective score and tied models found so far.
     /// Only exhausted coverage establishes that this incumbent is optimal.
     pub optimization: Option<crate::Optimization>,
@@ -131,6 +135,8 @@ pub enum RunError {
         /// Explicit materialization request.
         grounder: Grounder,
     },
+    /// The requested shared source policy needs relational lazy CPU execution.
+    UnsupportedSourceBatching,
     /// An already prepared representation cannot honor the requested strategy.
     PreparedInput {
         /// Representation supplied by the caller.
@@ -160,6 +166,8 @@ pub enum RunError {
     LazyGpu(zetesis_cpu::lazy::Failure<zetesis_wgpu::GpuError>),
     /// Cumulative lazy execution counters could not represent another batch.
     LazyStatisticsOverflow,
+    /// Concrete shared CPU evaluation violated its round protocol.
+    SharedCpu(zetesis_cpu::lazy::shared::Cause),
     /// A static oracle returned an invalid dense closure representation.
     Words(zetesis_core::WordError),
     /// An injected batch checker violated its ordered result-count contract.
@@ -209,6 +217,8 @@ impl fmt::Display for RunError {
             ),
             Self::PreparedInput { profile, oracle, grounder } => write!(f,
                 "prepared {profile:?} cannot honor oracle {oracle:?} with grounder {grounder:?}"),
+            Self::UnsupportedSourceBatching => f.write_str("shared source batching requires the relational closure route with lazy/auto grounding and cpu/auto backend"),
+            Self::SharedCpu(cause) => cause.fmt(f),
             Self::Formula(error) => error.fmt(f),
             Self::FormulaAdmission(error) => error.fmt(f),
             Self::FormulaBundleAdmission(error) => error.fmt(f),
@@ -286,6 +296,7 @@ impl std::error::Error for RunError {
             | Self::BackendUnavailable
             | Self::UnsupportedCombination { .. }
             | Self::UnsupportedOracle { .. }
+            | Self::UnsupportedSourceBatching
             | Self::LazyStatisticsOverflow
             | Self::FormulaBatchShape { .. } => None,
             Self::Formula(error) => Some(error),
@@ -297,6 +308,7 @@ impl std::error::Error for RunError {
             #[cfg(feature = "gpu")]
             Self::LazyGpu(error) => Some(error),
             Self::Words(error) => Some(error),
+            Self::SharedCpu(error) => Some(error),
             Self::PreparedInput { .. } => None,
         }
     }
@@ -723,9 +735,14 @@ pub(crate) fn finish(
             report.models, report.checked
         )?;
     } else {
+        let examined = if report.shared_execution.is_some() {
+            "closure result/control records examined"
+        } else {
+            "candidates examined"
+        };
         writeln!(
             output,
-            "Models: {}; candidates examined: {}; gate tuples discovered: {}",
+            "Models: {}; {examined}: {}; gate tuples discovered: {}",
             report.models, report.checked, report.discovered_gate_atoms
         )?;
     }

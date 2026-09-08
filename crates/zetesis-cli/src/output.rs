@@ -196,6 +196,7 @@ fn summary(result: &Result<Progress, SolveFailure>, maximum: usize) -> Result<Ve
         view.search,
         view.execution,
         view.lazy_execution,
+        view.shared_execution,
         view.timings,
     )?;
     out.text("}")?;
@@ -287,6 +288,8 @@ fn error_kind(error: &RunError) -> &'static str {
         RunError::BackendUnavailable => "backend_unavailable",
         RunError::UnsupportedCombination { .. } => "unsupported_combination",
         RunError::UnsupportedOracle { .. } => "unsupported_oracle",
+        RunError::UnsupportedSourceBatching => "unsupported_source_batching",
+        RunError::SharedCpu(_) => "shared_cpu",
         RunError::PreparedInput { .. } => "prepared_input",
         RunError::Formula(_) => "formula",
         RunError::FormulaAdmission(_) => "formula_admission",
@@ -482,6 +485,7 @@ fn statistics(
     search: Option<&zetesis_sat::Statistics>,
     execution: Option<&crate::FormulaExecutionStatistics>,
     lazy_execution: Option<&crate::LazyExecutionStatistics>,
+    shared_execution: Option<&crate::SharedExecutionStatistics>,
     timings: Option<&PhaseTimings>,
 ) -> Result<(), RunError> {
     // Counts are typed and optional; this is a bounded fixed-shape view, not a
@@ -493,6 +497,8 @@ fn statistics(
         execution_statistics(out, execution)?;
         out.text(",\"lazy_execution\":")?;
         lazy_statistics(out, lazy_execution)?;
+        out.text(",\"shared_execution\":")?;
+        shared_statistics(out, shared_execution)?;
         out.text(",\"phase_timings\":")?;
         phases(out, timings)?;
         out.text(",\"stage_timings\":")?;
@@ -595,6 +601,7 @@ struct SummaryView<'a> {
     search: Option<&'a zetesis_sat::Statistics>,
     execution: Option<&'a crate::FormulaExecutionStatistics>,
     lazy_execution: Option<&'a crate::LazyExecutionStatistics>,
+    shared_execution: Option<&'a crate::SharedExecutionStatistics>,
     timings: Option<&'a PhaseTimings>,
 }
 impl<'a> SummaryView<'a> {
@@ -612,6 +619,7 @@ impl<'a> SummaryView<'a> {
                     search: report.countermodel_statistics.as_ref(),
                     execution: report.formula_execution.as_ref(),
                     lazy_execution: report.lazy_execution.as_ref(),
+                    shared_execution: report.shared_execution.as_ref(),
                     timings: report.phase_timings.as_ref(),
                 }
             }
@@ -627,6 +635,7 @@ impl<'a> SummaryView<'a> {
                     search: partial.and_then(|p| p.countermodel_statistics.as_ref()),
                     execution: partial.and_then(|p| p.formula_execution.as_ref()),
                     lazy_execution: partial.and_then(|p| p.lazy_execution.as_ref()),
+                    shared_execution: partial.and_then(|p| p.shared_execution.as_ref()),
                     timings: failure.phase_timings.as_deref(),
                 }
             }
@@ -684,6 +693,56 @@ fn execution_statistics(
     out.text(",\"complete\":")?;
     out.text(if stats.overflowed { "false" } else { "true" })?;
     out.text("}}")
+}
+
+fn shared_statistics(
+    out: &mut Buffer,
+    statistics: Option<&crate::SharedExecutionStatistics>,
+) -> Result<(), RunError> {
+    let Some(stats) = statistics else {
+        return out.text("null");
+    };
+    out.text("{\"requested_backend\":")?;
+    out.string(stats.requested_backend.label())?;
+    out.text(",\"backend\":\"cpu\",\"source_batching\":")?;
+    out.string(match stats.selection {
+        zetesis_cpu::lazy::SourceSelection::Union => "union",
+        zetesis_cpu::lazy::SourceSelection::Worlds => "worlds",
+    })?;
+    out.number_field("workers", stats.workers)?;
+    out.number_field("batches", stats.batches)?;
+    out.number_field("submitted_candidates", stats.submitted_candidates)?;
+    out.number_field("completed_candidates", stats.completed_candidates)?;
+    out.number_field("stopped_candidates", stats.stopped_candidates)?;
+    out.number_field("queued_results", stats.queued_results)?;
+    out.number_field("source_rounds", stats.source_rounds)?;
+    out.number_field("source_work", stats.source_work)?;
+    out.number_field("source_instances", stats.source_instances)?;
+    out.number_field("peak_catalog_atoms", stats.peak_catalog_atoms)?;
+    out.number_field("mask_words", stats.mask_words)?;
+    out.number_field("pruned_prefixes", stats.pruned_prefixes)?;
+    out.number_field("peak_mask_bytes", stats.peak_mask_bytes)?;
+    out.number_field("world_work", stats.world_work)?;
+    out.number_field("world_instances", stats.world_instances)?;
+    out.text(",\"last_stop\":")?;
+    match stats.last_stop {
+        None => out.text("null")?,
+        Some(zetesis_cpu::lazy::shared::Cause::Source(stop)) => {
+            out.text("{\"scope\":\"source\",\"reason\":")?;
+            out.string(control_code(stop))?;
+            out.text("}")?;
+        }
+        Some(zetesis_cpu::lazy::shared::Cause::World { index, stop }) => {
+            out.text("{\"scope\":\"world\",\"reason\":")?;
+            out.string(control_code(stop))?;
+            out.number_field("index", index)?;
+            out.text("}")?;
+        }
+        Some(zetesis_cpu::lazy::shared::Cause::InvalidOutput) => {
+            out.text("{\"scope\":\"protocol\",\"reason\":\"invalid_output\"}")?;
+        }
+    }
+    out.text("}")
 }
 
 fn lazy_statistics(

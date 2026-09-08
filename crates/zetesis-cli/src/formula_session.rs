@@ -257,6 +257,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             gate_atoms: self.input.gate_atoms,
             countermodel_statistics: statistics,
             lazy_execution: None,
+            shared_execution: None,
             formula_execution: self
                 .models
                 .as_ref()
