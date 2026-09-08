@@ -124,7 +124,7 @@ fn lazy_gpu_statistics_name_the_observed_grounder() {
     report.lazy_execution = Some(crate::lazy_execution::tests::fixture());
     let text = every_prefix(&options, &Ok(report));
     assert!(text.contains(
-        "effective execution: oracle=closure; backend=requested GPU policy; grounder=lazy"
+        "effective execution: oracle=closure; backend=requested GPU policy; grounder=lazy; see backend diagnostics for actual adapter"
     ));
     assert!(!text.contains("grounder=eager"));
 }
@@ -137,7 +137,7 @@ fn static_gpu_statistics_retain_eager_grounding() {
     options.backend = Backend::Metal;
     let text = every_prefix(&options, &Ok(report));
     assert!(text.contains(
-        "effective execution: oracle=closure; backend=requested GPU policy; grounder=eager"
+        "effective execution: oracle=closure; backend=requested GPU policy; grounder=eager; see backend diagnostics for actual adapter"
     ));
 }
 

@@ -401,7 +401,7 @@ fn closure(sink: &mut impl Write, options: &Options, report: &Report) -> io::Res
         };
         writeln!(
             sink,
-            "  effective execution: oracle=closure; backend=requested GPU policy; grounder={grounder} (see backend diagnostics for actual adapter)"
+            "  effective execution: oracle=closure; backend=requested GPU policy; grounder={grounder}; see backend diagnostics for actual adapter"
         )?;
     }
     writeln!(

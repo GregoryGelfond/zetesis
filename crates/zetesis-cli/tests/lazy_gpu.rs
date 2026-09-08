@@ -133,7 +133,7 @@ mod physical {
                 assert_eq!(stats.backend, "Metal");
                 assert!(diagnostics.contains("effective=lazy"));
                 assert!(!diagnostics.contains("effective=eager"));
-                assert!(diagnostics.contains("effective execution: oracle=closure; backend=requested GPU policy; grounder=lazy"));
+                assert!(diagnostics.contains("effective execution: oracle=closure; backend=requested GPU policy; grounder=lazy; see backend diagnostics for actual adapter"));
                 assert_eq!(
                     actual["statistics"]["lazy_execution"]["dispatches"],
                     stats.dispatches
