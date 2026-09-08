@@ -1,9 +1,9 @@
 # Fedora 44 / Radeon 780M qualification plan
 
-Prepared 2026-09-08 from source
-`344c73799e5698b5e519e0f4452772141469bf6d`; lazy-transport qualification is incomplete.
+Updated 2026-09-08 against the qualified compiled source at
+`990104309b13641ee907e9b799f9e2566cfdf18f`.
 This is a preparation plan, not a laptop execution or qualification record.
-The campaign must identify its frozen source revision and binaries.
+The eventual campaign must identify its frozen Linux source and binaries.
 
 ## Feasibility and minimum prerequisites
 
@@ -174,3 +174,23 @@ The recommended first deliverable is one laptop archive proving that Vulkan
 actually executes correct work, followed by repeated matched CPU/Vulkan data.
 Neither the hardware specification, existing Metal proofs/tests nor a successful
 inventory command substitutes for that evidence.
+
+## Native execution and evidence integrity
+
+Existing Rust commands
+`zetesis-validate` and `zetesis-corpus` provide the corpus execution and comparison
+boundary; `zetesis-perf` provides repeated campaigns once its explicit Vulkan
+profiles are implemented. Cargo runs the Rust regression suite during development.
+No hosted GitHub Actions runner is required for this local campaign.
+
+Build an immutable source revision natively on Linux. Record the tested revision
+separately from any later evidence commit. A Git bundle can transport commits
+without live remote access; it does not replace complete Rust/themelios dependency
+preparation. The qualification archive records the resulting evidence.
+
+Review the report inventory before committing: retain raw successes and failures,
+commands, versions, source identities and device observations. Keep build targets,
+executables, dependency caches and credentials out of the evidence commit.
+Large raw campaigns can travel as a separate archive whose hash is committed with
+the concise report. Review and qualify the evidence independently of its storage;
+a successful push does not establish solver correctness.

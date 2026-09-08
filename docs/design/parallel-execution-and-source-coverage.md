@@ -175,6 +175,17 @@ sequence does not declare them implemented or silently remove them from scope.
 
 ## 4. Reduce measured host work and expose its costs
 
+The [measured-head laws](../../proofs/Zetesis/HeadMeasures.lean) identify a
+candidate for later representation work: head permission needs original/frozen
+eligibility, while the activated numeric bound needs only original candidate
+truth. A typed original-measure evaluator could therefore avoid expanding some
+bounds into general formula structure. This is a hypothesis, not an implemented
+route or a demonstrated gain. It requires complete tuple/eligibility coverage,
+exact signed arithmetic and overflow behavior, unchanged head permissions and
+subject identity, and honest source/resource completion. Extend the semantic
+representation and establish those obligations before selecting a GPU reduction
+or interpreting the generic congruence law as compiler verification.
+
 Use the existing eager grounding attribution and candidate-search measurements
 to select general operations for controlled changes. Candidate hypotheses include
 indexed arithmetic/binding operations and avoiding repeated relation or formula

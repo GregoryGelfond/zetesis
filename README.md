@@ -171,10 +171,11 @@ Metal has been physically qualified on an Apple M4 Pro for the recorded builds.
 The static closure oracle uses a bounded ground graph; general formula execution
 batches GPU propagation and exact CPU residual completion. Source loading,
 parsing, materialization, candidate generation and objective work still run on
-the host. Eight [physical lazy Metal tests](docs/verification/consumer-execution-tranche-20260908/physical/README.md)
-pass for the frozen debug executables, including complete model comparisons,
-catalog growth, bounded failure accounting and opt-in world-mask joins with
-reused storage. They do not establish release-binary qualification or a speedup.
+the host. The current [17 physical Metal regressions](docs/verification/language-execution-tranche-20260908/README.md)
+pass for frozen instrumented executables, covering lazy transport reuse, complete
+closures, tight support, ordinary solving and admitted weighted heads. They retain
+limits and output-failure accounting. These tests establish neither release
+performance nor an RSS reduction.
 Lazy general-formula execution remains an implementation
 gap. Broader lazy Metal qualification is required before version 1.0. CUDA,
 multi-GPU execution and neuromorphic backends are
@@ -231,12 +232,16 @@ frozen interpretation pairs, plus generated arithmetic properties. Negative
 `#sum+` head weights remain an internal limitation with a recorded reference
 discrepancy; they are not labeled modeling errors.
 
-The [ordinary release qualification](docs/verification/dependencies-measurement-tranche-20260908/README.md)
-passes **1,958 workspace test/doc checks**, **317 CPU-only CLI checks** and
-**62 external-oracle tests**. Both independent line-coverage profiles exceed their
-unchanged 91% floors: **91.0170% workspace / 92.3345% CPU-only CLI**. The frozen
-release passes all **94 clean kr-domains cases** and **24 selected upstream
-comparisons**, preserving the respective answer contracts and full-model checks.
+The [current integrated qualification](docs/verification/language-execution-tranche-20260908/README.md)
+passes **2,178 workspace test/doc checks**, **339 CPU-only CLI checks** and
+**65 external-oracle tests**. Both unchanged 91% coverage floors pass:
+**91.9033% workspace with the four designated Metal tests / 93.1998% independent
+CPU-only CLI**. The portable workspace stage remains visible at 90.6927%.
+The frozen release passes **94 clean kr-domains cases** and **24 selected
+upstream cases**, preserving their recorded display/cost and full-model contracts
+respectively. The [current CPU and Metal measurements](docs/verification/language-execution-tranche-20260908/timing/README.md)
+retain complete populations and timing limitations. The new transport comparison
+has mixed results; it does not establish a general GPU speedup.
 The [current Lean audit](proofs/verification/weighted-heads-20260908/README.md)
 checks **794 laws across 69 modules**; Rust and WGSL correspondence remains unproved.
 
@@ -246,13 +251,11 @@ scalar/Rayon/fresh-Metal/resident-Metal harness preserves exact CPU completion o
 residuals. Four [physical Metal tests](docs/verification/tight-metal-experiment-20260908/README.md)
 pass on Apple M4 Pro. [Matched measurements](docs/verification/tight-metal-experiment-20260908/measurements/README.md)
 now show that residency helps, but this primitive remains slower than scalar and
-Rayon checking in all 18 tested case medians. Its local qualification passes with
-**91.9969% workspace coverage including physical Metal tests / 93.3300% CPU-only
-CLI**. The portable workspace stage remains separately visible at 90.7634%; it
-does not pass the 91% floor. Ordinary backend selection is unchanged.
-The [approved work sequence](docs/design/parallel-execution-and-source-coverage.md)
-then addresses bounded lazy choices, aggregate consumers/heads and measured host
-costs.
+Rayon checking in all 18 tested case medians. Those measurements retain their
+earlier experimental binary identity; ordinary backend selection is unchanged.
+The [next tranche proposal](docs/design/next-language-and-execution-tranche.md)
+prioritizes the remaining admitted-language gaps, with bounded CPU/GPU experiments
+and Linux qualification work alongside them.
 
 The [September CI policy](docs/verification/local-macos-ci-20260908/README.md)
 uses local macOS qualification while GitHub Actions is paused through September
@@ -268,39 +271,44 @@ path now passes [physical Metal qualification](docs/verification/consumer-execut
 for the recorded 33-occurrence fixture and chunk sizes one and seven. No GPU
 speedup or process-RSS claim follows from these work and transfer controls.
 
-The [preceding CPU comparison](docs/verification/consumer-execution-tranche-20260908/timing/README.md)
+The [current CPU comparison](docs/verification/language-execution-tranche-20260908/timing/README.md)
 uses 21 alternating timed pairs per case, one worker per solver and complete
 answer/optimal-tie enumeration. Native runs explicitly request eager grounding;
 automatic oracle selection uses certified tight-support checking on these inputs:
 
 | Clean input | zetesis median | clingo 5.8.2 median | zetesis / clingo |
 |---|---:|---:|---:|
-| SEND + MORE = MONEY | 37.95 ms | 12.31 ms | 3.084 |
-| Eight queens, variant 02 | 93.74 ms | 119.07 ms | 0.787 |
-| Task allocation, variant 04 / larger mix | 122.44 ms | 182.54 ms | 0.671 |
+| SEND + MORE = MONEY | 38.08 ms | 12.86 ms | 2.960 |
+| Eight queens, variant 02 | 89.57 ms | 119.52 ms | 0.749 |
+| Task allocation, variant 04 / larger mix | 120.70 ms | 179.94 ms | 0.671 |
 
-All 153 baseline and 306 separate six-queens observations pass. zetesis uses
-21.3% less median wall time on this queens input and 32.9% less on this task
-allocation input; clingo remains substantially faster on SEND. Across all six
-queens encodings, zetesis is faster on variant02 and clingo is faster on the
-other five. Each encoding retains the same 92 displayed boards at size eight;
-hidden atoms differ. Full per-encoding distributions and raw observations are
-retained in the timing record.
+All 153 baseline and 306 separate six-queens observations pass. Zetesis has the
+lower median on this queens input and task-allocation case. Across all six
+queens encodings, clingo is faster on the other five. Every encoding retains
+all 92 displayed boards at size eight; hidden atoms differ. Full per-encoding
+results and separate diagnostic counters are retained in the timing record.
+The [queens analysis](docs/verification/language-execution-tranche-20260908/analysis/queens.md)
+identifies candidate generation and representation size as general optimization
+targets. The [graph and allocation analysis](docs/verification/language-execution-tranche-20260908/analysis/domains.md)
+separates current correctness evidence from the earlier full-corpus timing matrix.
 
-These are workload-specific CPU comparisons, not a causal speedup attributed to
-this checkpoint or a general solver ranking. A separate SEND `--stats` observation
-measures grounding at **17.90 ms** and solving at **15.38 ms**; these are not phase
-medians. Wall timings include process startup, output and capture. Peak RSS and
-lazy/GPU comparisons are unavailable in that historical population.
+These are descriptive CPU comparisons, not an isolated optimization effect or
+a general solver ranking. Preparation I/O may have overlapped SEND or baseline
+measurement; the coordination audit preserves that limitation. Process timers
+include startup, capture and each producer's different output format. A separate
+33-admission SEND study retains a median of **17.70 ms** for admission without
+internal observers;
+its detailed mode still attributes most admission work to rule instantiation.
+Peak RSS and lazy/GPU timings are not part of this whole-solve population.
 
-A subsequent [controlled propagation comparison](docs/verification/binary-propagation-20260908/README.md)
+An earlier [controlled propagation comparison](docs/verification/binary-propagation-20260908/README.md)
 isolates omission of empty binary-clause replacement scans. Across 42 timed
 native observations per variant, queens02 falls from **98.26 to 92.80 ms** and
 task allocation from **130.05 to 126.38 ms**; SEND is flat at **39.54 / 39.60 ms**.
 All 612 solve observations pass. The ABBA order, full distributions and reference
 drift are retained; this establishes neither a general speedup nor a memory or
 GPU improvement. These source-controlled populations are distinct from the
-preceding workload comparison and must not be combined as one timing series.
+current workload comparison and must not be combined as one timing series.
 
 The [instrumented M4 Pro corpus matrix](docs/verification/dependencies-measurement-tranche-20260908/physical/README.md)
 now records explicit CPU/Metal and eager/lazy requests over all 94 clean examples.
@@ -313,17 +321,23 @@ also make this a different output protocol from the earlier CPU comparison.
 [All six queens encodings and all other inputs](docs/verification/dependencies-measurement-tranche-20260908/physical/corpus-timing.md)
 retain their individual timings and scopes.
 
-The separate `zetesis-bench lazy` compares matched frozen batches across scalar,
-Rayon, portable and Metal source rounds. The [physical measurement](docs/verification/tight-metal-experiment-20260908/measurements/README.md)
-now retains all 12 case medians. For sparse width-8/128-world batches, per-world
-filtering reduces Metal time from 3.059 ms to 0.754 ms; the corresponding portable
-route takes 0.136 ms. For dense width-8/128-world batches, Metal takes 7.244 ms
-against independent Rayon checks at 14.950 ms, while portable union batching
-is faster at 4.934 ms. No Metal route is fastest among all six in this matrix.
-See the [matrix contract](crates/zetesis-validation/README.md) and
-[lazy experiment](crates/zetesis-experiments/README.md) for output, timing and
-resource scopes. Compact saved reports preserve every captured byte; they do
-not demonstrate lower solver memory use or peak process RSS.
+The separate `zetesis-bench lazy` compares identical frozen candidate batches
+across scalar, independent Rayon, shared CPU and Metal source rounds. The latest
+[audited old/new/new/old comparison](docs/verification/language-execution-tranche-20260908/timing/metal/review/README.md)
+retains all 4,320 samples and 231,840 checked occurrences. Of 24 Metal comparisons,
+four improve in both pairs, four regress and sixteen reverse direction. The new
+transport reuses storage on 240 of 3,120 dispatches; this modest reuse does not
+establish a general speedup or lower process RSS.
+
+For dense width-8/128-world batches, the new per-world Metal route takes a pooled
+median **6.944 ms**, independent Rayon **14.921 ms**, and shared CPU Union
+**4.808 ms**. The fastest observed CPU route beats the fastest Metal route in all
+12 cases. Complete source/reduct-call timers exclude parsing, outer search,
+objectives and device setup; these synthetic repeated-candidate populations are
+separate from ordinary whole solves. See the [matrix contract](crates/zetesis-validation/README.md)
+and [lazy experiment](crates/zetesis-experiments/README.md) for output, timing and
+resource scopes. Compact saved reports preserve every captured byte; their
+compression does not demonstrate lower solver memory use.
 
 The [compact-trail experiment](docs/verification/trail-storage-20260908/README.md)
 was declined: its small storage saving did not establish a reliable runtime
