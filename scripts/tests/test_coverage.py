@@ -13,6 +13,12 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 TIMEOUT = 20
+METAL_TESTS = [
+    "metal_support_matches_exact_reduct_semantics",
+    "metal_support_preserves_batch_isolation",
+    "metal_support_refusals_preserve_reusable_residency",
+    "metal_support_residency_tracks_theory_identity",
+]
 
 FAKE_CARGO = '''from pathlib import Path
 import json
@@ -47,6 +53,20 @@ phase = ("gate" if "--fail-under-lines" in args else
 if os.environ.get("COVERAGE_TEST_FAIL") in [phase, profile + ":" + phase]:
     print("simulated failure " + phase, file=sys.stderr)
     sys.exit(37)
+if "--test" in args:
+    if args[args.index("--test") + 1] != "hardware_tight":
+        sys.exit("unexpected physical test target")
+    physical = os.environ.get("COVERAGE_TEST_PHYSICAL", "passed")
+    if physical == "failed":
+        print("simulated physical test failure", file=sys.stderr)
+        sys.exit(37)
+    if physical != "unreported":
+        passed = {"empty": 0, "missing": 3}.get(physical, 4)
+        ignored = 1 if physical == "ignored" else 0
+        # The pinned libtest wire format, independently observed in retained
+        # coverage output, includes the measured count even for ordinary tests.
+        print(f"test result: ok. {passed} passed; 0 failed; {ignored} ignored; "
+              "0 measured; 1 filtered out; finished in 0.01s")
 if "--output-path" in args:
     Path(args[args.index("--output-path") + 1]).write_text("{}\\n")
 if "--output-dir" in args:
@@ -103,7 +123,7 @@ def ratchet_script():
 
 class CoverageScriptTests(unittest.TestCase):
     def run_case(self, *, mode="baseline", floor="UNMEASURED", overrides="neither",
-                 changes=None, error=None, locked=False):
+                 changes=None, error=None, locked=False, metal=False, exit_code=None):
         with tempfile.TemporaryDirectory(prefix="zetesis-coverage-") as temporary:
             repo = Path(temporary).resolve()
             (repo / "scripts").mkdir()
@@ -139,7 +159,10 @@ class CoverageScriptTests(unittest.TestCase):
             if overrides in ("profdata", "both"):
                 env["LLVM_PROFDATA"] = str(tools / "llvm-profdata")
             env.update(changes or {})
-            completed = subprocess.run(["sh", "scripts/coverage.sh", mode], cwd=repo,
+            arguments = ["sh", "scripts/coverage.sh", mode]
+            if metal:
+                arguments.append("--metal")
+            completed = subprocess.run(arguments, cwd=repo,
                                        env=env, text=True, capture_output=True,
                                        timeout=TIMEOUT, check=False)
             if error is None:
@@ -147,6 +170,8 @@ class CoverageScriptTests(unittest.TestCase):
             else:
                 self.assertNotEqual(completed.returncode, 0)
                 self.assertIn(error, completed.stderr)
+            if exit_code is not None:
+                self.assertEqual(completed.returncode, exit_code)
             expected_status = ("gate-passed" if locked else "incomplete" if error else
                                "baseline-complete (nongating)" if mode == "baseline" else
                                "gate-passed")
@@ -155,11 +180,13 @@ class CoverageScriptTests(unittest.TestCase):
             self.assertEqual(floor_path.read_text(), floor + "\n")
             calls = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
             if error is None:
-                self.assert_profile_contract(repo, reports, calls, mode, floor)
+                self.assert_profile_contract(repo, reports, calls, mode, floor, metal)
+            elif metal and changes and "COVERAGE_TEST_PHYSICAL" in changes:
+                self.assert_physical_failure(reports, calls)
             elif not changes or "COVERAGE_TEST_FAIL" not in changes:
                 self.assertEqual(calls, [], "preflight failure must not start instrumentation")
 
-    def assert_profile_contract(self, repo, reports, calls, mode, floor):
+    def assert_profile_contract(self, repo, reports, calls, mode, floor, metal):
         expected = []
         for profile, features, workspace in [
             ("workspace", ["--all-features"], ["--workspace"]),
@@ -170,10 +197,23 @@ class CoverageScriptTests(unittest.TestCase):
             commands = [
                 ["clean", "--workspace", "--locked"],
                 [*workspace, *features, "--locked", "--no-report"],
+            ]
+            if profile == "workspace" and metal:
+                commands.extend([
+                    ["report", "--locked", "--json", "--output-path",
+                     str(directory / "portable/coverage.json")],
+                    ["report", "--locked", "--html", "--output-dir", str(directory / "portable")],
+                    self.physical_command(),
+                ])
+                self.assertEqual((directory / "metal-tight-status.txt").read_text(), "passed\n")
+                self.assertIn("4 passed;", (directory / "metal-tight.log").read_text())
+                for path in ["coverage.json", "html/index.html"]:
+                    self.assertTrue((directory / "portable" / path).is_file())
+            commands.extend([
                 ["report", *selection, "--locked", "--json", "--output-path",
                  str(directory / "coverage.json")],
                 ["report", *selection, "--locked", "--html", "--output-dir", str(directory)],
-            ]
+            ])
             expected.extend({"args": ["+1.97.1", "llvm-cov", *command],
                              "profile": "build-" + profile} for command in commands)
             for path in ["coverage.json", "html/index.html"]:
@@ -197,11 +237,107 @@ class CoverageScriptTests(unittest.TestCase):
         self.assertEqual(metadata["default_filename_filters"],
                          "cargo-llvm-cov 0.8.7 src/report.rs::ignore_filename_regex")
         self.assertEqual(metadata["project_added_filename_filters"], [])
+        self.assertEqual(metadata["profile_merge_scope"],
+                         "profiles_merged describes floor profiles; raw execution profiles combine "
+                         "only within their own floor profile")
+        self.assertEqual(metadata["workspace_execution"], "portable+metal-tight" if metal else "portable")
+        self.assertEqual(metadata["workspace_stages"], ["portable", "metal-tight"] if metal else ["portable"])
+        self.assertEqual(metadata["physical_tests"], METAL_TESTS if metal else [])
+        self.assertEqual(metadata["expected_physical_tests"], len(METAL_TESTS) if metal else 0)
+        self.assertEqual(metadata["physical_test_target"], "hardware_tight" if metal else None)
         for tool in metadata["llvm_tools"].values():
             self.assertTrue(Path(tool["path"]).is_relative_to(repo))
             self.assertRegex(tool["sha256"], r"^[0-9a-f]{64}$")
             self.assertTrue(tool["version"].startswith("LLVM (http://llvm.org/):\n  LLVM version "))
             self.assertTrue(tool["version"].endswith("\n  Optimized build."))
+
+    @staticmethod
+    def physical_command():
+        """Require the same workspace features, retained data and exact group."""
+        return ["--workspace", "--all-features", "--test", "hardware_tight",
+                "--locked", "--no-report", "--no-clean", "--", "--ignored",
+                "--nocapture", "--test-threads=1", "--exact", *METAL_TESTS]
+
+    def assert_physical_failure(self, reports, calls):
+        """Only a retained portable report may precede physical-stage refusal."""
+        directory = reports / "workspace"
+        expected = [
+            ["clean", "--workspace", "--locked"],
+            ["--workspace", "--all-features", "--locked", "--no-report"],
+            ["report", "--locked", "--json", "--output-path", str(directory / "portable/coverage.json")],
+            ["report", "--locked", "--html", "--output-dir", str(directory / "portable")],
+            self.physical_command(),
+        ]
+        self.assertEqual(calls, [{"args": ["+1.97.1", "llvm-cov", *command],
+                                 "profile": "build-workspace"} for command in expected])
+        self.assertTrue((directory / "portable/coverage.json").is_file())
+        self.assertTrue((directory / "portable/html/index.html").is_file())
+        self.assertFalse((directory / "coverage.json").exists())
+        self.assertTrue((directory / "metal-tight.log").is_file())
+        self.assertEqual((directory / "metal-tight-status.txt").read_text(), "incomplete\n")
+
+    def test_metal_stage_precedes_separate_profile_gates(self):
+        self.run_case(mode="gate", floor="91", metal=True)
+
+    def test_metal_baseline_does_not_apply_a_floor(self):
+        self.run_case(metal=True)
+
+    def test_failed_physical_tests_prevent_completion(self):
+        self.run_case(mode="gate", floor="91", metal=True,
+                      changes={"COVERAGE_TEST_PHYSICAL": "failed"},
+                      error="simulated physical test failure", exit_code=37)
+
+    def test_missing_physical_tests_prevent_completion(self):
+        for result in ["empty", "missing"]:
+            with self.subTest(result=result):
+                self.run_case(mode="gate", floor="91", metal=True,
+                              changes={"COVERAGE_TEST_PHYSICAL": result},
+                              error="requires exactly 4 passing hardware_tight tests")
+
+    def test_ignored_physical_tests_prevent_completion(self):
+        self.run_case(mode="gate", floor="91", metal=True,
+                      changes={"COVERAGE_TEST_PHYSICAL": "ignored"},
+                      error="requires exactly 4 passing hardware_tight tests")
+
+    def test_unreported_physical_tests_prevent_completion(self):
+        self.run_case(mode="gate", floor="91", metal=True,
+                      changes={"COVERAGE_TEST_PHYSICAL": "unreported"},
+                      error="requires exactly 4 passing hardware_tight tests")
+
+    def test_optional_gate_failure_is_forwarded(self):
+        with tempfile.TemporaryDirectory(prefix="zetesis-check-forward-") as temporary:
+            repo = Path(temporary)
+            (repo / "scripts").mkdir()
+            shutil.copyfile(ROOT / "scripts/check.sh", repo / "scripts/check.sh")
+            gate = repo / "scripts/coverage.sh"
+            gate.write_text('#!/bin/sh\nprintf "<%s>\\n" "$@"\nexit 37\n')
+            gate.chmod(0o700)
+            result = subprocess.run(["sh", "scripts/check.sh", "coverage", "--metal"],
+                                    cwd=repo, env=clean_environment(), text=True,
+                                    capture_output=True, timeout=TIMEOUT, check=False)
+            self.assertEqual(result.stdout, "<gate>\n<--metal>\n")
+            self.assertEqual(result.returncode, 37)
+
+    def test_invalid_coverage_arguments_are_refused(self):
+        for arguments in [["bad"], ["gate", "--bad"], ["gate", ""],
+                          ["gate", "--metal", "extra"]]:
+            with self.subTest(arguments=arguments):
+                result = subprocess.run(["sh", str(ROOT / "scripts/coverage.sh"), *arguments],
+                                        env=clean_environment(), text=True, capture_output=True,
+                                        timeout=TIMEOUT, check=False)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("Usage:", result.stderr)
+
+    def test_invalid_check_arguments_are_refused(self):
+        for arguments in [["portable", "--metal"], ["full", "--metal"],
+                          ["coverage", "--bad"], ["coverage", ""],
+                          ["coverage", "--metal", "extra"]]:
+            with self.subTest(arguments=arguments):
+                result = subprocess.run(["sh", str(ROOT / "scripts/check.sh"), *arguments],
+                                        env=clean_environment(), text=True, capture_output=True,
+                                        timeout=TIMEOUT, check=False)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("Usage:", result.stderr)
 
     def test_baseline_profiles_are_fresh_separate_and_nongating(self):
         for overrides in ("neither", "both"):

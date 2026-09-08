@@ -3,14 +3,20 @@
 set -eu
 
 mode=${1:-gate}
-if [ "$#" -gt 1 ]; then
-    printf '%s\n' 'Usage: scripts/coverage.sh [gate|baseline]' >&2
+metal=${2:-}
+if [ "$#" -gt 2 ] || { [ "$#" -eq 2 ] && [ "$metal" != --metal ]; }; then
+    printf '%s\n' 'Usage: scripts/coverage.sh [gate|baseline] [--metal]' >&2
     exit 2
 fi
 case "$mode" in gate|baseline) ;; *)
-    printf '%s\n' 'Usage: scripts/coverage.sh [gate|baseline]' >&2
+    printf '%s\n' 'Usage: scripts/coverage.sh [gate|baseline] [--metal]' >&2
     exit 2 ;;
 esac
+# This finite list is both the recorded scope and the exact libtest selection.
+metal_tests='metal_support_matches_exact_reduct_semantics
+metal_support_preserves_batch_isolation
+metal_support_refusals_preserve_reusable_residency
+metal_support_residency_tracks_theory_identity'
 
 repo_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 cd -- "$repo_dir"
@@ -57,7 +63,7 @@ if [ -z "${LLVM_COV:-}" ]; then
     LLVM_PROFDATA="$sysroot/lib/rustlib/$host/bin/llvm-profdata"
 fi
 export LLVM_COV LLVM_PROFDATA
-python3 - "$coverage_dir/toolchain.json" "$mode" "$floor" <<'PY'
+python3 - "$coverage_dir/toolchain.json" "$mode" "$floor" "$metal" "$metal_tests" <<'PY'
 from pathlib import Path
 import hashlib
 import json
@@ -82,6 +88,7 @@ for name in ["LLVM_COV", "LLVM_PROFDATA"]:
     if len(llvm) != 1 or llvm[0].strip() not in accepted_versions:
         sys.exit(f"{name} does not match rustc LLVM {match.group(1)}: {version}")
     tools[name] = {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "version": version}
+physical_tests = sys.argv[5].split() if sys.argv[4] == "--metal" else []
 Path(sys.argv[1]).write_text(json.dumps({
     "mode": sys.argv[2], "committed_floor": sys.argv[3], "rustc": rust,
     "cargo_llvm_cov": "0.8.7", "llvm_tools": tools,
@@ -90,8 +97,59 @@ Path(sys.argv[1]).write_text(json.dumps({
     "default_filename_filters": "cargo-llvm-cov 0.8.7 src/report.rs::ignore_filename_regex",
     "project_added_filename_filters": [],
     "profiles_merged": False,
+    "profile_merge_scope": (
+        "profiles_merged describes floor profiles; raw execution profiles combine "
+        "only within their own floor profile"
+    ),
+    "workspace_execution": "portable+metal-tight" if physical_tests else "portable",
+    "workspace_stages": ["portable", "metal-tight"] if physical_tests else ["portable"],
+    "physical_test_target": "hardware_tight" if physical_tests else None,
+    "physical_tests": physical_tests,
+    "expected_physical_tests": len(physical_tests),
+    "physical_scope": "tight oracle only; other hardware suites are not selected" if physical_tests else None,
 }, indent=2) + "\n")
 PY
+
+write_report() {
+    destination=$1
+    shift
+    mkdir -p -- "$destination"
+    # In 0.8.7, report rejects build-feature flags despite listing them in help.
+    # The separate instrumented directories retain each feature configuration.
+    cargo +1.97.1 llvm-cov report "$@" --locked --json \
+        --output-path "$destination/coverage.json"
+    cargo +1.97.1 llvm-cov report "$@" --locked --html --output-dir "$destination"
+}
+
+run_metal() {
+    # Splitting is intentional: these are the fixed identifiers declared above,
+    # not user input. Exact selection plus the result count rejects missing tests.
+    set -- $metal_tests
+    expected=$#
+    physical_log="$coverage_dir/workspace/metal-tight.log"
+    physical_status="$coverage_dir/workspace/metal-tight-status.txt"
+    printf '%s\n' incomplete > "$physical_status"
+    # Keep workspace feature unification and the existing instrumented target.
+    # --no-clean retains the portable profile; no CLI-CPU data enters this stage.
+    if cargo +1.97.1 llvm-cov --workspace --all-features --test hardware_tight \
+        --locked --no-report --no-clean -- --ignored --nocapture --test-threads=1 \
+        --exact "$@" > "$physical_log" 2>&1; then
+        cat "$physical_log"
+    else
+        physical_exit=$?
+        cat "$physical_log" >&2 || :
+        return "$physical_exit"
+    fi
+    # A successful Cargo exit alone also permits zero selected tests. The pinned
+    # libtest summary must attest every required physical test passed unignored.
+    if ! LC_ALL=C grep -Eq \
+        "^test result: ok\\. $expected passed; 0 failed; 0 ignored; 0 measured; [0-9]+ filtered out; finished in " \
+        "$physical_log"; then
+        printf 'Physical coverage requires exactly %s passing hardware_tight tests.\n' "$expected" >&2
+        return 1
+    fi
+    printf '%s\n' passed > "$physical_status"
+}
 
 run_profile() {
     profile=$1
@@ -102,16 +160,16 @@ run_profile() {
     cargo +1.97.1 llvm-cov clean --workspace --locked
     if [ "$profile" = workspace ]; then
         cargo +1.97.1 llvm-cov --workspace "$@" --locked --no-report
+        if [ "$metal" = --metal ]; then
+            write_report "$report_dir/portable"
+            run_metal
+        fi
         set --
     else
         cargo +1.97.1 llvm-cov "$@" --locked --no-report
         set -- --package zetesis-cli
     fi
-    # In 0.8.7, report rejects build-feature flags despite listing them in help.
-    # The separate instrumented directories retain each feature configuration.
-    cargo +1.97.1 llvm-cov report "$@" --locked --json \
-        --output-path "$report_dir/coverage.json"
-    cargo +1.97.1 llvm-cov report "$@" --locked --html --output-dir "$report_dir"
+    write_report "$report_dir" "$@"
 }
 
 run_profile workspace --all-features

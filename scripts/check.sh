@@ -2,12 +2,13 @@
 # Independent check layers; full target is allowed to fail while unsupported.
 set -eu
 mode=${1:-portable}
-if [ "$#" -gt 1 ]; then
-    printf '%s\n' 'Usage: scripts/check.sh [portable|coverage|oracle|proofs|full]' >&2
+coverage_option=${2:-}
+if [ "$#" -gt 2 ] || { [ "$#" -eq 2 ] && { [ "$mode" != coverage ] || [ "$coverage_option" != --metal ]; }; }; then
+    printf '%s\n' 'Usage: scripts/check.sh [portable|coverage|oracle|proofs|full]; scripts/check.sh coverage --metal' >&2
     exit 2
 fi
 case "$mode" in portable|coverage|oracle|proofs|full) ;; *)
-    printf '%s\n' 'Usage: scripts/check.sh [portable|coverage|oracle|proofs|full]' >&2
+    printf '%s\n' 'Usage: scripts/check.sh [portable|coverage|oracle|proofs|full]; scripts/check.sh coverage --metal' >&2
     exit 2 ;;
 esac
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -35,7 +36,11 @@ if [ "$mode" = proofs ] || [ "$mode" = full ]; then
     python3 scripts/proof_record.py
 fi
 if [ "$mode" = coverage ] || [ "$mode" = full ]; then
-    ./scripts/coverage.sh
+    if [ "$coverage_option" = --metal ]; then
+        ./scripts/coverage.sh gate --metal
+    else
+        ./scripts/coverage.sh
+    fi
 fi
 if [ "$mode" = full ]; then
     mkdir -p -- "$repo_dir/target"
