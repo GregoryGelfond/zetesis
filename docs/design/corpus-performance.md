@@ -1,7 +1,13 @@
 # Reproducible kr-domains performance matrix
 
-Status: required comparison, with runner migration and execution pending. The
-existing three-case CPU measurements are not this matrix. This protocol applies
+Status: the Rust library runner and first
+[instrumented physical matrix](../verification/dependencies-measurement-tranche-20260908/physical/README.md)
+are complete. That campaign covers all 94 inputs with one warmup and five timed
+repetitions per active cell. It retains both lazy refusals on every formula input;
+it is not an all-pass matrix. The twenty-repetition uninstrumented series,
+additional worker configurations, size sweep and memory observations specified
+below remain outstanding. The existing three-case CPU measurements are a
+different population. This protocol applies
 the broader [evaluation contract](zetesis.md#required-cpugpu-evaluation-contract)
 to every non-clingcon kr-domains input in the sealed corpus manifest
 (currently 94 cases).
@@ -46,8 +52,9 @@ defined against an unsupported, incomplete or failed cell.
 The current implementation removes the blanket lazy/Metal refusal for relational
 sources using bounded source scans and per-world device consequences. Seven
 [physical Metal tests](../verification/lazy-device-integration-20260907/physical/README.md)
-qualify the prepared debug artifacts for their recorded cases. The full matrix
-and release-binary qualification remain pending. General formula sources continue
+qualify the prepared debug artifacts for their recorded cases. Subsequent
+release measurements cover every original corpus input and requested route;
+both lazy profiles are explicitly refused on all 94. General formula sources continue
 to refuse lazy execution. Broader lazy Metal qualification is required before
 version 1.0.
 
@@ -156,6 +163,6 @@ through lexical, symlink or hard-link aliasing.
 Qualify the integrated build before timing. Pause competing builds, tests and
 compute workloads, and record remaining host-load/thermal-control limitations.
 Physical Metal runs must use an execution context exposing the M4 Pro adapter;
-hosted CPU CI does not substitute for them. The README should link one complete
-matrix report with all cases and dispositions once collected. Until then, retain
-the narrower labels on existing performance results and mark this campaign pending.
+hosted CPU CI does not substitute for them. The README links the first
+instrumented matrix with all cases and dispositions. Preserve its narrower
+repetition, output and memory scope; remaining measurements above are pending.

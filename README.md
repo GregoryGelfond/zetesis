@@ -252,8 +252,8 @@ retained in the timing record.
 These are workload-specific CPU comparisons, not a causal speedup attributed to
 this checkpoint or a general solver ranking. A separate SEND `--stats` observation
 measures grounding at **17.90 ms** and solving at **15.38 ms**; these are not phase
-medians. Wall timings include process startup, output and capture. Peak RSS,
-lazy/GPU comparisons and the full corpus matrix remain unmeasured.
+medians. Wall timings include process startup, output and capture. Peak RSS and
+lazy/GPU comparisons are unavailable in that historical population.
 
 A subsequent [controlled propagation comparison](docs/verification/binary-propagation-20260908/README.md)
 isolates omission of empty binary-clause replacement scans. Across 42 timed
@@ -264,11 +264,20 @@ drift are retained; this establishes neither a general speedup nor a memory or
 GPU improvement. These source-controlled populations are distinct from the
 preceding workload comparison and must not be combined as one timing series.
 
-The instrumented `zetesis-perf --suite corpus` matrix now records explicit
-CPU/Metal and eager/lazy requests over all 94 clean examples, including refused
-cells. The separate `zetesis-bench lazy` compares matched frozen batches across
-scalar, Rayon, portable and Metal source rounds. Both have portable and frozen
-CPU qualification; their new physical measurement campaign remains pending.
+The [instrumented M4 Pro corpus matrix](docs/verification/dependencies-measurement-tranche-20260908/physical/README.md)
+now records explicit CPU/Metal and eager/lazy requests over all 94 clean examples.
+All eager CPU and Metal observations match clingo's complete selected-answer,
+cost and optimum-tie contracts. Both lazy profiles refuse all 94 formula inputs;
+those positions have no timed population. Metal/eager is slower than CPU/eager
+on all 94 inputs here: the median per-case ratio is 3.020. Device setup and
+different oracle selections contribute; native full-model JSON and statistics
+also make this a different output protocol from the earlier CPU comparison.
+[All six queens encodings and all other inputs](docs/verification/dependencies-measurement-tranche-20260908/physical/corpus-timing.md)
+retain their individual timings and scopes.
+
+The separate `zetesis-bench lazy` compares matched frozen batches across scalar,
+Rayon, portable and Metal source rounds. It has portable and frozen CPU
+qualification; its physical measurement remains pending.
 See the [matrix contract](crates/zetesis-validation/README.md) and
 [lazy experiment](crates/zetesis-experiments/README.md) for output, timing and
 resource scopes. Compact saved reports preserve every captured byte; they do
@@ -296,10 +305,10 @@ Earlier [scalar arithmetic measurements](docs/verification/scalar-evaluation-202
 and [whole-process results](docs/verification/execution-performance-20260907/README.md)
 retain their original sources and scope. Physical GPU microbenchmarks have mixed
 results; no new GPU speedup is claimed here.
-The required [full corpus matrix](docs/design/corpus-performance.md) will compare
-every non-clingcon kr-domains case across eager/lazy and CPU/Metal configurations
-with clingo, retaining unsupported and incomplete cells. It has not yet been
-collected; the current end-to-end campaigns cover the named CPU cases only.
+The broader [corpus performance protocol](docs/design/corpus-performance.md)
+still requires additional repetitions, worker configurations, parameterized
+sizes and memory measurements. The first instrumented matrix covers every
+original input and requested route, retaining unsupported cells explicitly.
 
 ## Libraries and mathematical specification
 
