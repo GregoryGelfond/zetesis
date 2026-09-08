@@ -45,8 +45,55 @@ pub struct LazyExecutionStatistics {
     /// Maximum requested device buffer payload, including inactive capacity.
     /// This excludes host payload, driver storage and process RSS.
     pub peak_transport_bytes: u64,
+    /// Overlapping reasons for replacing complete transport buffer sets.
+    pub transport_replacements: LazyTransportReplacements,
     /// Host wait plus readback decoding; this is not a kernel-only timer.
     pub host_wait: std::time::Duration,
+}
+
+/// View of submitted lazy transport replacement reasons.
+///
+/// Counts are per submission and may overlap; their sum is not an allocation
+/// count. Initial allocation is disjoint, and reuse contributes no reason.
+/// This view remains available to CPU-only consumers of solver reports.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LazyTransportReplacements {
+    /// No transport was retained in the current source batch.
+    pub initial: u64,
+    /// Source offsets exceeded their previous capacity.
+    pub offsets_growth: u64,
+    /// Source instances exceeded their previous capacity.
+    pub records_growth: u64,
+    /// Immutable snapshots exceeded their previous capacity.
+    pub snapshots_growth: u64,
+    /// Frozen seeds exceeded their previous capacity.
+    pub seeds_growth: u64,
+    /// The exact output/readback shape changed.
+    pub result_shape: u64,
+    /// Retained capacity and active host allowance exceeded the byte ceiling.
+    pub budget: u64,
+    /// The retained-capacity sum exceeded its integer representation.
+    pub accounting_overflow: u64,
+}
+
+#[cfg(feature = "gpu")]
+impl LazyTransportReplacements {
+    fn record(self, observed: zetesis_wgpu::LazyTransportReplacements) -> Option<Self> {
+        Some(Self {
+            initial: self.initial.checked_add(observed.initial)?,
+            offsets_growth: self.offsets_growth.checked_add(observed.offsets_growth)?,
+            records_growth: self.records_growth.checked_add(observed.records_growth)?,
+            snapshots_growth: self
+                .snapshots_growth
+                .checked_add(observed.snapshots_growth)?,
+            seeds_growth: self.seeds_growth.checked_add(observed.seeds_growth)?,
+            result_shape: self.result_shape.checked_add(observed.result_shape)?,
+            budget: self.budget.checked_add(observed.budget)?,
+            accounting_overflow: self
+                .accounting_overflow
+                .checked_add(observed.accounting_overflow)?,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -79,6 +126,7 @@ impl LazyExecutionStatistics {
             transport_allocations: 0,
             transport_reuses: 0,
             peak_transport_bytes: 0,
+            transport_replacements: LazyTransportReplacements::default(),
             host_wait: std::time::Duration::ZERO,
         }
     }
@@ -119,6 +167,10 @@ impl LazyExecutionStatistics {
             transport_allocations: add(self.transport_allocations, device.transport_allocations)?,
             transport_reuses: add(self.transport_reuses, device.transport_reuses)?,
             peak_transport_bytes: self.peak_transport_bytes.max(device.peak_transport_bytes),
+            transport_replacements: self
+                .transport_replacements
+                .record(device.transport_replacements)
+                .ok_or(crate::RunError::LazyStatisticsOverflow)?,
             host_wait: self
                 .host_wait
                 .checked_add(device.host_wait)

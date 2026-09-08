@@ -774,6 +774,29 @@ fn lazy_statistics(
     out.number_field("transport_allocations", stats.transport_allocations)?;
     out.number_field("transport_reuses", stats.transport_reuses)?;
     out.number_field("peak_transport_bytes", stats.peak_transport_bytes)?;
+    out.text(",\"transport_replacements\":{")?;
+    out.text("\"initial\":")?;
+    out.text(&stats.transport_replacements.initial.to_string())?;
+    out.number_field(
+        "offsets_growth",
+        stats.transport_replacements.offsets_growth,
+    )?;
+    out.number_field(
+        "records_growth",
+        stats.transport_replacements.records_growth,
+    )?;
+    out.number_field(
+        "snapshots_growth",
+        stats.transport_replacements.snapshots_growth,
+    )?;
+    out.number_field("seeds_growth", stats.transport_replacements.seeds_growth)?;
+    out.number_field("result_shape", stats.transport_replacements.result_shape)?;
+    out.number_field("budget", stats.transport_replacements.budget)?;
+    out.number_field(
+        "accounting_overflow",
+        stats.transport_replacements.accounting_overflow,
+    )?;
+    out.text("}")?;
     out.number_field("host_wait_ns", stats.host_wait.as_nanos())?;
     out.text("}")
 }
@@ -799,6 +822,19 @@ mod lazy_tests {
         assert_eq!(value["transport_reuses"], 3);
         assert_eq!(value["peak_transport_bytes"], 1024);
         assert_eq!(value["host_wait_ns"], 123);
+        assert_eq!(
+            value["transport_replacements"],
+            serde_json::json!({
+                "initial": 1,
+                "offsets_growth": 0,
+                "records_growth": 1,
+                "snapshots_growth": 0,
+                "seeds_growth": 0,
+                "result_shape": 1,
+                "budget": 0,
+                "accounting_overflow": 0
+            })
+        );
     }
 
     #[test]

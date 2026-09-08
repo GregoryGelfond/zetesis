@@ -89,6 +89,9 @@ pub struct DeviceWork {
     pub transport_reuses: u64,
     /// Maximum requested GPU buffer payload, including inactive capacity.
     pub peak_transport_bytes: u64,
+    /// Overlapping reasons for allocating complete transport buffer sets.
+    #[serde(serialize_with = "replacement_view")]
+    pub transport_replacements: zetesis_wgpu::LazyTransportReplacements,
     /// Host submission/readback wait, not a shader timestamp.
     pub host_wait_ns: u128,
 }
@@ -103,9 +106,27 @@ impl From<LazyGpuStatistics> for DeviceWork {
             transport_allocations: statistics.transport_allocations,
             transport_reuses: statistics.transport_reuses,
             peak_transport_bytes: statistics.peak_transport_bytes,
+            transport_replacements: statistics.transport_replacements,
             host_wait_ns: statistics.host_wait.as_nanos(),
         }
     }
+}
+
+fn replacement_view<S: Serializer>(
+    reasons: &zetesis_wgpu::LazyTransportReplacements,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    use serde::ser::SerializeStruct;
+    let mut record = serializer.serialize_struct("LazyTransportReplacements", 8)?;
+    record.serialize_field("initial", &reasons.initial)?;
+    record.serialize_field("offsets_growth", &reasons.offsets_growth)?;
+    record.serialize_field("records_growth", &reasons.records_growth)?;
+    record.serialize_field("snapshots_growth", &reasons.snapshots_growth)?;
+    record.serialize_field("seeds_growth", &reasons.seeds_growth)?;
+    record.serialize_field("result_shape", &reasons.result_shape)?;
+    record.serialize_field("budget", &reasons.budget)?;
+    record.serialize_field("accounting_overflow", &reasons.accounting_overflow)?;
+    record.end()
 }
 
 /// One successful route observation, after complete ordered scalar agreement.

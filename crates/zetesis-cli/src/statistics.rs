@@ -316,6 +316,19 @@ fn lazy(sink: &mut impl Write, stats: &crate::LazyExecutionStatistics) -> io::Re
         sink,
         "  lazy transport: buffer sets allocated={}; reused chunks={}; peak requested device bytes={} (RSS unmeasured)",
         stats.transport_allocations, stats.transport_reuses, stats.peak_transport_bytes
+    )?;
+    let reasons = stats.transport_replacements;
+    writeln!(
+        sink,
+        "  lazy replacements (overlapping): initial={}; offsets growth={}; records growth={}; snapshots growth={}; seeds growth={}; result shape={}; budget={}; accounting overflow={}",
+        reasons.initial,
+        reasons.offsets_growth,
+        reasons.records_growth,
+        reasons.snapshots_growth,
+        reasons.seeds_growth,
+        reasons.result_shape,
+        reasons.budget,
+        reasons.accounting_overflow
     )
 }
 

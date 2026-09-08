@@ -175,6 +175,10 @@ fn device_observations_preserve_recorded_units() {
         transport_reuses: 1,
         peak_transport_bytes: 256,
         host_wait: std::time::Duration::from_nanos(6),
+        transport_replacements: zetesis_wgpu::LazyTransportReplacements {
+            initial: 1,
+            ..Default::default()
+        },
     });
     assert_eq!(
         serde_json::to_value(work).unwrap(),
@@ -187,6 +191,16 @@ fn device_observations_preserve_recorded_units() {
             "transport_reuses": 1,
             "peak_transport_bytes": 256,
             "host_wait_ns": 6
+            ,"transport_replacements": {
+                "initial": 1,
+                "offsets_growth": 0,
+                "records_growth": 0,
+                "snapshots_growth": 0,
+                "seeds_growth": 0,
+                "result_shape": 0,
+                "budget": 0,
+                "accounting_overflow": 0
+            }
         })
     );
 }

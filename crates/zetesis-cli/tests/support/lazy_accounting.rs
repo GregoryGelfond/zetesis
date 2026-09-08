@@ -23,6 +23,12 @@ pub(crate) fn fixture() -> LazyExecutionStatistics {
         transport_allocations: 2,
         transport_reuses: 3,
         peak_transport_bytes: 1024,
+        transport_replacements: crate::LazyTransportReplacements {
+            initial: 1,
+            records_growth: 1,
+            result_shape: 1,
+            ..Default::default()
+        },
         host_wait: std::time::Duration::from_nanos(123),
     }
 }
@@ -68,6 +74,10 @@ fn failed_batches_retain_submitted_work() {
                 transport_allocations: 1,
                 transport_reuses: 1,
                 peak_transport_bytes: 2048,
+                transport_replacements: zetesis_wgpu::LazyTransportReplacements {
+                    initial: 1,
+                    ..Default::default()
+                },
                 host_wait: std::time::Duration::from_nanos(9),
             },
         )
@@ -111,6 +121,82 @@ fn transport_peak_is_the_largest_attempted_batch() {
             .unwrap();
         assert_eq!(stats.peak_transport_bytes, expected);
     }
+}
+
+#[cfg(feature = "gpu")]
+#[test]
+fn replacement_overflow_preserves_the_previous_record() {
+    type Field = fn(&mut zetesis_wgpu::LazyTransportReplacements) -> &mut u64;
+    let fields: [Field; 8] = [
+        |value| &mut value.initial,
+        |value| &mut value.offsets_growth,
+        |value| &mut value.records_growth,
+        |value| &mut value.snapshots_growth,
+        |value| &mut value.seeds_growth,
+        |value| &mut value.result_shape,
+        |value| &mut value.budget,
+        |value| &mut value.accounting_overflow,
+    ];
+    for field in fields {
+        let mut stats = fixture();
+        stats.transport_replacements = crate::LazyTransportReplacements {
+            initial: 1,
+            offsets_growth: 1,
+            records_growth: 1,
+            snapshots_growth: 1,
+            seeds_growth: 1,
+            result_shape: 1,
+            budget: 1,
+            accounting_overflow: 1,
+        };
+        let before = stats.clone();
+        let mut device = zetesis_wgpu::LazyGpuStatistics::default();
+        *field(&mut device.transport_replacements) = u64::MAX;
+        let error = stats
+            .record(1, true, zetesis_cpu::lazy::Progress::default(), device)
+            .unwrap_err();
+        assert!(matches!(error, crate::RunError::LazyStatisticsOverflow));
+        assert_eq!(stats, before);
+    }
+}
+
+#[cfg(feature = "gpu")]
+#[test]
+fn failed_batches_retain_replacement_reasons() {
+    let mut stats = fixture();
+    stats
+        .record(
+            1,
+            false,
+            zetesis_cpu::lazy::Progress::default(),
+            zetesis_wgpu::LazyGpuStatistics {
+                transport_replacements: zetesis_wgpu::LazyTransportReplacements {
+                    initial: 1,
+                    offsets_growth: 2,
+                    records_growth: 3,
+                    snapshots_growth: 4,
+                    seeds_growth: 5,
+                    result_shape: 6,
+                    budget: 7,
+                    accounting_overflow: 8,
+                },
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        stats.transport_replacements,
+        crate::LazyTransportReplacements {
+            initial: 2,
+            offsets_growth: 2,
+            records_growth: 4,
+            snapshots_growth: 4,
+            seeds_growth: 5,
+            result_shape: 7,
+            budget: 7,
+            accounting_overflow: 8,
+        }
+    );
 }
 
 #[cfg(feature = "gpu")]

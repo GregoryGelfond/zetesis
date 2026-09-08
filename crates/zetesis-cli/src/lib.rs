@@ -45,7 +45,7 @@ pub use driver::{
 pub use failure::{PartialReport, RunFailure};
 pub use formula_execution::{CompletionAccounting, FormulaExecutionStatistics};
 mod lazy_execution;
-pub use lazy_execution::LazyExecutionStatistics;
+pub use lazy_execution::{LazyExecutionStatistics, LazyTransportReplacements};
 mod shared_execution;
 pub use options::{Backend, Command, Grounder, Options, Oracle, SourceBatching};
 pub use presentation::ColorMode;
