@@ -91,7 +91,8 @@ Replace Python in this order:
 The selected-upstream comparison now runs through the Rust `selected` library
 and `zetesis-corpus compare`; its Python comparator, decoder and matching test
 module have been removed. The new Rust `performance` library and `zetesis-perf`
-command provide bounded three-case CPU measurements. They do not yet replace
+command provide bounded three-case baseline and six-encoding queens CPU
+measurements. They do not yet replace
 the complete historical benchmark or process-memory tooling. The annotation-free
 kr-domains collection and its typed contracts also have Rust integrity and
 regression consumers. Remaining Python gates and C++ import provenance are still

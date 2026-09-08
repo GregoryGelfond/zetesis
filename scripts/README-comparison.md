@@ -1,4 +1,31 @@
-# Complete optimization-aware solver comparisons
+# Solver comparison tools
+
+For current CPU/eager comparisons, use the Rust `zetesis-perf` command after
+qualification and while other owned builds/tests are stopped:
+
+```sh
+zetesis-perf examples/kr-domains --suite baseline --zetesis /path/to/zetesis \
+  --clingo /path/to/clingo --report /new/path/baseline.json
+zetesis-perf examples/kr-domains --suite queens --zetesis /path/to/zetesis \
+  --clingo /path/to/clingo --report /new/path/queens.json
+```
+
+The baseline suite covers SEND, queens02 and task allocation; the queens suite
+covers all six unchanged N=8 encodings. Reports retain complete comparison
+evidence, source/binary identities, timed pairs and separate phase observations.
+Report destinations must be new. See the
+[measured protocol](../docs/verification/cpu-refresh-20260908/README.md) and
+[development guide](../docs/development.md#measure-and-document-the-result).
+This Rust runner does not yet measure peak RSS or provide the complete
+eager/lazy × CPU/Metal corpus matrix.
+
+## Retained Python comparison protocol
+
+The following documents the earlier tooling and its tests. It remains available
+for the historical protocol, selected original-manifest cases and separate
+process-memory observations; it is not the default route for the current Rust
+campaigns. Migrating those remaining contracts requires equivalent bounded
+process, memory and answer evidence before removing the Python implementation.
 
 `compare-optimal.py` compares complete executions of the original manifest cases.
 It supports optimized and objective-free inputs. It leaves the historical
