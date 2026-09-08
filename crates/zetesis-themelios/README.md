@@ -387,6 +387,15 @@ Accepted templates contain ground shared Symbols, named variables, signed functi
 
 Source bytes, syntax traversal, scalar expansion, variable scopes, possible-support rounds, join work/bindings, formula storage, objective shape, and copied source evidence have independent ceilings. A limit produces a typed located refusal, not UNSAT or a smaller admitted theory. Bundle failures retain the complete catalog so diagnostics can name their original file. Objective evaluation and stable-model search have additional independent runtime budgets.
 
+Parser refusals preserve the original text and every typed themelios diagnostic.
+For string admission, `AdmissionFailure::Syntax` carries `SyntaxFailure`, whose
+`source()` and `diagnostics()` accessors support caller-owned views. This replaces
+the unreleased variant's bare diagnostic vector. Its plain human display resolves
+line/column locations and source excerpts under the neutral `<input>` name; bundle
+syntax errors retain the original path and source identity. Terminal colour belongs
+to the CLI. The [diagnostic record](../../docs/verification/syntax-diagnostics-20260908/README.md)
+describes ownership, rendering cost and the syntax-only scope of this refinement.
+
 ## Validation
 
 `tests/observations.rs` contains nine portable tests and an optional bounded fresh-clingo replay. Its 63 unchanged reference sources currently include 43 admitted programs with 59 complete displayed model/cost records and 20 explicit typed refusals. The [strong-negation record](../../docs/verification/strong-negation-20260906/README.md) documents those promotions; historical campaign results retain their original counts. Comparisons preserve multiplicities both inside each display and between original models. Additional regressions check every observation ceiling, cancellation/deadlines, public malformed-model names, exact original formula identity, duplicate provenance across bundles, and adjacent logical-source refusal boundaries. The CLI's `tests/observations.rs` adds five portable tests for auto/explicit routing, term/atom duplicates, hidden optimal ties and output failures with no partial Answer or false completion.

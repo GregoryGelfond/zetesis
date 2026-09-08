@@ -197,30 +197,7 @@ explains endpoint guards and why an internal refusal does not by itself establis
 a modeling error. Undefined or overflowing admitted arithmetic currently produces
 an explicit refusal rather than reproducing all of clingo's simplifications.
 
-The preceding execution tranche added [signed singleton heads](docs/verification/singleton-heads-20260907/README.md),
-[constructor patterns](docs/verification/function-patterns-20260907/README.md) and
-[evaluated positive arguments](docs/verification/positive-arguments-20260907/README.md).
-For example, `q(X):-d(X),p(X+1).` consumes `X` from `d(X)` and retains the
-matching `p` atom. Arithmetic does not infer an inverse binding.
-
-The current source also adds [aggregate consumers](docs/verification/aggregate-consumers-20260907/README.md)
-and [positive structured witnesses](docs/verification/structured-witnesses-20260907/README.md).
-An independent assignment can feed `N>0` and `Y=N+1` before constructing `q(f(Y))`;
-its proposed values still retain the original aggregate equality in the theory.
-The consequent in `q:-p(f(X,_)):#true.` selects complete matching `p` atoms through
-the existing transactional matcher. Local witnesses cannot establish outer or
-condition safety, and matching possible support does not make an atom true.
-Mixed evaluated/witness arguments, arithmetic inversion and negative anonymous
-witnesses remain refused.
-
-The [aggregate-bounds slice](docs/verification/aggregate-bounds-20260907/README.md)
-adds evaluated positive arguments, independent integer choice-bound proposals and
-positive count-head eligibility. For example,
-`d(1).N{a;b}N:-N=#count{X:d(X)}.` retains the original equality around each
-proposed bound, and `q(1).1#count{X:p(X):q(X)}1.` retains `q(1)` as a condition.
-Neither proposed values nor possible-support membership establish truth.
-
-Completed outer values now feed [negative consumers](docs/verification/outer-negative-consumers-20260908/README.md)
+Completed outer values feed [negative consumers](docs/verification/outer-negative-consumers-20260908/README.md)
 and [finite dependent ranges](docs/verification/outer-ranges-20260908/README.md)
 in ordinary, choice and checked count-head bodies. For example,
 `{p(0)}.q(N):-N=#count{},not p(N).` has answer sets `{p(0)}` and `{q(0)}`:
@@ -228,79 +205,58 @@ the count supplies an argument, while the original negative atom decides whether
 the rule applies. Similarly, `{d}.q(K):-N=#count{1:d},K=1..N.` has the empty
 answer set and `{d,q(1)}`. Each generated row retains the original aggregate
 equality and rule activation; a proposed value never certifies aggregate truth.
-The dated records distinguish complete clingo comparisons, frozen-reduct checks
-and explicit resource or numeric boundaries.
 
-The current [Lean audit](proofs/verification/consumers-memory-20260908/README.md)
-checks 748 laws across 61 modules; Rust and WGSL correspondence remains unproved.
+The [current local checkpoint](docs/verification/consumer-execution-tranche-20260908/README.md)
+passes **1,837 workspace test/doc checks**, **315 CPU-only CLI checks** and
+**61 external-oracle tests**. Both independent line-coverage profiles exceed their
+unchanged 91% floors: **91.1626% workspace / 92.2291% CPU-only CLI**. The frozen
+release passes all **94 clean kr-domains cases** and **24 selected upstream
+comparisons**, preserving the respective answer contracts and full-model checks.
+The [Lean audit](proofs/verification/consumer-execution-20260908/README.md)
+checks **763 laws across 64 modules**; Rust and WGSL correspondence remains unproved.
 
-The **2026-09-08 consumer and memory tranche** adds completed aggregate-value
-consumers in choice/count-head outer bodies, default/double-negated count-head
-eligibility, compact private watch links and opt-in immutable-world source masks.
-Local gates pass **1,779 workspace test/doc checks**, **300 CPU-only CLI checks**
-and **59 external-oracle tests**; all 94 clean corpus and 24 selected upstream
-cases still pass. Separate coverage profiles measure **91.1084% / 92.0460%**.
-The [tranche record](docs/verification/consumers-memory-tranche-20260908/README.md)
-keeps source, binary, audit and publication evidence separate.
 The [September CI policy](docs/verification/local-macos-ci-20260908/README.md)
-allows promotion using the completed local macOS gates while GitHub Actions is
-paused through September 30. The new tranche has no executed hosted Linux result.
+uses local macOS qualification while GitHub Actions is paused through September
+30. This checkpoint has no hosted Linux result. Historical qualifications and
+source-specific limitations remain in the [verification index](docs/verification/status.md).
 
-The [watch arrays](docs/verification/watch-storage-20260908/README.md) use half
-their former element payload on the measured 64-bit build; ordered search traces
-and counters are unchanged. The [source masks](docs/verification/source-masks-20260908/README.md)
-omit joins with no common current world. Sparse controls save work; dense controls
-pay overhead. Existing defaults are unchanged, and new masked physical execution
-remains unqualified. Neither result is a whole-solver RSS or isolated runtime claim.
+Relational lazy source joins offer an opt-in world-membership filter, which omits
+joins with no common current candidate world. Sparse controls save work; dense
+controls pay overhead. [Reusable join frames](docs/verification/join-workspace-20260908/README.md)
+now reduce repeated preparation while membership is rebuilt every round and
+retained storage stays charged. Defaults remain unchanged. Physical qualification
+of the updated masked path is pending; no GPU speedup or process-RSS claim follows
+from these deterministic work controls.
 
-The **2026-09-07 aggregate-bounds and lazy Metal checkpoint** passes all **94 clean
-non-clingcon kr-domains cases**, checking answer contracts, costs, counts and
-optimum ties across 1,931 selected model occurrences. All **24 selected upstream
-clingo assertions** pass with 73 full-model occurrences. Final local gates pass
-**1,707 workspace test/doc checks** and **300 CPU-only CLI checks**, with explicit
-external/device ignores retained. Corrected production line coverage is
-**91.0705% workspace / 92.0126% CPU-only CLI** before the final status-styling
-slice; both independent floors remain 91%. Hosted CI passed for that published revision.
-The [checkpoint](docs/verification/aggregate-bounds-tranche-20260907/README.md)
-records the rebuilt five release commands, source/binary identities, review
-findings and limitations. Hosted results attach to their specific source
-revision. The
-[verification record](docs/verification/status.md) indexes historical results.
-
-The [clean Lean build and audit](proofs/verification/aggregate-bounds-lazy-metal-20260907/README.md)
-preserve the prior semantic sources and theorem/axiom records. These are checked
-semantic laws, not a proof of the Rust/GPU implementation. Physical-device
-qualification retains its separately dated executable identity.
-
-The [updated end-to-end CPU comparison](docs/verification/cpu-refresh-20260908/README.md)
-records the new solver binary, 21 alternating timed pairs per case, one worker
-per solver and complete answer/optimal-tie enumeration. Native runs explicitly
-request eager grounding; automatic oracle selection uses certified tight-support
-checking for these inputs:
+The [fresh CPU comparison](docs/verification/consumer-execution-tranche-20260908/timing/README.md)
+uses 21 alternating timed pairs per case, one worker per solver and complete
+answer/optimal-tie enumeration. Native runs explicitly request eager grounding;
+automatic oracle selection uses certified tight-support checking on these inputs:
 
 | Clean input | zetesis median | clingo 5.8.2 median | zetesis / clingo |
 |---|---:|---:|---:|
-| SEND + MORE = MONEY | 37.98 ms | 12.29 ms | 3.090 |
-| Eight queens, variant 02 | 95.26 ms | 119.21 ms | 0.799 |
-| Task allocation, variant 04 / larger mix | 126.98 ms | 182.30 ms | 0.697 |
+| SEND + MORE = MONEY | 37.95 ms | 12.31 ms | 3.084 |
+| Eight queens, variant 02 | 93.74 ms | 119.07 ms | 0.787 |
+| Task allocation, variant 04 / larger mix | 122.44 ms | 182.54 ms | 0.671 |
 
-All 150 comparison invocations and three separate diagnostic runs preserve the
-complete reported-answer contracts. zetesis uses 20.1% less median wall time on
-this queens input and 30.3% less on this task-allocation input; clingo remains
-substantially faster on SEND. These are workload-specific CPU results, not a
-general ranking or a controlled change from the previous release. Separate single
-`--stats` observations put SEND grounding at **18.02 ms** and solving at
-**15.22 ms**; these are not phase medians. Wall times include process startup,
-output and capture with one-millisecond idle polling. Peak RSS is not measured.
+All 153 baseline and 306 separate six-queens observations pass. zetesis uses
+21.3% less median wall time on this queens input and 32.9% less on this task
+allocation input; clingo remains substantially faster on SEND. Across all six
+queens encodings, zetesis is faster on variant02 and clingo is faster on the
+other five. Each encoding retains the same 92 displayed boards at size eight;
+hidden atoms differ. Full per-encoding distributions and raw observations are
+retained in the timing record.
 
-The separate six-encoding campaign uses the same new binary and CPU/eager
-protocol at size eight. All 306 observations pass, with the same 92 displayed
-boards per encoding. Native/clingo median milliseconds are **9.21/6.17**,
-**95.13/119.09**, **7.75/6.19**, **7.72/6.17**, **10.72/6.17** and **10.71/6.17**
-for variants01–06. zetesis is faster on variant02; clingo is faster on the other
-five. Both complete campaigns and previous results remain linked in the
-[refresh record](docs/verification/cpu-refresh-20260908/README.md). No watch-only
-speedup, GPU speedup or full-corpus performance ranking follows from these data.
+These are workload-specific CPU comparisons, not a causal speedup attributed to
+this checkpoint or a general solver ranking. A separate SEND `--stats` observation
+measures grounding at **17.90 ms** and solving at **15.38 ms**; these are not phase
+medians. Wall timings include process startup, output and capture. Peak RSS,
+lazy/GPU comparisons and the full corpus matrix remain unmeasured.
+
+The [compact-trail experiment](docs/verification/trail-storage-20260908/README.md)
+was declined: its small storage saving did not establish a reliable runtime
+benefit across 612 complete comparisons. The production trail remains unchanged;
+the source patch, all observations and experimental proof evidence are retained.
 
 The current [bounded expression-storage experiment](docs/verification/evaluation-scratch-20260907/README.md)
 reduces median eager admission by 4.89% for SEND and 8.92% for queens02 in a
@@ -315,11 +271,10 @@ to 1.4% more time. It excludes source preparation and outer search; the three
 eager cases above do not exercise this optimization. Full samples and scopes
 remain in the records.
 
-The preceding [scalar ablation](docs/verification/scalar-evaluation-20260907/ablation.md)
-and [end-to-end comparison](docs/verification/execution-performance-20260907/README.md)
-retain their historical artifacts: a 61.5% isolated SEND admission reduction
-and a separately measured 43.4% whole-process reduction. Physical GPU
-microbenchmarks have mixed timing results; no new GPU speedup is claimed here.
+Earlier [scalar arithmetic measurements](docs/verification/scalar-evaluation-20260907/ablation.md)
+and [whole-process results](docs/verification/execution-performance-20260907/README.md)
+retain their original sources and scope. Physical GPU microbenchmarks have mixed
+results; no new GPU speedup is claimed here.
 The required [full corpus matrix](docs/design/corpus-performance.md) will compare
 every non-clingcon kr-domains case across eager/lazy and CPU/Metal configurations
 with clingo, retaining unsupported and incomplete cells. It has not yet been
