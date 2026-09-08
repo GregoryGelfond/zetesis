@@ -56,6 +56,28 @@ comparison, including signed constants, strings, tuples, function terms and
 genuine `#inf`/`#sup` endpoints. No floating-point values or encoded sentinels
 stand in for exact arithmetic or absence.
 
+### Future source integer width
+
+The source value carrier is still `i32`. Lazy grounding changes how many source
+instances need materialization; it does not widen an individual value or remove
+checked intermediate overflow. Wider aggregate accumulation is already a
+separate operation and must not silently widen source arithmetic.
+
+A future `i64` source profile needs coordinated changes to themelios-facing
+values and evaluation, domain bounds, comparisons, interchange and backend
+capabilities. Preserve exact values and located failures across those boundaries;
+never truncate a source value to fit a device representation. A backend may
+support a narrower operation profile and report that capability explicitly.
+Any wider native or multiword device implementation needs its own arithmetic,
+conversion, resource and physical qualification.
+
+The [aggregate range laws](../../proofs/Zetesis/AggregateRanges.lean) use
+mathematical integers and accept explicit lower/upper bounds. They provide a
+reusable argument for future widths, while the correspondence to each machine
+representation remains a separate obligation. Faster bounded `i32` arithmetic
+can already help scheduling and allocation workloads; integer width alone does
+not establish suitability for a safety-critical or financial deployment.
+
 ## Three operations and their costs
 
 `Group::new` transfers the tuple and guard vectors, shares the immutable `Theory`

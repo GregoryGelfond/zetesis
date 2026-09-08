@@ -23,6 +23,7 @@ if [ "$mode" = portable ] || [ "$mode" = full ]; then
     RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --all-features --no-deps
     cargo bench --locked -p zetesis-experiments --bench oracles -- --test
     cargo bench --locked -p zetesis-cpu --bench lazy_joins -- --test
+    cargo bench --locked -p zetesis-ferraris --bench native_aggregates -- --test
 fi
 if [ "$mode" = oracle ] || [ "$mode" = full ]; then
     cargo test --locked -p zetesis-themelios --test program_parts --test conditional_consumers --test weighted_heads --test nonbinding_guards --test extrema_heads -- --ignored --nocapture

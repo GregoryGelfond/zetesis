@@ -84,6 +84,27 @@ overflow, zero divisors and small batches. Avoid algebraic reassociation until
 its failure behavior is proved equivalent. This extends storage reuse rather
 than claiming it was absent.
 
+This grounder work complements candidate pruning and native aggregate checking:
+it reduces the cost of producing bindings before either stage. Distinguish three
+experiments: faster evaluation of an unchanged binding stream, reuse of an
+expression for an unchanged binding prefix, and sound elimination of bindings.
+The last two change the amount of work and need separate coverage and fault-order
+arguments. The existing checked numeric helpers also avoid temporary upstream
+term-tree construction; a new tile should measure beyond that baseline.
+
+Relevant primary work includes Kersten et al.'s
+[compiled/vectorized query comparison](https://ir.cwi.nl/pub/28470/28470.pdf)
+(VLDB 2018), which compares execution models with common algorithms and data
+structures. Its arithmetic primitives and fused loops motivate a matched
+numeric-binding experiment, not a prediction that either route always wins.
+[GPUlog](https://arshovon.com/publications/ASPLOS_2025.pdf) (ASPLOS 2025) supplies
+related ideas for dense relational kernels, indexed joins and semi-naive
+iteration. Applying those techniques to zetesis's arithmetic grounding is an
+architectural proposal; that paper does not establish ASP grounding or reduct
+preservation. Keep runtime specialization separate from algebraic source
+rewriting: preserving mathematical values alone does not preserve checked
+intermediate overflow, undefined operations or located failures.
+
 ## 3. Keyed logical groups — near term, after shared aggregate identity
 
 **Current boundary.** [Support rows](../../crates/zetesis-themelios/src/formula_support.rs)

@@ -124,6 +124,17 @@ baseline/candidate executable seals are required. Missing inner general-reduct
 time remains unmeasured until explicitly instrumented; do not infer it by
 subtracting enclosing phases.
 
+A separate arithmetic-grounding experiment accompanies these candidate
+consequences. The first bounded implementation evaluates short numeric
+expression prefixes in private integer storage, then resumes the existing
+general evaluator without repeating an operation or binding lookup. It preserves
+the source's checked `i32` arithmetic, failure order and authored work charges.
+Qualify this independently against the unchanged evaluator, with constructors,
+nonnumeric values, capacity transitions and exact resource controls. Freeze
+matched old/new binaries before measuring SEND, all six queens encodings and
+mixed arithmetic controls. Batched numeric execution, prefix-key reuse and
+domain narrowing remain separate experiments with additional obligations.
+
 ## 4. Trace GPU input replacement before expanding retention
 
 The [lazy Metal ABBA evidence](../verification/language-execution-tranche-20260908/timing/metal/review/README.md)
