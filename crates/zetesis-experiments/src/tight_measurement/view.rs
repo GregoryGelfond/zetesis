@@ -91,7 +91,7 @@ pub struct DeviceWork {
     pub scheduled_work: u64,
     /// Successfully validated readback occurrences.
     pub completed_candidates: u64,
-    /// Work of successfully completed results.
+    /// Work reported by validated readback; not a committed membership result.
     pub completed_work: u64,
     /// Authored initialized/write-buffer payload, not measured bus traffic.
     pub uploaded_bytes: u64,

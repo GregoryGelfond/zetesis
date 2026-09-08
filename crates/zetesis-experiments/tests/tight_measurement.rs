@@ -364,3 +364,78 @@ fn declared_physical_fixtures_qualify_on_cpu() {
     assert_eq!(occurrences, 966);
     assert_eq!(samples, 72);
 }
+
+#[test]
+fn cancellation_before_setup_creates_no_resources() {
+    let control = zetesis_cpu::Control::default();
+    let mut observed = 0;
+    let mut configuration = configuration(Family::Normal);
+    configuration.backend = Backend::Metal;
+    let error = measurement::measure_with_control(&configuration, &control, |event| {
+        observed += 1;
+        assert!(matches!(event, Event::Configuration { .. }));
+        control.cancel();
+        Ok(())
+    })
+    .unwrap_err();
+    assert!(matches!(error, Error::Cpu(zetesis_cpu::Stop::Cancelled)));
+    assert_eq!(observed, 1);
+}
+
+#[test]
+fn pool_callback_cancellation_prevents_device_setup() {
+    let control = zetesis_cpu::Control::default();
+    let mut observed = 0;
+    let mut configuration = configuration(Family::Normal);
+    configuration.backend = Backend::Metal;
+    let error = measurement::measure_with_control(&configuration, &control, |event| {
+        observed += 1;
+        match event {
+            Event::Configuration { .. } => {}
+            Event::Setup {
+                resource: Route::Rayon,
+                ..
+            } => control.cancel(),
+            _ => panic!("cancelled pool callback proceeded to device setup"),
+        }
+        Ok(())
+    })
+    .unwrap_err();
+    assert!(matches!(error, Error::Cpu(zetesis_cpu::Stop::Cancelled)));
+    assert_eq!(observed, 2);
+}
+
+#[test]
+fn last_sample_cancellation_omits_campaign_completion() {
+    let control = zetesis_cpu::Control::default();
+    let mut samples = 0;
+    let error =
+        measurement::measure_with_control(&configuration(Family::Normal), &control, |event| {
+            if matches!(event, Event::Sample { .. }) {
+                samples += 1;
+                if samples == 4 {
+                    control.cancel();
+                }
+            }
+            assert!(!matches!(event, Event::Complete { .. }));
+            Ok(())
+        })
+        .unwrap_err();
+    assert!(matches!(error, Error::Cpu(zetesis_cpu::Stop::Cancelled)));
+    assert_eq!(samples, 4);
+}
+
+#[test]
+fn cancellation_after_committed_completion_is_not_retroactive() {
+    let control = zetesis_cpu::Control::default();
+    let mut complete = false;
+    measurement::measure_with_control(&configuration(Family::Normal), &control, |event| {
+        if matches!(event, Event::Complete { .. }) {
+            complete = true;
+            control.cancel();
+        }
+        Ok(())
+    })
+    .unwrap();
+    assert!(complete);
+}

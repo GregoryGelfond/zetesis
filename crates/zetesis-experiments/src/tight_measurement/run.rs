@@ -28,8 +28,10 @@ struct Resources {
 impl Resources {
     fn new(
         configuration: &Configuration,
+        control: &Control,
         emit: &mut impl FnMut(&Event<'_>) -> io::Result<()>,
     ) -> Result<Self, Error> {
+        control.poll().map_err(Error::Cpu)?;
         let start = Instant::now();
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(configuration.workers.get())
@@ -49,8 +51,8 @@ impl Resources {
             resident: None,
         };
         if configuration.backend == crate::Backend::Metal {
-            let fresh = device(Route::MetalFresh, emit)?;
-            let resident = device(Route::MetalResident, emit)?;
+            let fresh = device(Route::MetalFresh, control, emit)?;
+            let resident = device(Route::MetalResident, control, emit)?;
             if fresh.info().metadata() != resident.info().metadata() {
                 return Err(Error::DeviceWork);
             }
@@ -63,8 +65,10 @@ impl Resources {
 
 fn device(
     route: Route,
+    control: &Control,
     emit: &mut impl FnMut(&Event<'_>) -> io::Result<()>,
 ) -> Result<GpuTightOracle, Error> {
+    control.poll().map_err(Error::Cpu)?;
     let start = Instant::now();
     let oracle = GpuTightOracle::new_metal(GpuOptions::default()).map_err(Error::Device)?;
     publish(
@@ -128,7 +132,7 @@ pub fn measure_with_control(
         },
     )?;
     control.poll().map_err(Error::Cpu)?;
-    let mut resources = Resources::new(configuration, &mut emit)?;
+    let mut resources = Resources::new(configuration, control, &mut emit)?;
     let routes = if configuration.backend == crate::Backend::Cpu {
         CPU_ROUTES
     } else {
@@ -173,6 +177,9 @@ pub fn measure_with_control(
             }
         }
     }
+    // A Sample callback may cancel after that observation was committed. Keep
+    // its prefix, but do not assert campaign completion under stopped control.
+    control.poll().map_err(Error::Cpu)?;
     publish(&mut emit, &Event::Complete { samples })
 }
 
@@ -277,7 +284,9 @@ fn observe(
             prepared.fixture.candidates.len(),
             per_candidate,
         )?;
-        checking::outcomes(&verdicts, &checks)
+        let outcomes = checking::outcomes(&verdicts, &checks)?;
+        control.poll().map_err(Error::Cpu)?;
+        Ok(outcomes)
     });
     match validated {
         Ok(outcomes) => Ok(Sample {

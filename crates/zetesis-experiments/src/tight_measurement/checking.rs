@@ -97,6 +97,9 @@ pub(super) fn classify(
     }
     // All indexed jobs have joined. Preserve every attempt's charge even if an
     // earlier occurrence failed; the first occurrence error is the reported one.
+    // Validated fixtures have C<=256, A<=256, N<=4A and R,P<=A-1.
+    // Each attempt charges at most N+R+P+A; the sum is at most 458,240,
+    // independently of the caller's max_work ceiling.
     for attempt in &attempts {
         activity.cpu_certificate_attempts += 1;
         activity.cpu_certificate_work += attempt.work;
@@ -126,11 +129,13 @@ pub(super) fn complete(
     control: &Control,
     activity: &mut Activity,
 ) -> Result<Vec<zetesis_sat::Check>, Error> {
+    control.poll().map_err(Error::Cpu)?;
     if verdicts.len() != prepared.fixture.candidates.len() {
         return Err(Error::Parity);
     }
     let mut checks = reserve(verdicts.len())?;
     for (verdict, candidate) in verdicts.iter().zip(&prepared.fixture.candidates) {
+        control.poll().map_err(Error::Cpu)?;
         let check = match verdict {
             TightVerdict::Stable => zetesis_sat::Check::Stable,
             TightVerdict::NotModel { .. } => zetesis_sat::Check::NotModel,
@@ -161,6 +166,7 @@ pub(super) fn validate(
     configuration: &Configuration,
     control: &Control,
 ) -> Result<(), Error> {
+    control.poll().map_err(Error::Cpu)?;
     if verdicts != prepared.certificates || checks.len() != prepared.reference.len() {
         return Err(Error::Parity);
     }
@@ -171,6 +177,7 @@ pub(super) fn validate(
         .zip(checks)
         .zip(&prepared.reference)
     {
+        control.poll().map_err(Error::Cpu)?;
         validate_witness(candidate, check, configuration, control)?;
         if !same_decision(check, reference) {
             return Err(Error::Parity);

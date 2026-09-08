@@ -174,8 +174,12 @@ are not measured bus traffic; logical retained/scratch payload is not RSS.
 An incomplete measured operation emits its failed position, measured prefix and
 available activity, then returns an error. Setup/reference failures return an
 error after their preceding prefix. Output failure preserves any written prefix.
-No failure is replaced, and no completion event follows an error. Retain stderr
-and process exit alongside all JSON lines. The finite scope permits at most
+No failure is replaced, and no completion event follows an error. Control is
+polled before each resource setup, before publishing a successful sample, and
+before final completion. A sample callback can cancel and retain that committed
+sample, while preventing campaign completion. Cancellation after the completion
+callback has committed is not retroactive. Retain stderr and process exit
+alongside all JSON lines. The finite scope permits at most
 24 cases, 256 atoms, 256 occurrences, six warmups, sixty repetitions and 64
 workers; native limits can still refuse an admitted case. There is no implied
 whole-campaign deadline or hard bound on pool/device creation or a caller's sink.

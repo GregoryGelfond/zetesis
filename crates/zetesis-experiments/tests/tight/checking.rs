@@ -175,3 +175,44 @@ fn certificate_failure_keeps_every_joined_charge() {
         assert_eq!(activity.classified, 0);
     }
 }
+
+#[test]
+fn stopped_control_prevents_direct_completion() {
+    let mut configuration = configuration(Family::Choices);
+    configuration.cases[0].candidates = NonZeroUsize::new(1).unwrap();
+    let control = Control::default();
+    let prepared = prepare(configuration.cases[0], &configuration, &control).unwrap();
+    assert_eq!(prepared.certificates, [TightVerdict::Stable]);
+    control.cancel();
+    let mut activity = Activity::default();
+    assert!(matches!(
+        complete(
+            &prepared,
+            &prepared.certificates,
+            &configuration,
+            &control,
+            &mut activity
+        ),
+        Err(Error::Cpu(zetesis_cpu::Stop::Cancelled))
+    ));
+    assert_eq!(activity.residual_attempts, 0);
+}
+
+#[test]
+fn stopped_control_prevents_direct_validation() {
+    let mut configuration = configuration(Family::Choices);
+    configuration.cases[0].candidates = NonZeroUsize::new(1).unwrap();
+    let control = Control::default();
+    let prepared = prepare(configuration.cases[0], &configuration, &control).unwrap();
+    control.cancel();
+    assert!(matches!(
+        validate(
+            &prepared,
+            &prepared.certificates,
+            &prepared.reference,
+            &configuration,
+            &control
+        ),
+        Err(Error::Cpu(zetesis_cpu::Stop::Cancelled))
+    ));
+}
