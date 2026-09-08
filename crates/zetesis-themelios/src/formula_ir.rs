@@ -55,10 +55,13 @@ pub(crate) struct RuleIr {
 pub(crate) enum HeadIr {
     Normal(Option<AtomPattern>),
     Disjunction(Vec<DisjunctIr>),
-    Choice {
-        guards: Vec<AggregateGuard>,
-        elements: Vec<Element>,
-    },
+    Choice(ChoiceIr),
+}
+/// One activated group owns both its permission elements and numeric measure.
+pub(crate) struct ChoiceIr {
+    pub measure: HeadMeasure,
+    pub guards: Vec<AggregateGuard>,
+    pub elements: Vec<Element>,
 }
 /// A semantic head occurrence; default negation never supplies positive support.
 pub(crate) struct DisjunctIr {
@@ -70,9 +73,17 @@ impl DisjunctIr {
         (self.negation == DefaultNegation::None).then_some(&self.atom)
     }
 }
+/// Numeric function used only for the bound constraint; every element retains
+/// its separate positive head permission, including neutral contributions.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum HeadMeasure {
+    Count,
+    Sum,
+    SumPlus,
+}
 pub(crate) struct Element {
-    /// Function-count groups carry a full tuple on every element; ordinary choices carry none.
-    pub count_tuple: Option<Vec<CoreTerm>>,
+    /// Function heads carry a full tuple on every element; ordinary choices carry none.
+    pub tuple: Option<Vec<CoreTerm>>,
     pub head: AtomPattern,
     pub condition: Vec<LiteralIr>,
     pub variables: usize,
@@ -624,15 +635,21 @@ impl Compiler<'_> {
         let head = if let Some(head) = ordinary {
             head
         } else {
-            let elements = match rule.head().get() {
-                Head::Choice(choice) => self.choice_elements(choice, &variables)?,
-                Head::Aggregate(aggregate) => self.count_head_elements(aggregate, &variables)?,
+            let (measure, elements) = match rule.head().get() {
+                Head::Choice(choice) => (
+                    HeadMeasure::Count,
+                    self.choice_elements(choice, &variables)?,
+                ),
+                Head::Aggregate(aggregate) => {
+                    self.aggregate_head_elements(aggregate, &variables)?
+                }
                 _ => unreachable!("head classified"),
             };
-            HeadIr::Choice {
+            HeadIr::Choice(ChoiceIr {
+                measure,
                 guards: choice_guards,
                 elements,
-            }
+            })
         };
         self.variable_limit(&variables)?;
         Ok(RuleIr {
@@ -679,7 +696,7 @@ impl Compiler<'_> {
             self.variable_limit(&local)?;
             local.safety(self.location)?;
             elements.push(Element {
-                count_tuple: None,
+                tuple: None,
                 head,
                 condition,
                 variables: local.count,

@@ -368,8 +368,6 @@ fn mismatched_tuple_atom_aliases_fail_before_any_admitted_theory() {
 #[test]
 fn unadmitted_head_profiles_have_explicit_refusals() {
     for (source, expected) in [
-        ("1#sum{1:a}1.", ProfileFeature::Head),
-        ("1#sum+{1:a}1.", ProfileFeature::Head),
         ("1#min{1:a}1.", ProfileFeature::Head),
         ("1#max{1:a}1.", ProfileFeature::Head),
         ("1#count{1:not a}1.", ProfileFeature::NegatedHead),

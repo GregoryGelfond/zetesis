@@ -15,7 +15,7 @@ use zetesis_ferraris::{
 use crate::expansion::Budget;
 use crate::formula::{Compiled, ceiling};
 use crate::formula_ir::{
-    AggregateGuard, AggregateIr, AggregateKey, Element, HeadIr, LiteralIr, ObjectiveIr, Prepared,
+    AggregateGuard, AggregateIr, AggregateKey, ChoiceIr, HeadIr, LiteralIr, ObjectiveIr, Prepared,
     Projection, RuleIr, value_bytes,
 };
 use crate::formula_support::{self, Counters, Join, Support};
@@ -522,9 +522,7 @@ impl Builder<'_> {
                 let formula = self.node(Node::Implies(body, disjunction), rule.location)?;
                 self.root(formula, rule)
             }
-            HeadIr::Choice { guards, elements } => {
-                self.choice(rule, body, guards, elements, assignment, support)
-            }
+            HeadIr::Choice(group) => self.choice(rule, group, body, assignment, support),
         }
     }
     pub(super) fn producer(
@@ -577,14 +575,18 @@ impl Builder<'_> {
     fn choice(
         &mut self,
         rule: &RuleIr,
+        group: &ChoiceIr,
         body: usize,
-        guards: &[AggregateGuard],
-        elements: &[Element],
         assignment: &[Value],
         support: &Support,
     ) -> Result<(), FormulaFailure> {
-        crate::formula_count_head::validate_group(
+        let ChoiceIr {
+            measure,
+            guards,
             elements,
+        } = group;
+        crate::formula_head_aggregate::validate_group(
+            group,
             assignment,
             support,
             self.limits,
@@ -607,19 +609,32 @@ impl Builder<'_> {
             {
                 let condition = self.body(&element.condition, &binding, rule.location, support)?;
                 let head = self.atom(&element.head, &binding, rule.location)?;
-                let previous = eligible.get(&head).copied().unwrap_or(0);
-                eligible.insert(head, self.or(previous, condition, rule.location)?);
+                let first = element
+                    .tuple
+                    .as_ref()
+                    .and_then(|terms| terms.first())
+                    .map(|term| {
+                        term.resolve(&binding)
+                            .expect("safe aggregate weight assigned")
+                    });
+                let weight = crate::formula_head_aggregate::weight(*measure, first, rule.location)?;
+                let previous = eligible.get(&head).map_or(0, |(_, condition)| *condition);
+                // Complete tuple/atom validation already fixes one weight per
+                // head. Duplicate eligibility still coalesces only by OR.
+                eligible.insert(head, (weight, self.or(previous, condition, rule.location)?));
             }
         }
         let mut selected = Vec::new();
-        for (head, condition) in eligible {
+        for (head, (weight, condition)) in eligible {
             let antecedent = self.and(body, condition, rule.location)?;
             let negative = self.neg(head, rule.location)?;
             let choice = self.or(head, negative, rule.location)?;
             let support = self.node(Node::Implies(antecedent, choice), rule.location)?;
             self.root(support, rule)?;
             self.producer(head, antecedent, rule)?;
-            if !guards.is_empty() {
+            if !guards.is_empty()
+                && let Some(weight) = weight
+            {
                 ceiling(
                     FormulaResource::AggregateElements,
                     selected.len() as u128 + 1,
@@ -627,7 +642,7 @@ impl Builder<'_> {
                     rule.location,
                 )?;
                 selected.push(AggregateElement {
-                    weight: 1,
+                    weight,
                     condition: self.and(condition, head, rule.location)?,
                 });
             }

@@ -269,7 +269,7 @@ fn profile(error: &FormulaFailure, expected: ProfileFeature) -> bool {
 }
 
 #[test]
-fn dynamic_false_comparison_and_function_head_conditions_remain_located_refusals() {
+fn conditional_disjunction_boundaries_remain_located() {
     for source in [
         "p:#false;q:#true.",
         "p:not #true;q:#true.",
@@ -288,8 +288,11 @@ fn dynamic_false_comparison_and_function_head_conditions_remain_located_refusals
         );
         assert!(!error.diagnostics().is_empty());
     }
+}
+
+#[test]
+fn unadmitted_head_profiles_have_located_refusals() {
     for (source, expected) in [
-        ("1#sum{X:p(X):X=1..4}2.", ProfileFeature::Head),
         // Signed singleton heads are covered positively in negative_heads.rs.
         ("{not a}.", ProfileFeature::NegatedHead),
         // Pooled true heads are now covered positively in finite_pools.rs.
@@ -302,6 +305,10 @@ fn dynamic_false_comparison_and_function_head_conditions_remain_located_refusals
         assert!(profile(&error, expected), "{source}: {error}");
         assert!(!error.diagnostics().is_empty());
     }
+}
+
+#[test]
+fn extended_profile_refuses_true_disjunctions() {
     assert!(
         admit_extended(
             "p:#true;q:#true.".into(),

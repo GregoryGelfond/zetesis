@@ -217,9 +217,9 @@ pub(crate) fn build(
                             )?;
                         }
                     }
-                    HeadIr::Choice { elements, .. } => {
-                        crate::formula_count_head::validate_group(
-                            elements,
+                    HeadIr::Choice(group) => {
+                        crate::formula_head_aggregate::validate_group(
+                            group,
                             &binding,
                             &support,
                             limits,
@@ -227,7 +227,7 @@ pub(crate) fn build(
                             counters,
                             rule.location,
                         )?;
-                        for element in elements {
+                        for element in &group.elements {
                             let mut local = Join::new(
                                 &element.condition,
                                 &binding,

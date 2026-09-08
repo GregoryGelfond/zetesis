@@ -132,8 +132,8 @@ fn head_profile(rule: &RuleIr) -> Result<(), FormulaFailure> {
         )
         .into());
     }
-    if let HeadIr::Choice { elements, .. } = &rule.head
-        && elements.iter().any(|element| element.count_tuple.is_some())
+    if let HeadIr::Choice(group) = &rule.head
+        && group.elements.iter().any(|element| element.tuple.is_some())
     {
         return Err(refusal(rule.location));
     }
@@ -146,7 +146,8 @@ fn relevant_head(head: &HeadIr, relevant: &BTreeSet<Signature>) -> bool {
         HeadIr::Disjunction(heads) => heads
             .iter()
             .any(|head| relevant.contains(&signature(head.atom.predicate()))),
-        HeadIr::Choice { elements, .. } => elements
+        HeadIr::Choice(group) => group
+            .elements
             .iter()
             .any(|element| relevant.contains(&signature(element.head.predicate()))),
     }
@@ -165,8 +166,9 @@ fn total_dependency(
         {
             return false;
         }
-        if let HeadIr::Choice { elements, .. } = &rule.head
-            && elements
+        if let HeadIr::Choice(group) = &rule.head
+            && group
+                .elements
                 .iter()
                 .any(|element| signature(element.head.predicate()) == *producer)
         {

@@ -1,6 +1,7 @@
-//! Finite count heads enter ordinary choice lowering only after a complete
-//! tuple/atom correspondence check. Neither count bounds nor tuple values supply
-//! bindings or support; both alias directions remain explicit profile refusals.
+//! Finite numeric aggregate heads retain separate permission and measure.
+//! A complete tuple/atom correspondence check precedes support or final lowering.
+//! Neither bounds nor tuple weights supply bindings or support; both alias
+//! directions remain explicit profile refusals.
 //! Positive conditions enumerate possible eligibility; default-negated gates
 //! consume established bindings. Choice lowering retains every eligibility
 //! formula. Support-table membership is never interpreted as truth.
@@ -9,24 +10,31 @@ use std::collections::BTreeMap;
 
 use themelios_base::span::Location;
 use themelios_program::program::{AggregateFunction, HeadAggregate};
-use zetesis_core::{Atom, Value};
+use zetesis_core::{Atom, Term, Value};
 
 use crate::diagnostic::unsupported;
 use crate::expansion::Budget;
 use crate::formula::ceiling;
-use crate::formula_ir::{Compiler, Element, LiteralIr, Variables, value_bytes};
+use crate::formula_ir::{
+    ChoiceIr, Compiler, Element, HeadMeasure, LiteralIr, Variables, value_bytes,
+};
 use crate::formula_support::{Counters, Join, Support};
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature};
 
 impl Compiler<'_> {
-    pub(super) fn count_head_elements(
+    pub(super) fn aggregate_head_elements(
         &mut self,
         aggregate: &HeadAggregate,
         variables: &Variables,
-    ) -> Result<Vec<Element>, FormulaFailure> {
-        if aggregate.function() != AggregateFunction::Count {
-            return Err(unsupported(ProfileFeature::Head, self.location).into());
-        }
+    ) -> Result<(HeadMeasure, Vec<Element>), FormulaFailure> {
+        let measure = match aggregate.function() {
+            AggregateFunction::Count => HeadMeasure::Count,
+            AggregateFunction::Sum => HeadMeasure::Sum,
+            AggregateFunction::SumPlus => HeadMeasure::SumPlus,
+            AggregateFunction::Min | AggregateFunction::Max => {
+                return Err(unsupported(ProfileFeature::Head, self.location).into());
+            }
+        };
         let mut elements = Vec::new();
         for element in aggregate.elements() {
             let element = element.get();
@@ -43,6 +51,18 @@ impl Compiler<'_> {
                 .terms()
                 .map(|term| self.aggregate_term(term, &mut local))
                 .collect::<Result<Vec<_>, _>>()?;
+            // Closed weight syntax has no binding dependency, so a false outer
+            // guard cannot conceal an unsupported declared weight. Variables
+            // are checked by the same selector on complete possible local rows.
+            match tuple.first() {
+                Some(Term::Constant(value)) => {
+                    weight(measure, Some(value), self.location)?;
+                }
+                None => {
+                    weight(measure, None, self.location)?;
+                }
+                Some(Term::Variable(_)) => {}
+            }
             let head = self.choice_head(element.literal(), &mut local, &mut condition)?;
             self.bindings(&mut condition, &mut local)?;
             self.variable_limit(&local)?;
@@ -60,13 +80,13 @@ impl Compiler<'_> {
                     | LiteralIr::Guard(_)
             )));
             elements.push(Element {
-                count_tuple: Some(tuple),
+                tuple: Some(tuple),
                 head,
                 condition,
                 variables: local.count,
             });
         }
-        Ok(elements)
+        Ok((measure, elements))
     }
 }
 
@@ -74,7 +94,7 @@ impl Compiler<'_> {
 /// or publishes a formula. The immutable completed support/binding is replayed
 /// afterwards through the ordinary choice path. Both passes charge their work.
 pub(super) fn validate_group(
-    elements: &[Element],
+    group: &ChoiceIr,
     assignment: &[Value],
     support: &Support,
     limits: FormulaLimits,
@@ -82,27 +102,30 @@ pub(super) fn validate_group(
     counters: &mut Counters,
     location: Location,
 ) -> Result<(), FormulaFailure> {
-    let counted = elements
+    let ChoiceIr {
+        measure, elements, ..
+    } = group;
+    let keyed = elements
         .first()
-        .is_some_and(|element| element.count_tuple.is_some());
+        .is_some_and(|element| element.tuple.is_some());
     // An explicit invariant at the common lowering boundary: groups cannot mix
     // ordinary atom-counting elements with tuple-keyed function elements.
     if elements
         .iter()
-        .any(|element| element.count_tuple.is_some() != counted)
+        .any(|element| element.tuple.is_some() != keyed)
     {
         return Err(unsupported(ProfileFeature::HeadAggregateAlias, location).into());
     }
-    if !counted {
+    if !keyed {
+        if *measure != HeadMeasure::Count && !elements.is_empty() {
+            return Err(unsupported(ProfileFeature::HeadAggregateAlias, location).into());
+        }
         return Ok(());
     }
     let mut tuples = BTreeMap::<Vec<Value>, Atom>::new();
     let mut atoms = BTreeMap::<Atom, Vec<Value>>::new();
     for element in elements {
-        let terms = element
-            .count_tuple
-            .as_ref()
-            .expect("uniform count group checked");
+        let terms = element.tuple.as_ref().expect("uniform tuple group checked");
         let mut local = Join::new(
             &element.condition,
             assignment,
@@ -116,7 +139,9 @@ pub(super) fn validate_group(
             let mut tuple = Vec::new();
             for term in terms {
                 counters.work(limits, location)?;
-                let value = term.resolve(&binding).expect("safe count tuple assigned");
+                let value = term
+                    .resolve(&binding)
+                    .expect("safe aggregate tuple assigned");
                 budget.charge(
                     ExpansionResource::ScalarBytes,
                     2 * (std::mem::size_of::<Value>() as u128 + value_bytes(value)),
@@ -124,13 +149,16 @@ pub(super) fn validate_group(
                 )?;
                 tuple.push(value.clone());
             }
+            weight(*measure, tuple.first(), location)?;
             let atom_bytes = element.head.predicate().name().len() as u128
                 + element
                     .head
                     .terms()
                     .iter()
                     .map(|term| {
-                        let value = term.resolve(&binding).expect("safe count head assigned");
+                        let value = term
+                            .resolve(&binding)
+                            .expect("safe aggregate head assigned");
                         std::mem::size_of::<Value>() as u128 + value_bytes(value)
                     })
                     .sum::<u128>();
@@ -142,7 +170,7 @@ pub(super) fn validate_group(
             let atom = element
                 .head
                 .instantiate(&binding)
-                .expect("safe count head assigned");
+                .expect("safe aggregate head assigned");
             if tuples.get(&tuple).is_some_and(|previous| *previous != atom)
                 || atoms.get(&atom).is_some_and(|previous| *previous != tuple)
             {
@@ -163,9 +191,32 @@ pub(super) fn validate_group(
     Ok(())
 }
 
+/// Numeric contribution is independent of permission to select the head.
+/// Count ignores tuple values; sum requires a numeric first term. Zero sum+
+/// contributes nothing but never removes an eligible head. Negative sum+ values
+/// retain an explicit profile refusal pending a separate semantic contract.
+pub(super) fn weight(
+    measure: HeadMeasure,
+    first: Option<&Value>,
+    location: Location,
+) -> Result<Option<i32>, FormulaFailure> {
+    if measure == HeadMeasure::Count {
+        return Ok(Some(1));
+    }
+    let Some(Value::Number(value)) = first else {
+        return Err(unsupported(ProfileFeature::HeadAggregateWeight, location).into());
+    };
+    if measure == HeadMeasure::SumPlus && *value < 0 {
+        return Err(unsupported(ProfileFeature::HeadAggregateWeight, location).into());
+    }
+    Ok((measure != HeadMeasure::SumPlus || *value > 0).then_some(*value))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Budget, Counters, Element, FormulaLimits, Support, validate_group};
+    use super::{
+        Budget, ChoiceIr, Counters, Element, FormulaLimits, HeadMeasure, Support, validate_group,
+    };
     use crate::{AdmissionOptions, ExpansionLimits, FormulaFailure, ProfileFeature};
     use themelios_base::source::{Source, SourceId};
     use themelios_base::span::Location;
@@ -173,14 +224,17 @@ mod tests {
 
     fn element(keyed: bool) -> Element {
         Element {
-            count_tuple: keyed.then(|| vec![Term::Constant(Value::Number(1))]),
+            tuple: keyed.then(|| vec![Term::Constant(Value::Number(1))]),
             head: AtomPattern::new(Predicate::new("p", 0).unwrap(), vec![]).unwrap(),
             condition: vec![],
             variables: 0,
         }
     }
 
-    fn validate(elements: &[Element]) -> Result<(), FormulaFailure> {
+    fn validate_measure(
+        measure: HeadMeasure,
+        elements: Vec<Element>,
+    ) -> Result<(), FormulaFailure> {
         let source = Source::new(SourceId::new(0), String::new()).unwrap();
         let location = Location {
             source: source.id(),
@@ -191,7 +245,11 @@ mod tests {
             AdmissionOptions::default().core_limits.max_templates,
         );
         validate_group(
-            elements,
+            &ChoiceIr {
+                measure,
+                guards: vec![],
+                elements,
+            },
             &[],
             &Support::default(),
             FormulaLimits::default(),
@@ -202,13 +260,13 @@ mod tests {
     }
 
     #[test]
-    fn mixed_metadata_is_rejected_in_either_order_at_the_shared_boundary() {
+    fn mixed_key_metadata_is_rejected() {
         for elements in [
             vec![element(false), element(true)],
             vec![element(true), element(false)],
         ] {
             assert!(matches!(
-                validate(&elements),
+                validate_measure(HeadMeasure::Count, elements),
                 Err(FormulaFailure::Expansion(
                     crate::ExpansionFailure::Admission(crate::AdmissionFailure::Profile {
                         feature: ProfileFeature::HeadAggregateAlias,
@@ -220,13 +278,36 @@ mod tests {
     }
 
     #[test]
-    fn homogeneous_and_empty_groups_satisfy_the_boundary_invariant() {
+    fn homogeneous_count_groups_satisfy_the_key_invariant() {
         for elements in [
             vec![],
             vec![element(false), element(false)],
             vec![element(true), element(true)],
         ] {
-            assert!(validate(&elements).is_ok());
+            assert!(validate_measure(HeadMeasure::Count, elements).is_ok());
+        }
+    }
+
+    #[test]
+    fn weighted_groups_require_tuple_keys() {
+        for measure in [HeadMeasure::Sum, HeadMeasure::SumPlus] {
+            let error = validate_measure(measure, vec![element(false)]).unwrap_err();
+            assert!(matches!(
+                error,
+                FormulaFailure::Expansion(crate::ExpansionFailure::Admission(
+                    crate::AdmissionFailure::Profile {
+                        feature: ProfileFeature::HeadAggregateAlias,
+                        ..
+                    }
+                ))
+            ));
+        }
+    }
+
+    #[test]
+    fn empty_weighted_groups_satisfy_the_key_invariant() {
+        for measure in [HeadMeasure::Sum, HeadMeasure::SumPlus] {
+            validate_measure(measure, vec![]).unwrap();
         }
     }
 }
