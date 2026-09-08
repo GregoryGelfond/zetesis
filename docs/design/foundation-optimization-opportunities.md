@@ -225,6 +225,67 @@ objective keys. Compare total enumeration, costs and all ties. Interface caches,
 global objective presence and full source coverage make this a later project,
 not a relaxation of current language admission.
 
+## Adjacent work: normalization and transposition
+
+These directions concern two different transformations. Semantic normalization
+changes a program or expression under a proved equivalence. Physical
+transposition changes how an unchanged logical object is stored and traversed.
+Keeping them separate makes both their tests and their costs easier to assess.
+
+The [MLIR sparse-tensor dialect](https://mlir.llvm.org/docs/Dialects/SparseTensorOps/)
+separates semantic tensor dimensions from storage levels and makes conversion
+between formats explicit. It also records that conversion can be expensive or
+infeasible. The relevant architectural lesson for zetesis is to retain a logical
+operator independently of its layout, then select an implementation with an
+explicit conversion/residency budget. It does not require adopting MLIR's
+implementation or introducing a C++ dependency.
+
+For example, the current formula and lazy kernels assign a workgroup to each
+candidate world. Section 5's alternative packs one atom/node's truth across
+candidate occurrences. A transposition experiment must change layout and its
+matching schedule together, preserving each occurrence's original/frozen
+identity and tail-bit boundaries. It must include packing, conversion, upload,
+readback and exact completion in the appropriate reported intervals. A
+row-oriented reduction can already have good locality within its workgroup;
+transposition is a competing plan, not an unconditional improvement. A useful
+Lean target is a commuting representation law: decoding the physical result
+equals the logical transform of the decoded input.
+
+[Column-Oriented Datalog on the GPU](https://arxiv.org/abs/2501.13051)
+provides a related CUDA relational execution design. Its relevance here is
+column layout and relational operators, alongside section 4's delta rounds.
+Applying them to source joins and aggregate acquisition is a proposal; that
+paper's workload results do not establish ASP reduct preservation, Metal
+performance or a GPU default for zetesis.
+
+Semantic normalization needs stronger premises than equality of classical
+Boolean values. [Strong equivalence](https://www.cs.utexas.edu/~vl/papers/ht.pdf)
+provides a context-independent replacement criterion for the program class it
+treats, characterized through the logic of here-and-there. Zetesis must establish
+the corresponding criterion for its exact formula/aggregate representation.
+For example, replacing `not not p` with `p` in `p :- not not p.` changes its
+answer sets: the original has the empty model and `{p}`, while `p :- p.` has
+only the empty model. A classical Boolean simplifier cannot authorize that
+replacement. Context-dependent simplification instead needs explicit premises
+and a theorem that the original program supplies them. Objective-slot presence,
+full-model reconstruction and source diagnostics are additional boundaries when
+those observations are affected.
+
+The Rust [egg library](https://github.com/egraphs-good/egg) implements equality
+saturation: retain equivalent expressions and extract a plan using a cost model.
+It could eventually host a bounded rewrite search over a typed arithmetic or
+execution-plan language. It supplies no ASP-specific equivalence proof. Start
+with a small library of justified rewrites and interval premises; mathematical
+identities such as cancelling a multiplication can change checked intermediate
+overflow. Proof-carrying rewrites, finite exploration budgets and an unchanged
+valid fallback must precede any broad optimizer integration.
+
+The first experiments should therefore be narrow: certified simplification
+before expensive source joins, and one alternative cross-candidate truth layout.
+Keep the language slices independent. Both experiments must preserve the exact
+reduct contract and account for complete source/candidate coverage, including
+all retained failure outcomes; neither is a replacement solving semantics.
+
 ## Selection and acceptance
 
 Native aggregates, candidate cardinality and numeric tiles have the clearest
