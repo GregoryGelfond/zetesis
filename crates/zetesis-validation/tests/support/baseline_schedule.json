@@ -1,0 +1,920 @@
+[
+  {
+    "case": "send",
+    "phase": "qualification",
+    "round": 0,
+    "producer": "reference"
+  },
+  {
+    "case": "send",
+    "phase": "qualification",
+    "round": 0,
+    "producer": "native"
+  },
+  {
+    "case": "queens",
+    "phase": "qualification",
+    "round": 0,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "qualification",
+    "round": 0,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "qualification",
+    "round": 0,
+    "producer": "reference"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "qualification",
+    "round": 0,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "warmup",
+    "round": 0,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "warmup",
+    "round": 0,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "warmup",
+    "round": 0,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "warmup",
+    "round": 0,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "warmup",
+    "round": 0,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "warmup",
+    "round": 0,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "warmup",
+    "round": 1,
+    "producer": "native"
+  },
+  {
+    "case": "queens",
+    "phase": "warmup",
+    "round": 1,
+    "producer": "reference"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "warmup",
+    "round": 1,
+    "producer": "reference"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "warmup",
+    "round": 1,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "warmup",
+    "round": 1,
+    "producer": "reference"
+  },
+  {
+    "case": "send",
+    "phase": "warmup",
+    "round": 1,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "warmup",
+    "round": 2,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "warmup",
+    "round": 2,
+    "producer": "reference"
+  },
+  {
+    "case": "send",
+    "phase": "warmup",
+    "round": 2,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "warmup",
+    "round": 2,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "warmup",
+    "round": 2,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "warmup",
+    "round": 2,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 0,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 0,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 0,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 0,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 0,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 0,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 1,
+    "producer": "native"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 1,
+    "producer": "reference"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 1,
+    "producer": "reference"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 1,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 1,
+    "producer": "reference"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 1,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 2,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 2,
+    "producer": "reference"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 2,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 2,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 2,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 2,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 3,
+    "producer": "reference"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 3,
+    "producer": "native"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 3,
+    "producer": "native"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 3,
+    "producer": "reference"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 3,
+    "producer": "reference"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 3,
+    "producer": "native"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 4,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 4,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 4,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 4,
+    "producer": "reference"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 4,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 4,
+    "producer": "reference"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 5,
+    "producer": "reference"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 5,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 5,
+    "producer": "reference"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 5,
+    "producer": "native"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 5,
+    "producer": "native"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 5,
+    "producer": "reference"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 6,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 6,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 6,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 6,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 6,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 6,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 7,
+    "producer": "native"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 7,
+    "producer": "reference"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 7,
+    "producer": "reference"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 7,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 7,
+    "producer": "reference"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 7,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 8,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 8,
+    "producer": "reference"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 8,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 8,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 8,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 8,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 9,
+    "producer": "reference"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 9,
+    "producer": "native"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 9,
+    "producer": "native"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 9,
+    "producer": "reference"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 9,
+    "producer": "reference"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 9,
+    "producer": "native"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 10,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 10,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 10,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 10,
+    "producer": "reference"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 10,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 10,
+    "producer": "reference"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 11,
+    "producer": "reference"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 11,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 11,
+    "producer": "reference"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 11,
+    "producer": "native"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 11,
+    "producer": "native"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 11,
+    "producer": "reference"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 12,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 12,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 12,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 12,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 12,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 12,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 13,
+    "producer": "native"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 13,
+    "producer": "reference"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 13,
+    "producer": "reference"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 13,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 13,
+    "producer": "reference"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 13,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 14,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 14,
+    "producer": "reference"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 14,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 14,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 14,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 14,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 15,
+    "producer": "reference"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 15,
+    "producer": "native"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 15,
+    "producer": "native"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 15,
+    "producer": "reference"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 15,
+    "producer": "reference"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 15,
+    "producer": "native"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 16,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 16,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 16,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 16,
+    "producer": "reference"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 16,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 16,
+    "producer": "reference"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 17,
+    "producer": "reference"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 17,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 17,
+    "producer": "reference"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 17,
+    "producer": "native"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 17,
+    "producer": "native"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 17,
+    "producer": "reference"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 18,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 18,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 18,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 18,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 18,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 18,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 19,
+    "producer": "native"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 19,
+    "producer": "reference"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 19,
+    "producer": "reference"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 19,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 19,
+    "producer": "reference"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 19,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 20,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "timed",
+    "round": 20,
+    "producer": "reference"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 20,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "timed",
+    "round": 20,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 20,
+    "producer": "reference"
+  },
+  {
+    "case": "queens",
+    "phase": "timed",
+    "round": 20,
+    "producer": "native"
+  },
+  {
+    "case": "send",
+    "phase": "diagnostics",
+    "round": 0,
+    "producer": "native"
+  },
+  {
+    "case": "queens",
+    "phase": "diagnostics",
+    "round": 0,
+    "producer": "native"
+  },
+  {
+    "case": "task_allocation",
+    "phase": "diagnostics",
+    "round": 0,
+    "producer": "native"
+  }
+]

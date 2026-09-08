@@ -5,7 +5,8 @@ use std::path::Path;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use super::{
-    Capture, Case, Decision, Error, Fault, Phase, Producer, Report, Request, Sample, Slot, timing,
+    Capture, Case, Decision, Error, Fault, Phase, Producer, Report, Request, Sample, Slot, Suite,
+    timing,
 };
 use crate::selected::{FileSeal, InvocationFailure, identity, publication};
 use crate::{answers, examples, process};
@@ -35,7 +36,7 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
     let started_unix_ns =
         unix_ns().ok_or(Error::Configuration("UTC metadata precedes Unix epoch"))?;
     let corpus = examples::load(request.corpus, request.limits.corpus).map_err(Error::Corpus)?;
-    let sources = source_paths(&corpus)?;
+    let sources = source_paths(&corpus, request.schedule.suite())?;
     let before = seals(&corpus, &sources, request)?;
     let destination = publication::prepare(request.report, corpus.root(), &before)?;
     let directory = tempfile::tempdir()
@@ -83,9 +84,9 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
     Ok(report)
 }
 
-fn source_paths(corpus: &examples::Corpus) -> Result<BTreeSet<&str>, Error> {
+fn source_paths(corpus: &examples::Corpus, suite: Suite) -> Result<BTreeSet<&str>, Error> {
     let mut sources = BTreeSet::new();
-    for selected in Case::ALL {
+    for selected in suite.cases() {
         let case = corpus
             .cases()
             .iter()
@@ -207,7 +208,8 @@ fn execute(
             return;
         }
     }
-    let mut references: [Option<answers::ReportedAnswers>; 3] = std::array::from_fn(|_| None);
+    let mut references: [Option<answers::ReportedAnswers>; Case::ALL.len()] =
+        std::array::from_fn(|_| None);
     for slot in request.schedule.slots() {
         let case = corpus
             .cases()

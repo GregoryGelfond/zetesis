@@ -1,19 +1,36 @@
 //! Thin installed view of the bounded ordinary CPU comparison library.
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Duration;
-use zetesis_validation::performance::{self, Limits, Request, Schedule};
+use zetesis_validation::performance::{self, Limits, Request, Schedule, Suite};
+
+#[derive(Clone, Copy, ValueEnum)]
+enum SuiteArgument {
+    Baseline,
+    Queens,
+}
+impl From<SuiteArgument> for Suite {
+    fn from(value: SuiteArgument) -> Self {
+        match value {
+            SuiteArgument::Baseline => Self::Baseline,
+            SuiteArgument::Queens => Self::Queens,
+        }
+    }
+}
 
 #[derive(Parser)]
 #[command(
     version,
-    about = "Compare three pinned clean examples using complete CPU answer-set families"
+    about = "Compare pinned clean example suites using complete CPU answer-set families"
 )]
 struct Options {
     /// Self-contained clean examples/kr-domains directory.
     root: PathBuf,
+    /// Established three-case baseline or all six original eight-queens encodings.
+    #[arg(long, value_enum, default_value = "baseline")]
+    suite: SuiteArgument,
     /// Native zetesis executable path.
     #[arg(long)]
     zetesis: PathBuf,
@@ -47,7 +64,7 @@ fn execute(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
         native: &native,
         reference: &reference,
         report: &options.report,
-        schedule: Schedule::new(options.warmups, options.repetitions)?,
+        schedule: Schedule::for_suite(options.suite.into(), options.warmups, options.repetitions)?,
         limits,
     })?;
     report.publish()?;

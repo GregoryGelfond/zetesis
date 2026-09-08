@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use zetesis_validation::{
     examples,
-    performance::{self, Case, Decision, Phase, Producer, Schedule},
+    performance::{self, Case, Decision, Phase, Producer, Schedule, Suite},
 };
 
 struct Fixture {
@@ -194,7 +194,7 @@ fn all_qualification_pairs_precede_timed_observations() {
 
 #[test]
 fn each_input_alternates_the_first_timed_producer() {
-    for case in Case::ALL {
+    for &case in Suite::Baseline.cases() {
         let slots: Vec<_> = Schedule::new(0, 4)
             .unwrap()
             .slots()
@@ -428,7 +428,7 @@ fn the_largest_schedule_preserves_every_authored_round() {
         (Phase::Warmup, schedule.warmups()),
         (Phase::Timed, schedule.repetitions()),
     ] {
-        for case in Case::ALL {
+        for &case in Suite::Baseline.cases() {
             let slots: Vec<_> = schedule
                 .slots()
                 .into_iter()
@@ -764,8 +764,15 @@ fn exclusive_stage_totals_cannot_exceed_the_driver_interval() {
 }
 
 fn cli(fixture: &Fixture, repetitions: &str) -> zetesis_validation::process::Capture {
+    cli_suite(fixture, repetitions, None)
+}
+fn cli_suite(
+    fixture: &Fixture,
+    repetitions: &str,
+    suite: Option<&str>,
+) -> zetesis_validation::process::Capture {
     use zetesis_validation::process::{self, Invocation, Limits};
-    let arguments = [
+    let mut arguments = vec![
         fixture.corpus.clone().into_os_string(),
         "--zetesis".into(),
         fixture.native.clone().into_os_string(),
@@ -778,6 +785,9 @@ fn cli(fixture: &Fixture, repetitions: &str) -> zetesis_validation::process::Cap
         "--repetitions".into(),
         repetitions.into(),
     ];
+    if let Some(suite) = suite {
+        arguments.extend(["--suite".into(), suite.into()]);
+    }
     let outcome = process::invoke(
         Invocation {
             executable: Path::new(env!("CARGO_BIN_EXE_zetesis-perf")),
@@ -838,4 +848,231 @@ fn the_cli_retains_failed_qualification_as_failed_evidence() {
     let view: Value = serde_json::from_slice(&fs::read(&fixture.report).unwrap()).unwrap();
     assert_eq!(view["passed"], false);
     assert_eq!(view["samples"][1]["decision"], "model_mismatch");
+}
+
+#[test]
+fn the_default_schedule_preserves_the_qualified_baseline() {
+    // Exact slot sequence extracted from the sealed ordinary CPU report whose
+    // decompressed SHA-256 is f420be5da474025b194fd0c2fa3f455a74307afd6b6cfca61891643af6d93d03.
+    let expected: Value =
+        serde_json::from_str(include_str!("support/baseline_schedule.json")).unwrap();
+    let schedule = Schedule::default();
+    assert_eq!(serde_json::to_value(schedule.slots()).unwrap(), expected);
+    assert_eq!(
+        serde_json::to_value(schedule).unwrap(),
+        json!({"warmups":3,"repetitions":21})
+    );
+    assert_eq!(schedule.expected_samples(), 153);
+}
+
+#[test]
+fn the_case_catalog_covers_both_suites_without_aliases() {
+    use std::collections::BTreeSet;
+    let all: BTreeSet<_> = Case::ALL.into_iter().map(Case::path).collect();
+    let selected: BTreeSet<_> = [Suite::Baseline, Suite::Queens]
+        .into_iter()
+        .flat_map(Suite::cases)
+        .map(|case| case.path())
+        .collect();
+    assert_eq!(all.len(), 8);
+    assert_eq!(selected, all);
+}
+
+#[test]
+fn the_queens_suite_retains_variant_order() {
+    assert_eq!(
+        Suite::Queens.cases(),
+        [
+            Case::Queens01,
+            Case::Queens02,
+            Case::Queens03,
+            Case::Queens04,
+            Case::Queens05,
+            Case::Queens06
+        ]
+    );
+}
+
+#[test]
+fn queens02_retains_its_historical_json_identifier() {
+    assert_eq!(
+        serde_json::to_value(Case::Queens02).unwrap(),
+        json!("queens")
+    );
+}
+
+#[test]
+fn queens_rounds_follow_all_six_qualification_pairs() {
+    let schedule = Schedule::for_suite(Suite::Queens, 3, 21).unwrap();
+    let slots = schedule.slots();
+    assert!(
+        slots[..12]
+            .iter()
+            .all(|slot| slot.phase == Phase::Qualification)
+    );
+    assert!(
+        slots[12..]
+            .iter()
+            .all(|slot| slot.phase != Phase::Qualification)
+    );
+}
+
+#[test]
+fn queens_diagnostics_cover_each_variant_once() {
+    let slots = Schedule::for_suite(Suite::Queens, 3, 21).unwrap().slots();
+    let diagnostics: Vec<_> = slots
+        .iter()
+        .filter(|slot| slot.phase == Phase::Diagnostics)
+        .collect();
+    assert_eq!(diagnostics.len(), 6);
+    assert!(
+        diagnostics
+            .iter()
+            .all(|slot| slot.producer == Producer::Native)
+    );
+    assert_eq!(
+        diagnostics.iter().map(|slot| slot.case).collect::<Vec<_>>(),
+        Suite::Queens.cases()
+    );
+    assert!(
+        slots[slots.len() - 6..]
+            .iter()
+            .all(|slot| slot.phase == Phase::Diagnostics)
+    );
+}
+
+#[test]
+fn the_default_queens_suite_has_252_timed_observations() {
+    let slots = Schedule::for_suite(Suite::Queens, 3, 21).unwrap().slots();
+    assert_eq!(
+        slots
+            .iter()
+            .filter(|slot| slot.phase == Phase::Timed)
+            .count(),
+        252
+    );
+}
+
+#[test]
+fn queens_schedules_serialize_their_selection() {
+    let schedule = Schedule::for_suite(Suite::Queens, 3, 21).unwrap();
+    assert_eq!(
+        serde_json::to_value(schedule).unwrap(),
+        json!({"suite":"queens","warmups":3,"repetitions":21})
+    );
+}
+
+#[test]
+fn queens_sample_counts_match_the_authored_populations() {
+    for (warmups, repetitions, expected) in [(3, 21, 306), (5, 41, 570)] {
+        let schedule = Schedule::for_suite(Suite::Queens, warmups, repetitions).unwrap();
+        assert_eq!(schedule.expected_samples(), expected);
+        assert_eq!(schedule.slots().len(), expected);
+    }
+}
+
+#[test]
+fn queens_pairs_alternate_each_variants_first_producer() {
+    let slots = Schedule::for_suite(Suite::Queens, 0, 21).unwrap().slots();
+    for case in Suite::Queens.cases() {
+        let pairs: Vec<_> = slots
+            .iter()
+            .filter(|slot| slot.case == *case && slot.phase == Phase::Timed)
+            .collect();
+        assert_eq!(pairs.len(), 42);
+        for (round, pair) in pairs.chunks_exact(2).enumerate() {
+            assert_eq!(pair[0].round, round);
+            assert_eq!(pair[1].round, round);
+            assert_ne!(pair[0].producer, pair[1].producer);
+        }
+        let first: Vec<_> = pairs.chunks_exact(2).map(|pair| pair[0].producer).collect();
+        assert!(first.windows(2).all(|window| window[0] != window[1]));
+    }
+}
+
+#[test]
+fn queens_execution_seals_only_its_six_source_closures() {
+    let fixture = Fixture::new("", |_| {});
+    let mut request = fixture.request();
+    request.schedule = Schedule::for_suite(Suite::Queens, 0, 1).unwrap();
+    let report = performance::run(&request).unwrap();
+    assert!(report.passed(), "{report:?}");
+    assert_eq!(report.samples().len(), 30);
+    let original: Vec<_> = report
+        .before()
+        .iter()
+        .filter(|seal| {
+            seal.requested().starts_with(&fixture.corpus)
+                && seal.requested().extension().is_some_and(|ext| ext == "lp")
+        })
+        .collect();
+    assert_eq!(original.len(), 6);
+    for case in Suite::Queens.cases() {
+        assert!(
+            original
+                .iter()
+                .any(|seal| seal.requested() == fixture.corpus.join(case.path()))
+        );
+    }
+    assert_eq!(report.before().len(), 16); // Two executables, manifest/license, six originals and six copies.
+    assert!(
+        report
+            .after()
+            .iter()
+            .all(zetesis_validation::selected::Change::unchanged)
+    );
+    assert!(
+        report
+            .samples()
+            .iter()
+            .all(|sample| sample.selected_models() == Some(92) && sample.cost().is_none())
+    );
+    assert_eq!(
+        report.limits().max_total_capture_bytes,
+        performance::Limits::default().max_total_capture_bytes
+    );
+}
+
+#[test]
+fn the_last_queens_qualification_failure_prevents_timing() {
+    let fixture = Fixture::new("", |_| {});
+    let index = Case::ALL
+        .iter()
+        .position(|case| *case == Case::Queens06)
+        .unwrap();
+    fs::write(
+        fixture.directory.path().join(format!("native-{index}.txt")),
+        b"SATISFIABLE\n",
+    )
+    .unwrap();
+    let mut request = fixture.request();
+    request.schedule = Schedule::for_suite(Suite::Queens, 0, 1).unwrap();
+    let report = performance::run(&request).unwrap();
+    assert!(!report.passed());
+    assert_eq!(report.samples().len(), 12);
+    assert_eq!(report.samples().last().unwrap().slot().case, Case::Queens06);
+    assert_eq!(
+        report.samples().last().unwrap().decision(),
+        Decision::InvalidReport
+    );
+    assert!(
+        report
+            .samples()
+            .iter()
+            .all(|sample| sample.slot().phase == Phase::Qualification)
+    );
+}
+
+#[test]
+fn the_cli_publishes_an_explicit_queens_suite() {
+    let fixture = Fixture::new("", |_| {});
+    let capture = cli_suite(&fixture, "1", Some("queens"));
+    assert_eq!(capture.exit().unwrap().code, Some(0));
+    let report: Value = serde_json::from_slice(&fs::read(&fixture.report).unwrap()).unwrap();
+    assert_eq!(report["passed"], true);
+    assert_eq!(
+        report["schedule"],
+        json!({"suite":"queens","warmups":0,"repetitions":1})
+    );
+    assert_eq!(report["samples"].as_array().unwrap().len(), 30);
 }

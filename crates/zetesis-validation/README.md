@@ -3,8 +3,9 @@
 This package has three commands and reusable corpus, process-capture and reported-answer libraries. `zetesis-corpus`
 verifies the selected clingo fixture or compares its complete solver results.
 `zetesis-validate` runs the separate 94-case kr-domains solver campaign described
-below. `zetesis-perf` characterizes the three established CPU comparison cases
-using sealed inputs, complete answer families and a fixed paired schedule.
+below. `zetesis-perf` characterizes a finite CPU input suite using sealed inputs,
+complete answer families and a fixed paired schedule. Its default remains the
+three established comparison cases.
 None of these commands is invoked by the production solver.
 
 ## Ordinary CPU performance characterization
@@ -24,8 +25,22 @@ Publication is a separate bounded, no-clobber operation.
 
 The [protocol](../../docs/verification/ordinary-cpu-refresh-20260907/PROTOCOL.md)
 states the exact execution order, worker settings, process/output limits and
-comparison scope. This is a three-case CPU characterization; peak RSS and the
-full eager/lazy × CPU/Metal matrix remain unmeasured by this command.
+comparison scope. Peak RSS and the full eager/lazy × CPU/Metal matrix remain
+unmeasured by this command.
+
+`--suite queens` selects all six real N-Queens source encodings in variant order,
+at their existing eight-queen setting. Variant 01 uses literal bounds; variants
+02–06 declare `#const n=8`. The runner rewrites neither source nor constants.
+The default population becomes 306 solves, including 12 initial qualification
+observations, 252 timed observations and six separate diagnostics, plus the same
+three executable metadata calls. Source, process, capture and publication ceilings
+remain unchanged; a larger suite may stop under those bounds.
+
+Library clients use `Schedule::for_suite(Suite::Queens, warmups, repetitions)`.
+`Case::ALL` lists all eight supported inputs; `Suite::cases()` states a selection
+and its order. `Case::Queens02` preserves the historical serialized identifier
+`"queens"`. Baseline schedules retain their original JSON representation and exact
+slot order; an explicit queens schedule additionally records `"suite":"queens"`.
 
 ## Reusable process and reported-answer boundaries
 

@@ -10,6 +10,13 @@ fn corpus() -> examples::Corpus {
 }
 
 #[test]
+fn every_case_has_its_own_reference_slot() {
+    for (index, case) in Case::ALL.into_iter().enumerate() {
+        assert_eq!(case.index(), index);
+    }
+}
+
+#[test]
 fn source_changes_between_loading_and_sealing_are_refused() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("source.lp");

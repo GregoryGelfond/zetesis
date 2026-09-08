@@ -1,4 +1,4 @@
-//! Bounded ordinary CPU characterization of three pinned clean examples.
+//! Bounded ordinary CPU characterization of finite pinned example suites.
 //!
 //! Fresh processes enumerate all ordinary answers or final optimum ties. Source
 //! loading, parsing, grounding, solving and captured output are inside each wall
@@ -29,7 +29,7 @@ use serde::Serialize;
 
 use crate::selected::{Change, FileSeal, publication};
 
-pub use config::{Case, Limits, Phase, Producer, Request, Schedule, Slot};
+pub use config::{Case, Limits, Phase, Producer, Request, Schedule, Slot, Suite};
 pub use record::{Capture, Decision, Fault, Sample};
 pub use timing::{Diagnostics, Measurement};
 
@@ -96,7 +96,7 @@ impl Report {
     /// This is qualification of these observations, not evidence of a speedup.
     #[must_use]
     pub fn passed(&self) -> bool {
-        self.samples.len() == self.schedule.slots().len()
+        self.samples.len() == self.schedule.expected_samples()
             && self
                 .samples
                 .iter()
@@ -183,7 +183,7 @@ impl Report {
 }
 
 /// Verify and seal the clean input closure, then run the fixed paired schedule.
-/// All three input pairs must qualify before any warmup or timed pair is launched.
+/// Every selected input pair must qualify before any warmup or timed pair is launched.
 /// Individual capture, contract and diagnostic failures remain in the report;
 /// failures stop subsequent launches and never cause replacement measurements.
 /// Primary files are rechecked even after interrupted execution. Sources are
