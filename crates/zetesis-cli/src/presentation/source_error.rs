@@ -26,7 +26,15 @@ pub(super) fn write(
     error: &(impl fmt::Display + ?Sized),
 ) -> io::Result<()> {
     if mode != ColorMode::Always {
-        return writeln!(output, "zetesis: {error}");
+        output.write_all(b"zetesis: ")?;
+        let mut view = Plain {
+            output,
+            failure: None,
+        };
+        if fmt::write(&mut view, format_args!("{error}")).is_err() {
+            return Err(format_failure(view.failure));
+        }
+        return writeln!(view.output);
     }
     write!(output, "{BLUE}zetesis:{RESET} ")?;
     let mut view = Lines {
@@ -37,14 +45,30 @@ pub(super) fn write(
         failure: None,
     };
     if fmt::write(&mut view, format_args!("{error}")).is_err() {
-        return Err(view
-            .failure
-            .unwrap_or_else(|| io::Error::other("diagnostic formatting failed")));
+        return Err(format_failure(view.failure));
     }
     if !view.line.is_empty() {
         view.emit("")?;
     }
     writeln!(view.output)
+}
+
+fn format_failure(failure: Option<io::Error>) -> io::Error {
+    failure.unwrap_or_else(|| io::Error::other("diagnostic formatting failed"))
+}
+
+struct Plain<'a, W> {
+    output: &'a mut W,
+    failure: Option<io::Error>,
+}
+
+impl<W: Write> fmt::Write for Plain<'_, W> {
+    fn write_str(&mut self, text: &str) -> fmt::Result {
+        self.output.write_all(text.as_bytes()).map_err(|error| {
+            self.failure = Some(error);
+            fmt::Error
+        })
+    }
 }
 
 struct Lines<'a, W> {
@@ -264,11 +288,11 @@ mod tests {
                 Err(std::fmt::Error)
             }
         }
-        assert_eq!(
-            write(&mut Vec::new(), ColorMode::Always, &Invalid)
-                .unwrap_err()
-                .kind(),
-            io::ErrorKind::Other
-        );
+        for mode in [ColorMode::Auto, ColorMode::Always, ColorMode::Never] {
+            assert_eq!(
+                write(&mut Vec::new(), mode, &Invalid).unwrap_err().kind(),
+                io::ErrorKind::Other
+            );
+        }
     }
 }
