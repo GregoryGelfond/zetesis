@@ -158,3 +158,10 @@ The repository's [specification](docs/design/zetesis.md) describes the architect
 state what is implemented and demonstrated. Update claims when behavior changes,
 including limitations. Comprehensibility to an ASP/reduct practitioner is a review
 criterion alongside correctness and performance.
+
+Give every baseline, candidate and mutation checkout its own Cargo target
+directory. A primary checkout may share its target among its own package checks;
+an alternate source tree may not reuse it. Preserve source and executable
+identities with experimental evidence. If a target has been shared across those
+trees, treat its checks as provisional and qualify again from a fresh target.
+Matching Cargo artifact filenames do not attest which source tree produced them.
