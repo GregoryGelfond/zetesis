@@ -5,13 +5,13 @@ points and a `zetesis-bench` command adapter. It does not replace ordinary solve
 qualification. Profiles are static reduct oracles (the default), `formula` for
 general reduct checking, `formula-projection` for paired opt-in gate comparison,
 `grounding` for fresh original-source formula admission, and `lazy` for matched
-source-round measurements, and `tight` for complete-theory ranked certificates
-with exact reduct completion.
+source-round measurements, `tight` for complete-theory ranked certificates
+with exact reduct completion, and `aggregate` for exact retained numeric reductions.
 
 Reproducible measurements of exact static reduct oracles. `zetesis-bench`
 defaults to a physical Metal device and fails if one cannot be used. Select
 `--backend cpu` explicitly for CPU measurements alone, or `--backend vulkan`
-for a physical Vulkan adapter. All five device experiment commands accept Vulkan;
+for a physical Vulkan adapter. All six device experiment commands accept Vulkan;
 `grounding` remains CPU-only. Explicit APIs never fall back to a different API,
 a CPU or a software adapter. Adapter metadata reports the actual selected device.
 This interface support does not establish Linux/Radeon qualification.
@@ -44,6 +44,87 @@ controlled. CPU allocations are included per call whereas the GPU can reuse its
 resident buffers. These limitations must accompany any reported measurements.
 Use release builds. No speedup, energy benefit, or full-domain result follows
 from portable tests or the CPU-only mode.
+
+## Native aggregate reductions
+
+```sh
+zetesis-bench aggregate --backend metal --tuples 0,64,4096 --batches 1,32,128 \
+  --functions count,sum,sum-plus,min,max --workers 4 --warmups 2 \
+  --repetitions 12 > aggregate-metal.jsonl
+```
+
+Use `--backend cpu` for matched scalar/Rayon correctness and measurements without
+a device, or `--backend vulkan` for an explicitly required physical Vulkan GPU.
+The default matrix contains 45 cases and 2,415 acquired occurrences; cases with
+one occurrence deliberately expose dispatch overhead. The two CPU routes call
+the same native exact reduction, and the two device routes call
+`GpuAggregateOracle` with the same Group-bound `Eligibility` records. Every
+original/frozen measure, guard result and aggregate-reduct conjunction is checked
+against the native reference, preserving repetitions and original-only records.
+No source formula is reconstructed from a Boolean lowering.
+
+`aggregate_measurement::Configuration`, `measure`, `measure_with_control` and
+typed events form the library interface; the command composes a JSON-lines view.
+Preparation records separately time native Group/Theory construction, actual
+original/frozen formula acquisition, numeric wire/carrier preparation and exact
+native references. Acquisition is CPU work and allocates retained masks. Its
+reported work and mask payload must accompany any reduction-only speed claim.
+Native admission and numeric preparation use their published default limits;
+configuration records separately expose acquisition, reference, CPU reduction,
+GPU host/device work, authored GPU payload and readback-wait bounds.
+
+Each case has an initial population, optional recorded warmups and repeated
+timed samples. Route positions rotate independently within each population.
+`device-fresh` owns a dedicated initialized device/pipeline whose residency is
+cleared before every sample; the measured call includes new group/transport
+allocation, upload, dispatch, readback and result construction. `device-resident`
+owns a separate device/pipeline; its initial sample primes this case, and all
+subsequent samples must reuse its numeric group and exact transport. Both routes
+execute new reductions every time. Fresh clearing, pipeline setup, parity checks,
+publication and destruction are outside clocks. These labels describe upload
+boundaries, not process-cold execution or hardware timestamps.
+
+`fixture_version = 1` defines a complete deterministic grammar. The two atoms are
+`p` and `q`; the shared topological prefix is false, true, `p`, `q`, `not p`,
+`not not p`, `not q`, `p and q`, `p or q`, and `p implies q`. Negation means
+implication to false, and true means false implies false. Tuple occurrence `j`
+uses condition IDs `[2,3,4,5,6,7,8,9][j mod 8]`. Tuple zero has the empty key;
+every other key is `(w,j)`, with `w = [-3,2,0,7,-1][j mod 5]`. Whole keys are
+distinct, even when weights or conditions coincide. One guard requires the
+selected operation to be at least zero. For occurrence `i`, the original atom
+bits are `floor(i/5) mod 4`; tested bits are `i mod 5` unless that is four, when
+only original eligibility is requested. Bit zero denotes `p`, bit one `q`.
+Prepared events carry every actual M/J pattern and exact reference result, so
+the grammar and observed values can be reconstructed independently.
+
+CPU work includes all joined attempts and their native failed prefixes. Device
+rows require actual API/category metadata, submissions, complete ordered
+occurrences, exact transfer payload and declared fresh/resident behavior.
+Scheduled work remains distinct from completed readback. Failed sample records
+retain the attempted position and accounting; no replacement sample or campaign
+completion follows a failure. Synchronous output failure stops immediately.
+
+Payload numbers are explicitly scoped: retained eligibility bytes and the
+largest individual acquisition allocation are separate from prospective device
+batch accounting and incoming residency. They exclude borrowed source objects,
+caller-held prior results, allocator/driver overhead and deferred retirement.
+Overlapping scopes are not additive, and these metrics are not RSS. This
+experiment establishes neither ordinary solver acceleration nor minimality,
+source completeness or aggregate head permission. It measures an exact native
+aggregate primitive, with physical execution and speed requiring separate evidence.
+
+Portable tests qualify all 45 default cases on scalar/Rayon and exercise empty
+extrema, reference equality, rotation, resource failures, cancellation and every
+publication boundary. Physical controls remain explicit:
+
+```sh
+cargo test --locked -p zetesis-wgpu --test hardware_aggregate metal -- --ignored --nocapture
+cargo test --locked -p zetesis-wgpu --lib metal_aggregate -- --ignored --nocapture
+cargo test --locked -p zetesis-experiments --test aggregate_measurement metal -- --ignored --nocapture
+```
+
+Replace `metal`/`metal_aggregate` with `vulkan`/`vulkan_aggregate` for the other
+API. Adapter absence fails these tests; portable passes do not qualify a GPU.
 
 ## Lazy relational source rounds
 
@@ -382,12 +463,15 @@ improvement is established by adding this driver.
 ## Explicit Vulkan qualification
 
 The wgpu regression fixtures have explicit ignored Vulkan entry points that
-share assertions with their Metal counterparts. This command requests all 15
-Vulkan checks for static, formula, tight, lazy and transport behavior:
+share assertions with their Metal counterparts. These commands request the
+Vulkan checks for static, formula, tight, lazy, aggregate and transport behavior:
 
 ```sh
 cargo test --locked -p zetesis-wgpu --lib --test hardware --test hardware_formula \
-  --test hardware_tight --test hardware_lazy vulkan -- --ignored --nocapture
+  --test hardware_tight --test hardware_lazy --test hardware_aggregate \
+  vulkan -- --ignored --nocapture
+cargo test --locked -p zetesis-experiments --test aggregate_measurement \
+  vulkan -- --ignored --nocapture
 ```
 
 Missing hardware or an unexpected API fails; it never becomes a skipped pass.

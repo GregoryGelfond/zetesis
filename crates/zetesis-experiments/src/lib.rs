@@ -18,6 +18,7 @@ mod measurement;
 pub mod grounding;
 pub mod lazy_measurement;
 pub mod tight_measurement;
+pub mod aggregate_measurement;
 
 pub use backend::Backend;
 pub use fixtures::{BenchmarkFixture, Family};
@@ -46,6 +47,8 @@ pub struct CommandOptions {
 /// Independently qualified execution profiles.
 #[derive(Debug, clap::Subcommand)]
 pub enum Experiment {
+    /// Compare exact native aggregate reductions on matched original/frozen masks.
+    Aggregate(aggregate_measurement::Options),
     /// Compare ranked tight certificates with exact CPU residual completion.
     Tight(tight_measurement::Options),
     /// Compare exact lazy source rounds on matched sparse and dense candidates.

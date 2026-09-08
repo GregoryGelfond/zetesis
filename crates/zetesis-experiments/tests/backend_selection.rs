@@ -9,6 +9,7 @@ fn backend(options: &CommandOptions) -> Backend {
         Some(Experiment::Formula(value) | Experiment::FormulaProjection(value)) => value.backend,
         Some(Experiment::Lazy(value)) => value.backend,
         Some(Experiment::Tight(value)) => value.backend,
+        Some(Experiment::Aggregate(value)) => value.backend,
         Some(Experiment::Grounding(_)) => panic!("grounding measurements are CPU only"),
     }
 }
@@ -21,6 +22,7 @@ fn vulkan_is_accepted_by_every_device_experiment() {
         Some("formula-projection"),
         Some("lazy"),
         Some("tight"),
+        Some("aggregate"),
     ] {
         let mut arguments = vec!["zetesis-bench"];
         arguments.extend(command);
@@ -38,6 +40,7 @@ fn default_experiment_backend_remains_metal() {
         Some("formula-projection"),
         Some("lazy"),
         Some("tight"),
+        Some("aggregate"),
     ] {
         let mut arguments = vec!["zetesis-bench"];
         arguments.extend(command);
@@ -69,7 +72,7 @@ fn vulkan_route_labels_are_distinct_from_metal() {
 
 #[test]
 fn configurations_retain_the_vulkan_request() {
-    for command in ["lazy", "tight"] {
+    for command in ["lazy", "tight", "aggregate"] {
         let parsed =
             CommandOptions::try_parse_from(["zetesis-bench", command, "--backend", "vulkan"])
                 .unwrap();
@@ -78,6 +81,9 @@ fn configurations_retain_the_vulkan_request() {
                 serde_json::to_value(options.configuration().unwrap()).unwrap()
             }
             Experiment::Tight(options) => {
+                serde_json::to_value(options.configuration().unwrap()).unwrap()
+            }
+            Experiment::Aggregate(options) => {
                 serde_json::to_value(options.configuration().unwrap()).unwrap()
             }
             _ => panic!("expected an event-based experiment"),
