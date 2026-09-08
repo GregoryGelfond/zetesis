@@ -225,3 +225,65 @@ fn missing_grounding_source_remains_a_process_error() {
     assert_eq!(report["failure"]["code"], "source");
     assert!(capture.stderr_text().unwrap().contains("missing-source.lp"));
 }
+
+#[test]
+fn tight_command_publishes_complete_occurrence_evidence() {
+    let capture = invoke(&[
+        "tight",
+        "--backend",
+        "cpu",
+        "--atoms",
+        "4",
+        "--batches",
+        "3",
+        "--families",
+        "normal",
+        "--warmups",
+        "0",
+        "--repetitions",
+        "1",
+        "--workers",
+        "1",
+    ]);
+    assert_eq!(capture.exit().unwrap().code, Some(0));
+    assert!(capture.stderr().is_empty());
+    let records = capture
+        .stdout_text()
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(records.last().unwrap()["samples"], 4);
+    let samples = records
+        .iter()
+        .filter(|record| record["event"] == "sample")
+        .collect::<Vec<_>>();
+    assert_eq!(samples.len(), 4);
+    for sample in samples {
+        assert_eq!(sample["sample"]["outcomes"].as_array().unwrap().len(), 3);
+    }
+}
+
+#[test]
+fn tight_command_preserves_failed_reference_exit() {
+    let capture = invoke(&[
+        "tight",
+        "--backend",
+        "cpu",
+        "--atoms",
+        "4",
+        "--batches",
+        "1",
+        "--max-work",
+        "0",
+    ]);
+    assert_eq!(capture.exit().unwrap().code, Some(2));
+    assert!(!capture.stderr().is_empty());
+    let records = capture
+        .stdout_text()
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .collect::<Vec<_>>();
+    assert!(!records.iter().any(|record| record["event"] == "complete"));
+}

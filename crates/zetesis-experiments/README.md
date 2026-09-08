@@ -5,7 +5,8 @@ points and a `zetesis-bench` command adapter. It does not replace ordinary solve
 qualification. Profiles are static reduct oracles (the default), `formula` for
 general reduct checking, `formula-projection` for paired opt-in gate comparison,
 `grounding` for fresh original-source formula admission, and `lazy` for matched
-source-round measurements.
+source-round measurements, and `tight` for complete-theory ranked certificates
+with exact reduct completion.
 
 Reproducible measurements of exact static reduct oracles. `zetesis-bench`
 defaults to a physical Metal device and fails if one cannot be used. Select
@@ -95,6 +96,95 @@ command, executable/source hashes, toolchain and host with the complete output;
 the embedded library cannot identify its caller's executable or control thermal
 state. Stop task-owned compute before timing. Portable tests alone provide no
 physical Metal result or performance claim.
+
+## Complete tight certificates
+
+```sh
+zetesis-bench tight --backend metal --atoms 4,64,256 --batches 1,32,128 \
+  --families normal,choices --workers 4 --warmups 2 --repetitions 12 \
+  > tight-metal.jsonl 2> tight-metal.stderr
+```
+
+`tight_measurement::measure` accepts a typed
+`Configuration` and synchronous event consumer. `measure_with_control` also
+accepts caller-owned cancellation/deadline control. The CLI is a JSON-lines view;
+`--backend cpu` explicitly selects only scalar and Rayon classification. Physical
+Metal is required otherwise, with no CPU fallback. No ordinary solver route is
+changed or qualified by this experiment.
+
+Every case owns one complete immutable original `Theory`, its checked
+`TightPlan`, and the same ordered unfiltered candidate occurrences on every
+route. The normal family is a fact followed by a positive implication chain.
+The choices family has unconditional atomic choices except for its final
+producer, which is guarded by the preceding atom when one exists. Both include one final atom
+without any producer. Roots are deliberately reversed to exercise original-root
+witness order. Candidates start empty, full, then full except the unsupported
+atom; subsequent occurrences repeat eight-bit patterns across the atom carrier.
+No candidate is filtered by its eventual result. Batch size one naturally
+contains only the first occurrence. Larger batches retain direct stable
+classifications, original nonmodels (normal family) and residual controls;
+the choices family supplies a substantial directly stable population.
+
+Before measuring a case, every occurrence receives an independent complete
+membership reference. At most eight atoms use the finite Ferraris checker's
+exhaustive proper-subset enumeration. Wider cases use the native general
+original/frozen-reduct checker with no tight certificate enabled. Each reference
+must complete. Scalar certificate witnesses are established separately, and
+original failure roots are checked against the finite checker with subset work
+disabled. Samples must match the reference status and exact certificate witness
+for every occurrence. Every actual residual countermodel is independently
+checked for theory identity, proper inclusion and satisfaction of the frozen
+reduct. Different valid countermodels may be returned by the two reference
+instruments; they are retained, not required to be identical.
+
+The four routes are scalar certificate classification, indexed Rayon
+classification, fresh Metal transport and resident Metal transport. All residuals
+receive serial, occurrence-ordered exact native CPU completion on every route.
+Rayon therefore parallelizes classification only. Whole-call elapsed,
+classification and residual-completion intervals are directly measured with the
+host monotonic clock; the latter two are nested within the first. Do not add them
+together as separate costs or infer a GPU classification gain from blended total
+time. Classification includes result allocation and, for Metal, packing,
+transfers, execution, wait and readback. Residual completion includes its result
+allocation, even with no residuals. These are not shader timestamps.
+
+The run owns one Rayon pool and two independently initialized GPU oracles.
+Reported adapter metadata must agree, which does not prove a unique physical
+chip identity. Resource setup times and actual adapter metadata are emitted
+outside sample clocks. Fresh residency is cleared before its clock starts;
+its measured call must upload the theory and allocate transport. The other
+oracle retains its graph and transport. Its initial observation primes that
+case; later warm and timed calls must reuse both. Fixture/reference preparation,
+parity/witness validation, fresh cache clearing, destruction and JSON publication
+are outside sample clocks. Parsing, grounding, outer candidate generation,
+objectives and complete solve time are excluded.
+
+Initial, warmup and timed populations stay separate. Each starts in the declared
+route order and rotates one position per iteration. Twelve repetitions balance
+both the four-route physical schedule and the two-route CPU schedule. The command
+above has 18 cases and 1,080 observations: 72 initial, 144 warmup and 864 timed.
+CPU-only mode retains 540 observations. Configuration precedes setup and includes
+all per-operation numeric limits. Prepared events retain the complete original
+DAG, root order, producers, ranks, candidate identities and reference outcomes.
+Sample events retain every actual outcome, direct CPU/GPU decision attribution,
+exact residual counts and CPU certificate work. Device activity distinguishes
+submitted/scheduled work from validated completed work. Authored transfer bytes
+are not measured bus traffic; logical retained/scratch payload is not RSS.
+
+An incomplete measured operation emits its failed position, measured prefix and
+available activity, then returns an error. Setup/reference failures return an
+error after their preceding prefix. Output failure preserves any written prefix.
+No failure is replaced, and no completion event follows an error. Retain stderr
+and process exit alongside all JSON lines. The finite scope permits at most
+24 cases, 256 atoms, 256 occurrences, six warmups, sixty repetitions and 64
+workers; native limits can still refuse an admitted case. There is no implied
+whole-campaign deadline or hard bound on pool/device creation or a caller's sink.
+
+Use a release binary, retain its hash, source revision, command, host and
+complete outputs, and stop task-owned compute before timing. Portable controls
+include exhaustive tiny candidate/subset checks, witness substitution,
+resource/cancellation failures and publication prefixes. Physical execution and
+performance remain unqualified until a retained device campaign succeeds.
 
 ## General Ferraris formulas
 
