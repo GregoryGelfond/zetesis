@@ -3,7 +3,7 @@
 //! The SAT kernel uses iterative chronological DPLL and two watched literals.
 //! Candidate formulas and frozen reducts receive full Tseitin equivalences;
 //! only original semantic atoms enter minimality and model blocking. This
-//! crate does not parse, ground, translate aggregates, optimize, invoke an
+//! crate does not parse, ground, translate source aggregates, invoke an
 //! external solver, or claim a refinement proof for its Rust implementation.
 #![forbid(unsafe_code)]
 
@@ -15,6 +15,7 @@ mod encoding;
 mod ferraris;
 mod timing;
 mod checked;
+pub mod partition;
 
 pub use checked::{CheckedInterpretation, StableInterpretation, check_interpretation};
 
