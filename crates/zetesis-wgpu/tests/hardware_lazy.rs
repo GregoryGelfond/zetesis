@@ -225,3 +225,86 @@ fn metal_lazy_catalog_fits_when_static_carrier_refuses() {
         },
     );
 }
+
+#[test]
+#[ignore = "requires a physical Metal adapter; source masks are not yet qualified"]
+fn metal_source_selections_preserve_each_frozen_closure() {
+    let constant = |name, value| pattern(name, vec![Term::Constant(Value::Number(value))]);
+    let mut templates = Vec::new();
+    for value in 0..2 {
+        let gate = constant("pick", value);
+        for name in ["pick", "a", "b", "c"] {
+            templates.push(Template::new(
+                Some(constant(name, value)),
+                vec![],
+                vec![gate.clone()],
+                vec![],
+                vec![],
+            ));
+        }
+    }
+    templates.push(Template::new(
+        Some(pattern("triple", (0..3).map(Term::Variable).collect())),
+        ["a", "b", "c"]
+            .into_iter()
+            .enumerate()
+            .map(|(slot, name)| pattern(name, vec![Term::Variable(slot)]))
+            .collect(),
+        vec![],
+        vec![],
+        vec![],
+    ));
+    let program = Program::new(templates, AdmissionLimits::default()).unwrap();
+    let seeds: Vec<_> = (0..33)
+        .map(|index| {
+            Seed::new(
+                &program,
+                [Atom::new(predicate("pick", 1), vec![Value::Number(index % 2)]).unwrap()],
+            )
+            .unwrap()
+        })
+        .collect();
+    let mut oracle = metal();
+    for chunk in [1, 7] {
+        for selection in [lazy::SourceSelection::Union, lazy::SourceSelection::Worlds] {
+            let batch = oracle
+                .check_batch_with_source(
+                    &program,
+                    &seeds,
+                    lazy::Limits {
+                        max_chunk_rules: chunk,
+                        ..Default::default()
+                    },
+                    GpuLimits::default(),
+                    selection,
+                    &Control::default(),
+                )
+                .unwrap();
+            for (actual, seed) in batch.checks.iter().zip(&seeds) {
+                let expected =
+                    check(&program, seed, Limits::default(), &Control::default()).unwrap();
+                assert_eq!(actual.closure(), expected.closure());
+                assert_eq!(actual.accepted(), expected.accepted());
+            }
+            let submitted = oracle.statistics();
+            assert_eq!(submitted.dispatches, batch.progress.chunks);
+            assert_eq!(submitted.world_instances, batch.progress.instances * 33);
+            assert!(submitted.uploaded_bytes > 0);
+            assert!(submitted.downloaded_bytes > 0);
+            assert_eq!(
+                batch.progress.pruned_prefixes > 0,
+                selection == lazy::SourceSelection::Worlds
+            );
+            eprintln!(
+                "adapter={} selection={selection:?} chunk={chunk} instances={} mask_work={} mask_bytes={} pruned={} uploaded={} downloaded={}",
+                oracle.info().name(),
+                batch.progress.instances,
+                batch.progress.mask_words,
+                batch.progress.peak_mask_bytes,
+                batch.progress.pruned_prefixes,
+                submitted.uploaded_bytes,
+                submitted.downloaded_bytes
+            );
+        }
+    }
+}

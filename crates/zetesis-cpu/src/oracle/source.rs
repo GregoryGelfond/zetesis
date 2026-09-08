@@ -1,14 +1,15 @@
 //! Filter-valid instances over one immutable relation snapshot.
 //!
-//! The visitor owns neither per-world truth nor frozen-gate decisions. A union
-//! of worlds can offer an instance, but a consumer must check every antecedent
-//! against its own world. Successful return establishes snapshot exhaustion;
-//! a callback error or source stop never does.
+//! The public scan exhausts its supplied relation snapshot without deciding
+//! per-world truth or frozen gates. A union can offer an instance, but a consumer
+//! must check every antecedent against its own world. The private masked scan
+//! narrows that offering to positive bindings with some current-world witness.
+//! A callback error or source stop establishes neither coverage contract.
 
 use std::fmt;
 use zetesis_core::{Atom, AtomPattern, Model, Program, Value};
 
-use super::{Limits, Relations, Statistics, Work, instantiate, visit};
+use super::{Relations, Work, instantiate, visit, worlds};
 use crate::{Control, Stop};
 
 /// Bounds on a source scan, including a single emitted instance's copied data.
@@ -72,10 +73,19 @@ impl Instance {
 /// Progress retained for both complete and interrupted scans.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ScanStatistics {
-    /// Charged template, tuple, filter and instance-copy work.
+    /// Charged template, tuple, filter and instance-copy work, including any
+    /// private world-membership construction and intersection charges.
     pub work: u64,
     /// Fully matched bindings offered to the consumer, including its failure.
     pub bindings: u64,
+    /// Membership probes, initialization and intersections charged within work.
+    pub mask_words: u64,
+    /// Matched positive prefixes with no possible current world.
+    /// Their unvisited extensions are not counted as offered instances.
+    pub pruned_prefixes: u64,
+    /// Peak requested owned membership/frame/index payload in this round.
+    /// This excludes symbolic atoms, allocator rounding and process RSS.
+    pub mask_bytes: usize,
 }
 
 /// An incomplete scan, preserving the cause and already charged source work.
@@ -152,35 +162,51 @@ pub fn scan<E>(
     control: &Control,
     mut consume: impl FnMut(Instance) -> Result<(), E>,
 ) -> Result<ScanStatistics, ScanFailure<E>> {
-    let mut work = Work {
-        control,
-        limits: Limits {
-            max_work: limits.max_work,
-            max_derived_atoms: 0,
-        },
-        statistics: Statistics::default(),
-    };
+    let mut work = Work::source(control, limits.max_work);
     let mut offered = 0;
     let result = scan_inner(
         program,
-        snapshot,
+        snapshot.atoms().iter(),
+        None,
         limits,
         &mut work,
         &mut offered,
         &mut consume,
     );
-    let statistics = ScanStatistics {
-        work: work.statistics.work,
-        bindings: offered,
-    };
+    let statistics = work.source_statistics(offered);
     result
         .map(|()| statistics)
         .map_err(|cause| ScanFailure { cause, statistics })
 }
 
-fn scan_inner<E>(
+pub(crate) fn scan_worlds<E>(
     program: &Program,
-    snapshot: &Model,
+    snapshot: &mut worlds::Snapshot,
+    limits: ScanLimits,
+    work: &mut Work<'_>,
+    mut consume: impl FnMut(Instance) -> Result<(), E>,
+) -> Result<ScanStatistics, ScanFailure<E>> {
+    let mut offered = 0;
+    let (atoms, mut membership) = snapshot.parts();
+    let result = scan_inner(
+        program,
+        atoms.iter(),
+        Some(&mut membership),
+        limits,
+        work,
+        &mut offered,
+        &mut consume,
+    );
+    let statistics = work.source_statistics(offered);
+    result
+        .map(|()| statistics)
+        .map_err(|cause| ScanFailure { cause, statistics })
+}
+
+fn scan_inner<'a, E>(
+    program: &Program,
+    atoms: impl Iterator<Item = &'a Atom>,
+    mut membership: Option<&mut worlds::Join<'_>>,
     limits: ScanLimits,
     work: &mut Work<'_>,
     offered: &mut u64,
@@ -188,49 +214,56 @@ fn scan_inner<E>(
 ) -> Result<(), ScanCause<E>> {
     work.control.poll()?;
     let mut relations = Relations::new();
-    for atom in snapshot.atoms() {
+    for atom in atoms {
         work.tick()?;
         relations.entry(atom.predicate()).or_default().push(atom);
     }
     for template in program.templates() {
         work.tick()?;
-        visit(template, &relations, None, work, |assignment, work| {
-            let mut remaining_atoms = limits.max_instance_atoms;
-            let mut remaining_bytes = limits.max_instance_bytes;
-            let mut copy = |pattern: &AtomPattern| {
-                copy_atom(
-                    pattern,
-                    assignment,
-                    &mut remaining_atoms,
-                    &mut remaining_bytes,
-                    work,
-                )
-            };
-            let head = template.head().map(&mut copy).transpose()?;
-            let positive = template
-                .positive()
-                .iter()
-                .map(&mut copy)
-                .collect::<Result<_, Stop>>()?;
-            let gate_true = template
-                .gate_true()
-                .iter()
-                .map(&mut copy)
-                .collect::<Result<_, Stop>>()?;
-            let gate_false = template
-                .gate_false()
-                .iter()
-                .map(&mut copy)
-                .collect::<Result<_, Stop>>()?;
-            *offered += 1;
-            consume(Instance {
-                head,
-                positive,
-                gate_true,
-                gate_false,
-            })
-            .map_err(ScanCause::Consumer)
-        })?;
+        visit(
+            template,
+            &relations,
+            None,
+            membership.as_deref_mut(),
+            work,
+            |assignment, work| {
+                let mut remaining_atoms = limits.max_instance_atoms;
+                let mut remaining_bytes = limits.max_instance_bytes;
+                let mut copy = |pattern: &AtomPattern| {
+                    copy_atom(
+                        pattern,
+                        assignment,
+                        &mut remaining_atoms,
+                        &mut remaining_bytes,
+                        work,
+                    )
+                };
+                let head = template.head().map(&mut copy).transpose()?;
+                let positive = template
+                    .positive()
+                    .iter()
+                    .map(&mut copy)
+                    .collect::<Result<_, Stop>>()?;
+                let gate_true = template
+                    .gate_true()
+                    .iter()
+                    .map(&mut copy)
+                    .collect::<Result<_, Stop>>()?;
+                let gate_false = template
+                    .gate_false()
+                    .iter()
+                    .map(&mut copy)
+                    .collect::<Result<_, Stop>>()?;
+                *offered += 1;
+                consume(Instance {
+                    head,
+                    positive,
+                    gate_true,
+                    gate_false,
+                })
+                .map_err(ScanCause::Consumer)
+            },
+        )?;
     }
     work.control.poll()?;
     Ok(())

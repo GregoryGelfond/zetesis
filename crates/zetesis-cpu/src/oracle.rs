@@ -10,6 +10,7 @@ use crate::{Control, Stop};
 
 mod window;
 pub mod source;
+pub(crate) mod worlds;
 
 /// Exact checking budgets, applied before the next charged operation/insertion.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -112,10 +113,13 @@ impl Check {
     }
 }
 
-struct Work<'a> {
+pub(crate) struct Work<'a> {
     control: &'a Control,
     limits: Limits,
     statistics: Statistics,
+    mask_words: u64,
+    pruned_prefixes: u64,
+    mask_bytes: usize,
 }
 
 impl Work<'_> {
@@ -125,6 +129,36 @@ impl Work<'_> {
             return Err(Stop::WorkLimit);
         }
         self.statistics.work += 1;
+        Ok(())
+    }
+
+    pub(crate) fn source(control: &Control, max_work: u64) -> Work<'_> {
+        Work {
+            control,
+            limits: Limits {
+                max_work,
+                max_derived_atoms: 0,
+            },
+            statistics: Statistics::default(),
+            mask_words: 0,
+            pruned_prefixes: 0,
+            mask_bytes: 0,
+        }
+    }
+
+    pub(crate) fn source_statistics(&self, bindings: u64) -> source::ScanStatistics {
+        source::ScanStatistics {
+            work: self.statistics.work,
+            bindings,
+            mask_words: self.mask_words,
+            pruned_prefixes: self.pruned_prefixes,
+            mask_bytes: self.mask_bytes,
+        }
+    }
+
+    fn mask_word(&mut self) -> Result<(), Stop> {
+        self.tick()?;
+        self.mask_words += 1;
         Ok(())
     }
 }
@@ -164,6 +198,9 @@ pub fn check(
         control,
         limits,
         statistics: Statistics::default(),
+        mask_words: 0,
+        pruned_prefixes: 0,
+        mask_bytes: 0,
     };
     let mut closure: BTreeSet<Atom> = BTreeSet::new();
     let mut constraint_violated = false;
@@ -181,6 +218,7 @@ pub fn check(
                 template,
                 &relations,
                 Some(seed),
+                None,
                 &mut work,
                 |assignment, work| {
                     work.tick()?;
@@ -239,6 +277,7 @@ fn visit<E: From<Stop>>(
     template: &Template,
     relations: &Relations<'_>,
     seed: Option<&Seed>,
+    mut membership: Option<&mut worlds::Join<'_>>,
     work: &mut Work<'_>,
     mut emit: impl FnMut(&[Option<Value>], &mut Work<'_>) -> Result<(), E>,
 ) -> Result<(), E> {
@@ -253,6 +292,9 @@ fn visit<E: From<Stop>>(
         }
         work.statistics.bindings += 1;
         return emit(&assignment, work);
+    }
+    if let Some(membership) = membership.as_mut() {
+        membership.reset(template, work)?;
     }
     // None means this depth has not yet been opened for the current parent
     // assignment. A retained range advances in the original relation order.
@@ -291,6 +333,10 @@ fn visit<E: From<Stop>>(
         let atom = tuples[index];
         if bind(pattern, atom, &mut assignment, &mut undo[depth], work)?
             && guards(template, &assignment, seed, work)?
+            && match membership.as_mut() {
+                Some(membership) => membership.extend(depth, index, work)?,
+                None => true,
+            }
         {
             depth += 1;
         } else {

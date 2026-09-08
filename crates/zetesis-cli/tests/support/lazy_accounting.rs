@@ -55,6 +55,7 @@ fn failed_batches_retain_submitted_work() {
                 instances: 3,
                 chunks: 1,
                 catalog_atoms: 66,
+                ..zetesis_cpu::lazy::Progress::default()
             },
             zetesis_wgpu::LazyGpuStatistics {
                 dispatches: 2,

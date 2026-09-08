@@ -3,7 +3,7 @@
 use zetesis_core::{Predicate, Sign, Term, ValueLimits, ValueNode};
 
 use super::*;
-use crate::{Control, Limits, Statistics};
+use crate::Control;
 
 fn tuple(values: Vec<Value>) -> Atom {
     Atom::new(Predicate::new("row", values.len()).unwrap(), values).unwrap()
@@ -47,14 +47,7 @@ fn lookup(
     limit: u64,
 ) -> Result<(Range<usize>, u64), Stop> {
     let control = Control::default();
-    let mut work = Work {
-        control: &control,
-        limits: Limits {
-            max_work: limit,
-            ..Limits::default()
-        },
-        statistics: Statistics::default(),
-    };
+    let mut work = Work::source(&control, limit);
     let range = matching_prefix(pattern, rows, assignment, &mut work)?;
     Ok((range, work.statistics.work))
 }

@@ -1,7 +1,7 @@
 //! Bounded, world-isolated reduct rounds with an injected chunk evaluator.
 //!
-//! Every chunk reads the same immutable round snapshots. Only successful source
-//! exhaustion and successful evaluation of its final chunk permit a commit.
+//! Every chunk reads the same immutable round snapshots. Only complete per-world
+//! source coverage and successful evaluation of its final chunk permit a commit.
 //! A new round rebuilds source relations from the union of derived atoms; seed
 //! atoms remain separate. The union offers instances and never establishes truth
 //! in an individual world.
@@ -11,6 +11,7 @@ use std::fmt;
 
 use zetesis_core::{Atom, Model, Program, Seed};
 
+use crate::oracle::{Work, worlds};
 use crate::{Control, Stop, source};
 
 /// Rule header words: head tag and three antecedent lengths.
@@ -22,6 +23,18 @@ pub const CONSTRAINT_HEAD: u32 = 0;
 const ROUND_MASK_VECTORS: usize = 5;
 // Three old masks can coexist with three replacement masks during stride growth.
 const GROWTH_MASK_VECTORS: usize = 6;
+
+/// Which positive source bindings may be offered within each immutable round.
+/// Every evaluator still checks per-world positives and all frozen gates.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SourceSelection {
+    /// Exhaust the union relation, including cross-world combinations.
+    #[default]
+    Union,
+    /// Omit positive prefixes that no current world can satisfy. This does not
+    /// prune the program, candidate carrier or any future snapshot.
+    Worlds,
+}
 
 /// Explicit batch, source, catalog and transport limits for lazy rounds.
 #[derive(Clone, Copy, Debug)]
@@ -42,9 +55,10 @@ pub struct Limits {
     /// separately from all catalog growth throughout every scan.
     pub max_instance_bytes: usize,
     /// Maximum requested owned payload bytes for catalog copies, snapshots,
-    /// seeds, pending deltas, chunk packing and one result. Input program/seeds,
-    /// allocator rounding, tree-node bookkeeping and backend-private transport
-    /// are excluded; a backend must bound its transport separately.
+    /// seeds, pending deltas, chunk packing, one result and optional source
+    /// membership masks/frames/indices. Input program/seeds, allocator rounding,
+    /// tree-node bookkeeping and backend-private transport are excluded; a
+    /// backend must bound its transport separately.
     pub max_host_bytes: usize,
 }
 
@@ -66,7 +80,7 @@ impl Default for Limits {
 /// Exact progress, also retained after source or evaluator failure.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Progress {
-    /// Exhaustively scanned and fully evaluated rounds.
+    /// Rounds with complete per-world source coverage and evaluation.
     pub rounds: u64,
     /// Source operation charges, including an incomplete scan.
     pub source_work: u64,
@@ -76,6 +90,25 @@ pub struct Progress {
     pub chunks: u64,
     /// Distinct demanded atom identities, including seed and underived heads.
     pub catalog_atoms: usize,
+    /// Source-work charges for membership probes and packed mask operations.
+    /// This is a subset of `source_work`, not additional work to add to it.
+    pub mask_words: u64,
+    /// Matched positive prefixes with empty current-world membership.
+    /// Unvisited extensions are not claimed as enumerated instances.
+    pub pruned_prefixes: u64,
+    /// Peak requested membership/frame/index payload held by one source round.
+    /// Symbolic atoms are accounted separately; this is not process RSS.
+    pub peak_mask_bytes: usize,
+}
+
+impl Progress {
+    fn record_source(&mut self, statistics: source::ScanStatistics) {
+        self.source_work += statistics.work;
+        self.instances += statistics.bindings;
+        self.mask_words += statistics.mask_words;
+        self.pruned_prefixes += statistics.pruned_prefixes;
+        self.peak_mask_bytes = self.peak_mask_bytes.max(statistics.mask_bytes);
+    }
 }
 
 /// An interrupted batch; none of its candidates has a completed check.
@@ -313,12 +346,50 @@ pub fn check_with<E>(
     seeds: &[Seed],
     limits: Limits,
     control: &Control,
+    execute: impl FnMut(&Chunk<'_>) -> Result<Vec<u32>, E>,
+) -> Result<Batch, Failure<E>> {
+    check_with_source(
+        program,
+        seeds,
+        limits,
+        SourceSelection::Union,
+        control,
+        execute,
+    )
+}
+
+/// Check the same per-world reduct closures using an explicit source selection.
+/// [`SourceSelection::Worlds`] retains complete coverage of each current world,
+/// but deliberately does not exhaust every cross-world union combination.
+///
+/// Mask construction/intersections consume the batch's cumulative source work.
+/// Their live storage is charged against `max_host_bytes` during catalog growth.
+/// This optional optimization can change resource stopping points. The injected
+/// evaluator's exactness contract is identical to [`check_with`].
+///
+/// # Errors
+/// Returns charged progress and no completed checks after any source, resource,
+/// evaluator or protocol failure, including failed mask construction.
+pub fn check_with_source<E>(
+    program: &Program,
+    seeds: &[Seed],
+    limits: Limits,
+    selection: SourceSelection,
+    control: &Control,
     mut execute: impl FnMut(&Chunk<'_>) -> Result<Vec<u32>, E>,
 ) -> Result<Batch, Failure<E>> {
     let mut progress = Progress::default();
-    run(program, seeds, limits, control, &mut progress, &mut execute)
-        .map(|checks| Batch { checks, progress })
-        .map_err(|cause| Failure { cause, progress })
+    run(
+        program,
+        seeds,
+        limits,
+        selection,
+        control,
+        &mut progress,
+        &mut execute,
+    )
+    .map(|checks| Batch { checks, progress })
+    .map_err(|cause| Failure { cause, progress })
 }
 
 struct State {
@@ -326,6 +397,7 @@ struct State {
     atoms: Vec<Atom>,
     payload_bytes: usize,
     fixed_bytes: usize,
+    round_mask_bytes: usize,
     words: usize,
     snapshots: Vec<u32>,
     seeds: Vec<u32>,
@@ -339,6 +411,7 @@ fn run<E>(
     program: &Program,
     seeds: &[Seed],
     limits: Limits,
+    selection: SourceSelection,
     control: &Control,
     progress: &mut Progress,
     execute: &mut impl FnMut(&Chunk<'_>) -> Result<Vec<u32>, E>,
@@ -371,34 +444,12 @@ fn run<E>(
             return Err(Stop::WorkLimit.into());
         }
         control.poll()?;
-        let snapshot = Model::new(
-            state
-                .atoms
-                .iter()
-                .enumerate()
-                .filter(|(id, _)| {
-                    (0..seeds.len()).any(|world| {
-                        contains(&state.snapshots[world * state.words..][..state.words], *id)
-                    })
-                })
-                .map(|(_, atom)| atom.clone()),
-        );
         state.pending.fill(0);
-        let scan_limits = source::ScanLimits {
-            max_work: limits.max_source_work.saturating_sub(progress.source_work),
-            max_instance_atoms: limits
-                .max_chunk_words
-                .saturating_sub(RECORD_HEADER_WORDS - 1),
-            max_instance_bytes: limits.max_instance_bytes,
-        };
-        let scanned = source::scan(program, &snapshot, scan_limits, control, |instance| {
-            state.offer(&instance, seeds.len(), limits, control, progress, execute)
-        });
+        let scanned = state.scan(program, selection, limits, control, progress, execute);
         let source_statistics = match scanned {
             Ok(statistics) => statistics,
             Err(failure) => {
-                progress.source_work += failure.statistics.work;
-                progress.instances += failure.statistics.bindings;
+                progress.record_source(failure.statistics);
                 progress.catalog_atoms = state.atoms.len();
                 return Err(match failure.cause {
                     source::ScanCause::Source(stop) => Cause::Source(stop),
@@ -406,8 +457,7 @@ fn run<E>(
                 });
             }
         };
-        progress.source_work += source_statistics.work;
-        progress.instances += source_statistics.bindings;
+        progress.record_source(source_statistics);
         state.flush(seeds.len(), control, progress, execute)?;
         control.poll()?;
         progress.rounds += 1;
@@ -427,6 +477,69 @@ fn run<E>(
 }
 
 impl State {
+    fn scan<E>(
+        &mut self,
+        program: &Program,
+        selection: SourceSelection,
+        limits: Limits,
+        control: &Control,
+        progress: &mut Progress,
+        execute: &mut impl FnMut(&Chunk<'_>) -> Result<Vec<u32>, E>,
+    ) -> Result<source::ScanStatistics, source::ScanFailure<Cause<E>>> {
+        let scan_limits = source::ScanLimits {
+            max_work: limits.max_source_work.saturating_sub(progress.source_work),
+            max_instance_atoms: limits
+                .max_chunk_words
+                .saturating_sub(RECORD_HEADER_WORDS - 1),
+            max_instance_bytes: limits.max_instance_bytes,
+        };
+        let candidates = self.violated.len();
+        if selection == SourceSelection::Union {
+            let snapshot = Model::new(
+                self.atoms
+                    .iter()
+                    .enumerate()
+                    .filter(|(id, _)| {
+                        (0..candidates).any(|world| {
+                            contains(&self.snapshots[world * self.words..][..self.words], *id)
+                        })
+                    })
+                    .map(|(_, atom)| atom.clone()),
+            );
+            return source::scan(program, &snapshot, scan_limits, control, |instance| {
+                self.offer(&instance, candidates, limits, control, progress, execute)
+            });
+        }
+        let mut work = Work::source(control, scan_limits.max_work);
+        let available = limits
+            .max_host_bytes
+            .saturating_sub(self.fixed_bytes)
+            .saturating_sub(self.payload_bytes);
+        let result = match worlds::Snapshot::new(
+            program,
+            &self.catalog,
+            &self.snapshots,
+            self.words,
+            candidates,
+            available,
+            &mut work,
+        ) {
+            Ok(mut snapshot) => {
+                self.round_mask_bytes = snapshot.bytes();
+                source::scan_worlds(program, &mut snapshot, scan_limits, &mut work, |instance| {
+                    self.offer(&instance, candidates, limits, control, progress, execute)
+                })
+            }
+            Err(stop) => Err(source::ScanFailure {
+                cause: source::ScanCause::Source(stop),
+                statistics: work.source_statistics(0),
+            }),
+        };
+        // The owned source snapshot has dropped before its reservation is released.
+        self.round_mask_bytes = 0;
+        result
+    }
+
     fn conclusions(
         &self,
         program: &Program,
@@ -504,6 +617,7 @@ impl State {
             atoms: Vec::new(),
             payload_bytes: 0,
             fixed_bytes,
+            round_mask_bytes: 0,
             words,
             snapshots: zeros(bits)?,
             seeds: zeros(bits)?,
@@ -536,6 +650,7 @@ impl State {
         if self
             .fixed_bytes
             .checked_add(total)
+            .and_then(|bytes| bytes.checked_add(self.round_mask_bytes))
             .ok_or(Stop::Allocation)?
             > limits.max_host_bytes
         {
@@ -574,6 +689,7 @@ impl State {
             .checked_mul(GROWTH_MASK_VECTORS * size_of::<u32>())
             .and_then(|n| n.checked_add(base))
             .and_then(|n| n.checked_add(payload_bytes))
+            .and_then(|n| n.checked_add(self.round_mask_bytes))
             .ok_or(Stop::Allocation)?;
         if peak > limits.max_host_bytes {
             return Err(Stop::Allocation);

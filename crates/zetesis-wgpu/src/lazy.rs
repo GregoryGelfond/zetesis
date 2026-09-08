@@ -101,10 +101,41 @@ impl GpuLazyOracle {
         limits: GpuLimits,
         control: &Control,
     ) -> Result<lazy::Batch, lazy::Failure<GpuError>> {
+        self.check_batch_with_source(
+            program,
+            seeds,
+            source_limits,
+            limits,
+            lazy::SourceSelection::Union,
+            control,
+        )
+    }
+
+    /// Check the same seed occurrences with explicit host source selection.
+    /// [`lazy::SourceSelection::Worlds`] removes positive prefixes with no
+    /// current-world witness before transport. The device still checks every
+    /// positive antecedent and frozen gate; its ABI and execution are unchanged.
+    /// Source mask storage/work share the supplied source budgets, and their
+    /// progress is distinct from actual submitted device work.
+    ///
+    /// # Errors
+    /// Preserves [`Self::check_batch`]'s failure and incomplete-coverage contract.
+    /// This opt-in path requires its own physical-device qualification; portable
+    /// semantic and transport tests do not establish hardware execution.
+    pub fn check_batch_with_source(
+        &mut self,
+        program: &Program,
+        seeds: &[Seed],
+        source_limits: lazy::Limits,
+        limits: GpuLimits,
+        selection: lazy::SourceSelection,
+        control: &Control,
+    ) -> Result<lazy::Batch, lazy::Failure<GpuError>> {
         self.statistics = LazyGpuStatistics::default();
-        let result = lazy::check_with(program, seeds, source_limits, control, |chunk| {
-            self.execute(chunk, limits, control)
-        });
+        let result =
+            lazy::check_with_source(program, seeds, source_limits, selection, control, |chunk| {
+                self.execute(chunk, limits, control)
+            });
         if matches!(
             &result,
             Err(lazy::Failure {
@@ -439,20 +470,23 @@ mod tests {
         )
         .unwrap();
         let seeds = [Seed::new(&program, []).unwrap()];
-        lazy::check_with(
-            &program,
-            &seeds,
-            lazy::Limits {
-                max_atoms: 33,
-                ..lazy::Limits::default()
-            },
-            &Control::default(),
-            |chunk| {
-                assertion(chunk);
-                lazy::evaluate(chunk)
-            },
-        )
-        .unwrap();
+        for selection in [lazy::SourceSelection::Union, lazy::SourceSelection::Worlds] {
+            lazy::check_with_source(
+                &program,
+                &seeds,
+                lazy::Limits {
+                    max_atoms: 33,
+                    ..lazy::Limits::default()
+                },
+                selection,
+                &Control::default(),
+                |chunk| {
+                    assertion(chunk);
+                    lazy::evaluate(chunk)
+                },
+            )
+            .unwrap();
+        }
     }
 
     #[test]
