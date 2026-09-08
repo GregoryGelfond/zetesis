@@ -28,7 +28,7 @@ all source profiles and execution plans.
 | `zetesis-ferraris` | Finite formula DAG transforms, exhaustive reduct checking, checked tight support plans and normal-rule formula translation |
 | `zetesis-objective` | Lifted positive objective joins, global tuple coalescing, checked costs and explicit per-model limits |
 | `zetesis-sat` | Native bounded candidate and frozen-reduct countermodel search with independent witness validation |
-| `zetesis-wgpu` | Bounded static integer oracle, relational lazy source execution , general Ferraris propagation and standalone ranked-support primitives; native adapter selection, resident buffers and GPU result transport |
+| `zetesis-wgpu` | Bounded static integer oracle, relational lazy source execution, general Ferraris propagation and standalone ranked-support primitives; native adapter selection, resident buffers and GPU result transport |
 | `zetesis-cli` | Prepared-input sessions, typed solve configuration/outcomes, bounded human/JSON views and process adaptation |
 | `zetesis-telemetry` | Optional typed host stage measurements, independent of rendered diagnostics |
 | `zetesis-experiments` | Standalone static, lazy-source, general-formula and matched tight-certificate qualifications, explicit CPU residual measurements and Criterion regression benchmarks |
