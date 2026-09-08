@@ -118,7 +118,8 @@ ordinary invocations.
 
 On a capable terminal, human answer headings use cyan with a bold `Answer:` label;
 optimization metadata uses italic green. Solve metadata on stderr uses blue
-labels and italic gray values. Colors come from your terminal palette.
+labels and italic gray values. The untagged `SATISFIABLE` and `UNSATISFIABLE`
+verdicts use bold italic gray. Colors come from your terminal palette.
 `--color auto|always|never` controls styling. Automatic mode resolves stdout and
 stderr independently, respects a nonempty `NO_COLOR` and `TERM=dumb`, and leaves
 each redirected stream plain. JSON never contains styling.
@@ -215,49 +216,63 @@ Neither proposed values nor possible-support membership establish truth.
 The current [Lean audit](proofs/verification/aggregate-bounds-lazy-metal-20260907/README.md)
 checks 723 laws across 57 modules; Rust and WGSL correspondence remains unproved.
 
-The **2026-09-07 dependency checkpoint** passes **94 unchanged
-non-clingcon kr-domains cases**,
-checking answer contracts, costs, counts and optimum ties. All **24 selected
-upstream clingo assertions** passed with 73 complete full-model occurrences,
-retaining original bytes and provenance. Final local gates pass **1,419 workspace
-test/doc checks** and **284 CPU-only CLI checks**, with explicit external/device
-ignores retained. Local line coverage is **91.1452% workspace / 91.7886% CPU-only
-CLI**; the pinned Lean build and audit check **702 theorems in 53 modules**.
-The four release commands are installed. The
-[checkpoint](docs/verification/dependency-tranche-20260907/README.md) states
-the source/binary scopes and limitations; hosted CI attaches to each published
+The **2026-09-07 aggregate-bounds and lazy Metal checkpoint** passes all **94 clean
+non-clingcon kr-domains cases**, checking answer contracts, costs, counts and
+optimum ties across 1,931 selected model occurrences. All **24 selected upstream
+clingo assertions** pass with 73 full-model occurrences. Final local gates pass
+**1,707 workspace test/doc checks** and **300 CPU-only CLI checks**, with explicit
+external/device ignores retained. Corrected production line coverage is
+**91.0705% workspace / 92.0126% CPU-only CLI** before the final status-styling
+slice; both independent floors remain 91%. Hosted CI checks the published revision.
+The [checkpoint](docs/verification/aggregate-bounds-tranche-20260907/README.md)
+records the rebuilt five release commands, source/binary identities, review
+findings and limitations. Hosted CI attaches separately to each published
 revision. The
 [verification record](docs/verification/status.md) indexes historical results.
 
-The [clean Lean build and audit](proofs/verification/dependency-tranche-20260907/README.md)
+The [clean Lean build and audit](proofs/verification/aggregate-bounds-lazy-metal-20260907/README.md)
 preserve the prior semantic sources and theorem/axiom records. These are checked
 semantic laws, not a proof of the Rust/GPU implementation. Physical-device
 qualification retains its separately dated executable identity.
 
-The [last qualified end-to-end CPU comparison](docs/verification/dependency-performance-20260907/README.md)
-uses the installed dependency-checkpoint build, 21 timed alternating pairs per case, one worker
-per solver and complete answer/optimal-tie enumeration. All three native routes
-select eager grounding and certified tight-support checking automatically:
+The [three-case end-to-end CPU comparison](docs/verification/ordinary-cpu-refresh-20260907/README.md)
+records its rebuilt solver binary, 21 alternating timed pairs per case, one worker
+per solver and complete answer/optimal-tie enumeration. Native runs explicitly
+request eager grounding; automatic oracle selection uses certified tight-support
+checking for these three inputs:
 
-| Original input | zetesis median | clingo 5.8.2 median | zetesis / clingo |
+| Clean input | zetesis median | clingo 5.8.2 median | zetesis / clingo |
 |---|---:|---:|---:|
-| SEND + MORE = MONEY | 41.02 ms | 12.78 ms | 3.210 |
-| Eight queens, variant 02 | 105.31 ms | 120.95 ms | 0.871 |
-| Task allocation, variant 04 / larger mix | 131.26 ms | 194.29 ms | 0.676 |
+| SEND + MORE = MONEY | 40.57 ms | 12.89 ms | 3.148 |
+| Eight queens, variant 02 | 105.63 ms | 121.46 ms | 0.870 |
+| Task allocation, variant 04 / larger mix | 131.55 ms | 183.67 ms | 0.716 |
 
-All 150 comparison invocations preserve complete answer contracts. Zetesis is
-12.9% faster on this queens input and 32.4% faster on this task-allocation input;
+All 150 comparison invocations and three separate diagnostic runs preserve the
+complete reported-answer contracts. zetesis uses 13.0% less median wall time on
+this queens input and 28.4% less on this task-allocation input;
 clingo remains substantially faster on SEND. These are workload-specific CPU
 results, not a general ranking or a controlled change from the previous release.
-Separate single `--stats` observations put SEND grounding at **19.74 ms** and
-solving at **16.83 ms**. Queens and task allocation spend most of their measured
+Separate single `--stats` observations put SEND grounding at **18.60 ms** and
+solving at **17.26 ms**. Queens and task allocation spend most of their measured
 driver time solving. These instrumented observations are not phase medians.
+Wall times include process capture with one-millisecond idle polling, startup
+and output. Different human/JSON encoding costs are included. Peak RSS is not
+measured by this command.
+
+The separate [six-encoding queens comparison](docs/verification/queens-performance-20260907/README.md)
+uses the final release binary and the same CPU/eager protocol at size eight.
+All 306 observations pass, with 92 displayed boards per encoding. Native/clingo
+median times in milliseconds are **10.84/6.24**, **108.82/126.41**,
+**9.43/6.30**, **9.37/6.24**, **12.36/6.28** and **12.38/6.30** for variants01–06.
+zetesis is faster on variant02; clingo is faster on the other five. This broader
+comparison limits the earlier queens win to that encoding and identifies both
+candidate-search cost and compact-encoding overhead for further measurement.
 
 The current [bounded expression-storage experiment](docs/verification/evaluation-scratch-20260907/README.md)
 reduces median eager admission by 4.89% for SEND and 8.92% for queens02 in a
 controlled comparison. It reuses empty storage within a join cursor and preserves
-the checked arithmetic operations. These measurements exclude parsing and solving;
-the end-to-end comparison above predates that change.
+the checked arithmetic operations. These measurements exclude parsing and solving.
+The end-to-end comparison above includes the change but does not isolate its effect.
 
 The new [matched lazy CPU oracle experiment](docs/verification/ordered-joins-20260907/README.md)
 measures 61.9–62.7% less time for sparse scalar joins at 256 rows and
@@ -274,7 +289,7 @@ microbenchmarks have mixed timing results; no new GPU speedup is claimed here.
 The required [full corpus matrix](docs/design/corpus-performance.md) will compare
 every non-clingcon kr-domains case across eager/lazy and CPU/Metal configurations
 with clingo, retaining unsupported and incomplete cells. It has not yet been
-collected; the table above covers only the three named CPU cases.
+collected; the current end-to-end campaigns cover the named CPU cases only.
 
 ## Libraries and mathematical specification
 

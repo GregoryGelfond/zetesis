@@ -493,9 +493,11 @@ passed all 94 unchanged entry graphs under default limits, preserving their
 original display/count/cost and optimum contracts. Hidden full models are not
 reconstructed from `#show`. The later [execution checkpoint](verification/execution-tranche-20260907/README.md)
 records its own completed qualification. The current
-[dependency checkpoint](verification/dependency-tranche-20260907/README.md)
-passes final workspace/CPU tests, strict gates, both coverage floors and fresh
-94/24 release replays. General factored body construction, retained candidate traversal, root
+[aggregate-bounds and lazy Metal checkpoint](verification/aggregate-bounds-tranche-20260907/README.md)
+passes final workspace/CPU tests, strict gates and fresh 94/24 release replays.
+Its local coverage passes both floors at the separately identified pre-styling
+revision; hosted CI checks coverage on the published revision.
+General factored body construction, retained candidate traversal, root
 failed-literal propagation, indexed exact semantic blocks and optional objective
 bounds reduce repeated work without changing the original reduct. The
 [objective-pruning protocol](design/objective-pruning.md) keeps dominance and
