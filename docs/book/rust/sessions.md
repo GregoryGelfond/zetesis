@@ -32,8 +32,9 @@ candidates have been checked. Inspect `SemanticOutcome::completion()`; it is
 optional precisely because a consumer may stop before a terminal classification
 exists.
 
-With an objective, the session completes the relevant search before yielding
-retained optimum ties. A score alone is not an optimum certificate. Use the
+With an objective, the search phase ends before retained incumbents are yielded.
+Exhausted search establishes optimum ties; an interrupted phase may yield
+unproved incumbents. A score alone is not an optimum certificate. Use the
 outcome's `optimum_proved()` and interruption information to distinguish proved
 ties from an interrupted incumbent. Yielded tie limits also affect how much of
 the selected family a consumer receives.

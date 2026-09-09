@@ -43,6 +43,9 @@ can continue using `target`.
 
 Each example checks a semantic result and propagates typed failures. No GPU
 support or performance claim follows from these portable example tests.
+The same files are registered as Cargo examples, so workspace formatting and
+all-target Clippy checks apply to them. The authored-lint inventory includes
+`docs/book/examples` as a maintained source root.
 Lean blocks are excerpts or consumer examples, not Rust doctests. Build their
 own package with:
 

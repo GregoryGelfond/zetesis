@@ -23,7 +23,7 @@ benchmark is not a complete source-language solve.
 Construct an oracle with `GpuOptions` and an explicit `GpuSelection` where
 reproducibility requires a particular backend. Selection distinguishes physical
 adapters from fallback/software devices and retains adapter metadata. Consult
-[rustdoc](src/lib.rs) for exact constructors, limits and result types.
+[public API](src/lib.rs) for exact constructors, limits and result types.
 
 ## Exact completion and failure
 

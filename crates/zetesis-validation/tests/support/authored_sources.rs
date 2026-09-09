@@ -13,7 +13,8 @@ const MAX_DIRECTORY_DEPTH: usize = 64;
 
 /// Workspace packages follow the repository's crates/* membership. The two
 /// maintained standalone packages are explicit. Each package contributes only
-/// src, tests, benches, examples and its optional build.rs.
+/// src, tests, benches, examples and its optional build.rs. Shared manual examples
+/// are maintained source too, even though they live outside package directories.
 pub(super) fn inventory(root: &Path) -> io::Result<Vec<PathBuf>> {
     let mut walk = Inventory::default();
     let mut packages = Vec::new();
@@ -52,6 +53,7 @@ pub(super) fn inventory(root: &Path) -> io::Result<Vec<PathBuf>> {
             walk.source(build)?;
         }
     }
+    walk.directory(&root.join("docs/book/examples"))?;
     walk.sources.sort();
     Ok(walk.sources)
 }

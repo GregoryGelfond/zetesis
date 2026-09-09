@@ -125,6 +125,7 @@ fn inventory_selects_maintained_rust_roots() {
         "crates/example/tests/.git/hidden.rs",
         "crates/example/tests/nested/case.rs",
         "crates/target/src/lib.rs",
+        "docs/book/examples/session.rs",
         "experiments/gate-transfer/src/lib.rs",
         "validation/reference/src/lib.rs",
     ];

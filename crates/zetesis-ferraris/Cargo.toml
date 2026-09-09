@@ -24,5 +24,9 @@ harness = false
 name = "frozen_reduct"
 harness = false
 
+[[example]]
+name = "book-reduct"
+path = "../../docs/book/examples/reduct.rs"
+
 [lints]
 workspace = true

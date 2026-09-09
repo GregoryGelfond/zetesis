@@ -32,3 +32,7 @@ gpu = ["dep:zetesis-wgpu"]
 [[bin]]
 name = "zetesis"
 path = "src/main.rs"
+
+[[example]]
+name = "book-session"
+path = "../../docs/book/examples/session.rs"
