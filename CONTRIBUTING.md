@@ -120,7 +120,17 @@ the tests and independent coverage floors are unchanged. Follow the
 required evidence and restoring hosted checks after the October 1 reset.
 
 Follow the workspace's rustfmt, pedantic Clippy, documentation and authored
-unsafe-code gates. Explain local lint exceptions at their point of use. Avoid
+unsafe-code gates. Resolve diagnostics in the implementation; a passing command
+does not justify hiding an unused operation or weakening a check. Do not suppress
+`dead_code`, its `unused` parent group or `warnings`, whether with `allow` or
+`expect`. Do not manufacture uses or widen visibility to evade these checks.
+Shared test helpers should expose cohesive operations and be compiled only by
+the consumers that need them.
+
+A foreign API can require a signature or field name that conflicts with a style
+lint. Such an exception must use a narrow `expect` on the required declaration
+and explain the actual interface constraint. It remains an exception, subject to
+review; this is not permission to suppress implementation defects. Avoid
 unbounded recursion on foreign input, unchecked arithmetic and hidden allocation
 or fallback behavior. Make malformed input, cancellation, partial results and
 writer/device failures intelligible typed outcomes.

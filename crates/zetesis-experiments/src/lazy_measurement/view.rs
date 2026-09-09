@@ -302,8 +302,10 @@ struct CandidateLimits {
 
 #[derive(Serialize)]
 #[serde(remote = "lazy::Limits")]
-// Remote serialization must mirror the existing native limit field names.
-#[allow(clippy::struct_field_names)]
+#[expect(
+    clippy::struct_field_names,
+    reason = "Serde remote fields must match the native resource limits; max_ denotes a ceiling."
+)]
 struct SourceLimits {
     max_candidates: usize,
     max_atoms: usize,
