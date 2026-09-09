@@ -72,6 +72,18 @@ the [ASP-Core-2 choice grammar (§4)](https://arxiv.org/pdf/1911.04326) covers
 classical atom heads. Observable clingo comparisons corroborate the extension
 contract; they do not make its internal data structures authoritative.
 
+[`SignedHeadElements`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/SignedHeadElements.lean)
+extends this distinction to `not` and `not not`. `operand_frozen` fixes either
+default-negated operand's truth in the candidate; `activity_frozen` retains the
+eligibility formula's own reduct. `signed_permission_frozen` explains why these
+operands supply no positive atom permission. Ordinary atomic keys include their
+sign, while Boolean keys retain their source occurrence. `coalesced_group_in_context`
+preserves complete answer sets under its finite family and coalescing hypotheses;
+`nonproducing_group_in_context` shows that a group without positive atomic operands
+can filter the context's answers without creating new support. The embedding into
+the earlier head-element laws is mathematical and does not prescribe a compiler
+rewrite or verify its source catalog.
+
 `AggregateReduct.direct_reduct` relates the failing-subset formula to original
 and frozen eligibility under complete masks. `AggregateRanges` establishes bounds
 on mathematical signed partial sums. `AggregateDependencies` composes complete

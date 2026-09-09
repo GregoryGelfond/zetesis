@@ -92,7 +92,7 @@ separated in the [Lean proof boundary](../lean/correspondence.md).
 | `#min`, `#max` heads | Numeric first tuple values; positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions and Boolean operands | Missing/nonnumeric measured values, the numeric endpoint guard, unsupported eligibility contexts and objective-relevant heads remain refused |
 
 A tuple becomes active when any occurrence has a true head operand and satisfies
-its own condition. An atomic operand is true when that atom is selected;
+its own condition. An unsigned atomic operand is true when that atom is selected;
 `#true` is true and `#false` is false. A sum counts each active tuple's weight
 once. Thus `1#sum{1:a;1:b}1.` admits `{a}`, `{b}` and `{a,b}`. Distinct
 complete tuples remain distinct contributions even if they share an atom:
@@ -110,8 +110,8 @@ Conversely, `1#max{0:a;1:a}1.` admits `{a}`, whose selection activates both
 complete tuples. An extremum bound supplies no support for an otherwise
 unsupported atom. The optional count specialization still requires its stronger
 tuple/atom bijection certificate; admitting aliases does not grant that certificate.
-Default-negated or Boolean operands also prevent a group from supplying that atom-only
-certificate. Other independently qualified groups remain eligible for the
+Default-negated or Boolean operands also prevent a group from supplying that
+atom-only certificate. Other independently qualified groups remain eligible for the
 specialization. A false operand or body does not bypass validation of a closed
 measured value: `0#sum{word:#false}0:-#false.` remains refused.
 

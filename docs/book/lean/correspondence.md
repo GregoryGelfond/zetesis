@@ -23,10 +23,23 @@ correspondence.
 
 The head-element laws assume a correctly identified activity family. Explicit
 aggregate elements use complete tuple keys; ordinary Boolean choices use original
-source occurrences, with local witnesses coalesced within an occurrence. The Rust
+source occurrences, with local witnesses coalesced within an occurrence. Ordinary
+atomic choices distinguish their default-negation sign as well as their atom.
+The Rust
 source adapter checks syntax-tree and provenance correspondence before retaining
 those keys. Tests cover duplicate rules, separate files and finite interpretations;
 proving this adapter implements the Lean family remains a separate obligation.
+
+The shared Rust
+[`HeadLiteral`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ir.rs)
+retains the sign and operand. Its `positive_atom` operation controls producer
+eligibility, while
+[`Builder::head_literal`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground.rs)
+constructs signed truth. This is the implementation distinction corresponding to
+the signed activity and permission laws. The finite `M/J` tests inspect the whole
+admitted theory, including necessary-support guards and candidate-frozen bounds;
+they do not establish pointwise equivalence between unguarded source formulas and
+every internal activity node.
 
 ## Read hypotheses as caller obligations
 
