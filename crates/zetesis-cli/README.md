@@ -26,9 +26,11 @@ options. `--help-all` additionally describes oracle selection, workers, batching
 and resource ceilings. Both views describe the same solver.
 
 Without objectives, the default returns one answer set; `--models 0` requests
-exhaustive enumeration. With an active objective, search runs to exhaustion to
-establish optimality, then displays up to the requested number of tied optimum
-models. Equal displays can represent distinct full answer sets.
+exhaustive enumeration. With an active objective, the search phase ends before
+retained incumbents are displayed. Exhaustion establishes optimality; an
+interrupted search can return incumbents whose optimality remains unproved.
+The model limit bounds displayed ties. Equal displays can represent distinct
+full answer sets.
 
 Every accepted answer must satisfy the original program and its reduct
 acceptance criterion. For example, `a :- a.` has only the empty answer set.

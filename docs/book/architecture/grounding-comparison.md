@@ -74,8 +74,10 @@ The lazy source scanner retains relation indexes, join frames and bounded
 instances rather than a complete ground-rule vector. Shared rounds may scan
 the union of candidate worlds; individual-world checks prevent cross-world
 combinations from becoming facts. Optional membership masks prune only prefixes
-with no witness in the current snapshots. The ordinary shared CLI route uses
-union scanning; the world-mask policy is an explicit library choice.
+with no witness in the current snapshots. The shared CPU CLI exposes union and
+world-mask policies through `--source-batching union|worlds`. Ordinary lazy GPU
+execution uses union scanning; its world-mask policy is an explicit library
+choice.
 
 Candidate coverage is a separate potential cost. `Candidates` begins with an
 empty seed without expanding the carrier, but complete enumeration must still
