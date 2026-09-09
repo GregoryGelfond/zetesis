@@ -2,9 +2,8 @@
 
 This is a mathematical reading of
 [`CertifiedExecution.completed_membership_exact`](../Zetesis/CertifiedExecution.lean),
-the first pilot under the [structured proof convention](../STYLE.md).
-The checked declaration is authoritative. Its statement and assumptions are
-unchanged by the proof-body refactor.
+using the [structured proof convention](../STYLE.md). The checked declaration
+is authoritative; the guide makes its assumptions and argument explicit.
 
 ## The objects and the claim
 

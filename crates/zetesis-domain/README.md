@@ -1,11 +1,11 @@
 # zetesis-domain
 
 Conservative argument domains over the exact borrowed
-`themelios_program::program::Program`. The production dependency is the estate's
-pinned `themelios-program`; this crate has no solver, oracle, CLI, GPU or
-`zetesis-core` dependency. It neither accepts source strings nor reparses,
-normalizes, unpools or grounds its input. It is a separate foundation that can
-later be reused by themelios.
+`themelios_program::program::Program`. The crate uses the pinned
+`themelios-program` dependency declared in the workspace; it has no solver,
+oracle, CLI, GPU or `zetesis-core` dependency. It neither accepts source strings
+nor reparses, normalizes, unpools or grounds its input. Callers supply the complete
+logical program whose argument domains they want to analyze.
 
 For a program corresponding to:
 

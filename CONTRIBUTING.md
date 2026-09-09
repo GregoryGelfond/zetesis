@@ -4,10 +4,11 @@ Start with the [guided tour](docs/book/architecture/tour.md), then the
 [library map](docs/book/rust/libraries.md). The [documentation build guide](docs/book/building.md)
 explains how to build the manual and exercise its Rust examples.
 
-zetesis is a native member of the themelios, keryx and morphe estate. Its own
-purpose is exact answer-set solving through the reduct, with composable parallel
-and device execution. A research milestone narrows supported features; it does
-not lower the standards for authored code. The MIT license names Gregory Gelfond.
+zetesis implements exact answer-set solving through the reduct, with composable
+parallel and device execution. It uses themelios for source representation and
+analysis. Every supported profile follows the same correctness and authored-code
+standards; unsupported features require explicit boundaries. The MIT license
+names Gregory Gelfond.
 
 ## Design from the logic programmer's questions
 

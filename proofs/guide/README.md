@@ -35,10 +35,10 @@ law, for example, cannot establish that a source grounder supplied every require
 instance merely because the law accepts a finite list.
 
 The [proof convention](../STYLE.md) explains how substantial arguments should be
-read and written. Small proofs may stay compact. Only the named pilot has been
-explicitly identified as the worked example; new substantial proofs follow the
-same convention. The entire existing library has not been refactored into that
-style.
+read and written. The [membership guide](certified-membership.md) works through
+one complete proof using named claims and explicit assumptions. The library
+contains both compact and expanded proofs; each statement and its hypotheses
+remain the contract to inspect.
 
 The execution extensions connect these paths to [signed singleton heads](../Zetesis/SingletonHeads.lean),
 [constructor shape and extraction](../Zetesis/ConstructorPatterns.lean),

@@ -91,20 +91,19 @@ semantics, algorithms over abstract data, representation refinements and concret
 counterexamples. Multiple layers may share a file when that aids comprehension;
 a new directory hierarchy is not itself a mathematical improvement.
 
-## First pilot and continuing migration
+## Worked example and review
 
-The first pilot is `CertifiedExecution.completed_membership_exact` in
-[CertifiedExecution.lean](Zetesis/CertifiedExecution.lean). Its theorem name,
-statement and assumptions are preserved. The [worked reading](guide/certified-membership.md)
-explains its complete argument without assuming tactic fluency. The remainder of
-the library is not claimed to have been converted to this style.
+`CertifiedExecution.completed_membership_exact` in
+[CertifiedExecution.lean](Zetesis/CertifiedExecution.lean) demonstrates the
+convention. The [worked reading](guide/certified-membership.md) explains its
+statement, assumptions and complete argument without assuming tactic fluency.
+The library contains both compact and expanded proofs.
 
-Adopt the convention for new substantial proofs and improve existing central
-proofs in bounded reviewed slices. Suggested next targets are frozen-reduct
-preservation, complete lazy acceptance and batched coverage. Preserve theorem
-statements first; factor reusable intermediate laws only where their independent
-purpose is clear. A browsable proof viewer may be useful later, but checked Lean
-source and a readable guide are sufficient to start.
+Use the convention for substantial proofs. When improving an existing proof's
+presentation, preserve its public statement and assumptions unless a semantic
+change is intended and reviewed. Factor reusable intermediate laws where their
+independent purpose is clear. Review both the checked Lean source and the guide
+that explains its argument.
 
 Changes pass the pinned clean build, strict complete axiom audit and the retained
 proof-record checker. The record preserves previous sources/artifacts as needed,
