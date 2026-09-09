@@ -3,7 +3,9 @@
 The starting checkpoint is `53f98ac`, with compiled release source
 `0b72472`, recorded local gates, physical Metal qualification and frozen
 measurements. The [language-closure plan](language-closure-tranche.md) governs
-this work. No new language extension is qualified by this progress record.
+this work. Focused source evidence is now integrated; repository-wide local
+qualification is incomplete. This record does not claim full language closure
+or qualification of the new sources as a release checkpoint.
 
 | Capability | Bounded first slice | Required result |
 |---|---|---|
@@ -16,6 +18,32 @@ matches, cycles and multiple producers from its certificate. Those remain
 visible follow-on obligations. The count slice preserves the existing weighted
 and extremal admission profiles; it does not silently promote every head
 aggregate after removing a bijection check.
+
+The [count-head slice](../verification/count-head-activity-20260908/README.md)
+passes 35 original clingo sources with 67 full models. Its separate permission
+and activity maps preserve both tuple/atom alias directions. The
+[objective slice](../verification/objective-forwarding-20260908/README.md)
+admits 38 new originals with 69 full model/cost records and retains ten explicit
+mixed-extrema refusal controls. A discovered pre-existing direct-observer
+cost-layout defect now receives a bounded refusal. That is a remaining zetesis
+implementation gap, not a themelios rejection or a modeling-error claim.
+
+Combined writer-free prepared sessions exercise five original programs with
+independent aliased count heads and forwarded objective producers, across
+pruning on/off, one/four completion workers and batches of one/eight. All 40
+sessions exhaust the relevant search and retain the expected full optimal
+models; assertions require actual pruning and batched completion work. The
+five corresponding objective-dependent count-head cases remain located
+refusals. Their clingo behavior is retained separately as gap evidence rather
+than silently broadening the successful composition claim.
+
+Further concrete follow-ons are nonnumeric literal objective weights, broader
+objective presence carriers, and objective-relevant function heads. The first
+two are recorded with original references in the objective evidence; they do
+not disappear when an equivalent variable-weight profile is admitted. The
+Lean library adds nine `CountHeadActivity` and six `ObjectiveTransport` laws,
+with a clean 834-theorem/74-module build and full axiom audit. These semantic
+laws retain their explicit compiler-correspondence limitations.
 
 An intake check also refines the Boolean-head ledger. With source
 `0b72472` and clingo 5.8.2, `#false.` already completes as UNSAT in both. In

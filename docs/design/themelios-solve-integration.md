@@ -39,9 +39,12 @@ Conversely, a requested complete observer must either fulfill its contract or
 return a typed refusal. The draft's observer capability and optional result
 should be reconciled explicitly in conformance tests when the shared API lands.
 
-The current scalar core is narrower than themelios's `Symbol` algebra. Adapter
-conversion must preserve identity for admitted values and refuse unsupported
-ones; compound/strong terms cannot be flattened into strings or silently lost.
+The core `Value` representation already includes extrema and structured values,
+including signed functions and tuples. Particular admission and execution
+profiles remain narrower than the complete shared language, and a public typed
+adapter is still missing. Adapter conversion must preserve identity for admitted
+values and refuse unsupported ones; compound/strong terms cannot be flattened
+into strings or silently lost.
 Canonical atom order, model identity, hidden-model multiplicity, objective
 priorities and source provenance must survive round trips. The estate's typed
 result models own human and machine views; CLI output is one view only.
@@ -79,7 +82,55 @@ backend planning must account for this placement and transfer cost.
 The [Rust function execution contract](rust-functions.md) specifies versioned
 results, admission, lazy coverage, limits and the future refinement obligations.
 
+## Future numerical capabilities in one solver
+
+The intended extension direction includes clingcon-compatible finite-domain
+integer constraints and clingo-dl-compatible difference constraints in one
+zetesis installation, alongside Rust ground-time functions. The reference
+projects describe their respective [finite-domain](https://github.com/potassco/clingcon)
+and [difference-logic](https://github.com/potassco/clingo-dl) scope. This is a
+future capability target, not current runtime compatibility or a commitment to
+reuse either project's clingo-bound implementation.
+
+themelios already represents theory atoms in its syntax and owned program
+layers. Reuse that frontend and its origins. Parsing is the starting boundary;
+the native extension must still establish theory meaning, truth/definedness
+policy, variable ownership, sound propagation and complete numerical witnesses.
+Candidate pruning and reduct acceptance must retain their separate contracts.
+The [theory investigation](theory-propagators/README.md) develops those obligations.
+
+One solver product can compose separate Rust library capabilities beneath a
+shared extension boundary. Coexistence requires explicit rules for shared
+variables, combined consistency and witness validation; registering two modules
+does not by itself establish a combined theory. Keep each capability's resource,
+cancellation, determinism and execution-placement contracts inspectable.
+
+Theory reasoning could avoid expensive Boolean expansion or reject inconsistent
+candidate regions earlier. Rust `@` functions provide a different operation:
+bounded value construction under the shared function contract. They do not
+acquire propagation or theory-solving semantics merely by computing a number.
+Both are potential performance opportunities to measure on applicable workloads.
+Their release placement remains a separate decision from the current base
+language closure and API review.
+
 ## Conformance before integration
+
+The current writer-free `PreparedInput`, `Session`, `SessionModel`, `SolveConfig`
+and `SemanticOutcome` boundaries already permit reuse of an admitted owner and
+typed iteration without clap parsing or rendered output. They currently live in
+`zetesis-cli`, which still brings command-adapter dependencies to a library
+consumer. The dedicated API review should move reusable orchestration beneath
+that adapter, preserving one implementation shared by library and CLI callers.
+That is a dependency-boundary task, not a reason to duplicate the session engine
+or prematurely copy the unimplemented themelios session API.
+
+Require small Rust consumer programs that exercise grounding alone, solving a
+prepared owner, and their composition through the intended library dependency.
+They should use typed limits, cancellation, diagnostics, statistics and outcomes;
+source loading and human/JSON views belong at the consumer boundary. An eventual
+themelios adapter should translate the shared contract into those operations
+without another grounding or reduct-acceptance implementation. A thin adapter
+must still report unsupported capabilities and incomplete work explicitly.
 
 Use the same typed programs through the clingo-backed themelios implementation
 and a zetesis adapter, comparing complete outcomes and capability refusals.

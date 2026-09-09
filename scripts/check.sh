@@ -26,7 +26,7 @@ if [ "$mode" = portable ] || [ "$mode" = full ]; then
     cargo bench --locked -p zetesis-ferraris --bench native_aggregates -- --test
 fi
 if [ "$mode" = oracle ] || [ "$mode" = full ]; then
-    cargo test --locked -p zetesis-themelios --test program_parts --test conditional_consumers --test weighted_heads --test nonbinding_guards --test extrema_heads --test count_plans -- --ignored --nocapture
+    cargo test --locked -p zetesis-themelios --test program_parts --test conditional_consumers --test weighted_heads --test nonbinding_guards --test extrema_heads --test count_plans --test count_head_activity --test objective_forwarding -- --ignored --nocapture
     cargo test --locked -p zetesis-themelios --test aggregate_dependencies --test aggregate_consumers --test choice_consumers --test outer_negative_consumers --test outer_ranges --test negative_count_eligibility --test structured_witnesses -- --ignored --nocapture
     cargo test --locked -p zetesis-ferraris --test aggregate_clingo -- --ignored --nocapture
     cargo test --locked -p zetesis-ferraris --test extrema_clingo --test value_extrema -- --ignored --nocapture

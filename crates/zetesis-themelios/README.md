@@ -8,7 +8,7 @@ The library keeps three explicit admission contracts:
 |---|---|---|
 | `admit` | Relational `Program` | Strict S0 normal rules, constraints, singleton unconditioned choices, scalar/closed structural terms, ordinary positive/default-negated literals, scalar equality/disequality |
 | `admit_extended` / `admit_bundle_extended` | Relational `Program` and source evidence | S0 plus acyclic closed constants, checked ground scalar arithmetic, finite fact-head pools/intervals, `#defined`, signature/empty `#show`, and original include graphs for the bundle API |
-| `admit_formula` / `admit_bundle_formula` | Ferraris `Theory`, dense original `Atom` identities, lifted objectives, and source evidence | Extended closed-value forms plus evaluated signed disjunctive heads with empty/explicitly true Boolean conditions, finite rule/head pools preserving whole-rule products and local choice groups, finite conditional choices, numeric choice bounds, positive function `#count`, numeric signed `#sum`, nonnegative numeric `#sum+` and numeric-valued `#min`/`#max` heads with signed eligibility and checked tuple/atom correspondence, top-level numeric/dependent intervals in positive disjunctive and choice heads, body count/sum/sum+ and complete-value min/max comparisons and acyclic finite equality assignments, finite comparison-generated bindings, bounded universal body conditionals, and the bounded `#minimize`/`#maximize`/positive weak-constraint profile below |
+| `admit_formula` / `admit_bundle_formula` | Ferraris `Theory`, dense original `Atom` identities, lifted objectives, and source evidence | Extended closed-value forms plus evaluated signed disjunctive heads with empty/explicitly true Boolean conditions, finite rule/head pools preserving whole-rule products and local choice groups, finite conditional choices, numeric choice bounds, positive function `#count` heads with complete-tuple activity, numeric signed `#sum`, nonnegative numeric `#sum+` and numeric-valued `#min`/`#max` heads with a checked tuple/atom bijection, signed head eligibility, top-level numeric/dependent intervals in positive disjunctive and choice heads, body count/sum/sum+ and complete-value min/max comparisons and acyclic finite equality assignments, finite comparison-generated bindings, bounded universal body conditionals, and the bounded `#minimize`/`#maximize`/positive weak-constraint profile below |
 
 The CLI chooses an admitted source route automatically. The library APIs remain explicit so callers can require a relational or formula result. `ExpansionFailure::needs_formula_admission()` permits a formula retry only for an unsupported profile or a scalar operation that stopped at a variable. Syntax errors, arithmetic undefinedness/overflow, exceeded budgets, and independent core failures are not profile retries.
 
@@ -22,8 +22,9 @@ themelios analysis, then consume the receipt with `ground()` or
 `admit_formula` functions compose the same two operations.
 
 Preparation is a checked compiler boundary; later grounding can still refuse
-undefined arithmetic or exhausted resources. `analysis_basis()` identifies a
-`NormalizedProgram` or a `DependencyProjection`. The latter retains every
+undefined arithmetic, unqualified objective presence or exhausted resources.
+`analysis_basis()` identifies a `NormalizedProgram` or a `DependencyProjection`.
+The latter retains every
 conditional alternative's predicate, strong sign, arity and default-negation
 mode in pool-free syntax, but changes its logical connective for analysis.
 Safety and class verdicts describe that projection, not original source
@@ -54,9 +55,13 @@ source origins, the shared immutable original theory identity and bounded work
 statistics. A candidate enumerator can install that restriction before proposal;
 all acceptance and reduct checks still use the original theory.
 
-The initial profile requires unconditional coalesced element eligibility and a
-complete tuple/atom bijection for function count heads. Upper-bounded partition
-groups must be unconditional or have exactly the global group's activation;
+The planning profile requires coalesced element eligibility represented by the
+canonical true formula and a complete tuple/atom bijection for function count
+heads. An ordinary count head
+without that bijection remains admitted; the optional collector skips that group
+without changing the original theory. Other applicable groups can still produce
+a plan. Upper-bounded partition groups must be unconditional or have exactly
+the global group's activation;
 consequences retain that activation. This also covers negated activation without
 reinterpreting it as positive support. The planner discovers covers greedily in
 retained grounding order and can miss a useful alternative: `NoPlan` describes
@@ -171,7 +176,7 @@ construction, objective or observation matching, budgets or GPU execution.
 
 Formula admission first validates the complete source profile and variable scopes. It then computes a finite possible-positive relation: ground facts seed the relation; normal heads and positive disjuncts follow positive-body joins; choice heads follow both outer and local positive-condition joins. Static comparison filters remain active. Default-negation gates are ignored only in this support computation, so recursive and negative conditions are not mistaken for extensional facts. Constraints and choice bounds never produce atoms.
 
-The computation must complete a full round with no new atoms. Formula construction then uses complete relational joins over that upper bound, retaining the original negative and recursive conditions in the actual formulas. It does not enumerate all substitutions over a global scalar Cartesian product. Bounded choices combine duplicate grounded heads by disjoining eligibility, count each head once, and express bounds as constraints. Double-negated necessary producer guards prune unsupported classical candidates without restricting reduct subsets of an accepted candidate.
+The computation must complete a full round with no new atoms. Formula construction then uses complete relational joins over that upper bound, retaining the original negative and recursive conditions in the actual formulas. It does not enumerate all substitutions over a global scalar Cartesian product. Ordinary bounded choices combine duplicate grounded heads by disjoining eligibility, count each head once, and express bounds as constraints. Double-negated necessary producer guards prune unsupported classical candidates without restricting reduct subsets of an accepted candidate.
 
 Numeric intervals in choice-head arguments use independent local value slots within the original group: `1 {p(1..2)} 1` has the two singleton models. An empty interval retains its surrounding bounds. Scalar arithmetic and top-level interval endpoints may depend on independently bound outer or element-local variables. Pools, nested intervals and closed nonnumeric endpoints remain refused. The [evaluated-head record](../../docs/verification/evaluated-heads-20260906/README.md) documents the current expansion and binding contract; the earlier [interval record](../../docs/verification/choice-intervals-20260906/README.md) preserves its original model/reduct comparisons, resource boundaries and external timeout.
 
@@ -193,10 +198,28 @@ An objective that can depend directly or indirectly on a disjunctive producer re
 
 Formula admission accepts `1#count{X:p(X):X=1..4}2.` with its four singleton and six pair models. Every function-head element retains the complete tuple key, positive derived atom and eligibility condition. Local conditions may contain finite scalar/range binders, evaluated Boolean/comparison filters and positive ordinary atoms, including admitted structured patterns. Positive atoms join the completed possible-support relation and retain their eligibility formulas; membership in that relation never asserts truth. Tuple/head arguments never supply their own bindings. Default-negated and double-negated conditions consume already established inputs and retain their frozen polarity; they never bind variables or establish support.
 
-Each completely instantiated group must have a one-to-one correspondence between distinct tuple keys and distinct atoms. Identical duplicate pairs coalesce; either one key denoting several atoms or one atom denoting several keys is a located refusal. A complete-group check precedes support derivation and final lowering. Only after it succeeds does the group use the established choice permissions and count constraints. Empty groups retain their bounds, all supported numeric guard relations remain available, and count bounds never supply positive support. Full structural keys remain distinct even when their first terms agree.
+Count heads keep atom permission separate from complete-tuple activity. An atom's
+permission uses the disjunction of eligibility from all rows headed by that atom.
+A tuple is active when at least one of its rows has both its head selected and
+its own eligibility satisfied. Each distinct active tuple contributes once,
+even when several heads activate it; one selected head may activate several
+tuples. Thus `1#count{1:a;1:b}1.` has `{a}`, `{b}` and `{a,b}`, while
+`2#count{1:a;2:a}2.` has only `{a}` and `1#count{1:a;2:a}1.` is unsatisfiable.
+Full structural keys remain distinct even when their first terms agree.
 
-Numeric `#sum` and `#sum+` heads now use the same complete tuple/atom check and
-permission formulas. `#sum` accepts signed integer weights; `#sum+` accepts
+Complete-row validation precedes support derivation and final lowering. Empty
+groups retain their bounds, all supported numeric guard relations remain
+available, and bounds never supply positive support. Eligibility retains its
+original frozen reduct in atom permissions; bounds constrain the candidate.
+Distinct complete tuples consume the aggregate-element allowance independently
+of permitted atoms and formula nodes. Exhausted limits return a located failure,
+never a partial admitted theory. The [activity design](../../docs/design/count-head-activity.md)
+and [qualification record](../../docs/verification/count-head-activity-20260908/README.md)
+describe both alias directions and the stricter optional CountPlan premises.
+
+Numeric `#sum` and `#sum+` heads retain the complete tuple/atom bijection check
+while sharing the separate permission and activity representation.
+`#sum` accepts signed integer weights; `#sum+` accepts
 nonnegative integer weights. For example, `2#sum{1:a;2:b}3.` has answer sets
 `{b}` and `{a,b}`. Zero contributes no quantity but still permits its head:
 `0#sum{0:a}0.` admits both `{}` and `{a}`. A private group owns the measure,
@@ -210,10 +233,12 @@ The [weighted-head record](../../docs/verification/weighted-heads-20260908/READM
 keeps the negative-`#sum+` clingo observations separate from the admitted subset.
 Closed unsupported weights are refused before a static outer guard can hide
 them; variable weights are checked on complete possible local rows. Default-negated
-derived head literals, nonnumeric extremal head values, aliases and objective-relevant function
-head producers retain explicit refusals. The [count-head record](../../docs/verification/count-heads-20260907/README.md) gives the initial correspondence, resource and frozen-reduct contracts; the [eligibility extension](../../docs/verification/aggregate-bounds-20260907/README.md) records the admitted positive conditions. The [negative-eligibility extension](../../docs/verification/negative-count-eligibility-20260908/README.md) records default/double negation, complete clingo comparisons and the removal of the now-unused `HeadAggregateCondition` error variant from this unreleased Rust API.
+derived head literals, nonnumeric extremal head values and aliases in weighted
+or extrema heads retain explicit refusals. Objective-relevant function head
+producers also remain refused, including count heads: admitted tuple activity
+alone does not establish objective priority presence. The [count-head record](../../docs/verification/count-heads-20260907/README.md) gives the initial correspondence, resource and frozen-reduct contracts; the [eligibility extension](../../docs/verification/aggregate-bounds-20260907/README.md) records the admitted positive conditions. The [negative-eligibility extension](../../docs/verification/negative-count-eligibility-20260908/README.md) records default/double negation, complete clingo comparisons and the removal of the now-unused `HeadAggregateCondition` error variant from this unreleased Rust API.
 
-Numeric `#min`/`#max` heads use the same checked permission groups. For example,
+Numeric `#min`/`#max` heads retain the checked tuple/atom bijection. For example,
 `1#min{1:a;2:b}1.` admits `{a}` and `{a,b}`. The bound measures selected eligible
 heads; it cannot create support, and zero or negative values never remove
 permission. First tuple values are numeric in this initial profile. Guards use
@@ -395,7 +420,54 @@ All objective variables must be positively bound. Variable arithmetic in weights
 
 For objective-enabled inputs, the frontend follows the pinned themelios dependency graph from the predicates read by objective conditions. Normal producer bodies and choice conditions within that dependency closure must contain no default negation. Relevant producer bodies refuse general aggregate conditions, with the total-assignment observer exception below. Unrelated producers retain their ordinary formula semantics. Negative and aggregate constraints remain supported. This restriction makes objective priority presence compatible with the possible-positive relation: broader grounder simplification of negative producers can remove priority slots, which a gate-ignoring upper bound alone cannot reproduce.
 
-An objective-enabled aggregate producer may be a pure total count/sum or numeric min/max assignment whose generated target occurs in its normal head. Assignment-generated head argument positions are identified structurally and unioned across every producer of a predicate. An objective-relevant total assignment may consume another generated predicate through a single unfiltered positive aggregate-element condition, with distinct variable bindings at its generated argument positions. Ordinary producer joins over generated outputs and choice producers remain refused; the established upstream dependency graph enforces that boundary. In objective conditions, every generated position must be a fresh variable occurring only once across positive atoms and absent from filters; it may supply the weight or tuple. Non-generated positions may still join ordinary relations. Constants and shared/filtered generated outputs remain typed refusals. This preserves a total assignment's existential priority presence without treating all proposed values as realizable, and recognizes no predicate or domain names.
+An objective-enabled aggregate producer may be a pure total count/sum or extrema
+assignment whose generated target occurs in its normal head, subject to the
+presence boundary below. Assignment-generated head argument positions are
+identified structurally and unioned across every producer of a predicate. An
+objective-relevant total assignment may consume another generated predicate
+through a single unfiltered positive aggregate-element condition, with distinct
+variable bindings at its generated argument positions.
+
+Total generated relations may also pass through finite chains of ordinary
+predicate renamings and argument permutations. Each forwarded predicate must
+have one defining rule, exactly one positive body atom and a bijection between
+the distinct body and head argument variables; its dependency component must be
+acyclic. For example, `n(N):-N=#count{}.p(X):-n(X).#minimize{X@7:p(X)}.` retains
+`n(0)`, `p(0)` and a present priority-7 zero cost. Joins, filters, constants,
+repeated variables, constructed arguments, alternative producers and cycles do
+not acquire this forwarding certificate. Choice producers over generated
+outputs retain their separate refusal.
+
+Forwarding transports the generated positions before checking subsequent
+consumers. In objective conditions, every generated position must be a fresh
+variable occurring only once across positive atoms and absent from filters; it
+may supply the weight or tuple. Non-generated positions may still join ordinary
+relations. Constants and shared/filtered generated outputs remain typed refusals.
+The original producer rules and aggregate equalities remain intact: possible
+values are not assertions that those values are realizable. This classification
+uses the pinned themelios dependency graph without recognizing domain names.
+
+When a generated value supplies a variable objective weight, relevant extrema
+assignments receive an additional presence check after support completion. A
+complete outer binding whose possible tuple carrier mixes numeric and
+nonnumeric first values receives a located `ObjectiveAggregateDependency`
+refusal. Otherwise an unrealizable numeric proposal could retain a zero priority
+slot when every actual extremum is symbolic. The check is conservative even
+when a numeric extremum dominates or an intervening numeric reduction might
+remove the concern. Numeric-only, nonnumeric-only and empty carriers, constant
+or zero objective weights, and different value classes in disjoint outer
+bindings retain their qualified profiles. An implicit empty endpoint is not a
+contributing tuple and does not trigger mixing.
+
+This is an internal zetesis implementation boundary, not a themelios rejection
+or a modeling-error judgment. Preparation can succeed before materialization
+detects the mixed carrier. The scan uses the existing complete joins and
+work/substitution/scalar budgets; failure publishes no admitted objective
+program. The [presence design](../../docs/design/objective-presence.md) and
+[forwarding record](../../docs/verification/objective-forwarding-20260908/README.md)
+separate admitted observations from conservative refusals. These source slices
+do not enable objective-relevant function head producers or lazy formula
+execution.
 
 An objective template with no possible numeric-weight positive/filter binding is omitted. Original declaration locations remain available even when every objective is omitted. Enabled zero weights, cancellation, and priorities inactive in a particular stable model retain their priority slots. The evaluator globally coalesces contributions by `(priority, weight, tuple)`, including repeated bindings and separate source statements. It sums checked costs in descending priority order. Optimization orders verified stable models; it does not replace the reduct membership check. An incumbent is not a proved optimum until search coverage completes.
 
@@ -489,7 +561,24 @@ The source fixtures, exact displayed `assigned_to` and `assigned_cost` atoms, co
 
 `tests/ground_guards.rs` checks 124 exact sources with 120 complete full-model records, native enumeration and an independent exhaustive reduct evaluator. It also compares every original/frozen interpretation pair for guard replacement, checks whole-chain sign scope, independent binding and aggregate target refusals, undefined/overflowing operands, resource limits and original bundle provenance. A separate optional test replays every source through external clingo. Objective and observation guards are outside this campaign.
 
-`tests/formula_assignments.rs` checks new-domain values, signed/correlated tuples, recursive assignments, scoped and resource refusals, generic mixed producers, cache isolation, and complete unique optimization of the unchanged layered-DAG source at default limits. Four further unchanged shortest-path include graphs exhaust their full optimal cost/model-count contracts at the existing CLI formula-work ceiling of 1,048,576; the regression exercises shared aggregate families without increasing limits. `tests/formula_analysis.rs` plus the helper's unit tests check the upstream boundary, payload/edge ceilings, pool rejection, original include provenance, and retained safety/finiteness facts. `tests/aggregate_objective_observers.rs` records 92 independently checked observer sources: 72 admissions with 118 complete model/cost records and 20 explicit dependency refusals.
+`tests/formula_assignments.rs` checks new-domain values, signed/correlated tuples, recursive assignments, scoped and resource refusals, generic mixed producers, cache isolation, and complete unique optimization of the unchanged layered-DAG source at default limits. Four further unchanged shortest-path include graphs exhaust their full optimal cost/model-count contracts at the existing CLI formula-work ceiling of 1,048,576; the regression exercises shared aggregate families without increasing limits. `tests/formula_analysis.rs` plus the helper's unit tests check the upstream boundary, payload/edge ceilings, pool rejection, original include provenance, and retained safety/finiteness facts. `tests/aggregate_objective_observers.rs` records 92 independently checked observer sources: 73 admissions and 19 explicit dependency refusals, with 159 external model/cost records across the full campaign.
+
+`tests/count_head_activity.rs` records 35 unchanged clingo sources with 67 complete
+models. It checks both alias directions through 1,142 arbitrary original/frozen
+interpretation pairs and 128 generated programs with an independent direct
+permission/activity evaluator. Separate controls check inclusive resources and
+optional CountPlan behavior without changing the original theory. The
+`CountHeadActivity` Lean laws describe the semantic row/tuple contract; they do
+not prove the Rust compiler or its resource accounting.
+
+`tests/objective_forwarding.rs` records 38 admitted originals with 69 complete
+model/cost records, plus 10 mixed-extrema refusal controls. The refused sources
+retain external observations but are not native parity successes. Independent
+ordinary formulas agree for all 243 `J ⊆ M` pairs on a five-atom example. Tests
+also retain original-theory identity, generated-position restrictions and exact
+resource boundaries. Complete enumeration followed by optimum-tie selection
+qualifies these source records; optimizing library sessions are a separate
+integration scope.
 
 `tests/formula_clingo.rs` preserves an independent recorded campaign of 403 valid and 26 refused source programs. Valid cases compare complete model sets using exhaustive Ferraris minimality. `tests/formula_support.rs` checks support pruning, recursive and negative conditions, variable undo, constraints, statement order, and incomplete-round refusals. Optional clingo tests remain explicit test oracles; they are never runtime dependencies.
 

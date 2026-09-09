@@ -22,8 +22,10 @@ The aim is a massively parallel ASP system with the assurance required by
 mission-critical applications. The current implementation is experimental and
 hybrid: general formula grounding and candidate search run on the host, with
 optional GPU propagation and exact CPU completion. Full language parity, general
-lazy formula construction, a demonstrated full-solve GPU advantage and deployment
-qualification remain open.
+lazy formula construction and deployment qualification remain open. Independent
+library reuse, themelios integration, clear code and stronger formal assurance
+are design goals alongside useful parallel execution. Outperforming clingo is a
+measured benefit, not a release requirement.
 
 ## Restore a route
 
@@ -198,10 +200,10 @@ syntax, raising and evaluation errors from zetesis implementation refusals.
 |---|---|
 | Normal rules | Safe finite rules, constraints, default/double negation, strong negation with coherence, and relational lazy checking in the admitted normal-rule profile. |
 | Formula rules | Bounded choices, signed singleton/disjunctive heads, finite rule/head pools, evaluated heads, scalar/range bindings, comparisons and admitted universal body conditionals. |
-| Aggregates | Body count/sum/sum+ and complete-value min/max comparisons; acyclic dependent assignments feeding scalar/tuple filters, scalar equalities, evaluated positive arguments and heads, default/double-negated outer atoms and admitted projections, finite outer ranges, integer choice bounds, nonbinding aggregate guards and existing universal conditional scopes; count, signed numeric sum, nonnegative numeric sum+ and numeric min/max heads with retained eligibility and checked tuple/atom correspondence. |
+| Aggregates | Body count/sum/sum+ and complete-value min/max comparisons; acyclic dependent assignments feeding scalar/tuple filters, scalar equalities, evaluated positive arguments and heads, default/double-negated outer atoms and admitted projections, finite outer ranges, integer choice bounds, nonbinding aggregate guards and existing universal conditional scopes; count heads with separate atom permission and complete-tuple activity, including both alias directions; signed numeric sum, nonnegative numeric sum+ and numeric min/max heads retain their checked tuple/atom correspondence. |
 | Logical values | Closed signed functions and tuples; finite construction from bound inputs; positive tuple/function patterns, including local conditional-consequent witnesses; evaluated positive arguments with independently bound inputs; evaluated already-safe negative arguments. |
-| Objectives and observations | Admitted minimize/maximize/weak constraints; complete tuple keys and optimal ties; signature, term and conditional `#show`; `#defined`; original include bundles and constants; explicit parameter-free `#program base` sections. |
-| Refusal boundaries | Cyclic or self-dependent assignment generators; unsupported local conditional generators; negative sum+ head weights, nonnumeric measured heads and broader tuple aliases; nontrivial conditional disjuncts; unsupported objective-dependent producers; broader directives and exact clingo undefined-arithmetic behavior remain incomplete. |
+| Objectives and observations | Admitted minimize/maximize/weak constraints; complete tuple keys and optimal ties; total aggregate observers through acyclic predicate renamings and argument permutations; signature, term and conditional `#show`; `#defined`; original include bundles and constants; explicit parameter-free `#program base` sections. |
+| Refusal boundaries | Cyclic or self-dependent assignment generators; unsupported local conditional generators; negative sum+ head weights, nonnumeric measured heads and weighted/extrema tuple aliases; nontrivial conditional disjuncts; unsupported objective-dependent producers, including relevant function heads and mixed-extrema variable-weight presence; broader directives and exact clingo undefined-arithmetic behavior remain incomplete. |
 
 These rows summarize profiles; they are not a grammar specification. The
 [source API guide](crates/zetesis-themelios/README.md) describes composition,
@@ -239,15 +241,18 @@ frozen interpretation pairs, plus generated arithmetic properties. Negative
 `#sum+` head weights remain an internal limitation with a recorded reference
 discrepancy; they are not labeled modeling errors.
 
-The [current integrated qualification](docs/verification/aggregate-primitives-tranche-20260908/README.md)
+The [last published qualification](docs/verification/aggregate-primitives-tranche-20260908/README.md)
 passes **2,352 workspace tests/doc checks**, **339 independent CPU-only CLI
 checks**, **68 external-oracle tests** and **25 physical Metal tests** on Apple
 M4 Pro. Both unchanged 91% coverage floors pass: **93.5816% workspace with the
 matching physical profiles / 93.3546% independent CPU-only CLI**. The frozen
 release passes all 94 clean corpus and 24 selected upstream comparisons.
-The [current Lean audit](proofs/verification/aggregate-ranges-20260908/README.md)
-checks **819 laws across 72 modules**; concrete Rust/WGSL correspondence remains
-unproved. The five installed commands use the exact qualified release bytes.
+The [current Lean audit](proofs/verification/language-closure-20260908/README.md)
+checks **834 laws across 74 modules**; concrete Rust/WGSL correspondence remains
+unproved. The five installed commands still use the preceding qualified release
+bytes. The [language-closure progress record](docs/design/language-closure-progress.md)
+separates the new integrated source checks from the pending whole-checkpoint
+qualification.
 
 The checkpoint includes the following scoped capabilities. The
 [previous checkpoint](docs/verification/language-execution-tranche-20260908/README.md)

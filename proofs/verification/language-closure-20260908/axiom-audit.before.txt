@@ -213,15 +213,6 @@
 'Zetesis.CountEligibility.indexed_rows_equal' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.CountEligibility.key_iff_atom' depends on axioms: [propext, Quot.sound]
 'Zetesis.CountEligibility.threshold_equivalent' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.CountHeadActivity.activity_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.CountHeadActivity.activity_of_same_rows' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.CountHeadActivity.activity_original' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.CountHeadActivity.bounds_are_candidate_constraints' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.CountHeadActivity.eligibility_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.CountHeadActivity.eligibility_of_same_rows' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.CountHeadActivity.eligibility_original' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.CountHeadActivity.stable_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.CountHeadActivity.threshold_original' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.CountHeads.activity_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.CountHeads.activity_original' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.CountHeads.alias_directions_are_rejected' does not depend on any axioms
@@ -495,12 +486,6 @@
 'Zetesis.ObjectiveDirections.same_weight_directions_distinct' depends on axioms: [propext, Quot.sound]
 'Zetesis.ObjectiveDirections.weighted_filter' depends on axioms: [propext]
 'Zetesis.ObjectiveDirections.weighted_map' depends on axioms: [propext]
-'Zetesis.ObjectiveTransport.active_keys_transport' depends on axioms: [propext]
-'Zetesis.ObjectiveTransport.cost_vector_transport' depends on axioms: [propext, Quot.sound]
-'Zetesis.ObjectiveTransport.mixed_cost_transport' depends on axioms: [propext, Quot.sound]
-'Zetesis.ObjectiveTransport.present_transport' depends on axioms: [propext, Quot.sound]
-'Zetesis.ObjectiveTransport.transport_composes' does not depend on any axioms
-'Zetesis.ObjectiveTransport.transport_key' does not depend on any axioms
 'Zetesis.Optimization.best_none_iff' depends on axioms: [propext]
 'Zetesis.Optimization.best_spec' depends on axioms: [propext, Quot.sound]
 'Zetesis.Optimization.completed_best_is_optimal' depends on axioms: [propext, Classical.choice, Quot.sound]

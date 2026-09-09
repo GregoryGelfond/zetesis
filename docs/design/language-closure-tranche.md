@@ -10,6 +10,24 @@ the right shared operations rather than accumulate syntax-specific workarounds.
 Keep necessary semantic proofs, resource controls, code clarity and regression
 gates active throughout language work; they are not postponed until optimization.
 
+Outperforming clingo is a useful measured result, not a release requirement or
+the sole test of this architecture. Correct admitted semantics, useful lazy and
+parallel execution, predictable resource behavior, reproducible measurements
+and stronger formal assurance remain success criteria in their own right.
+Comparisons identify bottlenecks and suitable workloads; they do not justify
+changing the reduct foundation or replacing a complete result with a faster
+incomplete one. Current physical execution and corpus evidence establish their
+recorded scopes; broad scalability and concrete implementation verification
+still require evidence.
+
+Independent library reuse and eventual themelios integration are also design
+objectives. Prefer a single composable implementation, small domain-oriented
+interfaces and a command adapter derived from them. Simplicity means removing
+duplication and unnecessary control flow while retaining semantic distinctions,
+ownership and failure contracts. A smaller interface that conflates candidates
+with answer sets, incomplete work with inconsistency, or incumbents with proved
+optima would make the system less comprehensible and less correct.
+
 ## Make closure an explicit contract
 
 Use the [compatibility matrix](../verification/clingo-compatibility.md) as an

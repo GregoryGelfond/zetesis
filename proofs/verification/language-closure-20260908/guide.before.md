@@ -56,15 +56,6 @@ original equality, and complete tuple/head correspondence retains every eligibil
 formula. These are source-to-formula obligations, not permission to substitute
 possible-support membership for logical truth.
 
-[CountHeadActivity](../Zetesis/CountHeadActivity.lean) removes the tuple/head
-bijection premise from the semantic row-table description. Head permission
-coalesces by atom; selected activity coalesces by the complete tuple. The older
-bijection laws remain useful for optimizations that require their stronger
-premise. [ObjectiveTransport](../Zetesis/ObjectiveTransport.lean) separately
-transports completed presence carriers and model-relative objective activation.
-Its premises do not establish a clingo-compatible priority layout from possible
-support. Neither addition proves the concrete source compiler.
-
 [EvaluationPrefix](../Zetesis/EvaluationPrefix.lean) specifies the live-prefix
 invariant beneath reusable expression storage. [LazyRounds](../Zetesis/LazyRounds.lean)
 specifies fresh source coverage and separate world truth beneath shared device
