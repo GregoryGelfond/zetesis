@@ -111,7 +111,10 @@ capabilities. Explicit choices remain useful for reproducible comparisons.
 Normal relational programs support lazy source joins and CPU/Metal closure.
 General formulas use eager source grounding, with host candidate search,
 optional GPU propagation and exact CPU completion of unresolved reduct queries.
-GPU initialization happens inside the command; `devices` is an optional inventory.
+GPU discovery and initialization happen inside the command. A fresh installation
+needs no separate qualification command or certification report to use Metal;
+`devices` is an optional inventory. Automatic selection may keep small workloads
+on the CPU; `--backend metal` requests Metal explicitly.
 
 Metal has physical regression coverage on Apple M4 Pro. Vulkan is implemented
 but needs physical qualification on each claimed platform. Full GPU residency,
