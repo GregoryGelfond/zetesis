@@ -1,9 +1,14 @@
 //! Completed priority presence for flat extrema observers.
 
 #[path = "support/source_records.rs"]
-mod reference;
+mod source_records;
+#[path = "support/source_cases.rs"]
+mod source_cases;
+#[path = "support/source_oracle.rs"]
+mod source_oracle;
 
-use reference::{admit, cases, exhaustive};
+use source_cases::cases;
+use source_records::{admit, exhaustive};
 use zetesis_themelios::{
     AdmissionFailure, ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource,
     ProfileFeature,
@@ -12,7 +17,7 @@ use zetesis_themelios::{
 const HISTORICAL: &str = include_str!("fixtures/objective-extrema-refusals.jsonl");
 const CONTROLS: &str = include_str!("fixtures/objective-flat-presence.jsonl");
 
-fn flat_cases() -> Vec<reference::Case> {
+fn flat_cases() -> Vec<source_cases::Case> {
     cases(HISTORICAL)
         .into_iter()
         .take(7)
@@ -52,7 +57,7 @@ fn presence_keeps_the_original_reduct_subject() {
             observed
                 .atoms()
                 .iter()
-                .any(|atom| reference::canonical(atom) == "n(2)")
+                .any(|atom| source_records::canonical(atom) == "n(2)")
         );
     }
 }
@@ -229,16 +234,18 @@ proptest::proptest! {
 #[ignore = "requires independent clingo for complete original records"]
 fn flat_presence_sources_match_fresh_clingo() {
     for case in flat_cases() {
-        let capture = reference::capture_clingo(&case.source);
-        assert_eq!(capture.records, case.records, "{}", case.name);
+        let capture = source_oracle::capture(&case.source);
+        let output = source_oracle::output(&capture);
+        let records = source_oracle::model_records(&output);
+        assert_eq!(records, case.records, "{}", case.name);
         println!(
             "reference_json: {}",
             serde_json::json!({
-                "name":case.name,"source":case.source,"stdout":capture.output,
-                "stderr":capture.diagnostics,"status":capture.status,
+                "name":case.name,"source":case.source,"stdout":output,
+                "stderr":std::str::from_utf8(&capture.stderr).expect("UTF-8 oracle diagnostics"),"status":capture.status.code().expect("normal oracle exit checked"),
                 "arguments":["0","--outf=2","--opt-mode=enum","--warn=none"]
             })
         );
-        assert_eq!(reference::clingo(&case.source), case.records);
+        assert_eq!(source_oracle::records(&case.source), case.records);
     }
 }

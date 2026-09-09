@@ -11,14 +11,18 @@ use zetesis_themelios::{
 
 #[path = "support/source_records.rs"]
 mod source_records;
+#[path = "support/source_cases.rs"]
+mod source_cases;
+#[path = "support/source_oracle.rs"]
+mod source_oracle;
 
 fn input(source: &str) -> AdmittedFormula {
     source_records::admit(source, &FormulaLimits::default())
         .unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 
-fn cases() -> Vec<source_records::Case> {
-    source_records::cases(include_str!("fixtures/maximize.jsonl"))
+fn cases() -> Vec<source_cases::Case> {
+    source_cases::cases(include_str!("fixtures/maximize.jsonl"))
 }
 
 #[test]
@@ -182,7 +186,7 @@ fn maximizing_occurrences_obey_the_original_objective_element_ceiling() {
 fn fresh_clingo_confirms_every_recorded_mixed_direction_contract() {
     for case in cases() {
         assert_eq!(
-            source_records::clingo(&case.source),
+            source_oracle::records(&case.source),
             case.records,
             "{}",
             case.name

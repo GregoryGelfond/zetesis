@@ -16,11 +16,10 @@ use zetesis_cpu::Control;
 use zetesis_sat::Incomplete;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
-// This existing helper supplies several independent campaign operations; this
-// client uses complete source enumeration and the bounded external invocation.
-#[allow(dead_code)]
 #[path = "../../zetesis-themelios/tests/support/source_records.rs"]
 mod source_records;
+#[path = "../../zetesis-themelios/tests/support/source_oracle.rs"]
+mod source_oracle;
 
 type Record = (BTreeSet<Atom>, Option<Vec<(i32, i64)>>);
 
@@ -326,7 +325,7 @@ fn stopped_composition_preserves_objective_presence() {
 #[ignore = "requires an independently installed clingo executable"]
 fn original_sources_match_complete_reference_records() {
     for (source, expected) in language_value_sources::SOURCES.into_iter().zip(&EXPECTED) {
-        let reference = source_records::clingo(source);
+        let reference = source_oracle::records(source);
         let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
         assert_eq!(source_records::exhaustive(&input), reference, "{source}");
         // The external campaign enumerates every model and score. Lexicographic

@@ -1,12 +1,17 @@
 //! Positive sums and ignored tuple contributions retain original reduct semantics.
 #[path = "support/source_records.rs"]
 mod source_records;
+#[path = "support/source_cases.rs"]
+mod source_cases;
+#[path = "support/source_oracle.rs"]
+mod source_oracle;
 
-use source_records::{admit, clingo, exhaustive};
+use source_oracle::records as clingo;
+use source_records::{admit, exhaustive};
 use zetesis_themelios::FormulaLimits;
 
-fn cases() -> Vec<source_records::Case> {
-    source_records::cases(include_str!("fixtures/sum-profiles.jsonl"))
+fn cases() -> Vec<source_cases::Case> {
+    source_cases::cases(include_str!("fixtures/sum-profiles.jsonl"))
 }
 
 #[test]

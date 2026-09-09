@@ -1,12 +1,17 @@
 //! Numeric min/max source translation, generated sentinels and total observers.
 #[path = "support/source_records.rs"]
 mod source_records;
-use source_records::{admit, clingo, exhaustive};
+#[path = "support/source_cases.rs"]
+mod source_cases;
+#[path = "support/source_oracle.rs"]
+mod source_oracle;
+use source_oracle::records as clingo;
+use source_records::{admit, exhaustive};
 use zetesis_core::Value;
 use zetesis_themelios::FormulaLimits;
 
-fn cases() -> Vec<source_records::Case> {
-    source_records::cases(include_str!("fixtures/extrema-source.jsonl"))
+fn cases() -> Vec<source_cases::Case> {
+    source_cases::cases(include_str!("fixtures/extrema-source.jsonl"))
 }
 #[test]
 fn numeric_extrema_preserve_complete_models_and_every_objective_cost() {

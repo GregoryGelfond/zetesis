@@ -17,13 +17,17 @@ use zetesis_themelios::{
 
 #[path = "support/source_records.rs"]
 mod source_records;
+#[path = "support/source_cases.rs"]
+mod source_cases;
+#[path = "support/source_oracle.rs"]
+mod source_oracle;
 
 fn input(source: &str) -> AdmittedFormula {
     source_records::admit(source, &FormulaLimits::default())
         .unwrap_or_else(|error| panic!("{source}: {error}"))
 }
-fn cases() -> Vec<source_records::Case> {
-    source_records::cases(include_str!("fixtures/weak-objectives.jsonl"))
+fn cases() -> Vec<source_cases::Case> {
+    source_cases::cases(include_str!("fixtures/weak-objectives.jsonl"))
 }
 #[test]
 fn complete_model_cost_records_match_independent_clingo_evidence() {
@@ -270,7 +274,7 @@ fn weak_and_minimize_keys_coalesce_across_original_include_sources() {
 fn fresh_clingo_confirms_every_recorded_weak_contract() {
     for case in cases() {
         assert_eq!(
-            source_records::clingo(&case.source),
+            source_oracle::records(&case.source),
             case.records,
             "{}",
             case.name

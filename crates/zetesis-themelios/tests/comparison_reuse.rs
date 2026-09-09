@@ -2,6 +2,10 @@
 
 #[path = "support/source_records.rs"]
 mod source_records;
+#[path = "support/source_cases.rs"]
+mod source_cases;
+#[path = "support/source_oracle.rs"]
+mod source_oracle;
 
 use themelios_program::term::EvalError;
 use zetesis_themelios::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
@@ -10,7 +14,7 @@ const FIXTURE: &str = include_str!("fixtures/comparison-reuse.jsonl");
 
 #[test]
 fn complete_models_preserve_backtracking_generators_and_residual_filters() {
-    let cases = source_records::cases(FIXTURE);
+    let cases = source_cases::cases(FIXTURE);
     assert_eq!(cases.len(), 20);
     assert_eq!(
         cases.iter().map(|case| case.records.len()).sum::<usize>(),
@@ -91,9 +95,9 @@ fn reused_comparisons_keep_the_work_ceiling_inclusive() {
 #[test]
 #[ignore = "requires the independent clingo executable on PATH"]
 fn unchanged_comparison_sources_match_fresh_clingo() {
-    for case in source_records::cases(FIXTURE) {
+    for case in source_cases::cases(FIXTURE) {
         assert_eq!(
-            source_records::clingo(&case.source),
+            source_oracle::records(&case.source),
             case.records,
             "{}",
             case.name

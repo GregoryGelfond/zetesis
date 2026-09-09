@@ -1,11 +1,15 @@
 //! Closed nonnumeric weights supply neither a numeric key nor a priority slot.
 
 #[path = "support/source_records.rs"]
-mod reference;
+mod source_records;
+#[path = "support/source_cases.rs"]
+mod source_cases;
+#[path = "support/source_oracle.rs"]
+mod source_oracle;
 #[path = "support/objective_literal_cases.rs"]
 mod sources;
 
-use reference::{Records, admit, exhaustive};
+use source_records::{Records, admit, exhaustive};
 use sources::{DIRECTIONS, PROGRAM, WEIGHTS, cases, directive};
 use std::collections::BTreeSet;
 use zetesis_core::{Model, Value};
@@ -21,7 +25,7 @@ const CONDITION_CASES: &str = r##"{"name":"absent_condition","source":"#minimize
 
 #[test]
 fn literal_conditions_preserve_complete_records() {
-    for case in reference::cases(CONDITION_CASES) {
+    for case in source_cases::cases(CONDITION_CASES) {
         assert_eq!(
             exhaustive(&admit(&case.source, &FormulaLimits::default()).unwrap()),
             case.records
@@ -70,7 +74,7 @@ fn ignored_weights_preserve_the_original_reduct_subject() {
 fn symbolic_extremum_literal_weights_leave_no_slot() {
     let source = "b.{a}.n(N):-N=#max{2:a;foo:b}.p(X):-n(X).#minimize{foo@7,X:p(X)}.";
     let input = admit(source, &FormulaLimits::default()).unwrap();
-    let reference = reference::cases(
+    let reference = source_cases::cases(
         r#"{"name":"symbol_weight","source":"","records":[[["b","n(foo)","p(foo)"],null],[["a","b","n(foo)","p(foo)"],null]]}"#,
     );
     assert_eq!(exhaustive(&input), reference[0].records);
@@ -255,7 +259,7 @@ fn completed_capture_preserves_exact_combined_output() {
     for (stdout, stderr) in [("", ""), ("abc", ""), ("", "def"), ("abc", "def")] {
         let maximum = stdout.len() + stderr.len();
         let (actual, diagnostics) =
-            reference::read_capture(stdout.as_bytes(), stderr.as_bytes(), maximum).unwrap();
+            source_oracle::read_capture(stdout.as_bytes(), stderr.as_bytes(), maximum).unwrap();
         assert_eq!(actual, stdout.as_bytes());
         assert_eq!(diagnostics, stderr.as_bytes());
     }
@@ -265,7 +269,7 @@ fn completed_capture_preserves_exact_combined_output() {
 fn completed_capture_bounds_stdout_reads() {
     let mut stdout = EndlessOutput::default();
     let mut stderr = EndlessOutput::default();
-    let error = reference::read_capture(&mut stdout, &mut stderr, 16).unwrap_err();
+    let error = source_oracle::read_capture(&mut stdout, &mut stderr, 16).unwrap_err();
     assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     assert_eq!(stdout.consumed, 17);
     assert_eq!(stderr.consumed, 0);
@@ -274,7 +278,7 @@ fn completed_capture_bounds_stdout_reads() {
 #[test]
 fn completed_capture_bounds_stderr_reads() {
     let mut stderr = EndlessOutput::default();
-    let error = reference::read_capture("12345678".as_bytes(), &mut stderr, 16).unwrap_err();
+    let error = source_oracle::read_capture("12345678".as_bytes(), &mut stderr, 16).unwrap_err();
     assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
     assert_eq!(stderr.consumed, 9);
 }
@@ -288,10 +292,10 @@ fn completed_capture_propagates_read_failures() {
         }
     }
     let mut stderr = EndlessOutput::default();
-    let error = reference::read_capture(FailedOutput, &mut stderr, 16).unwrap_err();
+    let error = source_oracle::read_capture(FailedOutput, &mut stderr, 16).unwrap_err();
     assert_eq!(error.kind(), std::io::ErrorKind::Other);
     assert_eq!(stderr.consumed, 0);
-    let error = reference::read_capture("retained".as_bytes(), FailedOutput, 16).unwrap_err();
+    let error = source_oracle::read_capture("retained".as_bytes(), FailedOutput, 16).unwrap_err();
     assert_eq!(error.kind(), std::io::ErrorKind::Other);
 }
 
@@ -299,7 +303,7 @@ fn completed_capture_propagates_read_failures() {
 fn completed_capture_refuses_unrepresentable_limits() {
     let mut stdout = EndlessOutput::default();
     let mut stderr = EndlessOutput::default();
-    let error = reference::read_capture(&mut stdout, &mut stderr, usize::MAX).unwrap_err();
+    let error = source_oracle::read_capture(&mut stdout, &mut stderr, usize::MAX).unwrap_err();
     assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
     assert_eq!(stdout.consumed, 0);
     assert_eq!(stderr.consumed, 0);
@@ -388,7 +392,7 @@ proptest::proptest! {
 #[test]
 #[ignore = "requires independent clingo; unchanged literal-weight source matrix"]
 fn literal_weight_sources_match_fresh_clingo() {
-    for case in reference::cases(CONDITION_CASES) {
+    for case in source_cases::cases(CONDITION_CASES) {
         external(&case.name, &case.source, &case.records);
     }
     for case in cases() {
@@ -421,24 +425,26 @@ fn literal_weight_sources_match_fresh_clingo() {
             &exhaustive(&admit(source, &FormulaLimits::default()).unwrap()),
         );
         assert_eq!(
-            reference::clingo(source),
+            source_oracle::records(source),
             exhaustive(&admit(source, &FormulaLimits::default()).unwrap())
         );
     }
 }
 
 fn external(name: &str, source: &str, expected: &Records) {
-    let capture = reference::capture_clingo(source);
-    assert_eq!(&capture.records, expected, "{name}");
+    let capture = source_oracle::capture(source);
+    let output = source_oracle::output(&capture);
+    let records = source_oracle::model_records(&output);
+    assert_eq!(&records, expected, "{name}");
     println!(
         "reference_json: {}",
         serde_json::json!({
             "name": name,
             "source": source,
             "arguments": ["0", "--outf=2", "--opt-mode=enum", "--warn=none"],
-            "status": capture.status,
-            "stdout": capture.output,
-            "stderr": capture.diagnostics,
+            "status": capture.status.code().expect("normal oracle exit checked"),
+            "stdout": output,
+            "stderr": std::str::from_utf8(&capture.stderr).expect("UTF-8 oracle diagnostics"),
         })
     );
 }

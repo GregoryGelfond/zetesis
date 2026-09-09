@@ -2,7 +2,8 @@
 
 use std::collections::BTreeSet;
 
-use super::reference::{Case, Records};
+use super::source_cases::Case;
+use super::source_records::Records;
 
 pub const WEIGHTS: [&str; 9] = [
     "foo", "-foo", "\"text\"", "\"\"", "f(1)", "-f(1)", "(1,2)", "#inf", "#sup",

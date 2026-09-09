@@ -1,9 +1,15 @@
 //! Complete objective observations through total predicate renamings.
 
 #[path = "support/source_records.rs"]
-mod reference;
+mod source_records;
+#[path = "support/source_cases.rs"]
+mod source_cases;
+#[path = "support/source_oracle.rs"]
+mod source_oracle;
 
-use reference::{Records, admit, canonical, cases, clingo, exhaustive};
+use source_cases::cases;
+use source_oracle::records as clingo;
+use source_records::{Records, admit, canonical, exhaustive};
 use zetesis_core::Model;
 use zetesis_cpu::Control;
 use zetesis_ferraris::{Node, Theory};
