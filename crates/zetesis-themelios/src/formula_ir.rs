@@ -598,18 +598,7 @@ impl Compiler<'_> {
         // a head variable cannot accidentally become safe inside an aggregate.
         let ordinary = match rule.head().get() {
             Head::Falsum => Some(HeadIr::Normal(None)),
-            Head::Verum => {
-                ceiling(
-                    FormulaResource::DisjunctionElements,
-                    1,
-                    self.limits.max_disjunction_elements as u128,
-                    self.location,
-                )?;
-                Some(HeadIr::Disjunction(vec![DisjunctIr {
-                    negation: DefaultNegation::None,
-                    operand: HeadOperand::Boolean(true),
-                }]))
-            }
+            Head::Verum => Some(self.verum_head()?),
             Head::Literal(literal)
                 if literal.negation == DefaultNegation::None
                     && matches!(literal.inner, LiteralInner::Atom(_)) =>
@@ -656,7 +645,9 @@ impl Compiler<'_> {
                 Some(HeadIr::Disjunction(heads))
             }
             Head::Choice(_) | Head::Aggregate(_) => None,
-            _ => return Err(unsupported(ProfileFeature::Head, self.location).into()),
+            Head::TheoryAtom(_) => {
+                return Err(unsupported(ProfileFeature::Head, self.location).into());
+            }
         };
         let aggregate_guards = self.body_guards(rule, &mut variables)?;
         let choice_guards = self.head_guards(rule.head().get(), &mut variables)?;

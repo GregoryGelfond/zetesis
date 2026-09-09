@@ -7,16 +7,29 @@
 
 use std::collections::BTreeSet;
 
-use themelios_program::program::{Arguments, Literal, LiteralInner};
+use themelios_program::program::{Arguments, DefaultNegation, Literal, LiteralInner};
 use themelios_program::symbol::Symbol;
 use themelios_program::term::{Term, Variable};
 
 use crate::diagnostic::unsupported;
 use crate::formula::ceiling;
-use crate::formula_ir::{Compiler, DisjunctIr, HeadOperand, LiteralIr, Variables};
+use crate::formula_ir::{Compiler, DisjunctIr, HeadIr, HeadOperand, LiteralIr, Variables};
 use crate::{ExpansionResource, FormulaFailure, FormulaResource, ProfileFeature};
 
 impl Compiler<'_> {
+    pub(super) fn verum_head(&self) -> Result<HeadIr, FormulaFailure> {
+        ceiling(
+            FormulaResource::DisjunctionElements,
+            1,
+            self.limits.max_disjunction_elements as u128,
+            self.location,
+        )?;
+        Ok(HeadIr::Disjunction(vec![DisjunctIr {
+            negation: DefaultNegation::None,
+            operand: HeadOperand::Boolean(true),
+        }]))
+    }
+
     pub(super) fn disjunction_head(
         &mut self,
         literal: &Literal,

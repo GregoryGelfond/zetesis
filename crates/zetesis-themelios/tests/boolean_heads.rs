@@ -11,8 +11,9 @@ use cases::CASES;
 use proptest::prelude::*;
 use reference::{Models, atom_text, exhaustive, external, holds, native, values};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_formula,
+    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
+    ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
+    FormulaResource, ProfileFeature, SourceBundle, admit_bundle_formula, admit_formula,
 };
 
 fn input(source: &str) -> AdmittedFormula {
@@ -294,12 +295,181 @@ fn boolean_disjuncts_preserve_objective_guards() {
 #[test]
 fn head_element_limits_count_boolean_operands() {
     for (source, count) in [("#true.", 1), ("#true|a.", 2), ("not #false|a|b.", 3)] {
-        let mut limits = FormulaLimits::default();
-        limits.max_disjunction_elements = count;
+        let mut limits = FormulaLimits {
+            max_disjunction_elements: count,
+            ..FormulaLimits::default()
+        };
         assert!(limited(source, limits).is_ok());
         limits.max_disjunction_elements = count - 1;
         assert!(
             matches!(limited(source, limits), Err(FormulaFailure::Limit { resource: FormulaResource::DisjunctionElements, observed, .. }) if observed == count as u128)
         );
+    }
+}
+
+#[test]
+fn tautologies_preserve_arithmetic_refusals() {
+    for source in ["#true|p(1/0).", "#true|p(2147483647+1)."] {
+        let error = limited(source, FormulaLimits::default()).unwrap_err();
+        assert!(!error.diagnostics().is_empty(), "{source}");
+        assert!(
+            matches!(
+                error,
+                FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })
+            ),
+            "{source}: {error}"
+        );
+    }
+}
+
+const BUDGET_SOURCE: &str = "d(1..2).#true|p(X+1):-d(X).";
+
+fn first_success(mut attempt: impl FnMut(u64) -> bool) -> u64 {
+    let mut high = 1;
+    while !attempt(high) {
+        high *= 2;
+        assert!(high <= 1_048_576, "qualification threshold exceeded");
+    }
+    let mut low = 0;
+    while low + 1 < high {
+        let middle = low + (high - low) / 2;
+        if attempt(middle) {
+            high = middle;
+        } else {
+            low = middle;
+        }
+    }
+    high
+}
+
+fn exact_formula_budget(resource: FormulaResource, configure: impl Fn(&mut FormulaLimits, u64)) {
+    let attempt = |limit| {
+        let mut limits = FormulaLimits::default();
+        configure(&mut limits, limit);
+        limited(BUDGET_SOURCE, limits)
+    };
+    let threshold = first_success(|limit| attempt(limit).is_ok());
+    assert_eq!(
+        native(&attempt(threshold).unwrap()),
+        native(&input(BUDGET_SOURCE))
+    );
+    let error = attempt(threshold - 1).unwrap_err();
+    assert!(!error.diagnostics().is_empty());
+    assert!(
+        matches!(error, FormulaFailure::Limit { resource: actual, observed, .. }
+        if actual == resource && observed == u128::from(threshold)),
+        "{resource:?}: {error}"
+    );
+    println!("resource={resource:?} inclusive_threshold={threshold}");
+}
+
+#[test]
+fn tautologies_preserve_work_accounting() {
+    exact_formula_budget(FormulaResource::Work, |limits, value| {
+        limits.max_work = value;
+    });
+}
+
+#[test]
+fn tautologies_preserve_substitution_accounting() {
+    exact_formula_budget(FormulaResource::Substitutions, |limits, value| {
+        limits.max_substitutions = value;
+    });
+}
+
+#[test]
+fn tautologies_preserve_node_accounting() {
+    exact_formula_budget(FormulaResource::Nodes, |limits, value| {
+        limits.theory.max_nodes = usize::try_from(value).unwrap();
+    });
+}
+
+#[test]
+fn tautologies_preserve_atom_accounting() {
+    exact_formula_budget(FormulaResource::Atoms, |limits, value| {
+        limits.theory.max_atoms = usize::try_from(value).unwrap();
+    });
+}
+
+#[test]
+fn tautologies_preserve_term_work_accounting() {
+    let attempt = |limit| {
+        admit_formula(
+            BUDGET_SOURCE.into(),
+            AdmissionOptions::default(),
+            ExpansionLimits {
+                max_term_work: usize::try_from(limit).unwrap(),
+                ..ExpansionLimits::default()
+            },
+            FormulaLimits::default(),
+        )
+    };
+    let threshold = first_success(|limit| attempt(limit).is_ok());
+    assert_eq!(
+        native(&attempt(threshold).unwrap()),
+        native(&input(BUDGET_SOURCE))
+    );
+    let error = attempt(threshold - 1).unwrap_err();
+    assert!(!error.diagnostics().is_empty());
+    assert!(matches!(
+        error,
+        FormulaFailure::Expansion(ExpansionFailure::Limit {
+            resource: ExpansionResource::TermWork,
+            ..
+        })
+    ));
+    println!("resource=TermWork inclusive_threshold={threshold}");
+}
+
+#[test]
+fn duplicate_boolean_heads_retain_original_file_identity() {
+    let directory = tempfile::tempdir().unwrap();
+    let rule = "#true|p(1..2).";
+    std::fs::write(
+        directory.path().join("entry.lp"),
+        format!("#include \"other.lp\".\n{rule}"),
+    )
+    .unwrap();
+    std::fs::write(directory.path().join("other.lp"), rule).unwrap();
+    let bundle =
+        SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
+    let admitted = admit_bundle_formula(
+        bundle,
+        BundleAdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap();
+    assert!(!admitted.formula_origins().is_empty());
+    for origins in admitted.formula_origins() {
+        assert_eq!(
+            origins
+                .iter()
+                .map(|origin| origin.source)
+                .collect::<BTreeSet<_>>()
+                .len(),
+            2
+        );
+        for origin in origins {
+            assert_eq!(
+                admitted
+                    .bundle()
+                    .get(origin.source)
+                    .unwrap()
+                    .source()
+                    .slice(origin.span)
+                    .unwrap(),
+                rule
+            );
+        }
+    }
+}
+
+#[test]
+#[ignore = "requires an independently installed clingo"]
+fn tautological_rules_remain_unsafe_in_clingo() {
+    for source in ["#true|p(X).", "#true:-not p(X).", "#true|p(2..1,X)."] {
+        let result = external(source, false);
+        assert_eq!(result["Result"], "UNKNOWN");
     }
 }

@@ -285,9 +285,10 @@ fn guard_conditions_do_not_supply_missing_bindings_or_expand_other_source_profil
                 .all(|diagnostic| diagnostic.primary().location.source == SOURCE)
         );
     }
-    assert!(
-        input("#true.").is_err(),
-        "Boolean heads remain outside this profile"
+    // Boolean heads are qualified independently in boolean_heads.rs.
+    assert_eq!(
+        native(&input("#true.").unwrap()),
+        BTreeSet::from([BTreeSet::new()])
     );
     assert_eq!(
         native(&input("q:-p(X):d(X).").unwrap()),

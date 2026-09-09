@@ -433,8 +433,7 @@ fn unsupported_head_profiles_remain_explicit() {
     for (source, predicted) in [
         ("{not a}.", ProfileFeature::NegatedHead),
         ("not a:b|c.", ProfileFeature::ConditionalDisjunction),
-        // Finite pools retain head polarity; finite_pools covers the former pool refusal.
-        ("#true|b.", ProfileFeature::Head),
+        // Boolean siblings are qualified positively in boolean_heads.rs.
         (
             "not a|b.#minimize{1:a}.",
             ProfileFeature::ObjectiveDisjunctionDependency,
