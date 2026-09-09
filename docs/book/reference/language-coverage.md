@@ -1,11 +1,11 @@
 # Language coverage obligations
 
 The [admitted language](language.md) defines the current executable contract.
-This checklist identifies known boundaries still requiring work. Its entries
+This checklist records known language boundaries and their current status. Its entries
 have unequal size: a single entry can include several related scopes or
 aggregate functions. The count is not a percentage of language parity.
 
-There are **18 open classified ordinary-language obligations**, **6 separate
+There are **17 open classified ordinary-language obligations**, **6 separate
 state/extension obligations**, and **2 input-boundary obligations**. The
 unclassified scopes below are additional; these totals are not an exhaustive
 inventory of every possible program or a definition of the v1.0 release scope.
@@ -19,12 +19,13 @@ that an open item is already qualified in its entirety.
 
 ## Ordinary language
 
-All entries below are open. Stable identifiers connect these boundaries to
-their tests and the admitted-language reference.
+L01 is closed within the admitted finite profiles. L02–L18 remain open. Stable
+identifiers connect these boundaries to their tests and the admitted-language
+reference.
 
-| ID | Contract to complete | Representative tests |
+| ID | Contract | Representative tests |
 | --- | --- | --- |
-| L01 | `not` and `not not` over atomic and Boolean operands in ordinary choices and all five admitted function heads, preserving signed contribution identity and positive producer support | [Signed elements](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/signed_element_contracts.rs) |
+| L01 | **Closed:** `not` and `not not` over atomic and Boolean operands in ordinary choices and all five admitted function heads, preserving signed contribution identity and positive producer support | [Signed elements](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/signed_element_contracts.rs) |
 | L02 | Nontrivial conditional disjuncts with atomic, false and comparison conditions, including local scope and reduct behavior | [Boolean heads](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/boolean_heads.rs) |
 | L03 | Negative anonymous consequent witnesses in universal body conditionals with a sound finite witness contract | [Consequent alternatives](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/consequent_alternatives.rs) |
 | L04 | Finite flat pools in currently refused body and local contexts | [Finite pools](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/finite_pools.rs) |

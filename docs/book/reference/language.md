@@ -87,7 +87,7 @@ separated in the [Lean proof boundary](../lean/correspondence.md).
 | Body `#count`, `#sum`, `#sum+` | Finite comparisons, recursive eligibility, complete-tuple coalescing and acyclic fresh-target assignments | Cyclic/self-dependent assignment generators, unsupported local generators and objective dependencies |
 | Body `#min`, `#max` | Comparisons over complete logical values; empty extrema; admitted acyclic assignments | Numeric endpoint guard below and unsupported consumer/observer combinations |
 | Assignment consumers | Dependency-ordered scalar/tuple filters and equalities, evaluated positive arguments/heads, admitted outer negative atoms, finite outer ranges, integer choice bounds, nonbinding aggregate guards and universal conditionals | Broader local scopes, objective-relevant new consumers and objective-relevant multiple assignments |
-| `#count` heads | Positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions and Boolean operands | Unsupported eligibility/observer contexts |
+| `#count` heads | Positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions and Boolean operands | Unsupported eligibility/observer contexts and objective-relevant heads remain refused |
 | `#sum`, `#sum+` heads | Signed numeric `#sum` and nonnegative numeric `#sum+`; positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions and Boolean operands; zero-weight positive atomic heads retain permission | Missing/nonnumeric measured values, negative `#sum+` weights, unsupported eligibility contexts and objective-relevant heads remain refused |
 | `#min`, `#max` heads | Numeric first tuple values; positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions and Boolean operands | Missing/nonnumeric measured values, the numeric endpoint guard, unsupported eligibility contexts and objective-relevant heads remain refused |
 
@@ -148,6 +148,12 @@ negative, disjunctive or conditional producer patterns do not inherit it.
 Dynamic priorities, additional objective conditions and broader mixed-extrema
 profiles remain restricted. In particular, accepting an extremal term as atom
 data does not imply accepting it in every objective field.
+
+Ordinary choices containing only default-negated operands supply no competing
+positive producer. They can compose with certified forwarding or assignment
+dependencies while their bounds still constrain answers. This does not admit
+general negative, disjunctive or conditional objective producers,
+objective-relevant function heads, or additional objective conditions.
 
 `#defined` and `#show` retain signed signature metadata. Ground and admitted
 conditional term observations operate over full models; they do not change
