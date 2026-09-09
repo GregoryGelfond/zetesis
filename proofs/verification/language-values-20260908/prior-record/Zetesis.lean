@@ -72,7 +72,3 @@ import Zetesis.PartitionCapacities
 import Zetesis.AggregateRanges
 import Zetesis.CountHeadActivity
 import Zetesis.ObjectiveTransport
-import Zetesis.BooleanHeads
-import Zetesis.EvaluatedWitnesses
-import Zetesis.ObjectiveValues
-import Zetesis.ExtremumPresence

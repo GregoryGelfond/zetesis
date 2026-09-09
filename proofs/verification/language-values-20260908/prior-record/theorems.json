@@ -375,51 +375,6 @@
     "line": 45
   },
   {
-    "name": "Zetesis.BooleanHeads.constant_frozen",
-    "file": "Zetesis/BooleanHeads.lean",
-    "line": 33
-  },
-  {
-    "name": "Zetesis.BooleanHeads.constant_original",
-    "file": "Zetesis/BooleanHeads.lean",
-    "line": 28
-  },
-  {
-    "name": "Zetesis.BooleanHeads.double_negative_constant_frozen",
-    "file": "Zetesis/BooleanHeads.lean",
-    "line": 43
-  },
-  {
-    "name": "Zetesis.BooleanHeads.guarded_theory_preserves_stable_models",
-    "file": "Zetesis/BooleanHeads.lean",
-    "line": 160
-  },
-  {
-    "name": "Zetesis.BooleanHeads.head_reduct_of_positive_kept",
-    "file": "Zetesis/BooleanHeads.lean",
-    "line": 72
-  },
-  {
-    "name": "Zetesis.BooleanHeads.negative_constant_frozen",
-    "file": "Zetesis/BooleanHeads.lean",
-    "line": 38
-  },
-  {
-    "name": "Zetesis.BooleanHeads.stable_has_positive_producer",
-    "file": "Zetesis/BooleanHeads.lean",
-    "line": 94
-  },
-  {
-    "name": "Zetesis.BooleanHeads.stable_satisfies_support",
-    "file": "Zetesis/BooleanHeads.lean",
-    "line": 151
-  },
-  {
-    "name": "Zetesis.BooleanHeads.support_formula_truth",
-    "file": "Zetesis/BooleanHeads.lean",
-    "line": 131
-  },
-  {
     "name": "Zetesis.Bounds.acceptance_survives_narrowing",
     "file": "Zetesis/Bounds.lean",
     "line": 116
@@ -1345,51 +1300,6 @@
     "line": 92
   },
   {
-    "name": "Zetesis.EvaluatedWitnesses.complete_row_collection_keeps_stability",
-    "file": "Zetesis/EvaluatedWitnesses.lean",
-    "line": 167
-  },
-  {
-    "name": "Zetesis.EvaluatedWitnesses.completed_condition_preserved",
-    "file": "Zetesis/EvaluatedWitnesses.lean",
-    "line": 89
-  },
-  {
-    "name": "Zetesis.EvaluatedWitnesses.false_check_refuses",
-    "file": "Zetesis/EvaluatedWitnesses.lean",
-    "line": 109
-  },
-  {
-    "name": "Zetesis.EvaluatedWitnesses.frozen_witness_truth",
-    "file": "Zetesis/EvaluatedWitnesses.lean",
-    "line": 151
-  },
-  {
-    "name": "Zetesis.EvaluatedWitnesses.original_witness_truth",
-    "file": "Zetesis/EvaluatedWitnesses.lean",
-    "line": 135
-  },
-  {
-    "name": "Zetesis.EvaluatedWitnesses.selected_iff",
-    "file": "Zetesis/EvaluatedWitnesses.lean",
-    "line": 120
-  },
-  {
-    "name": "Zetesis.EvaluatedWitnesses.successful_selection",
-    "file": "Zetesis/EvaluatedWitnesses.lean",
-    "line": 59
-  },
-  {
-    "name": "Zetesis.EvaluatedWitnesses.undefined_selection",
-    "file": "Zetesis/EvaluatedWitnesses.lean",
-    "line": 97
-  },
-  {
-    "name": "Zetesis.EvaluatedWitnesses.unmatched_row_skips_evaluation",
-    "file": "Zetesis/EvaluatedWitnesses.lean",
-    "line": 103
-  },
-  {
     "name": "Zetesis.EvaluationPrefix.reset_preservation",
     "file": "Zetesis/EvaluationPrefix.lean",
     "line": 77
@@ -1533,31 +1443,6 @@
     "name": "Zetesis.ExtremumCandidates.finite_ne_supremum",
     "file": "Zetesis/ExtremumCandidates.lean",
     "line": 73
-  },
-  {
-    "name": "Zetesis.ExtremumPresence.mandatory_class_excludes_numeric_result",
-    "file": "Zetesis/ExtremumPresence.lean",
-    "line": 73
-  },
-  {
-    "name": "Zetesis.ExtremumPresence.mandatory_dominance_excludes_numeric",
-    "file": "Zetesis/ExtremumPresence.lean",
-    "line": 32
-  },
-  {
-    "name": "Zetesis.ExtremumPresence.numeric_presence_transport",
-    "file": "Zetesis/ExtremumPresence.lean",
-    "line": 63
-  },
-  {
-    "name": "Zetesis.ExtremumPresence.optional_numeric_witness",
-    "file": "Zetesis/ExtremumPresence.lean",
-    "line": 44
-  },
-  {
-    "name": "Zetesis.ExtremumPresence.possible_extension_retains_presence",
-    "file": "Zetesis/ExtremumPresence.lean",
-    "line": 53
   },
   {
     "name": "Zetesis.Feedback.all_feedback_preserves_stability",
@@ -2488,41 +2373,6 @@
     "name": "Zetesis.ObjectiveTransport.transport_key",
     "file": "Zetesis/ObjectiveTransport.lean",
     "line": 56
-  },
-  {
-    "name": "Zetesis.ObjectiveValues.ignored_entry_has_no_numeric_key",
-    "file": "Zetesis/ObjectiveValues.lean",
-    "line": 45
-  },
-  {
-    "name": "Zetesis.ObjectiveValues.ignored_entry_preserves_cost",
-    "file": "Zetesis/ObjectiveValues.lean",
-    "line": 86
-  },
-  {
-    "name": "Zetesis.ObjectiveValues.ignored_entry_preserves_optima",
-    "file": "Zetesis/ObjectiveValues.lean",
-    "line": 95
-  },
-  {
-    "name": "Zetesis.ObjectiveValues.ignored_entry_preserves_presence",
-    "file": "Zetesis/ObjectiveValues.lean",
-    "line": 56
-  },
-  {
-    "name": "Zetesis.ObjectiveValues.numeric_entries_ignore",
-    "file": "Zetesis/ObjectiveValues.lean",
-    "line": 51
-  },
-  {
-    "name": "Zetesis.ObjectiveValues.selected_entry_preserves_key",
-    "file": "Zetesis/ObjectiveValues.lean",
-    "line": 79
-  },
-  {
-    "name": "Zetesis.ObjectiveValues.zero_entry_retains_presence",
-    "file": "Zetesis/ObjectiveValues.lean",
-    "line": 71
   },
   {
     "name": "Zetesis.Optimization.best_none_iff",

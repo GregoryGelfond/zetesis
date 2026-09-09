@@ -1,4 +1,5 @@
 import Zetesis
+
 #print axioms Zetesis.AggregateAssignment.active_tuples_nodup
 #print axioms Zetesis.AggregateAssignment.actual_tuple_sum_is_candidate
 #print axioms Zetesis.AggregateAssignment.coalesced_active_tuples
@@ -74,15 +75,6 @@ import Zetesis
 #print axioms Zetesis.BatchAccounting.propose_accounted
 #print axioms Zetesis.BinaryWatch.positions_exhausted
 #print axioms Zetesis.BinaryWatch.replacement_absent
-#print axioms Zetesis.BooleanHeads.constant_frozen
-#print axioms Zetesis.BooleanHeads.constant_original
-#print axioms Zetesis.BooleanHeads.double_negative_constant_frozen
-#print axioms Zetesis.BooleanHeads.guarded_theory_preserves_stable_models
-#print axioms Zetesis.BooleanHeads.head_reduct_of_positive_kept
-#print axioms Zetesis.BooleanHeads.negative_constant_frozen
-#print axioms Zetesis.BooleanHeads.stable_has_positive_producer
-#print axioms Zetesis.BooleanHeads.stable_satisfies_support
-#print axioms Zetesis.BooleanHeads.support_formula_truth
 #print axioms Zetesis.Bounds.acceptance_survives_narrowing
 #print axioms Zetesis.Bounds.accepted_seed_agrees
 #print axioms Zetesis.Bounds.closed_upper_sound
@@ -268,15 +260,6 @@ import Zetesis
 #print axioms Zetesis.DagSharing.stored_meaning
 #print axioms Zetesis.DagSharing.valid_mono
 #print axioms Zetesis.DagSharing.well_formed_reference
-#print axioms Zetesis.EvaluatedWitnesses.complete_row_collection_keeps_stability
-#print axioms Zetesis.EvaluatedWitnesses.completed_condition_preserved
-#print axioms Zetesis.EvaluatedWitnesses.false_check_refuses
-#print axioms Zetesis.EvaluatedWitnesses.frozen_witness_truth
-#print axioms Zetesis.EvaluatedWitnesses.original_witness_truth
-#print axioms Zetesis.EvaluatedWitnesses.selected_iff
-#print axioms Zetesis.EvaluatedWitnesses.successful_selection
-#print axioms Zetesis.EvaluatedWitnesses.undefined_selection
-#print axioms Zetesis.EvaluatedWitnesses.unmatched_row_skips_evaluation
 #print axioms Zetesis.EvaluationPrefix.reset_preservation
 #print axioms Zetesis.EvaluationPrefix.storage_preservation
 #print axioms Zetesis.EvaluationPrefix.write_prefix
@@ -306,11 +289,6 @@ import Zetesis
 #print axioms Zetesis.ExtremumCandidates.extreme_some_mem
 #print axioms Zetesis.ExtremumCandidates.finite_ne_infimum
 #print axioms Zetesis.ExtremumCandidates.finite_ne_supremum
-#print axioms Zetesis.ExtremumPresence.mandatory_class_excludes_numeric_result
-#print axioms Zetesis.ExtremumPresence.mandatory_dominance_excludes_numeric
-#print axioms Zetesis.ExtremumPresence.numeric_presence_transport
-#print axioms Zetesis.ExtremumPresence.optional_numeric_witness
-#print axioms Zetesis.ExtremumPresence.possible_extension_retains_presence
 #print axioms Zetesis.Feedback.all_feedback_preserves_stability
 #print axioms Zetesis.Feedback.allow_iff_no_countermodel
 #print axioms Zetesis.Feedback.classical_minimal_stable_sub_equal
@@ -497,13 +475,6 @@ import Zetesis
 #print axioms Zetesis.ObjectiveTransport.present_transport
 #print axioms Zetesis.ObjectiveTransport.transport_composes
 #print axioms Zetesis.ObjectiveTransport.transport_key
-#print axioms Zetesis.ObjectiveValues.ignored_entry_has_no_numeric_key
-#print axioms Zetesis.ObjectiveValues.ignored_entry_preserves_cost
-#print axioms Zetesis.ObjectiveValues.ignored_entry_preserves_optima
-#print axioms Zetesis.ObjectiveValues.ignored_entry_preserves_presence
-#print axioms Zetesis.ObjectiveValues.numeric_entries_ignore
-#print axioms Zetesis.ObjectiveValues.selected_entry_preserves_key
-#print axioms Zetesis.ObjectiveValues.zero_entry_retains_presence
 #print axioms Zetesis.Optimization.best_none_iff
 #print axioms Zetesis.Optimization.best_spec
 #print axioms Zetesis.Optimization.completed_best_is_optimal

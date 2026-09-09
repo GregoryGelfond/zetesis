@@ -8,7 +8,7 @@ readable before its Lean details. The convention has one deliberately bounded
 pilot so far; it is not a claim of a library-wide rewrite.
 
 
-This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **864 kernel-checked theorems** across 78 semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
+This package accompanies the [zetesis v0.2 specification](../docs/design/zetesis.md). It contains **834 kernel-checked theorems** across 74 semantic modules, using **Lean 4.33.1** and its standard library. There are no external package dependencies, project axioms, proof holes, or native-evaluation proof shortcuts.
 
 The formalization connects normalized stable-model semantics to candidate seeds, compositional reduct execution, lazy completion, consequence bounds, and completed search certificates. It supplies mathematical contracts for the Rust, wgpu, Rayon, and neuromorphic implementation work. It does not verify those implementations or make Lean a runtime dependency.
 
@@ -21,7 +21,7 @@ lake build
 lake env lean -DautoImplicit=false -DwarningAsError=true Audit.lean
 ```
 
-`lean-toolchain` pins `leanprover/lean4:v4.33.1`. The package has no remote dependencies, so the build itself needs no network once that toolchain exists. `lake build` compiles the umbrella module and all 78 semantic modules. `Audit.lean` requests the transitive axiom dependencies of every project theorem.
+`lean-toolchain` pins `leanprover/lean4:v4.33.1`. The package has no remote dependencies, so the build itself needs no network once that toolchain exists. `lake build` compiles the umbrella module and all 74 semantic modules. `Audit.lean` requests the transitive axiom dependencies of every project theorem.
 
 The [verification report](./verification.json) records the checked source hashes and commands. The [axiom audit](./axiom-audit.txt) contains only standard Lean logical axioms where needed: `propext`, `Quot.sound`, and `Classical.choice`. In particular, no theorem depends on `sorryAx` or `Lean.ofReduceBool`.
 
@@ -37,10 +37,6 @@ preserves an earlier inconsistent manifest and explains its repair.
 
 | Module | What is proved |
 |---|---|
-| [BooleanHeads](./Zetesis/BooleanHeads.lean) | Original/frozen Boolean head constants and signed operands, necessary positive support and contextual stability of guarded ground theories |
-| [EvaluatedWitnesses](./Zetesis/EvaluatedWitnesses.lean) | Partial evaluated checks over already matched positive rows preserve completed bindings and original/frozen witness truth under explicit row coverage |
-| [ObjectiveValues](./Zetesis/ObjectiveValues.lean) | Numeric selection of resolved finite objective entries preserves complete keys, priority presence, costs and optimal models; numeric zero remains present |
-| [ExtremumPresence](./Zetesis/ExtremumPresence.lean) | Mandatory dominance excludes possible numeric witnesses; optional carriers retain presence; completed presence transports under explicit correspondence; a separate selection law excludes numeric actual extrema |
 | [AggregateReduct](./Zetesis/AggregateReduct.lean) | Ferraris Proposition 7 for finite aggregate masks: direct original and recursively frozen eligibility evaluation, with checked enumeration coverage and an explicit evaluator-agreement premise |
 | [AggregateRanges](./Zetesis/AggregateRanges.lean) | Separate positive and negative contribution totals bound every intermediate mathematical sum under occurrence-preserving selection and arbitrary finite reassociation; machine execution remains a separate obligation |
 | [PartitionCapacities](./Zetesis/PartitionCapacities.lean) | Additive group counts imply local lower bounds and full-capacity consequences under explicit coverage and upper-capacity premises; these do not certify an original theory's entailment |

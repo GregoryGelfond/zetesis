@@ -73,15 +73,6 @@
 'Zetesis.BatchAccounting.propose_accounted' depends on axioms: [propext]
 'Zetesis.BinaryWatch.positions_exhausted' depends on axioms: [propext, Quot.sound]
 'Zetesis.BinaryWatch.replacement_absent' depends on axioms: [propext, Quot.sound]
-'Zetesis.BooleanHeads.constant_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.BooleanHeads.constant_original' depends on axioms: [propext]
-'Zetesis.BooleanHeads.double_negative_constant_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.BooleanHeads.guarded_theory_preserves_stable_models' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.BooleanHeads.head_reduct_of_positive_kept' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.BooleanHeads.negative_constant_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.BooleanHeads.stable_has_positive_producer' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.BooleanHeads.stable_satisfies_support' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.BooleanHeads.support_formula_truth' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Bounds.acceptance_survives_narrowing' does not depend on any axioms
 'Zetesis.Bounds.accepted_seed_agrees' does not depend on any axioms
 'Zetesis.Bounds.closed_upper_sound' does not depend on any axioms
@@ -279,17 +270,6 @@
 'Zetesis.DagSharing.stored_meaning' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.DagSharing.valid_mono' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.DagSharing.well_formed_reference' depends on axioms: [propext, Quot.sound]
-'Zetesis.EvaluatedWitnesses.complete_row_collection_keeps_stability' depends on axioms: [propext,
- Classical.choice,
- Quot.sound]
-'Zetesis.EvaluatedWitnesses.completed_condition_preserved' depends on axioms: [propext, Quot.sound]
-'Zetesis.EvaluatedWitnesses.false_check_refuses' depends on axioms: [propext]
-'Zetesis.EvaluatedWitnesses.frozen_witness_truth' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.EvaluatedWitnesses.original_witness_truth' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.EvaluatedWitnesses.selected_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.EvaluatedWitnesses.successful_selection' depends on axioms: [propext]
-'Zetesis.EvaluatedWitnesses.undefined_selection' depends on axioms: [propext]
-'Zetesis.EvaluatedWitnesses.unmatched_row_skips_evaluation' depends on axioms: [propext]
 'Zetesis.EvaluationPrefix.reset_preservation' depends on axioms: [propext, Quot.sound]
 'Zetesis.EvaluationPrefix.storage_preservation' depends on axioms: [propext, Quot.sound]
 'Zetesis.EvaluationPrefix.write_prefix' depends on axioms: [propext, Quot.sound]
@@ -319,11 +299,6 @@
 'Zetesis.ExtremumCandidates.extreme_some_mem' depends on axioms: [propext]
 'Zetesis.ExtremumCandidates.finite_ne_infimum' does not depend on any axioms
 'Zetesis.ExtremumCandidates.finite_ne_supremum' does not depend on any axioms
-'Zetesis.ExtremumPresence.mandatory_class_excludes_numeric_result' depends on axioms: [propext, Quot.sound]
-'Zetesis.ExtremumPresence.mandatory_dominance_excludes_numeric' does not depend on any axioms
-'Zetesis.ExtremumPresence.numeric_presence_transport' depends on axioms: [propext, Quot.sound]
-'Zetesis.ExtremumPresence.optional_numeric_witness' depends on axioms: [propext, Quot.sound]
-'Zetesis.ExtremumPresence.possible_extension_retains_presence' does not depend on any axioms
 'Zetesis.Feedback.all_feedback_preserves_stability' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Feedback.allow_iff_no_countermodel' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Feedback.classical_minimal_stable_sub_equal' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -526,13 +501,6 @@
 'Zetesis.ObjectiveTransport.present_transport' depends on axioms: [propext, Quot.sound]
 'Zetesis.ObjectiveTransport.transport_composes' does not depend on any axioms
 'Zetesis.ObjectiveTransport.transport_key' does not depend on any axioms
-'Zetesis.ObjectiveValues.ignored_entry_has_no_numeric_key' depends on axioms: [propext]
-'Zetesis.ObjectiveValues.ignored_entry_preserves_cost' depends on axioms: [propext]
-'Zetesis.ObjectiveValues.ignored_entry_preserves_optima' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.ObjectiveValues.ignored_entry_preserves_presence' depends on axioms: [propext]
-'Zetesis.ObjectiveValues.numeric_entries_ignore' depends on axioms: [propext]
-'Zetesis.ObjectiveValues.selected_entry_preserves_key' depends on axioms: [propext]
-'Zetesis.ObjectiveValues.zero_entry_retains_presence' depends on axioms: [propext]
 'Zetesis.Optimization.best_none_iff' depends on axioms: [propext]
 'Zetesis.Optimization.best_spec' depends on axioms: [propext, Quot.sound]
 'Zetesis.Optimization.completed_best_is_optimal' depends on axioms: [propext, Classical.choice, Quot.sound]

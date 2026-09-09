@@ -1,0 +1,12 @@
+{
+  "prior_theorems": 834,
+  "current_theorems": 864,
+  "retained_declarations": 834,
+  "added_theorems": 30,
+  "prior_semantic_modules": 74,
+  "current_semantic_modules": 78,
+  "changed_prior_declarations": [],
+  "changed_prior_module_bytes": [],
+  "changed_prior_axioms": [],
+  "passed": true
+}
