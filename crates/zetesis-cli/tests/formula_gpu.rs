@@ -4,6 +4,9 @@ use clap::Parser;
 use zetesis_cli::{Completion, Options, RunError, run_with_diagnostics};
 use zetesis_cpu::Control;
 
+#[path = "support/formula_records.rs"]
+mod formula_records;
+
 #[cfg(feature = "gpu")]
 #[path = "support/bounded_writer.rs"]
 mod bounded_writer;
@@ -15,6 +18,48 @@ fn options(arguments: &[&str]) -> Options {
             .chain(arguments.iter().copied()),
     )
     .unwrap()
+}
+
+fn cpu_output(source: &str, json: bool) -> Vec<u8> {
+    let mut configuration = options(&["--backend", "cpu"]);
+    configuration.json = json;
+    let mut output = Vec::new();
+    let report = run_with_diagnostics(
+        source.into(),
+        &configuration,
+        &mut output,
+        &mut Vec::new(),
+        &Control::default(),
+    )
+    .unwrap();
+    assert_eq!(report.completion, Completion::Exhausted);
+    output
+}
+
+#[test]
+fn complete_records_distinguish_hidden_atoms() {
+    let left = "visible. hidden(left). #show visible/0.";
+    let right = "visible. hidden(right). #show visible/0.";
+    // Identical displayed records cannot certify the hidden model identity.
+    assert_eq!(
+        formula_records::displayed_records(&cpu_output(left, false)),
+        formula_records::displayed_records(&cpu_output(right, false))
+    );
+    assert_ne!(
+        formula_records::full_records(&cpu_output(left, true)),
+        formula_records::full_records(&cpu_output(right, true))
+    );
+}
+
+#[test]
+fn complete_records_preserve_objective_presence() {
+    let absent = formula_records::full_records(&cpu_output("a. #show.", true));
+    let present = formula_records::full_records(&cpu_output("a. #show. #minimize{0@3}.", true));
+    assert_eq!(absent.len(), 1);
+    assert_eq!(present.len(), 1);
+    assert_eq!(absent[0].0, present[0].0);
+    assert_eq!(absent[0].1, None);
+    assert_eq!(present[0].1, Some(vec![(3, 0)]));
 }
 
 #[test]
@@ -120,34 +165,9 @@ mod language_value_sources;
 
 #[cfg(feature = "gpu")]
 mod physical {
+    use super::formula_records::{displayed_records, full_records};
     use super::physical_backend::Backend;
     use super::{Completion, Control, options, run_with_diagnostics};
-
-    fn records(output: &[u8]) -> Vec<(Vec<String>, Option<String>)> {
-        let text = std::str::from_utf8(output).unwrap();
-        let mut rows = Vec::new();
-        let mut lines = text.lines().peekable();
-        while let Some(line) = lines.next() {
-            if line.starts_with("Answer:") {
-                // These named tiny fixtures deliberately contain no whitespace in symbols.
-                let mut atoms: Vec<_> = lines
-                    .next()
-                    .unwrap()
-                    .split_whitespace()
-                    .map(str::to_owned)
-                    .collect();
-                atoms.sort();
-                let score = lines
-                    .peek()
-                    .filter(|line| line.starts_with("Optimization:"))
-                    .map(|_| ())
-                    .and_then(|()| lines.next().map(str::to_owned));
-                rows.push((atoms, score));
-            }
-        }
-        rows.sort();
-        rows
-    }
 
     #[test]
     #[ignore = "requires actual Metal; executes the ordinary solver and never substitutes CPU"]
@@ -180,58 +200,76 @@ mod physical {
         .chain([super::count_objective_sources::INCONSISTENT])
         .chain(super::language_value_sources::SOURCES)
         {
-            let mut expected = Vec::new();
-            let cpu = run_with_diagnostics(
+            for json in [false, true] {
+                qualify_formula_output(source, backend, json);
+            }
+        }
+    }
+
+    fn qualify_formula_output(source: &str, backend: Backend, json: bool) {
+        let mut expected = Vec::new();
+        let mut configuration = options(&["--backend", "cpu"]);
+        configuration.json = json;
+        let cpu = run_with_diagnostics(
+            source.into(),
+            &configuration,
+            &mut expected,
+            &mut Vec::new(),
+            &Control::default(),
+        )
+        .unwrap();
+        assert_eq!(cpu.completion, Completion::Exhausted);
+        for batch in ["3", "7", "16"] {
+            let mut actual = Vec::new();
+            let mut diagnostics = Vec::new();
+            let mut configuration = options(&[
+                "--backend",
+                backend.argument(),
+                "--oracle",
+                "countermodel",
+                "--batch-size",
+                batch,
+                "--stats",
+            ]);
+            configuration.json = json;
+            let report = run_with_diagnostics(
                 source.into(),
-                &options(&["--backend", "cpu"]),
-                &mut expected,
-                &mut Vec::new(),
+                &configuration,
+                &mut actual,
+                &mut diagnostics,
                 &Control::default(),
             )
             .unwrap();
-            assert_eq!(cpu.completion, Completion::Exhausted);
-            for batch in ["3", "7", "16"] {
-                let mut actual = Vec::new();
-                let mut diagnostics = Vec::new();
-                let report = run_with_diagnostics(
-                    source.into(),
-                    &options(&[
-                        "--backend",
-                        backend.argument(),
-                        "--oracle",
-                        "countermodel",
-                        "--batch-size",
-                        batch,
-                        "--stats",
-                    ]),
-                    &mut actual,
-                    &mut diagnostics,
-                    &Control::default(),
-                )
-                .unwrap();
-                assert_eq!(report.completion, Completion::Exhausted);
-                assert_eq!(report.models, cpu.models);
+            assert_eq!(report.completion, Completion::Exhausted);
+            assert_eq!(report.models, cpu.models);
+            if json {
                 assert_eq!(
-                    records(&actual),
-                    records(&expected),
-                    "{source} batch={batch}"
+                    full_records(&actual),
+                    full_records(&expected),
+                    "{source} batch={batch}: complete typed models and costs"
                 );
-                let stats = report.formula_execution.unwrap();
-                assert!(stats.adapter.contains(backend.name()));
-                if report.checked > 0 {
-                    assert!(stats.gpu_batches > 0);
-                } else {
-                    // An inconsistent source can exhaust before proposing a world.
-                    assert_eq!(report.models, 0);
-                    assert_eq!(stats.gpu_batches, 0);
-                }
-                assert_eq!(stats.gpu_candidates, report.checked);
-                assert_eq!(stats.gpu_decided + stats.cpu_residuals, report.checked);
-                assert_eq!((stats.pending_candidates, stats.queued_models), (0, 0));
-                let text = String::from_utf8(diagnostics).unwrap();
-                assert!(text.contains("hybrid GPU propagation + exact CPU residual search"));
-                assert!(text.contains("GPU kernel timing=unavailable"));
+            } else {
+                assert_eq!(
+                    displayed_records(&actual),
+                    displayed_records(&expected),
+                    "{source} batch={batch}: displayed records"
+                );
             }
+            let stats = report.formula_execution.unwrap();
+            assert!(stats.adapter.contains(backend.name()));
+            if report.checked > 0 {
+                assert!(stats.gpu_batches > 0);
+            } else {
+                // An inconsistent source can exhaust before proposing a world.
+                assert_eq!(report.models, 0);
+                assert_eq!(stats.gpu_batches, 0);
+            }
+            assert_eq!(stats.gpu_candidates, report.checked);
+            assert_eq!(stats.gpu_decided + stats.cpu_residuals, report.checked);
+            assert_eq!((stats.pending_candidates, stats.queued_models), (0, 0));
+            let text = String::from_utf8(diagnostics).unwrap();
+            assert!(text.contains("hybrid GPU propagation + exact CPU residual search"));
+            assert!(text.contains("GPU kernel timing=unavailable"));
         }
     }
 
