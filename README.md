@@ -265,9 +265,12 @@ pass 2,451 workspace tests/doc checks, 348 independent CPU-only CLI checks,
 76 external-oracle tests and fresh 94/24 release comparisons. The current
 [Lean audit](proofs/verification/language-values-20260908/README.md) checks
 864 laws across 78 modules. CPU-only CLI coverage passes at 93.3773%; portable
-workspace coverage is 90.2015%, below the unchanged 91% floor. The new frozen
-25-test Metal package awaits physical execution and matching profile collection.
-This branch has not replaced the promoted main or installed commands.
+workspace coverage is 90.2015%, below the unchanged 91% floor. The
+[returned 25-test Metal qualification](docs/verification/language-values-tranche-20260908/metal/README.md)
+passes on Apple M4 Pro. Workspace coverage with its matching profiles is
+93.6480%, so both independent 91% floors now pass. The portable-only result
+remains separately recorded. Promotion and installation are recorded after
+qualification.
 
 The checkpoint includes the following scoped capabilities. The
 [previous checkpoint](docs/verification/aggregate-primitives-tranche-20260908/README.md)
