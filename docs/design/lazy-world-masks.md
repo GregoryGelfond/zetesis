@@ -30,8 +30,8 @@ only to discard zero-mask source work. Uploading masks to schedule fewer
 world/instance checks remains a future step requiring measurement and its own ABI
 obligations.
 The current relational filters are equality/disequality tests. Extending this
-pruning to partial or effectful source evaluation would also need to preserve
-that evaluator's refusal and effect policy; logical consequence equivalence
+pruning to partial or fallible pure source evaluation would also need to preserve
+that evaluator's refusal policy; logical consequence equivalence
 alone would not establish that stronger contract.
 
 Masks must describe the same immutable snapshot as the whole round. They never

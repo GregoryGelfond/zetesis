@@ -68,12 +68,19 @@ results are relied on by a reduct proof. Callback failure, invalid values,
 cancellation or exceeded output/work limits produce typed failure or incomplete
 construction; they cannot mean an empty answer-set result.
 
-Memoization and parallel invocation require the declared determinism and
-thread-safety contracts. A function/context registration change invalidates
-dependent cached results. An effectful callback needs an explicit execution and
-snapshot contract; it cannot be treated as a pure mathematical function merely
-because its Rust signature takes `&self`. Calls should be attributable to original
-source sites and the exact program version used by the solve.
+Every Rust `@` function must be pure: equal shared logical arguments denote equal
+results for a fixed registered implementation. All semantic inputs cross through
+those declared arguments. Hidden state, I/O, clocks, randomness dependence and
+observable side effects are excluded. This is a required contract, not an
+optional deterministic mode, and `&self` alone cannot enforce it. The public
+interface uses the shared logical types and fallible conversions; callers do not
+work through rendered ASP strings, dense atom IDs or GPU representations.
+
+Memoization must preserve that contract; parallel invocation additionally
+requires the shared thread-safety contract. Replacing a registered implementation
+invalidates dependent cached results. Registration context may manage interning
+or caches but supplies no undeclared semantic inputs. Calls remain attributable
+to original source sites and the exact program version used by the solve.
 
 Rust callbacks initially execute on a Rust-capable host; supporting them does
 not imply compiling arbitrary Rust libraries into WGSL or neuromorphic kernels.

@@ -8,27 +8,46 @@ zetesis's execution obligations, not a second extension framework. See the
 [integration contract](themelios-solve-integration.md) for the inspected themelios
 design and the unchanged dependency pin.
 
+## Pure functions on shared logical values
+
+Purity is a required contract for every Rust `@` function. For a fixed registered
+implementation, equal typed arguments denote equal results, independently of
+invocation order, worker assignment or prior calls. All data that determines the
+logical result must be supplied through the declared logical arguments. Hidden
+mutable state, clock or randomness dependence, I/O and externally observable
+side effects are outside this contract. Registration does not provide an
+effectful execution mode.
+
+Arguments and results use the natural logical interface types supplied by
+themelios. Its inspected design calls these shared values `Symbol` and represents
+failure as a located `GroundFault`; zetesis will consume the implemented shared
+API. A function author should not need rendered ASP strings, dense atom IDs,
+internal formula nodes or GPU buffers. Shared fallible conversions connect Rust
+library values to logical values without losing identity or silently rounding
+unsupported results. The themelios draft names this conversion pillar
+`ToSymbol`/`FromSymbol` and proposes `#[external]` for checked Rust signatures;
+the shared `Symbol` dispatch boundary need not dictate every author's function
+signature. Those names describe the inspected design, not an implemented zetesis
+registration API. Rust string values remain legitimate logical string terms;
+they are not an alternative serialization-based callback interface.
+
+A successful result is a finite collection of shared logical values. The shared
+contract must settle ordering and duplicate semantics; the engine cannot silently
+change a sequence into a set. Empty success is distinct from a callback failure.
+Internal interning and memoization are permitted only when observationally
+equivalent to the same pure function. A Rust `&self` receiver alone does not
+establish purity: interior mutability can still change results or expose effects.
+
 ## A function result belongs to a program version
 
-A solve sees one immutable source/context version. A callback invocation is
-identified by its registered function identity, typed argument vector and context
-version. Its successful result is a finite collection of shared `Symbol` values.
-The shared contract must settle ordering and duplicate semantics; the engine
-cannot substitute string equality or silently change a sequence into a set.
-Empty success is distinct from a callback failure.
-
-For a deterministic function, every use of that invocation in a version must
-agree on its result. A cache may reuse a successful result only under those exact
-identities. Replacing a function implementation or its context starts a new
-version and invalidates dependent expansion and analysis results. A Rust `&self`
-receiver alone is no evidence of determinism: interior mutability, clocks and
-external services can all change results.
-
-The first implementation should require deterministic results relative to the
-registered context snapshot. Effectful functions need a separate contract for
-execution and replay before they can participate in lazy construction. They
-cannot be scheduled speculatively or called again during reduct evaluation under
-an assumed purity guarantee.
+A solve fixes its source and registered function implementations. An invocation
+is identified by the registered implementation's version and typed arguments.
+Every successful evaluation of that invocation must agree on its result. A cache
+may reuse a successful result only under those exact identities. Replacing an
+implementation starts a new version and invalidates dependent expansion and
+analysis results. Registration context may manage interning or caches; it cannot
+introduce undeclared semantic inputs. Resource exhaustion and cancellation remain
+explicit execution outcomes, not different logical results for the same inputs.
 
 ## Execution and admission
 
@@ -44,9 +63,10 @@ an assumed purity guarantee.
 A zero-argument function can be a finite source of values if its declared
 capability permits that use. A function with an unbound argument is not an
 enumerator for that argument. Returning a value also does not establish the
-safety of unrelated source variables. Function outputs may contain terms beyond
-zetesis's current scalar fragment; until those terms are supported, conversion
-must return a located refusal without conflating distinct symbols.
+safety of unrelated source variables. The core already represents structured
+values, but particular admission and execution profiles remain narrower. An
+unsupported output must receive a located refusal without conflating distinct
+symbols.
 
 Each invocation needs finite output and byte allowances. The whole construction
 also needs limits on distinct invocation keys, nesting, generated combinations,
@@ -77,9 +97,9 @@ keys, and the admitted expansions must establish sufficient final semantic
 coverage. This does not require executing every unreachable syntactic call. A
 function failure encountered while establishing that coverage remains a failure.
 
-Analysis treats an opaque callback conservatively. Placement and batching may
-use declared determinism, thread safety, argument dependencies and measured cost.
-Rayon invocation requires the shared concurrency contract and immutable version
+Analysis treats an opaque callback conservatively even though purity is required.
+Placement and batching may use thread safety, argument dependencies and measured
+cost. Rayon invocation requires the shared concurrency contract and immutable version
 identity; result publication must preserve symbol and source identities regardless
 of completion order. Cached failures cannot become empty successful results.
 
@@ -103,7 +123,7 @@ Rust purity, panic containment, scheduling or foreign-library behavior.
 Before claiming this capability, compare the future themelios clingo adapter and
 zetesis adapter on the same typed function registrations. Include empty and
 multi-valued results, duplicate values, nested calls, shared symbols and compound
-terms, several call sites, context replacement, recursive expansion limits,
+terms, several call sites, implementation replacement, recursive expansion limits,
 callback errors/panics, cancellation and concurrent calls. Check complete models,
 optimal ties, located failures and completion status. Existing single-shot corpus
 and Lean results establish none of these extension guarantees yet. In particular,
