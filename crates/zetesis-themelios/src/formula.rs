@@ -154,6 +154,12 @@ impl fmt::Display for FormulaResource {
 /// A located refusal of finite formula source admission; never semantic UNSAT.
 #[derive(Debug)]
 pub enum FormulaFailure {
+    /// Original Boolean choice occurrences could not be preserved through the
+    /// checked statement view. This refuses compilation, never answer sets.
+    ChoiceSource {
+        /// Original enclosing rule, or the source whose identity disagreed.
+        location: Location,
+    },
     /// Located bounded observation compilation failure.
     Observation {
         /// Independent typed observation refusal.
@@ -254,7 +260,8 @@ impl FormulaFailure {
                     )
                 })
                 .collect(),
-            Self::Limit { location, .. }
+            Self::ChoiceSource { location }
+            | Self::Limit { location, .. }
             | Self::UnsafeVariable { location, .. }
             | Self::UnboundArgumentInput { location, .. }
             | Self::UnboundValueInput { location, .. }
@@ -272,6 +279,9 @@ impl FormulaFailure {
 impl fmt::Display for FormulaFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::ChoiceSource { .. } => {
+                f.write_str("Boolean choice source occurrences could not be preserved")
+            }
             Self::Expansion(error) => error.fmt(f),
             Self::Include(error) => error.fmt(f),
             Self::Limit {
@@ -687,14 +697,18 @@ pub fn prepare_formula(
     }
     let mut metadata = SourceMetadata::default();
     metadata::collect_profile(raised.program(), &mut metadata, true)?;
+    let mut budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates);
+    let mut choices = crate::formula_choice_source::Catalog::default();
+    choices.include(&source, &parsed, &mut budget)?;
     let location = Location {
         source: source.id(),
         span: source.span(),
     };
     let preparation = prepare(
         raised.program(),
+        &choices,
         options,
-        expansion,
+        budget,
         &limits,
         location,
         &mut metadata,
@@ -771,6 +785,8 @@ fn prepare_bundle(
     let mut metadata = SourceMetadata::default();
     let mut statements = Vec::new();
     let mut visited = 0;
+    let mut budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates);
+    let mut choices = crate::formula_choice_source::Catalog::default();
     for source in bundle.sources() {
         let local = AdmissionOptions {
             source_id: source.id(),
@@ -789,6 +805,7 @@ fn prepare_bundle(
             return Err(AdmissionFailure::Raise(raised.diagnostics().to_vec()).into());
         }
         metadata::collect_profile(raised.program(), &mut metadata, true)?;
+        choices.include(source.source(), source.parsed(), &mut budget)?;
         statements.extend(
             raised
                 .program()
@@ -812,8 +829,9 @@ fn prepare_bundle(
     };
     let preparation = prepare(
         &SourceProgram::of(statements),
+        &choices,
         local,
-        expansion,
+        budget,
         limits,
         location,
         &mut metadata,
@@ -823,16 +841,16 @@ fn prepare_bundle(
 
 fn prepare(
     source: &SourceProgram,
+    choices: &crate::formula_choice_source::Catalog,
     options: AdmissionOptions,
-    expansion: ExpansionLimits,
+    mut budget: crate::expansion::Budget,
     limits: &FormulaLimits,
     location: Location,
     metadata: &mut SourceMetadata,
 ) -> Result<Preparation, FormulaFailure> {
-    let mut budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates);
     metadata.observations =
         crate::observation::compile(source, options, limits.observation, &mut budget, location)?;
-    let prepared = formula_ir::prepare(source, options, limits, &mut budget, location)?;
+    let prepared = formula_ir::prepare(source, choices, options, limits, &mut budget, location)?;
     Ok(Preparation::new(prepared, budget, limits, location))
 }
 
