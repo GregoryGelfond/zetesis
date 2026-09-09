@@ -24,13 +24,17 @@ mathematics; they do not yet constitute end-to-end verification of the Rust
 implementation, source compiler or WGSL shaders.
 
 The architecture uses **answer set** for a verified semantic interpretation and
-**world view** for a program's complete family of answer sets. Those terms do not
-promise that identically named Rust types already exist. The
-[vocabulary map](vocabulary.md) makes the current representation names explicit.
-An incomplete stream and a display projection are not a world view.
+**world view** for a program's complete family of answer sets. The Rust
+`AnswerSet` records checked membership; optional bounded `WorldView` collection
+also requires exhaustive original enumeration and complete capture. The
+[vocabulary map](vocabulary.md) relates these guarantees to the execution
+representations. An incomplete stream and a display projection are not a world view.
+
+The [neuromorphic appendix](appendices/neuromorphic.md) applies these contracts
+to a proposed event backend for Loihi 2 and SpiNNaker2, with explicit proof and
+hardware qualification obligations.
 
 Start with the [guided tour](architecture/tour.md), or go directly to
 [embedding a solve](rust/sessions.md). The examples use existing library APIs.
 The book deliberately separates current capabilities from unproved
 correspondences and unsupported execution combinations.
-
