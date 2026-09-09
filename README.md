@@ -242,7 +242,7 @@ frozen interpretation pairs, plus generated arithmetic properties. Negative
 `#sum+` head weights remain an internal limitation with a recorded reference
 discrepancy; they are not labeled modeling errors.
 
-The [last promoted qualification](docs/verification/language-closure-tranche-20260908/README.md)
+The [preceding promoted qualification](docs/verification/language-closure-tranche-20260908/README.md)
 passes **2,376 workspace tests/doc checks**, **343 independent CPU-only CLI
 checks**, **70 external-oracle tests** and **25 physical Metal tests** on Apple
 M4 Pro. Both unchanged 91% coverage floors pass: **93.6093% workspace with the
@@ -269,13 +269,14 @@ commands remain byte-identical to the binaries that passed the 94/24 corpus
 comparisons. The [Lean audit](proofs/verification/language-values-20260908/README.md)
 still checks 864 laws across 78 modules.
 
-Fresh CPU-only CLI coverage passes at 93.3773%; portable workspace coverage is
-90.2015%, below the unchanged 91% floor. The
-[preceding 25-test Metal qualification](docs/verification/language-values-tranche-20260908/metal/README.md)
-passed on Apple M4 Pro, raising that build's workspace coverage to 93.6480%.
-The rebuilt instrumented binaries differ, so those physical profiles are retained
-as historical evidence. Matching physical qualification for the corrected build
-and promotion remain pending.
+The corrected build passes [25 matching physical Metal tests](docs/verification/lint-discipline-20260909/physical/README.md)
+on Apple M4 Pro. Both unchanged 91% coverage floors pass: **93.6480% workspace
+with matching physical execution / 93.3773% independent CPU-only CLI**.
+The portable workspace baseline remains 90.2015%; it is retained separately.
+Only the eight profiles from the corrected frozen executables enter the combined
+workspace report. Earlier physical profiles remain historical evidence.
+All qualification requirements for promotion pass; promotion is recorded
+separately after it occurs.
 
 The checkpoint includes the following scoped capabilities. The
 [previous checkpoint](docs/verification/aggregate-primitives-tranche-20260908/README.md)
