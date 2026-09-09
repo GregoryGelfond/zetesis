@@ -135,10 +135,14 @@ Each line is an independent program. One head may activate several tuples, and
 several heads may activate one tuple. Local positive binders and admitted
 positive/default/double-negated eligibility retain their own scopes.
 
-Weighted and extrema heads retain a stricter complete-tuple/atom bijection.
+Weighted heads use the same separate atom permission and complete-tuple activity.
 `#sum` accepts signed numeric weights; head `#sum+` accepts nonnegative numeric
-weights. Nonnumeric head weights, negative head `#sum+` weights and nonnumeric
-extrema heads remain unsupported. A zero weight still permits its head.
+weights. A selected complete tuple contributes once, even when several of its
+eligible head atoms are selected. Distinct tuples sharing a head still contribute
+separately: `3#sum{1:a;2:a}3.` admits `{a}`. A zero weight still permits its head.
+Extrema heads retain a stricter complete-tuple/atom bijection. Nonnumeric head
+weights, negative head `#sum+` weights and nonnumeric extrema heads remain
+unsupported.
 Empty minima and maxima are `#sup` and `#inf`; bounds never create support.
 Objective-relevant function-head producers remain refused, including count heads.
 

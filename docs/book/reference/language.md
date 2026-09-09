@@ -60,7 +60,15 @@ remain implementation gaps.
 | Body `#min`, `#max` | Comparisons over complete logical values; empty extrema; admitted acyclic assignments | Numeric endpoint guard below and unsupported consumer/observer combinations |
 | Assignment consumers | Dependency-ordered scalar/tuple filters and equalities, evaluated positive arguments/heads, admitted outer negative atoms, finite outer ranges, integer choice bounds, nonbinding aggregate guards and universal conditionals | Broader local scopes, objective-relevant new consumers and objective-relevant multiple assignments |
 | `#count` heads | Permission coalesced by head atom and activity coalesced by complete tuple, including both alias directions | Unsupported eligibility/observer contexts |
-| Function heads | Signed numeric `#sum`, nonnegative numeric `#sum+`, and numeric-first-value `#min`/`#max`; zero-weight heads retain permission | These profiles require a bijection between complete tuple and head atom; weighted/extrema aliases, missing/nonnumeric measured values, negative `#sum+` weights, default-negated derived elements and objective-relevant heads remain refused |
+| `#sum`, `#sum+` heads | Signed numeric `#sum` and nonnegative numeric `#sum+`; permission coalesced by head atom and activity coalesced by complete tuple, including both alias directions; zero-weight heads retain permission | Missing/nonnumeric measured values, negative `#sum+` weights, default-negated derived elements, unsupported eligibility contexts and objective-relevant heads remain refused |
+| `#min`, `#max` heads | Numeric first tuple values, with a bijection between complete tuple and head atom | Extrema aliases, missing/nonnumeric measured values, the numeric endpoint guard, default-negated derived elements, unsupported eligibility contexts and objective-relevant heads remain refused |
+
+A tuple contributes its weight once when any of its eligible head occurrences
+is selected. Thus `1#sum{1:a;1:b}1.` admits `{a}`, `{b}` and `{a,b}`. Distinct
+complete tuples remain distinct contributions even if they share an atom:
+`3#sum{1:a;2:a}3.` admits `{a}`, as does `2#sum{1,k:a;1,l:a}2.`. Conditions
+retain their model-relative truth and reduct implications. Atom permission is
+independent of contribution, so `0#sum+{0:a;0:b}0.` retains all four choices.
 
 Acyclic aggregate assignments may depend on earlier assignments through scalar
 and range values. A proposed value remains guarded by the original aggregate

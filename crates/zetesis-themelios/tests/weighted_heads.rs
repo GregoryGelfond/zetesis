@@ -4,15 +4,19 @@
 mod cases;
 #[path = "support/finite_bindings.rs"]
 mod reference;
+#[path = "support/weighted_alias_semantics.rs"]
+mod alias_semantics;
 
 use std::collections::BTreeSet;
 
 use cases::CASES;
 use reference::{Models, atom_text, exhaustive, external, holds, native, values};
 use themelios_base::source::SourceId;
+use zetesis_cpu::Control;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_formula, prepare_formula,
+    AdmissionFailure, AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus,
+    ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
+    FormulaResource, ProfileFeature, admit_formula, prepare_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(167);
@@ -165,14 +169,88 @@ fn negative_eligibility_cannot_hide_weight_errors() {
 }
 
 #[test]
-fn neutral_contributions_cannot_hide_aliases() {
+fn neutral_aliases_keep_every_head_permission() {
+    let all = Models::from([
+        BTreeSet::new(),
+        BTreeSet::from(["a".into()]),
+        BTreeSet::from(["b".into()]),
+        BTreeSet::from(["a".into(), "b".into()]),
+    ]);
+    for source in ["0#sum{0:a;0:b}0.", "0#sum+{0:a;0:b}0."] {
+        assert_eq!(native(&input(source)), all, "{source}");
+    }
+    assert_eq!(
+        native(&input("0#sum+{0,k:a;0,l:a}0.")),
+        Models::from([BTreeSet::new(), BTreeSet::from(["a".into()])])
+    );
+}
+
+#[test]
+fn tuple_identity_changes_the_selected_sum() {
+    let shared = native(&input("1#sum{1:a;1:b}1."));
+    assert_eq!(
+        shared,
+        Models::from([
+            BTreeSet::from(["a".into()]),
+            BTreeSet::from(["b".into()]),
+            BTreeSet::from(["a".into(), "b".into()]),
+        ])
+    );
+    // Counting each selected atom would incorrectly omit {a,b}.
+    assert_ne!(shared, native(&input("1#sum{1,a:a;1,b:b}1.")));
+    for source in ["3#sum{1:a;2:a}3.", "2#sum{1,k:a;1,l:a}2."] {
+        assert_eq!(
+            native(&input(source)),
+            Models::from([BTreeSet::from(["a".into()])]),
+            "{source}"
+        );
+    }
+    // Coalescing by the atom or first tuple component would lose a contribution.
+    assert!(native(&input("3#sum{1:a}3.")).is_empty());
+    assert!(native(&input("2#sum{1,k:a}2.")).is_empty());
+}
+
+#[test]
+fn recursive_aliases_require_actual_eligibility() {
+    assert!(native(&input("1#sum{1:a:a;1:b:b}1.")).is_empty());
+    assert_ne!(
+        native(&input("1#sum{1:a:a;1:b:b}1.")),
+        native(&input("1#sum{1:a;1:b}1."))
+    );
+}
+
+#[test]
+fn alias_order_preserves_full_models() {
+    let elements = ["1:a", "1:b", "2:a"];
+    for function in ["#sum", "#sum+"] {
+        let expected = native(&input(&format!("3{function}{{1:a;1:b;2:a}}3.")));
+        for order in [
+            [0, 1, 2],
+            [0, 2, 1],
+            [1, 0, 2],
+            [1, 2, 0],
+            [2, 0, 1],
+            [2, 1, 0],
+        ] {
+            let tuples = order.map(|index| elements[index]).join(";");
+            assert_eq!(
+                native(&input(&format!("3{function}{{{tuples}}}3."))),
+                expected
+            );
+        }
+    }
+}
+
+#[test]
+fn aliased_groups_validate_every_weight() {
     for source in [
-        "0#sum{0:a;0:b}0.",
-        "0#sum+{0:a;0:b}0.",
-        "0#sum+{0,k:a;0,l:a}0.",
-        "d.0#sum{0,k:a:not d;0,k:b:not d}0.",
+        "0#sum{0:a;0:b;s:c}0.",
+        "d(0;s).0#sum{0:a;0:b;W:c:d(W)}0.",
+        "e.d(0;s).0#sum{0:a;0:b;W:c:d(W),not e}0.",
+        "0#sum+{0:a;0:b;-1:c}0.",
+        "d(0;-1).0#sum+{0:a;0:b;W:c:d(W)}0.",
     ] {
-        profile(source, ProfileFeature::HeadAggregateAlias);
+        profile(source, ProfileFeature::HeadAggregateWeight);
     }
 }
 
@@ -202,76 +280,82 @@ fn original_sources_remain_owned() {
 
 #[test]
 fn grounding_limits_are_inclusive() {
-    let source = "d(1..2).0#sum+{0,X:p(X):d(X)}0.";
-    for resource in [
-        FormulaResource::AggregateElements,
-        FormulaResource::Substitutions,
-        FormulaResource::Work,
+    for source in [
+        "d(1..2).0#sum+{0,X:p(X):d(X)}0.",
+        "1#sum{1:a;1:b}1.",
+        "{b;c}.1#sum{1:a:b;2:a:c}1.",
+        "0#sum+{0,k:a;0,l:a}0.",
     ] {
-        let limits = |ceiling| {
-            let mut limits = FormulaLimits::default();
-            match resource {
-                FormulaResource::AggregateElements => {
-                    limits.aggregate.max_elements = usize::try_from(ceiling).unwrap();
+        for resource in [
+            FormulaResource::AggregateElements,
+            FormulaResource::Substitutions,
+            FormulaResource::Work,
+        ] {
+            let limits = |ceiling| {
+                let mut limits = FormulaLimits::default();
+                match resource {
+                    FormulaResource::AggregateElements => {
+                        limits.aggregate.max_elements = usize::try_from(ceiling).unwrap();
+                    }
+                    FormulaResource::Substitutions => limits.max_substitutions = ceiling,
+                    FormulaResource::Work => limits.max_work = ceiling,
+                    _ => unreachable!(),
                 }
-                FormulaResource::Substitutions => limits.max_substitutions = ceiling,
-                FormulaResource::Work => limits.max_work = ceiling,
-                _ => unreachable!(),
-            }
-            limits
-        };
-        let mut lower = 0;
-        let mut upper = 16_384;
-        assert!(
-            admit_formula(
-                source.into(),
-                options(),
-                ExpansionLimits::default(),
-                limits(upper)
-            )
-            .is_ok()
-        );
-        while lower < upper {
-            let middle = lower + (upper - lower) / 2;
-            if admit_formula(
-                source.into(),
-                options(),
-                ExpansionLimits::default(),
-                limits(middle),
-            )
-            .is_ok()
-            {
-                upper = middle;
-            } else {
-                lower = middle + 1;
-            }
-        }
-        assert!(lower > 0);
-        assert_eq!(
-            native(
-                &admit_formula(
+                limits
+            };
+            let mut lower = 0;
+            let mut upper = 16_384;
+            assert!(
+                admit_formula(
                     source.into(),
                     options(),
                     ExpansionLimits::default(),
-                    limits(lower)
+                    limits(upper)
                 )
-                .unwrap()
-            ),
-            native(&input(source))
-        );
-        let error = admit_formula(
-            source.into(),
-            options(),
-            ExpansionLimits::default(),
-            limits(lower - 1),
-        )
-        .unwrap_err();
-        assert!(
-            matches!(error, FormulaFailure::Limit { resource: actual, limit, observed, .. } if actual == resource && limit == u128::from(lower-1) && observed == u128::from(lower)),
-            "{error}"
-        );
-        assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
-        println!("inclusive_{resource:?}={lower}");
+                .is_ok()
+            );
+            while lower < upper {
+                let middle = lower + (upper - lower) / 2;
+                if admit_formula(
+                    source.into(),
+                    options(),
+                    ExpansionLimits::default(),
+                    limits(middle),
+                )
+                .is_ok()
+                {
+                    upper = middle;
+                } else {
+                    lower = middle + 1;
+                }
+            }
+            assert!(lower > 0);
+            assert_eq!(
+                native(
+                    &admit_formula(
+                        source.into(),
+                        options(),
+                        ExpansionLimits::default(),
+                        limits(lower)
+                    )
+                    .unwrap()
+                ),
+                native(&input(source))
+            );
+            let error = admit_formula(
+                source.into(),
+                options(),
+                ExpansionLimits::default(),
+                limits(lower - 1),
+            )
+            .unwrap_err();
+            assert!(
+                matches!(error, FormulaFailure::Limit { resource: actual, limit, observed, .. } if actual == resource && limit == u128::from(lower-1) && observed == u128::from(lower)),
+                "{error}"
+            );
+            assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+            println!("source={source} inclusive_{resource:?}={lower}");
+        }
     }
 }
 
@@ -434,4 +518,134 @@ fn negative_eligibility_cannot_hide_undefined_weights() {
         "{error}"
     );
     assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+}
+
+#[test]
+fn optional_planning_declines_weighted_aliases() {
+    for source in [
+        "1#sum{1:a;1:b}1.",
+        "3#sum{1:a;2:a}3.",
+        "0#sum+{0,k:a;0,l:a}0.",
+    ] {
+        let ordinary = input(source);
+        let planned = prepare_formula(
+            source.into(),
+            options(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        )
+        .unwrap()
+        .ground_with_count_plan(CountPlanLimits::default(), &Control::default(), None)
+        .unwrap();
+        assert!(
+            matches!(planned.count_plan(), CountPlanStatus::NoPlan(_)),
+            "{source}"
+        );
+        assert_eq!(ordinary.atoms(), planned.atoms());
+        assert_eq!(ordinary.theory().nodes(), planned.theory().nodes());
+        assert_eq!(ordinary.theory().roots(), planned.theory().roots());
+        assert_eq!(ordinary.formula_origins(), planned.formula_origins());
+        assert_eq!(native(&ordinary), native(&planned));
+    }
+}
+
+#[test]
+fn weighted_aliases_preserve_other_count_certificates() {
+    let source = "2{a;b;c;d}2.{a;b}1.{c;d}1.1#sum{1:e;1:f}1.";
+    let ordinary = input(source);
+    let planned = prepare_formula(
+        source.into(),
+        options(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap()
+    .ground_with_count_plan(CountPlanLimits::default(), &Control::default(), None)
+    .unwrap();
+    let CountPlanStatus::Ready(plan) = planned.count_plan() else {
+        panic!("the disjoint count partition remains applicable");
+    };
+    assert!(planned.theory().same_instance(plan.original_theory()));
+    assert_eq!(plan.consequence_count(), 2);
+    assert_eq!(planned.theory().nodes(), ordinary.theory().nodes());
+    assert_eq!(planned.theory().roots(), ordinary.theory().roots());
+    assert_eq!(native(&planned), native(&ordinary));
+    for mask in 0..1 << planned.atoms().len() {
+        if holds(planned.theory(), &values(planned.theory(), mask, None)) {
+            assert!(holds(
+                plan.restriction(),
+                &values(plan.restriction(), mask, None)
+            ));
+        }
+    }
+}
+
+#[test]
+fn tuple_limits_count_complete_weighted_keys() {
+    let mut limits = FormulaLimits::default();
+    limits.aggregate.max_elements = 1;
+    assert!(
+        admit_formula(
+            "1#sum{1:a;1:b}1.".into(),
+            options(),
+            ExpansionLimits::default(),
+            limits,
+        )
+        .is_ok()
+    );
+    let error = admit_formula(
+        "0#sum+{0,k:a;0,l:a}0.".into(),
+        options(),
+        ExpansionLimits::default(),
+        limits,
+    )
+    .unwrap_err();
+    assert!(matches!(
+        error,
+        FormulaFailure::Limit {
+            resource: FormulaResource::AggregateElements,
+            limit: 1,
+            observed: 2,
+            ..
+        }
+    ));
+    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+}
+
+#[test]
+fn alias_storage_limits_are_inclusive() {
+    for source in ["1#sum{1:a;1:b}1.", "{b;c}.1#sum{1:a:b;2:a:c}1."] {
+        let attempt = |maximum| {
+            admit_formula(
+                source.into(),
+                options(),
+                ExpansionLimits {
+                    max_scalar_bytes: maximum,
+                    ..Default::default()
+                },
+                FormulaLimits::default(),
+            )
+        };
+        let mut lower = 0;
+        let mut upper = 65_536;
+        assert!(attempt(upper).is_ok());
+        while lower + 1 < upper {
+            let middle = lower + (upper - lower) / 2;
+            if attempt(middle).is_ok() {
+                upper = middle;
+            } else {
+                lower = middle;
+            }
+        }
+        let error = attempt(upper - 1).unwrap_err();
+        assert!(matches!(
+            error,
+            FormulaFailure::Expansion(ExpansionFailure::Limit {
+                resource: ExpansionResource::ScalarBytes, limit, observed, ..
+            }) if limit == (upper - 1) as u128 && observed == upper as u128
+        ));
+        assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+        assert_eq!(native(&attempt(upper).unwrap()), native(&input(source)));
+        println!("source={source} inclusive_ScalarBytes={upper}");
+    }
 }
