@@ -19,7 +19,8 @@ that an open item is already qualified in its entirety.
 
 ## Ordinary language
 
-All entries below are open. Stable identifiers keep later reports comparable.
+All entries below are open. Stable identifiers connect these boundaries to
+their tests and the admitted-language reference.
 
 | ID | Contract to complete | Representative tests |
 | --- | --- | --- |
@@ -81,15 +82,3 @@ and themelios's minimum-integer literal representation limit remain separate
 correspondence/dependency reviews. Reached undefined arithmetic, resource
 exhaustion and deliberate theory/scripting/`#heuristic`/`#edge` exclusions are
 not ordinary implementation-gap entries.
-
-## Maintaining the count
-
-Keep identifiers and acceptance boundaries stable. Record partial progress
-under an open parent. A report gives the opening count, completed entries,
-newly discovered or classified entries, reopened entries, explicit scope
-changes and remaining count. Retain unclassified scopes visibly. Decomposing
-an entry must preserve its identity and disclose any resulting count change.
-
-The current reference and executable examples change with the implementation.
-Historical qualification reports preserve the counts at their own revisions;
-they do not redefine the current manual's contracts.

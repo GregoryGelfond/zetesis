@@ -89,10 +89,10 @@ does not establish correspondence. Prefer stable include anchors to line-number
 excerpts, and maintain the book with the implementation it describes.
 
 The [language coverage checklist](docs/book/reference/language-coverage.md) uses
-stable contract identifiers. Report complete closures, new or reopened gaps and
-explicit scope changes separately; retain unclassified scopes. Partial progress
-does not close a larger obligation, and checklist counts do not measure a
-percentage of language parity.
+stable identifiers for known language boundaries. Keep those boundaries and
+their linked evidence consistent with the admitted-language reference. Partial
+support does not establish a complete contract, and unclassified scopes remain
+explicit. Checklist counts do not measure a percentage of language parity.
 
 ## Carry the semantic contract into Lean and Rust
 
