@@ -522,19 +522,11 @@ impl Compiler<'_> {
                 _ => return Err(unsupported(ProfileFeature::Objective, self.location).into()),
             }
         }
-        let weight = self.objective_term(element.weight().term(), &mut variables)?;
-        if matches!(
-            weight,
-            CoreTerm::Constant(
-                Value::Infimum
-                    | Value::Supremum
-                    | Value::String(_)
-                    | Value::Symbol(_)
-                    | Value::Structured(_)
-            )
-        ) {
-            return Err(unsupported(ProfileFeature::Objective, self.location).into());
-        }
+        let weight = self.objective_weight(element.weight().term(), &mut variables)?;
+        // Nonnumeric literals follow the same resolved-value contract as bound
+        // weights: they supply no contribution or numeric priority witness.
+        // Still admit the whole element, including priority, tuple and safety,
+        // before completed grounding determines objective presence.
         let priority = match element.weight().priority() {
             None => 0,
             Some(Term::Symbolic(Symbol::Number(priority))) => *priority,
@@ -574,6 +566,23 @@ impl Compiler<'_> {
             }
             _ => Err(unsupported(ProfileFeature::Objective, self.location).into()),
         }
+    }
+
+    fn objective_weight(
+        &mut self,
+        term: &Term,
+        variables: &mut Variables,
+    ) -> Result<CoreTerm, FormulaFailure> {
+        // Extrema are ignored logical weights, not finite arithmetic endpoints.
+        // Other objective term contexts retain their own admission contract.
+        let value = match term {
+            Term::Symbolic(Symbol::Infimum) => Value::Infimum,
+            Term::Symbolic(Symbol::Supremum) => Value::Supremum,
+            _ => return self.objective_term(term, variables),
+        };
+        self.budget
+            .charge(ExpansionResource::TermWork, 1, self.location)?;
+        Ok(CoreTerm::Constant(value))
     }
     pub(super) fn rule(
         &mut self,

@@ -319,7 +319,6 @@ fn unsupported_objective_syntax_and_unsafe_variables_are_typed_refusals() {
         "d(1). #minimize{X+1:d(X)}.",
         "d(1). #minimize{1@X:d(X)}.",
         "#minimize{1:not a}.",
-        "#minimize{foo:a}.",
         "d(1). #minimize{1:d(X),X<2}.",
         ":~ not a. [1@0]",
     ] {

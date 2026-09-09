@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use serde_json::Value as Json;
-use zetesis_core::{Atom, Model, Value};
+use zetesis_core::{Atom, Model, Sign, Value};
 use zetesis_cpu::Control;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_themelios::{
@@ -53,6 +53,12 @@ fn costs(values: &Json) -> Option<Vec<i64>> {
         .map(|values| values.iter().map(|v| v.as_i64().unwrap()).collect())
 }
 pub(super) fn canonical(atom: &Atom) -> String {
+    let sign = if atom.predicate().sign() == Sign::Negative {
+        "-"
+    } else {
+        ""
+    };
+    let name = format!("{sign}{}", atom.predicate().name());
     let arguments: Vec<_> = atom
         .values()
         .iter()
@@ -66,9 +72,9 @@ pub(super) fn canonical(atom: &Atom) -> String {
         })
         .collect();
     if arguments.is_empty() {
-        atom.predicate().name().into()
+        name
     } else {
-        format!("{}({})", atom.predicate().name(), arguments.join(","))
+        format!("{name}({})", arguments.join(","))
     }
 }
 pub fn admit(source: &str, limits: FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {
@@ -140,6 +146,24 @@ impl Drop for Directory {
 }
 
 pub fn clingo(source: &str) -> Records {
+    capture_clingo(source).records
+}
+
+/// One bounded independent invocation, retaining the raw evidence used to
+/// reconcile every full-model record. Process completion is checked separately
+/// from solver enumeration completion below.
+#[allow(
+    dead_code,
+    reason = "Most shared oracle harnesses consume records without retaining the raw capture."
+)]
+pub struct ClingoCapture {
+    pub records: Records,
+    pub output: Json,
+    pub diagnostics: String,
+    pub status: i32,
+}
+
+pub fn capture_clingo(source: &str) -> ClingoCapture {
     let directory = Directory::new();
     let input = directory.0.join("case.lp");
     let output = directory.0.join("models.json");
@@ -148,7 +172,8 @@ pub fn clingo(source: &str) -> Records {
     let stdout = File::create(&output).expect("oracle output");
     let stderr = File::create(&errors).expect("oracle diagnostics");
     let start = Instant::now();
-    let mut child = Command::new("clingo")
+    let executable = std::env::var_os("CLINGO").unwrap_or_else(|| "clingo".into());
+    let mut child = Command::new(executable)
         .args(["0", "--outf=2", "--opt-mode=enum", "--warn=none"])
         .arg(&input)
         .stdin(Stdio::null())
@@ -198,5 +223,10 @@ pub fn clingo(source: &str) -> Records {
         }
     }
     assert_eq!(json["Models"]["Number"].as_u64(), Some(count));
-    records
+    ClingoCapture {
+        records,
+        output: json,
+        diagnostics: fs::read_to_string(errors).expect("oracle diagnostics"),
+        status: status.code().expect("normal oracle exit checked"),
+    }
 }
