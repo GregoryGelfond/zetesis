@@ -2335,6 +2335,111 @@
     "line": 121
   },
   {
+    "name": "Zetesis.NormalFerraris.answer_set_iff",
+    "file": "Zetesis/NormalFerraris.lean",
+    "line": 267
+  },
+  {
+    "name": "Zetesis.NormalFerraris.applicable_answer_set_iff",
+    "file": "Zetesis/NormalFerraris.lean",
+    "line": 288
+  },
+  {
+    "name": "Zetesis.NormalFerraris.applicable_frozen_subset_model_iff",
+    "file": "Zetesis/NormalFerraris.lean",
+    "line": 296
+  },
+  {
+    "name": "Zetesis.NormalFerraris.false_filter_omitted",
+    "file": "Zetesis/NormalFerraris.lean",
+    "line": 192
+  },
+  {
+    "name": "Zetesis.NormalFerraris.ferraris_answer_set_iff_closure",
+    "file": "Zetesis/NormalFerraris.lean",
+    "line": 305
+  },
+  {
+    "name": "Zetesis.NormalFerraris.frozen_subset_model_iff",
+    "file": "Zetesis/NormalFerraris.lean",
+    "line": 258
+  },
+  {
+    "name": "Zetesis.NormalFerraris.mem_translate",
+    "file": "Zetesis/NormalFerraris.lean",
+    "line": 178
+  },
+  {
+    "name": "Zetesis.NormalFerraris.models_frozen_translate",
+    "file": "Zetesis/NormalFerraris.lean",
+    "line": 226
+  },
+  {
+    "name": "Zetesis.NormalFerraris.models_translate",
+    "file": "Zetesis/NormalFerraris.lean",
+    "line": 213
+  },
+  {
+    "name": "Zetesis.NormalFerraris.reduct_antecedent",
+    "file": "Zetesis/NormalFerraris.lean",
+    "line": 110
+  },
+  {
+    "name": "Zetesis.NormalFerraris.reduct_conjunction",
+    "file": "Zetesis/NormalFerraris.lean",
+    "line": 94
+  },
+  {
+    "name": "Zetesis.NormalFerraris.reduct_fold",
+    "file": "Zetesis/NormalFerraris.lean",
+    "line": 76
+  },
+  {
+    "name": "Zetesis.NormalFerraris.reduct_head",
+    "file": "Zetesis/NormalFerraris.lean",
+    "line": 127
+  },
+  {
+    "name": "Zetesis.NormalFerraris.reduct_model_iff_rules",
+    "file": "Zetesis/NormalFerraris.lean",
+    "line": 158
+  },
+  {
+    "name": "Zetesis.NormalFerraris.reduct_rule",
+    "file": "Zetesis/NormalFerraris.lean",
+    "line": 146
+  },
+  {
+    "name": "Zetesis.NormalFerraris.satisfies_antecedent",
+    "file": "Zetesis/NormalFerraris.lean",
+    "line": 102
+  },
+  {
+    "name": "Zetesis.NormalFerraris.satisfies_conjunction",
+    "file": "Zetesis/NormalFerraris.lean",
+    "line": 87
+  },
+  {
+    "name": "Zetesis.NormalFerraris.satisfies_fold",
+    "file": "Zetesis/NormalFerraris.lean",
+    "line": 66
+  },
+  {
+    "name": "Zetesis.NormalFerraris.satisfies_head",
+    "file": "Zetesis/NormalFerraris.lean",
+    "line": 122
+  },
+  {
+    "name": "Zetesis.NormalFerraris.satisfies_rule",
+    "file": "Zetesis/NormalFerraris.lean",
+    "line": 137
+  },
+  {
+    "name": "Zetesis.NormalFerraris.translate_applicable",
+    "file": "Zetesis/NormalFerraris.lean",
+    "line": 199
+  },
+  {
     "name": "Zetesis.ObjectiveBounds.bounded_best_is_global",
     "file": "Zetesis/ObjectiveBounds.lean",
     "line": 59

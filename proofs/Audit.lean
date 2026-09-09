@@ -1,4 +1,5 @@
 import Zetesis
+
 #print axioms Zetesis.AggregateAssignment.active_tuples_nodup
 #print axioms Zetesis.AggregateAssignment.actual_tuple_sum_is_candidate
 #print axioms Zetesis.AggregateAssignment.coalesced_active_tuples
@@ -466,6 +467,27 @@ import Zetesis
 #print axioms Zetesis.NegativeHeads.stable_has_positive_producer
 #print axioms Zetesis.NegativeHeads.stable_satisfies_support
 #print axioms Zetesis.NegativeHeads.support_formula_truth
+#print axioms Zetesis.NormalFerraris.answer_set_iff
+#print axioms Zetesis.NormalFerraris.applicable_answer_set_iff
+#print axioms Zetesis.NormalFerraris.applicable_frozen_subset_model_iff
+#print axioms Zetesis.NormalFerraris.false_filter_omitted
+#print axioms Zetesis.NormalFerraris.ferraris_answer_set_iff_closure
+#print axioms Zetesis.NormalFerraris.frozen_subset_model_iff
+#print axioms Zetesis.NormalFerraris.mem_translate
+#print axioms Zetesis.NormalFerraris.models_frozen_translate
+#print axioms Zetesis.NormalFerraris.models_translate
+#print axioms Zetesis.NormalFerraris.reduct_antecedent
+#print axioms Zetesis.NormalFerraris.reduct_conjunction
+#print axioms Zetesis.NormalFerraris.reduct_fold
+#print axioms Zetesis.NormalFerraris.reduct_head
+#print axioms Zetesis.NormalFerraris.reduct_model_iff_rules
+#print axioms Zetesis.NormalFerraris.reduct_rule
+#print axioms Zetesis.NormalFerraris.satisfies_antecedent
+#print axioms Zetesis.NormalFerraris.satisfies_conjunction
+#print axioms Zetesis.NormalFerraris.satisfies_fold
+#print axioms Zetesis.NormalFerraris.satisfies_head
+#print axioms Zetesis.NormalFerraris.satisfies_rule
+#print axioms Zetesis.NormalFerraris.translate_applicable
 #print axioms Zetesis.ObjectiveBounds.bounded_best_is_global
 #print axioms Zetesis.ObjectiveBounds.bounded_optimum_keeps_original_reduct
 #print axioms Zetesis.ObjectiveBounds.bounded_ties_exact
