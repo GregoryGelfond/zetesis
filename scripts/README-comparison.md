@@ -87,9 +87,8 @@ and child-RSS-byte distributions with exact inclusive quartiles represented as
 
 Preset ordinary campaigns without selection or memory extensions retain their
 schema-1 schedule and timing protocol. Explicit selection or memory uses schema
-2. Matrix reports have their own protocol/schema. The retired Python commands
-are not aliases for these protocols: do not pool their historical measurements
-with a new Rust campaign merely because the input is the same.
+2. Matrix reports have their own protocol/schema. Do not pool measurements from
+different protocols merely because the input is the same.
 
 The [validation library guide](../crates/zetesis-validation/README.md) describes
 the reusable APIs. Recorded-report fixtures, synthetic executable fixtures and

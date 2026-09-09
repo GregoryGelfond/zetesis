@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="760" viewBox="0 0 960 760" role="img" aria-labelledby="title description">
+  <title id="title">Grounding boundaries and candidate-directed reduct rounds</title>
+  <desc id="description">The top path shows selected program parts passing through grounding to retained solver input and solving. The lower path shows zetesis relational templates binding against a union of immutable derived snapshots, producing bounded instances evaluated separately with frozen seeds. Heads and constraint flags are reduced before complete rounds commit new snapshots. Candidate coverage remains a separate obligation.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#526479"/></marker>
+    <style>
+      text { font-family: system-ui, sans-serif; fill: #203248; }
+      .heading { font-size: 21px; font-weight: 650; }
+      .label { font-size: 17px; font-weight: 600; }
+      .detail { font-size: 15px; }
+      .note { font-size: 14px; fill: #465970; }
+      .source { fill: #edf4fd; stroke: #7096c4; stroke-width: 1.5; }
+      .transform { fill: #eef8f2; stroke: #72a588; stroke-width: 1.5; }
+      .state { fill: #f3f5f8; stroke: #8a9bab; stroke-width: 1.5; }
+      .flow { fill: none; stroke: #526479; stroke-width: 1.7; marker-end: url(#arrow); }
+    </style>
+  </defs>
+  <rect width="960" height="760" rx="12" fill="#ffffff"/>
+  <text x="28" y="36" class="heading">Eager boundary: selected parts → retained ground input → solving</text>
+  <text x="28" y="62" class="note">Ordinary gringo use; zetesis eager routes retain their own ground representations.</text>
+  <rect x="28" y="84" width="188" height="82" rx="9" class="source"/>
+  <text x="122" y="116" text-anchor="middle" class="label">Selected source parts</text>
+  <text x="122" y="144" text-anchor="middle" class="detail">parameters and context</text>
+  <rect x="252" y="84" width="224" height="82" rx="9" class="transform"/>
+  <text x="364" y="116" text-anchor="middle" class="label">Ground and simplify</text>
+  <text x="364" y="144" text-anchor="middle" class="detail">indexed, component-driven</text>
+  <rect x="512" y="84" width="184" height="82" rx="9" class="state"/>
+  <text x="604" y="116" text-anchor="middle" class="label">Ground solver input</text>
+  <text x="604" y="144" text-anchor="middle" class="detail">selected parts complete</text>
+  <rect x="732" y="84" width="200" height="82" rx="9" class="source"/>
+  <text x="832" y="116" text-anchor="middle" class="label">Solve</text>
+  <text x="832" y="144" text-anchor="middle" class="detail">answer-set semantics</text>
+  <path d="M216 125 H248" class="flow"/>
+  <path d="M476 125 H508" class="flow"/>
+  <path d="M696 125 H728" class="flow"/>
+  <text x="28" y="195" class="note">Incremental applications may request further grounding later; this is not every future program part.</text>
+  <path d="M28 220 H932" stroke="#d6dee7"/>
+  <text x="28" y="254" class="heading">Lazy relational boundary: source instantiation inside reduct inference</text>
+  <text x="28" y="280" class="note">Candidate proposals and their complete coverage remain a separate generator responsibility.</text>
+  <rect x="28" y="310" width="212" height="76" rx="9" class="source"/>
+  <text x="134" y="340" text-anchor="middle" class="label">Admitted templates</text>
+  <text x="134" y="367" text-anchor="middle" class="detail">heads, bodies, constraints</text>
+  <rect x="280" y="310" width="246" height="76" rx="9" class="source"/>
+  <text x="403" y="340" text-anchor="middle" class="label">Derived snapshots X[w]</text>
+  <text x="403" y="367" text-anchor="middle" class="detail">empty initially; immutable in round</text>
+  <rect x="686" y="310" width="246" height="76" rx="9" class="source"/>
+  <text x="809" y="340" text-anchor="middle" class="label">Gate seeds S[w]</text>
+  <text x="809" y="367" text-anchor="middle" class="detail">fixed throughout closure</text>
+  <rect x="28" y="442" width="260" height="96" rx="9" class="transform"/>
+  <text x="158" y="472" text-anchor="middle" class="label">Bind → Filter → Instantiate</text>
+  <text x="158" y="500" text-anchor="middle" class="detail">over Union(X[w]); source on host</text>
+  <text x="158" y="522" text-anchor="middle" class="note">gates remain symbolic</text>
+  <rect x="328" y="442" width="236" height="96" rx="9" class="state"/>
+  <text x="446" y="473" text-anchor="middle" class="label">Bounded instance chunks</text>
+  <text x="446" y="501" text-anchor="middle" class="detail">offered once to many worlds</text>
+  <text x="446" y="523" text-anchor="middle" class="note">offering does not establish truth</text>
+  <rect x="604" y="442" width="328" height="96" rx="9" class="transform"/>
+  <text x="768" y="472" text-anchor="middle" class="label">MapWorlds: PositiveTruth → Gate</text>
+  <text x="768" y="500" text-anchor="middle" class="detail">Project heads / detect constraints</text>
+  <text x="768" y="522" text-anchor="middle" class="note">exact evaluator: CPU / Rayon / wgpu</text>
+  <path d="M134 386 V438" class="flow"/>
+  <path d="M403 386 V408 H158 V438" class="flow"/>
+  <path d="M809 386 V438" class="flow"/>
+  <path d="M526 348 H570 V415 H666 V438" class="flow"/>
+  <path d="M288 490 H324" class="flow"/>
+  <path d="M564 490 H600" class="flow"/>
+  <rect x="328" y="596" width="604" height="84" rx="9" class="transform"/>
+  <text x="630" y="625" text-anchor="middle" class="label">ReduceWorldwise(Union heads, Or constraint flags)</text>
+  <text x="630" y="654" text-anchor="middle" class="detail">Complete scan + evaluation → extend snapshots → next round</text>
+  <path d="M768 538 V592" class="flow"/>
+  <path d="M328 638 H306 V408 H403 V390" class="flow"/>
+  <text x="28" y="605" class="label">CloseFromEmpty</text>
+  <text x="28" y="631" class="detail">No-growth must follow</text>
+  <text x="28" y="654" class="detail">a complete round.</text>
+  <text x="28" y="716" class="detail">Accept only after closure, no constraint violation and GateProjection(closure) = seed.</text>
+  <text x="28" y="741" class="note">A stopped scan or evaluation supplies progress, never a completed negative result or a proof of closure.</text>
+</svg>

@@ -32,7 +32,12 @@ independently; a caller building a theory need not parse source, and a caller
 preparing a program need not search it.
 
 Validation and repository maintenance are distinct development capabilities.
-`zetesis_validation` checks captured answer sets and comparison contracts;
+`zetesis_validation` checks captured answer sets and comparison contracts. Its
+`corpus_comparison::run` accepts a typed `Request` and a progress observer,
+returning a typed `Report`; command-line parsing and report publication remain
+separate consumers. `Report::to_json` is a fallible presentation view, not the
+source of a comparison decision. The `performance` API similarly separates a
+measurement request and runner from its report views;
 `zetesis_maintenance` checks recorded proof evidence and qualification policy.
 Neither is a production solver dependency. A consistent proof record does not
 establish that Lean ran or that a Rust implementation satisfies its theorems.

@@ -65,6 +65,13 @@ includes JSON/statistics in its timed native runs and forms a separate
 population. Keep the selected inputs, binaries, backend,
 worker counts, limits and warmup schedule with each result.
 
+Repeated `--case` arguments select unchanged cases from the sealed corpus.
+`--memory-runs` adds a separate population of fresh-child resource observations
+on macOS or Linux; it does not add samples to the wall-time distribution. Its
+reported child peak RSS excludes the measuring helper and is neither simultaneous
+process-tree memory nor GPU memory. These selected/resource campaigns use their
+own versioned report view.
+
 Stop competing builds, tests and measurements before a timing campaign. A small
 fixture can establish semantic agreement while being too small to demonstrate
 useful parallel speedup. Conversely, a shorter run is not an improvement if it

@@ -150,7 +150,7 @@ unbounded recursion on foreign input, unchecked arithmetic and hidden allocation
 or fallback behavior. Make malformed input, cancellation, partial results and
 writer/device failures intelligible typed outcomes.
 
-Use `scripts/check.sh portable` for portable Rust/Python tests, lint, strict docs
+Use `scripts/check.sh portable` for portable Rust tests, lint, strict docs
 and benchmark correctness, including both maintained standalone Rust packages.
 Their checks remain separate from the workspace coverage population. Run
 `scripts/check.sh oracle` for the relevant external

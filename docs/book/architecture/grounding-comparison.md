@@ -20,14 +20,120 @@ These routes do not have equal language coverage. The
 General lazy formula grounding, including arbitrary bounded choice groups, is
 not yet implemented.
 
+![Grounding selected program parts produces retained solver input; lazy relational checking composes source joins with world-specific reduct rounds.](grounding-comparison.svg)
+
+Three operations must remain distinct. **Source instantiation** produces bound
+rule instances. **Candidate generation** proposes interpretations, or gate seeds
+whose closures will supply interpretations. **Positive inference** derives atoms
+under a frozen seed. Lazy relational checking composes instantiation with
+inference; it does not identify a proposed atom with a derived atom or eliminate
+the candidate generator's coverage obligation.
+
+## Read grounding as a composition
+
+The following notation emphasizes the [exact transforms](alignment.md), not a
+particular loop nest. `∘` denotes composition, read from right to left. `Map`
+preserves independent subjects; `Reduce` combines results using the stated
+operation. `CloseFromEmpty` denotes inflationary iteration to a *complete* fixed
+point. These are descriptions of contracts, not a claim that every name below
+is an exported Rust combinator. Every operation may instead stop explicitly;
+an unfinished stream cannot supply a fixed-point or exhaustion result.
+
+For eager grounding, the conceptual boundary is:
+
+```text
+source parts and parameters
+    |> AnalyzeDependencies
+    |> InstantiateAndSimplifyToCompletion
+    |> RetainGroundInput
+    |> Solve
+```
+
+This is a boundary sketch for ordinary gringo use, not pseudocode for its full
+algorithm. Internally, instantiation already uses indexed binding, component
+scheduling and evolving grounding domains. Simplification can change the
+representation emitted to the solver. Completion concerns the selected parts
+and context, not every part that an incremental application might later request.
+zetesis's eager paths have the same broad materialization boundary while
+retaining their own relational or formula representations.
+
+For zetesis's admitted lazy relational profile, the source operation is:
+
+```text
+Offer_t(X) = Instantiate_t ∘ Filter_t ∘ Bind_t (X)
+Offer_P(X) = Concatenate(Map(Offer_t(X), templates(P)))
+```
+
+`Bind` joins positive witnesses and checks variable agreement. `Filter` evaluates
+admitted scalar conditions. `Instantiate` retains the head, positive antecedents
+and symbolic gates. A fact has an empty positive body, whose binding is the unit
+substitution, so it can contribute even when `X` is empty. Source scans cover
+constraints as well as headed rules.
+
+A shared round then composes that offering with world-specific evaluation.
+Here `S[w]` is the immutable gate seed and `X[w]` the immutable derived snapshot
+for world `w`; `C` is one bounded chunk of offered instances.
+
+```text
+Enabled_w = Gate(S[w]) ∘ PositiveTruth(X[w])
+Heads_w(C) = Reduce(Union) ∘ Map(Head) ∘ SelectHeaded ∘ Enabled_w (C)
+Bad_w(C)   = Reduce(Or) ∘ Map(True) ∘ SelectConstraints ∘ Enabled_w (C)
+
+Round_S(X) =
+    Offer_P(Reduce(Union, X))
+    |> BoundedChunks
+    |> Map(C => MapWorlds(w => (Heads_w(C), Bad_w(C))))
+    |> ReduceWorldwise((Union, Or))
+    |> RequireCompleteSourceAndEvaluation
+    |> ExtendSnapshots(X)       // heads are unioned; violations are retained
+
+closures, violations = CloseFromEmpty(Round_S)
+verdicts = MapWorlds(w =>
+    Accept(closures[w]) iff
+        not violations[w] and GateProjection(closures[w]) = S[w])
+```
+
+`Head` is projection of a retained instance; constraints have no head and go
+through the separate Boolean reduction. `PositiveTruth` is essential: a union
+join can offer a binding whose antecedents belong to different worlds. It is
+neither a proof of truth in any one world nor permission to mix their seeds.
+`Gate` consults only `S[w]`; it does not change as `X[w]` grows.
+
+All chunks in one round read the same snapshots. Chunk results can be reduced
+with associative union and disjunction; their new heads become source witnesses
+only in the next round. A successful no-growth round must have exhausted the
+source scan and all required evaluations. Only then do sound derivation from
+empty, closure, constraint checking and seed agreement establish acceptance.
+An interrupted round supplies progress, not a negative answer or a completed
+check. The current shared implementation returns no completed candidate checks
+if that batch's required work stops.
+
+This exposes two kinds of parallel work: common source instances can be reused
+across worlds, and enabled instances can contribute through independent truth
+tests and reductions. It also exposes the ordering that must remain: a later
+round depends on the prior round's completed consequences. World-membership
+masks may narrow offered bindings while preserving every world's enabled ones;
+they change source work, not the formula above or candidate coverage.
+
+The implementation connects at
+[`source::scan`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/oracle/source.rs),
+[`lazy::check_with_source`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/lazy.rs),
+the [shared Rayon evaluator](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/lazy/shared.rs)
+and the [wgpu evaluator](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/lazy.rs).
+The source scan and round coordinator run on the host; the injected evaluator
+executes the per-world positive/gate tests and head/constraint reductions.
+The composition is meaningful without claiming that source joins run on the GPU.
+
+[`LazyRounds.lean`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/LazyRounds.lean)
+formalizes the corresponding obligations: `union_scan_covers_world`,
+`world_consequences_exact`, `world_constraints_exact`, `chunk_concatenation`
+and `completed_round_exact`. Concrete Rust traversal, packed storage and WGSL
+refinement remain outside those theorems' established correspondence.
+
 ## Follow a candidate-dependent join
 
 ```asp
-edge(1,2). edge(2,3).
-start(1) :- not blocked.
-blocked :- not start(1).
-reach(X) :- start(X).
-reach(Y) :- reach(X), edge(X,Y).
+{{#include ../../../examples/lazy-reachability.lp}}
 ```
 
 One answer set contains `blocked` and the two edge facts. The other contains
@@ -40,6 +146,23 @@ The check begins with an empty derived interpretation, not with all seed atoms
 asserted as facts. A completed no-growth round establishes closure; constraints
 and agreement with the seed still have to hold. This example explains a work
 schedule. It does not, by itself, establish a speedup or a memory reduction.
+
+From the repository root, compare the complete answer families directly:
+
+```sh
+zetesis examples/lazy-reachability.lp --grounder eager --backend cpu --models 0 --stats
+zetesis examples/lazy-reachability.lp --grounder lazy --backend cpu --models 0 --stats
+clingo examples/lazy-reachability.lp 0
+```
+
+Answer order is immaterial. Both families above must be present, with all edge
+facts retained. On an accessible Metal device, the second command can instead
+use `--backend metal`; inspect its statistics to confirm the executed route.
+This tiny example tests meaning and routing, not throughput. For broader
+reproduction, the [validation guide](../reference/validation.md) links maintained
+corpora, physical checks and matched comparison schedules, with their limits and
+reported observations. A performance claim needs its exact program, configuration,
+completion evidence and measurement population as well as an elapsed time.
 
 ## What clingo already avoids
 
