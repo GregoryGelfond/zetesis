@@ -54,6 +54,10 @@ METAL_GROUPS = [
         "physical::ordinary_metal_formula_batches_match_complete_cpu_models_costs_and_displays",
         "physical::ordinary_metal_formula_limits_preserve_partial_coverage_and_writer_errors",
     ]),
+    ("world-views", "world_views_gpu", [
+        "metal_world_view_preserves_nonoptimal_answers",
+        "metal_collection_limit_retains_checked_accounting",
+    ]),
     ("aggregate-measurement", "aggregate_measurement", [
         "metal_aggregate_measurements_require_actual_submissions",
     ]),
@@ -342,7 +346,7 @@ class CoverageScriptTests(unittest.TestCase):
         } for group, target, tests in METAL_GROUPS] if metal else []
         self.assertEqual(metadata["physical_test_groups"], expected_groups)
         if metal:
-            self.assertEqual(metadata["expected_physical_tests"], 25)
+            self.assertEqual(metadata["expected_physical_tests"], 27)
             self.assertIn("Unlisted tests and Vulkan are not selected.", metadata["physical_scope"])
         else:
             self.assertIsNone(metadata["physical_scope"])
@@ -394,7 +398,7 @@ class CoverageScriptTests(unittest.TestCase):
 
     def test_omitted_group_prevents_instrumentation(self):
         self.run_case(mode="gate", floor="91", metal=True, omitted_group="lazy",
-                      error="requires all eight groups and 25 named tests")
+                      error="requires all nine groups and 27 named tests")
 
     def test_failed_physical_tests_prevent_completion(self):
         self.run_case(mode="gate", floor="91", metal=True,

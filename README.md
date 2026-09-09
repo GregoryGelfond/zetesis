@@ -124,6 +124,12 @@ and typed outcomes independently of terminal rendering. A reusable
 it. Independent satisfaction queries can share that immutable reduct.
 See the [working Rust examples](docs/book/rust/libraries.md).
 
+The session API returns checked `AnswerSet` values. `Session::enumerate` streams
+the original answer family, including nonoptimal answers with their scores.
+Optional bounded `WorldView` collection requires complete enumeration; a stopped
+prefix and a selected optimum remain distinct results. The
+[session manual](docs/book/rust/sessions.md) explains ownership and completion.
+
 The [Lean library](proofs/README.md) develops satisfaction, reducts, minimality,
 normal least closure and their preservation laws. Its normalized-rule translation
 is proved equivalent to Ferraris answer-set semantics. These mathematical laws
@@ -135,6 +141,12 @@ mission-critical deployment assurance are goals, not present certifications.
 Theory atoms, Python/Lua scripting, `#heuristic` and `#edge` are outside the current
 supported scope; Rust ground-time functions and broader incremental integration
 remain planned. Unsupported constructs receive explicit refusals.
+The [admitted-language reference](docs/book/reference/language.md) records the
+precise boundaries, including shared atoms and tuples in numeric weighted heads.
+
+The [neuromorphic appendix](docs/book/appendices/neuromorphic.md) specifies a
+possible Loihi 2/SpiNNaker2 backend, its exact event protocol and its qualification
+obligations. Native execution and performance on those platforms remain unproven.
 
 The self-contained [kr-domains examples](examples/kr-domains/README.md) include
 94 non-clingcon cases and 14 shared encodings, with source hashes, licenses and

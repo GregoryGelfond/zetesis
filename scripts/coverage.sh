@@ -22,6 +22,7 @@ aggregate|hardware_aggregate|3|metal_aggregate_reductions_match_native_occurrenc
 lazy|hardware_lazy|4|metal_lazy_worlds_match_exact_frozen_cpu_closures metal_lazy_growth_preserves_previous_round_truth metal_lazy_catalog_fits_when_static_carrier_refuses metal_source_selections_preserve_each_frozen_closure
 cli-lazy|lazy_gpu|4|physical::ordinary_lazy_metal_preserves_complete_cpu_models physical::requested_model_limit_retains_completed_lazy_candidates physical::lazy_source_stop_preserves_unfinished_candidate_counts physical::lazy_writer_failure_preserves_completed_device_work
 cli-formula|formula_gpu|2|physical::ordinary_metal_formula_batches_match_complete_cpu_models_costs_and_displays physical::ordinary_metal_formula_limits_preserve_partial_coverage_and_writer_errors
+world-views|world_views_gpu|2|metal_world_view_preserves_nonoptimal_answers metal_collection_limit_retains_checked_accounting
 aggregate-measurement|aggregate_measurement|1|metal_aggregate_measurements_require_actual_submissions'
 
 repo_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
@@ -107,10 +108,10 @@ if sys.argv[4] == "--metal":
             "tests": tests, "expected_tests": int(expected),
         })
     # These totals describe this reviewed scope, independently of each row.
-    if (len(physical_groups) != 8 or
-            len({group["group"] for group in physical_groups}) != 8 or
-            sum(group["expected_tests"] for group in physical_groups) != 25):
-        sys.exit("Physical coverage requires all eight groups and 25 named tests.")
+    if (len(physical_groups) != 9 or
+            len({group["group"] for group in physical_groups}) != 9 or
+            sum(group["expected_tests"] for group in physical_groups) != 27):
+        sys.exit("Physical coverage requires all nine groups and 27 named tests.")
 physical_tests = [test for group in physical_groups for test in group["tests"]]
 Path(sys.argv[1]).write_text(json.dumps({
     "mode": sys.argv[2], "committed_floor": sys.argv[3], "rustc": rust,
@@ -130,9 +131,10 @@ Path(sys.argv[1]).write_text(json.dumps({
     "physical_tests": physical_tests,
     "expected_physical_tests": len(physical_tests),
     "physical_scope": (
-        "25 exact Metal tests: native aggregate reduction and measurement, lazy "
+        "27 exact Metal tests: native aggregate reduction and measurement, lazy "
         "transport and source closure, tight and formula oracles, and ordinary "
-        "lazy/formula CLI paths. Unlisted tests and Vulkan are not selected."
+        "lazy/formula CLI paths and complete-world-view collection. "
+        "Unlisted tests and Vulkan are not selected."
     ) if physical_tests else None,
 }, indent=2) + "\n")
 PY
