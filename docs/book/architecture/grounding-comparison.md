@@ -34,8 +34,8 @@ the candidate generator's coverage obligation.
 The following notation emphasizes the [exact transforms](alignment.md), not a
 particular loop nest. `∘` denotes composition, read from right to left. `Map`
 preserves independent subjects; `Reduce` combines results using the stated
-operation. `CloseFromEmpty` denotes inflationary iteration to a *complete* fixed
-point. These are descriptions of contracts, not a claim that every name below
+operation. `CloseFromEmpty` denotes inflationary consequence iteration through a
+*complete* no-growth round. These are descriptions of contracts, not a claim that every name below
 is an exported Rust combinator. Every operation may instead stop explicitly;
 an unfinished stream cannot supply a fixed-point or exhaustion result.
 
@@ -71,23 +71,26 @@ substitution, so it can contribute even when `X` is empty. Source scans cover
 constraints as well as headed rules.
 
 A shared round then composes that offering with world-specific evaluation.
-Here `S[w]` is the immutable gate seed and `X[w]` the immutable derived snapshot
-for world `w`; `C` is one bounded chunk of offered instances.
+Here `S[w]` is the immutable gate seed, `X[w]` the immutable derived snapshot
+and `V[w]` the retained constraint flag for world `w`; `C` is one bounded chunk
+of offered instances.
 
 ```text
 Enabled_w = Gate(S[w]) ∘ PositiveTruth(X[w])
 Heads_w(C) = Reduce(Union) ∘ Map(Head) ∘ SelectHeaded ∘ Enabled_w (C)
 Bad_w(C)   = Reduce(Or) ∘ Map(True) ∘ SelectConstraints ∘ Enabled_w (C)
 
-Round_S(X) =
+Round_S(X, V) =
     Offer_P(Reduce(Union, X))
     |> BoundedChunks
     |> Map(C => MapWorlds(w => (Heads_w(C), Bad_w(C))))
     |> ReduceWorldwise((Union, Or))
     |> RequireCompleteSourceAndEvaluation
-    |> ExtendSnapshots(X)       // heads are unioned; violations are retained
+    |> MapWorlds((w, H, B) => (X[w] union H, V[w] or B))
 
-closures, violations = CloseFromEmpty(Round_S)
+closures, violations = CloseFromEmpty(
+    Round_S, initial = (all empty, all false),
+    complete_when = the completed round adds no head)
 verdicts = MapWorlds(w =>
     Accept(closures[w]) iff
         not violations[w] and GateProjection(closures[w]) = S[w])
@@ -99,9 +102,17 @@ join can offer a binding whose antecedents belong to different worlds. It is
 neither a proof of truth in any one world nor permission to mix their seeds.
 `Gate` consults only `S[w]`; it does not change as `X[w]` grows.
 
+Precisely, an instance is enabled when its positive antecedents are a subset of
+`X[w]`, its true-gate atoms are a subset of `S[w]`, and its false-gate atoms are
+disjoint from `S[w]`. If `G_P` is the admitted program's gate carrier, then
+`GateProjection(X) = X ∩ G_P`. The separate
+[`Candidates`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/candidate.rs)
+generator owes complete coverage of the relevant seeds over that carrier.
+
 All chunks in one round read the same snapshots. Chunk results can be reduced
 with associative union and disjunction; their new heads become source witnesses
-only in the next round. A successful no-growth round must have exhausted the
+only in the next round. Retaining a triggered constraint is sound because
+positive truth grows under fixed gates. A successful no-growth round must have exhausted the
 source scan and all required evaluations. Only then do sound derivation from
 empty, closure, constraint checking and seed agreement establish acceptance.
 An interrupted round supplies progress, not a negative answer or a completed
