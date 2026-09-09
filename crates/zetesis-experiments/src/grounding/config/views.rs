@@ -1,13 +1,13 @@
 //! Reporting-local serialization of native bounds; kernels do not depend on serde.
-#![expect(
-    clippy::struct_field_names,
-    reason = "Remote definitions must retain exact native field names, including max_ ceilings."
-)]
 
 use serde::Serialize;
 
 #[derive(Serialize)]
 #[serde(remote = "zetesis_themelios::BundleLimits")]
+#[expect(
+    clippy::struct_field_names,
+    reason = "Serde must access BundleLimits by its native max_ ceiling field names."
+)]
 pub(super) struct Bundle {
     max_roots: usize,
     max_files: usize,
@@ -28,6 +28,10 @@ pub(super) struct Admission {
 
 #[derive(Serialize)]
 #[serde(remote = "zetesis_core::AdmissionLimits")]
+#[expect(
+    clippy::struct_field_names,
+    reason = "Serde must access zetesis_core::AdmissionLimits by its native max_ ceiling field names."
+)]
 struct Core {
     max_templates: usize,
     max_predicate_arity: usize,
@@ -38,6 +42,10 @@ struct Core {
 
 #[derive(Serialize)]
 #[serde(remote = "zetesis_themelios::ExpansionLimits")]
+#[expect(
+    clippy::struct_field_names,
+    reason = "Serde must access ExpansionLimits by its native max_ ceiling field names."
+)]
 pub(super) struct Expansion {
     max_constants: usize,
     max_term_work: usize,
@@ -51,6 +59,7 @@ pub(super) struct Expansion {
 #[derive(Serialize)]
 #[serde(remote = "zetesis_themelios::FormulaLimits")]
 pub(super) struct Formula {
+    max_objective_presence_entries: usize,
     max_domain_values: usize,
     max_assignment_values: usize,
     max_disjunction_elements: usize,
@@ -77,6 +86,10 @@ pub(super) struct Formula {
 
 #[derive(Serialize)]
 #[serde(remote = "zetesis_ferraris::AdmissionLimits")]
+#[expect(
+    clippy::struct_field_names,
+    reason = "Serde must access zetesis_ferraris::AdmissionLimits by its native max_ ceiling field names."
+)]
 struct Theory {
     max_atoms: usize,
     max_nodes: usize,
@@ -85,6 +98,10 @@ struct Theory {
 
 #[derive(Serialize)]
 #[serde(remote = "zetesis_ferraris::AggregateLimits")]
+#[expect(
+    clippy::struct_field_names,
+    reason = "Serde must access AggregateLimits by its native max_ ceiling field names."
+)]
 struct Aggregate {
     max_elements: usize,
     max_nodes: usize,
@@ -95,6 +112,10 @@ struct Aggregate {
 
 #[derive(Serialize)]
 #[serde(remote = "zetesis_objective::AdmissionLimits")]
+#[expect(
+    clippy::struct_field_names,
+    reason = "Serde must access zetesis_objective::AdmissionLimits by its native max_ ceiling field names."
+)]
 struct Objective {
     max_templates: usize,
     max_tuple_width: usize,
@@ -106,6 +127,10 @@ struct Objective {
 
 #[derive(Serialize)]
 #[serde(remote = "zetesis_themelios::observation::AdmissionLimits")]
+#[expect(
+    clippy::struct_field_names,
+    reason = "Serde must access observation::AdmissionLimits by its native max_ ceiling field names."
+)]
 struct Observation {
     max_directives: u32,
     max_nodes: u32,
@@ -123,6 +148,10 @@ pub(super) struct Search {
     #[serde(with = "Cnf")]
     admission: zetesis_sat::AdmissionLimits,
     #[serde(with = "SearchWork")]
+    #[expect(
+        clippy::struct_field_names,
+        reason = "Serde reads native Limits.search, which distinguishes search work from admission bounds."
+    )]
     search: zetesis_sat::SearchLimits,
     max_candidates: u64,
     max_verification_work: u64,
@@ -130,6 +159,10 @@ pub(super) struct Search {
 
 #[derive(Serialize)]
 #[serde(remote = "zetesis_sat::AdmissionLimits")]
+#[expect(
+    clippy::struct_field_names,
+    reason = "Serde must access zetesis_sat::AdmissionLimits by its native max_ ceiling field names."
+)]
 struct Cnf {
     max_variables: usize,
     max_clauses: usize,
@@ -145,6 +178,10 @@ struct SearchWork {
 
 #[derive(Serialize)]
 #[serde(remote = "zetesis_ferraris::TightPlanLimits")]
+#[expect(
+    clippy::struct_field_names,
+    reason = "Serde must access TightPlanLimits by its native max_ ceiling field names."
+)]
 pub(super) struct Certificate {
     max_producers: usize,
     max_dependencies: usize,

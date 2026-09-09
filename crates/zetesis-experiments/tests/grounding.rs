@@ -384,6 +384,15 @@ fn invalid_repetition_counts_refuse_before_loading() {
 }
 
 #[test]
+fn objective_presence_limit_is_serialized() {
+    let mut config = Configuration::default();
+    config.formula.max_objective_presence_entries = 7_019;
+    config.formula.max_support_index_entries = 2_347;
+    let encoded = serde_json::to_value(config).unwrap();
+    assert_eq!(encoded["formula"]["max_objective_presence_entries"], 7_019);
+}
+
+#[test]
 fn native_limits_are_numeric_json_fields() {
     let config = Configuration::default();
     let encoded = serde_json::to_value(config).unwrap();
@@ -391,7 +400,7 @@ fn native_limits_are_numeric_json_fields() {
         ("bundle", 5),
         ("admission", 4),
         ("expansion", 7),
-        ("formula", 18),
+        ("formula", 19),
         ("search", 4),
         ("certificate", 4),
         ("capture", 7),
