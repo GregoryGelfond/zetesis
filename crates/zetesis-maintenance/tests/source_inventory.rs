@@ -1,5 +1,10 @@
 //! Source inventory boundaries without a compiler or physical device.
-use std::{fs, path::Path, process::Command};
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[path = "support/process.rs"]
+pub mod subprocess;
+use std::{fs, path::Path};
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use subprocess::Command;
 use zetesis_maintenance::inventory::{self, Limits};
 fn fixture() -> tempfile::TempDir {
     let directory = tempfile::tempdir().unwrap();
@@ -69,13 +74,13 @@ fn source_inventory_enforces_read_limits() {
     }
 }
 #[test]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn source_command_uses_the_library_inventory() {
     let f = fixture();
     let output = Command::new(env!("CARGO_BIN_EXE_zetesis-maintenance"))
         .args(["sources", "--root"])
         .arg(f.path())
-        .output()
-        .unwrap();
+        .bounded_output();
     assert!(output.status.success());
     assert_eq!(
         serde_json::from_slice::<serde_json::Value>(&output.stdout).unwrap(),

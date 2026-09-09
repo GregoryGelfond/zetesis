@@ -9,9 +9,11 @@ use std::{
     path::Path,
 };
 
-/// Hash the declared Rust/WGSL workspace source boundary, excluding build output.
+/// Hash the declared Rust/WGSL workspace source boundary.
 /// The inventory covers root Cargo files/toolchain and recursive crate Rust,
-/// WGSL and Cargo manifests. It does not seal tools, dependencies or executables.
+/// WGSL and Cargo manifests. The repository-level `target` directory is outside
+/// this traversal; matching files anywhere beneath `crates` are included.
+/// It does not seal tools, dependencies or executables.
 /// # Errors
 /// Refuses escaped/nonregular source paths, read/traversal limits and I/O errors.
 pub fn sources(root: &Path, limits: Limits) -> Result<BTreeMap<String, String>, Error> {

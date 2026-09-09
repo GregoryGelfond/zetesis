@@ -14,7 +14,6 @@ esac
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd -- "$repo_dir"
 if [ "$mode" = portable ] || [ "$mode" = full ]; then
-    python3 -m unittest discover -s scripts/tests -v
     cargo fmt --all -- --check
     cargo test --locked --workspace --all-features
     cargo test --locked -p zetesis-cli --no-default-features

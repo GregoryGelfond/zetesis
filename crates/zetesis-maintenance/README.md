@@ -55,6 +55,12 @@ order, profiles, status publication, failures and cleanup; they do not compile
 programs, execute Lean, collect coverage or exercise Metal. Real compiler,
 coverage and device qualification remain separate gates.
 
+On Linux and macOS, subprocess tests reuse `zetesis_validation::process` through
+a test-only dependency. Each invocation has a 20-second polling deadline and a
+four MiB combined output ceiling, followed by bounded cleanup. A stopped capture
+fails the test; an unresolved direct child is explicitly reported. This does not
+prove descendant termination or add support for other process backends.
+
 ## Prepare proof-library views
 
 `proofs::inventory` reads bounded current sources and returns typed declarations,

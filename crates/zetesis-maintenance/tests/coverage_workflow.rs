@@ -1,5 +1,11 @@
 //! Real shell orchestration with synthetic compilers and physical-test output.
-#![cfg(all(unix, feature = "test-fixtures"))]
+#![cfg(all(
+    any(target_os = "linux", target_os = "macos"),
+    feature = "test-fixtures"
+))]
+#[path = "support/process.rs"]
+pub mod subprocess;
+use subprocess::{Command, Output};
 #[path = "support/coverage_fixture.rs"]
 mod fixture;
 use fixture::{Fixture, groups};
@@ -198,11 +204,7 @@ fn invalid_coverage_arguments_are_refused() {
         vec!["gate", "--metal", "extra"],
     ] {
         let f = Fixture::new();
-        let result = f
-            .command("scripts/coverage.sh")
-            .args(args)
-            .output()
-            .unwrap();
+        let result = f.command("scripts/coverage.sh").args(args).bounded_output();
         assert_eq!(result.status.code(), Some(2));
     }
 }
@@ -216,7 +218,7 @@ fn invalid_check_arguments_are_refused() {
         vec!["coverage", "--metal", "extra"],
     ] {
         let f = Fixture::new();
-        let result = f.command("scripts/check.sh").args(args).output().unwrap();
+        let result = f.command("scripts/check.sh").args(args).bounded_output();
         assert_eq!(result.status.code(), Some(2));
     }
 }
@@ -230,8 +232,7 @@ fn optional_coverage_gate_forwards_failure() {
     let result = f
         .command("scripts/check.sh")
         .args(["coverage", "--metal"])
-        .output()
-        .unwrap();
+        .bounded_output();
     assert_eq!(result.status.code(), Some(37));
     assert_eq!(result.stdout, b"<gate>\n<--metal>\n");
 }
@@ -249,8 +250,7 @@ fn record_gate_follows_actual_lean_commands() {
                 .env("ZETESIS_MAINTENANCE", f.root().join("bin/maintenance"))
                 .env("CHECK_TEST_TRACE", f.root().join("trace"))
                 .env("CHECK_TEST_FAILURE", failure)
-                .output()
-                .unwrap();
+                .bounded_output();
             assert_eq!(
                 result.status.code(),
                 Some(if failure.is_empty() { 0 } else { 23 }),
@@ -307,10 +307,10 @@ fn workflow_block() -> String {
     assert!(!block.trim().is_empty());
     block
 }
-fn git(f: &Fixture, arguments: &[&str]) -> std::process::Output {
+fn git(f: &Fixture, arguments: &[&str]) -> Output {
     let hooks = f.root().join("empty-hooks");
     fs::create_dir_all(&hooks).unwrap();
-    let result = std::process::Command::new("git")
+    let result = Command::new("git")
         .current_dir(f.root())
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
@@ -325,8 +325,7 @@ fn git(f: &Fixture, arguments: &[&str]) -> std::process::Output {
             "user.email=coverage@example.invalid",
         ])
         .args(arguments)
-        .output()
-        .unwrap();
+        .bounded_output();
     assert!(
         result.status.success(),
         "{}",
@@ -369,8 +368,7 @@ fn workflow_ratchet_preserves_the_committed_floor() {
                 .env("GITHUB_EVENT_PATH", f.root().join("event.json"))
                 .env("GIT_CONFIG_NOSYSTEM", "1")
                 .env("GIT_CONFIG_GLOBAL", "/dev/null")
-                .output()
-                .unwrap();
+                .bounded_output();
             assert_eq!(
                 result.status.success(),
                 success,
@@ -395,8 +393,7 @@ fn unreadable_existing_history_cannot_count_as_adoption() {
     let result = f
         .command("scripts/coverage-ratchet.sh")
         .env("GITHUB_EVENT_PATH", f.root().join("event.json"))
-        .output()
-        .unwrap();
+        .bounded_output();
     assert!(!result.status.success());
 }
 #[test]
@@ -413,8 +410,7 @@ fn failed_history_lookup_cannot_count_as_adoption() {
     let result = f
         .command("scripts/coverage-ratchet.sh")
         .env("GITHUB_EVENT_PATH", f.root().join("event.json"))
-        .output()
-        .unwrap();
+        .bounded_output();
     assert_eq!(result.status.code(), Some(17));
 }
 #[test]
@@ -425,11 +421,10 @@ fn mock_report_parser_refuses_unsupported_feature_flags() {
         vec!["--features", "gpu"],
         vec!["--workspace"],
     ] {
-        let result = std::process::Command::new(env!("CARGO_BIN_EXE_zetesis-maintenance-fixture"))
+        let result = Command::new(env!("CARGO_BIN_EXE_zetesis-maintenance-fixture"))
             .args(["cargo", "+1.97.1", "llvm-cov", "report"])
             .args(arguments)
-            .output()
-            .unwrap();
+            .bounded_output();
         assert!(!result.status.success());
         assert!(String::from_utf8_lossy(&result.stderr).contains("invalid mock report option"));
     }

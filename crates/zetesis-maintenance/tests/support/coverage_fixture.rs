@@ -1,9 +1,9 @@
 //! Isolated shell gates with deterministic Rust tool stand-ins.
+use crate::subprocess::{Command, Output};
 use serde_json::{Value, json};
 use std::{
     env, fs,
     path::{Path, PathBuf},
-    process::{Command, Output},
 };
 
 pub const TABLE: &str = include_str!("physical-selection.txt");
@@ -38,7 +38,7 @@ impl Fixture {
         fixture.write("scripts/coverage-floor.txt", b"91\n");
         fixture.write("target/coverage/status.txt", b"gate-passed\n");
         fs::create_dir_all(fixture.root().join("proofs")).unwrap();
-        for role in ["cargo", "rustc", "mdbook", "lake", "python3"] {
+        for role in ["cargo", "rustc", "mdbook", "lake"] {
             fixture.tool(&format!("bin/{role}"), role);
         }
         for name in ["llvm-cov", "llvm-profdata"] {
@@ -113,7 +113,7 @@ impl Fixture {
         if metal {
             command.arg("--metal");
         }
-        command.output().unwrap()
+        command.bounded_output()
     }
     pub fn calls(&self) -> Vec<Value> {
         let path = self.root().join("calls.jsonl");

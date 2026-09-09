@@ -234,7 +234,7 @@ fn execute(role: &str, arguments: &[String]) -> Result<(), String> {
             }
             Ok(())
         }
-        "maintenance" | "lake" | "coverage.sh" | "validate.sh" | "python3" => Ok(()),
+        "maintenance" | "lake" | "coverage.sh" | "validate.sh" => Ok(()),
         _ => fail("unexpected mock tool invocation"),
     }
 }

@@ -1,9 +1,14 @@
 //! Independent adversarial records, never invoking Lean or a solver.
 #[path = "support/proof_fixture.rs"]
 mod fixture;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[path = "support/process.rs"]
+pub mod subprocess;
 use fixture::Fixture;
 use serde_json::{Value, json};
-use std::{fmt::Write as _, fs, process::Command};
+use std::{fmt::Write as _, fs};
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use subprocess::Command;
 use zetesis_maintenance::proofs::{self, Limits, Summary};
 
 #[test]
@@ -343,13 +348,13 @@ fn resource_limits_are_enforced() {
     }
 }
 #[test]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn proof_cli_prints_derived_counts() {
     let f = Fixture::new();
     let result = Command::new(env!("CARGO_BIN_EXE_zetesis-maintenance"))
         .args(["proof-record", "--proofs-dir"])
         .arg(f.root())
-        .output()
-        .unwrap();
+        .bounded_output();
     assert!(result.status.success());
     assert!(
         String::from_utf8(result.stdout)
@@ -358,6 +363,7 @@ fn proof_cli_prints_derived_counts() {
     );
 }
 #[test]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn proof_cli_cannot_certify_a_stale_alternative_record() {
     let mut f = Fixture::new();
     f.record["audit_consistency"]["indexed_theorems"] = 1.into();
@@ -365,8 +371,7 @@ fn proof_cli_cannot_certify_a_stale_alternative_record() {
     let result = Command::new(env!("CARGO_BIN_EXE_zetesis-maintenance"))
         .args(["proof-record", "--record", "old.json", "--proofs-dir"])
         .arg(f.root())
-        .output()
-        .unwrap();
+        .bounded_output();
     assert_eq!(result.status.code(), Some(1));
     assert!(!String::from_utf8(result.stdout).unwrap().contains("PASS"));
 }
@@ -496,6 +501,7 @@ fn proof_inventory_applies_read_limits() {
 }
 
 #[test]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn inventory_cli_renders_each_requested_view() {
     let f = Fixture::new();
     let inventory = proofs::inventory(f.root(), Limits::default()).unwrap();
@@ -506,16 +512,14 @@ fn inventory_cli_renders_each_requested_view() {
         let result = Command::new(env!("CARGO_BIN_EXE_zetesis-maintenance"))
             .args(["proof-inventory", "--view", view, "--proofs-dir"])
             .arg(f.root())
-            .output()
-            .unwrap();
+            .bounded_output();
         assert!(result.status.success());
         assert_eq!(result.stdout, expected);
     }
     let result = Command::new(env!("CARGO_BIN_EXE_zetesis-maintenance"))
         .args(["proof-inventory", "--proofs-dir"])
         .arg(f.root())
-        .output()
-        .unwrap();
+        .bounded_output();
     assert!(result.status.success());
     assert_eq!(
         serde_json::from_slice::<Value>(&result.stdout).unwrap(),
