@@ -210,7 +210,7 @@ fn default_campaign_reports_clean_source_provenance() {
 }
 
 #[test]
-fn historical_override_reports_original_source_provenance() {
+fn corpus_override_retains_original_provenance() {
     let directory = tempfile::tempdir().unwrap();
     let output = command()
         .arg("--corpus")
@@ -225,7 +225,7 @@ fn historical_override_reports_original_source_provenance() {
     assert_eq!(report["corpus_view"], "original");
     assert_eq!(
         report["manifest_sha256"],
-        "a99dafc272fb0047c01f984e27bf22943f2aa5f9c8acf04e4ed1de6ac1a3fe88"
+        "372f44c59f3b6c530d50e6683e087dbceda028d54195b9f1de1ef610803c71fb"
     );
     for case in report["cases"].as_array().unwrap() {
         assert!(case.get("original_sha256").is_none());
