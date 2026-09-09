@@ -66,7 +66,7 @@ pub enum Decision {
     ReferenceOutputError(String),
     /// The reference failed the source's independent expectations.
     ReferenceContractMismatch(String),
-    /// Native enumeration was interrupted or exhausted a budget.
+    /// Native execution or output did not establish completed enumeration or optimality.
     NativeIncomplete,
     /// Native source admission explicitly refused the input.
     NativeSourceRefused,
@@ -140,7 +140,9 @@ impl Decision {
             }
             Self::CaptureFailed(Producer::Native, _) => Some("native invocation did not complete"),
             Self::ReferenceError => Some("reference returned an unexpected exit code"),
-            Self::NativeIncomplete => Some("native solver exhausted a budget or was interrupted"),
+            Self::NativeIncomplete => {
+                Some("native solver did not establish completed enumeration or optimality")
+            }
             Self::NativeSourceRefused | Self::NativeError => {
                 Some("native solver did not return a completed result")
             }

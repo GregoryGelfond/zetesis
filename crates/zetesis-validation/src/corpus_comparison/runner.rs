@@ -160,7 +160,13 @@ fn check_native(
         answer.cost.is_some(),
     ) {
         Ok(answer) => answer,
-        Err(error) => return decide(result, Decision::NativeOutputUnsupported(error)),
+        Err(crate::answers::Error::Invalid {
+            issue: crate::answers::Issue::Incomplete,
+            ..
+        }) => return decide(result, Decision::NativeIncomplete),
+        Err(error) => {
+            return decide(result, Decision::NativeOutputUnsupported(error.to_string()));
+        }
     };
     let same = normalize::same(answer, &native_answer);
     result.native_answer = Some(native_answer);
@@ -194,7 +200,7 @@ fn native_failure(native: &Capture) -> Option<Decision> {
     if let Some(failure) = native.status.failure() {
         return Some(Decision::CaptureFailed(Producer::Native, failure));
     }
-    if native.exit_code == Some(3) || native.stdout.contains("INCOMPLETE:") {
+    if native.exit_code == Some(3) {
         return Some(Decision::NativeIncomplete);
     }
     if native.exit_code == Some(0) {

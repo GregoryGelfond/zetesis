@@ -278,7 +278,7 @@ fn native_failures_preserve_the_completed_reference_and_exact_request() {
             "UNSATISFIABLE\nCoverage: partial\nModels: 0\n",
             "",
             0,
-            "native_output_unsupported",
+            "native_incomplete",
         ),
         (
             "Answer: 1\nb\nSATISFIABLE\nCoverage: exhausted\nModels: 1\n",
@@ -696,60 +696,64 @@ fn original_contracts_are_checked_independently_of_solver_agreement() {
 
 #[test]
 fn malformed_native_records_cannot_supply_complete_costed_models() {
+    use crate::answers::{Error, Issue};
     for (text, optimized, expected) in [
         (
             "Answer: 1\na\nOptimization: 1\nOptimization: 1\nOPTIMUM FOUND\nCoverage: exhausted\nModels: 1\n",
             true,
-            "duplicate native cost",
+            Issue::Contradiction,
         ),
         (
             "Optimization: 1\nAnswer: 1\na\nOPTIMUM FOUND\nCoverage: exhausted\nModels: 1\n",
             true,
-            "preceding native model",
+            Issue::MissingField,
         ),
         (
             "Answer: 1\na\nOptimization: bad\nOPTIMUM FOUND\nCoverage: exhausted\nModels: 1\n",
             true,
-            "cost integer",
+            Issue::MalformedField,
         ),
         (
             "UNSATISFIABLE\nCoverage: exhausted\nModels: 1\nAnswer: 1\na\n",
             false,
-            "model/status mismatch",
+            Issue::Contradiction,
         ),
         (
             "SATISFIABLE\nCoverage: exhausted\nModels: 0\n",
             false,
-            "model/status mismatch",
+            Issue::Contradiction,
         ),
         (
             "UNSATISFIABLE\nCoverage: exhausted\n",
             false,
-            "Models summary",
+            Issue::Contradiction,
         ),
         (
             "UNSATISFIABLE\nCoverage: exhausted\nModels: 0\nModels: 0\n",
             false,
-            "Models summary",
+            Issue::Contradiction,
         ),
         (
             "UNSATISFIABLE\nCoverage: exhausted\nModels: zero\n",
             false,
-            "invalid Models count",
+            Issue::MalformedField,
         ),
         (
             "SATISFIABLE\nCoverage: exhausted\nModels: 1\nAnswer: 1",
             false,
-            "missing native model line",
+            Issue::MissingField,
         ),
         (
             "Answer: 1\np)\nSATISFIABLE\nCoverage: exhausted\nModels: 1\n",
             false,
-            "unmatched atom parenthesis",
+            Issue::MalformedField,
         ),
     ] {
         let error = super::normalize::native(text, optimized).unwrap_err();
-        assert!(error.contains(expected), "{text}: {error}");
+        assert!(
+            matches!(error, Error::Invalid { issue, .. } if issue == expected),
+            "{text}: {error}"
+        );
     }
     let reference = r#"{"Call":[{}, {"Witnesses":[]}],"Result":"UNSATISFIABLE","Models":{"More":"no","Number":0}}"#;
     assert!(!super::normalize::reference(reference).unwrap().satisfiable);
@@ -1032,4 +1036,48 @@ fn unrepresentable_report_path_preserves_acceptance() {
         .push(std::ffi::OsStr::from_bytes(b"source-\xff"));
     assert!(report.to_json().is_err());
     assert!(report.passed());
+}
+
+#[test]
+fn displayed_status_text_is_not_finish_evidence() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut loaded = loaded(directory.path(), 1);
+    let mut options = options(directory.path());
+    for symbol in [
+        "p(\"INCOMPLETE: embedded\")",
+        "p(\"first\nINCOMPLETE: embedded\nlast\")",
+    ] {
+        loaded.manifest.cases[0].contracts[1].arguments = format!("{{{symbol}}}");
+        let mut reference: Value = serde_json::from_str(&reference()).unwrap();
+        reference["Call"][0]["Witnesses"][0]["Value"] = json!([symbol]);
+        options.clingo = emitting(
+            directory.path(),
+            "reference",
+            &reference.to_string(),
+            "",
+            30,
+        );
+        let native = format!("Answer: 1\n{symbol}\nSATISFIABLE\nCoverage: exhausted\nModels: 1\n");
+        options.zetesis = emitting(directory.path(), "native", &native, "", 0);
+        check(&options, &loaded, "pass");
+    }
+}
+
+#[test]
+fn incomplete_metadata_remains_a_typed_failure() {
+    let directory = tempfile::tempdir().unwrap();
+    let loaded = loaded(directory.path(), 1);
+    let mut options = options(directory.path());
+    for marker in ["INCOMPLETE", "INCOMPLETE: work"] {
+        let native = format!("{NATIVE}{marker}\n");
+        options.zetesis = emitting(directory.path(), "native", &native, "", 0);
+        let mut pending = Vec::new();
+        let result = super::check_case(&options, &loaded, &loaded.manifest.cases[0], &mut pending);
+        assert!(matches!(
+            result.decision(),
+            super::Decision::NativeIncomplete
+        ));
+        assert!(result.native_answers().is_none());
+        assert!(pending.is_empty());
+    }
 }

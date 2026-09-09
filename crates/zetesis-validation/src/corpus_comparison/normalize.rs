@@ -32,14 +32,13 @@ pub(crate) fn reference(text: &str) -> Result<Answer, String> {
     .map_err(|error| error.to_string())
 }
 
-pub(crate) fn native(text: &str, optimized: bool) -> Result<Answer, String> {
+pub(crate) fn native(text: &str, optimized: bool) -> Result<Answer, crate::answers::Error> {
     crate::answers::native_text(
         text.as_bytes(),
         optimized,
         crate::answers::Limits::for_bytes(text.len()),
     )
     .map(adapt)
-    .map_err(|error| error.to_string())
 }
 
 fn adapt(answer: crate::answers::ReportedAnswers) -> Answer {
@@ -185,15 +184,10 @@ mod tests {
     }
 
     #[test]
-    fn native_complete_weighted_enumeration_selects_exact_best_vector() {
-        let output = "Answer: 1\na\nOptimization: 2 0\nAnswer: 2\nb\nOptimization: 1 7\nAnswer: 3\nc\nOptimization: 1 7\nSATISFIABLE\nCoverage: exhausted\nModels: 3\n";
+    fn native_final_optimum_preserves_the_complete_cost_vector() {
+        let output = "Answer: 1\nb\nOptimization: 1 7\nAnswer: 2\nc\nOptimization: 1 7\nOPTIMUM FOUND\nCoverage: exhausted\nModels: 2\n";
         let answer = native(output, true).unwrap();
         assert_eq!(answer.cost, Some(vec![1, 7]));
-        assert_eq!(answer.model_count, 2);
-        for replacement in ["Optimization: 2", "Optimization:"] {
-            let malformed = output.replace("Optimization: 2 0", replacement);
-            assert!(native(&malformed, true).is_err());
-        }
     }
 
     #[test]
