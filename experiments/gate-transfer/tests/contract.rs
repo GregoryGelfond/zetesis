@@ -26,13 +26,38 @@ fn all_960_transfers_match_the_independent_relation() {
                 let expected = reference(operation, aliases, input);
                 assert_eq!(bitwise(operation, aliases, input), expected);
                 assert_eq!(lookup(operation, aliases, input), expected);
-                assert!(subset(expected, input));
-                assert_eq!(bitwise(operation, aliases, expected), expected);
                 compared += 1;
             }
         }
     }
     assert_eq!(compared, TABLE_LEN);
+}
+
+fn inputs() -> impl Iterator<Item = (Operation, Aliases, Domains)> {
+    Operation::ALL.into_iter().flat_map(|operation| {
+        Aliases::ALL
+            .into_iter()
+            .flat_map(move |aliases| (0..64).map(move |code| (operation, aliases, domains(code))))
+    })
+}
+
+#[test]
+fn projected_support_is_contractive() {
+    for (operation, aliases, input) in inputs() {
+        assert!(subset(bitwise(operation, aliases, input), input));
+    }
+}
+
+#[test]
+fn projected_support_is_idempotent() {
+    for (operation, aliases, input) in inputs() {
+        let narrowed = bitwise(operation, aliases, input);
+        assert_eq!(bitwise(operation, aliases, narrowed), narrowed);
+    }
+}
+
+#[test]
+fn lookup_codes_fit_the_domain_encoding() {
     assert!(LOOKUP_TABLE.iter().all(|&code| code < 64));
 }
 
@@ -145,29 +170,43 @@ fn stale_and_mixed_snapshots_preserve_every_current_completion() {
     }
 }
 
+fn slot_triples() -> impl Iterator<Item = [u32; 3]> {
+    (0..3).flat_map(|left| (0..3).flat_map(move |right| (0..3).map(move |out| [left, right, out])))
+}
+
 #[test]
-fn aliases_use_physical_slot_identity_and_cover_all_partitions() {
-    let mut seen = [false; 5];
-    for left in 0..3 {
-        for right in 0..3 {
-            for output in 0..3 {
-                let alias = Aliases::from_slots(left, right, output);
-                let canonical = alias.slots();
-                let original = [left, right, output];
-                for a in 0..3 {
-                    for b in 0..3 {
-                        assert_eq!(canonical[a] == canonical[b], original[a] == original[b]);
-                    }
-                }
-                seen[Aliases::ALL.iter().position(|&item| item == alias).unwrap()] = true;
+fn alias_canonicalization_preserves_slot_identity() {
+    for original in slot_triples() {
+        let [left, right, output] = original;
+        let canonical = Aliases::from_slots(left, right, output).slots();
+        for a in 0..3 {
+            for b in 0..3 {
+                assert_eq!(canonical[a] == canonical[b], original[a] == original[b]);
             }
         }
     }
+}
+
+#[test]
+fn slot_triples_cover_every_alias_partition() {
+    let mut seen = [false; 5];
+    for [left, right, output] in slot_triples() {
+        let alias = Aliases::from_slots(left, right, output);
+        seen[Aliases::ALL.iter().position(|&item| item == alias).unwrap()] = true;
+    }
     assert!(seen.into_iter().all(|value| value));
+}
+
+#[test]
+fn largest_slot_identity_remains_distinct_from_zero() {
     assert_eq!(
         Aliases::from_slots(u32::MAX, 0, u32::MAX),
         Aliases::LeftOutput
     );
+}
+
+#[test]
+fn self_implication_supports_only_true_output() {
     assert_eq!(
         bitwise(
             Operation::Implies,
@@ -176,6 +215,10 @@ fn aliases_use_physical_slot_identity_and_cover_all_partitions() {
         ),
         Domains::new(2, 2, 2).unwrap(),
     );
+}
+
+#[test]
+fn contradictory_alias_observations_have_no_support() {
     assert_eq!(
         bitwise(
             Operation::And,
@@ -187,7 +230,7 @@ fn aliases_use_physical_slot_identity_and_cover_all_partitions() {
 }
 
 #[test]
-fn invalid_tags_and_masks_are_refused_without_truncation() {
+fn operation_tags_match_the_shader_contract() {
     for (tag, expected) in [
         (0, None),
         (1, None),
@@ -199,14 +242,26 @@ fn invalid_tags_and_masks_are_refused_without_truncation() {
     ] {
         assert_eq!(Operation::from_shader_tag(tag), expected);
     }
+}
+
+#[test]
+fn invalid_position_masks_are_refused_without_truncation() {
     for mask in 4..=u8::MAX {
         assert_eq!(Domains::new(mask, 3, 3), None);
         assert_eq!(Domains::new(3, mask, 3), None);
         assert_eq!(Domains::new(3, 3, mask), None);
     }
+}
+
+#[test]
+fn invalid_domain_codes_are_refused_without_truncation() {
     for code in 64..=u8::MAX {
         assert_eq!(Domains::from_code(code), None);
     }
+}
+
+#[test]
+fn valid_domain_codes_round_trip() {
     for code in 0..64 {
         assert_eq!(domains(code).code(), code);
     }

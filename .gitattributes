@@ -1,6 +1,3 @@
 # Preserve original source and qualification-record bytes on every platform.
 # Corpus and evidence manifests validate exact hashes, including line endings.
 * -text
-
-# These experiment snapshots are produced by the recorded shader generator.
-experiments/gate-transfer/generated/*.wgsl linguist-generated

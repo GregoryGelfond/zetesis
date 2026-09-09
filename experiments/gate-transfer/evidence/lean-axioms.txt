@@ -1,1 +1,0 @@
-'GateTransferExperiment.exact_transfer' depends on axioms: [propext]

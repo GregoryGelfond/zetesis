@@ -13,9 +13,8 @@ implementation. The
 [device constructors](../../crates/zetesis-wgpu/src/formula/device.rs) accept that
 selection. The bitwise path assembles the unchanged shader scaffold with
 [bitwise gate transfer](../../crates/zetesis-wgpu/src/formula/bitwise.wgsl).
-The finite reference and retained proposal artifacts below are separate from
-this runtime selection. Their presence does not establish physical qualification
-or a performance benefit.
+The independent finite reference establishes the local transfer contract. It
+does not establish physical qualification or a performance benefit.
 
 ## Finite transfer contract
 
@@ -63,50 +62,28 @@ cargo run --manifest-path experiments/gate-transfer/Cargo.toml \
 
 Create the output parent before redirecting the vector example if `target`
 does not exist. `scripts/check.sh portable` also checks this package's formatting,
-all-target tests, doctests, pedantic Clippy and strict rustdoc under the estate
+all-target tests, doctests, pedantic Clippy and strict rustdoc under the repository
 lint policy. Main-workspace coverage remains a separate measurement.
 
-[GateTransfer.lean](proofs/GateTransfer.lean) proves finite mathematical equality
-for the same transfer space. It is an isolated proof outside the production
-theorem inventory; its [recorded axiom output](evidence/lean-axioms.txt) lists
-`propext`. From the repository root, use the pinned Lean environment:
+## Proof and production contracts
 
-```sh
-(cd proofs && lake env lean -DautoImplicit=false -DwarningAsError=true \
-  ../experiments/gate-transfer/proofs/GateTransfer.lean)
-```
-
-These semantic checks do not prove shader compilation, memory-model behavior,
+[`GateProjection.lean`](../../proofs/Zetesis/GateProjection.lean) states the
+maintained finite mathematical result. `bitwise_support_exact` proves equality
+with independent Boolean enumeration for all 960 transfers;
+`aliased_intersection_exact` preserves intersections at shared physical slots.
+The [proof library](../../proofs/README.md) defines its pinned build and axiom
+checks. These laws do not prove shader compilation, memory-model behavior,
 convergence or physical execution.
 
-## Retained shader proposal and provenance
-
-[generated/patch-record.json](generated/patch-record.json) identifies the
-retained original/proposed full shaders and
-[unapplied patch artifact](generated/gate-transfer-unapplied.patch).
-The filename describes that stored patch; it does not mean the optional
-production `Bitwise` path is absent.
-
-The explicit [preparation adapter](tools/prepare_patch.py) verifies the retained
-shader identity and replaces only the gate-transfer function. Normal invocation
-is a read-only replay when the artifacts exist:
-
-```sh
-python3 experiments/gate-transfer/tools/prepare_patch.py
-```
-
-Its `--write` mode creates missing artifacts and refuses to overwrite retained
-files. The adapter does not compile or execute WGSL.
-[evidence/source-fingerprints.json](evidence/source-fingerprints.json) records
-the original experiment snapshot; it is not a current working-tree checksum
-manifest. The retained [vectors](evidence/vectors.tsv) and
-[independent vector review](evidence/vector-review.json) preserve the finite
-reference evidence.
-
-[gate_experiment.rs](../../crates/zetesis-wgpu/tests/gate_experiment.rs)
-parses and validates the retained proposal with the pinned Naga dependency,
-checking the declared bindings and entry points. It is portable validation of
-those shader inputs, not a physical-device result.
+The production
+[projection tests](../../crates/zetesis-wgpu/src/formula/projection/tests.rs)
+assemble both maintained variants through their actual selector. They verify
+that substitution changes only the gate-transfer region, validate both modules
+with pinned Naga, and compare their device interfaces. The
+[formula interface contracts](../../crates/zetesis-wgpu/tests/formula_interface.rs)
+check the expected host buffer bindings, uniform layout and compute entry point.
+Independent finite [Rust checks](tests/contract.rs) cover the relation itself;
+these portable contracts make no physical-device claim.
 
 ## Runtime preservation obligations
 

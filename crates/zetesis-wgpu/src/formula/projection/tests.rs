@@ -12,11 +12,17 @@ fn default_shader_remains_the_borrowed_baseline() {
 }
 
 #[test]
-fn bitwise_shader_matches_the_retained_transfer() {
-    assert_eq!(
-        GateProjection::Bitwise.shader().unwrap(),
-        include_str!("../../../../../experiments/gate-transfer/generated/proposed-formula.wgsl")
-    );
+fn bitwise_transfer_preserves_the_shader_scaffold() {
+    let baseline = include_str!("../../formula.wgsl");
+    let (prefix, transfer) = baseline.split_once("fn gate(").unwrap();
+    let suffix = &transfer[transfer.find("fn finish(").unwrap()..];
+    let assembled = GateProjection::Bitwise.shader().unwrap();
+    let replacement = assembled
+        .strip_prefix(prefix)
+        .unwrap()
+        .strip_suffix(suffix)
+        .unwrap();
+    assert_eq!(replacement, include_str!("../bitwise.wgsl"));
 }
 
 #[test]

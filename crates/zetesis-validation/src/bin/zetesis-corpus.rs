@@ -9,7 +9,7 @@ use zetesis_validation::{examples, selected};
 #[derive(Parser)]
 #[command(
     version,
-    about = "Verify ASP corpus provenance and compare complete solver results"
+    about = "Verify retained ASP fixtures and compare complete solver results"
 )]
 struct Options {
     #[command(subcommand)]
@@ -39,7 +39,7 @@ enum Action {
         #[arg(long)]
         report: PathBuf,
     },
-    /// Verify exact source bytes, provenance, license and model contracts.
+    /// Verify retained source bytes, license, assertion excerpts and model contracts.
     Verify {
         /// Curated directory containing manifest.json and programs/.
         root: PathBuf,
