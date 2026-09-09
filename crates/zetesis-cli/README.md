@@ -1,426 +1,194 @@
-# zetesis command
+# zetesis-cli
 
-Run one or more original ASP source files, or pipe source to standard input:
+The `zetesis` command composes source admission, reduct-based solving and human
+or machine output. This crate also exposes prepared-input sessions and injected
+writer APIs for library callers. Parsing, files, presentation and process exit
+policy remain separate from semantic results.
+
+See the [build guide](../../docs/book/building.md) for installation and the
+[session guide](../../docs/book/rust/sessions.md) for Rust composition.
+
+## Run a program
 
 ```sh
 zetesis input.lp
-zetesis input.lp --models 0
-zetesis input.lp --models 0 --stats
 zetesis encoding.lp instance.lp --models 0
+zetesis input.lp --models 0 --stats
+zetesis input.lp --models 0 --json
 printf 'a :- not b. b :- not a.\n' | zetesis --models 0
 zetesis devices
 zetesis --help
 zetesis --help-all
-zetesis --version
 ```
 
-`-h` and `--help` show everyday input, model, backend, grounding and output
-options. `--help-all` also describes oracle selection, workers, batching and
-resource ceilings. Advanced options remain parseable in every ordinary solve;
-the two help views do not select different execution modes.
+The compact help lists everyday input, enumeration, backend, grounder and output
+options. `--help-all` additionally describes oracle selection, workers, batching
+and resource ceilings. Both views describe the same solver.
 
-Supported language constructs are available automatically. Every returned answer
-set must satisfy the original program and the exact reduct acceptance criterion.
-For example, `a :- a.` has only the empty answer set: `{a}` lacks reduct support.
+Without objectives, the default returns one answer set; `--models 0` requests
+exhaustive enumeration. With an active objective, search runs to exhaustion to
+establish optimality, then displays up to the requested number of tied optimum
+models. Equal displays can represent distinct full answer sets.
 
-Without objectives, the default stops after one answer set and `--models 0`
-requests exhaustive enumeration. With an active objective, search always runs
-to exhaustion to establish optimality, then displays up to the requested number
-of tied optimal models. `--models 0` displays every full optimal model. Display
-selection preserves hidden differences, so identical answer lines can represent
-distinct answer sets.
+Every accepted answer must satisfy the original program and its reduct
+acceptance criterion. For example, `a :- a.` has only the empty answer set.
+Classical satisfaction alone does not establish stability.
 
-Human output defaults to `--color auto`: eligible stdout terminals receive cyan
-answer headings with a bold `Answer:` label and italic green optimization
-metadata. Eligible stderr terminals receive blue `Source:`, `Oracle:`,
-`Grounding:`, `Backend:` and `Auto:` labels with italic gray values. Standard ANSI
-palette colors inherit the terminal's configured theme. The untagged
-`SATISFIABLE` and `UNSATISFIABLE` verdicts use bold italic gray; atom lines and
-statistics stay plain. Fatal error summaries and primary diagnostic markers use
-bold red, with a blue `zetesis:` label. Syntax diagnostics use the original
-themelios messages, source excerpts and locations; locations, notes, help and
-secondary markers use italic gray. Warning and note headings preserve their
-yellow and blue severity styles. `--color always` forces the human styles, while
-`--color never` disables them. Automatic mode resolves stdout and stderr
-independently, respects a nonempty `NO_COLOR` and `TERM=dumb`, and leaves each
-redirected stream plain. JSON ignores color selection on both streams.
+## Results and presentation
 
-`ColorMode` is a typed presentation policy; it is absent from semantic
-`SolveConfig`. The process resolves terminal/environment capabilities once.
-Library calls with generic injected writers keep `Auto` plain and can request
-`Always` explicitly. Solve metadata is streamed through typed actions; arbitrary
-diagnostic writes still pass through unchanged. Fatal errors use the canonical
-human diagnostic view with colour applied one line at a time. Numbered source
-rows remain plain; interpretation of the program does not depend on rendered text.
-The colour adapter retains at most the longest line, while the upstream human
-view may allocate one diagnostic rendering. Repeated excerpts increase output
-work but are not collected into a single whole-error string.
-Styling and reset bytes in an Answer record count toward its complete human
-record ceiling before publication. A partial write remains an output failure,
-including when it interrupts an escape sequence; the writer's retained prefix
-cannot be recalled or guaranteed to have restored terminal styling. Diagnostic
-styling preserves the original plain metadata text, spacing and newlines.
+Human output separates answer headings, atoms, optimization metadata and the
+terminal result. `--color auto` resolves stdout and stderr independently,
+respects nonempty `NO_COLOR` and `TERM=dumb`, and leaves redirected streams
+plain. `always` and `never` provide explicit overrides.
 
-`SATISFIABLE`, `UNSATISFIABLE`, or `OPTIMUM FOUND` and the separate coverage record
-describe the result. A search or objective resource stop prints `INCOMPLETE` and
-cannot establish UNSAT or optimality. Retained incumbents may still be displayed
-with their fully evaluated costs. Exit 0 means the request completed, 2 means an
-input/backend/output error, and 3 means search was interrupted. These are not
-clingo's numeric exit codes.
+Answer headings use cyan with a bold label; optimization metadata uses italic
+green. Source/oracle/grounder/backend labels use blue with italic gray values.
+Untagged satisfiability verdicts use bold italic gray. Fatal diagnostics use red;
+themelios syntax messages retain source locations and excerpts. ANSI palette
+colors inherit the terminal theme. Styling never changes the semantic result.
 
-`--stats` adds version, configured resource ceilings, requested execution policies,
-completion, available counters and total driver wall time to stderr. It leaves
-stdout answer records unchanged and is off by default. Formula execution reports
-its actual single search worker, independently of the configured closure pool.
-Closure work is marked unavailable because the driver does not accumulate it.
-Automatic closure routing can change between batches; its effective device and
-grounder may be untracked or mixed, while the existing backend diagnostics retain
-actual adapter and fallback information. Unavailable counters are never printed
-as zero.
+A resource stop reports `INCOMPLETE`; it cannot establish UNSAT or optimality.
+Verified incumbents may still carry fully evaluated costs. Exit codes are:
 
-An interrupted native search returns a partial `Report`, including retained batch
-accounting when available. The additive `run_detailed`,
-`run_detailed_with_diagnostics` and `run_bundle_detailed_with_diagnostics` APIs
-retain a `RunFailure` on source, device, protocol, observation or output failure.
-Its original typed cause is accompanied by an optional `PartialReport` and
-attempted phase timings. Early source/setup failures can have no semantic report.
-The existing `run` and diagnostic convenience APIs retain their
-`Result<Report, RunError>` signatures and return the original cause.
+| Code | Meaning |
+|---|---|
+| 0 | The requested run completed. |
+| 2 | Input, backend, protocol or output failure. |
+| 3 | Search was interrupted. |
 
-Failure evidence separates verified stable models, pending batch candidates,
-verified queued models and completely published Answer records. Closure verification
-includes all accepted members of a completed batch, while its `checked` counter
-retains the existing count of result/control records consumed by the driver.
-A whole-batch stop contributes one such control record; shared execution's
-submitted/completed/stopped counters retain the full occurrence accounting. A cost-bearing
-Answer is counted only after its cost line also succeeds. An output sink can
-accept a partial record, but that record is excluded from `published_models`.
-`completion: None` means no search stopping classification was established;
-`Some(Exhausted)` can coexist with a failed later publication. The separate
-`summary_published` flag records whether the entire final coverage/count summary
-reached the sink. Publication is neither a flush nor a durable-storage guarantee.
-An unrelated checker/diagnostic failure does not flush retained incumbents or
-emit a new completion summary. The partial report retains incumbent metadata and a previously observed logical
-stop even if a later buffered Answer fails. Successful `Report` values retain
-their existing interruption/coverage invariant.
+These are zetesis exit codes, not clingo's codes.
 
-The process adapter uses the detailed API. Failed runs with `--stats` print the
-available partial accounting without claiming successful request completion.
-If writing those statistics also fails, `secondary_output` retains that error
-without replacing the original cause. This is terminal evidence, not a resumable
-search checkpoint: pending interpretations, queues and device resources are not
-returned to the caller.
+`--json` streams one schema-1 document without ANSI styling. Full semantic atoms,
+shown atom indices, shown terms, costs and terminal outcomes remain distinct.
+`--max-json-record-bytes` bounds each model and terminal record, with an 8 MiB
+default. Integer consumers need lossless parsing. A failed writer can leave a
+truncated document or partial human record; successful semantic checking does
+not imply successful publication. See [JSON views](src/output.rs) and
+[output regression tests](tests/json_output.rs).
 
-The measured driver interval includes semantic admission, search and answer
-output, and excludes original file/stdin loading and the statistics write itself.
-It is not a device, kernel or CPU-time measurement. Loaded source
-refusals and interrupted driver calls receive failed/incomplete statistics;
-process-level failures before admission (such as unreadable files) have no driver
-measurement. A failed statistics sink remains an output error, even if completed
-answer records were already written. Neither partial coverage nor a retained
-incumbent is labeled an established optimum.
+## Select an execution route
 
-The appended `Phase timings` section reports integer host nanoseconds and attempted
-call counts. It separates admission/materialization, execution setup, initial
-candidate setup, candidate generation/blocking, original-formula validation,
-GPU host oracle calls, exact CPU reduct membership, CPU closure membership,
-objective scoring/retention, objective feedback and observation/output. Setup
-includes device initialization or an owned worker pool; a GPU host oracle call
-includes transport, submission, waits and readback. It is never labeled kernel
-time. Formula execution uses original validation and exact reduct membership;
-closure execution uses closure membership instead. `unmeasured` means a phase
-was not entered or does not apply; it does not assert zero work.
-
-Intervals do not nest, but phase sums need not equal the driver total: source
-retry preparation, formula interpretation-to-Model conversion and other
-orchestration/timer overhead are unattributed. Admission includes materialization rather than separating parsing
-from grounding; lazy closure membership includes source joins. Objective feedback
-includes candidate-only bound compilation/restriction, not original reduct edits.
-Failed returned attempts contribute elapsed time independently of the semantic
-counters available in the detailed failure. A timing overflow reports `complete=false` and
-retains only the measured prefix, without changing solving. Disabled statistics
-read no clocks and make no timing-specific heap allocations; coarse optional
-branches and fixed-size fields remain. Timing calls do not count models, queries
-or semantic work. In particular a failed reduct encoding may consume a timed
-attempt before the query counter advances. Public successful reports expose
-`PhaseTimings`; detailed errors retain them even when diagnostics cannot be written.
-
-## Reduct oracle selection
-
-`--oracle auto` is the default. The solver first attempts the normal-rule closure
-specialization, including scalar expansion and display metadata. If the source
-needs richer supported constructs, it selects finite Ferraris reduct countermodel
-checking. Syntax, undefined arithmetic, overflow, core admission and resource
-failures are preserved; they never trigger a retry with a weaker limit.
-
-Advanced controls make the exact procedure explicit:
-
-```sh
-zetesis input.lp --oracle closure --models 0
-zetesis input.lp --oracle countermodel --models 0
-```
-
-`closure` checks sparse gate candidates by reduct least closure, constraints and
-candidate agreement. `countermodel` checks complete semantic candidates and
-rejects any candidate with a proper subset satisfying its frozen Ferraris reduct.
-The latter materializes a bounded formula theory. Automatic and CPU selection
-use native CPU search; an explicit GPU selects batched Ferraris propagation with
-exact native CPU completion of residual queries. A required but unavailable
-device is refused. Explicit lazy formula grounding remains unsupported.
-
-The internal countermodel search uses a native chronological DPLL implementation
-and full Tseitin equivalences. Those Boolean queries are replaceable implementation
-machinery. Classical satisfaction alone cannot establish an answer set. Only
-semantic atoms participate in minimality and model blocking; auxiliary variables
-do not define additional answer sets.
-
-`--max-search-work` and `--max-search-decisions` accumulate across encoding and
-countermodel queries. `--max-candidates` bounds candidates, and `--max-work`
-bounds each independent witness check. Formula admission caps atoms at 65,536,
-nodes at 1,048,576 and roots at 262,144; smaller CLI atom/root limits also apply.
-The internal encoding caps variables at 1,048,576, clauses at 4,194,304 and literal
-occurrences at 12,582,912. Formula candidate search remains serial. By default
-CPU formula execution uses the existing scalar cursor (`--completion-workers 1`).
-Set `--completion-workers 2` or `4` to request a reusable Rayon pool for independent
-exact reduct queries in ordinary CPU batches. GPU residual batches use the same
-bounded executor, including when its requested worker count is one. This setting
-is separate from closure's `--workers` and is never automatically increased.
-Batched formula execution uses `--batch-size` and `--max-batch-bytes` to bound
-proposals and transport. `--max-completion-scratch-bytes` defaults to 268435456
-(256 MiB) and independently admits all batch result slots plus simultaneous query
-workspaces before allocation. A tight budget reduces admitted query concurrency;
-failing to fit one required query returns explicit incomplete coverage. This
-logical budget includes reserved unused query slots but excludes allocator and
-hash-table overhead, pool/thread storage, the shared theory, the scalar candidate
-cursor and GPU memory. It is not a process memory limit. The direct CPU scalar
-cursor does not use this completion-batch budget; `--stats` says so explicitly. Proposals
-remain accounted for until a whole membership batch commits; verified models
-awaiting objective scoring or output are retained separately. Formula search
-reports its own counters, with gate-tuple discovery marked inapplicable.
-
-With `--stats`, hybrid execution reports the actual adapter, GPU batches and
-candidate worlds, charged propagation work and sweeps, CPU residual completions,
-GPU decisions, pending candidates, queued verified models and peak authored
-device-allocation accounting. CPU and hybrid batched execution also report
-requested and peak admitted completion concurrency, peak logical scratch,
-entered/completed/failed residuals, and pending/queued models. Completed local
-checks remain uncommitted if any batch member fails. With timing enabled,
-coordinator wall intervals are separate from summed worker intervals; overlapping
-worker intervals are not added to scalar phase timings. Diagnostic overflow is
-explicit and cannot discard committed answers. These are neither kernel timings
-nor process RSS. Portable tests establish correctness, not a parallel speedup.
-Device selection and initialization happen during ordinary invocation; no setup
-script, qualification command or stored pass marker is required.
-
-## Machine output
-
-`zetesis input.lp --models 0 --json` streams one schema-1 JSON document. Full
-semantic atoms, shown atom indices, shown terms and costs remain separate. The
-terminal outcome distinguishes exhaustive results, partial search, proved optima
-and failures. Add `--stats` for typed search/execution counters and both stage and
-phase timings. The fixed JSON header and terminal envelope lie outside the timing
-interval; model view construction and emission are output work.
-
-`--max-json-record-bytes` bounds each model and terminal record (8 MiB by default).
-A broken output stream can leave a truncated document; no completed publication
-is claimed. Integers are exact decimal values and need lossless consumer parsing.
-See the [complete schema and failure contract](../../docs/verification/json-output-20260907/README.md).
-
-## Grounding and solving time
-
-`--stats` includes a host-millisecond summary and an exact stage record separating
-source preparation, eager grounding, solving and output. Eager grounding measures
-actual finite instance construction; cached program reuse is not charged again.
-Solving includes setup, candidate generation, membership, waits and objective work.
-The detailed phase section remains available to distinguish those costs.
-
-Lazy joins remain interleaved with solving, so their separate grounding duration
-is unavailable. A mixed route reports measured eager spans and labels the remaining
-lazy work. Failed attempts retain time; unentered stages stay unmeasured. Neither
-a complete timing partition nor a nonzero duration proves semantic completion.
-The [measurement contract](../../docs/design/phase-measurements.md) states exact
-scope, and reusable typed snapshots live in `zetesis-telemetry`.
-
-For eager formula materialization, statistics additionally expose
-`PhaseTimings::grounding` as a fixed-size `GroundingTimings` value. It aggregates
-host intervals, completion/failure/unwind outcomes and selected work populations
-for support completion, objective activation, formula initialization, rule
-instantiation, coherence, support guards and theory validation. Per-rule callback
-locations remain available through the frontend observer API; the CLI does not
-retain an unbounded event history.
-
-The human `Grounding attribution` section and JSON `grounding_attribution`
-schema-1 object are views of that same snapshot. A missing phase is unmeasured;
-counter or duration overflow is unavailable rather than zero. Counters include
-failed attempts and instrumentation overhead. Join, filter and formula emission
-work can be interleaved, so these populations do not claim independent kernel
-times. Relational eager and lazy work have no detailed attribution in this view;
-their existing coarse stage measurements remain available. The no-statistics
-path does not enable the detailed observer.
-
-## Backend and grounder selection
-
-`--backend auto` and `--grounder auto` are the defaults. On the closure path,
-the empty seed is checked with lazy CPU joins. Later batches of at least 32
-candidates may initialize a physical GPU and compile a static program. This is
-a provisional scheduling threshold, not a measured performance crossover.
-
-An automatic GPU admission or submission failure reports a reason on stderr and
-retries unreported work on CPU. Explicit hardware requests never fall back:
+`--oracle auto` first tries the normal-rule closure specialization, then retries
+eligible richer source through finite Ferraris countermodel checking. Syntax,
+arithmetic and resource failures are preserved. The
+[frontend guide](../zetesis-themelios/README.md) defines admitted source profiles.
 
 ```sh
 zetesis input.lp --backend cpu
 zetesis input.lp --backend metal --grounder eager
-zetesis input.lp --backend vulkan
-zetesis input.lp --backend dx12
-zetesis input.lp --backend gl
-zetesis input.lp --backend nvidia
-zetesis input.lp --backend gpu
+zetesis input.lp --backend metal --grounder lazy
+zetesis input.lp --oracle countermodel --completion-workers 4 --models 0
 ```
 
-GPU support is included in the default build. `gpu` selects a physical adapter
-through a compiled wgpu API; a named API requires that API. `nvidia` adds a vendor
-filter through a graphics API, with no CUDA backend. Software, virtual and unknown
-adapter categories are refused. `zetesis devices` lists compiled APIs and visible
-capabilities without reading source. Actual device/shader initialization may
-still fail. A CPU-only build uses `--no-default-features` at installation time.
+Closure checks candidate gates against the least closure of the reduct,
+constraints and candidate agreement. Countermodel checking rejects a model when
+a proper subset satisfies its frozen Ferraris reduct. The latter uses native
+Boolean search internally; semantic atoms alone define minimality and model
+blocking. See [semantic foundations](../../docs/book/architecture/semantics.md).
 
-For the closure specialization:
+GPU support is in the default build. Explicit `metal`, `vulkan`, `dx12` or
+`gl` requests require that API. `gpu` accepts a physical adapter through a
+compiled wgpu API; `nvidia` adds a vendor filter, without a CUDA backend.
+Software, virtual and unknown adapter categories are refused. Device discovery
+and initialization happen during invocation; solving needs no qualification
+script or stored pass marker. `zetesis devices` lists visible capabilities,
+but successful discovery alone does not guarantee shader initialization.
+
+For relational closure:
 
 | Grounder | CPU | Automatic hardware | Explicit GPU |
 |---|---|---|---|
 | `auto` | Lazy source joins | Lazy CPU first; possible later static GPU batches | Static lowering |
-| `lazy` | Source joins without a complete ground-rule store | CPU throughout | Host source joins and per-world GPU consequences |
-| `eager` | Packed static closure scans | Retains the same static graph across GPU attempts and CPU fallback | Static lowering |
+| `lazy` | Candidate-specific source joins | CPU throughout | Host source joins with per-world GPU consequences |
+| `eager` | Packed static closure | Static graph retained across GPU attempts and CPU fallback | Static lowering |
 
-Static lowering is bounded by `--max-atoms`, `--max-substitutions` and
-`--max-ground-rules`. Static GPU closure supports at most 4,096 atoms. Lazy
-CPU checking instead uses `--max-work`, `--max-atoms` and candidate/carrier bounds.
-Its charged operations differ from eager scans. General formula execution uses
-eager admission on both CPU and explicit GPUs. `--backend auto` keeps the CPU
-formula route pending a measured scheduling crossover. GPU candidate search,
-exact GPU residual search and GPU objective scoring remain
-future work; the current formula GPU route is explicitly hybrid.
+The automatic closure policy may attempt a GPU after the first seed when a batch
+contains at least 32 candidates. This is a provisional heuristic, not a measured
+performance crossover. Automatic failure can retry unreported work on CPU;
+explicit hardware requests never silently fall back. Static GPU closure admits
+at most 4,096 atoms.
 
-The explicit lazy GPU route scans source instances on the host and evaluates
-immutable per-world consequences on the device. It grows the demanded catalog
-under `--max-atoms`, shares `--max-work` across each batch's source rounds, and
-splits `--max-batch-bytes` between coordinator payload and transport. Neither
-allowance is an RSS cap. `LazyExecutionStatistics` exposes source work, actual
-dispatches, transfers and candidate accounting independently of output formatting.
-Four ordinary CLI tests pass on Apple M4 Pro / Metal for the prepared debug
-artifact, including model parity and partial-result accounting. The
-[physical record](../../docs/verification/lazy-device-integration-20260907/physical/README.md)
-states its executable identity and limits; it is not release-binary or performance
-qualification.
+General formula execution requires eager admission. Automatic backend selection
+uses CPU; explicit GPU selection batches propagation and completes residual
+reduct queries exactly on CPU. Outer candidate search and objective scoring also
+remain on the host. This route is hybrid, and explicit lazy formula execution is
+unsupported.
 
-Advanced `--source-batching independent|union|worlds` can select shared source
-rounds on the owned Rayon pool. Independent candidate joins remain the default.
-Union and Worlds require relational closure with lazy/auto grounding and CPU/auto
-backend; an explicit shared policy resolves auto to CPU without GPU discovery.
-`--max-source-work` bounds the shared source work, while `--max-work` bounds each
-world's evaluation. A stopped world makes the whole batch incomplete. The typed
-`SharedExecutionStatistics` and JSON `shared_execution` record retain separate
-source/world work and candidate occurrence counts. See the
-[library and execution contract](../../docs/design/shared-source-cpu.md).
+`--workers` controls closure workers. `--completion-workers` separately controls
+independent exact formula checks, with a scalar CPU default of one.
+`--batch-size`, `--max-batch-bytes` and
+`--max-completion-scratch-bytes` bound batches and concurrent query storage.
+The scratch limit includes logical reserved query/result slots, not allocator,
+thread, shared-theory or GPU overhead; it is not RSS. A budget that cannot admit
+one required query yields incomplete coverage. The direct CPU scalar cursor
+does not consume the completion-batch allowance.
 
-Lazy device statistics additionally record fresh transport buffer sets, reuse
-within a candidate batch, and peak requested device-buffer bytes. Those quantities
-are distinct from active transfers, driver storage and process RSS. Reuse rewrites
-every active input and clears output before dispatch; it changes allocation
-behavior, not the frozen-reduct check. The changed transport requires its own
-[physical qualification](../../docs/verification/lazy-transport-20260908/README.md).
+Advanced `--source-batching independent|union|worlds` selects relational source
+sharing. Union/Worlds require lazy or automatic grounding with CPU/automatic
+backend; explicit sharing resolves automatic hardware to CPU.
+Source and per-world work have distinct ceilings. A stopped world makes the
+whole batch incomplete. See [parallel execution](../../docs/book/rust/parallel.md).
 
-## Source and objectives
+## Statistics and resource limits
 
-Source admission includes finite safe normal and unconditional disjunctive rules,
-constraints, finite conditional choices and bounds, evaluated positive heads and
-top-level numeric/dependent intervals, default/double negation,
-scalar constants/arithmetic and finite interval bindings, plus finite
-count/sum/sum+/numeric min/max comparisons and assignments, bounded term and
-conditional `#show` in addition to signature/empty selections, and `#defined`.
-The [frontend profile](../zetesis-themelios/README.md)
-specifies the exact safety, numeric and syntax boundaries. Recursive eligibility
-remains in the reduct formulas; choice bounds provide no support. Choice-head
-intervals retain one group; disjunctive intervals expand whole rule instances,
-each preserving the original disjunction.
+`--stats` leaves answer stdout unchanged and adds configured limits, actual
+execution counters, completion and host timings to stderr. JSON exposes typed
+views of the same information. Unavailable counters remain unavailable, not zero.
 
-Formula construction uses a bounded possible-positive relation, then joins
-against that relation to emit potentially relevant instances. This reduces
-materialization but still constructs a complete finite formula theory before
-search. It is distinct from the lazy closure oracle's candidate-specific joins.
-`--max-substitutions`, `--max-expansion-work`, and formula atom/root ceilings
-apply; the source value domain is capped at 1,024 and support closure at 1,024
-rounds, including a final round establishing no changes.
+Stage timings separate source preparation, eager grounding, solving and output.
+Lazy joins are interleaved with solving, so a separate lazy grounding duration
+is unavailable. Detailed phases distinguish candidate generation, membership,
+objective work and output. GPU host-call time includes transport, submission,
+waits and readback; it is not shader time. Worker intervals can overlap and are
+reported separately from coordinator wall time.
 
-The current `#minimize`, `#maximize` and positive weak-constraint profile accepts numeric
-weights, constant numeric priorities, closed or whole-bound logical tuple values,
-positive ordinary conditions and scalar equality/inequality filters. Closed
-structured terms and finite constructed keys retain their full logical identity.
-Dependencies relevant to an objective have
-additional explicit restrictions, including default-negated and disjunctive
-producers and non-total aggregate observers. Unrelated rules and negative
-constraints retain their ordinary semantics. These checks preserve observable
-objective presence and priority slots. Classical sign is preserved in these
-conditions independently of default negation. Positive named-function patterns,
-richer weak bodies and broader directives remain implementation
-work. Undefined/overflowing arithmetic is a located refusal.
+Failed attempts retain available timing/accounting. Timing completeness does not
+prove semantic completeness. Instrumentation is optional and adds overhead.
+See [telemetry](../zetesis-telemetry/README.md) and
+[timing regressions](tests/phase_timing.rs).
 
-Term observations run over verified full models and may construct output-only
-functions and tuples. Ordinary positive atoms must bind their named variables;
-supported negative and scalar comparison conditions filter those bindings.
-Shown constructors create no logical atoms or support. Term-only directives
-retain default atom output; signature/empty directives select the atom channel.
-Equal enabled terms coalesce globally within the term channel, while an atom and
-a shown term with the same spelling both appear. Hidden full models remain
-distinct answers. Arithmetic/generative term displays and broader conditions
-remain explicit refusals.
+Source, expansion, candidate search, witness checks, observations and optimal-model
+retention have independent ceilings listed by `--help-all`. A limit never means
+a smaller admitted program or proved inconsistency. Full models are counted
+before `#show`; observation failure cannot publish a complete Answer record.
+A retained incumbent remains unproved when search coverage is incomplete.
 
-This observation source profile uses eager formula execution on CPU or an
-explicitly selected GPU, with observations evaluated on the host after stability
-checking. Explicit `--oracle closure` and `--grounder lazy` remain refused.
-`--max-observation-work`, `--max-observation-bindings`, and
-`--max-observation-terms` bound each displayed model's observation work;
-`--max-observation-bytes` bounds retained term payload and the complete Answer
-record independently. Internal observation failures emit no partial Answer.
-Inputs with no term observations retain their existing output path.
+## Compose the library
 
-Objective tuples are joined against each verified stable model, with global
-(priority, normalized weight, tuple) deduplication and signed costs at descending
-priorities. Maximization negates weights before forming those keys; an enabled
-maximizing weight 2 prints cost -2. Equal keys coalesce across minimize, maximize
-and weak statements. Eligible unrepresentable negation receives a located refusal.
-They never supply atom support. `--max-objective-work` is cumulative across the
-run; binding, key and key-byte bounds apply per model. Best tied models are kept
-in a bounded store before display: `--max-optimal-models`, `--max-optimal-atoms`
-and `--max-optimal-bytes` count full models before `#show`. Byte limits account
-for canonical payload, excluding allocator overhead. A storage stop may preserve
-an earlier valid incumbent even after a better score could not be retained;
-coverage remains incomplete and optimality is never reported.
+`PreparedInput` borrows admitted relational, formula, bundle or ground input.
+`Session::new` combines it with typed `SolveConfig` and `Control`.
+The iterator yields `Result<SessionModel, SolveFailure>`; each successful model
+retains its exact subject, full interpretation and optional score.
+An accepted model or scored incumbent is not by itself evidence of exhaustive
+coverage or a proved optimum. Read the terminal `SemanticOutcome` separately.
 
-File arguments are ordered roots of one original source bundle, with global
-constants and retained source identities. String `#include` lookup uses a working
-directory captured once for the whole bundle, then falls back to the including
-source's directory after a relative filesystem lookup failure. No source text is
-concatenated. Exact repeated selected paths are included once; different lexical
-aliases of one canonical source and include symlink redirections are refused.
+The `run_detailed` and diagnostic/bundle variants compose human writer views
+and return typed failure evidence. Verification, pending candidates, queued
+models, completed publication and the final summary have separate accounting.
+A semantic exhausted result may coexist with later output failure.
+Generic injected writers use plain `ColorMode::Auto`; callers can request
+explicit styling. Color policy is separate from semantic `SolveConfig`.
 
-`--max-source-roots` defaults to 256 root occurrences, `--max-source-files` to
-256 unique files, `--max-total-source-bytes` to 8 MiB across those files, and
-`--max-include-depth` to 32. `--max-source-bytes` limits each original file,
-including children. Expansion and semantic limits cover the combined program.
-Cycles and library includes are refused. Standard input (`-`) must be the only
-root; repeated or mixed stdin arguments fail before reading any input. Stdin and
-string library entry points have no implicit include base path. Explicit bundle
-callers use `SourceBundle::load_many` and `run_bundle_with_diagnostics`.
+See [session types](src/session.rs), [outcomes](src/semantic_outcome.rs),
+[failure types](src/failure.rs) and the
+[outcome guide](../../docs/book/rust/outcomes.md). These APIs require no command
+parsing, global stdout or clingo invocation.
 
-`zetesis devices` is the command-first inventory form. Once a solver argument
-or an input file has appeared, later `devices` arguments are file names. Use
-`zetesis -- devices` to solve a first input with that reserved spelling.
+## Original sources
 
-`--max-expansion-work`, `--max-expanded-templates` and `--max-expansion-values`
-bound normalization separately from solver work. Original file/span diagnostics
-remain attached to refusals. The lower-level `admit`, `admit_extended` and
-`admit_formula` library contracts remain distinct for clients requiring a
-specific source boundary; the CLI makes the supported language available without
-feature-unlock flags.
+File arguments are ordered roots of one bundle with shared constants and original
+locations. Includes use a captured working directory, then the including source
+directory after a relative lookup failure. Exact repeated selected paths are
+included once; ambiguous aliases and include cycles are refused.
+
+Standard input (`-`) must be the only root and has no implicit include base.
+Use `zetesis -- devices` for a first input literally named `devices`; once
+another solver argument appears, later `devices` arguments are file names.
+
+Maintained controls include [route selection](tests/oracle_selection.rs),
+[source diagnostics](tests/bundles.rs),
+[failure accounting](tests/failure_reports.rs),
+[formula completion](tests/formula_completion.rs) and
+[shared CPU execution](tests/shared_cpu.rs).
+Portable regressions and actual physical-device tests have distinct purposes;
+the [build guide](../../docs/book/building.md) describes their execution.
