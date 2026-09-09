@@ -3,6 +3,9 @@
 #[path = "support/language_value_sources.rs"]
 mod language_value_sources;
 
+#[path = "support/projected_conditional_sources.rs"]
+mod projected_conditional_sources;
+
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 
@@ -22,6 +25,19 @@ mod source_records;
 mod source_oracle;
 
 type Record = (BTreeSet<Atom>, Option<Vec<(i32, i64)>>);
+
+#[test]
+#[ignore = "requires an independently installed clingo executable"]
+fn projected_conditionals_match_original_source_records() {
+    for source in projected_conditional_sources::SOURCES {
+        let admitted = source_records::admit(source, &FormulaLimits::default()).unwrap();
+        assert_eq!(
+            source_records::exhaustive(&admitted),
+            source_oracle::records(source),
+            "{source}"
+        );
+    }
+}
 
 enum Observer {
     Direct,

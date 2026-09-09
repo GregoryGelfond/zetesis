@@ -10,6 +10,9 @@ mod formula_records;
 #[path = "support/head_element_sources.rs"]
 mod head_element_sources;
 
+#[path = "support/projected_conditional_sources.rs"]
+mod projected_conditional_sources;
+
 #[cfg(feature = "gpu")]
 #[path = "support/bounded_writer.rs"]
 mod bounded_writer;
@@ -116,6 +119,47 @@ fn head_elements_preserve_complete_source_answers() {
 }
 
 #[test]
+fn projected_conditionals_preserve_complete_answers() {
+    use zetesis_core::{Atom, Predicate, Value};
+
+    let p =
+        |number| Atom::new(Predicate::new("p", 1).unwrap(), vec![Value::Number(number)]).unwrap();
+    let q = Atom::new(Predicate::new("q", 0).unwrap(), Vec::new()).unwrap();
+    // With no witnesses, default negation succeeds. Double negation succeeds
+    // precisely when a witness exists; it can also support the recursive pair.
+    let expected = [
+        vec![vec![q.clone()], vec![p(1)], vec![p(2)], vec![p(1), p(2)]],
+        vec![
+            vec![],
+            vec![p(1), q.clone()],
+            vec![p(2), q.clone()],
+            vec![p(1), p(2), q.clone()],
+        ],
+        vec![],
+        vec![vec![], vec![p(1), q]],
+    ];
+    assert_eq!(expected.len(), projected_conditional_sources::SOURCES.len());
+    for (source, answers) in projected_conditional_sources::SOURCES
+        .into_iter()
+        .zip(expected)
+    {
+        let mut expected: Vec<_> = answers
+            .into_iter()
+            .map(|mut atoms| {
+                atoms.sort();
+                (atoms, None)
+            })
+            .collect();
+        expected.sort();
+        assert_eq!(
+            formula_records::full_records(&cpu_output(source, true)),
+            expected,
+            "{source}"
+        );
+    }
+}
+
+#[test]
 fn cancellation_precedes_explicit_formula_device_initialization() {
     for arguments in [
         vec!["--backend", "metal"],
@@ -144,7 +188,7 @@ fn cancellation_precedes_explicit_formula_device_initialization() {
 }
 
 #[test]
-fn explicit_formula_route_admits_source_before_device_failure_and_still_refuses_lazy() {
+fn formula_admission_precedes_device_initialization() {
     let mut output = Vec::new();
     let error = run_with_diagnostics(
         "invalid ? source".into(),
@@ -156,6 +200,11 @@ fn explicit_formula_route_admits_source_before_device_failure_and_still_refuses_
     .unwrap_err();
     assert!(matches!(error, RunError::FormulaAdmission(_)));
     assert!(output.is_empty());
+}
+
+#[test]
+fn formula_device_route_refuses_explicit_lazy_grounding() {
+    let mut output = Vec::new();
     let error = run_with_diagnostics(
         "1 {a;b} 1.".into(),
         &options(&["--backend", "metal", "--grounder", "lazy"]),
@@ -254,6 +303,7 @@ mod physical {
         .chain([super::count_objective_sources::INCONSISTENT])
         .chain(super::language_value_sources::SOURCES)
         .chain(super::head_element_sources::SOURCES)
+        .chain(super::projected_conditional_sources::SOURCES)
         {
             for json in [false, true] {
                 qualify_formula_output(source, backend, json);
