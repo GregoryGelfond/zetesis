@@ -22,7 +22,7 @@ pub(super) fn inventory(root: &Path) -> io::Result<Vec<PathBuf>> {
         if kind.is_symlink() {
             return Err(io::Error::other("symlink in workspace package inventory"));
         }
-        if kind.is_dir() && !excluded(&entry.path()) {
+        if kind.is_dir() {
             packages.push(entry.path());
         }
     }
@@ -123,9 +123,4 @@ impl Inventory {
         self.sources.push(path);
         Ok(())
     }
-}
-
-fn excluded(path: &Path) -> bool {
-    path.file_name()
-        .is_some_and(|name| name == "target" || name == ".git")
 }

@@ -124,15 +124,24 @@ fn inventory_selects_maintained_rust_roots() {
         "crates/example/src/target/mod.rs",
         "crates/example/tests/.git/hidden.rs",
         "crates/example/tests/nested/case.rs",
+        "crates/target/src/lib.rs",
         "experiments/gate-transfer/src/lib.rs",
         "validation/reference/src/lib.rs",
     ];
     for package in [
         "crates/example",
+        "crates/target",
         "validation/reference",
         "experiments/gate-transfer",
     ] {
-        fixture(root, &format!("{package}/Cargo.toml"));
+        let directory = root.join(package);
+        fs::create_dir_all(&directory).unwrap();
+        let name = directory.file_name().unwrap().to_str().unwrap();
+        fs::write(
+            directory.join("Cargo.toml"),
+            format!("[package]\nname = \"{name}\"\nversion = \"0.0.0\"\n"),
+        )
+        .unwrap();
     }
     for source in expected {
         fixture(root, source);
