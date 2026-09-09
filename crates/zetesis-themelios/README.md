@@ -255,7 +255,7 @@ Maintained regressions include [preparation](tests/formula_preparation.rs),
 [observations](tests/observations.rs) and
 [refusal contracts](tests/refusal_contracts.rs).
 Original-source clingo comparisons and independent finite original/frozen checks
-are in these test suites. Consult the [build guide](../../docs/book/building.md)
+are in these test suites. Consult the [contributing guide](../../CONTRIBUTING.md#verification-and-review)
 for portable and external-oracle gates.
 
 The [Lean correspondence chapter](../../docs/book/lean/correspondence.md)

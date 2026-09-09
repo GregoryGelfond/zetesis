@@ -1,96 +1,89 @@
 # Retaining candidate search state
 
-The outer classical query is fixed within each candidate region. Admission
-creates the first region; a successfully appended candidate restriction starts
-a new region containing all prior clauses and exact semantic blocks.
-Every completed reduct check then blocks precisely one semantic interpretation.
-Restarting DPLL after each block revisits previously explored decision regions.
-The retained cursor keeps the original watch registry, assignment trail,
-decision frames and branching permutation, and resumes after the yielded leaf.
+The outer query proposes classical models of the original Ferraris theory.
+Its retained cursor resumes a fixed traversal instead of starting over after
+each semantic interpretation is blocked. The reduct acceptance criterion
+remains separate from candidate generation.
 
-The initial clause count and variable count are fixed. Later clauses introduce
-no variables and do not change the original prefix. They are checked as filters
-at complete assignments before semantic projection or candidate accounting.
-They are not dynamically installed into watch lists. A rejected leaf resumes the
-same traversal. Every returned full assignment is independently checked against
-both original clauses and appended filters. Complete semantic-prefix blocks
-are indexed by an exact binary trie; generic internal cursor tests also retain
-the linear reference filter.
+See the [search library](../README.md) for public APIs and the
+[semantic chapter](../../../docs/book/architecture/semantics.md) for the
+distinction between original satisfaction and reduct minimality.
 
-After a successful candidate restriction, root failed-literal probing may
-establish additional entailed root assignments
-before traversal and ordering. It does not remove any satisfying base-CNF
-assignment. Within the retained traversal, completed leaves cannot be
-revisited, and every unvisited base model remains in a pending branch. Exact
-semantic filters eliminate duplicate projections even if several auxiliary
-assignments extend one interpretation. The implementation does not need unique
-auxiliary extension for this argument. The existing encoder still provides full
-equivalences for every allocated auxiliary gate.
+## Candidate regions and exact blocking
 
-The reduct remains the acceptance authority. Each candidate is checked against
-the original Ferraris theory, receives a fresh frozen-reduct countermodel query,
-and is accepted only after that query completes UNSAT. SAT countermodels remain
-independently checked. An inconclusive reduct check terminates enumeration. The
-cursor never blocks it and continues. A successfully proved model may precede a
-pending blocking-storage failure; that existing API behavior remains explicit.
+A candidate region has a fixed base query. Initial admission creates the first
+region; a successful candidate restriction creates another containing the
+previous clauses and exact semantic blocks. Within a region, the cursor retains
+its watch registry, assignment trail, decision frames and branching permutation.
 
-The same shape ceilings bound the original state and accumulated clauses.
-The retained outer state remains allocated while an inner query runs; each has
-its own bounded variable/watch/trail arrays. No base-clause copy is added. All
-resumption, undo, leaf validation and appended-filter operations charge the
-existing cumulative work counter and poll control. The false-first traversal
-and initial occurrence-based variable ordering remain deterministic. Ordering
-is computed once for the base query, so enumeration order can differ from a
-sequence of independently reordered fresh queries.
+The base clause and variable counts are fixed. Appended blocks introduce no
+variables and do not alter the original clause prefix. They filter complete
+assignments before semantic projection and candidate accounting; they are not
+dynamically installed into the watch lists. A rejected leaf resumes the same
+traversal. Every returned full assignment is checked against both the base
+clauses and appended filters.
 
-There is no claim of clause learning, propagated incremental nogoods, or a
-universal speedup. An appended block acts only at completed leaves. The change
-removes repeated outer traversal work while retaining the existing inner
-algorithm, all original-atom subset tests and all logical completion obligations.
+A complete semantic-prefix block is indexed by its exact Boolean key.
+Auxiliary variables are absent from that key, so several auxiliary extensions
+cannot produce duplicate semantic candidates. This argument does not require
+unique auxiliary extension, although the encoder retains full gate equivalences.
+The internal linear filter remains a reference for the index.
 
-## Bounded measurement
+Within a region, completed leaves are not revisited and every unvisited base
+model remains in a pending branch. False-first traversal and occurrence-based
+variable ordering are deterministic. Ordering is computed once for each base
+query, so its output order need not match repeated independently reordered queries.
 
-A release-mode harness used the unchanged pinned kr-domains source
-`standalone/n-queens/variant-02.lp`, SHA-256
-`1c5451a6cbafe0f433347b5253fc4876e7c56b0a16f2237b513d9c62ee6142a2`.
-The admitted theory had 80 atoms, 4,516 nodes and 1,617 roots. Its original outer
-query had 2,671 variables and 9,310 clauses. This is a measured workload; none of
-these constants or source identifiers appears in the search policy.
+## Acceptance and stopping
 
-| Search state | Complete models | Charged work | Coverage |
-| --- | ---: | ---: | --- |
-| Restart after each semantic block | 11 | 100,000,000 | Incomplete |
-| Retain the original traversal | 92 | 30,007,222 | Exhausted |
+The general membership path checks original satisfaction and asks whether a
+proper subset satisfies the candidate's frozen Ferraris reduct. An UNSAT
+countermodel query establishes minimality; a returned countermodel is independently
+checked for proper containment and reduct satisfaction. Optional complete-theory
+certificates can discharge membership under their own validated premises;
+residual cases still use the general check. Neither route treats a classical
+candidate as an answer set merely because the outer query returned it.
 
-The retained run made 93 outer queries, 92 reduct queries, 17,660 decisions,
-2,653,599 propagations and 17,661 conflicts. It found no countermodels. Every
-returned board, and the complete set of 92 boards, matched an independent
-enumeration of all 8! column permutations with both diagonal constraints.
-No default limit changed. The measurement used the prior checkpoint's compiled
-frontend with the new SAT source; the installed full-corpus checkpoint is a
-separate integration result. No wall-clock speedup is claimed.
+After a completed membership decision, an exact block excludes that semantic
+interpretation from future candidates, whether it was stable or nonminimal.
+An inconclusive membership check terminates the iterator without blocking the
+candidate and continuing. If block storage fails after stability was established,
+the proved model is returned first and the pending failure follows on the next
+call. Exhaustion is never inferred from that failure.
 
-## Checks and formal boundary
+Candidate restrictions deliberately narrow the search region. Exhaustion means
+that region has been covered; an optimizer must separately justify any claim
+about all answer sets or all optimum ties.
+See [restriction and projection contracts](candidate-pruning.md).
 
-Portable tests enumerate all 522 canonical CNFs through two variables plus
-noncanonical input, compare complete truth-table model sets, and exercise
-multiple free auxiliary extensions, appended units/binary/empty clauses,
-zero-variable/root-forced completion, cancellation between yields and exact
-cumulative work/decision ceilings. Existing complete Ferraris differential and
-renaming tests remain in place. Six independent Boolean choices also compare
-complete sets and charged work against restarting after every exact block.
+## Work and retained storage
 
-[CandidateCursor.lean](../../../proofs/Zetesis/CandidateCursor.lean) provides an
-executable finite-forest specification. It proves exact remaining-leaf
-accounting, preservation on interruption, finite completion with sufficient
-mathematical fuel, duplicate-free complete semantic projection coverage, and a
-separate original-Ferraris stability filter theorem. Its checked example has
-four auxiliary leaves but only two semantic outputs. It does not prove the Rust
-CNF-to-tree correspondence, watches/trail/backtracking, machine resource
-accounting or oracle refinement.
+The original state and accumulated clauses share the query's shape ceilings.
+The retained outer state stays live while an inner query runs, and each owns
+bounded variable/watch/trail arrays. No additional base-clause copy is required.
+Resumption, undo, complete-leaf validation and appended-filter operations charge
+the cumulative work counter and poll control.
 
+Exact blocks act at completed leaves. This mechanism does not add clause
+learning, propagated incremental nogoods or a guaranteed speedup. Retaining a
+traversal avoids restarting its completed decision regions but does not remove
+exponential candidate or reduct-search behavior.
 
-The subsequent [candidate-pruning extension](candidate-pruning.md) adds
-transactional candidate restrictions, bounded root probing and exact indexed
-projection filters. The queens measurement above is historical evidence for
-the earlier retained-cursor change, not a timing claim about the later version.
+Implementation boundaries are in [the cursor](../src/search/cursor.rs),
+[projection indexing](../src/search/cursor/projections.rs) and
+[Ferraris membership](../src/ferraris.rs).
+
+## Regression and proof boundaries
+
+[Cursor tests](../src/search/cursor/tests.rs) compare complete truth-table model
+sets, including free auxiliary extensions, appended clauses, empty/root-forced
+queries, cancellation between yields and exact cumulative work/decision ceilings.
+[Ferraris tests](../tests/ferraris.rs) compare original membership and complete
+models with an independent reference.
+
+[CandidateCursor.lean](../../../proofs/Zetesis/CandidateCursor.lean) specifies a
+finite forest. It proves remaining-leaf accounting, preservation on interruption,
+completion with sufficient mathematical fuel, duplicate-free semantic projection
+coverage and a separate original-Ferraris stability filter theorem. It does not
+prove Rust CNF-to-tree correspondence, watch/trail/backtracking refinement,
+machine resource accounting or oracle implementation correctness.

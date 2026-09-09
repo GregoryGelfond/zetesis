@@ -5,7 +5,7 @@ or machine output. This crate also exposes prepared-input sessions and injected
 writer APIs for library callers. Parsing, files, presentation and process exit
 policy remain separate from semantic results.
 
-See the [build guide](../../docs/book/building.md) for installation and the
+See [Install and run](../../README.md#install-and-run) for installation and the
 [session guide](../../docs/book/rust/sessions.md) for Rust composition.
 
 ## Run a program
@@ -191,4 +191,4 @@ Maintained controls include [route selection](tests/oracle_selection.rs),
 [formula completion](tests/formula_completion.rs) and
 [shared CPU execution](tests/shared_cpu.rs).
 Portable regressions and actual physical-device tests have distinct purposes;
-the [build guide](../../docs/book/building.md) describes their execution.
+[contributing guide](../../CONTRIBUTING.md#verification-and-review) describes their execution.

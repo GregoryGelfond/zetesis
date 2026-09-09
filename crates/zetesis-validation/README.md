@@ -13,7 +13,8 @@ The production solver neither invokes nor depends on this validation executable.
 clingo is an external reference. Reports record observations and their limits;
 a process exit alone does not establish answer-set correctness.
 
-See the [build guide](../../docs/book/building.md) for installation and gates.
+See [Install and run](../../README.md#install-and-run) for installation and the
+[contributing guide](../../CONTRIBUTING.md#verification-and-review) for gates.
 Library entry points are documented in [src/lib.rs](src/lib.rs); generate their
 reference with `cargo doc --locked -p zetesis-validation --no-deps --open`.
 

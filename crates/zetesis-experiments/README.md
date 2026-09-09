@@ -5,7 +5,7 @@ Bounded development experiments with reusable Rust interfaces and a
 its reference comparison and its limits. Primitive measurements do not establish
 ordinary solver acceleration.
 
-Use the [build guide](../../docs/book/building.md) to install a release build.
+Use [Install and run](../../README.md#install-and-run) to install a release build.
 The [execution chapter](../../docs/book/architecture/execution.md) describes how
 these operations fit into the solver. Public interfaces start in
 [src/lib.rs](src/lib.rs); generate their reference with
