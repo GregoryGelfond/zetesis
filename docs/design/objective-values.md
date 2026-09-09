@@ -40,8 +40,8 @@ preservation for already-resolved finite entries. It does not verify the Rust
 compiler, finite-width arithmetic or clingo's grounding carrier. Prepared
 optimization sessions and physical backends require separate qualification.
 
-Mixed-extrema presence remains governed by the separate
-[presence contract](objective-presence.md). Accepting a literal nonnumeric weight
-does not remove the variable-weight mixed-carrier guard, certify filters or
-objective-relevant function heads, or implement dynamic priorities. Constructive
-extensions of that carrier are a subsequent slice.
+Mixed-extrema presence is governed by the separate
+[presence contract](objective-presence.md). Its bounded
+[flat-carrier extension](objective-flat-presence.md) qualifies some variable-weight
+observers independently of literal admission. Other mixed carriers, filters,
+objective-relevant function heads and dynamic priorities retain their obligations.

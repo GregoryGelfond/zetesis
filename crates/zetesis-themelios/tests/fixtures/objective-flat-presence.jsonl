@@ -1,0 +1,22 @@
+{"name":"shared_optional_condition","source":"{a}.n(N):-N=#max{2:a;foo:a}.#minimize{X@7:n(X)}.","records":[[["n(#inf)"],[0]],[["a","n(foo)"],[0]]]}
+{"name":"forbidden_optional_condition","source":"{a}.:-a.n(N):-N=#max{2:a;foo:a}.#minimize{X@7:n(X)}.","records":[[["n(#inf)"],[0]]]}
+{"name":"exclusive_optional_conditions","source":"{a;b}.:-a,b.n(N):-N=#max{2:a;foo:b}.#minimize{X@7:n(X)}.","records":[[["n(#inf)"],[0]],[["a","n(2)"],[2]],[["b","n(foo)"],[0]]]}
+{"name":"zero_observer","source":"b.{a}.n(N):-N=#max{2:a;foo:b}.#minimize{X@7:n(X);0@3:n(Y)}.","records":[[["b","n(foo)"],[0]],[["a","b","n(foo)"],[0]]]}
+{"name":"zero_same_priority","source":"b.{a}.n(N):-N=#max{2:a;foo:b}.#minimize{X@7:n(X);0@7:n(Y)}.","records":[[["b","n(foo)"],[0]],[["a","b","n(foo)"],[0]]]}
+{"name":"unrelated_numeric_binding","source":"d(4).b.{a}.n(N):-N=#max{2:a;foo:b}.#minimize{Z@9:n(Z);X@7:n(Y),d(X)}.","records":[[["d(4)","b","n(foo)"],[4]],[["d(4)","a","b","n(foo)"],[4]]]}
+{"name":"same_priority_optional_weight","source":"b.{a}.n(N):-N=#max{2:a;foo:b}.#minimize{X@7:n(X);3@7,a:a;0@3,n:n(Y)}.","records":[[["b","n(foo)"],[0,0]],[["a","b","n(foo)"],[3,0]]]}
+{"name":"signed_required_condition","source":"-b.{a}.n(N):-N=#max{2:a;foo: -b}.#minimize{X@7:n(X)}.","records":[[["-b","n(foo)"],null],[["a","-b","n(foo)"],null]]}
+{"name":"opposite_sign_is_absent","source":"-b.{a}.n(N):-N=#max{2:a;foo:b}.#minimize{X@7:n(X)}.","records":[[["-b","n(#inf)"],[0]],[["a","-b","n(2)"],[2]]]}
+{"name":"required_ground_argument","source":"fact(1).{a}.n(N):-N=#max{2:a;foo:fact(1)}.#minimize{X@7:n(X)}.","records":[[["fact(1)","n(foo)"],null],[["a","fact(1)","n(foo)"],null]]}
+{"name":"different_ground_argument","source":"fact(2).{a;fact(1)}.n(N):-N=#max{2:a;foo:fact(1)}.#minimize{X@7:n(X)}.","records":[[["fact(2)","n(#inf)"],[0]],[["a","fact(2)","n(2)"],[2]],[["fact(1)","fact(2)","n(foo)"],[0]],[["a","fact(1)","fact(2)","n(foo)"],[0]]]}
+{"name":"required_duplicate_tuple","source":"b.{a}.n(N):-N=#max{2:a;foo:a;foo:b}.#minimize{X@7:n(X)}.","records":[[["b","n(foo)"],null],[["a","b","n(foo)"],null]]}
+{"name":"unconditional_symbol","source":"{a}.n(N):-N=#max{2:a;foo}.#minimize{X@7:n(X)}.","records":[[["n(foo)"],null],[["a","n(foo)"],null]]}
+{"name":"reverse_statement_order","source":"#minimize{Z@7:q(Z)}.q(Y):-p(Y).p(X):-n(X).n(N):-N=#max{foo:b;2:a}.{a}.b.","records":[[["b","n(foo)","p(foo)","q(foo)"],null],[["a","b","n(foo)","p(foo)","q(foo)"],null]]}
+{"name":"maximum_numeric_direction","source":"b.{a}.n(N):-N=#min{2:b;foo:a}.#maximize{X@7:n(X)}.","records":[[["b","n(2)"],[-2]],[["a","b","n(2)"],[-2]]]}
+{"name":"weak_ignored_extremum","source":"b.{a}.n(N):-N=#max{2:a;foo:b}.:~n(X).[X@7]","records":[[["b","n(foo)"],null],[["a","b","n(foo)"],null]]}
+{"name":"constraint_does_not_erase_priority","source":"{a;b}.:-a.:-b.n(N):-N=#max{2:a;foo:b}.#minimize{X@7:n(X)}.","records":[[["n(#inf)"],[0]]]}
+{"name":"unconditional_lower_endpoint","source":"{a}.n(N):-N=#min{2:a;#inf}.#minimize{X@7:n(X)}.","records":[[["n(#inf)"],null],[["a","n(#inf)"],null]]}
+{"name":"unrelated_consumer","source":"b.{a}.n(N):-N=#max{2:a;foo:b}.m(M):-M=#count{Y:n(Y)}.#minimize{X@7:n(X)}.","records":[[["b","m(1)","n(foo)"],null],[["a","b","m(1)","n(foo)"],null]]}
+{"name":"unsatisfiable_theory","source":"b.{a}.:-b.n(N):-N=#max{2:a;foo:b}.#minimize{X@7:n(X)}.","records":[]}
+{"name":"signed_generated_predicate","source":"b.{a}.-n(N):-N=#max{2:a;foo:b}.-p(X):- -n(X).#minimize{X@7: -p(X)}.","records":[[["b","-n(foo)","-p(foo)"],null],[["a","b","-n(foo)","-p(foo)"],null]]}
+{"name":"fact_overrides_optional_occurrence","source":"{a;b}.b.n(N):-N=#max{2:a;foo:b}.#minimize{X@7:n(X)}.","records":[[["b","n(foo)"],null],[["a","b","n(foo)"],null]]}

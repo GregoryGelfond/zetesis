@@ -45,12 +45,14 @@ reported a present zero slot. Correct full models do not excuse this observable
 cost difference. The [recorded counterexample](../verification/objective-forwarding-20260908/direct-extremum-counterexample.json)
 retains both installed pre-change and external outputs with executable hashes.
 
-Direct and forwarded observers now return a located
-`ObjectiveAggregateDependency` refusal for the unqualified mixed carrier. A
+The [flat-carrier certificate](objective-flat-presence.md) now admits this direct
+observer and unary forwarding chains, correcting the absent layout without
+removing proposals or aggregate equalities. Other unqualified mixed carriers
+return a located `ObjectiveAggregateDependency` refusal. A
 generated argument used as a variable objective weight seeds predicate dependency
 reachability. After support completes, each relevant extrema assignment's raw
 tuple carrier is inspected separately for each complete outer binding. Both
-numeric and nonnumeric first values in that carrier trigger the refusal. Whole
+numeric and nonnumeric first values in that carrier require a certificate. Whole
 tuple duplicates have the same first-value class, so this inspection needs no
 alternate coalescing rule. The implicit empty endpoint is not a tuple; it does
 not cause all optional numeric extrema to be refused.
@@ -58,10 +60,10 @@ not cause all optional numeric extrema to be refused.
 Numeric-only and nonnumeric-only carriers, constant-weight observers, numeric
 zero weights, fixed dominating numeric extrema with numeric-only tuples and
 different value classes in disjoint outer bindings remain admitted. A mixed
-carrier whose numeric value dominates is conservatively refused too. Dependency
+carrier whose numeric value dominates admits under the flat profile. Dependency
 reachability also crosses intervening numeric reductions: such a reduction may
 remove the concern, but no value-class certificate currently discharges it.
-These are internal zetesis implementation gaps, not themelios rejections or
+The remaining refusals are internal zetesis implementation gaps, not themelios rejections or
 claims that the source is a modeling error.
 
 Preparation records only bounded aggregate IDs; successful preparation does not
@@ -71,7 +73,8 @@ work/substitution counters and scalar-copy budgets, with original producer
 locations on refusal. It retains two class flags per inspected carrier and no
 second tuple store. Repeated assignment proposals currently repeat this bounded
 inspection, so its work is visible and can exhaust the caller's allowance.
-Separating one outer binding from its proposal enumeration is a future shared
+The flat certificate adds metered classification and bounded borrowed planning
+entries. Separating one outer binding from its proposal enumeration is a future shared
 grounding improvement, not a claimed optimization in this slice.
 
 The [forwarding qualification](../verification/objective-forwarding-20260908/README.md)

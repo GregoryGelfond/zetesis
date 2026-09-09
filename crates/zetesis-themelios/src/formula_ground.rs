@@ -124,13 +124,15 @@ fn activate_objectives(
     counters: &mut Counters,
     location: Location,
 ) -> Result<(zetesis_objective::ObjectiveProgram, Vec<Vec<Location>>), FormulaFailure> {
-    crate::formula_objective_dependencies::check_presence(
+    let presence = crate::formula_objective_dependencies::check_presence(
         prepared, support, limits, budget, counters,
     )?;
     let mut active = Vec::new();
     let mut objective_origins = Vec::new();
     for objective in &prepared.objectives {
-        if objective_active(objective, support, limits, budget, counters)? {
+        if presence.may_have_numeric_weight(objective, limits, counters)?
+            && objective_active(objective, support, limits, budget, counters)?
+        {
             budget.charge(
                 ExpansionResource::Origins,
                 objective.origins.len() as u128,

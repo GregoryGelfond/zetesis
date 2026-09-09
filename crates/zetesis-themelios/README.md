@@ -23,6 +23,11 @@ themelios analysis, then consume the receipt with `ground()` or
 
 Preparation is a checked compiler boundary; later grounding can still refuse
 undefined arithmetic, unqualified objective presence or exhausted resources.
+The bounded [flat-extrema presence profile](../../docs/design/objective-flat-presence.md)
+retains separate proposal coverage, completed numeric priorities and realized
+weights. `FormulaLimits::max_objective_presence_entries` bounds simultaneous
+borrowed planning entries; a stop reports `ObjectivePresenceEntries` without a
+partial objective. Allocator overhead is separate from this logical entry limit.
 `analysis_basis()` identifies a `NormalizedProgram` or a `DependencyProjection`.
 The latter retains every
 conditional alternative's predicate, strong sign, arity and default-negation

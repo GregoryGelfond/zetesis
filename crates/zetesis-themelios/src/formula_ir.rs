@@ -36,8 +36,8 @@ pub(crate) struct Prepared {
     pub rules: Vec<RuleIr>,
     pub objectives: Vec<ObjectiveIr>,
     pub objective_declarations: Vec<Location>,
-    /// Extrema tuple carriers whose mixed value classes lack a qualified
-    /// numeric-objective presence contract. Checked after support completion.
+    /// Extrema tuple carriers requiring a numeric-objective presence certificate
+    /// after support completion. Unqualified mixed carriers remain refused.
     pub objective_extrema: BTreeSet<usize>,
 }
 pub(crate) struct ObjectiveIr {

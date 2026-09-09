@@ -23,10 +23,15 @@ mod preparation;
 use preparation::Preparation;
 pub use preparation::{PreparedFormula, PreparedFormulaBundle};
 
+const DEFAULT_OBJECTIVE_PRESENCE_ENTRIES: usize = 16_384;
+
 /// Independent finite grounding and formula-storage ceilings. No zero value
 /// means unlimited. Source parsing and scalar expansion retain their own limits.
 #[derive(Clone, Copy, Debug)]
 pub struct FormulaLimits {
+    /// Simultaneously retained borrowed entries in mixed objective-presence plans;
+    /// allocator overhead and internal collection capacity are not byte-accounted.
+    pub max_objective_presence_entries: usize,
     /// Distinct scalar values in the logical source, independent of join work.
     pub max_domain_values: usize,
     /// Distinct values in one generated assignment row and across generated heads.
@@ -67,6 +72,9 @@ pub struct FormulaLimits {
 impl Default for FormulaLimits {
     fn default() -> Self {
         Self {
+            // Match the bounded aggregate-plan row scale; this counts borrowed
+            // pointer slots, not source bytes or semantic candidate atoms.
+            max_objective_presence_entries: DEFAULT_OBJECTIVE_PRESENCE_ENTRIES,
             max_domain_values: 1_024,
             max_assignment_values: 1_024,
             max_disjunction_elements: 1_024,
@@ -92,6 +100,8 @@ impl Default for FormulaLimits {
 /// Resources counted by the separate formula admission boundary.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FormulaResource {
+    /// Simultaneously retained entries in completed objective-presence planning.
+    ObjectivePresenceEntries,
     /// Distinct finite scalar values.
     DomainValues,
     /// Generated scalar assignment values.

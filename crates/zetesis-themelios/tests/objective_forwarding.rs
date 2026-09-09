@@ -181,9 +181,10 @@ fn unsupported_observer_paths_keep_located_refusals() {
 }
 
 #[test]
-fn mixed_extrema_do_not_claim_numeric_slot_presence() {
-    let cases = cases(EXTREMA_REFUSALS);
-    assert_eq!(cases.len(), 10);
+fn unqualified_extrema_do_not_claim_numeric_presence() {
+    // The first seven unchanged originals now have a flat-carrier certificate.
+    let cases: Vec<_> = cases(EXTREMA_REFUSALS).into_iter().skip(7).collect();
+    assert_eq!(cases.len(), 3);
     for case in cases {
         let error = admit(&case.source, FormulaLimits::default()).unwrap_err();
         let FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
@@ -207,7 +208,8 @@ fn mixed_extrema_do_not_claim_numeric_slot_presence() {
 
 #[test]
 fn preparation_defers_carrier_presence_to_grounding() {
-    let source = "b.{a}.n(N):-N=#max{2:a;foo:b}.p(X):-n(X).#minimize{X@7:p(X)}.";
+    let source =
+        "b.{a}.n(N):-N=#max{2:a;foo:b}.p(X):-n(X).m(M):-M=#max{Y:p(Y)}.#minimize{M@7:m(M)}.";
     let prepared = prepare_formula(
         source.into(),
         AdmissionOptions::default(),

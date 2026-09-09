@@ -1,17 +1,18 @@
-//! A fail-closed boundary for unqualified mixed-extrema priority presence.
+//! Completed numeric priority presence for qualified extrema carriers.
 //!
 //! An extrema proposal can be numeric although a mandatory symbolic tuple
 //! prevents every realized extremum from being numeric. Possible support alone
 //! then cannot certify that a numeric objective priority survives grounding.
-//! Keep this implementation gap explicit instead of publishing a false zero
-//! cost slot. The implicit empty endpoint is not a contributing tuple.
+//! A flat fact/choice certificate excludes that numeric witness without pruning
+//! proposals. Other mixed carriers retain an explicit refusal. The implicit
+//! empty endpoint is not a contributing tuple.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use themelios_analysis::depend::DependencyGraph;
 use themelios_program::program::AggregateFunction;
 use themelios_program::symbol::Signature;
-use zetesis_core::{Term, Value};
+use zetesis_core::{Predicate, Term, Value};
 
 use crate::expansion::Budget;
 use crate::formula_ir::{AggregateIr, AggregateKey, Prepared};
@@ -21,6 +22,43 @@ use crate::{FormulaFailure, FormulaLimits};
 use super::{
     LiteralIr, ObjectiveIr, RuleIr, dependency_closure, refusal, relevant_head, signature,
 };
+
+mod flat;
+
+/// A borrowed certificate excluding numeric witnesses only for the same unary
+/// generated value used as the weight. It never erases constant-weight observers
+/// or unrelated numeric bindings from other objective body atoms.
+#[derive(Default)]
+pub(crate) struct Presence<'a> {
+    nonnumeric: BTreeSet<&'a Predicate>,
+}
+
+impl Presence<'_> {
+    /// False proves exclusion; true still requires completed-support activation.
+    pub(crate) fn may_have_numeric_weight(
+        &self,
+        objective: &ObjectiveIr,
+        limits: FormulaLimits,
+        counters: &mut Counters,
+    ) -> Result<bool, FormulaFailure> {
+        if self.nonnumeric.is_empty() {
+            return Ok(true);
+        }
+        counters.work(limits, objective.location)?;
+        let Term::Variable(weight) = objective.template.weight() else {
+            return Ok(true);
+        };
+        for atom in objective.template.positive() {
+            counters.work(limits, objective.location)?;
+            if self.nonnumeric.contains(atom.predicate())
+                && atom.terms() == [Term::Variable(*weight)]
+            {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+}
 
 /// Only a generated position used as an objective weight seeds this analysis.
 /// Reachability is deliberately conservative: an intervening numeric reduction
@@ -66,15 +104,16 @@ pub(super) fn required(
         .collect()
 }
 
-pub(crate) fn check(
-    prepared: &Prepared,
+pub(crate) fn check<'a>(
+    prepared: &'a Prepared,
     support: &Support,
     limits: FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
-) -> Result<(), FormulaFailure> {
+) -> Result<Presence<'a>, FormulaFailure> {
+    let mut presence = Presence::default();
     if prepared.objective_extrema.is_empty() {
-        return Ok(());
+        return Ok(presence);
     }
     for rule in &prepared.rules {
         for literal in &rule.body {
@@ -86,7 +125,7 @@ pub(crate) fn check(
             }
             let mut outer = Join::rule(rule, support, budget)?;
             while let Some(binding) = outer.next(limits, budget, counters, rule.location)? {
-                homogeneous(
+                if mixed(
                     aggregate,
                     &binding,
                     support,
@@ -94,18 +133,36 @@ pub(crate) fn check(
                     budget,
                     counters,
                     rule.location,
-                )?;
+                )? {
+                    let Some(excluded) = flat::certify(
+                        prepared,
+                        rule,
+                        aggregate,
+                        presence.nonnumeric.len(),
+                        limits,
+                        counters,
+                    )?
+                    else {
+                        return Err(refusal(rule.location));
+                    };
+                    for predicate in excluded {
+                        counters.work(limits, rule.location)?;
+                        // Consuming one temporary entry releases its slot before
+                        // it is transferred into the completed certificate.
+                        presence.nonnumeric.insert(predicate);
+                    }
+                }
             }
         }
     }
-    Ok(())
+    Ok(presence)
 }
 
 /// Distinct raw alternatives with one full key have the same first-value class,
 /// so class inspection needs no tuple store or alternate coalescing algorithm.
 /// Each completed rule binding is inspected independently; all repeated join
 /// work and copied values remain charged through the existing finite budgets.
-fn homogeneous(
+fn mixed(
     aggregate: &AggregateIr,
     binding: &[Value],
     support: &Support,
@@ -113,7 +170,7 @@ fn homogeneous(
     budget: &mut Budget,
     counters: &mut Counters,
     location: themelios_base::span::Location,
-) -> Result<(), FormulaFailure> {
+) -> Result<bool, FormulaFailure> {
     let mut numeric = false;
     let mut nonnumeric = false;
     for element in &aggregate.elements {
@@ -140,9 +197,9 @@ fn homogeneous(
                 nonnumeric = true;
             }
             if numeric && nonnumeric {
-                return Err(refusal(location));
+                return Ok(true);
             }
         }
     }
-    Ok(())
+    Ok(false)
 }
