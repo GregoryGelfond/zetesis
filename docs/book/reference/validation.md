@@ -10,6 +10,63 @@ reported-answer comparison, corpus contracts and bounded process capture.
 `zetesis_maintenance` owns repository assurance policy and proof-record
 consistency. Neither participates in production answer-set search.
 
+## Prepare verification tools
+
+The maintained shell checks target macOS and Linux. Begin with
+[Rust's installation prerequisites](https://doc.rust-lang.org/book/ch01-01-installation.html),
+including a native linker, and Git. The
+[checkout installation guide](https://github.com/GregoryGelfond/zetesis/blob/main/README.md#install-and-run)
+covers source access and the installed zetesis commands used below.
+
+The coverage and book gates require additional pinned tools. From the checkout
+root, install them once:
+
+```sh
+rustup toolchain install 1.97.1 --profile minimal --component rustfmt,clippy,llvm-tools-preview
+cargo +1.97.1 install --locked --version '=0.8.7' cargo-llvm-cov
+cargo +1.97.1 install --locked --version '=0.5.4' mdbook
+```
+
+Ensure the Cargo binary directory is on `PATH` (normally `~/.cargo/bin`).
+`scripts/coverage.sh` requires cargo-llvm-cov 0.8.7; the book gate requires mdBook
+0.5.4. The `llvm-tools-preview` component supplies `llvm-cov` and `llvm-profdata`
+for the pinned Rust compiler; rustup may display it as `llvm-tools` in its
+component listing. Installing those tools for a different Rust toolchain does
+not populate this toolchain's directory.
+
+By default, the coverage script discovers both LLVM executables under
+`$(rustc +1.97.1 --print sysroot)/lib/rustlib/<host>/bin`, deriving `<host>` from
+`rustc +1.97.1 -vV`. If you intentionally supply external tools, set **both**
+`LLVM_COV` and `LLVM_PROFDATA` to a compatible pair. Setting only one is refused;
+an arbitrary system LLVM installation is not an interchangeable profile reader.
+The report records the selected tool paths and their versions.
+
+For proofs, install [elan using its upstream instructions](https://github.com/leanprover/elan#installation)
+and make its `elan`, `lean` and `lake` commands available on `PATH`. Fetch the
+Lean version declared by `proofs/lean-toolchain`:
+
+```sh
+elan toolchain install leanprover/lean4:v4.33.1
+```
+
+The proof gate enters `proofs` before invoking Lake, so the checked-in toolchain
+selection applies. External oracle checks additionally require **clingo 5.8.2**
+as `clingo` on `PATH`; setting `CLINGO` alone does not configure every test.
+The comparison commands also accept explicit executable paths.
+
+Confirm the tools selected by your shell before running the gates:
+
+```sh
+rustc +1.97.1 -vV
+cargo +1.97.1 llvm-cov --version
+mdbook --version
+(cd proofs && lake --version)
+clingo --version
+```
+
+Initial tool and dependency installation needs network access. After installation,
+run the checks below against the exact checkout you intend to qualify.
+
 ## Keep semantic expectations independent
 
 For a new language feature, retain a small ASP fixture with an independently

@@ -1,6 +1,8 @@
 # Building the documentation
 
-The manual uses mdBook 0.5.4. Run the following from the repository root:
+The manual uses mdBook 0.5.4. Install the
+[verification prerequisites](reference/validation.md#prepare-verification-tools)
+first, then run the following from the repository root:
 
 ```sh
 scripts/check.sh book
