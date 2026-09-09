@@ -449,34 +449,45 @@ impl Builder<'_> {
         support: &Support,
         location: Location,
     ) -> Result<usize, FormulaFailure> {
-        let Projection::Arguments { predicate, terms } = projection else {
-            let Projection::Witnesses {
+        match projection {
+            Projection::Arguments { predicate, terms } => {
+                self.project_arguments(predicate, terms, assignment, support, location)
+            }
+            Projection::Witnesses {
                 atom,
                 bindings,
                 variables,
                 inputs,
-            } = projection
-            else {
-                unreachable!("projection representation exhausted")
-            };
-            let mut rows = Join::new(
-                bindings,
-                &assignment[..*inputs],
-                *variables,
-                support,
-                self.budget,
-                location,
-            )?;
-            let mut result = 0;
-            while let Some(row) =
-                rows.next(self.limits, self.budget, &mut self.counters, location)?
-            {
-                self.work(location)?;
-                let atom = self.atom(atom, &row, location)?;
-                result = self.or(result, atom, location)?;
+            } => {
+                let mut rows = Join::new(
+                    bindings,
+                    &assignment[..*inputs],
+                    *variables,
+                    support,
+                    self.budget,
+                    location,
+                )?;
+                let mut result = 0;
+                while let Some(row) =
+                    rows.next(self.limits, self.budget, &mut self.counters, location)?
+                {
+                    self.work(location)?;
+                    let atom = self.atom(atom, &row, location)?;
+                    result = self.or(result, atom, location)?;
+                }
+                Ok(result)
             }
-            return Ok(result);
-        };
+        }
+    }
+
+    fn project_arguments(
+        &mut self,
+        predicate: &zetesis_core::Predicate,
+        terms: &[Option<zetesis_core::Term>],
+        assignment: &[Value],
+        support: &Support,
+        location: Location,
+    ) -> Result<usize, FormulaFailure> {
         let mut result = 0;
         for atom in support.rows(predicate) {
             self.work(location)?;
