@@ -110,6 +110,52 @@ implementation of a particular registered function needs its own equivalence
 contract and tests against the Rust implementation; availability of Metal or an
 NVIDIA adapter alone cannot authorize substitution.
 
+## Motivating example: choose an available destination
+
+The first qualified Rust-function example should combine a small geographic
+calculation with an ASP decision: choose between two destinations using their
+haversine distance from an origin. Rust supplies the spherical distance estimate;
+ASP expresses availability, exactly-one selection and the objective. This is a
+planned example, not currently runnable zetesis input.
+
+```asp
+% geo(latitude, longitude), with coordinates in integer microdegrees.
+origin(geo(0,0)).
+destination(east,geo(0,1000000)).
+destination(west,geo(0,-2000000)).
+available(east).
+available(west).
+
+distance(S,M) :- destination(S,P), origin(O), M = @haversine_m(O,P).
+1 { visit(S) : destination(S,_), available(S) } 1.
+#minimize { M@1,S : visit(S), distance(S,M) }.
+#show visit/1.
+```
+
+The example has one origin and one coordinate per destination. A Rust library
+client registers the pure implementation through the shared function boundary;
+the source call selects it without a per-function command-line switch. Typed
+coordinate conversion validates units and geographic ranges. Every valid call
+returns exactly one nonnegative integer distance in metres, within the supported
+logical number range. Invalid coordinates or calculation failures produce a
+located error, never an empty successful result: a missing distance row would
+otherwise leave a selected destination without its intended objective cost.
+
+The registered implementation fixes and documents the sphere radius, numerical
+algorithm and conversion to integer metres. Equal returned distances preserve
+all optimum ties. Purity alone does not establish identical floating-point
+trigonometric results across platforms; cross-platform reproducibility needs its
+own implementation contract and evidence.
+
+Qualification should demonstrate the nearer destination selected when both are
+available, the farther destination selected when only it is available, all ties
+for equal returned distances, and UNSAT when neither is available. Include a
+small Rust registration client and an independently supplied distance-table
+control to separate grounding/selection checks from numerical checks. Eager,
+lazy and permitted parallel evaluation must agree on the complete result. The
+README example should land with that executable qualification; the present
+function specification and existing solver proofs do not establish it yet.
+
 ## Refinement and conformance obligations
 
 Lean should model a version-bound, finite invocation table rather than arbitrary
