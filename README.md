@@ -481,8 +481,9 @@ cargo test --locked --workspace --all-features
 
 The portable gate includes rustfmt, pedantic Clippy, strict rustdoc, both normal
 and CPU-only CLI tests, Criterion correctness smokes and the remaining legacy
-tooling tests. Rust property tests use proptest. Optional checks have explicit
-prerequisites:
+tooling tests. It also checks the two maintained standalone Rust packages and
+rejects authored suppression of dead-code diagnostics. Rust property tests use
+proptest. Optional checks have explicit prerequisites:
 
 ```sh
 ./scripts/check.sh oracle    # external clingo 5.8.2 on PATH
