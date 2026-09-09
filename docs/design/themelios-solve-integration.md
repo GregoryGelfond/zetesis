@@ -105,6 +105,20 @@ variables, combined consistency and witness validation; registering two modules
 does not by itself establish a combined theory. Keep each capability's resource,
 cancellation, determinism and execution-placement contracts inspectable.
 
+Capability use must follow the owned program, not per-theory command switches.
+An ordinary `zetesis program.lp` invocation should resolve the recognized theory
+constructs and assemble the required reasoning operations automatically. A theory
+grammar declaration alone does not define its solver semantics: resolution uses
+the registered, qualified theory contract and reports unknown or conflicting
+constructs at their original locations. Execution preferences such as backend
+selection do not change which constraints the program means.
+
+Rust functions follow the same rule. The Rust integration supplies registered
+implementations; an `@name(...)` occurrence in the source selects and invokes the
+matching function under its declared contract. No per-function enabling switch
+is needed. A missing implementation is a located error, not permission to ignore
+the call or discover and execute arbitrary external code.
+
 Theory reasoning could avoid expensive Boolean expansion or reject inconsistent
 candidate regions earlier. Rust `@` functions provide a different operation:
 bounded value construction under the shared function contract. They do not

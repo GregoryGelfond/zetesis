@@ -111,6 +111,10 @@ fn cpu_only_formula_hardware_request_is_explicitly_unavailable() {
 mod physical_backend;
 
 #[cfg(feature = "gpu")]
+#[path = "support/count_objective_sources.rs"]
+mod count_objective_sources;
+
+#[cfg(feature = "gpu")]
 mod physical {
     use super::physical_backend::Backend;
     use super::{Completion, Control, options, run_with_diagnostics};
@@ -166,7 +170,11 @@ mod physical {
             "{d}.0#sum{0:a:not d}0.",
             "{d}.1#sum+{1:a:not d}1.",
             "0#sum+{0:a}0.",
-        ] {
+        ]
+        .into_iter()
+        .chain(super::count_objective_sources::SATISFIABLE)
+        .chain([super::count_objective_sources::INCONSISTENT])
+        {
             let mut expected = Vec::new();
             let cpu = run_with_diagnostics(
                 source.into(),
@@ -205,7 +213,13 @@ mod physical {
                 );
                 let stats = report.formula_execution.unwrap();
                 assert!(stats.adapter.contains(backend.name()));
-                assert!(stats.gpu_batches > 0);
+                if report.checked > 0 {
+                    assert!(stats.gpu_batches > 0);
+                } else {
+                    // An inconsistent source can exhaust before proposing a world.
+                    assert_eq!(report.models, 0);
+                    assert_eq!(stats.gpu_batches, 0);
+                }
                 assert_eq!(stats.gpu_candidates, report.checked);
                 assert_eq!(stats.gpu_decided + stats.cpu_residuals, report.checked);
                 assert_eq!((stats.pending_candidates, stats.queued_models), (0, 0));

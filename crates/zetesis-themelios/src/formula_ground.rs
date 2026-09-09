@@ -720,7 +720,7 @@ impl Builder<'_> {
                             rule.location,
                         )?;
                     }
-                    let selected = self.and(head, condition, rule.location)?;
+                    let selected = self.and(condition, head, rule.location)?;
                     let activity = self.or(previous, selected, rule.location)?;
                     result.activity.insert(key, (weight, activity));
                 }

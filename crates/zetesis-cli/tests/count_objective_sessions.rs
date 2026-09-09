@@ -1,5 +1,10 @@
 //! Count-head activity composes with forwarded objectives in prepared sessions.
 
+#[path = "support/count_objective_sources.rs"]
+mod count_objective_sources;
+
+use count_objective_sources::{INCONSISTENT, SATISFIABLE};
+
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 
@@ -25,22 +30,22 @@ struct Case {
 // Expected models include every hidden derived atom.
 const CASES: &[Case] = &[
     Case {
-        source: "1#count{1:a;1:b}1.{d}.n(N):-N=#count{1:d}.p(X):-n(X).#minimize{X@7:p(X)}.",
+        source: SATISFIABLE[0],
         models: &[(&["a"], 0), (&["b"], 0), (&["a", "b"], 0)],
         direction: 1,
     },
     Case {
-        source: "2#count{1:a;2:a}2.{d}.n(N):-N=#count{1:d}.p(X):-n(X).#minimize{X@7:p(X)}.",
+        source: SATISFIABLE[1],
         models: &[(&["a"], 0)],
         direction: 1,
     },
     Case {
-        source: "0#count{1:a;2:a}2.{d}.n(N):-N=#count{1:d;2:d}.p(X):-n(X).#maximize{X@7:p(X)}.",
+        source: SATISFIABLE[2],
         models: &[(&["d"], 2), (&["a", "d"], 2)],
         direction: -1,
     },
     Case {
-        source: "{b;d}.1#count{1:a;1:c}1:-b.n(N):-N=#count{1:d}.p(X):-n(X).#minimize{X@7:p(X)}.",
+        source: SATISFIABLE[3],
         models: &[
             (&[], 0),
             (&["a", "b"], 0),
@@ -50,7 +55,7 @@ const CASES: &[Case] = &[
         direction: 1,
     },
     Case {
-        source: "1#count{1:a;2:a}1.{d}.n(N):-N=#count{1:d}.p(X):-n(X).#minimize{X@7:p(X)}.",
+        source: INCONSISTENT,
         models: &[],
         direction: 1,
     },
