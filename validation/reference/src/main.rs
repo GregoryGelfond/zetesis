@@ -1,3 +1,4 @@
+//! Command view of the deterministic finite semantic validation campaign.
 use std::{env, fs, process::ExitCode, time::Instant};
 use zetesis_reference::{lifted::run_sparse_fixtures, run_validation};
 
@@ -41,11 +42,11 @@ fn main() -> ExitCode {
                 ground_report.trim_end().trim_end_matches('}').trim_end(),
                 lifted_rows
             );
-            if let Some(path) = output {
-                if let Err(err) = fs::write(&path, &report) {
-                    eprintln!("could not write report {path}: {err}");
-                    return ExitCode::FAILURE;
-                }
+            if let Some(path) = output
+                && let Err(err) = fs::write(&path, &report)
+            {
+                eprintln!("could not write report {path}: {err}");
+                return ExitCode::FAILURE;
             }
             print!("{report}");
             ExitCode::SUCCESS

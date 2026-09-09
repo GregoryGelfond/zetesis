@@ -41,6 +41,12 @@ its audited transitive axiom dependency is `propext`. It is isolated from the
 production theorem inventory and checked with Lean 4.33.1, auto-implicit arguments
 disabled and warnings as errors. Rust used the pinned 1.97.1 toolchain.
 
+The repository's `./scripts/check.sh portable` explicitly includes this standalone
+Rust package's formatting, all-target tests, doctests, pedantic Clippy and strict
+Rustdoc. Its separate Cargo workspace retains the estate lint policy; the main
+workspace's coverage percentage remains a distinct measurement. The isolated
+Lean experiment still uses the separate commands documented here.
+
 ```sh
 cargo test --manifest-path experiments/gate-transfer/Cargo.toml --offline
 cargo clippy --manifest-path experiments/gate-transfer/Cargo.toml \

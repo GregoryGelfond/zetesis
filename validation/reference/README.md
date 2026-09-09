@@ -15,6 +15,12 @@ cargo run --release --offline -- --report test-results.json
 
 Both commands execute the deterministic property campaign. `cargo test` additionally runs named fault and adversarial tests. The executable writes its own semantic-check report; it does not invoke Cargo tests or claim that they ran. `test-results.json` is the recorded executable campaign. All random generation and shuffled event schedules have fixed seeds. The report's `seconds` has `time_scope: ground_kernel_campaign`: it excludes compilation, Cargo tests, and the separately reported lifted fixtures, and is not total verification time.
 
+From the repository root, `./scripts/check.sh portable` also checks this standalone
+package's formatting, all-target tests, doctests, pedantic Clippy and strict
+Rustdoc. Its Cargo workspace has explicit strict lint settings because it does
+not inherit the main solver workspace's settings. These checks do not add this
+reference implementation to the solver's coverage denominator.
+
 ## Lifted transformer composition and sparse candidates
 
 `src/lifted.rs` makes the central experiment executable without a mandatory ground-rule interface. Its validated templates contain `Var`/`Const` atom patterns, ordinary positive bodies, true/false reduct gates, and exact Eq/Neq filters. Domain values distinguish integers, text, and symbols. Every variable must occur in an ordinary positive body atom. The domain and predicate arities describe finite carriers symbolically; no implicit new value is admitted.

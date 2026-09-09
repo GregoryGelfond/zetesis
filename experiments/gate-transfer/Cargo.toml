@@ -13,6 +13,7 @@ unsafe_code = "deny"
 missing_docs = "deny"
 unused = { level = "deny", priority = -1 }
 unused_must_use = "deny"
+# Rust's generated test harness may allow dead code; authored code stays denied.
 dead_code = "deny"
 
 [lints.clippy]

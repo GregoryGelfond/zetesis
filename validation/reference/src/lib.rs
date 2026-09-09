@@ -2,21 +2,30 @@
 pub mod lifted;
 use std::collections::BTreeSet;
 
+/// Dense finite set of atoms, with atom `a` represented by bit `a`.
 pub type Mask = u64;
+/// Reference operation outcome, with a descriptive admission or invariant failure.
 pub type Result<T> = std::result::Result<T, String>;
 
 /// A source-level rule in the supported fragment. Duplicate antecedents are
 /// canonicalized by the bit mask. `choice` means a SINGLETON choice head.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Rule {
+    /// Head atom, or absence for an integrity constraint.
     pub head: Option<usize>,
+    /// Whether the head contributes its own positive reduct gate.
     pub choice: bool,
+    /// Ordinary positive body atoms.
     pub positive: Mask,
+    /// Body atoms under default negation.
     pub negative: Mask,
+    /// Body atoms under double default negation.
     pub double_negative: Mask,
 }
 
 impl Rule {
+    /// Construct an ordinary rule; carrier validation occurs in [`Program::new`].
+    #[must_use]
     pub fn normal(head: usize, positive: Mask, negative: Mask, double_negative: Mask) -> Self {
         Self {
             head: Some(head),
@@ -26,6 +35,8 @@ impl Rule {
             double_negative,
         }
     }
+    /// Construct a singleton choice whose head is tested against the frozen seed.
+    #[must_use]
     pub fn singleton_choice(head: usize, positive: Mask, negative: Mask) -> Self {
         Self {
             head: Some(head),
@@ -35,6 +46,8 @@ impl Rule {
             double_negative: 0,
         }
     }
+    /// Construct a headless constraint; carrier validation occurs on admission.
+    #[must_use]
     pub fn constraint(positive: Mask, negative: Mask, double_negative: Mask) -> Self {
         Self {
             head: None,
@@ -46,6 +59,7 @@ impl Rule {
     }
 }
 
+/// Validated finite ground rules over fewer than 64 densely numbered atoms.
 #[derive(Clone, Debug)]
 pub struct Program {
     atoms: usize,
@@ -54,36 +68,57 @@ pub struct Program {
     rules: Vec<Rule>,
 }
 
+/// Exact reduct-closure result for one total assignment on the seed carrier.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SeedCheck {
+    /// Least closure of the positive rules selected by the frozen seed.
     pub closure: Mask,
+    /// Whether closure agrees with the seed and satisfies every active constraint.
     pub stable: bool,
+    /// Whether an active constraint has its complete body in the closure.
     pub constraint_violated: bool,
 }
 
+/// Seed assignments between an inclusive lower and upper set bound.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Cube {
+    /// Atoms required in every represented seed.
     pub lower: Mask,
+    /// Atoms permitted in any represented seed.
     pub upper: Mask,
 }
 
+/// One replayable enclosure and narrowing step for a seed cube.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NarrowStep {
+    /// Input seed bounds.
     pub before: Cube,
+    /// Closure of rules active under every represented seed.
     pub lower_closure: Mask,
+    /// Closure of rules active under at least one represented seed.
     pub upper_closure: Mask,
+    /// Bounds after intersecting seed agreement with both closures.
     pub after: Cube,
+    /// Whether the resulting lower bound is outside the upper bound.
     pub inconsistent: bool,
+    /// First constraint violated by the lower closure, when one exists.
     pub definite_constraint: Option<usize>,
 }
 
 impl NarrowStep {
+    /// Whether this step certifies that the input cube contains no stable seed.
+    #[must_use]
     pub fn rejected(&self) -> bool {
         self.inconsistent || self.definite_constraint.is_some()
     }
 }
 
 impl Program {
+    /// Validate and own a finite rule sequence and its dense atom carrier.
+    ///
+    /// # Errors
+    /// Returns an error for 64 or more atoms, an out-of-carrier head/body atom,
+    /// or a singleton choice without a head.
     pub fn new(atoms: usize, rules: Vec<Rule>) -> Result<Self> {
         if atoms >= 64 {
             return Err("atom count must be below 64".into());
@@ -110,12 +145,18 @@ impl Program {
             rules,
         })
     }
+    /// Number of atoms in the validated dense carrier.
+    #[must_use]
     pub fn atom_count(&self) -> usize {
         self.atoms
     }
+    /// Atoms read by reduct gates, including gates in constraints and choices.
+    #[must_use]
     pub fn seed_carrier(&self) -> Mask {
         self.seed_carrier
     }
+    /// Validated rules in their original order, with duplicate rules preserved.
+    #[must_use]
     pub fn rules(&self) -> &[Rule] {
         &self.rules
     }
@@ -147,10 +188,11 @@ impl Program {
         loop {
             let mut next = derived;
             for (r, &on) in self.rules.iter().zip(active) {
-                if on && r.positive & !derived == 0 {
-                    if let Some(h) = r.head {
-                        next |= 1u64 << h;
-                    }
+                if on
+                    && r.positive & !derived == 0
+                    && let Some(h) = r.head
+                {
+                    next |= 1u64 << h;
                 }
             }
             if next == derived {
@@ -159,6 +201,10 @@ impl Program {
             derived = next;
         }
     }
+    /// Compute reduct closure and exact seed agreement.
+    ///
+    /// # Errors
+    /// Returns an error when the seed contains an atom outside the seed carrier.
     pub fn check_seed(&self, seed: Mask) -> Result<SeedCheck> {
         self.validate_seed(seed)?;
         let active: Vec<_> = self.rules.iter().map(|r| Self::enabled(r, seed)).collect();
@@ -174,6 +220,11 @@ impl Program {
             constraint_violated,
         })
     }
+    /// Enclose every completion's closure and narrow the cube by seed agreement.
+    ///
+    /// # Errors
+    /// Returns an error if the lower set exceeds the upper set or the upper set
+    /// contains an atom outside the seed carrier.
     pub fn narrow(&self, c: Cube) -> Result<NarrowStep> {
         self.validate_cube(c)?;
         let must: Vec<_> = self
@@ -211,6 +262,7 @@ impl Program {
     }
     /// Independent baseline: enumerate FULL interpretations and use sets,
     /// rather than the seed projection or mask-based positive closure.
+    #[must_use]
     pub fn direct_full_candidate_models(&self) -> Vec<Mask> {
         let mut models = Vec::new();
         for candidate_mask in subsets(self.universe) {
@@ -226,7 +278,7 @@ impl Program {
                     .all(|a| r.double_negative & (1u64 << a) == 0 || candidate.contains(&a));
                 if !negative_holds
                     || !double_holds
-                    || (r.choice && !candidate.contains(&r.head.unwrap()))
+                    || (r.choice && r.head.is_some_and(|head| !candidate.contains(&head)))
                 {
                     continue;
                 }
@@ -275,41 +327,70 @@ pub fn subsets(carrier: Mask) -> impl Iterator<Item = Mask> {
     })
 }
 
+/// Coverage disposition of one recorded seed cube.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LedgerAction {
+    /// The cube still has unaccounted work.
     Pending,
+    /// Its final narrowing step excludes every stable seed.
     Rejected,
+    /// A singleton seed has a verified stable closure.
     Accepted {
+        /// Total seed assignment on the program's seed carrier.
         seed: Mask,
+        /// Full stable closure, including atoms outside the seed carrier.
         model: Mask,
     },
+    /// An unknown atom partitions the remaining cube into two disjoint children.
     Split {
+        /// Dense atom identifier on which the cube is split.
         atom: usize,
+        /// Ledger index of the child where the atom is absent.
         false_child: usize,
+        /// Ledger index of the child where the atom is present.
         true_child: usize,
     },
 }
+/// Input cube, replayable narrowing trace and final coverage disposition.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LedgerNode {
+    /// Original cube represented by this node.
     pub input: Cube,
+    /// Complete narrowing trace, in execution order.
     pub steps: Vec<NarrowStep>,
+    /// Remaining work or the reason this node has been accounted for.
     pub action: LedgerAction,
 }
+/// Counted ledger operations; the trace, rather than counts, certifies coverage.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct LedgerCounters {
+    /// Number of recorded cube nodes.
     pub nodes: u64,
+    /// Number of recorded narrowing steps.
     pub transforms: u64,
+    /// Number of binary cube partitions.
     pub splits: u64,
+    /// Number of refuted cube leaves.
     pub rejected: u64,
+    /// Number of stable singleton leaves.
     pub accepted: u64,
 }
+/// Exhaustive stable models with their replayable seed-coverage ledger.
 #[derive(Clone, Debug)]
 pub struct SearchResult {
+    /// Full stable models in increasing mask order.
     pub models: Vec<Mask>,
+    /// All cube nodes, with the root at index zero.
     pub ledger: Vec<LedgerNode>,
+    /// Operation totals reproduced by [`verify_ledger`].
     pub counters: LedgerCounters,
 }
 
+/// Enumerate the full seed carrier by narrowing and disjoint binary splits.
+///
+/// # Errors
+/// Returns an error if a generated cube fails validation or a narrowed singleton
+/// fails exact reduct checking. Search is exhaustive and has no budget parameter.
 pub fn exact_cube_search(p: &Program) -> Result<SearchResult> {
     fn visit(p: &Program, input: Cube, result: &mut SearchResult) -> Result<usize> {
         let index = result.ledger.len();
@@ -392,106 +473,112 @@ pub fn exact_cube_search(p: &Program) -> Result<SearchResult> {
     Ok(result)
 }
 
+/// Replay one ledger subtree with the exact cube its parent assigned to it.
+fn verify_node(
+    p: &Program,
+    r: &SearchResult,
+    index: usize,
+    expected: Cube,
+    visited: &mut BTreeSet<usize>,
+    models: &mut Vec<Mask>,
+    counts: &mut LedgerCounters,
+) -> Result<()> {
+    if !visited.insert(index) {
+        return Err("ledger reuses a node or contains a cycle".into());
+    }
+    let node = r.ledger.get(index).ok_or("ledger child missing")?;
+    if node.input != expected {
+        return Err("ledger child does not cover expected cube".into());
+    }
+    counts.nodes += 1;
+    let mut cube = expected;
+    let mut rejected = false;
+    if node.steps.is_empty() {
+        return Err("ledger node has no checked transform".into());
+    }
+    for step in &node.steps {
+        if rejected {
+            return Err("ledger continues after rejection".into());
+        }
+        if *step != p.narrow(cube)? {
+            return Err("ledger transform fails replay".into());
+        }
+        rejected = step.rejected();
+        cube = step.after;
+        counts.transforms += 1;
+    }
+    match node.action {
+        LedgerAction::Pending => return Err("ledger has unresolved work".into()),
+        LedgerAction::Rejected => {
+            if !rejected {
+                return Err("rejection lacks a refutation".into());
+            }
+            counts.rejected += 1;
+        }
+        LedgerAction::Accepted { seed, model } => {
+            if rejected || cube.lower != cube.upper || cube.lower != seed {
+                return Err("accepted leaf is not a feasible singleton".into());
+            }
+            let checked = p.check_seed(seed)?;
+            if !checked.stable || checked.closure != model {
+                return Err("invalid model certificate".into());
+            }
+            counts.accepted += 1;
+            models.push(model);
+        }
+        LedgerAction::Split {
+            atom,
+            false_child,
+            true_child,
+        } => {
+            if rejected || atom >= p.atoms {
+                return Err("invalid split".into());
+            }
+            let bit = 1u64 << atom;
+            if cube.upper & !cube.lower & bit == 0 {
+                return Err("split variable is not unknown".into());
+            }
+            counts.splits += 1;
+            verify_node(
+                p,
+                r,
+                false_child,
+                Cube {
+                    lower: cube.lower,
+                    upper: cube.upper & !bit,
+                },
+                visited,
+                models,
+                counts,
+            )?;
+            verify_node(
+                p,
+                r,
+                true_child,
+                Cube {
+                    lower: cube.lower | bit,
+                    upper: cube.upper,
+                },
+                visited,
+                models,
+                counts,
+            )?;
+        }
+    }
+    Ok(())
+}
+
 /// Replays every recorded transform and verifies exact split coverage. Counters
 /// alone are never used as a completeness certificate.
+///
+/// # Errors
+/// Returns an error for invalid or reused nodes, incorrect narrowing, unresolved
+/// work, invalid model certificates, nonpartitioning splits, or mismatched totals.
 pub fn verify_ledger(p: &Program, result: &SearchResult) -> Result<()> {
-    fn visit(
-        p: &Program,
-        r: &SearchResult,
-        index: usize,
-        expected: Cube,
-        visited: &mut BTreeSet<usize>,
-        models: &mut Vec<Mask>,
-        counts: &mut LedgerCounters,
-    ) -> Result<()> {
-        if !visited.insert(index) {
-            return Err("ledger reuses a node or contains a cycle".into());
-        }
-        let node = r.ledger.get(index).ok_or("ledger child missing")?;
-        if node.input != expected {
-            return Err("ledger child does not cover expected cube".into());
-        }
-        counts.nodes += 1;
-        let mut cube = expected;
-        let mut rejected = false;
-        if node.steps.is_empty() {
-            return Err("ledger node has no checked transform".into());
-        }
-        for step in &node.steps {
-            if rejected {
-                return Err("ledger continues after rejection".into());
-            }
-            if *step != p.narrow(cube)? {
-                return Err("ledger transform fails replay".into());
-            }
-            rejected = step.rejected();
-            cube = step.after;
-            counts.transforms += 1;
-        }
-        match node.action {
-            LedgerAction::Pending => return Err("ledger has unresolved work".into()),
-            LedgerAction::Rejected => {
-                if !rejected {
-                    return Err("rejection lacks a refutation".into());
-                }
-                counts.rejected += 1;
-            }
-            LedgerAction::Accepted { seed, model } => {
-                if rejected || cube.lower != cube.upper || cube.lower != seed {
-                    return Err("accepted leaf is not a feasible singleton".into());
-                }
-                let checked = p.check_seed(seed)?;
-                if !checked.stable || checked.closure != model {
-                    return Err("invalid model certificate".into());
-                }
-                counts.accepted += 1;
-                models.push(model);
-            }
-            LedgerAction::Split {
-                atom,
-                false_child,
-                true_child,
-            } => {
-                if rejected || atom >= p.atoms {
-                    return Err("invalid split".into());
-                }
-                let bit = 1u64 << atom;
-                if cube.upper & !cube.lower & bit == 0 {
-                    return Err("split variable is not unknown".into());
-                }
-                counts.splits += 1;
-                visit(
-                    p,
-                    r,
-                    false_child,
-                    Cube {
-                        lower: cube.lower,
-                        upper: cube.upper & !bit,
-                    },
-                    visited,
-                    models,
-                    counts,
-                )?;
-                visit(
-                    p,
-                    r,
-                    true_child,
-                    Cube {
-                        lower: cube.lower | bit,
-                        upper: cube.upper,
-                    },
-                    visited,
-                    models,
-                    counts,
-                )?;
-            }
-        }
-        Ok(())
-    }
     let mut visited = BTreeSet::new();
     let mut models = Vec::new();
     let mut counts = LedgerCounters::default();
-    visit(
+    verify_node(
         p,
         result,
         0,
@@ -525,13 +612,20 @@ enum Event {
         atom: usize,
     },
 }
+/// Quiescent event execution with exact closure and delivery accounting.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct EventResult {
+    /// Atoms whose activation was delivered during this epoch.
     pub closure: Mask,
+    /// Exact seed agreement after delivery and constraint checks.
     pub stable: bool,
+    /// Whether an active constraint fired.
     pub constraint_violated: bool,
+    /// Distinct atom activations propagated to their consumers.
     pub atom_emissions: u64,
+    /// Unique positive antecedent deliveries.
     pub body_deliveries: u64,
+    /// Active rules whose complete positive bodies were delivered.
     pub rule_firings: u64,
 }
 struct EventEngine<'a> {
@@ -678,7 +772,7 @@ impl<'a> EventEngine<'a> {
     fn run(mut self, schedule_seed: u64) -> Result<EventResult> {
         let mut rng = Rng::new(schedule_seed);
         while !self.queue.is_empty() {
-            let index = rng.below(self.queue.len() as u64) as usize;
+            let index = rng.index(self.queue.len())?;
             let event = self.queue.swap_remove(index);
             self.handle(event)?;
         }
@@ -686,15 +780,22 @@ impl<'a> EventEngine<'a> {
     }
 }
 
+/// Compute reduct closure using a deterministic shuffled event schedule.
+///
+/// # Errors
+/// Returns an error for an invalid seed, invalid/duplicate/stale delivery,
+/// missing delivery at quiescence, or an unrepresentable queue index.
 pub fn event_closure(p: &Program, seed: Mask, schedule_seed: u64) -> Result<EventResult> {
     EventEngine::new(p, seed, 1)?.run(schedule_seed)
 }
 
 #[derive(Clone)]
 struct Rng(u64);
+// Xorshift cannot leave zero; preserve the original deterministic replacement.
+const NONZERO_RNG_SEED: u64 = 0x9e37_79b9_7f4a_7c15;
 impl Rng {
     fn new(seed: u64) -> Self {
-        Self(if seed == 0 { 0x9e3779b97f4a7c15 } else { seed })
+        Self(if seed == 0 { NONZERO_RNG_SEED } else { seed })
     }
     fn next(&mut self) -> u64 {
         let mut x = self.0;
@@ -707,24 +808,47 @@ impl Rng {
     fn below(&mut self, upper: u64) -> u64 {
         self.next() % upper
     }
+    fn index(&mut self, upper: usize) -> Result<usize> {
+        let bound = u64::try_from(upper).map_err(|_| "index bound exceeds generator carrier")?;
+        // The remainder is below the original usize bound. Keep that conversion
+        // checked so its invariant remains explicit on every target width.
+        usize::try_from(self.below(bound))
+            .map_err(|_| "generated index exceeds host carrier".into())
+    }
 }
 
+/// Executed observations from the fixed finite semantic validation campaign.
 #[derive(Clone, Debug, Default)]
 pub struct ValidationCounts {
+    /// One-atom rule subsets exhaustively checked.
     pub exhaustive_one_atom_programs: u64,
+    /// Two-atom rule subsets exhaustively checked.
     pub exhaustive_two_atom_programs: u64,
+    /// Programs produced by the fixed random generator.
     pub random_programs: u64,
+    /// Total programs checked across all three populations.
     pub programs: u64,
+    /// Full interpretations visited by the independent baseline.
     pub full_candidates: u64,
+    /// Total seed assignments checked by reduct closure.
     pub seeds: u64,
+    /// Complete shuffled event executions compared with reduct closure.
     pub event_schedules: u64,
+    /// Seed cubes checked for enclosure and narrowing.
     pub cubes: u64,
+    /// Seed completions checked against lower and upper closure bounds.
     pub enclosure_checks: u64,
+    /// Stable seed completions checked for survival under narrowing.
     pub stable_seed_survival_checks: u64,
+    /// Search ledger nodes replayed across all programs.
     pub ledger_nodes: u64,
+    /// Full stable models found across all programs.
     pub models: u64,
 }
 impl ValidationCounts {
+    /// Render the legacy campaign report with the supplied elapsed seconds.
+    /// The caller supplies a finite nonnegative duration for valid JSON metadata.
+    #[must_use]
     pub fn json(&self, seconds: f64) -> String {
         format!(
             concat!(
@@ -795,7 +919,7 @@ fn validate_program(p: &Program, counts: &mut ValidationCounts) -> Result<()> {
         if checked.stable {
             projected_models.push(checked.closure);
         }
-        for order in [1, 0x123456789abcdef, 0xf00d0000 ^ counts.programs] {
+        for order in [1, 0x0123_4567_89ab_cdef, 0xf00d_0000 ^ counts.programs] {
             let event = event_closure(p, seed, order)?;
             require(
                 event.closure == checked.closure
@@ -805,7 +929,7 @@ fn validate_program(p: &Program, counts: &mut ValidationCounts) -> Result<()> {
                 p,
             )?;
             require(
-                event.atom_emissions == event.closure.count_ones() as u64,
+                event.atom_emissions == u64::from(event.closure.count_ones()),
                 "atom emitted more than once",
                 p,
             )?;
@@ -867,7 +991,7 @@ fn validate_program(p: &Program, counts: &mut ValidationCounts) -> Result<()> {
 
 fn rule_universe(atoms: usize) -> Vec<Rule> {
     let mut rules = Vec::new();
-    for kind in 0..(1 + 2 * atoms) {
+    for kind in 0..=(2 * atoms) {
         let head = if kind == 0 {
             None
         } else {
@@ -923,21 +1047,25 @@ fn exhaustive(atoms: usize, max_rules: usize, counts: &mut ValidationCounts) -> 
 
 /// All one-atom programs with <=4 distinct rules, all two-atom programs with
 /// <=2 distinct rules, then 1000 reproducible random programs with <=5 atoms.
+///
+/// # Errors
+/// Returns the first admission, execution or semantic-agreement failure, with
+/// the finite counterexample when the failed comparison has one.
 pub fn run_validation() -> Result<ValidationCounts> {
     let mut counts = ValidationCounts::default();
     counts.exhaustive_one_atom_programs = exhaustive(1, 4, &mut counts)?;
     counts.exhaustive_two_atom_programs = exhaustive(2, 2, &mut counts)?;
-    let mut rng = Rng::new(20260905);
+    let mut rng = Rng::new(20_260_905);
     for sample in 0..1000 {
-        let atoms = 1 + rng.below(5) as usize;
-        let size = rng.below(21) as usize;
+        let atoms = 1 + rng.index(5)?;
+        let size = rng.index(21)?;
         let mut rules = Vec::new();
         for _ in 0..size {
             let kind = rng.below(4);
             let head = if kind == 3 {
                 None
             } else {
-                Some(rng.below(atoms as u64) as usize)
+                Some(rng.index(atoms)?)
             };
             let mut mask = || {
                 if sample % 2 == 1 {

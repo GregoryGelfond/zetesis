@@ -3,9 +3,21 @@ name = "zetesis-reference"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.97"
+license = "MIT"
 publish = false
 description = "Dependency-free executable semantic model for a finite reduct machine"
 
 [dependencies]
 
 [workspace]
+
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "deny"
+unused = { level = "deny", priority = -1 }
+unused_must_use = "deny"
+# Rust's generated test harness may allow dead code; authored code stays denied.
+dead_code = "deny"
+
+[lints.clippy]
+pedantic = { level = "deny", priority = -1 }

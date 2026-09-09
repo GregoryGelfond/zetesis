@@ -4,45 +4,71 @@
 use crate::Result;
 use std::collections::{BTreeMap, BTreeSet};
 
+/// Closed-domain scalar identity; text and symbols remain distinct.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum Value {
+    /// Signed finite integer.
     Int(i32),
+    /// Text value whose bytes determine identity.
     Text(String),
+    /// Symbol value whose bytes determine identity.
     Symbol(String),
 }
+/// A template variable or a closed-domain constant.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Term {
+    /// Variable identifier local to the template.
     Var(usize),
+    /// Fixed scalar value.
     Const(Value),
 }
+/// Predicate application whose arguments may contain template variables.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AtomPattern {
+    /// Index in the program's predicate catalog.
     pub predicate: usize,
+    /// Ordered predicate arguments.
     pub terms: Vec<Term>,
 }
+/// Ground predicate application with exact logical scalar identity.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Atom {
+    /// Index in the program's predicate catalog.
     pub predicate: usize,
+    /// Ordered ground argument values.
     pub tuple: Vec<Value>,
 }
+/// Equality or disequality applied once both terms are bound.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Filter {
+    /// Require identical logical values.
     Eq(Term, Term),
+    /// Require different logical values.
     Neq(Term, Term),
 }
+/// Safe lifted rule with positive joins and frozen reduct gates.
 #[derive(Clone, Debug)]
 pub struct Template {
+    /// Derived head, or absence for an integrity constraint.
     pub head: Option<AtomPattern>,
+    /// Positive body applications supplying all variable bindings.
     pub positive: Vec<AtomPattern>,
+    /// Applications required present in the frozen seed.
     pub gate_true: Vec<AtomPattern>,
+    /// Applications required absent from the frozen seed.
     pub gate_false: Vec<AtomPattern>,
+    /// Logical comparisons applied during binding.
     pub filters: Vec<Filter>,
 }
+/// Predicate identity within the finite source signature.
 #[derive(Clone, Debug)]
 pub struct Predicate {
+    /// Predicate name; identity includes arity.
     pub name: String,
+    /// Number of ordered arguments.
     pub arity: usize,
 }
+/// Validated templates over a finite closed domain and predicate signature.
 #[derive(Clone, Debug)]
 pub struct LiftedProgram {
     domain: BTreeSet<Value>,
@@ -50,10 +76,14 @@ pub struct LiftedProgram {
     templates: Vec<Template>,
     gate_predicates: BTreeSet<usize>,
 }
+/// Independent execution ceilings; zero never means unlimited.
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {
+    /// Maximum synchronous closure passes, including the final quiescent pass.
     pub max_rounds: usize,
+    /// Maximum charged binding entries and tuple probes.
     pub max_work: u64,
+    /// Maximum distinct derived atoms retained across relations and the delta.
     pub max_atoms: usize,
 }
 impl Default for Limits {
@@ -65,21 +95,34 @@ impl Default for Limits {
         }
     }
 }
+/// Actual inference work, distinct from the symbolic carrier size.
 #[derive(Clone, Debug, Default)]
 pub struct LiftedStats {
+    /// Synchronous closure passes executed.
     pub rounds: usize,
+    /// Relation tuples inspected during positive joins.
     pub tuple_probes: u64,
+    /// Complete bindings published after their filters and gates held.
     pub complete_bindings: u64,
+    /// Partial or complete bindings rejected by a bound filter or gate.
     pub guard_prunes: u64,
+    /// Charged binding entries plus tuple probes.
     pub work: u64,
+    /// Materialized symbolic-carrier tuples; always zero for this source engine.
     pub carrier_tuples_enumerated: u64,
+    /// Retained ground-rule rows; always zero for this source engine.
     pub ground_rows_materialized: u64,
 }
+/// Complete lifted reduct result with its inference accounting.
 #[derive(Clone, Debug)]
 pub struct LiftedCheck {
+    /// Exact least closure of all enabled positive source instances.
     pub closure: BTreeSet<Atom>,
+    /// Whether closure agrees with the seed and violates no active constraint.
     pub stable: bool,
+    /// Whether a complete enabled constraint binding was found.
     pub constraint_violated: bool,
+    /// Work performed by this complete check.
     pub stats: LiftedStats,
 }
 type Binding = BTreeMap<usize, Value>;
@@ -123,6 +166,12 @@ fn charge(stats: &mut LiftedStats, limits: Limits) -> Result<()> {
 }
 
 impl LiftedProgram {
+    /// Validate and own source templates over the supplied closed domain.
+    ///
+    /// # Errors
+    /// Rejects duplicate predicate identities, excessive positive-body length,
+    /// unsafe variables, constants outside the domain, and invalid arities or
+    /// predicate indices. Domain duplicates are coalesced by logical identity.
     pub fn new(
         domain: Vec<Value>,
         predicates: Vec<Predicate>,
@@ -208,6 +257,10 @@ impl LiftedProgram {
     }
     /// A frozen finite true set is total on S: missing carrier tuples are false.
     /// Errors, including budget exhaustion, return no accepted/rejected value.
+    ///
+    /// # Errors
+    /// Rejects an out-of-carrier seed, exhausted round/work/atom limits, counter
+    /// overflow, or an internal head whose variables were not bound.
     pub fn check(&self, seed: &BTreeSet<Atom>, limits: Limits) -> Result<LiftedCheck> {
         self.validate_seed(seed)?;
         let mut relations: Relations = vec![BTreeSet::new(); self.predicates.len()];
@@ -239,16 +292,12 @@ impl LiftedProgram {
                     }
                     Ok(())
                 };
-                bind(
-                    rule,
-                    0,
-                    &Binding::new(),
-                    &relations,
+                Join {
+                    relations: &relations,
                     seed,
-                    &mut stats,
                     limits,
-                    &mut publish,
-                )?;
+                }
+                .bind(rule, 0, &Binding::new(), &mut stats, &mut publish)?;
             }
             if delta.is_empty() {
                 break;
@@ -281,72 +330,70 @@ impl LiftedProgram {
     }
 }
 
-/// Streaming Bind → Filter/Gate (as soon as arguments are bound) → callback.
-/// Zero positive inputs yield one empty binding, provided its guards hold.
-fn bind(
-    rule: &Template,
-    depth: usize,
-    binding: &Binding,
-    relations: &Relations,
-    seed: &BTreeSet<Atom>,
-    stats: &mut LiftedStats,
+/// Immutable relation snapshot and frozen seed for one synchronous source join.
+struct Join<'a> {
+    relations: &'a Relations,
+    seed: &'a BTreeSet<Atom>,
     limits: Limits,
-    publish: &mut impl FnMut(&Binding) -> Result<()>,
-) -> Result<()> {
-    charge(stats, limits)?;
-    let blocked = rule
-        .filters
-        .iter()
-        .any(|f| filter_truth(f, binding) == Some(false))
-        || rule
-            .gate_true
+}
+impl Join<'_> {
+    /// Filter and gate as soon as arguments are bound, then publish complete rows.
+    /// Recursion is bounded by the admitted positive-body length.
+    fn bind(
+        &self,
+        rule: &Template,
+        depth: usize,
+        binding: &Binding,
+        stats: &mut LiftedStats,
+        publish: &mut impl FnMut(&Binding) -> Result<()>,
+    ) -> Result<()> {
+        charge(stats, self.limits)?;
+        let blocked = rule
+            .filters
             .iter()
-            .any(|p| instantiate(p, binding).is_some_and(|a| !seed.contains(&a)))
-        || rule
-            .gate_false
-            .iter()
-            .any(|p| instantiate(p, binding).is_some_and(|a| seed.contains(&a)));
-    if blocked {
-        stats.guard_prunes += 1;
-        return Ok(());
-    }
-    if depth == rule.positive.len() {
-        stats.complete_bindings += 1;
-        return publish(binding);
-    }
-    let pattern = &rule.positive[depth];
-    for tuple in &relations[pattern.predicate] {
-        charge(stats, limits)?;
-        stats.tuple_probes += 1;
-        let mut extended = binding.clone();
-        let compatible = pattern
-            .terms
-            .iter()
-            .zip(tuple)
-            .all(|(term, value)| match term {
-                Term::Const(v) => v == value,
-                Term::Var(i) => match extended.get(i) {
-                    Some(v) => v == value,
-                    None => {
-                        extended.insert(*i, value.clone());
-                        true
-                    }
-                },
-            });
-        if compatible {
-            bind(
-                rule,
-                depth + 1,
-                &extended,
-                relations,
-                seed,
-                stats,
-                limits,
-                publish,
-            )?;
+            .any(|f| filter_truth(f, binding) == Some(false))
+            || rule
+                .gate_true
+                .iter()
+                .any(|p| instantiate(p, binding).is_some_and(|a| !self.seed.contains(&a)))
+            || rule
+                .gate_false
+                .iter()
+                .any(|p| instantiate(p, binding).is_some_and(|a| self.seed.contains(&a)));
+        if blocked {
+            stats.guard_prunes += 1;
+            return Ok(());
         }
+        if depth == rule.positive.len() {
+            stats.complete_bindings += 1;
+            return publish(binding);
+        }
+        let pattern = &rule.positive[depth];
+        for tuple in &self.relations[pattern.predicate] {
+            charge(stats, self.limits)?;
+            stats.tuple_probes += 1;
+            let mut extended = binding.clone();
+            let compatible = pattern
+                .terms
+                .iter()
+                .zip(tuple)
+                .all(|(term, value)| match term {
+                    Term::Const(v) => v == value,
+                    Term::Var(i) => {
+                        if let Some(v) = extended.get(i) {
+                            v == value
+                        } else {
+                            extended.insert(*i, value.clone());
+                            true
+                        }
+                    }
+                });
+            if compatible {
+                self.bind(rule, depth + 1, &extended, stats, publish)?;
+            }
+        }
+        Ok(())
     }
-    Ok(())
 }
 
 fn pattern(predicate: usize, terms: Vec<Term>) -> AtomPattern {
@@ -370,8 +417,17 @@ fn predicates(entries: &[(&str, usize)]) -> Vec<Predicate> {
         })
         .collect()
 }
+fn integer_domain(size: usize) -> Result<Vec<Value>> {
+    (0..size)
+        .map(|value| {
+            i32::try_from(value)
+                .map(Value::Int)
+                .map_err(|_| "fixture domain exceeds integer carrier".into())
+        })
+        .collect()
+}
 fn diagonal_fixture(n: usize) -> Result<LiftedProgram> {
-    let domain: Vec<_> = (0..n).map(|i| Value::Int(i as i32)).collect();
+    let domain = integer_domain(n)?;
     let mut rules: Vec<_> = domain
         .iter()
         .map(|v| head_rule(pattern(0, vec![Term::Const(v.clone())]), vec![]))
@@ -392,7 +448,7 @@ fn diagonal_fixture(n: usize) -> Result<LiftedProgram> {
 }
 
 fn pair_fixture(n: usize) -> Result<LiftedProgram> {
-    let domain: Vec<_> = (0..n).map(|i| Value::Int(i as i32)).collect();
+    let domain = integer_domain(n)?;
     let mut rules: Vec<_> = domain
         .iter()
         .map(|v| head_rule(pattern(0, vec![Term::Const(v.clone())]), vec![]))
@@ -415,24 +471,35 @@ fn pair_fixture(n: usize) -> Result<LiftedProgram> {
     )
 }
 
+/// One executed sparse fixture with its symbolic size and exact closure record.
 #[derive(Clone, Debug)]
 pub struct SparseFixtureReport {
+    /// Stable fixture name used in the published report.
     pub fixture: &'static str,
+    /// Number of distinct scalar values in its authored domain.
     pub domain_size: usize,
+    /// Number of possible ground atoms in the symbolic seed carrier.
     pub symbolic_seed_atoms: usize,
+    /// Number of true atoms supplied in the sparse seed.
     pub true_seed_atoms: usize,
+    /// Complete domain substitutions for the observed source rule before gates.
     pub target_rule_source_substitutions: usize,
+    /// Completed reduct inference and measured work counts.
     pub check: LiftedCheck,
 }
 /// Executed by the CLI; these assert mechanism/work counts, not timing speedups.
+///
+/// # Errors
+/// Returns an error if fixture construction, bounded inference, exact model
+/// identity, or the declared sparse-work invariants fail.
 pub fn run_sparse_fixtures() -> Result<Vec<SparseFixtureReport>> {
     let mut reports = Vec::new();
     for n in [32, 128] {
         let p = diagonal_fixture(n)?;
         let check = p.check(&BTreeSet::new(), Limits::default())?;
-        let expected: BTreeSet<_> = (0..n)
-            .flat_map(|i| {
-                let v = Value::Int(i as i32);
+        let expected: BTreeSet<_> = integer_domain(n)?
+            .into_iter()
+            .flat_map(|v| {
                 [
                     Atom {
                         predicate: 0,
@@ -469,10 +536,11 @@ pub fn run_sparse_fixtures() -> Result<Vec<SparseFixtureReport>> {
         };
         let seed = [pick.clone()].into_iter().collect();
         let check = p.check(&seed, Limits::default())?;
-        let mut expected: BTreeSet<_> = (0..n)
-            .map(|i| Atom {
+        let mut expected: BTreeSet<_> = integer_domain(n)?
+            .into_iter()
+            .map(|value| Atom {
                 predicate: 0,
-                tuple: vec![Value::Int(i as i32)],
+                tuple: vec![value],
             })
             .collect();
         expected.insert(pick);

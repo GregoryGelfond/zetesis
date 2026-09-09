@@ -144,6 +144,13 @@ It runs all-feature workspace tests, CPU-only CLI tests, rustfmt, pedantic Clipp
 strict rustdoc and Criterion correctness smokes. Ignored external/device tests
 are not passes. When enabled, hosted CI repeats portable checks on Linux and macOS.
 
+The gate also explicitly checks the maintained standalone packages
+`validation/reference` and `experiments/gate-transfer`: formatting, all-target
+tests, doctests, all-target/all-feature pedantic Clippy and strict rustdoc. Their
+independent Cargo workspaces otherwise fall outside `--workspace`. They retain
+the same strict authored-code lint policy; this does not include their lines in
+the main workspace's separately reported coverage denominator.
+
 Install clingo 5.8.2 independently and put `clingo` on `PATH` for external checks:
 
 ```sh
