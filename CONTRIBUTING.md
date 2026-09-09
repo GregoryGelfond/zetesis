@@ -80,6 +80,19 @@ development diaries and transient qualification records outside the source tree.
 Retain curated fixtures, provenance and reproducible checks for public claims.
 Documentation must be intelligible without access to private working records.
 
+Keep the manual's runnable examples in shared checked source files. Link semantic
+definitions and algorithms to named implementation APIs or modules and the
+corresponding Lean declarations. During each change, follow affected references
+and check both their targets and the claims they support. A working link alone
+does not establish correspondence. Prefer stable include anchors to line-number
+excerpts, and maintain the book with the implementation it describes.
+
+The [language coverage checklist](docs/book/reference/language-coverage.md) uses
+stable contract identifiers. Report complete closures, new or reopened gaps and
+explicit scope changes separately; retain unclassified scopes. Partial progress
+does not close a larger obligation, and checklist counts do not measure a
+percentage of language parity.
+
 ## Carry the semantic contract into Lean and Rust
 
 Use the same mathematical distinctions in the specification, public APIs and
