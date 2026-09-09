@@ -126,7 +126,7 @@ fn source_grounding_and_setup_failures_keep_only_entered_stages() {
     for (source, args, grounding, solving) in [
         ("a(.", vec![], false, false),
         (
-            "1#min{1:a;1:b}1.",
+            "v(2147483647).0<=#min{X:a:v(X)}.",
             vec!["--oracle", "countermodel"],
             true,
             false,
