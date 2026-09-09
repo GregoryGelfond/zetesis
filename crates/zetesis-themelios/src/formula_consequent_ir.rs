@@ -117,7 +117,8 @@ impl Compiler<'_> {
 
     /// Witnesses select relational rows, never invert arithmetic or enumerate a
     /// global value universe. Extracted names stay private to this alternative;
-    /// the whole captured source atom remains its emitted logical consequent.
+    /// evaluated positions consume those names after matching. The whole captured
+    /// source atom remains the emitted logical consequent.
     fn consequent_witness(
         &mut self,
         atom: &Atom,
@@ -125,7 +126,7 @@ impl Compiler<'_> {
         local: &mut Variables,
         bindings: &mut Vec<LiteralIr>,
     ) -> Result<AtomPattern, FormulaFailure> {
-        if let Some(pattern) = self.positive_pattern(atom, local)? {
+        if let Some(pattern) = self.positive_witness(atom, local, bindings)? {
             let atom = self.consequent_capture(&pattern.atom)?;
             bindings.push(LiteralIr::PatternAtom(pattern));
             Ok(atom)

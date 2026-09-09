@@ -5,7 +5,7 @@ use reference::{Models, atom_text, exhaustive, external, holds, native, values};
 use std::collections::BTreeSet;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_formula,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
 };
 
 fn limited(
@@ -341,21 +341,12 @@ fn negative_witnesses_cannot_supply_names() {
 }
 
 #[test]
-fn witness_arithmetic_remains_explicitly_refused() {
-    for source in [
-        "p(f(2)).q:-p(f(X+1)):#true.",
-        "p(f(1,2)).q:-p(f(X,Y+1)):Y=1.",
-        "p(2).q:-p(X+1):#true.",
-    ] {
+fn witness_arithmetic_requires_bound_inputs() {
+    for source in ["p(f(2)).q:-p(f(X+1)):#true.", "p(2).q:-p(X+1):#true."] {
         assert!(
             matches!(
                 limited(source, ExpansionLimits::default(), FormulaLimits::default()),
-                Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
-                    zetesis_themelios::AdmissionFailure::Profile {
-                        feature: ProfileFeature::Term,
-                        ..
-                    }
-                )))
+                Err(FormulaFailure::UnboundArgumentInput { .. })
             ),
             "{source}"
         );

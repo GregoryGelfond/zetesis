@@ -29,11 +29,23 @@ impl Compiler<'_> {
         variables: &mut Variables,
         body: &mut Vec<LiteralIr>,
     ) -> Result<bool, FormulaFailure> {
-        let Some(pattern) = self.pattern_atom(atom, variables, Some(body))? else {
+        let Some(pattern) = self.positive_witness(atom, variables, body)? else {
             return Ok(false);
         };
         body.push(LiteralIr::PatternAtom(pattern));
         Ok(true)
+    }
+
+    /// Capture an existing complete row and separately check evaluated positions.
+    /// Checks consume extracted or independently bound inputs; they cannot make
+    /// an input safe, invert an expression, or establish the captured atom's truth.
+    pub(super) fn positive_witness(
+        &mut self,
+        atom: &Atom,
+        variables: &mut Variables,
+        checks: &mut Vec<LiteralIr>,
+    ) -> Result<Option<PatternAtom>, FormulaFailure> {
+        self.pattern_atom(atom, variables, Some(checks))
     }
 
     fn pattern_atom(
