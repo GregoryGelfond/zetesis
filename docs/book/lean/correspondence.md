@@ -13,10 +13,13 @@ silently stand for all of them.
 | Machine execution | Checked Rust behavior and qualified WGSL paths | Establish executable refinement, arithmetic and device semantics |
 | Observation | Semantic coverage and delivery laws | Connect actual output writes and counters to the retained semantic evidence |
 
-The normal-rule and Ferraris foundations currently have separate definitions
-and checked laws. A direct mathematical equivalence for the normalized-rule
-translation is an additional bridge; even that bridge would not alone verify
-`from_ground_program`, atom interning or formula DAG construction.
+The normal-rule and Ferraris foundations retain independent definitions.
+The [NormalFerraris bridge](normal-rules.md) proves their equivalence under the
+specified normalized-rule translation, including its filtered/direct-map
+distinction. It does not verify `from_ground_program`, atom interning or formula
+DAG construction. Likewise, `FrozenReduct` is a Rust representation of a fixed
+candidate's reduct; its existence does not close the Rust-to-Lean mask
+correspondence.
 
 ## Read hypotheses as caller obligations
 
@@ -51,4 +54,3 @@ native solver. Describing the whole Rust/GPU solver as formally verified would
 exceed the established correspondence. Progress consists of closing particular
 arrows in this table while preserving explicit limits, not of replacing those
 limits with a proof count.
-

@@ -3,6 +3,13 @@
 The manual uses mdBook 0.5.4. Run the following from the repository root:
 
 ```sh
+scripts/check.sh book
+```
+
+This checks the book build and the displayed Rust examples. To build only the
+HTML:
+
+```sh
 mdbook build
 ```
 

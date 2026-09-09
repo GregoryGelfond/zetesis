@@ -66,3 +66,7 @@ Lean uses `Stable` to connect with the stable-model literature. The solver-facin
 term **answer set** denotes that same semantic property. Naming an unchecked Rust
 value `AnswerSet` would not establish the property.
 
+The [next chapter](normal-rules.md) proves the connection between the independently
+defined normal-rule and Ferraris answer sets. This bridge is mathematical;
+source grounding and the Rust representation still require their own
+correspondences.

@@ -5,6 +5,10 @@ semantic configuration and control, with no argument parsing, standard streams
 or answer rendering. This example enumerates the guided tour's complete family:
 
 ```rust
+# extern crate zetesis_cli;
+# extern crate zetesis_core;
+# extern crate zetesis_cpu;
+# extern crate zetesis_themelios;
 {{#include ../examples/session.rs:example}}
 ```
 
@@ -50,4 +54,3 @@ The example deliberately collects just two tiny results. A production consumer
 can process each model as it arrives rather than retain an unbounded vector.
 Neither collection nor successful iteration acknowledges delivery to an external
 sink; [publication is a separate boundary](outcomes.md).
-

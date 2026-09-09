@@ -1,10 +1,11 @@
-// ANCHOR: example
 extern crate zetesis_cpu;
 extern crate zetesis_ferraris;
 
+// ANCHOR: example
 use zetesis_cpu::Control;
 use zetesis_ferraris::{
-    AdmissionLimits, Interpretation, Limits, Node, Theory, Verdict, check, models, models_reduct,
+    AdmissionLimits, FrozenReduct, Interpretation, Limits, Node, Theory, Verdict, check, models,
+    models_reduct,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -28,6 +29,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &theory, &candidate, witness, limits, &control
     )?);
     assert!(!decision.accepted());
+
+    let reduct = FrozenReduct::new(&candidate, limits, &control)?;
+    for atom in [0, 1] {
+        let singleton = Interpretation::new(&theory, [atom])?;
+        assert!(reduct.is_satisfied_by(&singleton, limits, &control)?);
+    }
+    let empty = Interpretation::new(&theory, [])?;
+    assert!(!reduct.is_satisfied_by(&empty, limits, &control)?);
     Ok(())
 }
 // ANCHOR_END: example

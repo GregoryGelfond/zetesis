@@ -1,9 +1,9 @@
-// ANCHOR: example
 extern crate zetesis_cli;
 extern crate zetesis_core;
 extern crate zetesis_cpu;
 extern crate zetesis_themelios;
 
+// ANCHOR: example
 use std::collections::BTreeSet;
 use zetesis_cli::{Backend, Completion, PreparedInput, Session, SolveConfig};
 use zetesis_core::{Atom, Predicate};

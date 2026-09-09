@@ -20,6 +20,7 @@
 # Part III — The Lean proof library
 
 - [Definitions and imports](lean/foundations.md)
+- [Normal rules as Ferraris formulas](lean/normal-rules.md)
 - [A map of the central theorems](lean/theorems.md)
 - [Reading a structured proof](lean/reading.md)
 - [Connecting proofs to implementations](lean/correspondence.md)
@@ -28,4 +29,3 @@
 
 [Vocabulary](vocabulary.md)
 [Building the documentation](building.md)
-

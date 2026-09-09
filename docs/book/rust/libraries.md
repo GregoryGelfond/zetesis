@@ -11,6 +11,7 @@ need to answer. Parsing command-line arguments is not required to use the solver
 | Explicit complete relational graph | `zetesis_core::GroundProgram::compile` |
 | Normal reduct membership | `zetesis_cpu::{check, check_static, BatchOracle}` |
 | Finite formula construction and reference membership | `zetesis_ferraris::{Theory, Node, Interpretation, check}` |
+| Repeated queries against one candidate's reduct | `zetesis_ferraris::FrozenReduct` |
 | Native formula candidate/countermodel search | `zetesis_sat` |
 | Bounded device execution | `zetesis_wgpu` |
 | Model-relative objective evaluation | `zetesis_objective` |
@@ -48,4 +49,3 @@ session boundaries are useful without pretending those interfaces are present.
 Generate the [local Rust API reference](../../doc/zetesis_cli/index.html) as
 described in [Building the documentation](../building.md). Public signatures and
 their per-operation cost and error contracts are authoritative.
-
