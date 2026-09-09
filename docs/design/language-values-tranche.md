@@ -52,8 +52,9 @@ explicit milestone; its planned haversine example is recorded in
 
 ## Following this checkpoint
 
-The next proposed language slices are numeric weighted-head aliases and bounded
-conditional disjuncts. Both remain unimplemented at this checkpoint.
+The next tranche now prioritizes [semantic architecture and library alignment](semantic-architecture-tranche.md).
+The following language slices remain a recorded backlog: numeric weighted-head
+aliases and bounded conditional disjuncts. Both remain unimplemented at this checkpoint.
 
 Weighted heads can reuse the separation between atom permission and complete-tuple
 activity already established for count heads. Start with signed numeric `#sum`

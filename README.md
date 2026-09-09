@@ -242,22 +242,10 @@ frozen interpretation pairs, plus generated arithmetic properties. Negative
 `#sum+` head weights remain an internal limitation with a recorded reference
 discrepancy; they are not labeled modeling errors.
 
-The [preceding promoted qualification](docs/verification/language-closure-tranche-20260908/README.md)
-passes **2,376 workspace tests/doc checks**, **343 independent CPU-only CLI
-checks**, **70 external-oracle tests** and **25 physical Metal tests** on Apple
-M4 Pro. Both unchanged 91% coverage floors pass: **93.6093% workspace with the
-matching physical profiles / 93.3773% independent CPU-only CLI**. The frozen
-release passes all 94 clean corpus and 24 selected upstream comparisons.
-Its [Lean audit](proofs/verification/language-closure-20260908/README.md)
-checks **834 laws across 74 modules**; concrete Rust/WGSL correspondence remains
-unproved. The five installed commands use the exact qualified release bytes.
-The [language-closure progress record](docs/design/language-closure-progress.md)
-retains the remaining head and objective dependency obligations. This tranche
-adds language and correctness evidence; it makes no new performance claim.
-
-The [language-values tranche](docs/design/language-values-tranche.md) extends
+The [promoted language-values checkpoint](docs/verification/lint-discipline-20260909/promotion/README.md)
+extends
 Boolean heads, literal objective weights, bounded mixed-extrema presence and
-evaluated local witnesses in the source tree. Its combined library and ordinary
+evaluated local witnesses. Its combined library and ordinary
 CLI checks compare full models,
 objective absence, present zero priorities, tuple coalescing and optimum ties.
 The subsequent [lint audit](docs/verification/lint-discipline-20260909/README.md)
@@ -267,7 +255,11 @@ checks pass 2,461 workspace tests/doc checks, 348 independent CPU-only CLI check
 25 standalone tests and 76 external-oracle tests. The release solver and validation
 commands remain byte-identical to the binaries that passed the 94/24 corpus
 comparisons. The [Lean audit](proofs/verification/language-values-20260908/README.md)
-still checks 864 laws across 78 modules.
+checks **864 laws across 78 modules**. Concrete source/Rust/WGSL correspondence
+remains unproved. All five installed commands use the exact qualified release
+bytes. The [language-closure progress record](docs/design/language-closure-progress.md)
+retains the remaining head and objective dependency obligations. This checkpoint
+makes no new comparative performance claim.
 
 The corrected build passes [25 matching physical Metal tests](docs/verification/lint-discipline-20260909/physical/README.md)
 on Apple M4 Pro. Both unchanged 91% coverage floors pass: **93.6480% workspace
@@ -275,8 +267,9 @@ with matching physical execution / 93.3773% independent CPU-only CLI**.
 The portable workspace baseline remains 90.2015%; it is retained separately.
 Only the eight profiles from the corrected frozen executables enter the combined
 workspace report. Earlier physical profiles remain historical evidence.
-All qualification requirements for promotion pass; promotion is recorded
-separately after it occurs.
+The checkpoint is on `main` and the private remote; hosted CI remains temporarily
+disabled under the local macOS qualification policy. The next planned tranche
+focuses on [semantic architecture and library alignment](docs/design/semantic-architecture-tranche.md).
 
 The checkpoint includes the following scoped capabilities. The
 [previous checkpoint](docs/verification/aggregate-primitives-tranche-20260908/README.md)
