@@ -26,11 +26,11 @@ if [ "$mode" = portable ] || [ "$mode" = full ]; then
     cargo bench --locked -p zetesis-ferraris --bench native_aggregates -- --test
 fi
 if [ "$mode" = oracle ] || [ "$mode" = full ]; then
-    cargo test --locked -p zetesis-themelios --test program_parts --test conditional_consumers --test weighted_heads --test nonbinding_guards --test extrema_heads --test count_plans --test count_head_activity --test objective_forwarding -- --ignored --nocapture
+    cargo test --locked -p zetesis-themelios --test program_parts --test conditional_consumers --test weighted_heads --test nonbinding_guards --test extrema_heads --test count_plans --test count_head_activity --test objective_forwarding --test boolean_heads --test evaluated_witnesses --test objective_literal_weights -- --ignored --nocapture
     cargo test --locked -p zetesis-themelios --test aggregate_dependencies --test aggregate_consumers --test choice_consumers --test outer_negative_consumers --test outer_ranges --test negative_count_eligibility --test structured_witnesses -- --ignored --nocapture
     cargo test --locked -p zetesis-ferraris --test aggregate_clingo -- --ignored --nocapture
     cargo test --locked -p zetesis-ferraris --test extrema_clingo --test value_extrema -- --ignored --nocapture
-    cargo test --locked -p zetesis-cli --test clingo --test extended_clingo --test multiple_inputs --test maximize -- --ignored --nocapture
+    cargo test --locked -p zetesis-cli --test clingo --test extended_clingo --test multiple_inputs --test maximize --test language_value_sessions -- --ignored --nocapture
     cargo test --locked -p zetesis-themelios --test bundle_admission --test metadata --test formula --test formula_clingo --test aggregate_clingo --test aggregate_assignments_multiple --test aggregate_objective_observers --test extrema_source --test scalar_bindings_clingo --test objective_bounds_adversarial --test factorization_clingo --test comparison_reuse --test disjunction --test sum_profiles --test weak_objectives --test maximize_clingo --test observations --test observations_adversarial --test choice_intervals --test ground_guards --test conditional_body --test comparison_generators --test finite_bindings --test evaluated_heads --test negative_heads --test structural_values --test finite_pools --test true_heads --test count_heads --test value_extrema --test structural_bindings --test finite_values --test consequent_alternatives --test function_patterns --test positive_arguments --test scalar_evaluation -- --ignored --nocapture
 fi
 if [ "$mode" = proofs ] || [ "$mode" = full ]; then

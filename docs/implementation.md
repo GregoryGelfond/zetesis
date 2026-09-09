@@ -402,9 +402,13 @@ agreement and anonymous values; a failed match preserves the completed condition
 binding. The retained capture copy is charged before allocation. These witnesses
 cannot bind the outer rule, repair condition safety or provide support.
 Empty alternative families are false; completed empty condition domains are true.
-Resource exhaustion remains a refusal. Objective-reachable conditional producers
-remain outside this bounded extension, as do evaluated positions mixed with local
-witness extraction, arithmetic inversion and negative anonymous witnesses. The
+Resource exhaustion remains a refusal. Evaluated positions can consume inputs
+captured structurally in the same positive witness or already established in the
+completed condition. They retain the full supporting atom, and a failed check
+discards only that row. Objective-reachable conditional producers, arithmetic
+inversion and negative anonymous witnesses retain their explicit boundaries. The
+[evaluated-witness record](verification/evaluated-witnesses-20260908/README.md)
+checks this composition without adding a second matcher. The
 [structured-witness record](verification/structured-witnesses-20260907/README.md)
 retains complete-model, arbitrary original/frozen, scope and exact-limit checks.
 Pooled analysis input carries `AnalysisBasis::DependencyProjection`; its safety
@@ -434,6 +438,13 @@ whole-rule or choice-group product semantics. Bound constructor arguments use
 the shared finite-value evaluator; nested pool/interval forms keep their own
 admission limits. A dedicated
 head-element ceiling bounds this source profile.
+Boolean singleton heads and signed Boolean disjuncts now use explicit constant
+operands in that same representation. They contribute no atoms or producer
+evidence. Admission still validates every sibling, body, scope and resource
+allowance before constant lowering, so a tautological head cannot hide an invalid
+source rule. The [Boolean-head record](verification/boolean-heads-20260908/README.md)
+retains original and frozen semantics, support and failure controls. Boolean
+choice/head-aggregate elements remain outside this extension.
 An assignment introduces one fresh named target, absent from its own tuple and
 conditions; its other inputs must be established by ordinary bindings or earlier
 acyclic producers. Finite

@@ -40,7 +40,8 @@ validation, binding instructions or their charged work.
 
 The operand representation costs constant additional tag storage per retained
 head occurrence. For `H` occurrences, retained head storage remains `O(H)`
-plus existing atomic pattern payloads. Visiting a head is `O(H)` excluding
+plus existing atomic pattern payloads. Lowering visits all `H` occurrences and
+uses `O(H log H)` ordered deduplication bookkeeping in the worst case, excluding
 the unchanged term evaluation, atom lookup and formula interning costs.
 Boolean operands allocate no atom payload. Finite generation can still multiply
 whole-rule instances; assignment, head-element, expression-work, substitution,

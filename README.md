@@ -200,10 +200,10 @@ syntax, raising and evaluation errors from zetesis implementation refusals.
 | Area | Implemented scope |
 |---|---|
 | Normal rules | Safe finite rules, constraints, default/double negation, strong negation with coherence, and relational lazy checking in the admitted normal-rule profile. |
-| Formula rules | Bounded choices, signed singleton/disjunctive heads, finite rule/head pools, evaluated heads, scalar/range bindings, comparisons and admitted universal body conditionals. |
+| Formula rules | Bounded choices, signed atom/Boolean singleton and disjunctive heads, finite rule/head pools, evaluated heads, scalar/range bindings, comparisons and admitted universal body conditionals. |
 | Aggregates | Body count/sum/sum+ and complete-value min/max comparisons; acyclic dependent assignments feeding scalar/tuple filters, scalar equalities, evaluated positive arguments and heads, default/double-negated outer atoms and admitted projections, finite outer ranges, integer choice bounds, nonbinding aggregate guards and existing universal conditional scopes; count heads with separate atom permission and complete-tuple activity, including both alias directions; signed numeric sum, nonnegative numeric sum+ and numeric min/max heads retain their checked tuple/atom correspondence. |
-| Logical values | Closed signed functions and tuples; finite construction from bound inputs; positive tuple/function patterns, including local conditional-consequent witnesses; evaluated positive arguments with independently bound inputs; evaluated already-safe negative arguments. |
-| Objectives and observations | Admitted minimize/maximize/weak constraints; complete tuple keys and optimal ties; total aggregate observers through acyclic predicate renamings and argument permutations; signature, term and conditional `#show`; `#defined`; original include bundles and constants; explicit parameter-free `#program base` sections. |
+| Logical values | Closed signed functions and tuples; finite construction from bound inputs; positive tuple/function patterns, including local conditional-consequent witnesses with evaluated arguments; expressions consume established or structurally captured inputs; evaluated already-safe negative arguments. |
+| Objectives and observations | Admitted minimize/maximize/weak constraints, including ignored resolved nonnumeric literal weights; complete tuple keys, explicit priority presence and optimal ties; total aggregate observers through acyclic predicate renamings and argument permutations; signature, term and conditional `#show`; `#defined`; original include bundles and constants; explicit parameter-free `#program base` sections. |
 | Refusal boundaries | Cyclic or self-dependent assignment generators; unsupported local conditional generators; negative sum+ head weights, nonnumeric measured heads and weighted/extrema tuple aliases; nontrivial conditional disjuncts; unsupported objective-dependent producers, including relevant function heads and mixed-extrema variable-weight presence; broader directives and exact clingo undefined-arithmetic behavior remain incomplete. |
 
 These rows summarize profiles; they are not a grammar specification. The
@@ -242,18 +242,25 @@ frozen interpretation pairs, plus generated arithmetic properties. Negative
 `#sum+` head weights remain an internal limitation with a recorded reference
 discrepancy; they are not labeled modeling errors.
 
-The [current qualification](docs/verification/language-closure-tranche-20260908/README.md)
+The [last promoted qualification](docs/verification/language-closure-tranche-20260908/README.md)
 passes **2,376 workspace tests/doc checks**, **343 independent CPU-only CLI
 checks**, **70 external-oracle tests** and **25 physical Metal tests** on Apple
 M4 Pro. Both unchanged 91% coverage floors pass: **93.6093% workspace with the
 matching physical profiles / 93.3773% independent CPU-only CLI**. The frozen
 release passes all 94 clean corpus and 24 selected upstream comparisons.
-The [current Lean audit](proofs/verification/language-closure-20260908/README.md)
+Its [Lean audit](proofs/verification/language-closure-20260908/README.md)
 checks **834 laws across 74 modules**; concrete Rust/WGSL correspondence remains
 unproved. The five installed commands use the exact qualified release bytes.
 The [language-closure progress record](docs/design/language-closure-progress.md)
 retains the remaining head and objective dependency obligations. This tranche
 adds language and correctness evidence; it makes no new performance claim.
+
+The [language-values tranche](docs/design/language-values-tranche.md) extends
+Boolean heads, literal objective weights and evaluated local witnesses in the
+source tree. Its combined library and ordinary CLI checks compare full models,
+objective absence, present zero priorities, tuple coalescing and optimum ties.
+Integration qualification is in progress; the promoted figures above do not
+qualify these new sources or a new installed executable.
 
 The checkpoint includes the following scoped capabilities. The
 [previous checkpoint](docs/verification/aggregate-primitives-tranche-20260908/README.md)

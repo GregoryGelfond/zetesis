@@ -111,7 +111,14 @@ never infer bindings. `q(X):-p(f(X+1))` without another binder receives
 `UnboundArgumentInput`: arithmetic inversion is unsupported by this profile,
 which is distinct from declaring the source unsafe in ASP.
 Positive structured consequent-only witnesses use this matcher in their own
-local alternative scope; evaluated witness positions retain a separate refusal.
+local alternative scope. They also admit evaluated positions whose inputs are
+already bound or captured structurally in that witness. For example,
+`{p(1,2);p(2,4)}.q:-p(X,X+1):#true.` retains the complete matching atom
+`p(1,2)` and rejects the row `p(2,4)` from the consequent alternatives.
+Local witness names cannot establish outer-rule or condition safety; an
+expression alone supplies no binding. The
+[evaluated-witness record](../../docs/verification/evaluated-witnesses-20260908/README.md)
+retains original-source, arbitrary frozen-reduct and failure-control evidence.
 Pools/intervals below a constructor remain outside this generation profile.
 The [finite-value](../../docs/verification/finite-values-20260907/README.md) and
 [tuple-binding](../../docs/verification/structural-bindings-20260907/README.md)
@@ -193,6 +200,15 @@ Formula admission accepts `a(X) | b(X) :- d(X).` as one implication from the ori
 The possible-support relation includes only positive disjuncts of each completed body binding. It does not use the single-head support shortcut, because an existing sibling cannot justify skipping another possible head. Final lowering retains one `body → OR(literals)` formula, coalesces identical literal nodes without merging polarities, and records the body as necessary producer evidence only for positive heads. Negative occurrences contribute source provenance. The original rule `a | not a` has both the empty and singleton answer sets; adding `not not a` as a third disjunct removes the singleton, so polarity cannot be replaced by classical equivalence. The separate [negative-head laws](../../proofs/Zetesis/NegativeHeads.lean) justify positive-only necessary support in the stated ground grammar, without proving this compiler. It never shifts a disjunction into normal rules or treats its heads as a choice: `a | b. a :- b. b :- a.` has the stable model `{a,b}`. The current normal-rule component factorization remains disabled for this new head form. The source-to-formula/compiler correspondence is tested, not a new Lean refinement claim.
 
 An objective that can depend directly or indirectly on a disjunctive producer receives `ObjectiveDisjunctionDependency`. This conservative boundary concerns exact objective presence, not reduct stability: clingo removes the objective in `a. a | b. #minimize {1@1:b}.`, while a constraint forbidding `b` may preserve a zero cost slot. A possible-positive upper bound cannot distinguish these grounding simplifications. Disjunctions unrelated to the objective dependency graph remain admissible alongside objectives; costs, priority slots and tuple identity keep their existing contract.
+
+Boolean singleton heads and disjuncts use the same signed head representation.
+`#true | a.` has only the empty answer set; `#false | a.` has only `{a}`.
+Boolean operands have no atom identity or positive support. Every sibling and
+the complete body are admitted before constants are lowered, including source
+safety and shape limits. The existing empty/explicitly true head-condition
+profile remains; Boolean choice and function-head elements are not covered.
+The [Boolean-head evidence](../../docs/verification/boolean-heads-20260908/README.md)
+includes all default-negation signs and arbitrary original/frozen interpretations.
 
 ## Checked finite function count heads
 

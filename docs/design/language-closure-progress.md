@@ -42,10 +42,12 @@ five corresponding objective-dependent count-head cases remain located
 refusals. Their clingo behavior is retained separately as gap evidence rather
 than silently broadening the successful composition claim.
 
-Further concrete follow-ons are nonnumeric literal objective weights, broader
-objective presence carriers, and objective-relevant function heads. The first
-two are recorded with original references in the objective evidence; they do
-not disappear when an equivalent variable-weight profile is admitted. The
+That checkpoint left nonnumeric literal objective weights, broader objective
+presence carriers and objective-relevant function heads as concrete follow-ons.
+The [current language-values tranche](language-values-tranche.md) implements
+literal weights, Boolean heads and evaluated local witnesses, with a separate
+proposed bounded presence extension. Its qualification is recorded separately;
+the results below describe the prior qualified checkpoint. The
 Lean library adds nine `CountHeadActivity` and six `ObjectiveTransport` laws,
 with a clean 834-theorem/74-module build and full axiom audit. These semantic
 laws retain their explicit compiler-correspondence limitations.
@@ -58,7 +60,9 @@ refusals. These tiny preliminary probes identify a remaining representation
 boundary; they are not a new curated campaign or compatibility gate. A future
 Boolean-head slice must cover signed forms, disjunction, original/frozen truth,
 binding safety, diagnostics and budgets rather than merely drop true-headed
-source rules before admission.
+source rules before admission. The [implemented slice](../verification/boolean-heads-20260908/README.md)
+now covers that bounded contract; the probes above remain historical intake
+evidence rather than current refusals.
 
 The themelios solve design at revision `c4d4045` has
 the engine-independent `Backend` contract and capability declarations already
