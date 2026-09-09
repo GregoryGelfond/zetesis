@@ -11,6 +11,9 @@ use crate::{Control, Stop};
 mod window;
 pub mod source;
 pub(crate) mod worlds;
+#[cfg(test)]
+#[path = "oracle/closure_tests.rs"]
+mod closure_tests;
 
 /// Exact checking budgets, applied before the next charged operation/insertion.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -202,6 +205,39 @@ pub fn check(
         pruned_prefixes: 0,
         mask_bytes: 0,
     };
+    let completed = least_closure(program, seed, &mut work)?;
+    let seed_mismatch = !gate_agreement(program, seed, &completed.atoms, &mut work)?;
+    work.statistics.derived_atoms = completed.atoms.len();
+    let closure = Model::new(completed.atoms);
+    control.poll()?;
+    Ok(Check {
+        program: program.clone(),
+        closure,
+        constraint_violated: completed.constraint_violated,
+        seed_mismatch,
+        statistics: work.statistics,
+    })
+}
+
+// Construction establishes a complete no-delta source scan, not constraint
+// satisfaction or agreement with the seed. Those are separate acceptance facts.
+struct CompletedClosure {
+    atoms: BTreeSet<Atom>,
+    constraint_violated: bool,
+}
+
+// The caller has established program/seed identity. Each round reads only the
+// preceding closure and visits every template, including constraints. Positive
+// bodies and the fixed gate seed make derived atoms and constraint violations
+// monotone. A no-delta round therefore establishes leastness and source coverage.
+// Every pending insertion is charged and bounded before publication; a stop
+// cannot construct CompletedClosure. Constraint failure never truncates a scan.
+// Each growing round adds an atom, so the derived-atom ceiling bounds growth.
+fn least_closure(
+    program: &Program,
+    seed: &Seed,
+    work: &mut Work<'_>,
+) -> Result<CompletedClosure, Stop> {
     let mut closure: BTreeSet<Atom> = BTreeSet::new();
     let mut constraint_violated = false;
     loop {
@@ -219,7 +255,7 @@ pub fn check(
                 &relations,
                 Some(seed),
                 None,
-                &mut work,
+                work,
                 |assignment, work| {
                     work.tick()?;
                     if let Some(head) = template.head() {
@@ -229,7 +265,7 @@ pub fn check(
                                 .len()
                                 .checked_add(delta.len())
                                 .ok_or(Stop::DerivedAtomLimit)?
-                                >= limits.max_derived_atoms
+                                >= work.limits.max_derived_atoms
                             {
                                 return Err(Stop::DerivedAtomLimit);
                             }
@@ -248,29 +284,35 @@ pub fn check(
         }
         closure.extend(delta);
     }
-    let mut seed_mismatch = false;
-    for atom in &closure {
+    Ok(CompletedClosure {
+        atoms: closure,
+        constraint_violated,
+    })
+}
+
+// Establish closure ∩ gate_carrier = seed in both directions. Continue charging
+// both complete scans after a mismatch; rejection does not bypass work limits.
+// Positive-only atoms do not belong to this comparison's projected carrier.
+fn gate_agreement(
+    program: &Program,
+    seed: &Seed,
+    closure: &BTreeSet<Atom>,
+    work: &mut Work<'_>,
+) -> Result<bool, Stop> {
+    let mut agreement = true;
+    for atom in closure {
         work.tick()?;
         if program.contains_gate_atom(atom) && !seed.contains(atom) {
-            seed_mismatch = true;
+            agreement = false;
         }
     }
     for atom in seed.atoms() {
         work.tick()?;
         if !closure.contains(atom) {
-            seed_mismatch = true;
+            agreement = false;
         }
     }
-    work.statistics.derived_atoms = closure.len();
-    let closure = Model::new(closure);
-    control.poll()?;
-    Ok(Check {
-        program: program.clone(),
-        closure,
-        constraint_violated,
-        seed_mismatch,
-        statistics: work.statistics,
-    })
+    Ok(agreement)
 }
 
 fn visit<E: From<Stop>>(
