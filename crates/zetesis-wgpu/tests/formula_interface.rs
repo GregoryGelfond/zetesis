@@ -1,4 +1,7 @@
-//! Portable host/shader interface contracts for the maintained formula oracle.
+//! Portable declared-interface contracts for the maintained formula oracle.
+//!
+//! These checks inspect shader declarations. Physical qualification covers
+//! integration with host buffers and dispatch.
 
 fn module() -> naga::Module {
     let module = naga::front::wgsl::parse_str(include_str!("../src/formula.wgsl"))
@@ -13,7 +16,7 @@ fn module() -> naga::Module {
 }
 
 #[test]
-fn formula_bindings_match_the_host_buffers() {
+fn formula_preserves_the_declared_bindings() {
     use naga::{AddressSpace, StorageAccess};
     let module = module();
     let bindings: Vec<_> = module
@@ -91,7 +94,7 @@ fn formula_parameters_keep_the_packed_word_layout() {
 }
 
 #[test]
-fn formula_entry_point_uses_one_candidate_workgroup() {
+fn formula_preserves_the_declared_compute_entry() {
     let module = module();
     assert_eq!(module.entry_points.len(), 1);
     let entry = &module.entry_points[0];
