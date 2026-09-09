@@ -12,10 +12,11 @@ use crate::formula_execution::{Failure, MembershipExecution};
 use crate::objective_bounds::Bounds;
 use crate::optimization::Incumbents;
 use crate::phase_timing::{Recorder, SolvePhase};
-use crate::{Completion, Interruption, RunError, SemanticOutcome, SolveConfig};
+use crate::{AnswerSelection, Completion, Interruption, RunError, SemanticOutcome, SolveConfig};
 
 pub(crate) struct FormulaSession<'a, E> {
     input: Input<'a>,
+    selection: AnswerSelection,
     execution: E,
     models: Option<StableModels>,
     bounds: Option<Bounds>,
@@ -35,8 +36,33 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         control: &Control,
         phases: &Recorder,
     ) -> Self {
+        Self::with_selection(
+            input,
+            execution,
+            config,
+            diagnostics,
+            control,
+            phases,
+            AnswerSelection::Optimal,
+        )
+    }
+
+    pub(crate) fn with_selection(
+        input: Input<'a>,
+        execution: E,
+        config: &SolveConfig,
+        diagnostics: &mut impl Write,
+        control: &Control,
+        phases: &Recorder,
+        selection: AnswerSelection,
+    ) -> Self {
         let mut session = Self {
             input,
+            selection: if input.objectives.is_present() {
+                selection
+            } else {
+                AnswerSelection::All
+            },
             execution,
             models: None,
             bounds: None,
@@ -101,15 +127,17 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             );
             return Ok(());
         }
-        self.bounds = Some(
-            if self.input.objectives.is_present() && config.max_objective_bound_work != 0 {
-                phases.measure(SolvePhase::ObjectiveFeedback, || {
-                    Bounds::new(self.input, config, diagnostics, control)
-                })?
-            } else {
-                Bounds::new(self.input, config, diagnostics, control)?
-            },
-        );
+        if self.selection == AnswerSelection::Optimal {
+            self.bounds = Some(
+                if self.input.objectives.is_present() && config.max_objective_bound_work != 0 {
+                    phases.measure(SolvePhase::ObjectiveFeedback, || {
+                        Bounds::new(self.input, config, diagnostics, control)
+                    })?
+                } else {
+                    Bounds::new(self.input, config, diagnostics, control)?
+                },
+            );
+        }
         Ok(())
     }
 
@@ -126,7 +154,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         if self.final_outcome.is_some() {
             return self.next_retained().map(Ok);
         }
-        if !self.input.objectives.is_present()
+        if self.selection == AnswerSelection::All
             && config.models != 0
             && self.yielded >= config.models
         {
@@ -169,6 +197,22 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             if !self.input.objectives.is_present() {
                 self.yielded += 1;
                 return Some(Ok((model, None)));
+            }
+            if self.selection == AnswerSelection::All {
+                let score = phases.measure(SolvePhase::ObjectiveScoringRetention, || {
+                    self.incumbents
+                        .evaluate(self.input.objectives, &model, config, control)
+                });
+                return match score {
+                    Ok(score) => {
+                        self.yielded += 1;
+                        Some(Ok((model, Some(score))))
+                    }
+                    Err(reason) => {
+                        self.complete(Completion::Interrupted, Some(reason), phases);
+                        None
+                    }
+                };
             }
             let scored = phases.measure(SolvePhase::ObjectiveScoringRetention, || {
                 self.incumbents
@@ -247,6 +291,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         }
         SemanticOutcome {
             subject: Some(crate::Subject::Theory(self.input.theory.clone())),
+            selection: Some(self.selection),
             verified: statistics.map_or(0, |s| s.stable_models),
             scored: self.incumbents.scored(),
             retained: self.incumbents.retained(),

@@ -58,6 +58,13 @@ program. It is not an epistemic extension of the language. A family restricted
 by assumptions or selected by an objective must be identified as such. In
 particular, a set of optimal ties is not the unrestricted world view.
 
+The writer-free `Session::enumerate` returns checked `AnswerSet` values as they
+are found. `WorldView::collect` additionally requires complete unrestricted
+coverage and retention of every answer. Its empty family means inconsistency;
+the family containing one empty answer is consistent. The Rust boundary is
+backed by native runtime checks and enumeration contracts, not an executable
+refinement proof from the Lean definitions.
+
 `#show` defines observations of answers. It does not erase hidden atoms from
 membership or justify ignoring rules irrelevant to a displayed predicate.
 Two full answers can have identical displays. Objectives rank verified answers;
@@ -67,4 +74,3 @@ for reduct checking.
 The formal definitions are developed in
 [Part III](../lean/foundations.md). The current Rust names for these objects are
 listed in the [vocabulary](../vocabulary.md).
-

@@ -54,16 +54,18 @@ pub(crate) struct Incumbents {
     scored: u64,
 }
 impl Incumbents {
-    pub(crate) fn consider(
+    /// Evaluate without retaining or selecting the model. Both unrestricted
+    /// enumeration and optimization spend this same cumulative score budget.
+    pub(crate) fn evaluate(
         &mut self,
         program: &ObjectiveProgram,
-        model: Model,
+        model: &Model,
         options: &SolveConfig,
         control: &Control,
-    ) -> Result<bool, Interruption> {
+    ) -> Result<Score, Interruption> {
         let evaluation = zetesis_objective::evaluate(
             program,
-            &model,
+            model,
             zetesis_objective::Limits {
                 max_work: options.max_objective_work.saturating_sub(self.work),
                 max_bindings: options.max_objective_bindings,
@@ -95,7 +97,17 @@ impl Incumbents {
             best.scored_models = self.scored;
             best.work = self.work;
         }
-        let score = evaluation.score();
+        Ok(evaluation.into_score())
+    }
+
+    pub(crate) fn consider(
+        &mut self,
+        program: &ObjectiveProgram,
+        model: Model,
+        options: &SolveConfig,
+        control: &Control,
+    ) -> Result<bool, Interruption> {
+        let score = self.evaluate(program, &model, options, control)?;
         let order = self
             .best
             .as_ref()
@@ -108,7 +120,7 @@ impl Incumbents {
             self.atoms = 0;
             self.bytes = 0;
             self.best = Some(Optimization {
-                score: score.clone(),
+                score,
                 tied_models: 0,
                 scored_models: self.scored,
                 work: self.work,
@@ -188,7 +200,7 @@ impl Incumbents {
     }
 }
 
-fn payload_bytes(model: &Model) -> Result<usize, OptimizationStop> {
+pub(crate) fn payload_bytes(model: &Model) -> Result<usize, OptimizationStop> {
     // Canonical payload accounting: u64 model/atom lengths, one predicate-sign
     // tag per atom, predicate UTF-8,
     // and tagged i32 or length-prefixed scalar values; not allocator overhead.

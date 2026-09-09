@@ -7,6 +7,7 @@ need to answer. Parsing command-line arguments is not required to use the solver
 | --- | --- |
 | Original ASP source | `zetesis_themelios::admit`, `admit_extended`, `admit_formula`, and their bundle APIs |
 | Ordinary solve over an admitted owner | `zetesis_cli::{PreparedInput, Session, SolveConfig}` |
+| All original answers, streamed or completely collected | `Session::enumerate`, `WorldView::collect`, checked `AnswerSet` |
 | Finite relational templates and atoms | `zetesis_core::{Program, Template, Atom, Seed}` |
 | Explicit complete relational graph | `zetesis_core::GroundProgram::compile` |
 | Normal reduct membership | `zetesis_cpu::{check, check_static, BatchOracle}` |

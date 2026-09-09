@@ -2,12 +2,24 @@
 
 use crate::{Completion, Interruption, Optimization};
 
+/// The answer family requested by a semantic session, independently of whether
+/// it was completely searched or delivered.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AnswerSelection {
+    /// All full answer sets of the original program, regardless of objectives.
+    All,
+    /// Objective-selected answers. Interrupted incumbents need not be optimal;
+    /// even a proved optimum need not have every tie retained or yielded.
+    Optimal,
+}
+
 /// Immutable semantic accounting when a session stops or finishes its search.
 /// A verified model need not have been scored, retained, yielded or published.
 /// Neither missing coverage nor a zero publication count establishes UNSAT.
 #[derive(Clone, Debug)]
 pub struct SemanticOutcome {
     pub(crate) subject: Option<crate::Subject>,
+    pub(crate) selection: Option<AnswerSelection>,
     pub(crate) verified: u64,
     pub(crate) scored: u64,
     pub(crate) retained: usize,
@@ -23,6 +35,13 @@ pub struct SemanticOutcome {
 }
 
 impl SemanticOutcome {
+    /// Requested answer family. Absent only when a driver stopped before a
+    /// session established its selection. This is not a completeness claim.
+    #[must_use]
+    pub const fn selection(&self) -> Option<AnswerSelection> {
+        self.selection
+    }
+
     /// Original immutable semantic subject, before any candidate restrictions.
     /// Absent only for a control stop before source admission established an input.
     #[must_use]
@@ -77,7 +96,7 @@ impl SemanticOutcome {
     }
 
     /// Incumbent models retained when search stopped, before any delivery.
-    /// Ordinary enumeration without objectives does not retain incumbents.
+    /// Unrestricted enumeration does not retain incumbents, even with objectives.
     #[must_use]
     pub const fn retained_models(&self) -> usize {
         self.retained
@@ -105,7 +124,9 @@ impl SemanticOutcome {
     /// Complete relevant search established the retained incumbent's optimum.
     #[must_use]
     pub const fn optimum_proved(&self) -> bool {
-        matches!(self.completion, Some(Completion::Exhausted)) && self.optimization.is_some()
+        matches!(self.selection, Some(AnswerSelection::Optimal))
+            && matches!(self.completion, Some(Completion::Exhausted))
+            && self.optimization.is_some()
     }
 
     /// Complete search found no stable model, independently of output delivery.

@@ -10,8 +10,8 @@ representations. A representation name does not confer a semantic property.
 | Finite propositional theory | `zetesis_ferraris::Theory` | `Ferraris.Theory` |
 | Interpretation | `zetesis_core::Interpretation` / `Model`; theory-bound `zetesis_ferraris::Interpretation` | `Atoms α` |
 | Candidate gate assignment | `zetesis_core::Seed` | Seed `z` and `Semantics.GateCarrier` |
-| Answer set | `SessionModel` or the appropriate privately constructed `StableInterpretation` carries completed native evidence | `Semantics.Stable` / `Ferraris.Stable` |
-| Complete world view | No dedicated current public type; requires the original subject, all full answers and complete relevant coverage | Membership plus explicit enumeration-coverage laws |
+| Answer set | Privately constructed `AnswerSet` (`SessionModel` compatibility alias), or a native `StableInterpretation` | `Semantics.Stable` / `Ferraris.Stable` |
+| Complete world view | `WorldView` retains the original subject and all full answers after unrestricted exhaustion | Membership, original-family coverage and complete-capture laws |
 | Positive consequence closure | CPU normal oracle result; static or lazy representation | `Semantics.Gamma`, `Zetesis.Least` |
 | Frozen reduct | `zetesis_ferraris::FrozenReduct` or candidate-gated normal consequences | `Ferraris.ReductTheory` / `Semantics.ReductModel` |
 | Display | Source observations selecting shown atoms and terms | Distinct from full interpretation |

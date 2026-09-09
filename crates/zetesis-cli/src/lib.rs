@@ -52,7 +52,7 @@ mod shared_execution;
 pub use options::{Backend, Command, Grounder, Options, Oracle, SourceBatching};
 pub use presentation::ColorMode;
 pub use process::entry;
-pub use semantic_outcome::SemanticOutcome;
+pub use semantic_outcome::{AnswerSelection, SemanticOutcome};
 pub use shared_execution::SharedExecutionStatistics;
 pub use solve_config::SolveConfig;
 
@@ -69,4 +69,7 @@ mod finalized;
 pub use finalized::{Publication, SolveFailure, SolveReport};
 
 mod session;
-pub use session::{PreparedInput, PreparedProfile, Session, SessionModel, Subject};
+pub use session::{AnswerSet, PreparedInput, PreparedProfile, Session, SessionModel, Subject};
+
+mod world_view;
+pub use world_view::{WorldView, WorldViewError, WorldViewFailure, WorldViewLimits};

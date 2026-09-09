@@ -21,8 +21,8 @@ use crate::formula_execution::Execution;
 use crate::formula_session::FormulaSession;
 use crate::phase_timing::{Recorder, SolvePhase};
 use crate::{
-    Completion, Grounder, Interruption, Oracle, PhaseTimings, RunError, SemanticOutcome,
-    SolveConfig, SolveFailure,
+    AnswerSelection, Completion, Grounder, Interruption, Oracle, PhaseTimings, RunError,
+    SemanticOutcome, SolveConfig, SolveFailure,
 };
 
 /// The complete semantic representation supplied to an ordinary session.
@@ -120,11 +120,17 @@ impl<'a> PreparedInput<'a> {
     pub const fn metadata(self) -> Option<&'a SourceMetadata> {
         self.metadata
     }
-    fn subject(self) -> Subject {
+    pub(crate) fn subject(self) -> Subject {
         match self.input {
             Prepared::Relational(program) => Subject::Program(program.clone()),
             Prepared::Formula(input) => Subject::Theory(input.theory.clone()),
             Prepared::Ground(ground) => Subject::Program(ground.program().clone()),
+        }
+    }
+    fn selection(self, requested: AnswerSelection) -> AnswerSelection {
+        match self.input {
+            Prepared::Formula(input) if input.objectives.is_present() => requested,
+            _ => AnswerSelection::All,
         }
     }
     fn configure(self, mut config: SolveConfig) -> Result<SolveConfig, RunError> {
@@ -167,17 +173,39 @@ pub enum Subject {
     /// Original indexed finite formula theory, before candidate restrictions.
     Theory(Theory),
 }
+impl Subject {
+    /// Whether both handles retain the same original immutable semantic instance.
+    /// Structural equality of independently admitted programs is insufficient.
+    #[must_use]
+    pub fn same_instance(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Program(left), Self::Program(right)) => left.same_instance(right),
+            (Self::Theory(left), Self::Theory(right)) => left.same_instance(right),
+            _ => false,
+        }
+    }
+}
 
 /// A full stable interpretation produced by the session's membership engine.
 /// Private construction preserves its subject association after detachment.
 /// This is semantic evidence, independently of display selection or publication.
+/// It records completed native membership, not a Lean proof or enumeration
+/// coverage. Cloning shares the subject and clones the full interpretation.
+///
+/// ```compile_fail
+/// use zetesis_cli::{AnswerSet, Subject};
+/// use zetesis_core::Model;
+/// fn forge(subject: Subject, interpretation: Model) -> AnswerSet {
+///     AnswerSet { subject, interpretation, score: None }
+/// }
+/// ```
 #[derive(Clone, Debug)]
-pub struct SessionModel {
+pub struct AnswerSet {
     subject: Subject,
     interpretation: Model,
     score: Option<Score>,
 }
-impl SessionModel {
+impl AnswerSet {
     /// Original immutable subject used by the membership engine.
     #[must_use]
     pub const fn subject(&self) -> &Subject {
@@ -188,7 +216,8 @@ impl SessionModel {
     pub const fn interpretation(&self) -> &Model {
         &self.interpretation
     }
-    /// Completely evaluated incumbent cost, if this solve has an objective.
+    /// Completely evaluated cost, if this solve has an objective. Absence is
+    /// distinct from an active objective with zero cost or no priority slots.
     /// Optimality is determined by the session outcome, never by a score alone.
     #[must_use]
     pub const fn score(&self) -> Option<&Score> {
@@ -201,6 +230,9 @@ impl SessionModel {
     }
 }
 
+/// Compatibility name for the checked answer produced by an ordinary session.
+pub type SessionModel = AnswerSet;
+
 enum State<'a> {
     Closure(Box<ClosureSession<'a>>),
     Formula(Box<FormulaSession<'a, Execution>>),
@@ -208,8 +240,9 @@ enum State<'a> {
 }
 
 /// A pull-based ordinary solve, independent of argument parsing and writers.
-/// `models` limits yielded models, or retained objective ties. Objective search
-/// finishes before ties are yielded. Search budgets persist across every pull.
+/// [`Self::new`] selects objective ties after search; [`Self::enumerate`] streams
+/// the unrestricted original family. `models` limits yielded answers, or
+/// retained objective ties in a selected solve. Budgets persist across pulls.
 /// Stopping pulls early establishes no additional coverage. The caller decides
 /// how to store or publish each full interpretation; no delivery is inferred.
 ///
@@ -253,8 +286,38 @@ impl<'a> Session<'a> {
         config: SolveConfig,
         control: Control,
     ) -> Result<Self, SolveFailure> {
+        Self::with_selection(input, config, control, AnswerSelection::Optimal)
+    }
+    /// Stream the original program's answer sets, including nonoptimal answers.
+    ///
+    /// Objective scores are evaluated but never restrict candidates or select
+    /// incumbents. Every yielded answer carries completed membership and its
+    /// full interpretation. `config.models` remains a yield limit; zero requests
+    /// exhaustive enumeration. Formula search work/decisions and objective work
+    /// are cumulative. Per-model objective binding/key ceilings and per-candidate
+    /// closure work retain [`SolveConfig`]'s resource contracts. Storage is the
+    /// engine's bounded batches and one yielded
+    /// answer, with no incumbent retention. The caller controls any collection.
+    ///
+    /// # Errors
+    /// Returns the setup failures of [`Self::new`]. During iteration, scoring or
+    /// search stops preserve verified accounting without claiming completeness;
+    /// an answer whose scoring stopped is not yielded as a fully scored answer.
+    pub fn enumerate(
+        input: PreparedInput<'a>,
+        config: SolveConfig,
+        control: Control,
+    ) -> Result<Self, SolveFailure> {
+        Self::with_selection(input, config, control, AnswerSelection::All)
+    }
+    fn with_selection(
+        input: PreparedInput<'a>,
+        config: SolveConfig,
+        control: Control,
+        selection: AnswerSelection,
+    ) -> Result<Self, SolveFailure> {
         let phases = Recorder::new(config.stats);
-        let result = Self::initialize(input, config, &control, &phases);
+        let result = Self::initialize(input, config, &control, &phases, input.selection(selection));
         match result {
             Ok((state, config)) => Ok(Self {
                 state,
@@ -275,6 +338,7 @@ impl<'a> Session<'a> {
         config: SolveConfig,
         control: &Control,
         phases: &Recorder,
+        selection: AnswerSelection,
     ) -> Result<(State<'a>, SolveConfig), RunError> {
         let config = input.configure(config)?;
         let _solving = phases.stage(crate::SolveStage::Solving);
@@ -286,6 +350,7 @@ impl<'a> Session<'a> {
             return Ok((
                 State::Stopped(Box::new(SemanticOutcome {
                     subject: Some(input.subject()),
+                    selection: Some(selection),
                     verified: 0,
                     scored: 0,
                     retained: 0,
@@ -324,13 +389,14 @@ impl<'a> Session<'a> {
                 let execution = phases.measure(SolvePhase::ExecutionSetup, || {
                     Execution::new(&config, &mut diagnostics)
                 })?;
-                State::Formula(Box::new(FormulaSession::new(
+                State::Formula(Box::new(FormulaSession::with_selection(
                     input,
                     execution,
                     &config,
                     &mut diagnostics,
                     control,
                     phases,
+                    selection,
                 )))
             }
         };
@@ -366,7 +432,7 @@ impl<'a> Session<'a> {
     }
 }
 impl Iterator for Session<'_> {
-    type Item = Result<SessionModel, SolveFailure>;
+    type Item = Result<AnswerSet, SolveFailure>;
     fn next(&mut self) -> Option<Self::Item> {
         let solving = self.phases.stage(crate::SolveStage::Solving);
         let mut diagnostics = Diagnostics::new(io::sink(), crate::ColorMode::Never);
@@ -381,7 +447,7 @@ impl Iterator for Session<'_> {
         };
         drop(solving);
         next.map(|result| match result {
-            Ok((interpretation, score)) => Ok(SessionModel {
+            Ok((interpretation, score)) => Ok(AnswerSet {
                 subject: self.subject.clone(),
                 interpretation,
                 score,

@@ -159,8 +159,14 @@ A retained incumbent remains unproved when search coverage is incomplete.
 
 `PreparedInput` borrows admitted relational, formula, bundle or ground input.
 `Session::new` combines it with typed `SolveConfig` and `Control`.
-The iterator yields `Result<SessionModel, SolveFailure>`; each successful model
+The iterator yields `Result<AnswerSet, SolveFailure>`; each successful model
 retains its exact subject, full interpretation and optional score.
+`SessionModel` remains a compatibility alias. `Session::enumerate` streams the
+original unrestricted family even when objectives are present; `Session::new`
+retains ordinary incumbent selection. `WorldView::collect` explicitly collects
+all original answers within independent retention ceilings and refuses partial
+coverage. An empty complete world view establishes inconsistency; one empty
+answer instead establishes a consistent singleton family.
 An accepted model or scored incumbent is not by itself evidence of exhaustive
 coverage or a proved optimum. Read the terminal `SemanticOutcome` separately.
 

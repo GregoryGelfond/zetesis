@@ -99,6 +99,12 @@ impl Evaluation {
     pub const fn score(&self) -> &Score {
         &self.score
     }
+    /// Transfer the completed score without cloning its priority vector.
+    /// Contribution and work evidence are discarded by this explicit conversion.
+    #[must_use]
+    pub fn into_score(self) -> Score {
+        self.score
+    }
     /// Distinct active keys in ascending (priority, weight, tuple) order.
     /// Reusing this evaluator on a possible-positive relation discovers keys in
     /// that relation only; the result is not a stable-model or optimization bound.

@@ -9,6 +9,7 @@ search has completed, and what an external consumer received.
 | Evaluated score | Cost of that verified model | A globally best cost |
 | Exhausted search | Relevant candidate coverage completed | Successful external publication |
 | Proved optimum | Complete relevant search establishes the incumbent | Every optimal tie was delivered |
+| `WorldView` | All full answers of the original subject were captured after unrestricted exhaustion | Successful external publication |
 | Published record | The sink accepted one whole record | Flush, durability or complete search |
 
 `SemanticOutcome::unsatisfiable()` requires exhausted coverage and zero verified
@@ -16,10 +17,22 @@ models. A zero display count, an empty consumer vector, or `completion() == None
 cannot establish inconsistency. A requested model limit and an interrupted
 search are distinct completion states.
 
+`SemanticOutcome::selection()` identifies the family requested by the session.
+`All` ranges over the original program; `Optimal` permits sound exclusion of
+worse candidates. `Completion::Exhausted` therefore does not by itself identify
+the unrestricted family, and an optimum proof does not prove that a consumer
+retained every tie. `WorldView` owns both unrestricted enumeration and complete
+capture; callers cannot attach an arbitrary vector to this evidence.
+
 Objective presence is also semantic data. An absent objective is not an active
 objective whose cost happens to be zero. Preserve the priority structure and
 optional score in typed results and comparisons; flattening both cases to an
 empty or zero vector can conceal a disagreement.
+
+Unrestricted enumeration evaluates scores without retaining incumbents. Its
+`scored_models()` can be positive while `incumbent()` is absent and
+`retained_models()` is zero. Those fields describe objective-search retention,
+not the number of answers in a `WorldView` or a consumer's own collection.
 
 ## Resource contracts
 

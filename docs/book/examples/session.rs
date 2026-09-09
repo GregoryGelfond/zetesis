@@ -2,7 +2,9 @@
 
 // ANCHOR: example
 use std::collections::BTreeSet;
-use zetesis_cli::{Backend, Completion, PreparedInput, Session, SolveConfig};
+use zetesis_cli::{
+    Backend, Completion, PreparedInput, Session, SolveConfig, WorldView, WorldViewLimits,
+};
 use zetesis_core::{Atom, Predicate};
 use zetesis_cpu::Control;
 use zetesis_themelios::{AdmissionOptions, admit};
@@ -17,7 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         models: 0,
         ..SolveConfig::default()
     };
-    let mut session = Session::new(
+    let mut session = Session::enumerate(
         PreparedInput::admitted(&admitted),
         config,
         Control::default(),
@@ -39,6 +41,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(outcome.verified_models(), 2);
     assert_eq!(outcome.completion(), Some(Completion::Exhausted));
     assert!(!outcome.unsatisfiable());
+
+    // A fresh bounded collection owns the complete-family claim. A Vec gathered
+    // from an arbitrary stream cannot acquire it from a separate outcome.
+    let world_view = WorldView::collect(
+        PreparedInput::admitted(&admitted),
+        config,
+        WorldViewLimits {
+            max_answer_sets: 2,
+            ..WorldViewLimits::default()
+        },
+        Control::default(),
+    )?;
+    assert_eq!(world_view.len(), 2);
+    assert!(!world_view.is_empty());
     Ok(())
 }
 // ANCHOR_END: example

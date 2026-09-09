@@ -161,6 +161,7 @@ impl<'a> ClosureSession<'a> {
     pub(crate) fn outcome(&self) -> SemanticOutcome {
         SemanticOutcome {
             subject: Some(crate::Subject::Program(self.program.clone())),
+            selection: Some(crate::AnswerSelection::All),
             verified: self.verified,
             scored: 0,
             retained: 0,

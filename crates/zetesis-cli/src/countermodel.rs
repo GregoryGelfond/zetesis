@@ -180,6 +180,7 @@ pub(crate) fn check_control(
             progress.report.interruption = Some(Interruption::Countermodel(error.into()));
             progress.apply(crate::SemanticOutcome {
                 subject,
+                selection: None,
                 verified: 0,
                 scored: 0,
                 retained: 0,
