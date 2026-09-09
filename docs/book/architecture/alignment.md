@@ -52,8 +52,8 @@ different types of value.
 | Derive positive consequences | Test enabled bodies, union their heads, repeat until closed | [`check_static`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/static_oracle.rs); [lazy batches](../rust/parallel.md) |
 | Test formula satisfaction | Evaluate an acyclic Boolean graph; require every asserted root | [`models`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/oracle.rs) |
 | Construct and reuse a formula reduct | Freeze candidate truth at every graph node; mask candidate-false nodes during later queries | [`FrozenReduct`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/reduct.rs) |
-| Establish subset minimality | Search for a proper-subset reduct model; propagate Boolean domains and exactly complete unresolved queries | [`zetesis-sat`](../../../crates/zetesis-sat/README.md); [`GpuFormulaOracle`](../../../crates/zetesis-wgpu/README.md) |
-| Evaluate an aggregate | Coalesce complete tuple identities, combine eligibility, then reduce count/sum/extrema | [Native aggregate operations](../../../crates/zetesis-wgpu/README.md#native-numeric-aggregates) |
+| Establish subset minimality | Search for a proper-subset reduct model; propagate Boolean domains and exactly complete unresolved queries | [`zetesis-sat`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/README.md); [`GpuFormulaOracle`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md) |
+| Evaluate an aggregate | Coalesce complete tuple identities, combine eligibility, then reduce count/sum/extrema | [Native aggregate operations](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md#native-numeric-aggregates) |
 | Check several proposals | Share program data while keeping each interpretation, reduct and verdict separate | [`BatchOracle`](../rust/parallel.md); [commit boundaries](execution.md#immutable-rounds-and-commit-boundaries) |
 
 These are capability mappings. Ordinary relational solving supports lazy source

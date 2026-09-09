@@ -57,7 +57,7 @@ than interpreting every successful command as a semantic pass.
 ## Measure the relevant work
 
 Use `zetesis-perf` for matched end-to-end comparisons and the
-[comparison guide](../../../scripts/README-comparison.md) for its schedules,
+[comparison guide](https://github.com/GregoryGelfond/zetesis/blob/main/scripts/README-comparison.md) for its schedules,
 capture bounds and report formats. Direct wall time includes process startup,
 source loading, grounding, solving and captured output. The CPU baseline keeps
 instrumented phase observations in separate samples. The explicit profile matrix
@@ -79,7 +79,7 @@ searched fewer candidates, omitted optimum ties or stopped early.
 
 ## Run the independent checks
 
-The [contributing guide](../../../CONTRIBUTING.md#verification-and-review) defines
+The [contributing guide](https://github.com/GregoryGelfond/zetesis/blob/main/CONTRIBUTING.md#verification-and-review) defines
 the maintained checks. From the repository root:
 
 ```sh

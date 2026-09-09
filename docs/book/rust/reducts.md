@@ -77,8 +77,9 @@ membership check's proper-subset queries. Cancellation and deadlines use
 `zetesis_cpu::Control`.
 
 Every operation returns a typed stop on exceeded limits or invalid identity.
-The [Rust API reference](../../doc/zetesis_ferraris/index.html) documents the
-individual admission and query contracts. An error is not the Boolean value
+The [local Rust API reference](../../doc/zetesis_ferraris/index.html), generated
+and served as described in [Building the documentation](../building.md),
+documents the individual admission and query contracts. An error is not the Boolean value
 `false`. In particular, exhausting the subset
 budget cannot establish an answer set. The source compiler's finite coverage
 and aggregate translations remain separate from this already-admitted DAG API.
