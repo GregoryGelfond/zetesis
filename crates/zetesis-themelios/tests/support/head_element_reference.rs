@@ -1,4 +1,9 @@
 //! Source-level selection truth, independent of the lowered aggregate DAG.
+//!
+//! The fixed rules `{g;o}.a:-g.c:-g.` give each generated atom possible producer
+//! support without permitting either head when g is false. Expected candidate
+//! truth includes the admitted theory's necessary-support guards; those guards
+//! and the activated numeric bound are frozen candidate constraints.
 
 #[path = "finite_bindings.rs"]
 mod formula;
@@ -160,8 +165,8 @@ impl Selection {
             2 => Some(i64::try_from(tuples.len()).unwrap()),
             3 | 4 => Some(tuples.iter().map(|row| i64::from(row.0)).sum()),
             5 => {
-                // Atom choices coalesce by atom. Each Boolean source occurrence
-                // owns a distinct implicit tuple, even if its text repeats.
+                // The declared extension convention coalesces atom choices by
+                // atom, while Boolean source occurrences have distinct keys.
                 let identities: BTreeSet<_> = self
                     .rows
                     .iter()
@@ -207,6 +212,8 @@ impl Selection {
                 || !eligible(row.3, outer, Some(inner))
                 || inner.head(row.2)
         });
+        // The candidate must satisfy every original constraint. Only genuine
+        // atom permissions and the fixed seed rules can retain atoms in J.
         self.original(outer)
             && (!outer.0[2] || inner.0[2])
             && (!outer.0[3] || inner.0[3])
