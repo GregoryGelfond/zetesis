@@ -18,6 +18,7 @@ import Zetesis.AggregateAssignment
 import Zetesis.DagSharing
 import Zetesis.CandidateCursor
 import Zetesis.ExtremumCandidates
+import Zetesis.ExtremumHeadActivity
 import Zetesis.RuleFactorization
 import Zetesis.ObjectiveBounds
 import Zetesis.IndexedCandidates
