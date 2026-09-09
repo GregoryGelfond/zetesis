@@ -22,33 +22,9 @@ pub(super) fn integers(text: &str, limits: Limits) -> Result<Vec<i64>, Error> {
 pub(super) fn split_atoms(text: &str, comma_separated: bool) -> Result<Model, Error> {
     let mut result = Model::new();
     let mut atom = String::new();
-    let mut depth = 0usize;
-    let mut quoted = false;
-    let mut escaped = false;
+    let mut frame = Frame::default();
     for character in text.chars() {
-        if quoted {
-            atom.push(character);
-            if escaped {
-                escaped = false;
-            } else if character == '\\' {
-                escaped = true;
-            } else if character == '"' {
-                quoted = false;
-            }
-        } else if character == '"' {
-            quoted = true;
-            atom.push(character);
-        } else if character == '(' {
-            depth = depth
-                .checked_add(1)
-                .ok_or_else(|| invalid(Issue::CountOverflow, "atom nesting overflow"))?;
-            atom.push(character);
-        } else if character == ')' {
-            depth = depth
-                .checked_sub(1)
-                .ok_or_else(|| invalid(Issue::MalformedField, "unmatched atom parenthesis"))?;
-            atom.push(character);
-        } else if depth == 0 && (character.is_whitespace() || (comma_separated && character == ','))
+        if frame.complete() && (character.is_whitespace() || (comma_separated && character == ','))
         {
             if !atom.is_empty() {
                 result.push(std::mem::take(&mut atom));
@@ -56,8 +32,9 @@ pub(super) fn split_atoms(text: &str, comma_separated: bool) -> Result<Model, Er
         } else {
             atom.push(character);
         }
+        frame.advance(character)?;
     }
-    if quoted || depth != 0 {
+    if !frame.complete() {
         return Err(invalid(
             Issue::MalformedField,
             "unterminated quoted atom or tuple",
@@ -68,4 +45,70 @@ pub(super) fn split_atoms(text: &str, comma_separated: bool) -> Result<Model, Er
     }
     result.sort_unstable();
     Ok(result)
+}
+
+/// Read one bounded display frame before interpreting later lines as metadata.
+/// Every character advances the balance once, then the completed frame is
+/// tokenized once. Multiline quoted symbols therefore remain linear in bytes.
+pub(super) fn model(lines: &mut std::str::Split<'_, char>) -> Result<Model, Error> {
+    let mut text = String::new();
+    let mut frame = Frame::default();
+    loop {
+        let line = lines
+            .next()
+            .ok_or_else(|| invalid(Issue::MissingField, "missing or unterminated native model"))?;
+        if !text.is_empty() {
+            text.push('\n');
+            frame.advance('\n')?;
+        }
+        for character in line.chars() {
+            frame.advance(character)?;
+        }
+        text.push_str(line);
+        if frame.complete() {
+            return split_atoms(&text, false);
+        }
+    }
+}
+
+#[derive(Default)]
+struct Frame {
+    depth: usize,
+    quoted: bool,
+    escaped: bool,
+}
+
+impl Frame {
+    const fn complete(&self) -> bool {
+        !self.quoted && self.depth == 0
+    }
+
+    fn advance(&mut self, character: char) -> Result<(), Error> {
+        if self.quoted {
+            if self.escaped {
+                self.escaped = false;
+            } else if character == '\\' {
+                self.escaped = true;
+            } else if character == '"' {
+                self.quoted = false;
+            }
+        } else {
+            match character {
+                '"' => self.quoted = true,
+                '(' => {
+                    self.depth = self
+                        .depth
+                        .checked_add(1)
+                        .ok_or_else(|| invalid(Issue::CountOverflow, "atom nesting overflow"))?;
+                }
+                ')' => {
+                    self.depth = self.depth.checked_sub(1).ok_or_else(|| {
+                        invalid(Issue::MalformedField, "unmatched atom parenthesis")
+                    })?;
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
 }
