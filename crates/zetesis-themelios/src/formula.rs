@@ -556,11 +556,14 @@ pub(crate) struct Compiled {
 ///
 /// Eligibility remains a formula even for recursive conditions. Duplicate
 /// grounded head atoms combine permission by disjunction. Ordinary choices
-/// count atoms; function heads measure distinct complete tuples selected by any
-/// eligible head occurrence. Count, signed numeric sum and nonnegative numeric
-/// sum+ permit either tuple/atom alias direction. Numeric-valued min/max heads
-/// require a complete per-group tuple/atom bijection. Head bounds are constraints,
-/// so they do not invent support.
+/// count distinct signed atoms and original Boolean source occurrences; local
+/// eligibility witnesses for each key combine by disjunction. Function heads
+/// measure distinct complete tuples selected by any eligible signed operand.
+/// All five measures permit either tuple/atom alias direction. Only unsigned
+/// atoms supply choice permission or producer support; `not` and `not not`
+/// retain their frozen reduct truth. Booleans introduce no atom or support.
+/// Atom-only count certificates require wholly unsigned atomic groups with
+/// a tuple/atom bijection. Head bounds are constraints and never invent support.
 /// Numeric measure is separate from permission: zero-weight heads remain
 /// selectable. Missing or nonnumeric weights and negative sum+ head weights
 /// have an explicit zetesis profile refusal, including closed weights in

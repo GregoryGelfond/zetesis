@@ -16,8 +16,8 @@ use crate::diagnostic::unsupported;
 use crate::expansion::Budget;
 use crate::formula::ceiling;
 use crate::formula_ir::{
-    ChoiceIr, Compiler, Element, HeadElementKey, HeadMeasure, HeadOperand, LiteralIr, Variables,
-    value_bytes,
+    ChoiceIr, Compiler, Element, HeadElementKey, HeadLiteral, HeadMeasure, HeadOperand, LiteralIr,
+    Variables, value_bytes,
 };
 use crate::formula_support::{Counters, Join, Support};
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature};
@@ -63,7 +63,7 @@ impl Compiler<'_> {
                 }
                 Some(Term::Variable(_)) => {}
             }
-            let head = self.choice_head(element.literal(), &mut local, &mut condition)?;
+            let head = self.head_literal(element.literal(), &mut local, &mut condition)?;
             self.bindings(&mut condition, &mut local)?;
             self.variable_limit(&local)?;
             local.safety(self.location)?;
@@ -96,7 +96,7 @@ impl Compiler<'_> {
 /// A present map certifies the stronger tuple/atom bijection used by optional
 /// count planning. Nonbijective function groups return no certificate; an
 /// ordinary atom choice has implicit atom keys and returns a present empty map.
-/// Boolean elements never certify the stronger atom-only planning contract.
+/// Signed or Boolean elements never certify the stronger unsigned atom-only contract.
 pub(super) fn validate_group(
     group: &ChoiceIr,
     assignment: &[Value],
@@ -126,12 +126,14 @@ pub(super) fn validate_group(
         }
         return Ok(elements
             .iter()
-            .all(|element| element.head.atom().is_some())
+            .all(|element| element.head.positive_atom().is_some())
             .then(BTreeMap::new));
     }
-    let mut tuples = BTreeMap::<Vec<Value>, HeadOperand<Atom>>::new();
+    let mut tuples = BTreeMap::<Vec<Value>, HeadLiteral<Atom>>::new();
     let mut atoms = BTreeMap::<Atom, Vec<Value>>::new();
-    let mut bijective = elements.iter().all(|element| element.head.atom().is_some());
+    let mut bijective = elements
+        .iter()
+        .all(|element| element.head.positive_atom().is_some());
     for element in elements {
         let terms = element.key.tuple().expect("uniform tuple group checked");
         let mut local = Join::new(
@@ -176,7 +178,7 @@ pub(super) fn validate_group(
                 )?;
                 tuples.insert(tuple.clone(), head.clone());
             }
-            if let HeadOperand::Atom(atom) = head {
+            if let HeadOperand::Atom(atom) = head.operand {
                 atoms.entry(atom).or_insert(tuple);
             }
         }
@@ -190,14 +192,19 @@ pub(super) fn validate_group(
 /// Resolve the semantic operand while charging copied atom payload. Constants
 /// have no atom identity, and their tuple still passes the complete validation.
 fn head_identity(
-    head: &HeadOperand,
+    head: &HeadLiteral,
     binding: &[Value],
     budget: &mut Budget,
     location: Location,
-) -> Result<HeadOperand<Atom>, FormulaFailure> {
-    let atom = match head {
+) -> Result<HeadLiteral<Atom>, FormulaFailure> {
+    let atom = match &head.operand {
         HeadOperand::Atom(atom) => atom,
-        HeadOperand::Boolean(value) => return Ok(HeadOperand::Boolean(*value)),
+        HeadOperand::Boolean(value) => {
+            return Ok(HeadLiteral {
+                negation: head.negation,
+                operand: HeadOperand::Boolean(*value),
+            });
+        }
     };
     let atom_bytes = atom.predicate().name().len() as u128
         + atom
@@ -213,10 +220,13 @@ fn head_identity(
         atom_bytes.saturating_mul(2),
         location,
     )?;
-    Ok(HeadOperand::Atom(
-        atom.instantiate(binding)
-            .expect("safe aggregate head assigned"),
-    ))
+    Ok(HeadLiteral {
+        negation: head.negation,
+        operand: HeadOperand::Atom(
+            atom.instantiate(binding)
+                .expect("safe aggregate head assigned"),
+        ),
+    })
 }
 
 /// Numeric contribution is independent of permission to select the head.
@@ -246,12 +256,13 @@ pub(super) fn weight(
 #[cfg(test)]
 mod tests {
     use super::{
-        Budget, ChoiceIr, Counters, Element, FormulaLimits, HeadElementKey, HeadMeasure,
-        HeadOperand, Support, validate_group,
+        Budget, ChoiceIr, Counters, Element, FormulaLimits, HeadElementKey, HeadLiteral,
+        HeadMeasure, HeadOperand, Support, validate_group,
     };
     use crate::{AdmissionOptions, ExpansionLimits, FormulaFailure, ProfileFeature};
     use themelios_base::source::{Source, SourceId};
     use themelios_base::span::Location;
+    use themelios_program::program::DefaultNegation;
     use zetesis_core::{AtomPattern, Predicate, Term, Value};
 
     fn element(keyed: bool) -> Element {
@@ -261,9 +272,12 @@ mod tests {
             } else {
                 HeadElementKey::Atom
             },
-            head: HeadOperand::Atom(
-                AtomPattern::new(Predicate::new("p", 0).unwrap(), vec![]).unwrap(),
-            ),
+            head: HeadLiteral {
+                negation: DefaultNegation::None,
+                operand: HeadOperand::Atom(
+                    AtomPattern::new(Predicate::new("p", 0).unwrap(), vec![]).unwrap(),
+                ),
+            },
             condition: vec![],
             variables: 0,
         }
@@ -370,7 +384,7 @@ mod tests {
             HeadMeasure::Max,
         ] {
             let mut same_tuple = element(true);
-            same_tuple.head = HeadOperand::Atom(
+            same_tuple.head.operand = HeadOperand::Atom(
                 AtomPattern::new(Predicate::new("q", 0).unwrap(), vec![]).unwrap(),
             );
             assert!(!validate_measure(measure, vec![element(true), same_tuple]).unwrap());
@@ -384,7 +398,7 @@ mod tests {
     fn boolean_elements_never_certify_atom_planning() {
         for value in [false, true] {
             let mut ordinary = element(false);
-            ordinary.head = HeadOperand::Boolean(value);
+            ordinary.head.operand = HeadOperand::Boolean(value);
             assert!(!validate_measure(HeadMeasure::Count, vec![ordinary]).unwrap());
             for measure in [
                 HeadMeasure::Count,
@@ -394,8 +408,19 @@ mod tests {
                 HeadMeasure::Max,
             ] {
                 let mut keyed = element(true);
-                keyed.head = HeadOperand::Boolean(value);
+                keyed.head.operand = HeadOperand::Boolean(value);
                 assert!(!validate_measure(measure, vec![keyed]).unwrap());
+            }
+        }
+    }
+    #[test]
+    fn signed_elements_never_certify_atom_planning() {
+        for negation in [DefaultNegation::Not, DefaultNegation::NotNot] {
+            for keyed in [false, true] {
+                let mut signed = element(keyed);
+                signed.head.negation = negation;
+                assert!(!validate_measure(HeadMeasure::Count, vec![signed]).unwrap());
+                assert!(validate_measure(HeadMeasure::Count, vec![element(keyed)]).unwrap());
             }
         }
     }

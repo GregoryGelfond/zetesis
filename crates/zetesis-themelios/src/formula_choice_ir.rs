@@ -1,17 +1,14 @@
-//! Evaluated arguments and finite intervals generate local choice alternatives.
+//! Original Boolean source occurrences become ordinary choice contribution keys.
 //!
-//! Each expression or interval receives an independent local slot; the shared
-//! dependency scheduler binds its inputs from outer and element conditions.
-//! The streamed cursor retains one choice group without allocating an interval
-//! or Cartesian product. Original conditions, signs and origins remain intact.
+//! Finite-pool rewriting preserves the Boolean subsequence but reconstructs child
+//! provenance. The checked source catalog supplies every parsed occurrence, and
+//! this bounded reconciliation verifies complete logical equality before copying
+//! its locations. Default negation is part of that logical equality.
 
-use crate::diagnostic::unsupported;
-use crate::formula_ir::{Compiler, HeadOperand, LiteralIr, Variables};
-use crate::{ExpansionResource, FormulaFailure, ProfileFeature};
+use crate::formula_ir::Compiler;
+use crate::{ExpansionResource, FormulaFailure};
 use themelios_base::span::Location;
-use themelios_program::program::{
-    Arguments, ChoiceElement, DefaultNegation, Literal, LiteralInner,
-};
+use themelios_program::program::ChoiceElement;
 use themelios_program::provenance::{Origin, WithProvenance};
 
 impl Compiler<'_> {
@@ -59,34 +56,5 @@ impl Compiler<'_> {
             return Err(failure());
         }
         Ok(occurrences)
-    }
-
-    pub(super) fn choice_head(
-        &mut self,
-        literal: &Literal,
-        variables: &mut Variables,
-        condition: &mut Vec<LiteralIr>,
-    ) -> Result<HeadOperand, FormulaFailure> {
-        if literal.negation != DefaultNegation::None {
-            return Err(unsupported(ProfileFeature::NegatedHead, self.location).into());
-        }
-        if matches!(literal.inner, LiteralInner::True | LiteralInner::False) {
-            return Ok(HeadOperand::Boolean(matches!(
-                literal.inner,
-                LiteralInner::True
-            )));
-        }
-        let LiteralInner::Atom(atom) = &literal.inner else {
-            return self.head(literal, variables).map(HeadOperand::Atom);
-        };
-        let Arguments::Single(arguments) = &atom.get().arguments else {
-            return self.head(literal, variables).map(HeadOperand::Atom);
-        };
-        if !self.needs_head_generation(arguments)? {
-            return self.head(literal, variables).map(HeadOperand::Atom);
-        }
-        self.generated_arguments(arguments, variables)?;
-        self.generated_head(literal, variables, condition)
-            .map(HeadOperand::Atom)
     }
 }

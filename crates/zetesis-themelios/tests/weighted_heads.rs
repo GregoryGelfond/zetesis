@@ -265,9 +265,9 @@ fn weighted_heads_retain_objective_restrictions() {
 }
 
 #[test]
-fn negative_weighted_heads_keep_located_refusals() {
+fn signed_neutral_weights_supply_no_support() {
     for source in ["0#sum{0:not a}0.", "0#sum+{0:not not a}0."] {
-        profile(source, ProfileFeature::NegatedHead);
+        assert_eq!(native(&input(source)), Models::from([BTreeSet::new()]));
     }
 }
 

@@ -291,20 +291,14 @@ fn conditional_disjunction_boundaries_remain_located() {
 }
 
 #[test]
-fn unadmitted_head_profiles_have_located_refusals() {
-    for (source, expected) in [
-        // Signed singleton heads are covered positively in negative_heads.rs.
-        ("{not a}.", ProfileFeature::NegatedHead),
-        // Pooled true heads are now covered positively in finite_pools.rs.
-        (
-            "p:#true;q:#true.#minimize{1:q}.",
-            ProfileFeature::ObjectiveDisjunctionDependency,
-        ),
-    ] {
-        let error = input(source).expect_err(source);
-        assert!(profile(&error, expected), "{source}: {error}");
-        assert!(!error.diagnostics().is_empty());
-    }
+fn true_disjunction_objective_dependencies_are_refused() {
+    let source = "p:#true;q:#true.#minimize{1:q}.";
+    let error = input(source).expect_err(source);
+    assert!(profile(
+        &error,
+        ProfileFeature::ObjectiveDisjunctionDependency
+    ));
+    assert!(!error.diagnostics().is_empty());
 }
 
 #[test]

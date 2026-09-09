@@ -1,4 +1,4 @@
-//! Unsigned Boolean elements retain activity without introducing producer atoms.
+//! Boolean elements retain activity without introducing producer atoms.
 
 use std::collections::BTreeSet;
 
@@ -161,16 +161,27 @@ fn refused(source: &str, expected: ProfileFeature) {
 }
 
 #[test]
-fn signed_boolean_elements_remain_refused() {
-    for value in ["#true", "#false"] {
-        for sign in ["not", "not not"] {
-            refused(&format!("{{{sign} {value}}}."), ProfileFeature::NegatedHead);
-            for function in ["#count", "#sum", "#sum+", "#min", "#max"] {
-                refused(
-                    &format!("0{function}{{1:{sign} {value}}}1."),
-                    ProfileFeature::NegatedHead,
-                );
-            }
+fn signed_boolean_elements_have_their_logical_truth() {
+    for (literal, active) in [
+        ("not #true", false),
+        ("not #false", true),
+        ("not not #true", true),
+        ("not not #false", false),
+    ] {
+        for source in std::iter::once(format!("1{{{literal}}}1.")).chain(
+            ["#count", "#sum", "#sum+", "#min", "#max"]
+                .into_iter()
+                .map(|function| format!("1{function}{{1:{literal}}}1.")),
+        ) {
+            assert_eq!(
+                models(&source),
+                if active {
+                    expected(&[&[]])
+                } else {
+                    Models::new()
+                },
+                "{source}"
+            );
         }
     }
 }

@@ -57,7 +57,7 @@ pub(crate) struct RuleIr {
 }
 pub(crate) enum HeadIr {
     Normal(Option<AtomPattern>),
-    Disjunction(Vec<DisjunctIr>),
+    Disjunction(Vec<HeadLiteral>),
     Choice(ChoiceIr),
 }
 /// One activated group owns both its permission elements and numeric measure.
@@ -67,9 +67,10 @@ pub(crate) struct ChoiceIr {
     pub elements: Vec<Element>,
 }
 /// A semantic head occurrence; default negation never supplies positive support.
-pub(crate) struct DisjunctIr {
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) struct HeadLiteral<A = AtomPattern> {
     pub negation: DefaultNegation,
-    pub operand: HeadOperand,
+    pub operand: HeadOperand<A>,
 }
 /// The same semantic distinction precedes and follows atom instantiation.
 /// Boolean operands carry truth without introducing a semantic atom.
@@ -86,11 +87,11 @@ impl<A> HeadOperand<A> {
         }
     }
 }
-impl DisjunctIr {
-    pub(crate) fn atom(&self) -> Option<&AtomPattern> {
+impl<A> HeadLiteral<A> {
+    pub(crate) fn atom(&self) -> Option<&A> {
         self.operand.atom()
     }
-    pub(crate) fn positive_atom(&self) -> Option<&AtomPattern> {
+    pub(crate) fn positive_atom(&self) -> Option<&A> {
         if self.negation == DefaultNegation::None {
             self.atom()
         } else {
@@ -99,7 +100,7 @@ impl DisjunctIr {
     }
 }
 /// Numeric function used only for the bound constraint; every element retains
-/// its separate positive head permission, including neutral contributions.
+/// its signed activity and separate unsigned atom permission, including neutral contributions.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum HeadMeasure {
     Count,
@@ -110,11 +111,11 @@ pub(crate) enum HeadMeasure {
 }
 pub(crate) struct Element {
     pub key: HeadElementKey,
-    pub head: HeadOperand,
+    pub head: HeadLiteral,
     pub condition: Vec<LiteralIr>,
     pub variables: usize,
 }
-/// Complete tuples have set identity. Ordinary atoms use their grounded atom;
+/// Complete tuples have set identity. Ordinary atoms use their sign and grounded atom;
 /// ordinary Boolean elements instead retain every original source occurrence.
 pub(crate) enum HeadElementKey {
     Atom,
@@ -651,7 +652,7 @@ impl Compiler<'_> {
                 )?;
                 // The singleton retains its signed literal in the original
                 // implication. Neither default-negation sign supplies support.
-                Some(HeadIr::Disjunction(vec![self.disjunction_head(
+                Some(HeadIr::Disjunction(vec![self.head_literal(
                     literal,
                     &mut variables,
                     &mut body,
@@ -669,7 +670,7 @@ impl Compiler<'_> {
                     self.true_head_condition(element.get().condition())?;
                     // Generated arguments share outer bindings; each emitted
                     // rule retains its original disjunction, without shifting.
-                    heads.push(self.disjunction_head(
+                    heads.push(self.head_literal(
                         element.get().literal(),
                         &mut variables,
                         &mut body,
@@ -759,8 +760,8 @@ impl Compiler<'_> {
         for element in choice.elements() {
             let mut local = variables.clone();
             let mut condition = Vec::new();
-            let head = self.choice_head(element.get().literal(), &mut local, &mut condition)?;
-            let key = match &head {
+            let head = self.head_literal(element.get().literal(), &mut local, &mut condition)?;
+            let key = match &head.operand {
                 HeadOperand::Atom(_) => HeadElementKey::Atom,
                 HeadOperand::Boolean(_) => {
                     // The owned analysis set forgets Boolean multiplicity; it
@@ -796,19 +797,6 @@ impl Compiler<'_> {
             self.options.core_limits.max_variables_per_template as u128,
             self.location,
         )
-    }
-    pub(super) fn head(
-        &mut self,
-        literal: &Literal,
-        variables: &mut Variables,
-    ) -> Result<AtomPattern, FormulaFailure> {
-        if literal.negation != DefaultNegation::None {
-            return Err(unsupported(ProfileFeature::NegatedHead, self.location).into());
-        }
-        let LiteralInner::Atom(atom) = &literal.inner else {
-            return Err(unsupported(ProfileFeature::Head, self.location).into());
-        };
-        self.atom(atom.get(), variables, false)
     }
     pub(super) fn literal(
         &mut self,

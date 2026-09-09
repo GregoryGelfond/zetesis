@@ -326,13 +326,16 @@ fn extrema_producers_preserve_objective_refusals() {
 }
 
 #[test]
-fn negated_head_atoms_remain_refused() {
+fn signed_extrema_do_not_supply_atom_support() {
     for function in ["#min", "#max"] {
         for sign in ["not", "not not"] {
-            profile(
-                &format!("0{function}{{0:{sign} a}}0."),
-                ProfileFeature::NegatedHead,
-            );
+            let result = native(&input(&format!("0{function}{{0:{sign} a}}0.")));
+            let expected = if sign == "not" {
+                Models::from([BTreeSet::new()])
+            } else {
+                Models::new()
+            };
+            assert_eq!(result, expected, "{function} {sign}");
         }
     }
 }

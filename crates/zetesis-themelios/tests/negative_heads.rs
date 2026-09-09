@@ -431,7 +431,6 @@ fn negative_heads_do_not_bind_variables() {
 #[test]
 fn unsupported_head_profiles_remain_explicit() {
     for (source, predicted) in [
-        ("{not a}.", ProfileFeature::NegatedHead),
         ("not a:b|c.", ProfileFeature::ConditionalDisjunction),
         // Boolean siblings are qualified positively in boolean_heads.rs.
         (

@@ -15,8 +15,8 @@ use zetesis_ferraris::{
 use crate::expansion::Budget;
 use crate::formula::{Compiled, ceiling};
 use crate::formula_ir::{
-    AggregateGuard, AggregateIr, AggregateKey, ChoiceIr, HeadElementKey, HeadIr, HeadMeasure,
-    HeadOperand, LiteralIr, ObjectiveIr, Prepared, Projection, RuleIr, value_bytes,
+    AggregateGuard, AggregateIr, AggregateKey, ChoiceIr, HeadElementKey, HeadIr, HeadLiteral,
+    HeadMeasure, HeadOperand, LiteralIr, ObjectiveIr, Prepared, Projection, RuleIr, value_bytes,
 };
 use crate::formula_support::{self, Counters, Join, Support};
 use crate::grounding_observer::Event;
@@ -512,22 +512,7 @@ impl Builder<'_> {
                 let mut disjunction = 0;
                 let mut distinct = BTreeSet::new();
                 for head in heads {
-                    let (mut literal, atom) = match &head.operand {
-                        crate::formula_ir::HeadOperand::Atom(pattern) => {
-                            let atom = self.atom(pattern, assignment, rule.location)?;
-                            (atom, Some(atom))
-                        }
-                        // Builder::new fixes falsum at node 0 and verum at node 1.
-                        crate::formula_ir::HeadOperand::Boolean(value) => {
-                            (usize::from(*value), None)
-                        }
-                    };
-                    if head.negation != DefaultNegation::None {
-                        literal = self.neg(literal, rule.location)?;
-                    }
-                    if head.negation == DefaultNegation::NotNot {
-                        literal = self.neg(literal, rule.location)?;
-                    }
+                    let (literal, atom) = self.head_literal(head, assignment, rule.location)?;
                     if distinct.insert(literal) {
                         disjunction = self.or(disjunction, literal, rule.location)?;
                         // Necessary support is the original body for each head,
@@ -686,6 +671,31 @@ impl Builder<'_> {
         }
         Ok(())
     }
+    /// Lower signed truth independently of producer eligibility. A negated
+    /// operand remains an implication to falsum, so its reduct is frozen in M.
+    fn head_literal(
+        &mut self,
+        head: &HeadLiteral,
+        assignment: &[Value],
+        location: Location,
+    ) -> Result<(usize, Option<usize>), FormulaFailure> {
+        let (mut literal, atom) = match &head.operand {
+            HeadOperand::Atom(pattern) => {
+                let atom = self.atom(pattern, assignment, location)?;
+                (atom, Some(atom))
+            }
+            // The initialized builder fixes falsum at 0 and verum at 1.
+            HeadOperand::Boolean(value) => (usize::from(*value), None),
+        };
+        if head.negation != DefaultNegation::None {
+            literal = self.neg(literal, location)?;
+        }
+        if head.negation == DefaultNegation::NotNot {
+            literal = self.neg(literal, location)?;
+        }
+        Ok((literal, atom))
+    }
+
     fn head_group(
         &mut self,
         group: &ChoiceIr,
@@ -710,19 +720,17 @@ impl Builder<'_> {
                 local.next(self.limits, self.budget, &mut self.counters, rule.location)?
             {
                 let condition = self.body(&element.condition, &binding, rule.location, support)?;
-                let head = match &element.head {
-                    HeadOperand::Atom(atom) => {
-                        let head = self.atom(atom, &binding, rule.location)?;
-                        let previous = result.eligible.get(&head).copied().unwrap_or(0);
+                let (head, atom) = self.head_literal(&element.head, &binding, rule.location)?;
+                if let Some(atom) = atom {
+                    if element.head.positive_atom().is_some() {
+                        let previous = result.eligible.get(&atom).copied().unwrap_or(0);
                         result
                             .eligible
-                            .insert(head, self.or(previous, condition, rule.location)?);
-                        head
+                            .insert(atom, self.or(previous, condition, rule.location)?);
+                    } else {
+                        self.head_origins(atom, rule)?;
                     }
-                    // A constant can affect the bound but never creates a
-                    // producer, permission formula or semantic atom.
-                    HeadOperand::Boolean(value) => usize::from(*value),
-                };
+                }
                 if !group.guards.is_empty() {
                     let selected = self.and(condition, head, rule.location)?;
                     match &element.key {
@@ -746,7 +754,10 @@ impl Builder<'_> {
                         HeadElementKey::Atom => {
                             self.head_activity(
                                 &mut result,
-                                HeadKey::Atom(head),
+                                HeadKey::Atom(
+                                    element.head.negation,
+                                    atom.expect("atomic element key"),
+                                ),
                                 selected,
                                 *measure,
                                 rule.location,
@@ -780,7 +791,7 @@ impl Builder<'_> {
     ) -> Result<(), FormulaFailure> {
         let first = match &key {
             HeadKey::Tuple(tuple) => tuple.first(),
-            HeadKey::Atom(_) | HeadKey::BooleanOccurrence(_) => None,
+            HeadKey::Atom(..) | HeadKey::BooleanOccurrence(_) => None,
         };
         let weight = crate::formula_head_aggregate::weight(measure, first, location)?;
         let previous = group.activity.get(&key).map_or(0, |(_, node)| *node);
@@ -837,7 +848,8 @@ impl Builder<'_> {
 
 /// Permission coalesces by head atom; measure activity coalesces independently
 /// by the complete tuple. An ordinary atom choice uses its atom as the implicit
-/// key; a Boolean choice uses its source occurrence within this outer group.
+/// key and default-negation sign; a Boolean choice uses its source occurrence
+/// within this outer group.
 #[derive(Default)]
 struct HeadGroup {
     eligible: BTreeMap<usize, usize>,
@@ -847,7 +859,7 @@ struct HeadGroup {
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 enum HeadKey {
     Tuple(Vec<Value>),
-    Atom(usize),
+    Atom(DefaultNegation, usize),
     BooleanOccurrence(Location),
 }
 

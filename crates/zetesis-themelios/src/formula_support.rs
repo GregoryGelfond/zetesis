@@ -239,7 +239,7 @@ pub(crate) fn build(
                             while let Some(binding) =
                                 local.next(limits, budget, counters, rule.location)?
                             {
-                                if let Some(head) = element.head.atom() {
+                                if let Some(head) = element.head.positive_atom() {
                                     derive(
                                         head,
                                         &binding,

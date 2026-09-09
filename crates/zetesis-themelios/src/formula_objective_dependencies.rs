@@ -17,7 +17,7 @@ use themelios_program::symbol::{Name, Signature};
 use zetesis_core::{Filter, Predicate, Term};
 
 use crate::diagnostic::unsupported;
-use crate::formula_ir::{DisjunctIr, HeadIr, LiteralIr, ObjectiveIr, RuleIr};
+use crate::formula_ir::{HeadIr, HeadLiteral, LiteralIr, ObjectiveIr, RuleIr};
 use crate::{FormulaFailure, ProfileFeature, extended};
 
 pub(crate) fn check(
@@ -172,7 +172,7 @@ fn relevant_head(head: &HeadIr, relevant: &BTreeSet<Signature>) -> bool {
         HeadIr::Normal(Some(atom)) => relevant.contains(&signature(atom.predicate())),
         HeadIr::Disjunction(heads) => heads
             .iter()
-            .filter_map(DisjunctIr::atom)
+            .filter_map(HeadLiteral::atom)
             .any(|atom| relevant.contains(&signature(atom.predicate()))),
         HeadIr::Choice(group) => group
             .elements
@@ -191,7 +191,7 @@ fn total_dependency(
         if let HeadIr::Disjunction(heads) = &rule.head
             && heads
                 .iter()
-                .filter_map(DisjunctIr::atom)
+                .filter_map(HeadLiteral::atom)
                 .any(|atom| signature(atom.predicate()) == *producer)
         {
             return false;

@@ -13,7 +13,7 @@ use themelios_program::term::{Term, Variable};
 
 use crate::diagnostic::unsupported;
 use crate::formula::ceiling;
-use crate::formula_ir::{Compiler, DisjunctIr, HeadIr, HeadOperand, LiteralIr, Variables};
+use crate::formula_ir::{Compiler, HeadIr, HeadLiteral, HeadOperand, LiteralIr, Variables};
 use crate::{ExpansionResource, FormulaFailure, FormulaResource, ProfileFeature};
 
 impl Compiler<'_> {
@@ -24,20 +24,20 @@ impl Compiler<'_> {
             self.limits.max_disjunction_elements as u128,
             self.location,
         )?;
-        Ok(HeadIr::Disjunction(vec![DisjunctIr {
+        Ok(HeadIr::Disjunction(vec![HeadLiteral {
             negation: DefaultNegation::None,
             operand: HeadOperand::Boolean(true),
         }]))
     }
 
-    pub(super) fn disjunction_head(
+    pub(super) fn head_literal(
         &mut self,
         literal: &Literal,
         variables: &mut Variables,
         body: &mut Vec<LiteralIr>,
-    ) -> Result<DisjunctIr, FormulaFailure> {
+    ) -> Result<HeadLiteral, FormulaFailure> {
         if matches!(literal.inner, LiteralInner::True | LiteralInner::False) {
-            return Ok(DisjunctIr {
+            return Ok(HeadLiteral {
                 negation: literal.negation,
                 operand: HeadOperand::Boolean(matches!(literal.inner, LiteralInner::True)),
             });
@@ -54,7 +54,7 @@ impl Compiler<'_> {
         } else {
             self.atom(atom.get(), variables, false)?
         };
-        Ok(DisjunctIr {
+        Ok(HeadLiteral {
             negation: literal.negation,
             operand: HeadOperand::Atom(pattern),
         })

@@ -361,20 +361,18 @@ fn count_aliases_admit_complete_groups() {
 }
 
 #[test]
-fn unadmitted_head_profiles_have_explicit_refusals() {
-    for (source, expected) in [
-        ("1#count{1:not a}1.", ProfileFeature::NegatedHead),
-        ("1#count{1:not not a}1.", ProfileFeature::NegatedHead),
-        ("1#count{1:not #true}1.", ProfileFeature::NegatedHead),
-        (
-            "1#count{1:a}1.#minimize{1:a}.",
-            ProfileFeature::ObjectiveAggregateDependency,
-        ),
-    ] {
-        let error = input(source).expect_err(source);
-        assert!(profile(&error, expected), "{source}: {error}");
-        assert!(!error.diagnostics().is_empty());
-    }
+fn count_head_objective_dependencies_are_refused() {
+    let source = "1#count{1:a}1.#minimize{1:a}.";
+    let error = input(source).expect_err(source);
+    assert!(profile(
+        &error,
+        ProfileFeature::ObjectiveAggregateDependency
+    ));
+    assert!(!error.diagnostics().is_empty());
+}
+
+#[test]
+fn extended_profile_refuses_count_heads() {
     assert!(
         admit_extended(
             "1#count{X:p(X):X=1..4}2.".into(),

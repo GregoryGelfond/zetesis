@@ -181,7 +181,7 @@ fn activity(
             HeadIr::Choice(group) => {
                 for element in &group.elements {
                     context.inspect()?;
-                    let Some(head) = element.head.atom() else {
+                    let Some(head) = element.head.positive_atom() else {
                         continue;
                     };
                     if head.predicate() != atom.predicate() {
@@ -336,7 +336,7 @@ fn unique(
                     context.inspect()?;
                     if element
                         .head
-                        .atom()
+                        .positive_atom()
                         .is_some_and(|head| head.predicate() == predicate)
                     {
                         return Ok(false);
