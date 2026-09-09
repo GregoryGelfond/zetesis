@@ -76,6 +76,7 @@ import Zetesis.CountHeadActivity
 import Zetesis.WeightedHeadActivity
 import Zetesis.ObjectiveTransport
 import Zetesis.BooleanHeads
+import Zetesis.BooleanHeadElements
 import Zetesis.EvaluatedWitnesses
 import Zetesis.ObjectiveValues
 import Zetesis.ExtremumPresence
