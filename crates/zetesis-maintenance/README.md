@@ -54,3 +54,22 @@ Tests execute the actual shell drivers with those stand-ins and inspect command
 order, profiles, status publication, failures and cleanup; they do not compile
 programs, execute Lean, collect coverage or exercise Metal. Real compiler,
 coverage and device qualification remain separate gates.
+
+## Prepare proof-library views
+
+`proofs::inventory` reads bounded current sources and returns typed declarations,
+module identities and source hashes. Its `theorem_index` and `audit_source`
+methods render deterministic views without writing files or reporting success.
+The scanner is the same restricted scanner used by record verification.
+
+```sh
+scripts/maintenance.sh proof-inventory --proofs-dir proofs
+scripts/maintenance.sh proof-inventory --proofs-dir proofs --view index
+scripts/maintenance.sh proof-inventory --proofs-dir proofs --view audit
+```
+
+These commands print observations or proposed index/audit text. Publication is a
+separate caller operation. After changing those files, collect fresh identities
+and run the actual pinned Lean checks before producing a verification record.
+The inventory neither generates `verification.json` nor copies assurance flags
+from an old record. A complete command-executing record refresher is not provided.

@@ -1,7 +1,7 @@
 //! Restricted declaration inventory; this deliberately does not parse Lean.
 use crate::{Error, require};
 use regex::Regex;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::sync::LazyLock;
 
 pub(super) const NAME: &str = r"[A-Za-z_][A-Za-z_0-9']*(?:\.[A-Za-z_][A-Za-z_0-9']*)*";
@@ -18,12 +18,31 @@ static SCOPE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\b(?:theorem|namespace|section|end)\b").unwrap());
 static THEOREM_WORD: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\btheorem\b").unwrap());
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct Declaration {
-    pub name: String,
-    pub file: String,
-    pub line: usize,
+/// A declaration location recognized by the restricted source convention.
+/// Recognition is not proof-kernel acceptance.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+pub struct Declaration {
+    pub(super) name: String,
+    pub(super) file: String,
+    pub(super) line: usize,
+}
+
+impl Declaration {
+    /// Fully qualified ASCII theorem name, including enclosing namespaces.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+    /// Canonical path relative to the proof-library root.
+    #[must_use]
+    pub fn file(&self) -> &str {
+        &self.file
+    }
+    /// One-based source line containing the theorem declaration.
+    #[must_use]
+    pub const fn line(&self) -> usize {
+        self.line
+    }
 }
 
 /// Mask comments and strings without changing byte offsets or newlines.

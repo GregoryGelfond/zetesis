@@ -6,7 +6,11 @@
 //! Actual pinned kernel checking must run independently before record validation.
 //! Hashes establish consistency, not command execution or compiler refinement.
 mod audit;
+mod inventory;
 mod source;
+
+pub use inventory::{Inventory, inventory};
+pub use source::Declaration;
 
 pub use crate::files::Limits;
 use crate::{
@@ -14,7 +18,7 @@ use crate::{
     files::{self, Tree},
     json, require,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::BTreeSet, path::Path};
 
@@ -132,9 +136,25 @@ fn hashes(
     }
     Ok(())
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RecordedDeclaration {
+    name: String,
+    file: String,
+    line: usize,
+}
+
 fn index(tree: &mut Tree, expected: &[source::Declaration]) -> Result<(), Error> {
     let value = json::parse(&tree.read("theorems.json")?)?;
-    let entries: Vec<source::Declaration> = serde_json::from_value(value).map_err(Error::Json)?;
+    let recorded: Vec<RecordedDeclaration> = serde_json::from_value(value).map_err(Error::Json)?;
+    let entries: Vec<_> = recorded
+        .into_iter()
+        .map(|entry| source::Declaration {
+            name: entry.name,
+            file: entry.file,
+            line: entry.line,
+        })
+        .collect();
     require(
         entries.iter().all(|entry| entry.line > 0),
         "invalid theorem index location",

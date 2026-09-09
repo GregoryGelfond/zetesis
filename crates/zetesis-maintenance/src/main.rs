@@ -1,5 +1,5 @@
 //! Thin command views of repository assurance libraries.
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use std::{
     io::{self, Write},
     path::PathBuf,
@@ -20,8 +20,22 @@ struct Options {
     #[command(subcommand)]
     command: Action,
 }
+
+#[derive(Clone, Copy, ValueEnum)]
+enum InventoryView {
+    Inventory,
+    Index,
+    Audit,
+}
 #[derive(Subcommand)]
 enum Action {
+    /// Observe Lean source declarations; no proof success is inferred.
+    ProofInventory {
+        #[arg(long, default_value = "proofs")]
+        proofs_dir: PathBuf,
+        #[arg(long, value_enum, default_value = "inventory")]
+        view: InventoryView,
+    },
     /// Check a retained Lean record; run pinned kernel checks separately.
     ProofRecord {
         #[arg(long, default_value = "proofs")]
@@ -88,6 +102,16 @@ fn text(path: &std::path::Path) -> Result<String, Error> {
 }
 fn execute(action: Action, output: &mut impl Write) -> Result<(), Error> {
     let value = match action {
+        Action::ProofInventory { proofs_dir, view } => {
+            let inventory = proofs::inventory(&proofs_dir, proofs::Limits::default())?;
+            match view {
+                InventoryView::Inventory => {
+                    coverage::render(&serde_json::to_value(&inventory).map_err(Error::Json)?)?
+                }
+                InventoryView::Index => inventory.theorem_index()?,
+                InventoryView::Audit => inventory.audit_source().into_bytes(),
+            }
+        }
         Action::ProofRecord { proofs_dir, record } => {
             let result = proofs::verify(&proofs_dir, &record, proofs::Limits::default())?;
             format!("Proof record: PASS: {} theorems; {} semantic modules; {} source/configuration files\n", result.theorems, result.semantic_modules, result.source_files).into_bytes()

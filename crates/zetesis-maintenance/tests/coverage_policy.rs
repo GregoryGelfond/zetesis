@@ -163,3 +163,32 @@ fn portable_metadata_makes_no_physical_claim() {
     assert_eq!(record["expected_physical_tests"], 0);
     assert!(record["physical_scope"].is_null());
 }
+
+#[test]
+fn coverage_inputs_enforce_their_byte_ceiling() {
+    let oversized = " ".repeat(coverage::MAX_INPUT_BYTES + 1);
+    assert!(matches!(
+        coverage::previous_revision(oversized.as_bytes()),
+        Err(zetesis_maintenance::Error::Limit { .. })
+    ));
+    let group = coverage::selection(TABLE).unwrap().remove(0);
+    assert!(matches!(
+        coverage::physical_result(&oversized, &group),
+        Err(zetesis_maintenance::Error::Limit { .. })
+    ));
+    assert!(matches!(
+        metadata(&oversized, false),
+        Err(zetesis_maintenance::Error::Limit { .. })
+    ));
+}
+
+#[test]
+fn unknown_test_boundaries_cannot_hide_missing_outcomes() {
+    let group = coverage::selection(TABLE).unwrap().remove(0);
+    let output = output(&group.tests, true).replacen(
+        "adapter=fixture\nok",
+        "adapter=fixture\ntest malformed boundary\nok",
+        1,
+    );
+    assert!(coverage::physical_result(&output, &group).is_err());
+}

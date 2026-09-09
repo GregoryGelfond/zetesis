@@ -398,3 +398,127 @@ fn recorded_file_symlinks_cannot_escape_the_root() {
     std::os::unix::fs::symlink(file, f.root().join("verification/current/build.log")).unwrap();
     f.reject();
 }
+
+#[test]
+fn proof_inventory_renders_the_observed_declarations() {
+    let f = Fixture::new();
+    let inventory = proofs::inventory(f.root(), Limits::default()).unwrap();
+    assert_eq!(
+        inventory
+            .modules()
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["Zetesis/A.lean", "Zetesis/Sub/B.lean"]
+    );
+    assert_eq!(
+        inventory
+            .declarations()
+            .iter()
+            .map(|declaration| (declaration.name(), declaration.file(), declaration.line()))
+            .collect::<Vec<_>>(),
+        [
+            ("Zetesis.first", "Zetesis/A.lean", 8),
+            ("Zetesis.Sub.second'", "Zetesis/Sub/B.lean", 2)
+        ]
+    );
+    assert_eq!(
+        serde_json::from_slice::<Value>(&inventory.theorem_index().unwrap()).unwrap(),
+        f.entries
+    );
+    assert_eq!(inventory.audit_source(), f.read("Audit.lean"));
+}
+#[test]
+fn proof_inventory_hashes_observed_source_bytes() {
+    let f = Fixture::new();
+    let inventory = proofs::inventory(f.root(), Limits::default()).unwrap();
+    assert_eq!(
+        serde_json::to_value(inventory.source_sha256()).unwrap(),
+        f.record["source_sha256"]
+    );
+}
+#[test]
+fn inventory_views_make_no_success_claim() {
+    let f = Fixture::new();
+    let inventory = proofs::inventory(f.root(), Limits::default()).unwrap();
+    let value = serde_json::to_value(&inventory).unwrap();
+    assert_eq!(
+        value
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["declarations", "modules", "source_sha256"]
+    );
+}
+#[test]
+fn inventory_publication_remains_the_callers_operation() {
+    let f = Fixture::new();
+    let before = f.read("theorems.json");
+    let audit = f.read("Audit.lean");
+    let inventory = proofs::inventory(f.root(), Limits::default()).unwrap();
+    let _views = (inventory.theorem_index().unwrap(), inventory.audit_source());
+    assert_eq!(f.read("theorems.json"), before);
+    assert_eq!(f.read("Audit.lean"), audit);
+}
+#[test]
+fn proof_inventory_enforces_the_source_convention() {
+    let f = Fixture::new();
+    f.write(
+        "Zetesis/A.lean",
+        "namespace Zetesis\naxiom hidden : False\nend Zetesis\n",
+    );
+    assert!(proofs::inventory(f.root(), Limits::default()).is_err());
+}
+#[test]
+fn proof_inventory_rejects_duplicate_qualified_names() {
+    let f = Fixture::new();
+    f.write(
+        "Zetesis/Sub/B.lean",
+        "namespace Zetesis\ntheorem first : True := by trivial\nend Zetesis\n",
+    );
+    assert!(proofs::inventory(f.root(), Limits::default()).is_err());
+}
+#[test]
+fn proof_inventory_applies_read_limits() {
+    let f = Fixture::new();
+    assert!(
+        proofs::inventory(
+            f.root(),
+            Limits {
+                file_bytes: 0,
+                ..Limits::default()
+            }
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn inventory_cli_renders_each_requested_view() {
+    let f = Fixture::new();
+    let inventory = proofs::inventory(f.root(), Limits::default()).unwrap();
+    for (view, expected) in [
+        ("index", inventory.theorem_index().unwrap()),
+        ("audit", inventory.audit_source().into_bytes()),
+    ] {
+        let result = Command::new(env!("CARGO_BIN_EXE_zetesis-maintenance"))
+            .args(["proof-inventory", "--view", view, "--proofs-dir"])
+            .arg(f.root())
+            .output()
+            .unwrap();
+        assert!(result.status.success());
+        assert_eq!(result.stdout, expected);
+    }
+    let result = Command::new(env!("CARGO_BIN_EXE_zetesis-maintenance"))
+        .args(["proof-inventory", "--proofs-dir"])
+        .arg(f.root())
+        .output()
+        .unwrap();
+    assert!(result.status.success());
+    assert_eq!(
+        serde_json::from_slice::<Value>(&result.stdout).unwrap(),
+        serde_json::to_value(&inventory).unwrap()
+    );
+}

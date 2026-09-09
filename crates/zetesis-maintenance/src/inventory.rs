@@ -20,7 +20,11 @@ pub fn sources(root: &Path, limits: Limits) -> Result<BTreeMap<String, String>, 
         .map(str::to_owned)
         .into();
     names.extend(tree.inventory("crates", "")?.into_iter().filter(|name| {
-        name.ends_with(".rs") || name.ends_with(".wgsl") || name.ends_with("/Cargo.toml")
+        let path = Path::new(name);
+        matches!(
+            path.extension().and_then(std::ffi::OsStr::to_str),
+            Some("rs" | "wgsl")
+        ) || path.file_name() == Some(std::ffi::OsStr::new("Cargo.toml"))
     }));
     names
         .into_iter()

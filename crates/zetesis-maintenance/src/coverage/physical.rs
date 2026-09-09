@@ -120,6 +120,13 @@ pub fn physical_result(output: &str, group: &Group) -> Result<(), Error> {
                     .parse::<usize>()
                     .map_err(|_| Error::Invalid("invalid physical summary count".into()))?,
             );
+        } else if line.starts_with("test ") {
+            if let Some(outcome) = current_outcome.take() {
+                require(
+                    outcome == "ok",
+                    "physical test record lacks a passing outcome",
+                )?;
+            }
         } else if current_outcome.is_some() && !line.trim().is_empty() {
             current_outcome = Some(line.trim());
         }
