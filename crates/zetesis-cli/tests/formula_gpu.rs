@@ -1,4 +1,4 @@
-//! Ordinary formula invocations select the hybrid before stable-model publication.
+//! Ordinary formula invocations select the hybrid before answer-set publication.
 
 use clap::Parser;
 use zetesis_cli::{Completion, Options, RunError, run_with_diagnostics};
@@ -12,6 +12,9 @@ mod head_element_sources;
 
 #[path = "support/projected_conditional_sources.rs"]
 mod projected_conditional_sources;
+
+#[path = "support/logical_extremum_sources.rs"]
+mod logical_extremum_sources;
 
 #[cfg(feature = "gpu")]
 #[path = "support/bounded_writer.rs"]
@@ -40,6 +43,23 @@ fn cpu_output(source: &str, json: bool) -> Vec<u8> {
     .unwrap();
     assert_eq!(report.completion, Completion::Exhausted);
     output
+}
+
+/// Compare the complete answer family of a source with no objective.
+fn assert_answer_family(source: &str, answers: Vec<Vec<zetesis_core::Atom>>) {
+    let mut expected: Vec<_> = answers
+        .into_iter()
+        .map(|mut atoms| {
+            atoms.sort();
+            (atoms, None)
+        })
+        .collect();
+    expected.sort();
+    assert_eq!(
+        formula_records::full_records(&cpu_output(source, true)),
+        expected,
+        "{source}"
+    );
 }
 
 #[test]
@@ -102,19 +122,7 @@ fn head_elements_preserve_complete_source_answers() {
     ];
     assert_eq!(expected.len(), head_element_sources::SOURCES.len());
     for (source, answers) in head_element_sources::SOURCES.into_iter().zip(expected) {
-        let mut expected: Vec<_> = answers
-            .into_iter()
-            .map(|mut atoms| {
-                atoms.sort();
-                (atoms, None)
-            })
-            .collect();
-        expected.sort();
-        assert_eq!(
-            formula_records::full_records(&cpu_output(source, true)),
-            expected,
-            "{source}"
-        );
+        assert_answer_family(source, answers);
     }
 }
 
@@ -143,19 +151,29 @@ fn projected_conditionals_preserve_complete_answers() {
         .into_iter()
         .zip(expected)
     {
-        let mut expected: Vec<_> = answers
-            .into_iter()
-            .map(|mut atoms| {
-                atoms.sort();
-                (atoms, None)
-            })
-            .collect();
-        expected.sort();
-        assert_eq!(
-            formula_records::full_records(&cpu_output(source, true)),
-            expected,
-            "{source}"
-        );
+        assert_answer_family(source, answers);
+    }
+}
+
+#[test]
+fn logical_extrema_preserve_complete_answers() {
+    use zetesis_core::{Atom, Predicate};
+
+    let a = Atom::new(Predicate::new("a", 0).unwrap(), Vec::new()).unwrap();
+    let b = Atom::new(Predicate::new("b", 0).unwrap(), Vec::new()).unwrap();
+    let expected = [
+        vec![vec![a.clone()], vec![a.clone(), b.clone()]],
+        vec![vec![b.clone()], vec![a.clone(), b.clone()]],
+        // Symbol z precedes string "a" in logical term order.
+        vec![vec![b.clone()], vec![a.clone(), b.clone()]],
+        vec![vec![a.clone()], vec![a.clone(), b.clone()]],
+        vec![vec![a.clone()], vec![a.clone(), b]],
+        // An empty minimum and a selected #sup both satisfy the bound.
+        vec![vec![], vec![a]],
+    ];
+    assert_eq!(expected.len(), logical_extremum_sources::SOURCES.len());
+    for (source, answers) in logical_extremum_sources::SOURCES.into_iter().zip(expected) {
+        assert_answer_family(source, answers);
     }
 }
 
@@ -304,6 +322,7 @@ mod physical {
         .chain(super::language_value_sources::SOURCES)
         .chain(super::head_element_sources::SOURCES)
         .chain(super::projected_conditional_sources::SOURCES)
+        .chain(super::logical_extremum_sources::SOURCES)
         {
             for json in [false, true] {
                 qualify_formula_output(source, backend, json);

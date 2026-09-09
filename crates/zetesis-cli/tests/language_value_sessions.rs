@@ -6,6 +6,9 @@ mod language_value_sources;
 #[path = "support/projected_conditional_sources.rs"]
 mod projected_conditional_sources;
 
+#[path = "support/logical_extremum_sources.rs"]
+mod logical_extremum_sources;
+
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 
@@ -42,6 +45,19 @@ fn projected_conditionals_match_original_source_records() {
 enum Observer {
     Direct,
     Forwarded,
+}
+
+#[test]
+#[ignore = "requires an independently installed clingo executable"]
+fn logical_extrema_match_original_source_records() {
+    for source in logical_extremum_sources::SOURCES {
+        let admitted = source_records::admit(source, &FormulaLimits::default()).unwrap();
+        assert_eq!(
+            source_records::exhaustive(&admitted),
+            source_oracle::records(source),
+            "{source}"
+        );
+    }
 }
 
 struct Expected {
