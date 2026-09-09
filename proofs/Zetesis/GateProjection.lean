@@ -14,7 +14,7 @@ into arbitrary current masks at aliased physical slots. Frozen-false gates
 remain outside this enabled-transfer contract; their existing output constraint
 and disabled connective are not replaced.
 
-Definitions originate in the retained gate-transfer draft at revision 93d2575.
+Independent Rust enumeration checks the same finite transfer space.
 These are mathematical representation laws, not Rust/WGSL compiler refinement,
 atomic execution, propagation convergence, complete search, or GPU qualification.
 -/
