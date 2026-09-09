@@ -103,6 +103,13 @@ condition-to-consequent implications, conjoined over complete condition rows.
 Consequent alternatives may use admitted pools, intervals and local positive
 structural/evaluated witnesses. These witnesses cannot bind outer variables or
 establish condition safety. Only exhaustive enumeration can establish vacuity.
+Negative anonymous consequents project complete matching atoms before applying
+`not` or `not not`. Multiple anonymous positions and descendants of positive
+constructors and tuples share that contract; arithmetic consumes independently
+bound inputs before matching. Each admitted source alternative retains its own
+projection, separate from universal condition rows. Anonymous inputs inside
+arithmetic or unary wrappers remain unsafe; broader nested pools remain
+unsupported.
 
 Strong-negated predicates have distinct identities and coherence constraints:
 `not p` never implies `-p`. Under default negation, anonymous projections of
@@ -144,12 +151,13 @@ Weighted heads use the same separate atom permission and complete-tuple activity
 weights. A selected complete tuple contributes once, even when several of its
 head operands are true. Distinct tuples sharing a head still contribute
 separately: `3#sum{1:a;2:a}3.` admits `{a}`. A zero weight still permits an
-unsigned atomic head. Numeric extrema use the same complete-tuple activity;
-atoms may occur under several tuples and several operands may share one tuple.
+unsigned atomic head. Extrema use the same complete-tuple activity and retain
+the first tuple value in full, including symbols, strings, constructors and
+logical extrema. Values are compared in ASP term order. Atoms may occur under
+several tuples and several operands may share one tuple.
 The optional count specialization requires a stronger tuple/atom bijection and
-wholly unsigned atomic groups. Nonnumeric head weights, negative head `#sum+`
-weights and nonnumeric extrema heads remain
-unsupported.
+wholly unsigned atomic groups. Missing measured values, nonnumeric sum-head
+weights and negative head `#sum+` weights remain unsupported.
 Empty minima and maxima are `#sup` and `#inf`; bounds never create support.
 Objective-relevant function-head producers remain refused, including count heads.
 

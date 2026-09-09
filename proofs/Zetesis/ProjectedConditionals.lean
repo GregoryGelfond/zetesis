@@ -19,7 +19,7 @@ The complete-carrier law states the bridge to an intended matching predicate
 explicitly. The other laws quantify over supplied completed formula families;
 they do not establish source matching, safety, bindings, anonymous scope, support
 enumeration, resource completion or the Rust compiler's correspondence. A signed
-projection tests candidate truth and does not introduce positive atom support.
+projection tests candidate truth without producing a witness atom.
 -/
 
 namespace Zetesis.ProjectedConditionals

@@ -41,6 +41,26 @@ admitted theory, including necessary-support guards and candidate-frozen bounds;
 they do not establish pointwise equivalence between unguarded source formulas and
 every internal activity node.
 
+[`OrderedHeadActivity`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/OrderedHeadActivity.lean)
+relates selected signed tuple activity to an ordered value reduction. In Rust,
+[`contribution`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_head_aggregate.rs)
+borrows the complete first tuple value, and `HeadContributions` retains it for
+the existing value-extremum lowering. The laws require complete-key coverage,
+comparison properties and a logical empty value. They do not prove that the
+Rust comparator, source join or charged value copy realizes those premises.
+
+[`ProjectedConditionals`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ProjectedConditionals.lean)
+separates anonymous witness disjunctions, signed source alternatives and
+universal condition rows. The Rust
+[`Projection`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ir.rs)
+has flat-argument and structural-witness representations. `Builder::project`
+completes their witness formula before the conditional compiler applies its
+sign. Structural matching uses a private binding frame whose input prefix
+excludes later outer bindings. This implements the intended quantifier order;
+source support completeness, frame construction and matcher correspondence
+remain separate proof obligations. A resource stop cannot establish an empty
+completed carrier.
+
 ## Read hypotheses as caller obligations
 
 For a frozen mask, correctness means agreement with the fixed candidate's

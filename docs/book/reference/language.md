@@ -24,7 +24,7 @@ eager. Selecting a GPU does not expand the accepted source language.
 | Positive witnesses | Constructor/tuple patterns preserve sign, name, arity and complete supporting atoms; evaluated positions consume bound inputs | Arithmetic inversion; a negative atom cannot supply a missing binding |
 | Comparisons | Equality/disequality, structural ordering, admitted flat-tuple equality and complete comparison chains, including default/double negation | Several unresolved variables in a generating chain and broader inverse binders |
 | Finite generators | Scalar equality, admitted flat-tuple equality, closed integer bounds, dependent intervals and finite scoped rule/head pools | Unsupported body/local pool contexts and broader nested interval construction |
-| Universal body conditionals | Complete local implication families with signed consequent alternatives and positive local witnesses | Negative anonymous consequent witnesses, unsupported local generators and objective-dependent conditional producers |
+| Universal body conditionals | Complete local implication families with signed consequent alternatives, positive local witnesses and finite anonymous projections under `not` or `not not` | Unsupported local generators, nested pools and objective-dependent conditional producers |
 
 For example, `q(X) :- d(X), p(X+1).` checks the complete supporting `p` atom
 after `d(X)` binds `X`. By contrast, `q(X) :- p(X+1).` requires arithmetic
@@ -44,6 +44,40 @@ establish outer-rule or condition safety. Empty completed universal families
 are true, while recursive conditions retain their original implications.
 The maintained [witness tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/evaluated_witnesses.rs)
 exercise these distinctions.
+
+Under `not` or `not not`, anonymous positions instead denote an existential
+projection of complete matching atoms. Negation applies to that projection,
+before source alternatives are disjoined and condition rows are conjoined:
+
+```asp
+{{#include ../../../crates/zetesis-cli/tests/fixtures/projected-conditionals/absent.lp}}
+```
+
+Its answer sets are `{q}`, `{p(1)}`, `{p(2)}` and `{p(1),p(2)}`. Here `q` requires
+the absence of every matching `p` atom. Replacing `not` with `not not` tests for
+the presence of a witness in the candidate; it does not produce a `p` atom.
+The same projection contract covers multiple anonymous positions and anonymous
+descendants of positive constructors and tuples. Other inputs must already be
+bound; arithmetic is evaluated before witness matching. Admitted finite interval
+and pool alternatives retain separate projections.
+
+An empty witness family, an empty source-alternative family and an empty
+condition-row family have different meanings. Only completed enumeration can
+establish any of them:
+
+| Completed empty family | Meaning |
+| --- | --- |
+| Witnesses of one source alternative | That projection is false; `not` makes it true and `not not` leaves it false |
+| Source alternatives for one condition row | That row has a false consequent, so its implication requires a false condition |
+| Condition rows | The entire universal conditional is true |
+
+Anonymous inputs inside arithmetic or unary wrappers,
+classical-negative anonymous predicates and genuinely unbound named inputs
+remain refused. These safety boundaries are distinct from the remaining nested
+pool and local-generator implementation gaps. See the
+[conditional contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/consequent_alternatives.rs)
+and the finite-carrier laws in
+[`ProjectedConditionals`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ProjectedConditionals.lean).
 
 ## Choices and aggregates
 
@@ -89,7 +123,7 @@ separated in the [Lean proof boundary](../lean/correspondence.md).
 | Assignment consumers | Dependency-ordered scalar/tuple filters and equalities, evaluated positive arguments/heads, admitted outer negative atoms, finite outer ranges, integer choice bounds, nonbinding aggregate guards and universal conditionals | Broader local scopes, objective-relevant new consumers and objective-relevant multiple assignments |
 | `#count` heads | Positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions and Boolean operands | Unsupported eligibility/observer contexts and objective-relevant heads remain refused |
 | `#sum`, `#sum+` heads | Signed numeric `#sum` and nonnegative numeric `#sum+`; positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions and Boolean operands; zero-weight positive atomic heads retain permission | Missing/nonnumeric measured values, negative `#sum+` weights, unsupported eligibility contexts and objective-relevant heads remain refused |
-| `#min`, `#max` heads | Numeric first tuple values; positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions and Boolean operands | Missing/nonnumeric measured values, the numeric endpoint guard, unsupported eligibility contexts and objective-relevant heads remain refused |
+| `#min`, `#max` heads | Complete logical first tuple values in ASP term order; positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions and Boolean operands | Missing measured values, the numeric endpoint guard, unsupported eligibility contexts and objective-relevant heads remain refused |
 
 A tuple becomes active when any occurrence has a true head operand and satisfies
 its own condition. An unsigned atomic operand is true when that atom is selected;
@@ -104,7 +138,7 @@ Boolean and atomic occurrences may share one explicit tuple: in
 activates tuple `1`, giving `{a}`, `{b}` and `{a,b}`. Repeating that tuple
 does not add a contribution: `2#sum{1:#true;1:#true}2.` is inconsistent.
 
-Numeric extrema use the same tuple-selection rule. `1#min{1:a;1:b}1.` admits
+Extrema use the same tuple-selection rule. `1#min{1:a;1:b}1.` admits
 `{a}`, `{b}` and `{a,b}`: either selected atom activates the shared tuple.
 Conversely, `1#max{0:a;1:a}1.` admits `{a}`, whose selection activates both
 complete tuples. An extremum bound supplies no support for an otherwise
@@ -115,11 +149,25 @@ atom-only certificate. Other independently qualified groups remain eligible for 
 specialization. A false operand or body does not bypass validation of a closed
 measured value: `0#sum{word:#false}0:-#false.` remains refused.
 
+An extremum measure retains the complete first value of its tuple. For example:
+
+```asp
+{{#include ../../../crates/zetesis-cli/tests/fixtures/logical-extrema/min-symbols.lp}}
+```
+
+This program has answer sets `{a}` and `{a,b}`: the minimum selected value must
+be `m`, while selecting the tuple beginning with `n` remains optional. Numbers,
+symbols, strings, signed constructors and tuples use the same logical term order
+as body extrema. Empty minima and maxima remain `#sup` and `#inf`; a selected
+tuple whose value is that extremum still retains its own activity and permission.
+The [ordered-head laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/OrderedHeadActivity.lean)
+separate these concerns and state the required order and carrier assumptions.
+
 Acyclic aggregate assignments may depend on earlier assignments through scalar
 and range values. A proposed value remains guarded by the original aggregate
 equality. Membership in possible support cannot replace model-relative aggregate
-truth. The numeric-first-value restriction on extremum **heads** is narrower
-than the complete-value extremum **body** profile.
+truth. An extremum head still requires a first tuple value; an empty tuple is
+distinct from a complete logical value such as `#sup`.
 
 ### Interpreting source analysis
 
