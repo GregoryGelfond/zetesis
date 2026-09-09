@@ -23,8 +23,8 @@
         "--version"
       ],
       "cwd": "proofs",
-      "started_utc": "2026-09-09T16:19:01.000Z",
-      "elapsed_seconds": 0.459321875,
+      "started_utc": "2026-09-09T16:21:33.575Z",
+      "elapsed_seconds": 0.31527125,
       "exit_code": 0,
       "result": "PASS",
       "log": "verification/current/version.log"
@@ -35,8 +35,8 @@
         "clean"
       ],
       "cwd": "proofs",
-      "started_utc": "2026-09-09T16:19:01.465Z",
-      "elapsed_seconds": 0.416238292,
+      "started_utc": "2026-09-09T16:21:33.892Z",
+      "elapsed_seconds": 0.29799025,
       "exit_code": 0,
       "result": "PASS",
       "log": "verification/current/clean.log"
@@ -47,8 +47,8 @@
         "build"
       ],
       "cwd": "proofs",
-      "started_utc": "2026-09-09T16:19:01.881Z",
-      "elapsed_seconds": 9.351952042,
+      "started_utc": "2026-09-09T16:21:34.190Z",
+      "elapsed_seconds": 7.43557425,
       "exit_code": 0,
       "result": "PASS",
       "log": "verification/current/build.log"
@@ -60,8 +60,8 @@
         "for source in Zetesis/*.lean; do lake env lean -DautoImplicit=false -DwarningAsError=true \"$source\" || exit \"$?\"; done"
       ],
       "cwd": "proofs",
-      "started_utc": "2026-09-09T16:19:11.233Z",
-      "elapsed_seconds": 55.463586709,
+      "started_utc": "2026-09-09T16:21:41.626Z",
+      "elapsed_seconds": 48.772384667,
       "exit_code": 0,
       "result": "PASS",
       "log": "verification/current/strict-modules.log"
@@ -76,8 +76,8 @@
         "Audit.lean"
       ],
       "cwd": "proofs",
-      "started_utc": "2026-09-09T16:20:06.697Z",
-      "elapsed_seconds": 0.677390584000008,
+      "started_utc": "2026-09-09T16:22:30.398Z",
+      "elapsed_seconds": 0.6064303329999966,
       "exit_code": 0,
       "result": "PASS",
       "log": "verification/current/audit.log"
@@ -94,8 +94,8 @@
         "test_proof_record.py"
       ],
       "cwd": "proofs",
-      "started_utc": "2026-09-09T16:20:07.375Z",
-      "elapsed_seconds": 4.776661999999996,
+      "started_utc": "2026-09-09T16:22:31.005Z",
+      "elapsed_seconds": 2.9197704169999996,
       "exit_code": 0,
       "result": "PASS",
       "log": "verification/current/record-regressions.log"
@@ -106,8 +106,8 @@
         "--version"
       ],
       "cwd": "proofs",
-      "started_utc": "2026-09-09T16:20:12.152Z",
-      "elapsed_seconds": 0.0073253330000006825,
+      "started_utc": "2026-09-09T16:22:33.925Z",
+      "elapsed_seconds": 0.007845041999993555,
       "exit_code": 0,
       "result": "PASS",
       "log": "verification/current/python-version.log"
@@ -118,8 +118,8 @@
         "../scripts/proof_record.py"
       ],
       "cwd": "proofs",
-      "started_utc": "2026-09-09T16:20:12.165Z",
-      "elapsed_seconds": 0.1283287080000009,
+      "started_utc": "2026-09-09T16:22:33.937Z",
+      "elapsed_seconds": 0.13199558299999625,
       "exit_code": 0,
       "result": "PASS",
       "log": "verification/current/record-check.log"
@@ -134,7 +134,7 @@
   "proof_holes": false,
   "native_evaluation_proof_shortcuts": false,
   "source_sha256": {
-    "Audit.lean": "5fdb034be3152d35c85af4e4843fef8b731ba3e39045267d8bca0ecaebdb159d",
+    "Audit.lean": "cceb9bd24968343684f8d786d94154521ebd2a5500e37d3bcd08449e0d9e307d",
     "Zetesis.lean": "06ebd9d21852a476d620c987d7789d5574daca08fe4b92eac9430f9bce26bf20",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
@@ -223,16 +223,16 @@
   },
   "generated_artifact_sha256": {
     "README.md": "98188a900d739b0b5412c63757fc36b4495aef5c58c8d03c34340acdf31f03a1",
-    "axiom-audit.txt": "ed984d5ae1e978f3eaa19543a7407d7072cc6f008f4c16bf54f913b7ff1cde47",
-    "theorems.json": "d2cd28536ef409c6afa58ee383c850b48906df79243d1e7bebc19ccca8802f76"
+    "axiom-audit.txt": "5809ead707d631f668956d6af1f7279e9fa7ff049a46fb4b2b663450b13990e0",
+    "theorems.json": "6364dab4eff48912761454f24055e09d03fcc924d54b81d2f1cb131602a35f8a"
   },
   "verification_log_sha256": {
     "verification/current/version.log": "4762d596346ad354e28668de62b7eeae7de5d531b9a7b1c182ca59cfacd81bdd",
     "verification/current/clean.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "verification/current/build.log": "06e7365d9180160e1695b6e6ff10cc3c5dd1586dfe4ea71aba971e4e686c9b3e",
+    "verification/current/build.log": "a9f5d98e80a4c5c7316cbe92bef4eeb4c8d94854ddfdf006c136672570e2bf3a",
     "verification/current/strict-modules.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "verification/current/audit.log": "ed984d5ae1e978f3eaa19543a7407d7072cc6f008f4c16bf54f913b7ff1cde47",
-    "verification/current/record-regressions.log": "74dfe351dd19e69fa449f6fe719f3a141f86d2b2d2f8d83e701bf491fbfe48e3",
+    "verification/current/audit.log": "5809ead707d631f668956d6af1f7279e9fa7ff049a46fb4b2b663450b13990e0",
+    "verification/current/record-regressions.log": "fd6fe1d33f3f4060896a1aa6688a944d31415832b8fa5b8bf6bba8b3477eafa4",
     "verification/current/python-version.log": "0366d77cc1f1ac88ea458231ba4f639323d5caf34de0d50b7618277fd4395f1f",
     "verification/current/record-check.log": "89d95605c49e94b239c8b67c378c2641188366e2d37280b6cc3d7b7a2605d051"
   },
