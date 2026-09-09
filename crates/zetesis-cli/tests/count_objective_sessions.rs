@@ -25,8 +25,7 @@ struct Case {
     costs: Option<&'static [(i32, i64)]>,
 }
 
-// Original programs are retained with fresh clingo results in the tranche
-// verification record. The aliased group and objective producer are independent:
+// The aliased group and objective producer are independent:
 // an objective-relevant count head retains a separate admission obligation.
 // Expected models include every hidden derived atom.
 const CASES: &[Case] = &[

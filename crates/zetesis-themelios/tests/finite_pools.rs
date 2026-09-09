@@ -322,7 +322,7 @@ fn residual_contexts_and_unsafe_or_undefined_alternatives_remain_refused() {
 }
 
 #[test]
-#[ignore = "requires an independently installed clingo; retained by tranche verification"]
+#[ignore = "requires an independently installed clingo"]
 fn all_pool_cases_match_complete_clingo_models() {
     for &(source, _) in CASES {
         let raw = reference::external(source, true);
