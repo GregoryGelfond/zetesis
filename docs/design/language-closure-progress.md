@@ -3,9 +3,10 @@
 The starting checkpoint is `53f98ac`, with compiled release source
 `0b72472`, recorded local gates, physical Metal qualification and frozen
 measurements. The [language-closure plan](language-closure-tranche.md) governs
-this work. Focused source evidence is now integrated; repository-wide local
-qualification is incomplete. This record does not claim full language closure
-or qualification of the new sources as a release checkpoint.
+this work. Focused source evidence is integrated; the local portable/oracle
+checks, release comparisons, both coverage floors and 25 frozen physical Metal
+tests pass. The [checkpoint record](../verification/language-closure-tranche-20260908/README.md)
+retains the qualification scope. This is not full language closure.
 
 | Capability | Bounded first slice | Required result |
 |---|---|---|

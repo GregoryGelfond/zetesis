@@ -174,10 +174,11 @@ Metal has been physically qualified on an Apple M4 Pro for the recorded builds.
 The static closure oracle uses a bounded ground graph; general formula execution
 batches GPU propagation and exact CPU residual completion. Source loading,
 parsing, materialization, candidate generation and objective work still run on
-the host. The current checkpoint's [25 physical Metal regressions](docs/verification/aggregate-primitives-tranche-20260908/README.md)
+the host. The current checkpoint's [25 physical Metal regressions](docs/verification/language-closure-tranche-20260908/README.md)
 pass for frozen instrumented executables, covering lazy transport reuse, complete
 closures, tight support, native aggregates, ordinary solving and admitted
-weighted heads. They retain
+weighted heads. Combined count-head/objective cases preserve absent costs and
+interrupted incumbents. The checks retain
 limits and output-failure accounting. These tests establish neither release
 performance nor an RSS reduction.
 Lazy general-formula execution remains an implementation
@@ -241,25 +242,27 @@ frozen interpretation pairs, plus generated arithmetic properties. Negative
 `#sum+` head weights remain an internal limitation with a recorded reference
 discrepancy; they are not labeled modeling errors.
 
-The [last published qualification](docs/verification/aggregate-primitives-tranche-20260908/README.md)
-passes **2,352 workspace tests/doc checks**, **339 independent CPU-only CLI
-checks**, **68 external-oracle tests** and **25 physical Metal tests** on Apple
-M4 Pro. Both unchanged 91% coverage floors pass: **93.5816% workspace with the
-matching physical profiles / 93.3546% independent CPU-only CLI**. The frozen
+The [current qualification](docs/verification/language-closure-tranche-20260908/README.md)
+passes **2,376 workspace tests/doc checks**, **343 independent CPU-only CLI
+checks**, **70 external-oracle tests** and **25 physical Metal tests** on Apple
+M4 Pro. Both unchanged 91% coverage floors pass: **93.6093% workspace with the
+matching physical profiles / 93.3773% independent CPU-only CLI**. The frozen
 release passes all 94 clean corpus and 24 selected upstream comparisons.
 The [current Lean audit](proofs/verification/language-closure-20260908/README.md)
 checks **834 laws across 74 modules**; concrete Rust/WGSL correspondence remains
-unproved. The five installed commands still use the preceding qualified release
-bytes. The [language-closure progress record](docs/design/language-closure-progress.md)
-separates the new integrated source checks from the pending whole-checkpoint
-qualification.
+unproved. The five installed commands use the exact qualified release bytes.
+The [language-closure progress record](docs/design/language-closure-progress.md)
+retains the remaining head and objective dependency obligations. This tranche
+adds language and correctness evidence; it makes no new performance claim.
 
 The checkpoint includes the following scoped capabilities. The
-[previous checkpoint](docs/verification/language-execution-tranche-20260908/README.md)
+[previous checkpoint](docs/verification/aggregate-primitives-tranche-20260908/README.md)
 retains its own qualification, timing populations and limitations.
 
 | Checkpoint capability | Boundary and evidence |
 |---|---|
+| Count-head activity | [Tuple/atom aliases](docs/verification/count-head-activity-20260908/README.md) preserve separate atom permission and complete-tuple activity: 35 original sources and 67 complete models. Optional CountPlan certificates decline nonbijective groups; weighted/extrema profiles retain their restrictions. |
+| Objective transport | [Qualified acyclic forwarding](docs/verification/objective-forwarding-20260908/README.md) admits 38 new originals with 69 full model/cost records. Mixed-extrema presence and objective-dependent function heads retain explicit implementation refusals. Combined library/device checks retain absent costs and partial optimization accounting. |
 | Completed-value aggregate guards and numeric min/max heads | [Guard checks](docs/verification/nonbinding-guards-20260908/README.md) retain 46 originals / 88 complete models / 7,312 frozen pairs; [extrema heads](docs/verification/extrema-heads-20260908/README.md) retain 51 originals / 94 models / 5,439 frozen pairs. Tuple/head bijection, original eligibility and numeric endpoint limits remain. |
 | Native aggregate operations | The [CPU library](docs/verification/native-aggregates-20260908/README.md) and [numeric GPU primitive](docs/verification/native-aggregate-gpu-20260908/README.md) compute count, sum, sum+, min and max over complete tuple eligibility. Ordinary solving still uses Boolean aggregate lowering; GPU mask acquisition remains on the host. Frozen Metal qualification passes; Vulkan remains unqualified. |
 | Source count consequences | An opt-in [CountPlan](docs/verification/source-count-plans-20260908/README.md) derives guarded partition bounds for candidate generation while preserving the original reduct subject. Its 10 originals match 53 complete clingo models. Greedy discovery can miss a cover; `NoPlan` does not prove that no consequence exists. It does not recognize queens02's body-count/pairwise encoding. |
@@ -304,7 +307,7 @@ path now passes [physical Metal qualification](docs/verification/consumer-execut
 for the recorded 33-occurrence fixture and chunk sizes one and seven. No GPU
 speedup or process-RSS claim follows from these work and transfer controls.
 
-The [current CPU comparison](docs/verification/language-execution-tranche-20260908/timing/README.md)
+The [latest controlled CPU comparison](docs/verification/language-execution-tranche-20260908/timing/README.md)
 uses 21 alternating timed pairs per case, one worker per solver and complete
 answer/optimal-tie enumeration. Native runs explicitly request eager grounding;
 automatic oracle selection uses certified tight-support checking on these inputs:

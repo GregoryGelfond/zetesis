@@ -152,6 +152,40 @@ correctness or incompatibility verdict about ngo follows from this inventory.
 
 ## Implementation and qualification
 
+### Choosing among equivalent representations
+
+The [count-head integration control](../verification/language-closure-tranche-20260908/watch-order-control.json)
+provides a small concrete motivation for cost-directed selection. Reversing the
+operands of the same conjunction changed emitted clause order and charged
+traversal work. All 92 ordered candidates and their decision, propagation and
+conflict counters stayed identical. Restoring the earlier order recovered all
+six unchanged queens traces. This was a lowering-order effect, not a new
+source optimization or measured end-to-end speedup.
+
+Keep three related choices explicit: a source rewrite can change joins and
+ground-program structure; a grounding plan can schedule valid bindings and
+filters; a backend lowering can choose formula layout and execution order.
+Their preservation obligations differ, even when the same program analysis
+helps all three. A fixed canonical representation is useful for identity and
+sharing, but its canonical order need not be the cheapest physical order.
+
+The preservation argument admits alternatives; cost estimates and measurements
+select among them. Candidate experiments include shared-join extraction,
+domain-guided filtering, and alternate aggregate representations. Compare
+grounding and solving time, retained storage, candidate/reduct work, transfers
+and dispatches across applicable eager/lazy and CPU/GPU paths. A smaller ground
+program can still induce more search, and a GPU-friendly layout can cost more
+on the CPU. Retain the baseline when a valid transformation has no demonstrated
+benefit under its selected execution policy.
+
+The recent objective-presence checks reinforce the semantic boundary: an absent
+cost is not a zero-cost priority. Any transformation touching aggregate
+producers or objectives must preserve that distinction together with complete
+models and optimum ties. A rewrite that only preserves satisfiability is not
+an adequate optimizer for ordinary complete enumeration.
+
+### Bounded execution and evidence
+
 Each pass should produce a transformed shared program plus located transformation
 evidence: its name/version, exact input identity, applicability checks, output
 identity, vocabulary mapping, resource outcome and preservation-contract kind.
