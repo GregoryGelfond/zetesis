@@ -6,6 +6,7 @@
 
 - [A guided tour](architecture/tour.md)
 - [Programs, answer sets, and the reduct](architecture/semantics.md)
+- [From answer-set semantics to exact transforms](architecture/alignment.md)
 - [Source programs and grounding](architecture/grounding.md)
 - [Grounding compared with clingo](architecture/grounding-comparison.md)
 - [Composing exact execution](architecture/execution.md)

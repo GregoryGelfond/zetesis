@@ -5,6 +5,10 @@ execution layer represents the required work as joins, masks, Boolean evaluation
 reductions and independent candidate queries. These primitives are exact
 operations; they are not learned approximations or neural attention layers.
 
+The [alignment chapter](alignment.md) connects the two vocabularies with a
+diagram, primitive map and pseudocode for closure, frozen satisfaction and
+batched membership.
+
 ## Two exact membership paths
 
 For the normal profile, a seed fixes the reduct's gates. Positive inference

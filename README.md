@@ -20,6 +20,9 @@ Start with the [guided tour](docs/book/architecture/tour.md). The
 [zetesis Book](docs/book/index.md) develops the solver architecture, teaches the
 Rust libraries and presents the Lean proof library. It connects the logical
 operations to the joins, masks, fixed points and batches that implement them.
+The [alignment chapter](docs/book/architecture/alignment.md) makes that connection
+explicit with a diagram, algorithm pseudocode and links to the corresponding
+Rust and Lean definitions.
 
 ## Restore a route
 

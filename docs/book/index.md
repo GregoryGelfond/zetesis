@@ -5,6 +5,10 @@ the logical question—whether an interpretation is an answer set—from the
 candidate generation, source joins, Boolean transforms and parallel execution
 used to answer it. The native grounding and solving paths do not invoke clingo.
 
+The [architecture alignment](architecture/alignment.md) connects ASP operations
+to exact execution transforms through a diagram and pseudocode, with links to
+their Rust implementations and Lean laws.
+
 This book has three parts:
 
 - **[Solver design and architecture](architecture/tour.md)** follows one program
