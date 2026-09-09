@@ -53,11 +53,11 @@ fn string_end(text: &str, start: usize) -> Result<usize, Error> {
     }
     Err(Error::Literal("unterminated string".into()))
 }
-pub(super) fn literals(text: &str) -> Result<String, Error> {
+fn literal_prefix(text: &str) -> Result<(String, usize), Error> {
     let mut offset = trivia(text, 0)?;
     let mut output = String::new();
     let mut found = false;
-    while offset < text.len() {
+    while text.as_bytes().get(offset) == Some(&b'"') {
         let end = string_end(text, offset)?;
         let value: String = serde_json::from_str(&text[offset..end])?;
         output.push_str(&value);
@@ -66,6 +66,13 @@ pub(super) fn literals(text: &str) -> Result<String, Error> {
     }
     if !found {
         return Err(Error::Literal("empty literal sequence".into()));
+    }
+    Ok((output, offset))
+}
+pub(super) fn literals(text: &str) -> Result<String, Error> {
+    let (output, end) = literal_prefix(text)?;
+    if end != text.len() {
+        return Err(Error::Literal("trailing literal expression".into()));
     }
     Ok(output)
 }
@@ -127,12 +134,12 @@ pub(super) fn assertion(text: &str) -> Result<(String, Vec<String>, String), Err
         return Err(Error::Literal("trailing assertion text".into()));
     }
     let inner = &text[opening + 1..end];
-    let equal = inner
-        .find("==")
+    let (expected, end) = literal_prefix(inner)?;
+    let right = inner[end..]
+        .strip_prefix("==")
         .ok_or_else(|| Error::Literal("expected equality assertion".into()))?;
-    let expected = literals(&inner[..equal])?;
-    let right = inner[equal + 2..].trim();
     let right = right
+        .trim()
         .strip_prefix("IO::to_string")
         .ok_or_else(|| Error::Literal("expected IO::to_string".into()))?;
     let outer = trivia(right, 0)?;

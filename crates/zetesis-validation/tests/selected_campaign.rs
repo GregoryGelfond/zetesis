@@ -116,6 +116,20 @@ fn exact_full_model_campaign_passes() {
 }
 
 #[test]
+fn campaign_schema_names_the_license_ceiling() {
+    let fixture = Fixture::new(|_, _| {});
+    let report = fixture.run();
+    let stored = serde_json::to_value(&report).unwrap();
+    assert_eq!(stored["schema"], 2);
+    let limits = &stored["requested_limits"]["corpus"];
+    assert_eq!(
+        limits["license_bytes"],
+        curated::Limits::default().license_bytes
+    );
+    assert!(limits.get("original_bytes").is_none());
+}
+
+#[test]
 fn hidden_identity_mismatch_cannot_pass() {
     let fixture = Fixture::new(|index, record| {
         if index == 0 {

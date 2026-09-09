@@ -73,6 +73,15 @@ fn assertion_decoding_preserves_its_contract() {
 }
 
 #[test]
+fn quoted_equality_does_not_split_the_assertion() {
+    let input = r#"REQUIRE("([[eq==]],[])" /* == */ == IO::to_string(solve("p.")))"#;
+    let (source, arguments, expected) = assertion(input).unwrap();
+    assert_eq!(source, "p.");
+    assert!(arguments.is_empty());
+    assert_eq!(expected, "([[eq==]],[])");
+}
+
+#[test]
 fn unsupported_assertion_wrappers_are_refused() {
     for input in [
         "CHECK(1)",

@@ -203,7 +203,7 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
     let directory = tempfile::tempdir()
         .map_err(|source| identity::io(Path::new("temporary campaign directory"), source))?;
     let mut report = Report {
-        schema: 1,
+        schema: 2,
         target: "clingo-5.8.2-selected-24",
         manifest_sha256: curated::MANIFEST_SHA256,
         requested_execution: request.execution,

@@ -181,6 +181,11 @@ spans remain inspectable provenance; complete model contracts stay separate from
 the helper's display projection. Updating a pinned manifest requires a deliberate
 source/provenance review.
 
+Selected comparison reports use schema 2. In `requested_limits.corpus`,
+`license_bytes` replaces schema 1's `original_bytes`; it limits the retained
+license read. The selected campaign does not read original upstream C++ files.
+Previously captured schema 1 reports retain their original field names.
+
 On Linux/macOS, process capture uses the safe process-group backend.
 `Stop::Completed` means the direct child was reaped and both captured streams
 reached EOF. It does not establish solver exhaustion, descendant termination
