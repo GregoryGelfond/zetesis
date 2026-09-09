@@ -49,3 +49,31 @@ Broad optimization implementation follows source-language closure. No comparativ
 speedup claim follows from incidental test timings. Rust `@` execution is a later
 explicit milestone; its planned haversine example is recorded in
 [the function contract](rust-functions.md).
+
+## Following this checkpoint
+
+The next proposed language slices are numeric weighted-head aliases and bounded
+conditional disjuncts. Both remain unimplemented at this checkpoint.
+
+Weighted heads can reuse the separation between atom permission and complete-tuple
+activity already established for count heads. Start with signed numeric `#sum`
+and nonnegative numeric `#sum+`; qualify numeric extrema separately. Both alias
+directions, complete-key coalescing, zero-weight permission, recursive eligibility
+and exact resource ceilings need original/clingo and arbitrary frozen-reduct
+checks. Removing the existing guard alone would not establish that contract.
+
+Conditional disjuncts need an explicit scoped alternative and eligibility
+representation. A first slice can consume safely bound arguments and existing
+finite positive conditions without adding inverse arithmetic or objective
+consumers. Empty head families, inactive conditions, signed siblings, recursion
+and complete validation before simplification are essential controls. The Lean
+contract must distinguish existential head alternatives from universal body
+conditionals and preserve eligibility under the reduct.
+
+Broader objective producers and dynamic priorities need a separate foundation
+task. The flat certificate does not justify filtered or multiple producers, and
+variable priorities cross the existing fixed-priority template interface.
+Objective-dependent head guards should remain until their own completed-presence
+contracts preserve absent costs, numeric-zero priorities, global keys and ties.
+Language coverage can expose later optimization opportunities; it does not by
+itself demonstrate a performance benefit.

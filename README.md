@@ -260,8 +260,14 @@ Boolean heads, literal objective weights, bounded mixed-extrema presence and
 evaluated local witnesses in the source tree. Its combined library and ordinary
 CLI checks compare full models,
 objective absence, present zero priorities, tuple coalescing and optimum ties.
-Integration qualification is in progress; the promoted figures above do not
-qualify these new sources or a new installed executable.
+Its [final local checks](docs/verification/language-values-tranche-20260908/README.md)
+pass 2,451 workspace tests/doc checks, 348 independent CPU-only CLI checks,
+76 external-oracle tests and fresh 94/24 release comparisons. The current
+[Lean audit](proofs/verification/language-values-20260908/README.md) checks
+864 laws across 78 modules. CPU-only CLI coverage passes at 93.3773%; portable
+workspace coverage is 90.2015%, below the unchanged 91% floor. The new frozen
+25-test Metal package awaits physical execution and matching profile collection.
+This branch has not replaced the promoted main or installed commands.
 
 The checkpoint includes the following scoped capabilities. The
 [previous checkpoint](docs/verification/aggregate-primitives-tranche-20260908/README.md)
