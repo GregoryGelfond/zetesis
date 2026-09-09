@@ -215,14 +215,26 @@ fn element_order_preserves_full_models() {
 }
 
 #[test]
-fn aliases_fail_before_any_admitted_theory() {
+fn aliased_tuples_retain_each_atom_permission() {
     for function in ["#min", "#max"] {
-        for tuples in ["1:a;1:b", "1,k:a;1,l:a", "0:a:not d;0:b:not d"] {
-            profile(
-                &format!("d.0<={function}{{{tuples}}}."),
-                ProfileFeature::HeadAggregateAlias,
-            );
-        }
+        assert_eq!(
+            native(&input(&format!("1{function}{{1:a;1:b}}1."))),
+            Models::from([
+                BTreeSet::from(["a".into()]),
+                BTreeSet::from(["b".into()]),
+                BTreeSet::from(["a".into(), "b".into()]),
+            ])
+        );
+    }
+}
+
+#[test]
+fn aliased_atoms_select_every_eligible_tuple() {
+    for (function, bound) in [("#min", 1), ("#max", 2)] {
+        assert_eq!(
+            native(&input(&format!("{bound}{function}{{1:a;2:a}}{bound}."))),
+            Models::from([BTreeSet::from(["a".into()])])
+        );
     }
 }
 

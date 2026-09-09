@@ -18,6 +18,18 @@ pub(super) fn sources() -> Vec<(String, String)> {
 }
 
 const CASES: &[(&str, &str)] = &[
+    ("1#min{1:a;1:b}1.", "{a;b}.:-not 1#min{1:a;1:b}1."),
+    ("1#max{1:a;1:b}1.", "{a;b}.:-not 1#max{1:a;1:b}1."),
+    ("1#min{1:a;2:a}1.", "{a}.:-not 1#min{1:a;2:a}1."),
+    ("2#max{1:a;2:a}2.", "{a}.:-not 2#max{1:a;2:a}2."),
+    (
+        "{b;c}.1#min{1,k:a:b;1,k:d:c;2,l:a:c}1.",
+        "{b;c}.{a:b;d:c;a:c}.:-not 1#min{1,k:a,b;1,k:d,c;2,l:a,c}1.",
+    ),
+    (
+        "{b;c}.2#max{1,k:a:b;1,k:d:c;2,l:a:c}2.",
+        "{b;c}.{a:b;d:c;a:c}.:-not 2#max{1,k:a,b;1,k:d,c;2,l:a,c}2.",
+    ),
     (
         "0<=#min{0:a:a;0:a:not a}.",
         "{a:a;a:not a}.:-not 0<=#min{0:a,a;0:a,not a}.",

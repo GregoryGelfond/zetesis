@@ -41,7 +41,11 @@ fn exact_grounding_boundary_preserves_success_and_retains_failed_attempts() {
     assert_eq!(measured.theory().roots(), plain.theory().roots());
     assert_eq!(*observer.0.borrow(), [true, false]);
 
-    for (source, enters) in [("a(.", false), ("p(X).", false), ("1#min{1:a;1:b}1.", true)] {
+    for (source, enters) in [
+        ("a(.", false),
+        ("p(X).", false),
+        ("v(2147483647).0<=#min{X:a:v(X)}.", true),
+    ] {
         let observer = Observer::default();
         let result = admit_formula_with_grounding_observer(
             source.into(),

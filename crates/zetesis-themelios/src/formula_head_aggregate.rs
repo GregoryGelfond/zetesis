@@ -1,7 +1,7 @@
 //! Finite numeric aggregate heads retain separate permission and measure.
-//! Complete tuple validation precedes support or final lowering. Count and sums
-//! permit either tuple/atom alias direction; extrema retain their checked
-//! bijection profile. Neither bounds nor tuple weights supply bindings or support.
+//! Complete tuple validation precedes support or final lowering. Every measure
+//! permits either tuple/atom alias direction. Neither bounds nor tuple weights
+//! supply bindings or support.
 //! Positive conditions enumerate possible eligibility; default-negated gates
 //! consume established bindings. Choice lowering retains every eligibility
 //! formula. Support-table membership is never interpreted as truth.
@@ -93,7 +93,7 @@ impl Compiler<'_> {
 /// or publishes a formula. The immutable completed support/binding is replayed
 /// afterwards through the ordinary choice path. Both passes charge their work.
 /// A present map certifies the stronger tuple/atom bijection used by optional
-/// count planning. Nonbijective count and sum groups return no certificate; an
+/// count planning. Nonbijective function groups return no certificate; an
 /// ordinary choice has implicit atom keys and returns a present empty map.
 pub(super) fn validate_group(
     group: &ChoiceIr,
@@ -177,9 +177,6 @@ pub(super) fn validate_group(
             if tuples.get(&tuple).is_some_and(|previous| *previous != atom)
                 || atoms.get(&atom).is_some_and(|previous| *previous != tuple)
             {
-                if matches!(measure, HeadMeasure::Min | HeadMeasure::Max) {
-                    return Err(unsupported(ProfileFeature::HeadAggregateAlias, location).into());
-                }
                 bijective = false;
             }
             if !tuples.contains_key(&tuple) {
@@ -194,7 +191,7 @@ pub(super) fn validate_group(
             atoms.entry(atom).or_insert(tuple);
         }
     }
-    // This optional certificate is consumed only by CountPlan. Count and sum
+    // This optional certificate is consumed only by CountPlan. All measures'
     // semantics use the complete tuple activities even without a bijection:
     // each key contributes once when any eligible occurrence selects its atom.
     Ok(bijective.then_some(atoms))
@@ -336,7 +333,13 @@ mod tests {
 
     #[test]
     fn numeric_aliases_never_certify_a_bijection() {
-        for measure in [HeadMeasure::Count, HeadMeasure::Sum, HeadMeasure::SumPlus] {
+        for measure in [
+            HeadMeasure::Count,
+            HeadMeasure::Sum,
+            HeadMeasure::SumPlus,
+            HeadMeasure::Min,
+            HeadMeasure::Max,
+        ] {
             let mut same_tuple = element(true);
             same_tuple.head = AtomPattern::new(Predicate::new("q", 0).unwrap(), vec![]).unwrap();
             assert!(!validate_measure(measure, vec![element(true), same_tuple]).unwrap());
