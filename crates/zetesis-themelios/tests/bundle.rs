@@ -316,7 +316,7 @@ fn absolute_include_paths_remain_absolute() {
 }
 
 // Snapshot of cases and include closures from
-// docs/verification/kr-domains-target-manifest.json at the revision below.
+// validation/corpus/manifest.json at the revision below.
 // This deliberately uses no JSON/runtime dependency in the source boundary.
 // Upstream revision: 38f0660ded448ed268c5a68759ceb0e2840dd497.
 const CORPUS_CASES: &[(&str, &[&str])] = &[

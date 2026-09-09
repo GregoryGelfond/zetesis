@@ -101,10 +101,9 @@ fn cleaned_sources_have_no_annotation_lines() {
 
 #[test]
 fn original_inventory_retains_every_case() {
-    let old: Value = serde_json::from_slice(
-        &fs::read(repo().join("docs/verification/kr-domains-target-manifest.json")).unwrap(),
-    )
-    .unwrap();
+    let old: Value =
+        serde_json::from_slice(&fs::read(repo().join("validation/corpus/manifest.json")).unwrap())
+            .unwrap();
     let corpus = verified();
     assert_eq!(corpus.files().len(), 108);
     for (case, legacy) in corpus.cases().iter().zip(old["cases"].as_array().unwrap()) {
@@ -120,10 +119,9 @@ fn original_inventory_retains_every_case() {
 
 #[test]
 fn every_original_annotation_has_deletion_coordinates() {
-    let old: Value = serde_json::from_slice(
-        &fs::read(repo().join("docs/verification/kr-domains-target-manifest.json")).unwrap(),
-    )
-    .unwrap();
+    let old: Value =
+        serde_json::from_slice(&fs::read(repo().join("validation/corpus/manifest.json")).unwrap())
+            .unwrap();
     let corpus = verified();
     for legacy in old["cases"].as_array().unwrap() {
         let source = corpus

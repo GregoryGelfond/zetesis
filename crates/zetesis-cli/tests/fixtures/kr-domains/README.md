@@ -10,11 +10,9 @@ synthetic scalar facts. They are fragment conformance tests, not executions of
 the original complete shortest-path or task-allocation optimization domains.
 No source-language extension is implied.
 
-Full support for the 94 original non-clingcon cases is the required future
-target. None of these extracted cases counts as a full original case passing;
-the compatibility target and exact manifest are in
-`docs/verification/kr-domains-compatibility.md` and
-`docs/verification/kr-domains-target-manifest.json` at the repository root.
+Complete original cases are tested separately using the source identities and
+contracts in `validation/corpus/manifest.json` at the repository root. Fragment
+fixtures never count as complete original cases.
 
 ## Accepted extracted cases
 
@@ -50,7 +48,7 @@ the shortest-path excerpt, including its final LF, is
 The allocation lines with one blank line between them hash to
 `4bad5c8d9cd83776e06a060eb39ddb7544fad28d448dd13fdd7a775bd30af45c`.
 
-## Historical S0 refusal cases
+## Relational-profile refusal cases
 
 `refused/shortest-path-variant-01.lp` is a byte-for-byte copy of the entire
 `encodings/shortest-path/variant-01.lp`. It includes `#defined`, a conditional
@@ -67,16 +65,11 @@ results are covered separately by the snapshots below.
 choices, ordering, arithmetic, and `#show`; S0 must refuse it. Its current first
 diagnostic is an unsupported non-scalar term/operator.
 
-All **155 unchanged `.lp` files** in the pinned snapshot were checked for S0
-admission: **none was admitted**. The 20 open encodings, 125 scenario files, and
-10 standalone cases therefore supply no unchanged complete solve benchmark for
-this profile. See `docs/verification/kr-domains.md` and the recorded inventory.
-
 ## Complete original-source snapshots
 
-`complete-models.json` is separate from the historical S0 excerpts above. It
-records external clingo results for 68 unchanged original entry graphs selected by the
-aggregate-assignment checkpoint, including every optimal displayed model set,
+`complete-models.json` is separate from the relational-profile excerpts above. It
+records external clingo results for 68 unchanged original entry graphs selected for this
+regression fixture, including every optimal displayed model set,
 raw full-model count and cost vector. The CLI regression runs each original
 vendored entry graph with its unchanged includes, requests every model and
 compares complete results and exhausted coverage without requiring clingo.

@@ -35,6 +35,16 @@ jobs:
           df -h .
           du -sh target
 
+  book:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - run: rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+      - uses: taiki-e/install-action@51c9d223e46ef0189fd65bfe00a28e0de249282c
+        with:
+          tool: mdbook@0.5.4
+      - run: ./scripts/check.sh book
+
   proofs:
     runs-on: ubuntu-latest
     env:

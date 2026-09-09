@@ -13,9 +13,8 @@ zetesis-perf examples/kr-domains --suite queens --zetesis /path/to/zetesis \
 The baseline suite covers SEND, queens02 and task allocation; the queens suite
 covers all six unchanged N=8 encodings. Reports retain complete comparison
 evidence, source/binary identities, timed pairs and separate phase observations.
-Report destinations must be new. See the
-[measured protocol](../docs/verification/cpu-refresh-20260908/README.md) and
-[development guide](../docs/development.md#measure-and-document-the-result).
+Report destinations must be new. The [Rust validation guide](../crates/zetesis-validation/README.md)
+documents the maintained commands and their comparison contracts.
 This Rust runner does not yet measure peak RSS or provide the complete
 eager/lazy × CPU/Metal corpus matrix.
 
@@ -79,8 +78,8 @@ agreeing with each other, before a timing result is accepted. `@note` remains
 metadata; unknown contract tags are refused. Up to 256 source files and 16 MiB of
 source bytes are admitted. The supplied corpus directory must contain the exact
 manifest hashes. Source, dependency, manifest, runner, parser, memory-wrapper and
-binary/Python-interpreter hashes are retained before and after the campaign. The manifest's old
-historical status labels are not interpreted as current solver results.
+binary/Python-interpreter hashes are retained before and after the campaign. The corpus manifest contains source identities and test contracts; execution
+results belong to each comparison report.
 
 Timed pairs alternate which solver runs first, keeping the imbalance at most
 one pair. Wall time covers direct process creation, parsing, grounding, solving,
@@ -113,7 +112,7 @@ python3 -m unittest discover -s scripts/tests -v
 ```
 
 They cover the `optN` replay protocol, hidden equal displays, objective vectors,
-original contracts, malformed/incomplete outputs, quoted strings, the historical
-SEND+MORE record, timeout/output ceilings, source include hashes, child-only RSS
+original contracts, malformed/incomplete outputs, quoted strings, curated objective-free
+protocol samples, timeout/output ceilings, source include hashes, child-only RSS
 units and a complete report round trip using synthetic binaries. They never
 launch zetesis or clingo and establish no performance result.

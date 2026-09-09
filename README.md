@@ -5,27 +5,21 @@
 
 ζήτησις, *inquiry/search* — candidate-directed answer-set solving through the reduct.
 
-zetesis is an independent Rust answer-set solver exploring lazy materialization,
-parallel CPU execution and GPU computation. A generator proposes an
-interpretation; an exact oracle checks the original program and its frozen
-reduct. Only an interpretation that meets the stable-model criterion is returned
-as an answer set. Clingo is an external test oracle, never the runtime grounder
-or solver.
+zetesis is an independent Rust answer-set solver with lazy grounding, parallel
+CPU execution and GPU computation. A generator proposes an interpretation; an
+exact oracle checks the original program and its frozen reduct. clingo is an
+external test oracle, never the runtime grounder or solver.
 
-**The reduct is the architectural foundation.** For safe normal rules, checking
-specializes to least closure, constraints and candidate agreement. Richer
-programs use finite Ferraris formulas and proper-subset countermodel checking.
-A checked certificate can justify a cheaper exact test for an eligible program
-class. These are semantic specializations of the same acceptance criterion.
+**The reduct is the architectural foundation.** For normal rules, checking
+specializes to least closure, constraints and candidate agreement. General
+Ferraris formulas require minimality: no proper subset of a candidate may satisfy
+its frozen reduct. A checked program-class certificate can justify a cheaper
+exact test without changing this acceptance criterion.
 
-The aim is a massively parallel ASP system with the assurance required by
-mission-critical applications. The current implementation is experimental and
-hybrid: general formula grounding and candidate search run on the host, with
-optional GPU propagation and exact CPU completion. Full language parity, general
-lazy formula construction and deployment qualification remain open. Independent
-library reuse, themelios integration, clear code and stronger formal assurance
-are design goals alongside useful parallel execution. Outperforming clingo is a
-measured benefit, not a release requirement.
+Start with the [guided tour](docs/book/architecture/tour.md). The
+[zetesis Book](docs/book/index.md) develops the solver architecture, teaches the
+Rust libraries and presents the Lean proof library. It connects the logical
+operations to the joins, masks, fixed points and batches that implement them.
 
 ## Restore a route
 
@@ -50,17 +44,16 @@ reachable(Y) :- reachable(X), open(X,Y).
 ```
 
 ```sh
-zetesis examples/network-repair.lp --models 0
+zetesis examples/network-repair.lp --models 0 --stats
 ```
 
 The [complete example](examples/network-repair.lp) has two answer sets: one
 repairs the northern bridge, the other the southern bridge. Each includes its
-facts and recursive consequences. The solver rejects unsupported reachability
-and a plan requiring both repairs. The regression suite compares complete models
-with clingo, rather than just their displayed repair choices.
+facts and recursive consequences. Merely assuming that the clinic is reachable
+does not supply the support required by the reduct.
 
-A [kr-domains task-allocation scenario](examples/kr-domains/scenarios/task-allocation/variant-01/01-basic.lp)
-adds an objective:
+A [task-allocation example](examples/kr-domains/scenarios/task-allocation/variant-01/01-basic.lp)
+adds bounded choices and an objective:
 
 ```clingo
 1{ assigned_to(A,T) : agent(A), compatible_with(A,T) }1 :- task(T).
@@ -72,75 +65,37 @@ zetesis examples/kr-domains/scenarios/task-allocation/variant-01/01-basic.lp
 ```
 
 Its optimum assigns `a1` to `t1` and `a2` to `t2`, with cost **5**. Objectives
-score verified stable models; they supply no atom support. Exact bounds may
-prune candidates that cannot improve or tie an incumbent. `OPTIMUM FOUND`
-requires complete search, and `--models 0` displays every tied optimum.
-The [eight-queens example](examples/kr-domains/standalone/n-queens/variant-01.lp)
-likewise preserves all **92 answer sets**.
-
-The self-contained [kr-domains collection](examples/kr-domains/README.md) contains
-all 94 non-clingcon cases and their 14 shared encodings. Only elenctic annotation
-comments have been removed; a pinned manifest retains their test contracts,
-original and cleaned source hashes, and exact deletion provenance. Rust validation
-uses these examples by default. The independent original/clean clingo comparison
-passes every case with the same costs and selected display multiplicities.
+score verified answer sets; they supply no atom support. `OPTIMUM FOUND` requires
+complete search, and `--models 0` displays every tied optimum.
 
 ## Install and run
 
-From a checkout, install the pinned Rust 1.97.1 toolchain and native release
-commands once:
+From a checkout, install the pinned toolchain and release commands once:
 
 ```sh
 rustup toolchain install 1.97.1 --profile minimal --component rustfmt,clippy
 ./scripts/install.sh
 zetesis --help
-zetesis --version
-zetesis examples/network-repair.lp --models 0 --stats
 zetesis examples/network-repair.lp --models 0 --json
 ```
 
-The private repository and pinned themelios dependency require GitHub read
-access for the initial checkout/build. No sibling estate checkout is needed.
-The installer defaults to `~/.local/bin`; add that directory to `PATH` if the
-installer reports it missing. Pass a different binary directory as its argument.
-Installed commands need neither Cargo nor a Rust toolchain at runtime. GPU
-support is included; normal solving initializes its own device and pipelines.
+The repository and pinned themelios dependency require GitHub read access for the
+initial checkout/build. No sibling checkout is needed. The installer defaults to
+`~/.local/bin`; add it to `PATH` if requested, or pass a different installation
+directory. Installed commands need neither Cargo nor a Rust toolchain at runtime.
 
-Give multiple files in order, or use `-` for standard input. Without objectives,
-the default requests one answer set; `--models 0` requests exhaustive enumeration.
-Human output is the default. `--json` exposes a versioned streaming view retaining
-full models separately from displayed symbols, objective costs, completion and
-partial failure evidence. A resource stop is **incomplete**, never an UNSAT proof.
-The [CLI guide](crates/zetesis-cli/README.md) describes stream contracts and exit
-codes.
+Human output is the default, with terminal-aware color. `--json` provides a
+versioned machine view. `--stats` reports measured phases and work counters;
+eager grounding is timed separately, while lazy joins interleave with solving.
+A resource stop is **incomplete**, never an UNSAT proof. Parser errors include
+themelios diagnostics with source locations and excerpts.
 
-`-h` and `--help` show everyday solving options. Use `--help-all` for the full
-oracle, worker, batch and resource controls; these options remain available in
-ordinary invocations.
+`--help` shows everyday options; `--help-all` adds execution and resource controls.
+Without objectives the default requests one answer set. Use `--models 0` for
+exhaustive enumeration. The [CLI reference](crates/zetesis-cli/README.md) documents
+stream contracts, diagnostics and exit codes.
 
-On a capable terminal, human answer headings use cyan with a bold `Answer:` label;
-optimization metadata uses italic green. Solve metadata on stderr uses blue
-labels and italic gray values. The untagged `SATISFIABLE` and `UNSATISFIABLE`
-verdicts use bold italic gray. Colors come from your terminal palette.
-`--color auto|always|never` controls styling. Automatic mode resolves stdout and
-stderr independently, respects a nonempty `NO_COLOR` and `TERM=dumb`, and leaves
-each redirected stream plain. JSON never contains styling.
-
-Malformed source reports the original themelios parser messages with file,
-line, column and marked source excerpts. Error headings and primary markers use
-red; locations and explanatory context use italic gray. Included files retain
-their own locations. Standard input uses the neutral `<input>` label. Diagnostics
-go to stderr; syntax failure never becomes an `UNSATISFIABLE` result.
-
-`--stats` adds host timings and available work counters to stderr. It separates
-source preparation, eager grounding, solving and output. Formula grounding has
-additional attribution for support completion, rule instantiation and other
-materialization phases. Lazy joins are explicitly interleaved with solving;
-unentered or unmeasured work is not reported as zero. Timings exclude source
-loading, include instrumentation overhead, and are not GPU kernel measurements.
-Statistics are also available as typed Rust values and in the JSON view.
-
-## Select grounding and execution
+## Grounding and execution
 
 ```sh
 zetesis examples/network-repair.lp --backend cpu --grounder lazy --models 0
@@ -148,387 +103,49 @@ zetesis examples/network-repair.lp --backend metal --grounder eager --models 0
 zetesis devices
 ```
 
-`zetesis devices` is an optional inventory command, not a setup step.
+Automatic selection uses the admitted program profile and available execution
+capabilities. Explicit choices remain useful for reproducible comparisons.
+Normal relational programs support lazy source joins and CPU/Metal closure.
+General formulas use eager source grounding, with host candidate search,
+optional GPU propagation and exact CPU completion of unresolved reduct queries.
+GPU initialization happens inside the command; `devices` is an optional inventory.
 
-The [Linux/Vulkan qualification plan](docs/design/linux-vulkan-qualification.md)
-covers a second reported Fedora 44/Radeon 780M machine and a single transferable
-report archive. Vulkan execution is available through explicit selection, but
-that machine has not yet been qualified. The working tranche adds explicit
-Vulkan selection to the primitive benchmark interfaces; the repeated whole-solve
-matrix still needs Vulkan profiles and telemetry qualification.
+Metal has physical regression coverage on Apple M4 Pro. Vulkan is implemented
+but needs physical qualification on each claimed platform. Full GPU residency,
+general lazy formula construction and broad hardware qualification remain open.
+The [execution chapter](docs/book/architecture/execution.md) distinguishes
+semantic guarantees, scheduling and the work that remains on the host.
 
-The [grounder comparison](docs/design/grounding-compared-with-clingo.md) explains
-how zetesis's eager and lazy routes differ from clingo's grounder, including
-their current language coverage and hardware boundaries.
+## Libraries and assurance
 
-| Control | Current behavior |
-|---|---|
-| `--grounder auto\|lazy\|eager` | Relational execution can join source templates lazily or lower eagerly. Explicit lazy GPU execution composes host joins with per-world device consequences. Formula execution currently requires eager materialization. |
-| `--backend auto` | The closure route starts on lazy CPU; later eligible batches may use an accessible GPU. Formula solving selects CPU automatically. The closure batch threshold is provisional, not a measured crossover. |
-| Explicit backend | `cpu`, `metal`, `vulkan`, `dx12`, `gl`, `nvidia` or `gpu`. An unavailable required device is an error. NVIDIA uses a supported wgpu API, not CUDA. |
-| `--completion-workers N` | Bounded Rayon completion of independent formula-reduct queries, including GPU residuals. Defaults to one worker. |
-| `--batch-size N` | Bounds candidate batches. Logical completion scratch has its own explicit ceiling. |
-| `--oracle auto` | Selects an exact supported check, including certified support checking where applicable. `closure` and `countermodel` make the procedure explicit. |
+The libraries expose admitted programs, interpretations, bounded checks, sessions
+and typed outcomes independently of terminal rendering. A reusable
+`zetesis_ferraris::FrozenReduct` binds a reduct to the interpretation that defines
+it. Independent satisfaction queries can share that immutable reduct.
+See the [working Rust examples](docs/book/rust/libraries.md).
 
-Metal has been physically qualified on an Apple M4 Pro for the recorded builds.
-The static closure oracle uses a bounded ground graph; general formula execution
-batches GPU propagation and exact CPU residual completion. Source loading,
-parsing, materialization, candidate generation and objective work still run on
-the host. The last promoted checkpoint's [25 physical Metal regressions](docs/verification/language-closure-tranche-20260908/README.md)
-pass for frozen instrumented executables, covering lazy transport reuse, complete
-closures, tight support, native aggregates, ordinary solving and admitted
-weighted heads. Combined count-head/objective cases preserve absent costs and
-interrupted incumbents. The checks retain
-limits and output-failure accounting. These tests establish neither release
-performance nor an RSS reduction.
-Lazy general-formula execution remains an implementation
-gap. Broader lazy Metal qualification is required before version 1.0. CUDA,
-multi-GPU execution and neuromorphic backends are
-future work. See [execution boundaries](docs/implementation.md) and the
-[hardware evidence](docs/verification/metal-requalification-20260907/README.md).
+The [Lean library](proofs/README.md) develops satisfaction, reducts, minimality,
+normal least closure and their preservation laws. Its normalized-rule translation
+is proved equivalent to Ferraris answer-set semantics. These mathematical laws
+are not yet an end-to-end verification of Rust, source lowering or WGSL. The
+[correspondence chapter](docs/book/lean/correspondence.md) states that boundary.
 
-## Status
+The implementation remains experimental. Full intended language coverage and
+mission-critical deployment assurance are goals, not present certifications.
+Theory atoms, Python/Lua scripting, `#heuristic` and `#edge` are outside the current
+supported scope; Rust ground-time functions and broader incremental integration
+remain planned. Unsupported constructs receive explicit refusals.
 
-The language target is clingo source and answer-set compatibility **excluding
-theory atoms/terms, Python/Lua scripting, `#heuristic` and `#edge`**. The two
-directives are deliberate project exclusions and receive explicit refusals.
-Passing a selected corpus is not a
-percentage of language compatibility. The source boundary uses the unchanged
-themelios parser and owned program model; admission failures distinguish upstream
-syntax, raising and evaluation errors from zetesis implementation refusals.
+The self-contained [kr-domains examples](examples/kr-domains/README.md) include
+94 non-clingcon cases and 14 shared encodings, with source hashes, licenses and
+annotation-removal provenance. Regression comparisons check complete answer sets,
+objective costs and optimum ties. Reproduce comparisons with the Rust
+[validation tools](crates/zetesis-validation/README.md); distinguish matched
+end-to-end solves from kernel measurements when comparing performance.
 
-| Area | Implemented scope |
-|---|---|
-| Normal rules | Safe finite rules, constraints, default/double negation, strong negation with coherence, and relational lazy checking in the admitted normal-rule profile. |
-| Formula rules | Bounded choices, signed atom/Boolean singleton and disjunctive heads, finite rule/head pools, evaluated heads, scalar/range bindings, comparisons and admitted universal body conditionals. |
-| Aggregates | Body count/sum/sum+ and complete-value min/max comparisons; acyclic dependent assignments feeding scalar/tuple filters, scalar equalities, evaluated positive arguments and heads, default/double-negated outer atoms and admitted projections, finite outer ranges, integer choice bounds, nonbinding aggregate guards and existing universal conditional scopes; count heads with separate atom permission and complete-tuple activity, including both alias directions; signed numeric sum, nonnegative numeric sum+ and numeric min/max heads retain their checked tuple/atom correspondence. |
-| Logical values | Closed signed functions and tuples; finite construction from bound inputs; positive tuple/function patterns, including local conditional-consequent witnesses with evaluated arguments; expressions consume established or structurally captured inputs; evaluated already-safe negative arguments. |
-| Objectives and observations | Admitted minimize/maximize/weak constraints, including ignored resolved nonnumeric literal weights; complete tuple keys, explicit priority presence and optimal ties; total aggregate observers through acyclic predicate renamings and argument permutations; bounded flat mixed-extrema observers with separate mandatory/possible presence evidence; signature, term and conditional `#show`; `#defined`; original include bundles and constants; explicit parameter-free `#program base` sections. |
-| Refusal boundaries | Cyclic or self-dependent assignment generators; unsupported local conditional generators; negative sum+ head weights, nonnumeric measured heads and weighted/extrema tuple aliases; nontrivial conditional disjuncts; unsupported objective-dependent producers, including relevant function heads and mixed-extrema profiles outside the flat certificate; broader directives and exact clingo undefined-arithmetic behavior remain incomplete. |
-
-These rows summarize profiles; they are not a grammar specification. The
-[source API guide](crates/zetesis-themelios/README.md) describes composition,
-scope and resource limits. The [compatibility matrix](docs/verification/clingo-compatibility.md)
-records the broader target. [Numeric semantics](docs/design/numeric-semantics.md)
-explains endpoint guards and why an internal refusal does not by itself establish
-a modeling error. Undefined or overflowing admitted arithmetic currently produces
-an explicit refusal rather than reproducing all of clingo's simplifications.
-Source values and arithmetic remain checked `i32`. The new native CPU aggregate
-primitive separately accumulates checked `i128` results; it does not widen source
-terms. Its GPU numeric profile admits only carriers whose intermediate sums fit
-its checked `i32` range. Unsupported device representation is a capability
-failure, not a new source-language refusal.
-
-Completed outer values feed [negative consumers](docs/verification/outer-negative-consumers-20260908/README.md)
-and [finite dependent ranges](docs/verification/outer-ranges-20260908/README.md)
-in ordinary, choice and checked count-head bodies. For example,
-`{p(0)}.q(N):-N=#count{},not p(N).` has answer sets `{p(0)}` and `{q(0)}`:
-the count supplies an argument, while the original negative atom decides whether
-the rule applies. Similarly, `{d}.q(K):-N=#count{1:d},K=1..N.` has the empty
-answer set and `{d,q(1)}`. Each generated row retains the original aggregate
-equality and rule activation; a proposed value never certifies aggregate truth.
-
-Completed values also feed the existing universal conditional scopes, with every
-original implication retained. The [conditional-consumer record](docs/verification/conditional-consumers-20260908/README.md)
-compares 33 original sources, 146 complete clingo models and 9,876 original/frozen
-interpretation pairs. Explicit parameter-free `#program base` declarations now
-work across [source and bundle boundaries](docs/verification/base-sections-20260908/README.md);
-named or parameterized sections remain located implementation refusals.
-
-[Numeric sum heads](docs/verification/weighted-heads-20260908/README.md) now keep
-head permission separate from the numeric bound, including zero-weight heads.
-The scoped checks retain 27 originals, 43 complete clingo models and 846 arbitrary
-frozen interpretation pairs, plus generated arithmetic properties. Negative
-`#sum+` head weights remain an internal limitation with a recorded reference
-discrepancy; they are not labeled modeling errors.
-
-The [promoted language-values checkpoint](docs/verification/lint-discipline-20260909/promotion/README.md)
-extends
-Boolean heads, literal objective weights, bounded mixed-extrema presence and
-evaluated local witnesses. Its combined library and ordinary
-CLI checks compare full models,
-objective absence, present zero priorities, tuple coalescing and optimum ties.
-The subsequent [lint audit](docs/verification/lint-discipline-20260909/README.md)
-removes two unused-code suppressions, adds an authored-attribute regression and
-brings both maintained standalone Rust packages into the portable gate. Integrated
-checks pass 2,461 workspace tests/doc checks, 348 independent CPU-only CLI checks,
-25 standalone tests and 76 external-oracle tests. The release solver and validation
-commands remain byte-identical to the binaries that passed the 94/24 corpus
-comparisons. The [Lean audit](proofs/verification/language-values-20260908/README.md)
-checks **864 laws across 78 modules**. Concrete source/Rust/WGSL correspondence
-remains unproved. All five installed commands use the exact qualified release
-bytes. The [language-closure progress record](docs/design/language-closure-progress.md)
-retains the remaining head and objective dependency obligations. This checkpoint
-makes no new comparative performance claim.
-
-The corrected build passes [25 matching physical Metal tests](docs/verification/lint-discipline-20260909/physical/README.md)
-on Apple M4 Pro. Both unchanged 91% coverage floors pass: **93.6480% workspace
-with matching physical execution / 93.3773% independent CPU-only CLI**.
-The portable workspace baseline remains 90.2015%; it is retained separately.
-Only the eight profiles from the corrected frozen executables enter the combined
-workspace report. Earlier physical profiles remain historical evidence.
-The checkpoint is on `main` and the private remote; hosted CI remains temporarily
-disabled under the local macOS qualification policy. The next planned tranche
-focuses on [semantic architecture and library alignment](docs/design/semantic-architecture-tranche.md).
-
-The checkpoint includes the following scoped capabilities. The
-[previous checkpoint](docs/verification/aggregate-primitives-tranche-20260908/README.md)
-retains its own qualification, timing populations and limitations.
-
-| Checkpoint capability | Boundary and evidence |
-|---|---|
-| Count-head activity | [Tuple/atom aliases](docs/verification/count-head-activity-20260908/README.md) preserve separate atom permission and complete-tuple activity: 35 original sources and 67 complete models. Optional CountPlan certificates decline nonbijective groups; weighted/extrema profiles retain their restrictions. |
-| Objective transport | [Qualified acyclic forwarding](docs/verification/objective-forwarding-20260908/README.md) admits 38 new originals with 69 full model/cost records. Mixed-extrema presence and objective-dependent function heads retain explicit implementation refusals. Combined library/device checks retain absent costs and partial optimization accounting. |
-| Completed-value aggregate guards and numeric min/max heads | [Guard checks](docs/verification/nonbinding-guards-20260908/README.md) retain 46 originals / 88 complete models / 7,312 frozen pairs; [extrema heads](docs/verification/extrema-heads-20260908/README.md) retain 51 originals / 94 models / 5,439 frozen pairs. Tuple/head bijection, original eligibility and numeric endpoint limits remain. |
-| Native aggregate operations | The [CPU library](docs/verification/native-aggregates-20260908/README.md) and [numeric GPU primitive](docs/verification/native-aggregate-gpu-20260908/README.md) compute count, sum, sum+, min and max over complete tuple eligibility. Ordinary solving still uses Boolean aggregate lowering; GPU mask acquisition remains on the host. Frozen Metal qualification passes; Vulkan remains unqualified. |
-| Source count consequences | An opt-in [CountPlan](docs/verification/source-count-plans-20260908/README.md) derives guarded partition bounds for candidate generation while preserving the original reduct subject. Its 10 originals match 53 complete clingo models. Greedy discovery can miss a cover; `NoPlan` does not prove that no consequence exists. It does not recognize queens02's body-count/pairwise encoding. |
-| Transport execution | [Selective lazy input retention](docs/verification/lazy-transport-retention-20260908/README.md) passes portable ownership/resource controls and the integrated Metal tests. [Controlled measurements](docs/verification/aggregate-primitives-tranche-20260908/measurements/lazy.md) show fewer allocation-bearing submissions, with modest and variable timing differences. |
-
-The [numeric-prefix experiment](docs/verification/numeric-prefix-20260908/measurements/README.md)
-was declined after controlled comparisons showed mixed effects and regressions;
-it is not a retained optimization. Its qualification and measurement evidence
-remain available. Source arithmetic still uses the existing checked evaluator.
-
-These operations preserve the reduct foundation. A native aggregate result is
-neither a source-completeness certificate nor an answer set; a count restriction
-cannot provide logical support. The source planner initially requires canonical
-true element eligibility, not merely an atom known as a domain fact. The
-[partition design](docs/design/partition-consequences.md) separates this bounded
-source bridge from its earlier manually supplied queens experiment.
-
-A standalone [tight-support Metal experiment](docs/design/metal-tight-support.md)
-now applies the CPU class certificate through a bounded GPU checker. Its matched
-scalar/Rayon/fresh-Metal/resident-Metal harness preserves exact CPU completion of
-residuals. Four [physical Metal tests](docs/verification/tight-metal-experiment-20260908/README.md)
-pass on Apple M4 Pro. [Matched measurements](docs/verification/tight-metal-experiment-20260908/measurements/README.md)
-now show that residency helps, but this primitive remains slower than scalar and
-Rayon checking in all 18 tested case medians. Those measurements retain their
-earlier experimental binary identity; ordinary backend selection is unchanged.
-The [tranche plan and progress](docs/design/next-language-and-execution-tranche.md)
-prioritizes the remaining admitted-language gaps, with native aggregate
-primitives, bounded CPU/GPU experiments, Linux qualification and a broader
-foundation research survey alongside them.
-
-The [September CI policy](docs/verification/local-macos-ci-20260908/README.md)
-uses local macOS qualification while GitHub Actions is paused through September
-30. This checkpoint has no hosted Linux result. Historical qualifications and
-source-specific limitations remain in the [verification index](docs/verification/status.md).
-
-Relational lazy source joins offer an opt-in world-membership filter, which omits
-joins with no common current candidate world. Sparse controls save work; dense
-controls pay overhead. [Reusable join frames](docs/verification/join-workspace-20260908/README.md)
-now reduce repeated preparation while membership is rebuilt every round and
-retained storage stays charged. Defaults remain unchanged. The updated masked
-path now passes [physical Metal qualification](docs/verification/consumer-execution-tranche-20260908/physical/README.md)
-for the recorded 33-occurrence fixture and chunk sizes one and seven. No GPU
-speedup or process-RSS claim follows from these work and transfer controls.
-
-The [latest controlled CPU comparison](docs/verification/language-execution-tranche-20260908/timing/README.md)
-uses 21 alternating timed pairs per case, one worker per solver and complete
-answer/optimal-tie enumeration. Native runs explicitly request eager grounding;
-automatic oracle selection uses certified tight-support checking on these inputs:
-
-| Clean input | zetesis median | clingo 5.8.2 median | zetesis / clingo |
-|---|---:|---:|---:|
-| SEND + MORE = MONEY | 38.08 ms | 12.86 ms | 2.960 |
-| Eight queens, variant 02 | 89.57 ms | 119.52 ms | 0.749 |
-| Task allocation, variant 04 / larger mix | 120.70 ms | 179.94 ms | 0.671 |
-
-All 153 baseline and 306 separate six-queens observations pass. Zetesis has the
-lower median on this queens input and task-allocation case. Across all six
-queens encodings, clingo is faster on the other five. Every encoding retains
-all 92 displayed boards at size eight; hidden atoms differ. Full per-encoding
-results and separate diagnostic counters are retained in the timing record.
-The [queens analysis](docs/verification/language-execution-tranche-20260908/analysis/queens.md)
-identifies candidate generation and representation size as general optimization
-targets. The [graph and allocation analysis](docs/verification/language-execution-tranche-20260908/analysis/domains.md)
-separates current correctness evidence from the earlier full-corpus timing matrix.
-
-These are descriptive CPU comparisons, not an isolated optimization effect or
-a general solver ranking. Preparation I/O may have overlapped SEND or baseline
-measurement; the coordination audit preserves that limitation. Process timers
-include startup, capture and each producer's different output format. A separate
-33-admission SEND study retains a median of **17.70 ms** for admission without
-internal observers;
-its detailed mode still attributes most admission work to rule instantiation.
-Peak RSS and lazy/GPU timings are not part of this whole-solve population.
-
-An earlier [controlled propagation comparison](docs/verification/binary-propagation-20260908/README.md)
-isolates omission of empty binary-clause replacement scans. Across 42 timed
-native observations per variant, queens02 falls from **98.26 to 92.80 ms** and
-task allocation from **130.05 to 126.38 ms**; SEND is flat at **39.54 / 39.60 ms**.
-All 612 solve observations pass. The ABBA order, full distributions and reference
-drift are retained; this establishes neither a general speedup nor a memory or
-GPU improvement. These source-controlled populations are distinct from the
-current workload comparison and must not be combined as one timing series.
-
-The [instrumented M4 Pro corpus matrix](docs/verification/dependencies-measurement-tranche-20260908/physical/README.md)
-now records explicit CPU/Metal and eager/lazy requests over all 94 clean examples.
-All eager CPU and Metal observations match clingo's complete selected-answer,
-cost and optimum-tie contracts. Both lazy profiles refuse all 94 formula inputs;
-those positions have no timed population. Metal/eager is slower than CPU/eager
-on all 94 inputs here: the median per-case ratio is 3.020. Device setup and
-different oracle selections contribute; native full-model JSON and statistics
-also make this a different output protocol from the earlier CPU comparison.
-[All six queens encodings and all other inputs](docs/verification/dependencies-measurement-tranche-20260908/physical/corpus-timing.md)
-retain their individual timings and scopes.
-
-The separate `zetesis-bench lazy` compares identical frozen candidate batches
-across scalar, independent Rayon, shared CPU and Metal source rounds. The latest
-[audited old/new/new/old comparison](docs/verification/aggregate-primitives-tranche-20260908/measurements/lazy.md)
-retains all 4,320 samples. Allocation-bearing submissions fall from 96 to 80
-across the 24 GPU case/route cells, and complete buffer reuse rises from 8 to 24
-of 104 submissions. Metal medians decrease in 19 of 24 cells, but interquartile
-ranges overlap in 21. Build-scope differences and the larger timed statistics
-snapshot prevent attributing these modest differences to retention alone.
-Peak requested payload is unchanged; process RSS was not measured.
-
-For dense width-8/128-world batches, new Metal Union takes a pooled median
-**7.257 ms**, independent Rayon **14.931 ms**, and shared CPU Union **4.606 ms**.
-The fastest CPU route beats the fastest Metal route in all 12 cases. Complete
-source/reduct-call timers exclude parsing, outer search, objectives and device
-setup; these repeated-candidate populations are separate from ordinary solves.
-The [previous comparison](docs/verification/language-execution-tranche-20260908/timing/metal/review/README.md)
-retains its original build and population rather than being pooled with this run.
-
-The new [native aggregate campaign](docs/verification/aggregate-primitives-tranche-20260908/measurements/aggregate.md)
-retains 2,700 samples across count, sum, sum+, min and max. Resident Metal beats
-scalar reduction in 8 of 45 case medians; four-worker Rayon is faster in all 45.
-At 4,096 tuples and 128 occurrences, resident reduction takes 1.020–1.106 ms,
-with host eligibility acquisition separately taking 0.964–1.044 ms. These
-primitive results do not establish faster ordinary aggregate solving.
-
-The [compact-trail experiment](docs/verification/trail-storage-20260908/README.md)
-was declined: its small storage saving did not establish a reliable runtime
-benefit across 612 complete comparisons. The production trail remains unchanged;
-the source patch, all observations and experimental proof evidence are retained.
-
-The current [bounded expression-storage experiment](docs/verification/evaluation-scratch-20260907/README.md)
-reduces median eager admission by 4.89% for SEND and 8.92% for queens02 in a
-controlled comparison. It reuses empty storage within a join cursor and preserves
-the checked arithmetic operations. These measurements exclude parsing and solving.
-The end-to-end comparison above includes the change but does not isolate its effect.
-
-The new [matched lazy CPU oracle experiment](docs/verification/ordered-joins-20260907/README.md)
-measures 61.9–62.7% less time for sparse scalar joins at 256 rows and
-68.3–71.1% less for eight-seed Rayon batches. Dense controls range from 4.0% less
-to 1.4% more time. It excludes source preparation and outer search; the three
-eager cases above do not exercise this optimization. Full samples and scopes
-remain in the records.
-
-Earlier [scalar arithmetic measurements](docs/verification/scalar-evaluation-20260907/ablation.md)
-and [whole-process results](docs/verification/execution-performance-20260907/README.md)
-retain their original sources and scope. These physical oracle measurements do
-not establish a faster ordinary solver or an automatic GPU crossover.
-The broader [corpus performance protocol](docs/design/corpus-performance.md)
-still requires additional repetitions, worker configurations, parameterized
-sizes and memory measurements. The first instrumented matrix covers every
-original input and requested route, retaining unsupported cells explicitly.
-
-## Libraries and mathematical specification
-
-The project is library-first. Source programs, ground interpretations, checked
-answer sets, objectives, completion and publication are distinct objects. Human
-and JSON output are views of those objects. Public limits and typed failures are
-part of each capability, not just command-line behavior.
-
-| Start here | Responsibility |
-|---|---|
-| [zetesis-themelios](crates/zetesis-themelios/README.md) | Bounded source preparation, themelios analysis, relational admission and eager formula grounding, preserving origins. |
-| [zetesis-domain](crates/zetesis-domain/README.md) | Conservative domain analysis over a borrowed themelios program, independent of solving. |
-| [zetesis-core](crates/zetesis-core/src/lib.rs) / [zetesis-ferraris](crates/zetesis-ferraris/README.md) | Relational and formula semantics, interpretations, reducts and validated representations. |
-| [zetesis-cpu](crates/zetesis-cpu/src/lib.rs) / [zetesis-wgpu](crates/zetesis-wgpu/README.md) | Closure execution and GPU primitives. |
-| [zetesis-sat](crates/zetesis-sat/README.md) / [zetesis-objective](crates/zetesis-objective/README.md) | Native candidate/countermodel search and exact objective work. Boolean queries are internal machinery; stable acceptance belongs to the reduct composition. |
-| [zetesis-cli](crates/zetesis-cli/README.md) | Prepared-input sessions, solve configuration, typed outcomes and output views, plus the process adapter. Extracting orchestration into a dedicated package remains planned. |
-| [zetesis-validation](crates/zetesis-validation/README.md) / [zetesis-experiments](crates/zetesis-experiments/README.md) | Curated fixtures, reusable bounded process capture and reported-answer checks, external-oracle qualification and bounded measurements, separate from production acceptance. |
-
-`prepare_formula` and `prepare_bundle_formula` expose analysis before ground
-materialization. Consuming their receipts with `ground()` resumes the original
-resource budget. Preparation is not a guarantee of successful grounding or
-proof that a lazy strategy supports that source. Standalone ground/solve commands,
-ASPIF interchange and Rust `@` functions remain design work.
-
-The [design specification](docs/design/zetesis.md) gives the architecture.
-The in-repository [Lean library](proofs/README.md) gives reusable mathematical
-laws, with a [reading guide](proofs/guide/README.md), structured proof convention,
-pinned toolchain and axiom/source audit. These are checked semantic contracts;
-they do **not** certify the Rust compiler, search implementation or shaders.
-Release work focuses on the [fundamentals enabling solver verification](docs/design/verified-solver.md),
-with definitions and module boundaries that can fit a broader ASP theory library.
-Comprehensive formalization of that broader theory is an adjacent long-term aim.
-See the [theory-extension design](docs/design/theory-propagators/README.md)
-and [neuromorphic feasibility assessment](docs/design/neuromorphic-feasibility-20260906.md)
-for future integrations.
-Selectable [Gelfond–Zhang aggregate semantics](docs/design/aggregate-semantics.md)
-is a post-1.0 direction; the current aggregate semantics remains clingo/Ferraris.
-[Brave and cautious consequences](docs/design/consequences.md) target version
-1.1. Their design considers streaming and targeted restricted search
-while keeping complete and partial conclusions distinct; no consequence-query
-API or performance evidence is available yet.
-
-## Build and check
-
-New collaborators should start with [Contributing](CONTRIBUTING.md) and the
-[development guide](docs/development.md): repository map, first edit, test
-selection, qualification prerequisites and documentation responsibilities.
-
-```sh
-cargo build --locked -p zetesis-cli
-cargo test --locked --workspace --all-features
-./scripts/check.sh portable
-```
-
-The portable gate includes rustfmt, pedantic Clippy, strict rustdoc, both normal
-and CPU-only CLI tests, Criterion correctness smokes and the remaining legacy
-tooling tests. It also checks the two maintained standalone Rust packages and
-rejects authored suppression of dead-code diagnostics. Rust property tests use
-proptest. Optional checks have explicit prerequisites:
-
-```sh
-./scripts/check.sh oracle    # external clingo 5.8.2 on PATH
-./scripts/check.sh proofs    # pinned Lean 4.33.1 through Elan
-./scripts/check.sh coverage  # cargo-llvm-cov and llvm-tools
-./scripts/check.sh coverage --metal # include 25 exact physical Metal tests
-```
-
-Workspace and CPU-only CLI coverage each retain an independent **91% line
-floor**. The explicit Metal mode retains portable-stage coverage, then adds 25
-named aggregate, lazy, tight, formula and ordinary-solving tests within the
-workspace profile; it never merges the CPU-only CLI profile. Each group requires
-its exact passing outcomes. Coverage does not measure assertion strength, Lean
-correspondence or shader execution. Unlisted GPU paths and Vulkan require their
-own physical test groups. The retained [CI workflow](.github/workflows/checks.yml) defines
-portable gates on Linux/macOS, proofs and Linux coverage. Hosted execution is
-temporarily disabled under the [local macOS policy](docs/verification/local-macos-ci-20260908/README.md).
-A hosted runner does not establish NVIDIA or Metal hardware qualification.
-
-The intended authored implementation is Rust, Lean and WGSL. Repository cleanup
-is in progress. The first reusable Rust process/answer boundary now serves the
-existing 94-case validator on Linux/macOS. It separates direct-child completion,
-cleanup ownership and reported display evidence; it does not certify solver
-correctness or hidden full models. The selected-upstream Rust campaign compares
-typed native full models against all 24 pinned contracts and clingo, retaining
-bounded failure evidence and primary-input seals. Its Python predecessor is
-retired. Other Python qualification tools and C++ import provenance remain
-until their replacements and independent evidence are verified.
-Corpus expectation annotations are consumed only by separate validation tools;
-they are ordinary comments to the solver and never guide its answers.
-The [organization plan](docs/design/repository-organization.md) records the
-migration without weakening gates or discarding evidence. Tooling follows the
-same coding and review standards as the solver.
-
-## Built on
-
-[themelios](https://github.com/GregoryGelfond/themelios) supplies source identity,
-parsing, programs and analysis at the estate's reviewed `87c11a3` pin.
-[Rayon](https://github.com/rayon-rs/rayon) supplies CPU parallel execution;
-[wgpu](https://github.com/gfx-rs/wgpu) supplies the GPU boundary.
-
-zetesis is a separate experiment from apokrisis, and a member of the same estate
-as themelios, keryx and morphe. The [standards alignment](docs/design/estate-alignment-20260907.md)
-and [assurance audit](docs/verification/audit-contract.md) describe the quality
-floor and the work still needed to reach the intended deployment standard.
+See [Contributing](CONTRIBUTING.md) for development and verification requirements,
+and [build the book](docs/book/building.md) to read the complete manual locally.
 
 ## License
 
-[MIT](LICENSE). Copyright © 2026 Gregory Gelfond.
+MIT. Copyright Gregory Gelfond.

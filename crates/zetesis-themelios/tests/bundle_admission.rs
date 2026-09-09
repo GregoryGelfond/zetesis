@@ -375,10 +375,9 @@ fn expansion_and_provenance_budgets_remain_global_across_files() {
 
 #[test]
 fn original_required_bundles_report_semantic_refusal_after_include_admission() {
-    let manifest: Json = serde_json::from_str(include_str!(
-        "../../../docs/verification/kr-domains-target-manifest.json"
-    ))
-    .expect("vendored target manifest");
+    let manifest: Json =
+        serde_json::from_str(include_str!("../../../validation/corpus/manifest.json"))
+            .expect("vendored target manifest");
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../validation/corpus/kr-domains");
     let cases = manifest["cases"].as_array().expect("required case entries");
     assert_eq!(cases.len(), 94);

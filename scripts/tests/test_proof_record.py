@@ -297,10 +297,11 @@ set -eu
 name=${0##*/}
 printf '%s %s\\n' "$name" "$*" >> "$TRACE"
 case "$name:$*:$FAILURE" in
+ mdbook:--version:*) printf '%s\\n' 'mdbook v0.5.4' ;;
  lake:build:build|lake:*Audit.lean:audit|python3:scripts/proof_record.py:record) exit 23 ;;
 esac
 '''
-                for name in ("lake", "cargo", "python3"):
+                for name in ("lake", "cargo", "python3", "mdbook"):
                     path = root / "bin" / name
                     path.write_text(stub)
                     path.chmod(0o755)

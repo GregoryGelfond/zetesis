@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 use crate::Options;
 
 const REVISION: &str = "38f0660ded448ed268c5a68759ceb0e2840dd497";
-const MANIFEST_SHA256: &str = "a99dafc272fb0047c01f984e27bf22943f2aa5f9c8acf04e4ed1de6ac1a3fe88";
+const MANIFEST_SHA256: &str = "372f44c59f3b6c530d50e6683e087dbceda028d54195b9f1de1ef610803c71fb";
 const MAX_MANIFEST: u64 = 4_194_304;
 const MAX_SOURCE: u64 = 1_048_576;
 
@@ -73,11 +73,10 @@ pub(crate) fn load(options: &Options) -> Result<Loaded, String> {
     let root = root
         .canonicalize()
         .map_err(|error| format!("corpus {}: {error}", root.display()))?;
-    let path = options.manifest.clone().unwrap_or_else(|| {
-        options
-            .repo
-            .join("docs/verification/kr-domains-target-manifest.json")
-    });
+    let path = options
+        .manifest
+        .clone()
+        .unwrap_or_else(|| options.repo.join("validation/corpus/manifest.json"));
     let bytes = bounded_read(&path, MAX_MANIFEST)?;
     if hash(&bytes) != MANIFEST_SHA256 {
         return Err("manifest identity differs from the trusted pinned target".into());
@@ -229,8 +228,7 @@ mod tests {
             root.clone().into_os_string(),
         ])
         .unwrap();
-        let original =
-            std::fs::read(root.join("docs/verification/kr-domains-target-manifest.json")).unwrap();
+        let original = std::fs::read(root.join("validation/corpus/manifest.json")).unwrap();
         let mut document: serde_json::Value = serde_json::from_slice(&original).unwrap();
         // Keep the revision and population counts, but remove a required edge.
         document["cases"][0]["includes"] = serde_json::json!([]);
@@ -323,11 +321,7 @@ mod tests {
     #[test]
     fn explicit_manifest_override_preserves_original_mode() {
         let mut options = repository_options();
-        options.manifest = Some(
-            options
-                .repo
-                .join("docs/verification/kr-domains-target-manifest.json"),
-        );
+        options.manifest = Some(options.repo.join("validation/corpus/manifest.json"));
         assert_original(&load(&options).unwrap());
     }
 
@@ -356,7 +350,7 @@ mod tests {
             std::fs::create_dir_all(destination.parent().unwrap()).unwrap();
             std::fs::copy(historical.root.join(path), destination).unwrap();
         }
-        let manifest = "docs/verification/kr-domains-target-manifest.json";
+        let manifest = "validation/corpus/manifest.json";
         let destination = directory.path().join(manifest);
         std::fs::create_dir_all(destination.parent().unwrap()).unwrap();
         std::fs::copy(source_options.repo.join(manifest), destination).unwrap();

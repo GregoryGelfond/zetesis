@@ -126,8 +126,8 @@ class ContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             contracts(answer, [{"tag": "new-unsupported", "arguments": ""}])
 
-    def test_historical_objective_free_send_records_still_normalize(self):
-        document = json.loads((SCRIPTS.parent / "docs/verification/send-money-20260905/comparison.json").read_text())
+    def test_objective_free_protocol_samples_normalize(self):
+        document = json.loads((SCRIPTS.parent / "scripts/tests/fixtures/objective-free-protocol.json").read_text())
         for entry in document["runs"]:
             answer = (clingo if entry["solver"] == "clingo" else native)(subprocess.CompletedProcess([], entry["returncode"], entry["stdout"], entry["stderr"]))
             self.assertEqual(answer["models"], document["models"])
@@ -224,7 +224,7 @@ class ProcessAndCatalogTests(unittest.TestCase):
         self.assertIn("timeout", timeout.exception.evidence["reason"])
 
     def test_original_transitive_graph_hashes_are_checked(self):
-        manifest = SCRIPTS.parent / "docs/verification/kr-domains-target-manifest.json"
+        manifest = SCRIPTS.parent / "validation/corpus/manifest.json"
         corpus = (SCRIPTS.parent / "validation/corpus/kr-domains").resolve()
         case, sources, size = runner.source_catalog(manifest, corpus, "scenarios/task-allocation/variant-04/05-larger-mix.lp")
         self.assertEqual(len(sources), len(case["transitive_source_paths"]))
@@ -235,7 +235,7 @@ class ProcessAndCatalogTests(unittest.TestCase):
             runner.source_catalog(manifest, corpus, case["path"], max_bytes=0)
 
     def test_full_report_protocol_with_fake_binaries_and_no_solver_execution(self):
-        manifest = json.loads((SCRIPTS.parent / "docs/verification/kr-domains-target-manifest.json").read_text())
+        manifest = json.loads((SCRIPTS.parent / "validation/corpus/manifest.json").read_text())
         case = next(case for case in manifest["cases"] if case["expected_satisfiability"] == "unsat")
         with tempfile.TemporaryDirectory() as temporary:
             temporary = Path(temporary)
@@ -269,7 +269,7 @@ class ProcessAndCatalogTests(unittest.TestCase):
             self.assertNotIn("models", terminal["answer"])
 
     def test_malformed_reference_still_writes_incomplete_report(self):
-        manifest = json.loads((SCRIPTS.parent / "docs/verification/kr-domains-target-manifest.json").read_text())
+        manifest = json.loads((SCRIPTS.parent / "validation/corpus/manifest.json").read_text())
         case = next(case for case in manifest["cases"] if case["expected_satisfiability"] == "unsat")
         with tempfile.TemporaryDirectory() as temporary:
             temporary = Path(temporary)

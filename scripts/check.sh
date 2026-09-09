@@ -4,11 +4,11 @@ set -eu
 mode=${1:-portable}
 coverage_option=${2:-}
 if [ "$#" -gt 2 ] || { [ "$#" -eq 2 ] && { [ "$mode" != coverage ] || [ "$coverage_option" != --metal ]; }; }; then
-    printf '%s\n' 'Usage: scripts/check.sh [portable|coverage|oracle|proofs|full]; scripts/check.sh coverage --metal' >&2
+    printf '%s\n' 'Usage: scripts/check.sh [portable|coverage|oracle|proofs|book|full]; scripts/check.sh coverage --metal' >&2
     exit 2
 fi
-case "$mode" in portable|coverage|oracle|proofs|full) ;; *)
-    printf '%s\n' 'Usage: scripts/check.sh [portable|coverage|oracle|proofs|full]; scripts/check.sh coverage --metal' >&2
+case "$mode" in portable|coverage|oracle|proofs|book|full) ;; *)
+    printf '%s\n' 'Usage: scripts/check.sh [portable|coverage|oracle|proofs|book|full]; scripts/check.sh coverage --metal' >&2
     exit 2 ;;
 esac
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -33,6 +33,17 @@ if [ "$mode" = portable ] || [ "$mode" = full ]; then
     cargo bench --locked -p zetesis-experiments --bench oracles -- --test
     cargo bench --locked -p zetesis-cpu --bench lazy_joins -- --test
     cargo bench --locked -p zetesis-ferraris --bench native_aggregates -- --test
+    cargo bench --locked -p zetesis-ferraris --bench frozen_reduct -- --test
+fi
+if [ "$mode" = book ] || [ "$mode" = full ]; then
+    if [ "$(mdbook --version)" != 'mdbook v0.5.4' ]; then
+        printf '%s\n' 'Documentation checks require mdBook 0.5.4.' >&2
+        exit 2
+    fi
+    mdbook build
+    # Keep one dependency configuration here so example crate lookup is unique.
+    cargo build --locked -p zetesis-cli --lib --no-default-features --target-dir target/book-tests
+    mdbook test --library-path target/book-tests/debug/deps
 fi
 if [ "$mode" = oracle ] || [ "$mode" = full ]; then
     cargo test --locked -p zetesis-themelios --test program_parts --test conditional_consumers --test weighted_heads --test nonbinding_guards --test extrema_heads --test count_plans --test count_head_activity --test objective_forwarding --test boolean_heads --test evaluated_witnesses --test objective_literal_weights --test objective_extrema_presence -- --ignored --nocapture

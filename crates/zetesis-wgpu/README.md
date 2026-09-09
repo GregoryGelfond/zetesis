@@ -1,377 +1,78 @@
 # zetesis-wgpu
 
-Exact GPU reduct primitives for zetesis. The original static profile compiles a
-`GroundProgram` under separate grounding limits before checking candidates.
-`check_batch` performs no source grounding or lazy tuple discovery.
+Bounded GPU operations for answer-set checking. CPU and GPU operations share the
+same reduct obligations; device scheduling does not establish a different
+semantics. The [execution chapter](../../docs/book/architecture/execution.md)
+explains their place in ordinary solving, and the
+[parallel library guide](../../docs/book/rust/parallel.md) describes composition.
 
-The experimental `GpuAggregateOracle` reduces a retained
-`zetesis_ferraris::native_aggregate::Group` through an opaque `AggregateGpuPlan`.
-It accepts ordered, Group-bound `Eligibility` occurrences acquired by the native
-formula evaluator. Count, sum, sum-plus, minimum and maximum preserve tuple
-identity and original/frozen eligibility; a paired result exposes original guard
-truth conjoined with frozen guard truth. This is an aggregate suboperation.
-Source completeness, aggregate head permission and stable-model minimality remain
-the caller's obligations. Ordinary solver dispatch does not yet select it.
+## Choose an operation
 
-Preparation preserves empty and nonnumeric keys as neutral sum contributions;
-count includes them. Extrema ignore empty keys and currently require numeric
-first components. Numeric `Bound::Integer` and `Bound::Term(Number)` guards share
-the same exact representation. Unsupported terms, out-of-range guards or unsafe
-signed carriers return a typed capability failure, permitting the native CPU
-operation without introducing a source refusal. Empty extrema have a separate
-presence bit and genuine `#inf`/`#sup` results; no integer acts as an endpoint.
+| Operation | Subject and result | Obligation outside this operation |
+| --- | --- | --- |
+| `GpuOracle` | Complete `GroundProgram` and candidate seeds; least closures, constraint failures and gate agreement | Complete candidate enumeration and source admission |
+| `GpuLazyOracle` | Relational source instances and frozen per-candidate worlds; synchronized closure rounds | Complete source coverage and final acceptance accounting |
+| `GpuFormulaOracle` | Original formula DAG and ordered candidate interpretations; rejection, completed refutation or a residual query | Exact completion of every residual before answer-set acceptance |
+| `GpuTightOracle` | A checked `TightPlan` and interpretations; original satisfaction and ranked support | Plan applicability, candidate enumeration and complete result accounting |
+| `GpuAggregateOracle` | An `AggregateGpuPlan` and Group-bound eligibility occurrences; count, sum, sum-plus, minimum and maximum | Source completeness, head permission and reduct minimality |
 
-One 64-lane workgroup reduces each occurrence using strided folds followed by a
-shared-memory tree. Signed addition is admitted only when the complete positive
-carrier fits `i32::MAX` and the complete negative carrier fits `i32::MIN`;
-cancellation in the final sum cannot hide an overflowing intermediate. The Lean
-arithmetic library models occurrence-preserving selected subcollections and
-addition-tree bounds. Actual Rust/WGSL partitioning, packing, synchronization
-and readback remain implementation correspondence obligations. No floating-point
-or optional subgroup operation is used.
+The tight and native aggregate operations are explicit library experiments;
+ordinary solver dispatch does not currently select them. A successful primitive
+benchmark is not a complete source-language solve.
 
-Construct `AggregateGpuPlan::new(&Group, AggregateGpuPlanLimits, &Control)` and
-`GpuAggregateOracle::new_selected(GpuOptions, GpuSelection)`, then call
-`check_batch(&AggregateGpuPlan, &[Eligibility], AggregateGpuLimits, &Control)`.
-Plan construction and formula-mask acquisition have independent work/storage
-budgets. Batch work charges identity checks, mask initialization/packing and
-complete readback validation, plus both full tuple/guard scans and two 63-combine
-trees on the device. Original-only records still reserve both phase scans but
-return no frozen result. Every nonempty successful batch submits actual device
-work; an empty Group is a valid executed operation.
+Construct an oracle with `GpuOptions` and an explicit `GpuSelection` where
+reproducibility requires a particular backend. Selection distinguishes physical
+adapters from fallback/software devices and retains adapter metadata. Consult
+[rustdoc](src/lib.rs) for exact constructors, limits and result types.
 
-One immutable numeric plan and exact occurrence-count transport remain resident.
-Plan clones share identity; independently prepared plans require upload. Before
-packing or allocation, batch admission checks the prospective payload after
-evicting incompatible ownership. Prior large shapes do not require manual cache
-clearing to admit an otherwise valid exact smaller shape. Successful statistics
-separately expose incoming owned residency and prospective active accounting.
-The latter includes retained host wire, GPU group/transport, packed masks, a
-mapped-readback allowance and returned records. It excludes borrowed Group/masks,
-caller-retained plans/results, allocator/driver overhead and deferred retirement;
-these numbers are authored payloads, not RSS or physical bus traffic.
+## Exact completion and failure
 
-Pure preflight failures preserve residency. Execution/readback failures poison
-the oracle and return no partial result vector. `activity()` retains submitted
-work, while completed occurrence/work/readback counts are committed only after
-the whole result vector validates. Each record carries an epoch and occurrence
-index; guard truth is independently rechecked against its decoded exact measure.
-The four ignored tests per API cover matched CPU reductions, word/lane boundaries,
-empty extrema, numeric endpoints, repeated/reordered batches, exact limits,
-residency changes and malformed submitted readback. They are prepared physical
-controls, without a hardware-pass or speedup claim:
+A formula propagation fixed point is not itself an answer-set certificate.
+`FormulaVerdict::Residual` requires the exact host completion path. Candidate
+ordering, original theory identity and the frozen candidate are preserved across
+that boundary. Device results cannot silently change the subject being checked.
 
-```sh
-cargo test --locked -p zetesis-wgpu --test hardware_aggregate metal -- --ignored --nocapture
-cargo test --locked -p zetesis-wgpu --lib metal_aggregate -- --ignored --nocapture
-```
+The static operation receives a complete ground program; `check_batch` performs
+no lazy tuple discovery. Lazy execution instead admits bounded source instances
+against immutable world snapshots. Source rounds and their coverage barriers
+remain part of correctness, even when instances are shared across candidates.
 
-Use the `vulkan`/`vulkan_aggregate` filters to select actual Vulkan qualification.
+Adapter, allocation, limit, cancellation, timeout, validation and device failures
+remain failures or incomplete work. They are never converted into UNSAT results.
+Resident plans and transport buffers retain explicit identity and capacity
+contracts. Statistics distinguish submitted work from completely validated
+results; payload accounting is not a measurement of process RSS or physical bus
+traffic. Read each operation's rustdoc before reusing residency after a failure.
 
-The separate experimental `GpuTightOracle` accepts a complete checked
-`zetesis_ferraris::TightPlan` and ordered `Interpretation` occurrences. It evaluates
-original formula truth and producer support on the selected device. Ranked
-support discharges the proper-subset reduct obligation for that certified class;
-the original theory, equality conditions and choice activation remain intact.
-Ordinary solver dispatch does not select this primitive yet.
+## Native numeric aggregates
 
-Construct it with `new_metal(GpuOptions)` or
-`new_selected(GpuOptions, GpuSelection)`, then call
-`check_batch(&TightPlan, &[Interpretation], TightGpuLimits, &Control)`.
-Results retain the scalar certificate's `TightVerdict`, including the first false
-root in original assertion order or the lowest unsupported present atom.
-Residuals remain the caller's exact reduct-completion responsibility. No CPU
-certificate evaluation is hidden behind GPU results, and an incomplete lazy
-registry cannot supply the required complete-theory certificate.
+Aggregate preparation coalesces complete tuple identities and retains original
+and frozen eligibility separately. Empty extrema carry presence explicitly;
+no ordinary integer stands for an empty minimum or maximum. The numeric GPU
+profile requires representable measured values and guards. Unsupported numeric
+plans return a capability failure rather than changing the source semantics.
 
-Each candidate has a separate 64-invocation workgroup. One invocation evaluates
-its topological DAG; cooperative root checks and producer support reduction follow.
-All scans run to completion, charging `nodes + roots + producers + 2*atoms`
-logical operations per candidate, including support initialization. This fixed
-charge differs from the scalar checker's early exits and is not a hardware
-instruction count. Runtime work and scratch storage are linear in the candidate
-count and graph/carrier sizes. Passing typed preflight limits does not guarantee
-that device allocation or execution succeeds.
+One 64-lane workgroup reduces each occurrence with strided folds and a shared
+addition tree. Signed sums require separately safe complete positive and negative
+carriers; cancellation in the final sum cannot justify an overflowing
+intermediate. Integer execution uses neither floating point nor optional subgroup
+operations. Actual packing, synchronization and readback remain executable
+refinement obligations; the Lean arithmetic laws alone do not verify WGSL.
 
-Immutable graph storage is reused only for the same theory instance: every
-accepted plan for that instance derives the same producers from the complete
-original roots, irrespective of valid rank choices. Candidate-count changes
-replace exact-shape transport. `last_batch_stats()` reports successful nonempty
-batches; `activity()` separately retains submitted and validated work on failure.
-Scheduled work is not claimed completed after a timeout. Transfer counters count
-authored initialized/write-buffer and decoded readback payload, not physical bus
-traffic. Byte budgets exclude caller-owned shared inputs, allocator overhead,
-driver-private storage and deferred retirement; they are not RSS ceilings.
+## Validate a physical backend
 
-Control and device health are checked even for empty batches. Every failed call
-returns a typed error without a partial result vector. Execution-stage failures
-invalidate the oracle; `clear_residency()` drops handles but does not repair it.
-Portable tests validate the wire layout, limits, cache decisions, malformed
-readback and WGSL. The four ignored Metal `hardware_tight` tests require actual Metal
-to qualify scalar/frozen-reduct agreement, ordered witnesses, world/atom
-boundaries and resource refusals. They are prepared tests, not a claim of physical
-qualification or a demonstrated speedup. The existing rank/support semantic
-proofs do not verify Rust packing, synchronization or device execution.
-
-The distinct `GpuLazyOracle` accepts a relational `Program` and frozen seed
-occurrences. It composes bounded host source scans with per-world GPU consequence
-evaluation over immutable rounds, without a complete ground-rule store.
-Demand-driven packed catalogs preserve separate world truth and frozen gates.
-Source progress and device work have separate typed statistics; failures publish
-no completed batch. Its
-[implementation and qualification boundary](../../docs/verification/lazy-device-integration-20260907/README.md)
-documents the budgets and seven explicit physical tests. All seven pass on
-Apple M4 Pro / Metal for the [recorded debug executables](../../docs/verification/lazy-device-integration-20260907/physical/README.md).
-This establishes device execution and correctness for those cases, without a
-performance or release-binary claim. The static-profile description below retains
-its narrower scope.
-
-The current lazy host path reuses transport buffers within one candidate batch.
-Each chunk overwrites its active uniform, offsets, records, snapshots and frozen
-seeds, then clears the output before executing the unchanged shader. Input
-capacity can exceed the current chunk; result/readback shapes remain exact.
-Each fitting input can survive another input's growth or a changed result shape;
-the fixed uniform and exactly matching output/readback buffers can survive too.
-Admission checks prospective retained plus replacement capacities and active host
-payload before effects. If input slack would exceed the ceiling, only slack is
-released and the already admitted exact shape remains available. Old bindings
-and discarded handles are dropped before new buffers are requested. Every batch
-exit releases the buffers; execution
-or readback failure also permanently invalidates the device executor.
-`LazyGpuStatistics.transport_allocations` counts submitted chunks requesting at
-least one new buffer; `transport_reuses` counts complete transport reuse. Named
-`transport_usage` observations distinguish allocation/reuse of each of the seven
-buffers, and each pair sums to dispatches. Uniform allocation occurs initially;
-output/readback observations agree because they always have exact active size.
-Overlapping historical replacement reasons describe the complete old shape;
-usage also records releases caused by prospective input slack. Peak requested
-GPU bytes remain separate from active upload and successful readback bytes.
-These are authored payload/accounting observations, not RSS or bus-traffic data.
-
-This transport change requires fresh physical qualification; prior executable
-records do not qualify it. Four ignored library checks per physical API cover
-retained handle identity and exact output through shrinking chunks and catalog
-growth, exact byte ceilings, preflight refusals and cancellation after either
-complete reuse or partial replacement. Existing
-`hardware_lazy` tests also check allocation/reuse accounting and source-mask
-isolation. Portable capacity/sequence tests establish neither hardware execution
-nor a performance improvement:
+Portable checks exercise planning and host failure boundaries. Physical Metal
+qualification is selected explicitly:
 
 ```sh
-cargo test --locked -p zetesis-wgpu --lib metal -- --ignored --nocapture
-cargo test --locked -p zetesis-wgpu --test hardware_lazy metal -- --ignored --nocapture
+cargo test --locked -p zetesis-wgpu --all-features --test hardware_formula -- --ignored --nocapture
+cargo test --locked -p zetesis-wgpu --all-features --test hardware_aggregate metal -- --ignored --nocapture
+cargo test --locked -p zetesis-wgpu --all-features --lib metal_aggregate -- --ignored --nocapture
 ```
 
-Use the `vulkan` filter for the matching Vulkan checks. Do not run these groups
-with an unfiltered `--ignored` on a host supporting only one of the requested APIs.
-
-One 64-invocation workgroup owns one frozen candidate and its 4096-atom maximum
-closure. Worlds share immutable rules, antecedent lists, and gate-carrier bits.
-Each world starts from the empty positive interpretation. Integer seed gates
-enable rules; positive antecedents consult atom latches. Every pass which
-continues adds at least one previously absent atom. A full pass with no additions
-establishes closure. The kernel then checks all enabled constraints and compares
-the closure's gate projection with the seed. Duplicate derivations are idempotent.
-
-Workgroup barriers separate reset, derivation, completion observation, and final
-constraint checking. `workgroupUniformLoad` provides uniform loop exit. There is
-no cross-workgroup communication, floating-point truth representation, or
-fixed-depth approximation. These are reviewed implementation invariants; the
-Lean abstract schedule proofs do not mechanically verify Rust packing or WGSL.
-
-The public API is `GpuOracle::new(GpuOptions)`,
-`GpuOracle::new_metal(GpuOptions)`, or
-`GpuOracle::new_selected(GpuOptions, GpuSelection)`, followed by
-`check_batch(&GroundProgram, &[Seed], GpuLimits)`. Results preserve candidate
-order and expose exact rejection reasons and validated dense closure words.
-`GroundProgram::model_from_words` reconstructs symbolic models when needed.
-The Metal constructor enables only Metal, checks the returned backend identity,
-and refuses targets without compiled Metal support. It does not fall back to
-another graphics API or apply environment overrides to its backend selection.
-
-`GpuSelection` combines `GpuBackendPreference::{Auto, Metal, Vulkan, Dx12, Gl}`
-with an optional exact `vendor_id`. Explicit APIs and vendor IDs are hard filters;
-unavailable requests produce typed errors. `NVIDIA_VENDOR_ID` is `0x10de`, matching
-[NVIDIA's published driver source](https://raw.githubusercontent.com/NVIDIA/open-gpu-kernel-modules/main/kernel-open/nvidia/nv-pci-table.c).
-NVIDIA devices execute this WGSL profile through an available wgpu API, such as
-Vulkan or DX12. This crate supplies no CUDA backend and never matches vendors
-using potentially misleading device names.
-
-`compiled_backends()` lists native APIs built for the current target without
-touching hardware. `discover_adapters()` enumerates those APIs and returns
-reported name, API, category, vendor/device IDs, PCI bus ID when available,
-driver details, and static-oracle capability diagnostics. Software and virtual
-adapters remain visible and are marked nonphysical. An empty inventory means no
-adapter was exposed to this process. A device can appear separately through
-multiple APIs. Advertised compute support and limits are a preflight: device
-creation, shader compilation, execution, and workload-specific admission remain
-separate checks. Browser WebGPU and the nonexecuting Noop API are excluded.
-
-Auto first filters capabilities and the caller's hardware/vendor policy. Among
-eligible adapters it ranks physical devices ahead of nonphysical ones, then
-prefers Metal on Apple, DX12 on Windows, and Vulkan elsewhere; GL follows the
-primary native APIs. Within an API it prefers discrete over integrated GPUs,
-then orders reported vendor/device IDs, PCI bus, name, and driver metadata.
-This is a reproducible selection policy, not a performance prediction. Exact
-metadata ties retain driver enumeration order; it does not promise a persistent
-identity for otherwise indistinguishable physical GPUs. A selected device's
-initialization failure is returned rather than silently selecting another API.
-
-No compiled API or no exposed adapter yields `AdapterUnavailable`; an exposed
-inventory rejected by backend/vendor/hardware filters yields `AdapterRefused`;
-matching adapters lacking required advertised capabilities yield `Capacity`.
-`discover_adapters()` itself returns an empty vector for no exposed adapters.
-CPU reference fallback remains a caller policy, with its reason available from
-the returned error. Setting `require_gpu: false` only admits nonphysical wgpu
-adapters; it does not invoke the CPU reference solver.
-
-The first nonempty batch packs and uploads immutable rules, antecedents, and
-gate-carrier bits. Those three buffers and their validated dimensions remain
-resident for the same immutable `Program` instance. Cloning or recompiling that
-Program preserves residency; admitting an independently created Program replaces
-it, even when its source is identical. The cache retains a shared Program handle
-for identity, not a cloned `GroundProgram` or retained host graph packing.
-
-Subsequent batches of the same size reuse the parameter, seed, result, and
-readback buffers and their bind group. Each call packs and writes fresh seed
-bits, dispatches fresh candidate latches, and fully reads/unmaps its result before
-reuse. A changed batch size replaces only transport, with exactly sized buffers;
-there is no unbounded high-water capacity cache. Changing Program drops graph
-and transport handles before new packing/allocation. One oracle retains at most
-one Program and one transport shape. Empty checks preserve residency and clear
-last-batch statistics; they submit no work. `clear_residency()` explicitly drops
-the retained handles without repairing an invalidated device or cancelling work.
-
-`last_batch_stats()` reports whether the successful nonempty call uploaded a
-graph or allocated transport, plus resident and accounted bytes. A repeated
-equal-sized batch should report both flags false. These diagnostics distinguish
-setup from steady-state benchmarks; they are not GPU timestamps or speedup claims.
-
-The default adapter policy accepts only devices wgpu identifies as integrated
-or discrete GPUs. Adapter name, backend, and category remain observable.
-There is no automatic CPU fallback. Capacity, allocation, invalid seed,
-validation, timeout, device, and readback errors are separate from logical
-candidate rejection. An execution failure invalidates the instance and returns
-no partial batch. The host waits at most the configured GPU polling interval;
-this does not provide preemption of running GPU commands or a wall-time bound
-on driver allocation/pipeline compilation. Native execution is the implemented
-host profile; browser event-loop integration is not supplied.
-
-Before allocation, packing checks dense IDs, u32 addresses, the adapter's granted
-buffer/dispatch limits, the 4096-atom shader capacity, and the batch budget.
-Every nonempty batch's budget counts its resident graph and transport even when
-reused, host seed/parameter packing, temporary per-seed words, returned closure
-arrays, and result metadata. A new graph additionally counts its host packing;
-resident batches avoid that cost. Old transport handles are released before a
-changed-size allocation, so a prior large batch cannot silently remain in the
-authored working set under a smaller budget. The sum conservatively includes
-some allocations with nonoverlapping lifetimes.
-
-The budget excludes caller-owned source/seed objects and earlier results,
-symbolic models reconstructed by a caller, allocator rounding, wgpu/driver upload
-staging, internal objects, and deferred retirement of dropped handles. It is not
-a process-RSS or physical-device-memory cap. Counts are checked arithmetic, and
-host transport vectors reserve fallibly. The public atom/workgroup constants
-are checked against the parsed shader in a portable test.
-
-Portable tests cover packing of gates and constraints, resident Program identity
-including clones and recompilation, cold/hot accounting and lowered budgets,
-transport/dispatch/binding limits, malformed readback, zero-atom result records,
-hard API/vendor filters, software refusal, platform ranking, advertised compute
-capabilities, deterministic reported-identity ordering, and full Naga validation
-of the WGSL without optional shader capabilities. Selection tests use synthetic
-adapter reports and do not imply hardware execution on those platforms.
-The explicit hardware qualification is:
-
-```sh
-cargo test -p zetesis-wgpu --test hardware -- --ignored --nocapture
-```
-
-It compares actual device output with independent ordered-set CPU closures,
-including zero-atom programs and constraints, default-negation cycles, choices,
-self-support, multiword closure, reversed candidate epochs, and the 4096-atom
-boundary. It additionally checks resident reuse, smaller transport replacement,
-explicit cache release, and a Metal-only constructor. This separately ignored
-hardware-test binary has not yet run on the physical device.
-
-A user-run [Metal qualification](../../docs/verification/metal/20260905T214253Z/README.md)
-on the Apple M4 Pro did execute the example and 108 static GPU batches, covering
-11,556 candidate checks with exact CPU parity and warm residency checks. Raw
-binary hashes and timings identify that measured run. The best CPU median was
-faster in all 18 measured cases; there is no established advantage over that
-baseline, full-domain result, or energy measurement. The sandboxed execution
-environment still reports no adapters. Explicit hardware requests there fail
-rather than substitute CPU computation.
-
-## General finite formulas
-
-`GpuFormulaOracle::new_selected` and `new_metal` create a separate resident
-Ferraris propagation profile. `propagate_batch(&Theory, &[Interpretation],
-FormulaLimits)` evaluates the original DAG, freezes each candidate's truth mask
-and narrows its strict proper-subset query. Atom, false, conjunction, disjunction
-and implication retain their original structure. A false-masked connective
-constrains only its output to false, leaving its children unconstrained by it.
-
-`FormulaVerdict` distinguishes original nonmodels, refuted proper-subset queries
-and explicit residuals. Only a refuted query establishes stability. Quiescence,
-round limits and work limits require exact residual search. This API performs
-no automatic CPU completion and supplies no full candidate search or source
-grounding. The CLI's explicit GPU formula route composes it with bounded native
-candidate generation and exact native completion of residual queries.
-
-The graph is resident by immutable Theory instance; transport is reused for the
-same exact candidate count. Checked storage limits replace the static profile's
-4,096-atom ceiling. Candidate epochs, readback identity, charged setup/sweeps and
-all authored allocations are checked. `FormulaBatchStats` makes residency and
-accounting observable. Device errors invalidate the instance and return no
-partial result. The same explicit hardware and failure policies apply.
-
-Portable tests validate WGSL and packing/decoder boundaries and compare a
-separate propagation model with independent exhaustive reduct completions.
-They do not execute the shader. The physical tests are separate:
-
-```sh
-cargo test -p zetesis-wgpu --test hardware_formula -- --ignored --nocapture
-zetesis-bench formula --backend metal --atoms 64,256 --batches 1,64,256
-```
-
-The benchmark includes exact CPU completion of residuals and reports it
-separately. General formula synthetic hybrid membership is now qualified by the
-[M4 Pro run](../../docs/verification/metal-formula/20260906T140835Z/README.md).
-The subsequent [ordinary-solver campaign](../../docs/verification/metal-batched-formula/20260906-corpus/README.md)
-passes all 94 original cases, and four focused CLI/formula device tests pass.
-The matched scalar/Rayon/Metal benchmark finds no shape where hybrid Metal has
-the lowest warm median; automatic formula selection therefore retains CPU.
-The older static Metal record does not qualify this kernel. See the
-[design and completion obligations](../../docs/design/gpu-formula-propagation.md)
-for semantic premises, resource boundaries and the path to full acceleration.
-
-### Explicit gate projection experiment
-
-`GateProjection::Enumerated` remains the default for all existing constructors
-and ordinary solver calls. `GpuFormulaOracle::new_metal_with_projection` and
-`new_selected_with_projection` permit the opt-in `Bitwise` alternative;
-`projection()` reports the immutable selection. Bitwise replaces only the enabled
-gate's eight-row loop by intersections of eight-bit relation masks. It preserves
-physical aliases, separately observed domain masks, the three atomic loads and
-intersections, frozen-false gate suppression, sweep/work accounting and result
-decoding. Both variants use the original shader scaffold and transport.
-
-The baseline shader is borrowed unchanged. The alternative reserves one fixed
-source buffer fallibly, inserts its gate fragment into that baseline, then passes
-the source to shader creation. This setup cost is outside batch resource limits;
-driver allocations are also outside the authored accounting contract.
-
-Portable tests cover all 960 connective/alias/domain combinations against an
-independent Boolean row definition, mixed stale observations, complete frozen
-query examples and Naga validation. The new Lean finite representation laws are
-not a Rust/WGSL or atomic-execution refinement proof. Both variants are included
-in the explicit `hardware_formula` test above. A paired engineering command is
-`zetesis-bench formula-projection --backend metal`; its exact scope and bounded
-qualification command are in the [experiment guide](../zetesis-experiments/README.md#paired-gate-projections).
-Historical hardware records qualify the retained enumerated implementation;
-they establish neither physical qualification nor performance of Bitwise.
-The later [paired physical experiment](../../docs/verification/gate-projection-20260907/physical/README.md)
-qualifies both variants for its recorded synthetic batches and executable.
-Its mixed timing results do not establish an ordinary-solver speedup or change
-the default projection.
+The [test sources](tests) contain the separate static, lazy, tight, formula and
+aggregate controls. Vulkan tests use their explicit Vulkan filters; a Metal pass
+does not qualify Vulkan. The repository's `scripts/check.sh coverage --metal`
+checks the selected physical groups with the matching instrumented binaries and
+keeps CPU-only CLI coverage separate. See [Contributing](../../CONTRIBUTING.md)
+for the complete gate discipline.

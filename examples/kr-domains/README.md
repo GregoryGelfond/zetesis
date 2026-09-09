@@ -97,5 +97,5 @@ The opt-in test runs all 94 cases from both trees with bounded capture,
 `--models=0 --opt-mode=optN`, checks successful completion and compares selected
 display multiplicities, costs and all typed contracts. It is a source-cleaning
 qualification, not a benchmark or a complete native-language compatibility claim.
-Current qualification evidence is in
-[the verification record](../../docs/verification/kr-domains-examples-20260907/README.md).
+The maintained [parity test](../../crates/zetesis-validation/tests/example_parity.rs)
+implements this check.

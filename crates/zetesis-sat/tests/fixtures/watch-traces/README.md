@@ -4,8 +4,9 @@ These records were produced from the unpacked watch implementation in commit
 `78a069b562c9dd141a416b134f7d4aeb0041592a`, crates tree
 `b4735f601118958e7c76f941ae151e35eed813e2`, with themelios pinned at `87c11a3`.
 They were frozen before the compact implementation was used to check them.
-The [verification record](../../../../../docs/verification/watch-storage-20260908/README.md)
-retains the recorder, source identities, commands and qualification outcomes.
+The source identities distinguish the reference implementation from the
+implementation under test. These are deterministic traversal fixtures, not timing
+or answer-set acceptance evidence.
 
 The six queens inputs are the clean, unchanged N=8 examples included directly
 by `tests/support/watch_traces.rs`. A private test exercises the real formula

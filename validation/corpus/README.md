@@ -5,7 +5,7 @@
 [GregoryGelfond/kr-domains](https://github.com/GregoryGelfond/kr-domains).
 Relative paths are preserved so every original include resolves unchanged.
 The 94 runnable entry points and every expected SHA-256 digest are in the
-[target manifest](../../docs/verification/kr-domains-target-manifest.json).
+[target manifest](../../validation/corpus/manifest.json).
 The other 47 source files are excluded because they are clingcon encodings or
 include those encodings. Their exclusion evidence remains in the manifest.
 

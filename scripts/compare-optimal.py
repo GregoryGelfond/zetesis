@@ -161,7 +161,7 @@ def configuration():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--case", required=True, help="original manifest-relative input path")
     parser.add_argument("--corpus-root", type=Path, default=ROOT / "validation/corpus/kr-domains")
-    parser.add_argument("--manifest", type=Path, default=ROOT / "docs/verification/kr-domains-target-manifest.json")
+    parser.add_argument("--manifest", type=Path, default=ROOT / "validation/corpus/manifest.json")
     parser.add_argument("--zetesis", required=True)
     parser.add_argument("--clingo", default="clingo")
     parser.add_argument("--runs", type=int, default=21)
