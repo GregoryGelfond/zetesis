@@ -195,11 +195,19 @@ fn supportedness_guards_bound_classical_transitive_candidates_without_changing_c
 }
 
 #[test]
-fn formula_mode_does_not_silently_broaden_extended_or_accept_other_syntax() {
+fn strong_negated_choices_supply_signed_atoms() {
     assert_eq!(native("1{-a}1."), expected(&["-a."]));
+}
+
+#[test]
+fn closed_comparison_chains_supply_local_bindings() {
     // Closed comparison chains now supply a finite local binding, while the
     // complete original guard is retained. This is an admitted source upgrade.
     assert_eq!(native("a :- 1<X<3."), expected(&["a."]));
+}
+
+#[test]
+fn extended_profile_refuses_bounded_choices() {
     assert!(
         admit_extended(
             "1{a;b}1.".to_owned(),
@@ -208,12 +216,17 @@ fn formula_mode_does_not_silently_broaden_extended_or_accept_other_syntax() {
         )
         .is_err()
     );
-    for source in [
-        "a|b:c.",
-        "#program base(x). a.",
-        "#maximize{1:not a}.",
-        "1{not a}1.",
-    ] {
+}
+
+#[test]
+fn signed_choice_bounds_do_not_create_support() {
+    assert_eq!(native("1{not a}1."), Models::from([BTreeSet::new()]));
+    assert!(native("1{not not a}1.").is_empty());
+}
+
+#[test]
+fn unimplemented_source_profiles_are_refused() {
+    for source in ["a|b:c.", "#program base(x). a.", "#maximize{1:not a}."] {
         assert!(
             admit_formula(
                 source.to_owned(),
