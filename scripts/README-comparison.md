@@ -15,13 +15,14 @@ covers all six unchanged N=8 encodings. Reports retain complete comparison
 evidence, source/binary identities, timed pairs and separate phase observations.
 Report destinations must be new. The [Rust validation guide](../crates/zetesis-validation/README.md)
 documents the maintained commands and their comparison contracts.
-This Rust runner does not yet measure peak RSS or provide the complete
-eager/lazy × CPU/Metal corpus matrix.
+`--suite corpus` also provides an eager/lazy × CPU/Metal matrix with explicit
+profiles. Those instrumented `--json --stats` runs form a separate timing
+population from the uninstrumented baseline comparisons. Neither Rust protocol
+currently measures peak RSS.
 
 ## Retained Python comparison protocol
 
-The following documents the earlier tooling and its tests. It remains available
-for the historical protocol, selected original-manifest cases and separate
+This protocol remains available for selected original-manifest cases and separate
 process-memory observations; it is not the default route for the current Rust
 campaigns. Migrating those remaining contracts requires equivalent bounded
 process, memory and answer evidence before removing the Python implementation.
