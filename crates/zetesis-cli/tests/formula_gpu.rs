@@ -115,6 +115,10 @@ mod physical_backend;
 mod count_objective_sources;
 
 #[cfg(feature = "gpu")]
+#[path = "support/language_value_sources.rs"]
+mod language_value_sources;
+
+#[cfg(feature = "gpu")]
 mod physical {
     use super::physical_backend::Backend;
     use super::{Completion, Control, options, run_with_diagnostics};
@@ -174,6 +178,7 @@ mod physical {
         .into_iter()
         .chain(super::count_objective_sources::SATISFIABLE)
         .chain([super::count_objective_sources::INCONSISTENT])
+        .chain(super::language_value_sources::SOURCES)
         {
             let mut expected = Vec::new();
             let cpu = run_with_diagnostics(
