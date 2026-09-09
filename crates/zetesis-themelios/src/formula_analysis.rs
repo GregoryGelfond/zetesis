@@ -76,7 +76,7 @@ pub(crate) fn fact(
 
 pub(crate) fn analyze(
     program: &Program,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
     budget: &mut Budget,
     fallback: Location,
 ) -> Result<themelios_analysis::Analysis, FormulaFailure> {
@@ -210,7 +210,7 @@ mod tests {
 
     fn run(
         text: &str,
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         expansion: ExpansionLimits,
     ) -> Result<Analysis, FormulaFailure> {
         let (program, location) = input(text);
@@ -231,7 +231,7 @@ mod tests {
             "p :- #count{(1;2):q}>=1.",
             "#minimize{(1;2):q}.",
         ] {
-            let error = run(text, FormulaLimits::default(), ExpansionLimits::default())
+            let error = run(text, &FormulaLimits::default(), ExpansionLimits::default())
                 .expect_err("pool freedom must be certified before upstream unpool");
             assert!(
                 matches!(error,
@@ -255,10 +255,10 @@ mod tests {
                 max_analysis_edges: edges,
                 ..FormulaLimits::default()
             };
-            run(text, limits, ExpansionLimits::default()).expect("inclusive edge ceiling");
+            run(text, &limits, ExpansionLimits::default()).expect("inclusive edge ceiling");
             let error = run(
                 text,
-                FormulaLimits {
+                &FormulaLimits {
                     max_analysis_edges: edges - 1,
                     ..limits
                 },
@@ -283,7 +283,7 @@ mod tests {
             max_scalar_bytes: 10,
             ..ExpansionLimits::default()
         };
-        run("a :- b,c.", FormulaLimits::default(), expansion).expect("exact ceilings");
+        run("a :- b,c.", &FormulaLimits::default(), expansion).expect("exact ceilings");
         for (limited, expected) in [
             (
                 ExpansionLimits {
@@ -300,7 +300,7 @@ mod tests {
                 ExpansionResource::ScalarBytes,
             ),
         ] {
-            let error = run("a :- b,c.", FormulaLimits::default(), limited)
+            let error = run("a :- b,c.", &FormulaLimits::default(), limited)
                 .expect_err("preflight allowance exhausted");
             assert!(
                 matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit {
@@ -312,7 +312,7 @@ mod tests {
         let source = format!("{name} :- b,c,d,e.");
         let error = run(
             &source,
-            FormulaLimits::default(),
+            &FormulaLimits::default(),
             ExpansionLimits {
                 max_scalar_bytes: 4096,
                 ..ExpansionLimits::default()
@@ -332,7 +332,7 @@ mod tests {
     fn unknown_finiteness_is_retained_without_disabling_limits() {
         let text = "p(0). p(X+1) :- p(X).";
         let (program, _) = input(text);
-        let analysis = run(text, FormulaLimits::default(), ExpansionLimits::default())
+        let analysis = run(text, &FormulaLimits::default(), ExpansionLimits::default())
             .expect("bounded analysis of a potentially growing source");
         assert_eq!(analysis, Analysis::of(&program));
         assert!(matches!(
@@ -342,7 +342,7 @@ mod tests {
         assert!(matches!(
             run(
                 text,
-                FormulaLimits {
+                &FormulaLimits {
                     max_analysis_edges: 0,
                     ..FormulaLimits::default()
                 },
@@ -359,7 +359,7 @@ mod tests {
     fn directives_need_an_explicit_analysis_allocation_contract() {
         let error = run(
             "#external a : b.",
-            FormulaLimits::default(),
+            &FormulaLimits::default(),
             ExpansionLimits::default(),
         )
         .expect_err("external pseudo-rule is outside the analyzed projection");

@@ -21,7 +21,7 @@ pub(crate) fn values(
     aggregate: &AggregateIr,
     assignment: &[Value],
     support: &Support,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
     location: Location,
@@ -96,7 +96,7 @@ pub(crate) fn extremum_value(value: &Value, location: Location) -> Result<(), Fo
 pub(crate) fn extrema_candidates<'a>(
     function: AggregateFunction,
     possible: impl IntoIterator<Item = &'a Value>,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
     location: Location,
@@ -152,7 +152,7 @@ pub(crate) fn tuple_weight(
 /// Correlated conditions do not justify deleting candidate values here.
 pub(crate) fn sums(
     weights: impl IntoIterator<Item = i32>,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
     counters: &mut Counters,
     location: Location,
 ) -> Result<Vec<i32>, FormulaFailure> {
@@ -194,7 +194,7 @@ pub(crate) fn sums(
 pub(crate) fn candidates(
     function: AggregateFunction,
     weights: impl IntoIterator<Item = i32>,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
     counters: &mut Counters,
     location: Location,
 ) -> Result<Vec<Value>, FormulaFailure> {

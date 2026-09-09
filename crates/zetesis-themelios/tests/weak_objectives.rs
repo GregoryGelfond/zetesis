@@ -19,7 +19,7 @@ use zetesis_themelios::{
 mod source_records;
 
 fn input(source: &str) -> AdmittedFormula {
-    source_records::admit(source, FormulaLimits::default())
+    source_records::admit(source, &FormulaLimits::default())
         .unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 fn cases() -> Vec<source_records::Case> {

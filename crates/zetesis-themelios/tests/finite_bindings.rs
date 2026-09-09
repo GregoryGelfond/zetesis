@@ -19,7 +19,7 @@ const SOURCE: SourceId = SourceId::new(113);
 fn input_with(
     source: &str,
     expansion: ExpansionLimits,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
 ) -> Result<AdmittedFormula, FormulaFailure> {
     admit_formula(
         source.into(),
@@ -28,13 +28,17 @@ fn input_with(
             ..Default::default()
         },
         expansion,
-        limits,
+        *limits,
     )
 }
 
 fn input(source: &str) -> AdmittedFormula {
-    input_with(source, ExpansionLimits::default(), FormulaLimits::default())
-        .unwrap_or_else(|error| panic!("{source}: {error}"))
+    input_with(
+        source,
+        ExpansionLimits::default(),
+        &FormulaLimits::default(),
+    )
+    .unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 
 fn model(atoms: impl IntoIterator<Item = String>) -> Models {
@@ -193,8 +197,12 @@ fn unsafe_sources() -> [&'static str; 13] {
 #[test]
 fn scope_and_nonbinding_negation_do_not_acquire_accidental_domains() {
     for source in unsafe_sources() {
-        let error =
-            input_with(source, ExpansionLimits::default(), FormulaLimits::default()).unwrap_err();
+        let error = input_with(
+            source,
+            ExpansionLimits::default(),
+            &FormulaLimits::default(),
+        )
+        .unwrap_err();
         assert!(
             matches!(error, FormulaFailure::UnsafeVariable { .. }),
             "{source}: {error}"
@@ -216,8 +224,12 @@ fn active_undefined_operands_remain_located_failures() {
         "d(1).p:-d(X),not not (X,1)=(1,2,1/0).",
         "p(X):-0<X,X<3,not not X=1>2<1/0.",
     ] {
-        let error =
-            input_with(source, ExpansionLimits::default(), FormulaLimits::default()).unwrap_err();
+        let error = input_with(
+            source,
+            ExpansionLimits::default(),
+            &FormulaLimits::default(),
+        )
+        .unwrap_err();
         assert!(
             matches!(
                 error,
@@ -240,7 +252,7 @@ fn exact_domain_ceilings_empty_intervals_and_retry_preserve_results() {
         let error = input_with(
             source,
             ExpansionLimits::default(),
-            FormulaLimits {
+            &FormulaLimits {
                 max_assignment_values: 2,
                 ..Default::default()
             },
@@ -253,7 +265,7 @@ fn exact_domain_ceilings_empty_intervals_and_retry_preserve_results() {
         let program = input_with(
             source,
             ExpansionLimits::default(),
-            FormulaLimits {
+            &FormulaLimits {
                 max_assignment_values: 3,
                 ..Default::default()
             },
@@ -273,7 +285,7 @@ fn exact_domain_ceilings_empty_intervals_and_retry_preserve_results() {
         let program = input_with(
             source,
             ExpansionLimits::default(),
-            FormulaLimits {
+            &FormulaLimits {
                 max_assignment_values: 0,
                 ..Default::default()
             },
@@ -296,7 +308,7 @@ fn planner_work_refusal_is_transactional_at_the_exact_ceiling() {
                 max_term_work: limit,
                 ..Default::default()
             },
-            FormulaLimits::default(),
+            &FormulaLimits::default(),
         ) {
             Ok(_) => upper = limit,
             Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
@@ -313,7 +325,7 @@ fn planner_work_refusal_is_transactional_at_the_exact_ceiling() {
             max_term_work: lower - 1,
             ..Default::default()
         },
-        FormulaLimits::default(),
+        &FormulaLimits::default(),
     )
     .unwrap_err();
     assert!(
@@ -325,7 +337,7 @@ fn planner_work_refusal_is_transactional_at_the_exact_ceiling() {
             max_term_work: lower,
             ..Default::default()
         },
-        FormulaLimits::default(),
+        &FormulaLimits::default(),
     )
     .unwrap();
     assert_eq!(native(&program), exhaustive(&input("{p(1);p(2)}.q:-p(2).")));

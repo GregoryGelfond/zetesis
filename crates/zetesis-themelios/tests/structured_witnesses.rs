@@ -11,19 +11,23 @@ use zetesis_themelios::{
 fn limited(
     source: &str,
     expansion: ExpansionLimits,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
 ) -> Result<AdmittedFormula, FormulaFailure> {
     admit_formula(
         source.into(),
         AdmissionOptions::default(),
         expansion,
-        limits,
+        *limits,
     )
 }
 
 fn input(source: &str) -> AdmittedFormula {
-    limited(source, ExpansionLimits::default(), FormulaLimits::default())
-        .unwrap_or_else(|error| panic!("{source}: {error}"))
+    limited(
+        source,
+        ExpansionLimits::default(),
+        &FormulaLimits::default(),
+    )
+    .unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 
 // Written finite substitutions retain full supporting atoms. A condition row
@@ -295,7 +299,11 @@ fn witness_names_cannot_establish_condition_safety() {
     ] {
         assert!(
             matches!(
-                limited(source, ExpansionLimits::default(), FormulaLimits::default()),
+                limited(
+                    source,
+                    ExpansionLimits::default(),
+                    &FormulaLimits::default()
+                ),
                 Err(FormulaFailure::UnsafeVariable { .. })
             ),
             "{source}"
@@ -312,7 +320,11 @@ fn local_witness_names_do_not_escape() {
     ] {
         assert!(
             matches!(
-                limited(source, ExpansionLimits::default(), FormulaLimits::default()),
+                limited(
+                    source,
+                    ExpansionLimits::default(),
+                    &FormulaLimits::default()
+                ),
                 Err(FormulaFailure::UnsafeVariable { .. })
             ),
             "{source}"
@@ -330,7 +342,7 @@ fn negative_witnesses_cannot_supply_names() {
                     limited(
                         &source,
                         ExpansionLimits::default(),
-                        FormulaLimits::default()
+                        &FormulaLimits::default()
                     ),
                     Err(FormulaFailure::UnsafeVariable { .. })
                 ),
@@ -345,7 +357,11 @@ fn witness_arithmetic_requires_bound_inputs() {
     for source in ["p(f(2)).q:-p(f(X+1)):#true.", "p(2).q:-p(X+1):#true."] {
         assert!(
             matches!(
-                limited(source, ExpansionLimits::default(), FormulaLimits::default()),
+                limited(
+                    source,
+                    ExpansionLimits::default(),
+                    &FormulaLimits::default()
+                ),
                 Err(FormulaFailure::UnboundArgumentInput { .. })
             ),
             "{source}"
@@ -503,7 +519,7 @@ fn witness_work_limit_is_inclusive() {
             limited(
                 BOUNDED,
                 ExpansionLimits::default(),
-                FormulaLimits {
+                &FormulaLimits {
                     max_work: cap as u64,
                     ..Default::default()
                 },
@@ -521,7 +537,7 @@ fn witness_substitution_limit_is_inclusive() {
             limited(
                 BOUNDED,
                 ExpansionLimits::default(),
-                FormulaLimits {
+                &FormulaLimits {
                     max_substitutions: cap as u64,
                     ..Default::default()
                 },
@@ -542,7 +558,7 @@ fn witness_storage_limit_is_inclusive() {
                     max_scalar_bytes: cap,
                     ..Default::default()
                 },
-                FormulaLimits::default(),
+                &FormulaLimits::default(),
             )
         },
         |error| {
@@ -568,7 +584,7 @@ fn witness_term_work_limit_is_inclusive() {
                     max_term_work: cap,
                     ..Default::default()
                 },
-                FormulaLimits::default(),
+                &FormulaLimits::default(),
             )
         },
         |error| {

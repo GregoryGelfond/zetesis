@@ -25,18 +25,22 @@ fn competition() -> String {
 fn limited(
     source: &str,
     expansion: ExpansionLimits,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
 ) -> Result<AdmittedFormula, FormulaFailure> {
     admit_formula(
         source.into(),
         AdmissionOptions::default(),
         expansion,
-        limits,
+        *limits,
     )
 }
 fn input(source: &str) -> AdmittedFormula {
-    limited(source, ExpansionLimits::default(), FormulaLimits::default())
-        .unwrap_or_else(|error| panic!("{source}: {error}"))
+    limited(
+        source,
+        ExpansionLimits::default(),
+        &FormulaLimits::default(),
+    )
+    .unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 // Handwritten substitutions preserve whole rule bodies and choice-group scope.
 const CASES: &[(&str, &str)] = &[
@@ -200,7 +204,11 @@ fn negative_arguments_do_not_bind_inputs() {
     ] {
         assert!(
             matches!(
-                limited(source, ExpansionLimits::default(), FormulaLimits::default()),
+                limited(
+                    source,
+                    ExpansionLimits::default(),
+                    &FormulaLimits::default()
+                ),
                 Err(FormulaFailure::UnsafeVariable { .. })
             ),
             "{source}"
@@ -214,7 +222,7 @@ fn anonymous_constructor_facts_remain_refused() {
         limited(
             "p(f(_)).",
             ExpansionLimits::default(),
-            FormulaLimits::default()
+            &FormulaLimits::default()
         )
         .is_err()
     );
@@ -230,7 +238,11 @@ fn scalar_failures_remain_admission_errors() {
     ] {
         assert!(
             matches!(
-                limited(source, ExpansionLimits::default(), FormulaLimits::default()),
+                limited(
+                    source,
+                    ExpansionLimits::default(),
+                    &FormulaLimits::default()
+                ),
                 Err(FormulaFailure::Expansion(
                     ExpansionFailure::Evaluation { .. }
                 ))
@@ -244,7 +256,12 @@ fn scalar_failures_remain_admission_errors() {
 fn unsupported_value_families_remain_refused() {
     for source in ["d(1).p(f(X..X+1)):-d(X).", "d(1).q:-d(X),not p(f(X;2))."] {
         assert!(
-            limited(source, ExpansionLimits::default(), FormulaLimits::default()).is_err(),
+            limited(
+                source,
+                ExpansionLimits::default(),
+                &FormulaLimits::default()
+            )
+            .is_err(),
             "{source}"
         );
     }
@@ -258,7 +275,7 @@ fn recursive_construction_cannot_finish_truncated() {
         ..FormulaLimits::default()
     };
     assert!(matches!(
-        limited(source, ExpansionLimits::default(), limits),
+        limited(source, ExpansionLimits::default(), &limits),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::SupportRounds,
             ..
@@ -292,7 +309,7 @@ fn construction_scalar_bytes_have_an_inclusive_limit() {
             max_scalar_bytes: middle,
             ..ExpansionLimits::default()
         };
-        if limited(source, expansion, FormulaLimits::default()).is_ok() {
+        if limited(source, expansion, &FormulaLimits::default()).is_ok() {
             upper = middle;
         } else {
             lower = middle + 1;
@@ -303,7 +320,7 @@ fn construction_scalar_bytes_have_an_inclusive_limit() {
         ..ExpansionLimits::default()
     };
     assert_eq!(
-        native(&limited(source, expansion, FormulaLimits::default()).unwrap()),
+        native(&limited(source, expansion, &FormulaLimits::default()).unwrap()),
         native(&input(source))
     );
     let expansion = ExpansionLimits {
@@ -311,7 +328,7 @@ fn construction_scalar_bytes_have_an_inclusive_limit() {
         ..ExpansionLimits::default()
     };
     assert!(matches!(
-        limited(source, expansion, FormulaLimits::default()),
+        limited(source, expansion, &FormulaLimits::default()),
         Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
             resource: ExpansionResource::ScalarBytes,
             ..
@@ -456,7 +473,7 @@ fn constructed_assignment_limit_is_inclusive() {
         ..FormulaLimits::default()
     };
     assert_eq!(
-        native(&limited(source, ExpansionLimits::default(), limits).unwrap()),
+        native(&limited(source, ExpansionLimits::default(), &limits).unwrap()),
         native(&input(source))
     );
     let limits = FormulaLimits {
@@ -464,7 +481,7 @@ fn constructed_assignment_limit_is_inclusive() {
         ..FormulaLimits::default()
     };
     assert!(matches!(
-        limited(source, ExpansionLimits::default(), limits),
+        limited(source, ExpansionLimits::default(), &limits),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::AssignmentValues,
             observed: 2,
@@ -509,7 +526,7 @@ fn incomplete_constructor_work_returns_no_admission() {
         ..FormulaLimits::default()
     };
     assert!(matches!(
-        limited("d(1).p(f(X)):-d(X).", ExpansionLimits::default(), limits),
+        limited("d(1).p(f(X)):-d(X).", ExpansionLimits::default(), &limits),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::Work,
             observed: 1,

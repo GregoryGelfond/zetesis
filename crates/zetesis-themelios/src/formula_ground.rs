@@ -24,7 +24,7 @@ use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
 
 pub(crate) fn ground(
     prepared: Prepared,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
     budget: &mut Budget,
     location: Location,
     observer: Option<&dyn crate::GroundingObserver>,
@@ -119,7 +119,7 @@ pub(crate) fn ground(
 fn activate_objectives(
     prepared: &Prepared,
     support: &Support,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
     location: Location,
@@ -154,7 +154,7 @@ fn activate_objectives(
 fn objective_active(
     objective: &ObjectiveIr,
     support: &Support,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
 ) -> Result<bool, FormulaFailure> {
@@ -193,7 +193,7 @@ fn objective_active(
 }
 
 pub(super) struct Builder<'a> {
-    pub(super) limits: FormulaLimits,
+    pub(super) limits: &'a FormulaLimits,
     pub(super) budget: &'a mut Budget,
     atoms: Vec<Atom>,
     atom_indices: BTreeMap<Atom, usize>,

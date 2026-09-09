@@ -36,7 +36,7 @@ impl Counters {
     }
     pub fn work(
         &mut self,
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         location: Location,
     ) -> Result<(), FormulaFailure> {
         ceiling(
@@ -51,7 +51,7 @@ impl Counters {
     pub(super) fn generated(
         &mut self,
         value: &Value,
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         budget: &mut Budget,
         location: Location,
     ) -> Result<(), FormulaFailure> {
@@ -68,7 +68,7 @@ impl Counters {
     }
     pub(super) fn substitution(
         &mut self,
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         location: Location,
     ) -> Result<(), FormulaFailure> {
         ceiling(
@@ -102,7 +102,7 @@ impl Support {
     fn insert(
         &mut self,
         atom: Atom,
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
@@ -136,7 +136,7 @@ impl Support {
         &self,
         pattern: &AtomPattern,
         values: &[Option<Value>],
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<&[usize]>, FormulaFailure> {
@@ -164,7 +164,7 @@ impl Support {
 
 pub(crate) fn build(
     prepared: &Prepared,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
     fallback: Location,
@@ -269,7 +269,7 @@ fn derive(
     binding: &[Value],
     support: &Support,
     delta: &mut BTreeSet<Atom>,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
     budget: &mut Budget,
     location: Location,
 ) -> Result<(), FormulaFailure> {
@@ -441,7 +441,7 @@ impl<'a> Join<'a> {
     }
     pub fn next(
         &mut self,
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
@@ -452,7 +452,7 @@ impl<'a> Join<'a> {
         &mut self,
         head: &AtomPattern,
         delta: &BTreeSet<Atom>,
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
@@ -462,7 +462,7 @@ impl<'a> Join<'a> {
     fn next_inner(
         &mut self,
         projected: Option<(&AtomPattern, &BTreeSet<Atom>)>,
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
@@ -516,7 +516,7 @@ impl<'a> Join<'a> {
     fn next_base(
         &mut self,
         projected: Option<(&AtomPattern, &BTreeSet<Atom>)>,
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
@@ -595,7 +595,7 @@ impl<'a> Join<'a> {
         &mut self,
         pattern: PositivePattern<'_>,
         atom: &Atom,
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
@@ -654,7 +654,7 @@ impl<'a> Join<'a> {
     }
     fn filter_prefix(
         &mut self,
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
@@ -678,7 +678,7 @@ impl<'a> Join<'a> {
     fn skip_derived(
         &mut self,
         projected: Option<(&AtomPattern, &BTreeSet<Atom>)>,
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
@@ -702,7 +702,7 @@ impl<'a> Join<'a> {
     fn already_derived(
         &self,
         projected: Option<(&AtomPattern, &BTreeSet<Atom>)>,
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
@@ -739,7 +739,7 @@ impl<'a> Join<'a> {
     }
     fn complete(
         &self,
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
@@ -767,7 +767,7 @@ fn partial_filters(
     literals: &[LiteralIr],
     assignment: &[Option<Value>],
     evaluation: &mut Evaluation,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
     location: Location,
@@ -816,7 +816,7 @@ fn partial_value(
     expression: &Expression,
     assignment: &[Option<Value>],
     evaluation: &mut Evaluation,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
     location: Location,
@@ -840,7 +840,7 @@ fn partial_value(
 fn bound(
     expression: &Expression,
     assignment: &[Option<Value>],
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
     counters: &mut Counters,
     location: Location,
 ) -> Result<bool, FormulaFailure> {
@@ -860,7 +860,7 @@ fn filters(
     literals: &[LiteralIr],
     assignment: &[Value],
     comparisons: Comparisons,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
     location: Location,
@@ -904,7 +904,7 @@ fn filters(
 pub(crate) fn expression(
     expression: &Expression,
     assignment: &[Value],
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
     location: Location,

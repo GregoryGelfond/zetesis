@@ -35,16 +35,16 @@ fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
         source,
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits::default(),
+        &FormulaLimits::default(),
     )
 }
 fn limited(
     source: &str,
     options: AdmissionOptions,
     expansion: ExpansionLimits,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
 ) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(source.into(), options, expansion, limits)
+    admit_formula(source.into(), options, expansion, *limits)
 }
 fn name(atom: &Atom) -> String {
     let sign = if atom.predicate().sign() == Sign::Negative {
@@ -435,7 +435,7 @@ fn checked_group_size_and_tuple_storage_obey_inclusive_limits() {
                 source,
                 AdmissionOptions::default(),
                 ExpansionLimits::default(),
-                limits
+                &limits
             )
             .is_ok()
         );
@@ -445,7 +445,7 @@ fn checked_group_size_and_tuple_storage_obey_inclusive_limits() {
                 source,
                 AdmissionOptions::default(),
                 ExpansionLimits::default(),
-                limits
+                &limits
             ),
             Err(FormulaFailure::Limit {
                 resource: FormulaResource::AggregateElements,
@@ -463,7 +463,7 @@ fn checked_group_size_and_tuple_storage_obey_inclusive_limits() {
                 max_scalar_bytes: usize::try_from(limit).unwrap(),
                 ..ExpansionLimits::default()
             },
-            FormulaLimits::default(),
+            &FormulaLimits::default(),
         )
     };
     let threshold = first_success(|limit| attempt(limit).is_ok());
@@ -503,7 +503,7 @@ fn validation_limits(source: &str) {
                 source,
                 AdmissionOptions::default(),
                 ExpansionLimits::default(),
-                limits,
+                &limits,
             )
         };
         let threshold = first_success(|limit| attempt(limit).is_ok());

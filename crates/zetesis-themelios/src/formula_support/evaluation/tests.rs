@@ -25,7 +25,7 @@ fn evaluate(
     evaluation.expression(
         &Expression { nodes },
         |variable| &assignment[variable],
-        FormulaLimits::default(),
+        &FormulaLimits::default(),
         &mut Budget::new(ExpansionLimits::default(), usize::MAX),
         &mut Counters::default(),
         location(),
@@ -101,7 +101,7 @@ fn unwinding_clears_the_live_prefix() {
                 ],
             },
             |_| panic!("injected variable lookup unwind"),
-            FormulaLimits::default(),
+            &FormulaLimits::default(),
             &mut Budget::new(ExpansionLimits::default(), usize::MAX),
             &mut Counters::default(),
             location(),
@@ -137,7 +137,7 @@ fn stopped_evaluations_release_large_storage() {
                 .collect(),
         },
         |_| unreachable!("the plan has no variables"),
-        FormulaLimits {
+        &FormulaLimits {
             max_work: u64::try_from(RETAINED_VALUE_CELLS + 1).unwrap(),
             ..Default::default()
         },
@@ -174,7 +174,7 @@ fn reuse_charges_each_operand_copy() {
                 .expression(
                     &expression,
                     |_| &value,
-                    FormulaLimits::default(),
+                    &FormulaLimits::default(),
                     &mut budget,
                     &mut counters,
                     location(),
@@ -186,7 +186,7 @@ fn reuse_charges_each_operand_copy() {
     let failure = evaluation.expression(
         &expression,
         |_| &value,
-        FormulaLimits::default(),
+        &FormulaLimits::default(),
         &mut budget,
         &mut counters,
         location(),

@@ -33,7 +33,7 @@ fn plan(
     let mut budget = Budget::new(limits, 100);
     let mut compiler = Compiler {
         options: AdmissionOptions::default(),
-        limits: FormulaLimits::default(),
+        limits: &FormulaLimits::default(),
         budget: &mut budget,
         domain: BTreeSet::new(),
         next_aggregate: 0,

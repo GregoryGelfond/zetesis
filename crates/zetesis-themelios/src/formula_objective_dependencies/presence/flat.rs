@@ -27,7 +27,7 @@ enum Activity {
 /// count simultaneous borrowed slots, including caller-held exclusions. No
 /// names or values are cloned. Every insertion is checked before allocation.
 struct Context<'a> {
-    limits: FormulaLimits,
+    limits: &'a FormulaLimits,
     counters: &'a mut Counters,
     location: Location,
     entries: usize,
@@ -93,7 +93,7 @@ pub(super) fn certify<'a>(
     rule: &'a RuleIr,
     aggregate: &AggregateIr,
     retained: usize,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
     counters: &mut Counters,
 ) -> Result<Option<BTreeSet<&'a Predicate>>, FormulaFailure> {
     let mut context = Context {
@@ -210,7 +210,7 @@ fn activity(
                     }
                 }
             }
-            _ => {}
+            HeadIr::Normal(_) => {}
         }
     }
     Ok(Some(activity))
@@ -347,7 +347,7 @@ fn unique(
                     }
                 }
             }
-            _ => {}
+            HeadIr::Normal(_) => {}
         }
     }
     Ok(occurrences == 1)

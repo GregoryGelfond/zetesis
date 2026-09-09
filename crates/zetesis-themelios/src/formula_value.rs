@@ -43,7 +43,7 @@ impl Constructor {
     pub(super) fn evaluate(
         &self,
         values: &[Value],
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
@@ -56,7 +56,7 @@ impl Constructor {
         &self,
         values: &[Value],
         value_limits: ValueLimits,
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
@@ -110,7 +110,7 @@ impl Constructor {
         &self,
         values: &[Value],
         value_limits: ValueLimits,
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         counters: &mut Counters,
         location: Location,
     ) -> Result<Layout, FormulaFailure> {
@@ -261,7 +261,7 @@ mod tests {
         constructor.construct(
             values,
             value_limits,
-            FormulaLimits::default(),
+            &FormulaLimits::default(),
             &mut Budget::new(ExpansionLimits::default(), 100),
             &mut Counters::default(),
             location(),
@@ -427,7 +427,7 @@ mod tests {
                 let result = expression(
                     &expression_plan,
                     &[Value::Number(ignored), Value::Number(input)],
-                    FormulaLimits::default(),
+                    &FormulaLimits::default(),
                     &mut Budget::new(ExpansionLimits::default(), 100),
                     &mut Counters::default(),
                     location(),

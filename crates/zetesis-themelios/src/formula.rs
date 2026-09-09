@@ -678,7 +678,7 @@ pub fn prepare_formula(
     profile::check_formula(&parsed, options, false)?;
     extended::check_definitions_in(&parsed, expansion, &mut BTreeMap::new())?;
     metadata::check_count(&parsed, expansion, &mut 0)?;
-    formula_ir::check_objectives(&parsed, limits, &mut 0)?;
+    formula_ir::check_objectives(&parsed, &limits, &mut 0)?;
     let raised = raise(&parsed);
     if !raised.diagnostics().is_empty() {
         return Err(AdmissionFailure::Raise(raised.diagnostics().to_vec()).into());
@@ -693,7 +693,7 @@ pub fn prepare_formula(
         raised.program(),
         options,
         expansion,
-        limits,
+        &limits,
         location,
         &mut metadata,
     )?;
@@ -744,7 +744,7 @@ pub fn prepare_bundle_formula(
     expansion: ExpansionLimits,
     limits: FormulaLimits,
 ) -> Result<PreparedFormulaBundle, FormulaBundleFailure> {
-    match prepare_bundle(&bundle, options, expansion, limits) {
+    match prepare_bundle(&bundle, options, expansion, &limits) {
         Ok((preparation, metadata)) => {
             Ok(PreparedFormulaBundle::new(preparation, bundle, metadata))
         }
@@ -759,7 +759,7 @@ fn prepare_bundle(
     bundle: &SourceBundle,
     options: BundleAdmissionOptions,
     expansion: ExpansionLimits,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
 ) -> Result<(Preparation, SourceMetadata), FormulaFailure> {
     bundle_admission::check_include_identity(bundle)
         .map_err(|error| FormulaFailure::Include(Box::new(error)))?;
@@ -823,7 +823,7 @@ fn prepare(
     source: &SourceProgram,
     options: AdmissionOptions,
     expansion: ExpansionLimits,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
     location: Location,
     metadata: &mut SourceMetadata,
 ) -> Result<Preparation, FormulaFailure> {

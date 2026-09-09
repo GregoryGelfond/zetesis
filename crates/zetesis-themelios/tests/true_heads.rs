@@ -29,16 +29,16 @@ fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
         source,
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits::default(),
+        &FormulaLimits::default(),
     )
 }
 fn limited(
     source: &str,
     options: AdmissionOptions,
     expansion: ExpansionLimits,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
 ) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(source.into(), options, expansion, limits)
+    admit_formula(source.into(), options, expansion, *limits)
 }
 fn name(atom: &Atom) -> String {
     let sign = if atom.predicate().sign() == Sign::Negative {
@@ -363,7 +363,7 @@ fn condition_and_head_counts_have_inclusive_limits() {
             source,
             options,
             ExpansionLimits::default(),
-            FormulaLimits::default()
+            &FormulaLimits::default()
         )
         .is_ok()
     );
@@ -373,7 +373,7 @@ fn condition_and_head_counts_have_inclusive_limits() {
             source,
             options,
             ExpansionLimits::default(),
-            FormulaLimits::default()
+            &FormulaLimits::default()
         ),
         Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
             AdmissionFailure::Limit {
@@ -393,7 +393,7 @@ fn condition_and_head_counts_have_inclusive_limits() {
             source,
             AdmissionOptions::default(),
             ExpansionLimits::default(),
-            limits
+            &limits
         )
         .is_ok()
     );
@@ -402,7 +402,7 @@ fn condition_and_head_counts_have_inclusive_limits() {
             source,
             AdmissionOptions::default(),
             ExpansionLimits::default(),
-            FormulaLimits {
+            &FormulaLimits {
                 max_disjunction_elements: 1,
                 ..limits
             }
@@ -426,7 +426,7 @@ fn erased_conditions_do_not_consume_synthetic_variable_slots() {
             source,
             options,
             ExpansionLimits::default(),
-            FormulaLimits::default()
+            &FormulaLimits::default()
         )
         .is_ok()
     );
@@ -436,7 +436,7 @@ fn erased_conditions_do_not_consume_synthetic_variable_slots() {
             source,
             options,
             ExpansionLimits::default(),
-            FormulaLimits::default()
+            &FormulaLimits::default()
         ),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::Variables,
@@ -462,7 +462,7 @@ fn construction_work_substitutions_and_nodes_fail_at_exact_boundaries() {
                 source,
                 AdmissionOptions::default(),
                 ExpansionLimits::default(),
-                limits,
+                &limits,
             )
         };
         let threshold = first_success(|limit| attempt(limit).is_ok());
@@ -483,7 +483,7 @@ fn construction_work_substitutions_and_nodes_fail_at_exact_boundaries() {
                 max_term_work: usize::try_from(limit).unwrap(),
                 ..ExpansionLimits::default()
             },
-            FormulaLimits::default(),
+            &FormulaLimits::default(),
         )
     };
     let threshold = first_success(|limit| attempt(limit).is_ok());
@@ -502,7 +502,7 @@ fn construction_work_substitutions_and_nodes_fail_at_exact_boundaries() {
             source,
             AdmissionOptions::default(),
             ExpansionLimits::default(),
-            limits
+            &limits
         )
         .is_ok()
     );
@@ -512,7 +512,7 @@ fn construction_work_substitutions_and_nodes_fail_at_exact_boundaries() {
             source,
             AdmissionOptions::default(),
             ExpansionLimits::default(),
-            limits
+            &limits
         ),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::Nodes,

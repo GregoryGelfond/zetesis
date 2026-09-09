@@ -13,7 +13,7 @@ use zetesis_themelios::{
 mod source_records;
 
 fn input(source: &str) -> AdmittedFormula {
-    source_records::admit(source, FormulaLimits::default())
+    source_records::admit(source, &FormulaLimits::default())
         .unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 
@@ -111,7 +111,7 @@ fn eligible_minimum_integer_is_a_located_compatibility_refusal() {
         "a. #maximize{(-2147483647-1)@1,k:a}.",
         "v(-2147483647-1).v(1). #maximize{W@1,k:v(W)}.",
     ] {
-        let error = source_records::admit(source, FormulaLimits::default()).unwrap_err();
+        let error = source_records::admit(source, &FormulaLimits::default()).unwrap_err();
         assert!(
             matches!(
                 error,
@@ -135,7 +135,7 @@ fn minimum_integer_literal_retains_the_pinned_frontends_located_refusal() {
         "#maximize{-2147483648@1,k:absent}.",
         "v(-2147483648). #maximize{W@1,k:v(W),W!=(-2147483647-1)}.",
     ] {
-        let error = source_records::admit(source, FormulaLimits::default()).unwrap_err();
+        let error = source_records::admit(source, &FormulaLimits::default()).unwrap_err();
         assert!(
             matches!(
                 error,
@@ -155,7 +155,7 @@ fn maximizing_occurrences_obey_the_original_objective_element_ceiling() {
     ] {
         let result = source_records::admit(
             source,
-            FormulaLimits {
+            &FormulaLimits {
                 objective: zetesis_objective::AdmissionLimits {
                     max_templates: 1,
                     ..zetesis_objective::AdmissionLimits::default()

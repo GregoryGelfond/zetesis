@@ -17,7 +17,7 @@ fn numeric_extrema_preserve_complete_models_and_every_objective_cost() {
         654
     );
     for case in cases {
-        let input = admit(&case.source, FormulaLimits::default())
+        let input = admit(&case.source, &FormulaLimits::default())
             .unwrap_or_else(|error| panic!("{}: {error}", case.name));
         assert_eq!(
             exhaustive(&input),
@@ -32,7 +32,7 @@ fn numeric_extrema_preserve_complete_models_and_every_objective_cost() {
 fn empty_assignments_use_real_extrema_and_respect_assignment_cache_limits() {
     for (function, value) in [("min", Value::Supremum), ("max", Value::Infimum)] {
         let source = format!("m(M) :- M = #{function}{{}}.");
-        let input = admit(&source, FormulaLimits::default()).unwrap();
+        let input = admit(&source, &FormulaLimits::default()).unwrap();
         assert_eq!(input.atoms().len(), 1);
         assert_eq!(input.atoms()[0].values(), &[value]);
         for limits in [
@@ -49,7 +49,12 @@ fn empty_assignments_use_real_extrema_and_respect_assignment_cache_limits() {
                 ..FormulaLimits::default()
             },
         ] {
-            assert!(!admit(&source, limits).unwrap_err().diagnostics().is_empty());
+            assert!(
+                !admit(&source, &limits)
+                    .unwrap_err()
+                    .diagnostics()
+                    .is_empty()
+            );
         }
     }
 }
@@ -61,7 +66,7 @@ fn unresolved_numeric_endpoints_remain_located_refusals() {
         "m(M) :- M = #max {2147483647,k}.",
     ] {
         assert!(
-            !admit(source, FormulaLimits::default())
+            !admit(source, &FormulaLimits::default())
                 .unwrap_err()
                 .diagnostics()
                 .is_empty()

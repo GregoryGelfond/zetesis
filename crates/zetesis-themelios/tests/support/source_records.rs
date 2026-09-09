@@ -78,12 +78,12 @@ pub(super) fn canonical(atom: &Atom) -> String {
         format!("{name}({})", arguments.join(","))
     }
 }
-pub fn admit(source: &str, limits: FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {
+pub fn admit(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {
     admit_formula(
         source.into(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        limits,
+        *limits,
     )
 }
 pub fn exhaustive(input: &AdmittedFormula) -> Records {

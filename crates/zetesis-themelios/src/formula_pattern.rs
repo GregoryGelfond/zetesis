@@ -149,7 +149,7 @@ impl PatternNode {
 }
 
 pub(super) struct MatchContext<'a> {
-    pub limits: FormulaLimits,
+    pub limits: &'a FormulaLimits,
     pub budget: &'a mut Budget,
     pub counters: &'a mut Counters,
     pub location: Location,
@@ -409,7 +409,7 @@ mod tests {
                 atom,
                 incoming,
                 &mut MatchContext {
-                    limits: FormulaLimits::default(),
+                    limits: &FormulaLimits::default(),
                     budget: &mut budget,
                     counters: &mut counters,
                     location: location(),
@@ -427,7 +427,7 @@ mod tests {
                     atom,
                     incoming,
                     &mut MatchContext {
-                        limits: FormulaLimits {
+                        limits: &FormulaLimits {
                             max_work: limit,
                             ..FormulaLimits::default()
                         },
@@ -454,7 +454,7 @@ mod tests {
                     atom,
                     incoming,
                     &mut MatchContext {
-                        limits: FormulaLimits {
+                        limits: &FormulaLimits {
                             max_work: exact,
                             ..FormulaLimits::default()
                         },
@@ -483,7 +483,7 @@ mod tests {
                 &atom,
                 &incoming,
                 &mut MatchContext {
-                    limits: FormulaLimits::default(),
+                    limits: &FormulaLimits::default(),
                     budget: &mut budget,
                     counters: &mut counters,
                     location: location(),
@@ -516,7 +516,7 @@ mod tests {
             let result = extract(
                 &nodes,
                 &mut MatchContext {
-                    limits: FormulaLimits::default(),
+                    limits: &FormulaLimits::default(),
                     budget: &mut budget,
                     counters: &mut counters,
                     location: location(),

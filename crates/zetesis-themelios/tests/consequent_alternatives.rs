@@ -14,18 +14,22 @@ use zetesis_themelios::{
 fn limited(
     source: &str,
     expansion: ExpansionLimits,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
 ) -> Result<AdmittedFormula, FormulaFailure> {
     admit_formula(
         source.into(),
         AdmissionOptions::default(),
         expansion,
-        limits,
+        *limits,
     )
 }
 fn input(source: &str) -> AdmittedFormula {
-    limited(source, ExpansionLimits::default(), FormulaLimits::default())
-        .unwrap_or_else(|error| panic!("{source}: {error}"))
+    limited(
+        source,
+        ExpansionLimits::default(),
+        &FormulaLimits::default(),
+    )
+    .unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 fn corpus_case() -> &'static zetesis_validation::curated::Case {
     upstream::corpus()
@@ -310,7 +314,11 @@ fn witnesses_cannot_repair_condition_safety() {
     ] {
         assert!(
             matches!(
-                limited(source, ExpansionLimits::default(), FormulaLimits::default()),
+                limited(
+                    source,
+                    ExpansionLimits::default(),
+                    &FormulaLimits::default()
+                ),
                 Err(FormulaFailure::UnsafeVariable { .. })
             ),
             "{source}"
@@ -327,7 +335,11 @@ fn witnesses_cannot_bind_outer_names() {
     ] {
         assert!(
             matches!(
-                limited(source, ExpansionLimits::default(), FormulaLimits::default()),
+                limited(
+                    source,
+                    ExpansionLimits::default(),
+                    &FormulaLimits::default()
+                ),
                 Err(FormulaFailure::UnsafeVariable { .. })
             ),
             "{source}"
@@ -345,7 +357,11 @@ fn negative_consequents_require_bound_inputs() {
     ] {
         assert!(
             matches!(
-                limited(source, ExpansionLimits::default(), FormulaLimits::default()),
+                limited(
+                    source,
+                    ExpansionLimits::default(),
+                    &FormulaLimits::default()
+                ),
                 Err(FormulaFailure::UnsafeVariable { .. })
             ),
             "{source}"
@@ -367,7 +383,7 @@ fn entered_conditions_retain_value_errors() {
         limited(
             "q:-p((1..2)/X):X=0.",
             ExpansionLimits::default(),
-            FormulaLimits::default()
+            &FormulaLimits::default()
         ),
         Err(FormulaFailure::Expansion(
             zetesis_themelios::ExpansionFailure::Evaluation { .. }
@@ -458,7 +474,7 @@ fn local_substitution_limit_is_inclusive() {
         limited(
             BOUNDED,
             ExpansionLimits::default(),
-            FormulaLimits {
+            &FormulaLimits {
                 max_substitutions: cap as u64,
                 ..Default::default()
             },
@@ -480,7 +496,7 @@ fn consequent_value_limit_is_inclusive() {
                 max_values: cap,
                 ..Default::default()
             },
-            FormulaLimits::default(),
+            &FormulaLimits::default(),
         )
     };
     let cap = first_cap(run);
@@ -504,7 +520,7 @@ fn consequent_byte_limit_is_inclusive() {
                 max_scalar_bytes: cap,
                 ..Default::default()
             },
-            FormulaLimits::default(),
+            &FormulaLimits::default(),
         )
     };
     let cap = first_cap(run);
@@ -528,7 +544,7 @@ fn consequent_term_work_limit_is_inclusive() {
                 max_term_work: cap,
                 ..Default::default()
             },
-            FormulaLimits::default(),
+            &FormulaLimits::default(),
         )
     };
     let cap = first_cap(run);
@@ -549,7 +565,7 @@ fn projection_node_limit_is_inclusive() {
         limited(
             BOUNDED,
             ExpansionLimits::default(),
-            FormulaLimits {
+            &FormulaLimits {
                 max_analysis_nodes: cap,
                 ..Default::default()
             },
@@ -570,7 +586,7 @@ fn consequent_products_are_preflighted() {
     let arguments = ["(1;2)"; 20].join(",");
     let source = format!("q:-p({arguments}):#true.");
     assert!(
-        matches!(limited(&source, ExpansionLimits { max_values: 1_000, ..Default::default() }, FormulaLimits::default()),
+        matches!(limited(&source, ExpansionLimits { max_values: 1_000, ..Default::default() }, &FormulaLimits::default()),
         Err(FormulaFailure::Expansion(zetesis_themelios::ExpansionFailure::Limit { resource: zetesis_themelios::ExpansionResource::Values, observed, .. })) if observed >= 1 << 20)
     );
 }
@@ -787,7 +803,7 @@ fn projected_copies_share_the_node_allowance() {
             limited(
                 source,
                 ExpansionLimits::default(),
-                FormulaLimits {
+                &FormulaLimits {
                     max_analysis_nodes: cap,
                     ..Default::default()
                 },
@@ -802,7 +818,7 @@ fn projected_copies_share_the_node_allowance() {
         limited(
             two,
             ExpansionLimits::default(),
-            FormulaLimits {
+            &FormulaLimits {
                 max_analysis_nodes: cap,
                 ..Default::default()
             }

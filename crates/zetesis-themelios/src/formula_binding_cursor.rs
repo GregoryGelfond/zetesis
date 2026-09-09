@@ -82,7 +82,7 @@ impl<'a> Cursor<'a> {
     /// scopes retain their existing scalar dependency order.
     pub fn next(
         &mut self,
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
@@ -143,7 +143,7 @@ impl<'a> Cursor<'a> {
 
     fn initialize(
         &mut self,
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,

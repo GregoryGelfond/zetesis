@@ -21,7 +21,7 @@ fn forwarding_preserves_complete_model_cost_records() {
     assert_eq!(cases.len(), 38);
     let mut models = 0;
     for case in cases {
-        let input = admit(&case.source, FormulaLimits::default())
+        let input = admit(&case.source, &FormulaLimits::default())
             .unwrap_or_else(|error| panic!("{}: {error}", case.name));
         let records = exhaustive(&input);
         assert_eq!(records, case.records, "{}: {}", case.name, case.source);
@@ -33,7 +33,7 @@ fn forwarding_preserves_complete_model_cost_records() {
 #[test]
 fn search_preserves_every_optimum_tie() {
     for case in cases(FIXTURE) {
-        let input = admit(&case.source, FormulaLimits::default()).unwrap();
+        let input = admit(&case.source, &FormulaLimits::default()).unwrap();
         let mut search = zetesis_sat::StableModels::new(
             input.theory(),
             zetesis_sat::Limits::default(),
@@ -101,8 +101,8 @@ fn holds(theory: &Theory, values: &[bool]) -> bool {
 fn frozen_forwarding_keeps_assignment_equalities() {
     let source = "{a}.n(N):-N=#count{1:a}.p(X):-n(X).#minimize{X@7:p(X)}.";
     let expanded = "{a}.n(0):-not a.n(1):-a.p(0):-n(0).p(1):-n(1).";
-    let input = admit(source, FormulaLimits::default()).unwrap();
-    let reference = admit(expanded, FormulaLimits::default()).unwrap();
+    let input = admit(source, &FormulaLimits::default()).unwrap();
+    let reference = admit(expanded, &FormulaLimits::default()).unwrap();
     let count = input.atoms().len();
     assert_eq!(count, 5, "complete proposed carrier");
     assert_eq!(input.atoms(), reference.atoms());
@@ -133,10 +133,10 @@ fn frozen_forwarding_keeps_assignment_equalities() {
 #[test]
 fn forwarded_observers_leave_the_original_theory_intact() {
     let program = "{a}.n(N):-N=#count{1:a}.p(X):-n(X).q(Y):-p(Y).";
-    let ordinary = admit(program, FormulaLimits::default()).unwrap();
+    let ordinary = admit(program, &FormulaLimits::default()).unwrap();
     let observed = admit(
         &format!("{program}#minimize{{Y@7:q(Y)}}."),
-        FormulaLimits::default(),
+        &FormulaLimits::default(),
     )
     .unwrap();
     assert_eq!(ordinary.atoms(), observed.atoms());
@@ -165,7 +165,7 @@ fn unsupported_observer_paths_keep_located_refusals() {
         "a.n(N):-N=#count{1:a}.p(X):-n(X).#minimize{1@7:p(0)}.",
         "d(k).a.n(G,N):-d(G),N=#count{1:a}.p(Y,X):-n(X,Y).#minimize{1@7,K:p(0,K)}.",
     ] {
-        let error = admit(source, FormulaLimits::default()).unwrap_err();
+        let error = admit(source, &FormulaLimits::default()).unwrap_err();
         assert!(!error.diagnostics().is_empty(), "{source}: located refusal");
         assert!(
             matches!(
@@ -186,7 +186,7 @@ fn unqualified_extrema_do_not_claim_numeric_presence() {
     let cases: Vec<_> = cases(EXTREMA_REFUSALS).into_iter().skip(7).collect();
     assert_eq!(cases.len(), 3);
     for case in cases {
-        let error = admit(&case.source, FormulaLimits::default()).unwrap_err();
+        let error = admit(&case.source, &FormulaLimits::default()).unwrap_err();
         let FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
             feature,
             location,
@@ -271,7 +271,7 @@ fn exact_admission_limits_preserve_objective_completion() {
 }
 
 fn exact_limits(source: &str) {
-    let reference = admit(source, FormulaLimits::default()).unwrap();
+    let reference = admit(source, &FormulaLimits::default()).unwrap();
     for resource in [
         Resource::Work,
         Resource::Substitutions,
@@ -281,19 +281,19 @@ fn exact_limits(source: &str) {
     ] {
         let mut lower = 0;
         let mut upper = 10_000;
-        assert!(admit(source, resource.limits(upper)).is_ok());
+        assert!(admit(source, &resource.limits(upper)).is_ok());
         while lower < upper {
             let middle = lower + (upper - lower) / 2;
-            if admit(source, resource.limits(middle)).is_ok() {
+            if admit(source, &resource.limits(middle)).is_ok() {
                 upper = middle;
             } else {
                 lower = middle + 1;
             }
         }
         assert!(lower > 0);
-        let exact = admit(source, resource.limits(lower)).unwrap();
+        let exact = admit(source, &resource.limits(lower)).unwrap();
         assert_eq!(exhaustive(&exact), exhaustive(&reference));
-        let error = admit(source, resource.limits(lower - 1)).unwrap_err();
+        let error = admit(source, &resource.limits(lower - 1)).unwrap_err();
         assert!(
             matches!(error, FormulaFailure::Limit { resource: actual, observed, limit, .. }
                 if actual == resource.kind() && observed > limit),
@@ -301,7 +301,7 @@ fn exact_limits(source: &str) {
         );
         assert!(!error.diagnostics().is_empty());
         assert_eq!(
-            exhaustive(&admit(source, resource.limits(lower)).unwrap()),
+            exhaustive(&admit(source, &resource.limits(lower)).unwrap()),
             exhaustive(&reference),
             "retry publishes the complete objective contract"
         );

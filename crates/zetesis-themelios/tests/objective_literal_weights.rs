@@ -23,7 +23,7 @@ const CONDITION_CASES: &str = r##"{"name":"absent_condition","source":"#minimize
 fn literal_conditions_preserve_complete_records() {
     for case in reference::cases(CONDITION_CASES) {
         assert_eq!(
-            exhaustive(&admit(&case.source, FormulaLimits::default()).unwrap()),
+            exhaustive(&admit(&case.source, &FormulaLimits::default()).unwrap()),
             case.records
         );
     }
@@ -34,7 +34,7 @@ fn literal_weights_preserve_complete_model_records() {
     let cases = cases();
     assert_eq!(cases.len(), 162);
     for case in cases {
-        let input = admit(&case.reference.source, FormulaLimits::default())
+        let input = admit(&case.reference.source, &FormulaLimits::default())
             .unwrap_or_else(|error| panic!("{}: {error}", case.reference.name));
         assert_eq!(
             input.objectives().priorities(),
@@ -54,9 +54,9 @@ fn literal_weights_preserve_complete_model_records() {
 
 #[test]
 fn ignored_weights_preserve_the_original_reduct_subject() {
-    let ordinary = admit(PROGRAM, FormulaLimits::default()).unwrap();
+    let ordinary = admit(PROGRAM, &FormulaLimits::default()).unwrap();
     for case in cases() {
-        let input = admit(&case.reference.source, FormulaLimits::default()).unwrap();
+        let input = admit(&case.reference.source, &FormulaLimits::default()).unwrap();
         // Identical original nodes imply identical truth for every original and
         // frozen interpretation, including candidates rejected by the reduct.
         assert_eq!(input.atoms(), ordinary.atoms());
@@ -69,7 +69,7 @@ fn ignored_weights_preserve_the_original_reduct_subject() {
 #[test]
 fn symbolic_extremum_literal_weights_leave_no_slot() {
     let source = "b.{a}.n(N):-N=#max{2:a;foo:b}.p(X):-n(X).#minimize{foo@7,X:p(X)}.";
-    let input = admit(source, FormulaLimits::default()).unwrap();
+    let input = admit(source, &FormulaLimits::default()).unwrap();
     let reference = reference::cases(
         r#"{"name":"symbol_weight","source":"","records":[[["b","n(foo)","p(foo)"],null],[["a","b","n(foo)","p(foo)"],null]]}"#,
     );
@@ -82,7 +82,7 @@ fn empty_programs_keep_objective_absence() {
     for weight in WEIGHTS {
         for direction in DIRECTIONS {
             let source = directive(direction, weight, 7, "");
-            let input = admit(&source, FormulaLimits::default()).unwrap();
+            let input = admit(&source, &FormulaLimits::default()).unwrap();
             assert_eq!(exhaustive(&input), Records::from([(BTreeSet::new(), None)]));
         }
     }
@@ -90,7 +90,7 @@ fn empty_programs_keep_objective_absence() {
 
 #[test]
 fn reference_spelling_preserves_atom_sign() {
-    let input = admit("a.-b.p(1).-q(2).", FormulaLimits::default()).unwrap();
+    let input = admit("a.-b.p(1).-q(2).", &FormulaLimits::default()).unwrap();
     let records = exhaustive(&input);
     assert_eq!(
         records,
@@ -112,7 +112,7 @@ fn ignored_weights_do_not_hide_invalid_siblings() {
         "a.#minimize{foo@7:not a}.",
         "a.#maximize{foo@7;-2147483648@3}.",
     ] {
-        let error = admit(source, FormulaLimits::default()).unwrap_err();
+        let error = admit(source, &FormulaLimits::default()).unwrap_err();
         assert!(!error.diagnostics().is_empty(), "{source}");
     }
 }
@@ -122,7 +122,7 @@ fn ignored_templates_retain_source_limits() {
     let mut limits = FormulaLimits::default();
     limits.objective.max_templates = 0;
     assert!(matches!(
-        admit("#minimize{foo}.", limits),
+        admit("#minimize{foo}.", &limits),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::ObjectiveElements,
             limit: 0,
@@ -308,7 +308,7 @@ fn completed_capture_refuses_unrepresentable_limits() {
 #[test]
 fn literal_admission_limits_are_inclusive() {
     let source = "{a;b}.#minimize{f(1,\"text\")@7,k:a;0@3,k:b}.";
-    let reference = exhaustive(&admit(source, FormulaLimits::default()).unwrap());
+    let reference = exhaustive(&admit(source, &FormulaLimits::default()).unwrap());
     for resource in [FormulaResource::Work, FormulaResource::Substitutions] {
         let attempt = |maximum| {
             let mut limits = FormulaLimits::default();
@@ -317,7 +317,7 @@ fn literal_admission_limits_are_inclusive() {
             } else {
                 limits.max_substitutions = maximum;
             }
-            admit(source, limits)
+            admit(source, &limits)
         };
         let exact = threshold(|maximum| attempt(maximum).is_ok());
         assert_eq!(exhaustive(&attempt(exact).unwrap()), reference);
@@ -372,7 +372,7 @@ proptest::proptest! {
     ) {
         let source = format!("{{a}}.#minimize{{{}@{},k:a;{amount}@{priority},k:a;{amount}@{priority},k:a}}.",
             WEIGHTS[weight], priority + 1);
-        let input = admit(&source, FormulaLimits::default()).unwrap();
+        let input = admit(&source, &FormulaLimits::default()).unwrap();
         let model = Model::new(input.atoms().iter().filter(|atom| selected && atom.values().is_empty()).cloned());
         let evaluation = zetesis_objective::evaluate(input.objectives(), &model,
             zetesis_objective::Limits::default(), &Control::default()).unwrap();
@@ -418,11 +418,11 @@ fn literal_weight_sources_match_fresh_clingo() {
         external(
             name,
             source,
-            &exhaustive(&admit(source, FormulaLimits::default()).unwrap()),
+            &exhaustive(&admit(source, &FormulaLimits::default()).unwrap()),
         );
         assert_eq!(
             reference::clingo(source),
-            exhaustive(&admit(source, FormulaLimits::default()).unwrap())
+            exhaustive(&admit(source, &FormulaLimits::default()).unwrap())
         );
     }
 }

@@ -59,14 +59,14 @@ impl GroundingObserver for Observer {
 
 fn compile(
     source: &str,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
     observer: Option<&dyn GroundingObserver>,
 ) -> Result<AdmittedFormula, FormulaFailure> {
     admit_formula_with_grounding_observer(
         source.into(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        limits,
+        *limits,
         observer,
     )
 }
@@ -75,8 +75,8 @@ fn compile(
 fn profile_preserves_the_compiled_subject() {
     let source = "digit(0..3). 1 {p(X):digit(X)} 1. :- p(X), X+1>2. #minimize{X:p(X)}. #show p/1.";
     let observer = Observer::default();
-    let measured = compile(source, FormulaLimits::default(), Some(&observer)).unwrap();
-    let plain = compile(source, FormulaLimits::default(), None).unwrap();
+    let measured = compile(source, &FormulaLimits::default(), Some(&observer)).unwrap();
+    let plain = compile(source, &FormulaLimits::default(), None).unwrap();
     assert_eq!(measured.atoms(), plain.atoms());
     assert_eq!(measured.theory().nodes(), plain.theory().nodes());
     assert_eq!(measured.theory().roots(), plain.theory().roots());
@@ -98,7 +98,7 @@ fn phase_counts_reconcile_with_materialized_storage() {
     let observer = Observer::default();
     let admitted = compile(
         "p(1). 1 {q(X):p(X)} 1. -q(1).",
-        FormulaLimits::default(),
+        &FormulaLimits::default(),
         Some(&observer),
     )
     .unwrap();
@@ -126,7 +126,7 @@ fn phase_counts_reconcile_with_materialized_storage() {
 #[test]
 fn support_counts_describe_completed_rounds() {
     let observer = Observer::default();
-    compile("p(1).", FormulaLimits::default(), Some(&observer)).unwrap();
+    compile("p(1).", &FormulaLimits::default(), Some(&observer)).unwrap();
     let records = observer.records.borrow();
     let support = records
         .iter()
@@ -142,7 +142,7 @@ fn arithmetic_counts_describe_the_joined_rule() {
     let observer = Observer::default();
     compile(
         "p(1). :- p(X), X+1<3.",
-        FormulaLimits::default(),
+        &FormulaLimits::default(),
         Some(&observer),
     )
     .unwrap();
@@ -163,7 +163,7 @@ fn arithmetic_counts_describe_the_joined_rule() {
 #[test]
 fn only_rule_phases_claim_a_source_location() {
     let observer = Observer::default();
-    compile("p(1).", FormulaLimits::default(), Some(&observer)).unwrap();
+    compile("p(1).", &FormulaLimits::default(), Some(&observer)).unwrap();
     let records = observer.records.borrow();
     assert_eq!(
         records.first().unwrap().phase,
@@ -186,8 +186,8 @@ fn only_rule_phases_claim_a_source_location() {
 fn undefined_arithmetic_retains_its_failed_phase() {
     let observer = Observer::default();
     let source = "p(0). :- p(X), 1/X=0.";
-    let measured = compile(source, FormulaLimits::default(), Some(&observer)).unwrap_err();
-    let plain = compile(source, FormulaLimits::default(), None).unwrap_err();
+    let measured = compile(source, &FormulaLimits::default(), Some(&observer)).unwrap_err();
+    let plain = compile(source, &FormulaLimits::default(), None).unwrap_err();
     assert_eq!(measured.to_string(), plain.to_string());
     let records = observer.records.borrow();
     let last = records.last().unwrap();
@@ -206,8 +206,8 @@ fn profiling_preserves_inclusive_support_limits() {
             ..FormulaLimits::default()
         };
         let observer = Observer::default();
-        let measured = compile("p(1).", limits, Some(&observer));
-        let plain = compile("p(1).", limits, None);
+        let measured = compile("p(1).", &limits, Some(&observer));
+        let plain = compile("p(1).", &limits, None);
         assert_eq!(measured.is_ok(), succeeds);
         assert_eq!(plain.is_ok(), succeeds);
         if let Err(error) = measured {
@@ -231,10 +231,10 @@ fn node_refusal_retains_attempted_interning() {
         ..FormulaLimits::default()
     };
     let observer = Observer::default();
-    let error = compile("p(1).", limits, Some(&observer)).unwrap_err();
+    let error = compile("p(1).", &limits, Some(&observer)).unwrap_err();
     assert_eq!(
         error.to_string(),
-        compile("p(1).", limits, None).unwrap_err().to_string()
+        compile("p(1).", &limits, None).unwrap_err().to_string()
     );
     let records = observer.records.borrow();
     let last = records.last().unwrap();
@@ -248,7 +248,7 @@ fn node_refusal_retains_attempted_interning() {
 fn source_refusals_have_no_grounding_phases() {
     for source in ["p(.", "p(X)."] {
         let observer = Observer::default();
-        assert!(compile(source, FormulaLimits::default(), Some(&observer)).is_err());
+        assert!(compile(source, &FormulaLimits::default(), Some(&observer)).is_err());
         assert!(observer.records.borrow().is_empty());
         assert!(!observer.active.get());
     }

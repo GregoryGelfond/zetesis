@@ -18,7 +18,7 @@ fn sum_profiles_preserve_complete_models_and_every_objective_cost() {
         1_018
     );
     for case in cases {
-        let input = admit(&case.source, FormulaLimits::default())
+        let input = admit(&case.source, &FormulaLimits::default())
             .unwrap_or_else(|error| panic!("{}: {error}\n{}", case.name, case.source));
         assert_eq!(
             exhaustive(&input),
@@ -38,7 +38,7 @@ fn ignored_weights_do_not_relax_scope_or_resource_checks() {
         "n(N) :- N = #sum+ { 2,X : p(Y) }.",
     ] {
         assert!(
-            !admit(source, FormulaLimits::default())
+            !admit(source, &FormulaLimits::default())
                 .unwrap_err()
                 .diagnostics()
                 .is_empty()
@@ -64,7 +64,12 @@ fn ignored_weights_do_not_relax_scope_or_resource_checks() {
                 ..Default::default()
             },
         ] {
-            assert!(!admit(&source, limits).unwrap_err().diagnostics().is_empty());
+            assert!(
+                !admit(&source, &limits)
+                    .unwrap_err()
+                    .diagnostics()
+                    .is_empty()
+            );
         }
     }
 }

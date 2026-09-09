@@ -27,13 +27,13 @@ fn options() -> AdmissionOptions {
 
 fn formula(
     source: &str,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
 ) -> Result<zetesis_themelios::AdmittedFormula, FormulaFailure> {
     admit_formula(
         source.to_owned(),
         options(),
         ExpansionLimits::default(),
-        limits,
+        *limits,
     )
 }
 
@@ -256,7 +256,7 @@ fn constant_refusals_retain_duplicate_or_policy_locations_and_evaluation_causes(
 fn formula_resource_failures_keep_the_actual_nested_admission_cause() {
     let mut objective = FormulaLimits::default();
     objective.objective.max_filters = 0;
-    let error = formula("p(1). #minimize{X:p(X),X!=0}.", objective).unwrap_err();
+    let error = formula("p(1). #minimize{X:p(X),X!=0}.", &objective).unwrap_err();
     assert!(
         matches!(error, FormulaFailure::Objective { .. }),
         "{error:?}"
@@ -272,7 +272,7 @@ fn formula_resource_failures_keep_the_actual_nested_admission_cause() {
     assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
     let mut aggregate = FormulaLimits::default();
     aggregate.aggregate.max_states = 0;
-    let error = formula("{q}. p :- #count{1:q}=1.", aggregate).unwrap_err();
+    let error = formula("{q}. p :- #count{1:q}=1.", &aggregate).unwrap_err();
     assert!(
         matches!(error, FormulaFailure::Aggregate { .. }),
         "{error:?}"
@@ -288,7 +288,7 @@ fn formula_resource_failures_keep_the_actual_nested_admission_cause() {
     assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
     let mut observation = FormulaLimits::default();
     observation.observation.max_nodes = 0;
-    let error = formula("p. #show f(1).", observation).unwrap_err();
+    let error = formula("p. #show f(1).", &observation).unwrap_err();
     assert!(
         matches!(error, FormulaFailure::Observation { .. }),
         "{error:?}"
@@ -522,7 +522,7 @@ fn a_redirected_include_has_both_lexical_and_canonical_diagnostic_evidence() {
 
 #[test]
 fn observation_bindings_preserve_symbol_string_and_infinite_value_identity() {
-    let input = formula("#show p/1. #show item(X): p(X).", FormulaLimits::default()).unwrap();
+    let input = formula("#show p/1. #show item(X): p(X).", &FormulaLimits::default()).unwrap();
     let observations = input.metadata().observations();
     // Observation evaluation intentionally accepts a caller-supplied model;
     // it neither admits these values as source terms nor decides stability.
@@ -602,7 +602,7 @@ fn observation_bindings_preserve_symbol_string_and_infinite_value_identity() {
 #[test]
 fn nonbinding_aggregate_guards_require_safe_inputs() {
     let source = "p(1). n(N) :- N<=#count{X:p(X)}.";
-    let error = formula(source, FormulaLimits::default()).unwrap_err();
+    let error = formula(source, &FormulaLimits::default()).unwrap_err();
     assert!(matches!(error, FormulaFailure::UnsafeVariable { .. }));
     assert!(
         error

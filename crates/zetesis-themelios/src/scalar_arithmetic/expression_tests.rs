@@ -28,7 +28,7 @@ fn evaluate(
     let result = expression(
         &Expression { nodes },
         &[],
-        FormulaLimits {
+        &FormulaLimits {
             max_work: work,
             ..Default::default()
         },

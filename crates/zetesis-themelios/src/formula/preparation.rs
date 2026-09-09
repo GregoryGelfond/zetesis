@@ -21,13 +21,15 @@ impl Preparation {
     pub(super) fn new(
         program: formula_ir::Prepared,
         budget: Budget,
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         location: Location,
     ) -> Self {
         Self {
             program,
             budget,
-            limits,
+            // The deferred receipt owns one immutable snapshot; its later
+            // compilation and grounding helpers borrow this configuration.
+            limits: *limits,
             location,
         }
     }
@@ -40,7 +42,7 @@ impl Preparation {
         grounding_observer::observe(observer, || {
             formula_ground::ground(
                 self.program,
-                self.limits,
+                &self.limits,
                 &mut self.budget,
                 self.location,
                 observer,

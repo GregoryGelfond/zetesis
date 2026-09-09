@@ -37,7 +37,7 @@ impl Evaluation {
         &mut self,
         expression: &Expression,
         variable: impl Fn(usize) -> &'a Value,
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,

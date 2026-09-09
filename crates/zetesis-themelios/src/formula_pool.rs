@@ -78,7 +78,7 @@ impl<'a> Cursor<'a> {
     fn new(
         source: &'a WithProvenance<Statement>,
         origins: usize,
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         projection_nodes: &mut u128,
         budget: &mut Budget,
         location: Location,

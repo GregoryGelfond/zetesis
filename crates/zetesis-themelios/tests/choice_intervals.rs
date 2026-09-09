@@ -385,12 +385,12 @@ fn excluded_endpoints_syntax_and_unsafe_scopes_remain_typed_refusals() {
     );
 }
 
-fn limited(source: &str, limits: FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {
+fn limited(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {
     admit_formula(
         source.into(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        limits,
+        *limits,
     )
 }
 #[test]
@@ -419,11 +419,11 @@ fn fresh_slots_and_generated_values_obey_inclusive_cumulative_limits() {
         max_assignment_values: 4,
         ..FormulaLimits::default()
     };
-    assert!(limited(source, limits).is_ok());
+    assert!(limited(source, &limits).is_ok());
     assert!(matches!(
         limited(
             source,
-            FormulaLimits {
+            &FormulaLimits {
                 max_assignment_values: 3,
                 ..limits
             }
@@ -438,7 +438,7 @@ fn fresh_slots_and_generated_values_obey_inclusive_cumulative_limits() {
         matches!(
             limited(
                 "{p((-2147483647-1)..2147483647)}.",
-                FormulaLimits {
+                &FormulaLimits {
                     max_assignment_values: 3,
                     ..limits
                 }
@@ -454,7 +454,7 @@ fn fresh_slots_and_generated_values_obey_inclusive_cumulative_limits() {
     assert!(
         limited(
             "{p((-2147483647-1)..2147483647)}:-missing.",
-            FormulaLimits {
+            &FormulaLimits {
                 max_assignment_values: 0,
                 ..limits
             }
@@ -492,7 +492,7 @@ fn construction_and_streamed_substitution_work_refuse_before_partial_admission()
             } else {
                 limits.max_substitutions = limit;
             }
-            limited(source, limits)
+            limited(source, &limits)
         };
         let threshold = first_success(|limit| attempt(limit).is_ok());
         assert!(matches!(attempt(threshold - 1), Err(FormulaFailure::Limit {
@@ -530,7 +530,7 @@ fn construction_and_streamed_substitution_work_refuse_before_partial_admission()
             limits.theory.max_nodes = limit - 1;
         }
         assert!(
-            matches!(limited(source, limits), Err(FormulaFailure::Limit {
+            matches!(limited(source, &limits), Err(FormulaFailure::Limit {
             resource: actual, .. }) if actual == resource)
         );
     }

@@ -38,7 +38,7 @@ impl Presence<'_> {
     pub(crate) fn may_have_numeric_weight(
         &self,
         objective: &ObjectiveIr,
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         counters: &mut Counters,
     ) -> Result<bool, FormulaFailure> {
         if self.nonnumeric.is_empty() {
@@ -107,7 +107,7 @@ pub(super) fn required(
 pub(crate) fn check<'a>(
     prepared: &'a Prepared,
     support: &Support,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
 ) -> Result<Presence<'a>, FormulaFailure> {
@@ -166,7 +166,7 @@ fn mixed(
     aggregate: &AggregateIr,
     binding: &[Value],
     support: &Support,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
     location: themelios_base::span::Location,

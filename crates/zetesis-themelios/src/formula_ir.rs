@@ -183,7 +183,7 @@ pub(crate) enum Operation {
 pub(crate) fn prepare(
     source: &SourceProgram,
     options: AdmissionOptions,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
     budget: &mut Budget,
     fallback: Location,
 ) -> Result<Prepared, FormulaFailure> {
@@ -289,7 +289,7 @@ pub(crate) fn prepare(
 
 fn validate_objectives(
     objectives: &[ObjectiveIr],
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
     fallback: Location,
 ) -> Result<(), FormulaFailure> {
     ObjectiveProgram::new(
@@ -407,7 +407,7 @@ impl Variables {
 
 pub(super) struct Compiler<'a> {
     pub(super) options: AdmissionOptions,
-    pub(super) limits: FormulaLimits,
+    pub(super) limits: &'a FormulaLimits,
     pub(super) budget: &'a mut Budget,
     domain: BTreeSet<Value>,
     pub(super) next_aggregate: usize,
@@ -973,7 +973,7 @@ fn scalar_expression(term: &CoreTerm) -> Expression {
 
 pub(crate) fn check_objectives(
     parsed: &Parse<ast::Program>,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
     count: &mut usize,
 ) -> Result<(), FormulaFailure> {
     for statement in parsed.tree().statements() {

@@ -58,7 +58,7 @@ impl Guard {
     pub(super) fn evaluate(
         &self,
         assignment: &[Value],
-        limits: FormulaLimits,
+        limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,

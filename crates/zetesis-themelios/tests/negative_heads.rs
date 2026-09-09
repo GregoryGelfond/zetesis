@@ -31,16 +31,16 @@ fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
         source,
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits::default(),
+        &FormulaLimits::default(),
     )
 }
 fn limited(
     source: &str,
     options: AdmissionOptions,
     expansion: ExpansionLimits,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
 ) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(source.into(), options, expansion, limits)
+    admit_formula(source.into(), options, expansion, *limits)
 }
 fn name(atom: &Atom) -> String {
     let sign = if atom.predicate().sign() == Sign::Negative {
@@ -473,7 +473,7 @@ fn negation_nodes_and_occurrences_obey_exact_resource_boundaries() {
                     source,
                     AdmissionOptions::default(),
                     ExpansionLimits::default(),
-                    limits
+                    &limits
                 )
                 .unwrap()
             ),
@@ -485,7 +485,7 @@ fn negation_nodes_and_occurrences_obey_exact_resource_boundaries() {
                 source,
                 AdmissionOptions::default(),
                 ExpansionLimits::default(),
-                limits
+                &limits
             ),
             Err(FormulaFailure::Limit {
                 resource: FormulaResource::Nodes,
@@ -502,7 +502,7 @@ fn negation_nodes_and_occurrences_obey_exact_resource_boundaries() {
                 ..ExpansionLimits::default()
             };
             assert!(matches!(
-                limited(source, AdmissionOptions::default(), expansion, limits),
+                limited(source, AdmissionOptions::default(), expansion, &limits),
                 Err(FormulaFailure::Limit {
                     resource: FormulaResource::Work,
                     ..
@@ -522,7 +522,7 @@ fn negation_nodes_and_occurrences_obey_exact_resource_boundaries() {
             "a|not a.",
             AdmissionOptions::default(),
             ExpansionLimits::default(),
-            limits
+            &limits
         )
         .is_ok()
     );
@@ -531,7 +531,7 @@ fn negation_nodes_and_occurrences_obey_exact_resource_boundaries() {
             "a|not a|not not a.",
             AdmissionOptions::default(),
             ExpansionLimits::default(),
-            limits
+            &limits
         ),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::DisjunctionElements,
@@ -553,7 +553,7 @@ fn singleton_head_limit_counts_one_literal() {
                 source,
                 AdmissionOptions::default(),
                 ExpansionLimits::default(),
-                limits
+                &limits
             )
             .is_ok()
         );
@@ -566,7 +566,7 @@ fn singleton_head_limit_counts_one_literal() {
                 source,
                 AdmissionOptions::default(),
                 ExpansionLimits::default(),
-                limits
+                &limits
             ),
             Err(FormulaFailure::Limit {
                 resource: FormulaResource::DisjunctionElements,

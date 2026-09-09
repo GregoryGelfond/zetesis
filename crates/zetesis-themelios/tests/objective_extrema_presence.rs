@@ -23,7 +23,7 @@ fn flat_cases() -> Vec<reference::Case> {
 #[test]
 fn flat_extrema_preserve_full_model_cost_records() {
     for case in flat_cases() {
-        let input = admit(&case.source, FormulaLimits::default())
+        let input = admit(&case.source, &FormulaLimits::default())
             .unwrap_or_else(|error| panic!("{}: {error}", case.name));
         assert_eq!(exhaustive(&input), case.records, "{}", case.name);
     }
@@ -36,10 +36,10 @@ fn presence_keeps_the_original_reduct_subject() {
         "{a}.n(N):-N=#max{2:a;foo:a}.p(X):-n(X).",
         "b.{a}.n(N):-N=#min{2:b;foo:a}.p(X):-n(X).",
     ] {
-        let original = admit(program, FormulaLimits::default()).unwrap();
+        let original = admit(program, &FormulaLimits::default()).unwrap();
         let observed = admit(
             &format!("{program}#minimize{{X@7:p(X)}}."),
-            FormulaLimits::default(),
+            &FormulaLimits::default(),
         )
         .unwrap();
         // Node identity gives the same truth at every original and frozen pair,
@@ -67,7 +67,7 @@ fn unqualified_conditions_keep_located_refusals() {
         "b.{a}.n(N):-N=#max{2:a;foo:b}.n(7).#minimize{X@7:n(X)}.",
         "b.{a}.n(N):-N=#max{2:a;foo:b}.m(M):-M=#count{Y:n(Y)}.#minimize{M@7:m(M)}.",
     ] {
-        let error = admit(source, FormulaLimits::default()).unwrap_err();
+        let error = admit(source, &FormulaLimits::default()).unwrap_err();
         assert!(!error.diagnostics().is_empty(), "{source}");
         assert!(
             matches!(
@@ -86,7 +86,7 @@ fn unqualified_conditions_keep_located_refusals() {
 fn presence_completion_respects_inclusive_limits() {
     let source =
         "b.{a}.n(N):-N=#max{2:a;foo:b}.p(X):-n(X).q(Y):-p(Y).#minimize{Y@7:q(Y);0@3:q(Z)}.";
-    let expected = exhaustive(&admit(source, FormulaLimits::default()).unwrap());
+    let expected = exhaustive(&admit(source, &FormulaLimits::default()).unwrap());
     for resource in [
         FormulaResource::Work,
         FormulaResource::Substitutions,
@@ -101,7 +101,7 @@ fn presence_completion_respects_inclusive_limits() {
             } else {
                 limits.max_objective_presence_entries = usize::try_from(maximum).unwrap();
             }
-            admit(source, limits)
+            admit(source, &limits)
         };
         let (mut lower, mut upper) = (0, 65_536);
         assert!(attempt(upper).is_ok());
@@ -127,11 +127,11 @@ fn presence_completion_respects_inclusive_limits() {
 #[test]
 fn distinct_carriers_share_the_storage_allowance() {
     let source = "b.{a}.n(N):-N=#max{2:a;foo:b}.p(X):-n(X).m(M):-M=#max{4:a;bar:b}.#minimize{X@7:p(X);Y@3:m(Y);0@1:n(Z)}.";
-    let expected = exhaustive(&admit(source, FormulaLimits::default()).unwrap());
+    let expected = exhaustive(&admit(source, &FormulaLimits::default()).unwrap());
     let attempt = |maximum| {
         admit(
             source,
-            FormulaLimits {
+            &FormulaLimits {
                 max_objective_presence_entries: maximum,
                 ..Default::default()
             },
@@ -148,7 +148,7 @@ fn distinct_carriers_share_the_storage_allowance() {
 #[test]
 fn excluded_weights_do_not_hide_endpoint_refusals() {
     let source = "b.{a}.n(N):-N=#max{(-2147483647-1):a;foo:b}.#maximize{X@7:n(X)}.";
-    let error = admit(source, FormulaLimits::default()).unwrap_err();
+    let error = admit(source, &FormulaLimits::default()).unwrap_err();
     assert!(!error.diagnostics().is_empty());
     assert!(
         matches!(
@@ -168,7 +168,11 @@ fn zero_presence_storage_refuses_a_mixed_certificate() {
         max_objective_presence_entries: 0,
         ..Default::default()
     };
-    let error = admit("b.{a}.n(N):-N=#max{2:a;foo:b}.#minimize{X@7:n(X)}.", limits).unwrap_err();
+    let error = admit(
+        "b.{a}.n(N):-N=#max{2:a;foo:b}.#minimize{X@7:n(X)}.",
+        &limits,
+    )
+    .unwrap_err();
     assert!(matches!(
         error,
         FormulaFailure::Limit {
@@ -191,8 +195,8 @@ fn homogeneous_carriers_need_no_presence_storage() {
             ..Default::default()
         };
         assert_eq!(
-            exhaustive(&admit(source, limits).unwrap()),
-            exhaustive(&admit(source, FormulaLimits::default()).unwrap())
+            exhaustive(&admit(source, &limits).unwrap()),
+            exhaustive(&admit(source, &FormulaLimits::default()).unwrap())
         );
     }
 }
@@ -203,7 +207,7 @@ proptest::proptest! {
     #[test]
     fn optional_correlation_retains_numeric_presence(weight in -8_i32..9, priority in -3_i32..4) {
         let source = format!("{{a}}.n(N):-N=#max{{{weight}:a;foo:a}}.#minimize{{X@{priority}:n(X)}}.");
-        let input = admit(&source, FormulaLimits::default()).unwrap();
+        let input = admit(&source, &FormulaLimits::default()).unwrap();
         proptest::prop_assert_eq!(input.objectives().priorities(), &[priority]);
         let records = exhaustive(&input);
         proptest::prop_assert_eq!(records.len(), 2);
@@ -213,7 +217,7 @@ proptest::proptest! {
     #[test]
     fn required_symbol_excludes_only_its_weight(weight in -8_i32..9, priority in -3_i32..4) {
         let source = format!("b.{{a}}.n(N):-N=#max{{{weight}:a;foo:b}}.#minimize{{X@{priority}:n(X);0@{},k:n(Y)}}.", priority-1);
-        let input = admit(&source, FormulaLimits::default()).unwrap();
+        let input = admit(&source, &FormulaLimits::default()).unwrap();
         proptest::prop_assert_eq!(input.objectives().priorities(), &[priority-1]);
         let records = exhaustive(&input);
         proptest::prop_assert_eq!(records.len(), 2);

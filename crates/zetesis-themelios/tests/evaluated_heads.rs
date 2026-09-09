@@ -28,16 +28,16 @@ fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
         source,
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits::default(),
+        &FormulaLimits::default(),
     )
 }
 fn limited(
     source: &str,
     options: AdmissionOptions,
     expansion: ExpansionLimits,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
 ) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(source.into(), options, expansion, limits)
+    admit_formula(source.into(), options, expansion, *limits)
 }
 fn name(atom: &Atom) -> String {
     let sign = if atom.predicate().sign() == Sign::Negative {
@@ -393,13 +393,13 @@ fn generated_slot_arity_and_range_width_limits_are_inclusive() {
                 source,
                 options,
                 ExpansionLimits::default(),
-                FormulaLimits::default()
+                &FormulaLimits::default()
             )
             .is_ok()
         );
         options.core_limits.max_variables_per_template -= 1;
         assert!(
-            matches!(limited(source, options, ExpansionLimits::default(), FormulaLimits::default()), Err(FormulaFailure::Limit { resource: FormulaResource::Variables, observed, .. }) if observed == slots as u128)
+            matches!(limited(source, options, ExpansionLimits::default(), &FormulaLimits::default()), Err(FormulaFailure::Limit { resource: FormulaResource::Variables, observed, .. }) if observed == slots as u128)
         );
     }
     let source = "n(1).{p(N..N+1):n(N)}.";
@@ -412,7 +412,7 @@ fn generated_slot_arity_and_range_width_limits_are_inclusive() {
             source,
             AdmissionOptions::default(),
             ExpansionLimits::default(),
-            limits
+            &limits
         )
         .is_ok()
     );
@@ -421,7 +421,7 @@ fn generated_slot_arity_and_range_width_limits_are_inclusive() {
             source,
             AdmissionOptions::default(),
             ExpansionLimits::default(),
-            FormulaLimits {
+            &FormulaLimits {
                 max_assignment_values: 1,
                 ..limits
             }
@@ -437,7 +437,7 @@ fn generated_slot_arity_and_range_width_limits_are_inclusive() {
             "n(0).{p((N-2147483647-1)..(N+2147483647)):n(N)}.",
             AdmissionOptions::default(),
             ExpansionLimits::default(),
-            limits
+            &limits
         ),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::AssignmentValues,
@@ -452,7 +452,7 @@ fn generated_slot_arity_and_range_width_limits_are_inclusive() {
             "d(1).{p(X+1,X)}:-d(X).",
             options,
             ExpansionLimits::default(),
-            FormulaLimits::default()
+            &FormulaLimits::default()
         ),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::Arity,
@@ -480,7 +480,7 @@ fn construction_work_nodes_and_substitutions_fail_before_partial_admission() {
                     source,
                     AdmissionOptions::default(),
                     ExpansionLimits::default(),
-                    limits,
+                    &limits,
                 )
             };
             let threshold = first_success(|limit| attempt(limit).is_ok());
@@ -500,7 +500,7 @@ fn construction_work_nodes_and_substitutions_fail_before_partial_admission() {
                     max_term_work: usize::try_from(limit).unwrap(),
                     ..ExpansionLimits::default()
                 },
-                FormulaLimits::default(),
+                &FormulaLimits::default(),
             )
         };
         let threshold = first_success(|limit| attempt(limit).is_ok());
@@ -519,7 +519,7 @@ fn construction_work_nodes_and_substitutions_fail_before_partial_admission() {
                 source,
                 AdmissionOptions::default(),
                 ExpansionLimits::default(),
-                limits
+                &limits
             )
             .is_ok()
         );
@@ -529,7 +529,7 @@ fn construction_work_nodes_and_substitutions_fail_before_partial_admission() {
                 source,
                 AdmissionOptions::default(),
                 ExpansionLimits::default(),
-                limits
+                &limits
             ),
             Err(FormulaFailure::Limit {
                 resource: FormulaResource::Nodes,

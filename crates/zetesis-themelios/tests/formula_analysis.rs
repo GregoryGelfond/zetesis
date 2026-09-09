@@ -16,12 +16,12 @@ use zetesis_themelios::{
     admit_formula,
 };
 
-fn admit_with(text: &str, limits: FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {
+fn admit_with(text: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {
     admit_formula(
         text.to_owned(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        limits,
+        *limits,
     )
 }
 
@@ -29,7 +29,7 @@ fn admit_with(text: &str, limits: FormulaLimits) -> Result<AdmittedFormula, Form
 fn empty_and_exact_structure_ceilings_are_inclusive() {
     admit_with(
         "",
-        FormulaLimits {
+        &FormulaLimits {
             max_analysis_nodes: 0,
             max_analysis_edges: 0,
             ..FormulaLimits::default()
@@ -42,7 +42,7 @@ fn empty_and_exact_structure_ceilings_are_inclusive() {
         ..FormulaLimits::default()
     };
     let source = "a :- b,c.";
-    admit_with(source, limits).expect("statement plus three atoms and two edges");
+    admit_with(source, &limits).expect("statement plus three atoms and two edges");
     for (limited, expected) in [
         (
             FormulaLimits {
@@ -59,7 +59,7 @@ fn empty_and_exact_structure_ceilings_are_inclusive() {
             FormulaResource::AnalysisEdges,
         ),
     ] {
-        let error = admit_with(source, limited).expect_err("one below inclusive ceiling");
+        let error = admit_with(source, &limited).expect_err("one below inclusive ceiling");
         assert!(matches!(error, FormulaFailure::Limit {
             resource, observed, limit, ..
         } if resource == expected && observed == limit + 1));
@@ -69,7 +69,7 @@ fn empty_and_exact_structure_ceilings_are_inclusive() {
 
 #[test]
 fn analysis_is_for_the_normalized_projection_with_original_fact_origins() {
-    let input = admit_with("#const n=2. #show p/1. p(1..n).", FormulaLimits::default())
+    let input = admit_with("#const n=2. #show p/1. p(1..n).", &FormulaLimits::default())
         .expect("bounded constant and fact expansion");
     let program = input.analyzed_program();
     assert_eq!(input.source_analysis(), &Analysis::of(program));
@@ -97,7 +97,7 @@ fn analysis_is_for_the_normalized_projection_with_original_fact_origins() {
 
 #[test]
 fn upstream_safety_disagreement_is_visible_and_does_not_weaken_native_scope_checks() {
-    let input = admit_with("n(N) :- N=#sum{}.", FormulaLimits::default())
+    let input = admit_with("n(N) :- N=#sum{}.", &FormulaLimits::default())
         .expect("separately checked clingo aggregate equality binder");
     assert_eq!(
         input.source_analysis(),
@@ -113,7 +113,7 @@ fn upstream_safety_disagreement_is_visible_and_does_not_weaken_native_scope_chec
         "n(N) :- N=#sum{X:p(Y)}.",
     ] {
         assert!(
-            admit_with(text, FormulaLimits::default()).is_err(),
+            admit_with(text, &FormulaLimits::default()).is_err(),
             "unsafe source: {text}"
         );
     }
@@ -121,7 +121,7 @@ fn upstream_safety_disagreement_is_visible_and_does_not_weaken_native_scope_chec
 
 #[test]
 fn unknown_class_verdict_does_not_remove_the_support_round_ceiling() {
-    let input = admit_with("a :- a.", FormulaLimits::default()).expect("finite unsupported cycle");
+    let input = admit_with("a :- a.", &FormulaLimits::default()).expect("finite unsupported cycle");
     assert!(matches!(
         input.source_analysis().classes().tightness(),
         Verdict::Unknown { .. }
@@ -129,7 +129,7 @@ fn unknown_class_verdict_does_not_remove_the_support_round_ceiling() {
     assert!(input.atoms().is_empty(), "analysis cannot invent support");
     let error = admit_with(
         "a :- a.",
-        FormulaLimits {
+        &FormulaLimits {
             max_support_rounds: 0,
             ..FormulaLimits::default()
         },

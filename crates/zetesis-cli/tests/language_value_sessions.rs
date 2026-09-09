@@ -265,7 +265,7 @@ fn stopped_composition_preserves_objective_presence() {
     for index in [0, 2, 8, 9] {
         let input = source_records::admit(
             language_value_sources::SOURCES[index],
-            FormulaLimits::default(),
+            &FormulaLimits::default(),
         )
         .unwrap();
         let expected = records(&EXPECTED[index]);
@@ -327,7 +327,7 @@ fn stopped_composition_preserves_objective_presence() {
 fn original_sources_match_complete_reference_records() {
     for (source, expected) in language_value_sources::SOURCES.into_iter().zip(&EXPECTED) {
         let reference = source_records::clingo(source);
-        let input = source_records::admit(source, FormulaLimits::default()).unwrap();
+        let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
         assert_eq!(source_records::exhaustive(&input), reference, "{source}");
         // The external campaign enumerates every model and score. Lexicographic
         // minimum selects all optimum ties; absent scores retain every model.
