@@ -63,3 +63,8 @@ Host elapsed time around a GPU call includes transport and waiting; it is not
 kernel time. Logical storage budgets are not process RSS or total device memory.
 The [outcome contracts](../rust/outcomes.md) preserve these distinctions for
 library consumers.
+
+The [neuromorphic appendix](../appendices/neuromorphic.md) describes a proposed
+mapping of the same semantic operations to Loihi 2 and SpiNNaker2. Its event
+protocol and qualification steps are design obligations; these targets are not
+implemented backends.

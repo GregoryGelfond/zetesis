@@ -26,6 +26,10 @@
 - [Reading a structured proof](lean/reading.md)
 - [Connecting proofs to implementations](lean/correspondence.md)
 
+# Appendices
+
+- [Exact event execution on neuromorphic hardware](appendices/neuromorphic.md)
+
 ---
 
 [Admitted language](reference/language.md)
