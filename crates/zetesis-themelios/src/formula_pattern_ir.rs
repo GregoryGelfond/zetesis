@@ -190,7 +190,7 @@ impl Compiler<'_> {
     /// Unary minus changes a function's sign; it never inverts an arithmetic
     /// expression or extracts a value from a negated variable. Every wrapper is
     /// consumed before the finite function root is admitted.
-    fn function_pattern<'a>(
+    pub(super) fn function_pattern<'a>(
         &mut self,
         mut term: &'a Term,
     ) -> Result<Option<(PatternNode, &'a [Term])>, FormulaFailure> {

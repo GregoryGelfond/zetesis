@@ -116,7 +116,12 @@ fn scope(
             }
         }
         LiteralIr::ProjectedAtom(_, projection) => {
-            for item in projection.terms.iter().flatten() {
+            let Projection::Arguments { terms, .. } = projection else {
+                // Structural witness plans retain their complete local scope;
+                // this flat-row factorization has no certificate for them.
+                return Ok(None);
+            };
+            for item in terms.iter().flatten() {
                 term(item)?;
             }
         }
@@ -210,13 +215,20 @@ fn copy_literal(
             LiteralIr::Atom(*negation, copy_pattern(builder, rule, pattern)?)
         }
         LiteralIr::ProjectedAtom(negation, projection) => {
+            let Projection::Arguments {
+                predicate,
+                terms: original,
+            } = projection
+            else {
+                unreachable!("factor scope excludes structural projections")
+            };
             builder.budget.charge(
                 ExpansionResource::ScalarBytes,
-                projection.predicate.name().len() as u128,
+                predicate.name().len() as u128,
                 rule.location,
             )?;
             let mut terms = Vec::new();
-            for term in &projection.terms {
+            for term in original {
                 builder.work(rule.location)?;
                 terms.push(match term {
                     Some(Term::Constant(value)) => {
@@ -228,8 +240,8 @@ fn copy_literal(
             }
             LiteralIr::ProjectedAtom(
                 *negation,
-                Projection {
-                    predicate: projection.predicate.clone(),
+                Projection::Arguments {
+                    predicate: predicate.clone(),
                     terms,
                 },
             )

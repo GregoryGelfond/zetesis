@@ -156,9 +156,28 @@ pub(crate) enum LiteralIr {
         binder: bool,
     },
 }
-pub(crate) struct Projection {
-    pub predicate: Predicate,
-    pub terms: Vec<Option<CoreTerm>>,
+/// Complete existential witnesses, with a flat relational fast path.
+pub(crate) enum Projection {
+    Arguments {
+        predicate: Predicate,
+        terms: Vec<Option<CoreTerm>>,
+    },
+    Witnesses {
+        atom: AtomPattern,
+        bindings: Vec<LiteralIr>,
+        variables: usize,
+        /// Only this prefix belongs to the outer frame. Later outer slots must
+        /// never populate the private structural captures of this projection.
+        inputs: usize,
+    },
+}
+impl Projection {
+    pub(crate) fn predicate(&self) -> &Predicate {
+        match self {
+            Self::Arguments { predicate, .. } => predicate,
+            Self::Witnesses { atom, .. } => atom.predicate(),
+        }
+    }
 }
 pub(crate) struct AggregateGuard {
     pub relation: Relation,
@@ -809,11 +828,6 @@ impl Compiler<'_> {
                     && let Some(pattern) = self.positive_pattern(atom.get(), variables)?
                 {
                     return Ok(LiteralIr::PatternAtom(pattern));
-                }
-                if let Some(projected) =
-                    self.projected_atom(atom.get(), literal.negation, variables)?
-                {
-                    return Ok(projected);
                 }
                 Ok(LiteralIr::Atom(
                     literal.negation,

@@ -8,7 +8,7 @@ use zetesis_core::{AtomPattern, Term};
 use crate::diagnostic::unsupported;
 use crate::formula_ir::{
     AggregateElementIr, AggregateGuard, AggregateIr, AggregateKey, Compiler, Expression, LiteralIr,
-    Operation, Variables,
+    Operation, Projection, Variables,
 };
 use crate::{ExpansionResource, FormulaFailure, ProfileFeature};
 
@@ -180,6 +180,32 @@ impl Compiler<'_> {
         Ok(atom.terms().contains(&Term::Variable(variable)))
     }
 
+    fn projection_uses(
+        &mut self,
+        projection: &Projection,
+        variable: usize,
+    ) -> Result<bool, FormulaFailure> {
+        match projection {
+            Projection::Arguments { terms, .. } => {
+                self.scope_work(terms.len())?;
+                Ok(terms.contains(&Some(Term::Variable(variable))))
+            }
+            Projection::Witnesses {
+                bindings, inputs, ..
+            } => {
+                if variable >= *inputs {
+                    return Ok(false);
+                }
+                for literal in bindings {
+                    if self.literal_uses(literal, variable)? {
+                        return Ok(true);
+                    }
+                }
+                Ok(false)
+            }
+        }
+    }
+
     pub(super) fn element_uses(
         &mut self,
         element: &AggregateElementIr,
@@ -217,8 +243,7 @@ impl Compiler<'_> {
                 pattern.slots().any(|slot| slot == variable)
             }
             LiteralIr::ProjectedAtom(_, projection) => {
-                self.scope_work(projection.terms.len())?;
-                projection.terms.contains(&Some(Term::Variable(variable)))
+                self.projection_uses(projection, variable)?
             }
             LiteralIr::Compare(left, _, right)
             | LiteralIr::ArgumentCheck {
@@ -246,7 +271,14 @@ impl Compiler<'_> {
                     crate::formula_conditional_ir::Consequent::Atoms(_, alternatives) => {
                         let mut uses = false;
                         for alternative in alternatives {
-                            uses |= self.pattern_uses(&alternative.atom, variable)?;
+                            uses |= match &alternative.operand {
+                                crate::formula_conditional_ir::ConsequentOperand::Atom(atom) => {
+                                    self.pattern_uses(atom, variable)?
+                                }
+                                crate::formula_conditional_ir::ConsequentOperand::Projection(
+                                    projection,
+                                ) => self.projection_uses(projection, variable)?,
+                            };
                             for literal in &alternative.bindings {
                                 uses |= self.literal_uses(literal, variable)?;
                             }

@@ -281,7 +281,6 @@ fn local_scopes_cannot_repair_unsafe_outer_bindings() {
         "q(X):-N=#count{};p(X):d(X).",
         "q(N):-N=#count{};p(N):not d(X).",
         "q(N):-N=#count{};not p(N,X):d.",
-        "q(N):-N=#count{};not p(N,_):d.",
     ] {
         let error = prepare_formula(
             source.into(),

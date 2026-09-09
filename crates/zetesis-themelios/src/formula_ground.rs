@@ -442,18 +442,46 @@ impl Builder<'_> {
         }
         Ok(result)
     }
-    fn project(
+    pub(super) fn project(
         &mut self,
         projection: &Projection,
         assignment: &[Value],
         support: &Support,
         location: Location,
     ) -> Result<usize, FormulaFailure> {
+        let Projection::Arguments { predicate, terms } = projection else {
+            let Projection::Witnesses {
+                atom,
+                bindings,
+                variables,
+                inputs,
+            } = projection
+            else {
+                unreachable!("projection representation exhausted")
+            };
+            let mut rows = Join::new(
+                bindings,
+                &assignment[..*inputs],
+                *variables,
+                support,
+                self.budget,
+                location,
+            )?;
+            let mut result = 0;
+            while let Some(row) =
+                rows.next(self.limits, self.budget, &mut self.counters, location)?
+            {
+                self.work(location)?;
+                let atom = self.atom(atom, &row, location)?;
+                result = self.or(result, atom, location)?;
+            }
+            return Ok(result);
+        };
         let mut result = 0;
-        for atom in support.rows(&projection.predicate) {
+        for atom in support.rows(predicate) {
             self.work(location)?;
             let mut matches = true;
-            for (term, value) in projection.terms.iter().zip(atom.values()) {
+            for (term, value) in terms.iter().zip(atom.values()) {
                 self.work(location)?;
                 if let Some(term) = term {
                     matches &= term

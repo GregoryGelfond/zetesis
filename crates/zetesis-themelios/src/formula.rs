@@ -551,6 +551,12 @@ pub(crate) struct Compiled {
 /// additional variables. Conditional local joins inherit the complete
 /// outer binding; neither local witnesses nor vacuity establishes an aggregate
 /// equality. Every generated rule retains its original equalities.
+/// Default-negated anonymous consequent positions project the complete finite
+/// witness family before applying `not` or `not not`. Anonymous positions may
+/// occur inside positive function or tuple constructors; named and evaluated
+/// inputs must be independently bound. Pools and intervals retain their source
+/// alternative quantifier outside each projection. Classical-negative
+/// predicates and anonymous unary/arithmetic inputs retain their safety refusal.
 /// Ground scalar comparisons use ASP term order; arithmetic expressions
 /// require numeric operands. Flat tuple equality/disequality is also supported.
 ///

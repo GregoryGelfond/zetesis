@@ -224,7 +224,7 @@ fn total_dependency(
                     return false;
                 }
                 LiteralIr::ProjectedAtom(_, projection)
-                    if signature(&projection.predicate) == *dependency =>
+                    if signature(projection.predicate()) == *dependency =>
                 {
                     return false;
                 }
@@ -235,7 +235,7 @@ fn total_dependency(
                                 signature(pattern.atom.predicate()) == *dependency
                             }
                             LiteralIr::ProjectedAtom(_, projection) => {
-                                signature(&projection.predicate) == *dependency
+                                signature(projection.predicate()) == *dependency
                             }
                             _ => false,
                         }) {

@@ -10,7 +10,7 @@ use zetesis_core::{AtomPattern, Predicate, Term as CoreTerm};
 
 use crate::diagnostic::unsupported;
 use crate::formula::ceiling;
-use crate::formula_conditional_ir::Alternative;
+use crate::formula_conditional_ir::{Alternative, ConsequentOperand};
 use crate::formula_ir::{Compiler, Expression, LiteralIr, Operation, Variables};
 use crate::{AdmissionFailure, ExpansionResource, FormulaFailure, FormulaResource, ProfileFeature};
 
@@ -61,57 +61,84 @@ impl Compiler<'_> {
                 Term::Variable(Variable::Named(name)) => !local.named.contains_key(name.as_str()),
                 _ => false,
             });
-        let atom = if missing && negation == DefaultNegation::None {
-            self.consequent_witness(atom, arguments, &mut local, &mut bindings)?
+        let operand = if let Some(LiteralIr::ProjectedAtom(_, projection)) =
+            self.projected_atom(atom, negation, &mut local, &mut bindings)?
+        {
+            ConsequentOperand::Projection(projection)
+        } else if missing && negation == DefaultNegation::None {
+            ConsequentOperand::Atom(self.consequent_witness(
+                atom,
+                arguments,
+                &mut local,
+                &mut bindings,
+            )?)
         } else {
-            ceiling(
-                FormulaResource::Arity,
-                arguments.len() as u128,
-                self.options.core_limits.max_predicate_arity as u128,
-                self.location,
-            )?;
-            let mut terms = Vec::new();
-            for term in arguments {
-                if matches!(term, Term::Symbolic(_) | Term::Variable(_)) {
-                    terms.push(self.objective_term(term, &mut local)?);
-                } else {
-                    let value = self.consequent_expression(term, &mut local, &mut bindings)?;
-                    let target = self.consequent_slot(&mut local)?;
-                    bindings.push(LiteralIr::Compare(
-                        Expression {
-                            nodes: vec![Operation::Variable(target)],
-                        },
-                        Relation::Eq,
-                        value,
-                    ));
-                    terms.push(CoreTerm::Variable(target));
-                }
-            }
-            let predicate = Predicate::with_sign(
-                atom.name.as_str(),
-                arguments.len(),
-                crate::coherence::core_sign(atom.sign),
-            )
-            .map_err(|error| AdmissionFailure::Construction {
-                error,
-                location: self.location,
-            })?;
-            let atom = AtomPattern::new(predicate, terms).map_err(|error| {
-                AdmissionFailure::Construction {
-                    error,
-                    location: self.location,
-                }
-            })?;
-            self.pattern_domain(&atom)?;
-            atom
+            ConsequentOperand::Atom(self.consequent_atom(
+                atom,
+                arguments,
+                &mut local,
+                &mut bindings,
+            )?)
         };
         self.bindings(&mut bindings, &mut local)?;
         self.variable_limit(&local)?;
         local.safety(self.location)?;
         Ok(Alternative {
-            atom,
+            operand,
             bindings,
             variables: local.count,
+        })
+    }
+
+    fn consequent_atom(
+        &mut self,
+        atom: &Atom,
+        arguments: &[Term],
+        local: &mut Variables,
+        bindings: &mut Vec<LiteralIr>,
+    ) -> Result<AtomPattern, FormulaFailure> {
+        ceiling(
+            FormulaResource::Arity,
+            arguments.len() as u128,
+            self.options.core_limits.max_predicate_arity as u128,
+            self.location,
+        )?;
+        let mut terms = Vec::new();
+        for term in arguments {
+            if matches!(term, Term::Symbolic(_) | Term::Variable(_)) {
+                let value = self.objective_term(term, local)?;
+                if let CoreTerm::Constant(value) = &value {
+                    self.value(value)?;
+                }
+                terms.push(value);
+            } else {
+                let value = self.consequent_expression(term, local, bindings)?;
+                let target = self.consequent_slot(local)?;
+                bindings.push(LiteralIr::Compare(
+                    Expression {
+                        nodes: vec![Operation::Variable(target)],
+                    },
+                    Relation::Eq,
+                    value,
+                ));
+                terms.push(CoreTerm::Variable(target));
+            }
+        }
+        let predicate = Predicate::with_sign(
+            atom.name.as_str(),
+            arguments.len(),
+            crate::coherence::core_sign(atom.sign),
+        )
+        .map_err(|error| AdmissionFailure::Construction {
+            error,
+            location: self.location,
+        })?;
+        AtomPattern::new(predicate, terms).map_err(|error| {
+            AdmissionFailure::Construction {
+                error,
+                location: self.location,
+            }
+            .into()
         })
     }
 
@@ -149,7 +176,10 @@ impl Compiler<'_> {
     /// and selected value payload before cloning. Structured payload is charged
     /// conservatively even when its immutable allocation is shared by the clone,
     /// following the existing value-copy budget. Allocator metadata is excluded.
-    fn consequent_capture(&mut self, pattern: &AtomPattern) -> Result<AtomPattern, FormulaFailure> {
+    pub(super) fn consequent_capture(
+        &mut self,
+        pattern: &AtomPattern,
+    ) -> Result<AtomPattern, FormulaFailure> {
         self.budget.charge(
             ExpansionResource::TermWork,
             pattern.terms().len() as u128
@@ -180,7 +210,10 @@ impl Compiler<'_> {
         Ok(pattern.clone())
     }
 
-    fn consequent_slot(&self, variables: &mut Variables) -> Result<usize, FormulaFailure> {
+    pub(super) fn consequent_slot(
+        &self,
+        variables: &mut Variables,
+    ) -> Result<usize, FormulaFailure> {
         ceiling(
             FormulaResource::Variables,
             variables.count as u128 + 1,
@@ -190,7 +223,7 @@ impl Compiler<'_> {
         Ok(variables.slot(&Variable::Anonymous))
     }
 
-    fn consequent_expression(
+    pub(super) fn consequent_expression(
         &mut self,
         term: &Term,
         variables: &mut Variables,

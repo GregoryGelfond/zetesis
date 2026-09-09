@@ -7,7 +7,7 @@ use themelios_program::term::Term;
 use zetesis_core::AtomPattern;
 
 use crate::formula_guard::Guard;
-use crate::formula_ir::{Compiler, LiteralIr, Variables};
+use crate::formula_ir::{Compiler, LiteralIr, Projection, Variables};
 use crate::{AdmissionFailure, ExpansionResource, FormulaFailure, InputLimit};
 
 pub(crate) struct ConditionalIr {
@@ -23,10 +23,18 @@ pub(crate) enum Consequent {
 }
 
 pub(crate) struct Alternative {
-    pub atom: AtomPattern,
+    pub operand: ConsequentOperand,
     /// Data instructions and optional positive witnesses, scoped to this alternative.
     pub bindings: Vec<LiteralIr>,
     pub variables: usize,
+}
+
+/// Source alternatives and anonymous witnesses have distinct quantifiers.
+/// Projection completes the witness disjunction before default negation;
+/// the caller disjoins the resulting signed source alternatives afterwards.
+pub(crate) enum ConsequentOperand {
+    Atom(AtomPattern),
+    Projection(Projection),
 }
 
 impl Compiler<'_> {

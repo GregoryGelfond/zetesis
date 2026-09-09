@@ -6,7 +6,7 @@ use zetesis_core::Value;
 use zetesis_ferraris::Node;
 
 use crate::FormulaFailure;
-use crate::formula_conditional_ir::{ConditionalIr, Consequent};
+use crate::formula_conditional_ir::{ConditionalIr, Consequent, ConsequentOperand};
 use crate::formula_ground::Builder;
 use crate::formula_support::{Join, Support};
 
@@ -48,7 +48,12 @@ impl Builder<'_> {
                             rows.next(self.limits, self.budget, &mut self.counters, location)?
                         {
                             self.work(location)?;
-                            let mut value = self.atom(&alternative.atom, &row, location)?;
+                            let mut value = match &alternative.operand {
+                                ConsequentOperand::Atom(atom) => self.atom(atom, &row, location)?,
+                                ConsequentOperand::Projection(projection) => {
+                                    self.project(projection, &row, support, location)?
+                                }
+                            };
                             if *negation != DefaultNegation::None {
                                 value = self.neg(value, location)?;
                             }

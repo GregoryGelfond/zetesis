@@ -49,6 +49,102 @@ fn corpus_models() -> Models {
 // Independent finite substitutions. OR consequents distribute into the complete
 // rule family below; conditions retain their own universal rows.
 const CASES: &[(&str, &str)] = &[
+    ("q(N):-N=#count{};not p(N,_):d.", "q(0)."),
+    (
+        "{d;p(0,1)}.q(N):-N=#count{};not p(N,_):d.",
+        "{d;p(0,1)}.q(0):-not d.q(0):-not p(0,1).",
+    ),
+    (
+        "{p(f(1,1));p(f(2,2))}.q:-not p(f(_,X..X+1)):X=1.",
+        "{p(f(1,1));p(f(2,2))}.q:-not p(f(1,1)).q:-not p(f(2,2)).",
+    ),
+    (
+        "{p(f(1,1));p(f(2,2))}.q:-not not p(f(_,X..X+1)):X=1.",
+        "{p(f(1,1));p(f(2,2))}.q:-not not p(f(1,1)).q:-not not p(f(2,2)).",
+    ),
+    (
+        "{p(f(1,1));p(f(2,2))}.q:-not p((f(_,1);f(_,2))):#true.",
+        "{p(f(1,1));p(f(2,2))}.q:-not p(f(1,1)).q:-not p(f(2,2)).",
+    ),
+    ("q:-not p(f(_,2..1)):#true.", ""),
+    ("q:-not not p(f(_,2..1)):#true.", ""),
+    (
+        "{p(f(1));p(f(2))}.d(9).q(X):-not p(f(_)),X=9,d(X).",
+        "{p(f(1));p(f(2))}.d(9).q(9):-not p(f(1)),not p(f(2)).",
+    ),
+    (
+        "{p(f(1));p(f(2));p(g(1))}.q:-not p(f(_)):#true.",
+        "{p(f(1));p(f(2));p(g(1))}.q:-not p(f(1)),not p(f(2)).",
+    ),
+    (
+        "{p(f(1));p(f(2))}.q:-not not p(f(_)):#true.",
+        "{p(f(1));p(f(2))}.q:-not not p(f(1)).q:-not not p(f(2)).",
+    ),
+    (
+        "{p((1,));p((2,));p(())}.q:-not p((_,)):#true.",
+        "{p((1,));p((2,));p(())}.q:-not p((1,)),not p((2,)).",
+    ),
+    (
+        "{p(f(1,1));p(f(2,2))}.q:-not p(f(_,X+1)):X=0.",
+        "{p(f(1,1));p(f(2,2))}.q:-not p(f(1,1)).",
+    ),
+    (
+        "{p(f(1,2));p(f(2,1))}.q:-not p(f(_,_)):#true.",
+        "{p(f(1,2));p(f(2,1))}.q:-not p(f(1,2)),not p(f(2,1)).",
+    ),
+    (
+        "{p(f(1));p(f(2));p(g(1))}.q:-not p(f(_)).",
+        "{p(f(1));p(f(2));p(g(1))}.q:-not p(f(1)),not p(f(2)).",
+    ),
+    (
+        "{p(f(1));p(f(2))}.q:-not not p(f(_)).",
+        "{p(f(1));p(f(2))}.q:-not not p(f(1)).q:-not not p(f(2)).",
+    ),
+    (
+        "{p(f(1));p(f(2))}.d(9).q(X):-not p(f(_)),d(X).",
+        "{p(f(1));p(f(2))}.d(9).q(9):-not p(f(1)),not p(f(2)).",
+    ),
+    ("q:-not p(_):#true.", "q."),
+    ("q:-not not p(_):#true.", ""),
+    (
+        "{p(1..2)}.q:-not p(_):#true.",
+        "{p(1..2)}.q:-not p(1),not p(2).",
+    ),
+    (
+        "{p(1..2)}.q:-not not p(_):#true.",
+        "{p(1..2)}.q:-not not p(1).q:-not not p(2).",
+    ),
+    (
+        "{p(1,2);p(2,1)}.q:-not p(_,_):#true.",
+        "{p(1,2);p(2,1)}.q:-not p(1,2),not p(2,1).",
+    ),
+    (
+        "{p(1,1);p(2,1)}.q:-not p(_,X+1):X=0.",
+        "{p(1,1);p(2,1)}.q:-not p(1,1),not p(2,1).",
+    ),
+    (
+        "{p(1,1);p(2,2)}.q:-not p(_,(1;2)):#true.",
+        "{p(1,1);p(2,2)}.q:-not p(1,1).q:-not p(2,2).",
+    ),
+    (
+        "{p(1,1);p(2,2)}.q:-not p(_,X..X+1):X=1.",
+        "{p(1,1);p(2,2)}.q:-not p(1,1).q:-not p(2,2).",
+    ),
+    (
+        "{p(1,1);p(2,2)}.q:-not p(_,X):X=1..2.",
+        "{p(1,1);p(2,2)}.q:-not p(1,1),not p(2,2).",
+    ),
+    ("{p(1)}.q:-not p(_):#false.", "{p(1)}.q."),
+    ("{p(1)}.q:-not not p(_):#false.", "{p(1)}.q."),
+    ("q:-not p(_,X):X=2..1.", "q."),
+    ("q:-not p(_,2..1):#true.", ""),
+    ("q:-not not p(_,2..1):#true.", ""),
+    ("p(1):-q.q:-not p(_):#true.", "p(1):-q.q:-not p(1)."),
+    ("p(1):-q.q:-not not p(_):#true.", "p(1):-q.q:-not not p(1)."),
+    (
+        "{p(1,1);p(2,2)}.d(1..2).q(X):-d(X);not p(_,X):#true.",
+        "{p(1,1);p(2,2)}.d(1..2).q(1):-not p(1,1).q(2):-not p(2,2).",
+    ),
     (
         "{p(-1);p(-2)}.q:-p(-(X..X+1)):X=1.",
         "{p(-1);p(-2)}.q:-p(-1).q:-p(-2).",
@@ -283,6 +379,139 @@ fn compare_root(program: &AdmittedFormula, specified: &Formula) -> usize {
 }
 
 #[test]
+fn anonymous_witnesses_are_negated_after_projection() {
+    for (polarity, sign) in [(1, "not "), (2, "not not ")] {
+        for condition_sign in ["", "not ", "not not "] {
+            let source =
+                format!("{{p(1,1);p(2,1);p(1,2);c}}.q:-{sign}p(_,(1;2)):{condition_sign}c.");
+            let program = input(&source);
+            let witnesses = Formula::Or(
+                Box::new(Formula::atom("p(1,1)")),
+                Box::new(Formula::atom("p(2,1)")),
+            );
+            let alternatives = Formula::Or(
+                Box::new(witnesses.sign(polarity)),
+                Box::new(Formula::atom("p(1,2)").sign(polarity)),
+            );
+            let condition = Formula::atom("c").sign(condition_sign.matches("not").count());
+            let specified = Formula::implies(
+                Formula::implies(condition, alternatives),
+                Formula::atom("q"),
+            );
+            compare_root(&program, &specified);
+        }
+    }
+}
+
+#[test]
+fn empty_witnesses_preserve_signed_false() {
+    for (polarity, sign) in [(1, "not "), (2, "not not ")] {
+        let source = format!("{{c}}.q:-{sign}p(_):c.");
+        compare_root(
+            &input(&source),
+            &Formula::implies(
+                Formula::implies(Formula::atom("c"), Formula::False.sign(polarity)),
+                Formula::atom("q"),
+            ),
+        );
+    }
+}
+
+#[test]
+fn structured_witnesses_preserve_frozen_projection() {
+    for (polarity, sign) in [(1, "not "), (2, "not not ")] {
+        let source = format!("{{p(f(1,1));p(f(2,1));p(f(1,2));c}}.q:-{sign}p(f(_,X..X+1)):X=1,c.");
+        let witnesses = Formula::Or(
+            Box::new(Formula::atom("p(f(1,1))")),
+            Box::new(Formula::atom("p(f(2,1))")),
+        );
+        let alternatives = Formula::Or(
+            Box::new(witnesses.sign(polarity)),
+            Box::new(Formula::atom("p(f(1,2))").sign(polarity)),
+        );
+        compare_root(
+            &input(&source),
+            &Formula::implies(
+                Formula::implies(Formula::atom("c"), alternatives),
+                Formula::atom("q"),
+            ),
+        );
+    }
+}
+
+#[test]
+fn projection_inputs_require_outer_support() {
+    for source in [
+        "q:-not p(f(_,X)):#true.",
+        "q:-not not p(f(_,X)):#false.",
+        "q:-not p(f(_,X)).",
+        "q(X):-not p(f(_,X)):#true.",
+        "q:-not p(_+1):#true.",
+        "q:-not p(f(_+1)):#true.",
+        "q:-not p(-f(_)):#true.",
+        "q:-not not p(-f(_)):#true.",
+        "q:-not p(--f(_)):#true.",
+        "q:-not p(h(-f(_))):#true.",
+        "q:-not -p(_):#true.",
+        "q:-not not -p(_):#true.",
+        "q:-not -p(f(_)):#true.",
+        "q:-not not -p(f(_)):#true.",
+    ] {
+        assert!(
+            matches!(
+                limited(
+                    source,
+                    ExpansionLimits::default(),
+                    &FormulaLimits::default()
+                ),
+                Err(FormulaFailure::UnsafeVariable { .. })
+            ),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn absent_witnesses_do_not_hide_value_errors() {
+    for source in ["q:-not p(f(_,1/X)):X=0.", "q:-not not p(f(_,1/X)):X=0."] {
+        assert!(matches!(
+            limited(
+                source,
+                ExpansionLimits::default(),
+                &FormulaLimits::default()
+            ),
+            Err(FormulaFailure::Expansion(
+                zetesis_themelios::ExpansionFailure::Evaluation { .. }
+            ))
+        ));
+    }
+}
+
+#[test]
+fn empty_condition_rows_defer_projection_values() {
+    assert_eq!(
+        native(&input("q:-not p(f(_,1/X)):X=2..1.")),
+        native(&input("q."))
+    );
+}
+
+#[test]
+fn nested_pools_retain_their_admission_boundary() {
+    assert!(matches!(
+        limited(
+            "q:-not p(f(_,(1;2))):#true.",
+            ExpansionLimits::default(),
+            &FormulaLimits::default()
+        ),
+        Err(FormulaFailure::Expansion(
+            zetesis_themelios::ExpansionFailure::Admission(
+                zetesis_themelios::AdmissionFailure::Profile { .. }
+            )
+        ))
+    ));
+}
+
+#[test]
 fn positive_witnesses_preserve_frozen_disjunction() {
     let program = input("{p(1..2)}.q:-p(X):#true.");
     let specified = Formula::implies(
@@ -467,6 +696,217 @@ fn first_cap(mut admit: impl FnMut(usize) -> Result<AdmittedFormula, FormulaFail
     low
 }
 const BOUNDED: &str = "{p(1..3)}.q:-p(X-1;2*(X..X+1)-3):X=2.";
+const PROJECTED: &str = "{p(f(1,1));p(f(2,1));p(g(1,1))}.q:-not p(f(_,X..X+1)):X=1.";
+
+#[test]
+fn witness_projection_obeys_the_work_ceiling() {
+    let cap = first_cap(|cap| {
+        limited(
+            PROJECTED,
+            ExpansionLimits::default(),
+            &FormulaLimits {
+                max_work: u64::try_from(cap).unwrap(),
+                ..FormulaLimits::default()
+            },
+        )
+    });
+    assert!(cap > 0);
+    assert!(matches!(
+        limited(
+            PROJECTED,
+            ExpansionLimits::default(),
+            &FormulaLimits {
+                max_work: u64::try_from(cap - 1).unwrap(),
+                ..FormulaLimits::default()
+            }
+        ),
+        Err(FormulaFailure::Limit {
+            resource: zetesis_themelios::FormulaResource::Work,
+            ..
+        })
+    ));
+    assert_eq!(
+        native(
+            &limited(
+                PROJECTED,
+                ExpansionLimits::default(),
+                &FormulaLimits {
+                    max_work: u64::try_from(cap).unwrap(),
+                    ..FormulaLimits::default()
+                }
+            )
+            .unwrap()
+        ),
+        native(&input(PROJECTED))
+    );
+}
+
+#[test]
+fn witness_projection_obeys_the_substitution_ceiling() {
+    let cap = first_cap(|cap| {
+        limited(
+            PROJECTED,
+            ExpansionLimits::default(),
+            &FormulaLimits {
+                max_substitutions: u64::try_from(cap).unwrap(),
+                ..FormulaLimits::default()
+            },
+        )
+    });
+    assert!(cap > 0);
+    assert!(matches!(
+        limited(
+            PROJECTED,
+            ExpansionLimits::default(),
+            &FormulaLimits {
+                max_substitutions: u64::try_from(cap - 1).unwrap(),
+                ..FormulaLimits::default()
+            }
+        ),
+        Err(FormulaFailure::Limit {
+            resource: zetesis_themelios::FormulaResource::Substitutions,
+            ..
+        })
+    ));
+    assert_eq!(
+        native(
+            &limited(
+                PROJECTED,
+                ExpansionLimits::default(),
+                &FormulaLimits {
+                    max_substitutions: u64::try_from(cap).unwrap(),
+                    ..FormulaLimits::default()
+                }
+            )
+            .unwrap()
+        ),
+        native(&input(PROJECTED))
+    );
+}
+
+#[test]
+fn witness_projection_obeys_the_byte_ceiling() {
+    let cap = first_cap(|cap| {
+        limited(
+            PROJECTED,
+            ExpansionLimits {
+                max_scalar_bytes: cap,
+                ..ExpansionLimits::default()
+            },
+            &FormulaLimits::default(),
+        )
+    });
+    assert!(cap > 0);
+    assert!(matches!(
+        limited(
+            PROJECTED,
+            ExpansionLimits {
+                max_scalar_bytes: cap - 1,
+                ..ExpansionLimits::default()
+            },
+            &FormulaLimits::default()
+        ),
+        Err(FormulaFailure::Expansion(
+            zetesis_themelios::ExpansionFailure::Limit {
+                resource: zetesis_themelios::ExpansionResource::ScalarBytes,
+                ..
+            }
+        ))
+    ));
+    assert_eq!(
+        native(
+            &limited(
+                PROJECTED,
+                ExpansionLimits {
+                    max_scalar_bytes: cap,
+                    ..ExpansionLimits::default()
+                },
+                &FormulaLimits::default()
+            )
+            .unwrap()
+        ),
+        native(&input(PROJECTED))
+    );
+}
+
+#[test]
+fn anonymous_inspections_obey_the_term_work_ceiling() {
+    let source = format!("q:-not p({}_{}):#true.", "f(".repeat(16), ")".repeat(16));
+    let cap = first_cap(|cap| {
+        limited(
+            &source,
+            ExpansionLimits {
+                max_term_work: cap,
+                ..ExpansionLimits::default()
+            },
+            &FormulaLimits::default(),
+        )
+    });
+    assert!(cap > 0);
+    assert!(matches!(
+        limited(
+            &source,
+            ExpansionLimits {
+                max_term_work: cap - 1,
+                ..ExpansionLimits::default()
+            },
+            &FormulaLimits::default()
+        ),
+        Err(FormulaFailure::Expansion(
+            zetesis_themelios::ExpansionFailure::Limit {
+                resource: zetesis_themelios::ExpansionResource::TermWork,
+                ..
+            }
+        ))
+    ));
+    assert_eq!(
+        native(
+            &limited(
+                &source,
+                ExpansionLimits {
+                    max_term_work: cap,
+                    ..ExpansionLimits::default()
+                },
+                &FormulaLimits::default()
+            )
+            .unwrap()
+        ),
+        native(&input("q."))
+    );
+}
+
+#[test]
+fn private_witness_slots_obey_the_variable_ceiling() {
+    let source = "q:-not p(f(_)):#true.";
+    let mut options = AdmissionOptions::default();
+    options.core_limits.max_variables_per_template = 0;
+    assert!(matches!(
+        admit_formula(
+            source.into(),
+            options,
+            ExpansionLimits::default(),
+            FormulaLimits::default()
+        ),
+        Err(FormulaFailure::Limit {
+            resource: zetesis_themelios::FormulaResource::Variables,
+            observed: 1,
+            ..
+        })
+    ));
+    options.core_limits.max_variables_per_template = 1;
+    assert_eq!(
+        native(
+            &admit_formula(
+                source.into(),
+                options,
+                ExpansionLimits::default(),
+                FormulaLimits::default()
+            )
+            .unwrap()
+        ),
+        native(&input("q."))
+    );
+}
 
 #[test]
 fn local_substitution_limit_is_inclusive() {

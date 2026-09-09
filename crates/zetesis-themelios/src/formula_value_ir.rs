@@ -26,12 +26,9 @@ impl Compiler<'_> {
         if literal.negation != DefaultNegation::None
             && let LiteralInner::Atom(atom) = &literal.inner
             && let Arguments::Single(arguments) = &atom.get().arguments
-            && arguments
-                .iter()
-                .any(|term| !matches!(term, Term::Variable(_) | Term::Symbolic(_)))
         {
-            // This door is deterministic: intervals/pools need their own family
-            // semantics and analyzed projection, and remain located refusals.
+            // Ordinary negative arguments remain single-valued. Conditional
+            // consequent alternatives have a separate finite-family boundary.
             for term in arguments.iter().flat_map(Term::subterms) {
                 self.budget
                     .charge(ExpansionResource::TermWork, 1, self.location)?;
@@ -39,6 +36,22 @@ impl Compiler<'_> {
                     return Err(unsupported(ProfileFeature::Term, self.location).into());
                 }
             }
+        }
+        if literal.negation != DefaultNegation::None
+            && let LiteralInner::Atom(atom) = &literal.inner
+            && let Some(projection) =
+                self.projected_atom(atom.get(), literal.negation, variables, body)?
+        {
+            body.push(projection);
+            return Ok(());
+        }
+        if literal.negation != DefaultNegation::None
+            && let LiteralInner::Atom(atom) = &literal.inner
+            && let Arguments::Single(arguments) = &atom.get().arguments
+            && arguments
+                .iter()
+                .any(|term| !matches!(term, Term::Variable(_) | Term::Symbolic(_)))
+        {
             self.generated_arguments(arguments, variables)?;
             let pattern = self.generated_atom(atom.get(), variables, body)?;
             body.push(LiteralIr::Atom(literal.negation, pattern));

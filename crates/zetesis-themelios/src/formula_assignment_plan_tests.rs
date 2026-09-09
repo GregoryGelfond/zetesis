@@ -301,11 +301,13 @@ fn conditional_read(slot: usize) -> LiteralIr {
         consequent: crate::formula_conditional_ir::Consequent::Atoms(
             DefaultNegation::None,
             vec![crate::formula_conditional_ir::Alternative {
-                atom: AtomPattern::new(
-                    Predicate::new("p", 1).unwrap(),
-                    vec![CoreTerm::Variable(slot)],
-                )
-                .unwrap(),
+                operand: crate::formula_conditional_ir::ConsequentOperand::Atom(
+                    AtomPattern::new(
+                        Predicate::new("p", 1).unwrap(),
+                        vec![CoreTerm::Variable(slot)],
+                    )
+                    .unwrap(),
+                ),
                 bindings: Vec::new(),
                 variables: slot + 1,
             }],
