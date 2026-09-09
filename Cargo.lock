@@ -1997,6 +1997,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "zetesis-maintenance"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
 name = "zetesis-objective"
 version = "0.1.0"
 dependencies = [
