@@ -1,6 +1,7 @@
 //! Shared complete source/model evidence for bounded aggregate campaigns.
 use std::collections::BTreeSet;
 use std::fs::{self, File};
+use std::io::{self, Read};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -163,6 +164,36 @@ pub struct ClingoCapture {
     pub status: i32,
 }
 
+const ORACLE_OUTPUT_LIMIT: usize = 65_536;
+
+/// Probe at most one byte beyond the combined ceiling, even if a child writes
+/// after the last size poll. A successful read contains both complete streams.
+pub(super) fn read_capture(
+    stdout: impl Read,
+    stderr: impl Read,
+    maximum: usize,
+) -> io::Result<(Vec<u8>, Vec<u8>)> {
+    let output = bounded_bytes(stdout, maximum)?;
+    let diagnostics = bounded_bytes(stderr, maximum - output.len())?;
+    Ok((output, diagnostics))
+}
+
+fn bounded_bytes(input: impl Read, allowance: usize) -> io::Result<Vec<u8>> {
+    let probe = allowance
+        .checked_add(1)
+        .and_then(|count| u64::try_from(count).ok())
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "capture limit overflow"))?;
+    let mut bytes = Vec::new();
+    input.take(probe).read_to_end(&mut bytes)?;
+    if bytes.len() > allowance {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "oracle exceeded the combined output limit",
+        ));
+    }
+    Ok(bytes)
+}
+
 pub fn capture_clingo(source: &str) -> ClingoCapture {
     let directory = Directory::new();
     let input = directory.0.join("case.lp");
@@ -183,9 +214,12 @@ pub fn capture_clingo(source: &str) -> ClingoCapture {
         .expect("independent clingo on PATH");
     let status = loop {
         if start.elapsed() > Duration::from_secs(5)
-            || stdout.metadata().expect("output size").len()
-                + stderr.metadata().expect("diagnostic size").len()
-                > 65_536
+            || stdout
+                .metadata()
+                .expect("output size")
+                .len()
+                .saturating_add(stderr.metadata().expect("diagnostic size").len())
+                > ORACLE_OUTPUT_LIMIT as u64
         {
             let _ = child.kill();
             let _ = child.wait();
@@ -196,13 +230,14 @@ pub fn capture_clingo(source: &str) -> ClingoCapture {
         }
         std::thread::sleep(Duration::from_millis(5));
     };
-    assert!(
-        matches!(status.code(), Some(10 | 20 | 30)),
-        "{}",
-        fs::read_to_string(errors).expect("oracle diagnostics")
-    );
-    let bytes = fs::read(output).expect("oracle JSON");
-    assert!(bytes.len() <= 65_536);
+    let (bytes, diagnostics) = read_capture(
+        File::open(output).expect("oracle JSON"),
+        File::open(errors).expect("oracle diagnostics"),
+        ORACLE_OUTPUT_LIMIT,
+    )
+    .expect("bounded complete oracle capture");
+    let diagnostics = String::from_utf8(diagnostics).expect("UTF-8 oracle diagnostics");
+    assert!(matches!(status.code(), Some(10 | 20 | 30)), "{diagnostics}");
     let json: Json = serde_json::from_slice(&bytes).expect("complete oracle output");
     assert_eq!(json["Models"]["More"].as_str(), Some("no"));
     assert!(matches!(
@@ -226,7 +261,7 @@ pub fn capture_clingo(source: &str) -> ClingoCapture {
     ClingoCapture {
         records,
         output: json,
-        diagnostics: fs::read_to_string(errors).expect("oracle diagnostics"),
+        diagnostics,
         status: status.code().expect("normal oracle exit checked"),
     }
 }

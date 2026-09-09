@@ -10,9 +10,10 @@ use sources::{DIRECTIONS, PROGRAM, WEIGHTS, cases, directive};
 use std::collections::BTreeSet;
 use zetesis_core::{Model, Value};
 use zetesis_cpu::Control;
+use zetesis_objective::{AdmissionError, AdmissionLimits, AdmissionResource};
 use zetesis_themelios::{
-    AdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure,
-    FormulaLimits, FormulaResource, admit_formula,
+    AdmissionFailure, AdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource,
+    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_formula,
 };
 
 const CONDITION_CASES: &str = r##"{"name":"absent_condition","source":"#minimize{foo:a}.","records":[[[],null]]}
@@ -129,6 +130,179 @@ fn ignored_templates_retain_source_limits() {
             ..
         })
     ));
+}
+
+const IGNORED_SHAPE: &str = "p(1).q(2).#minimize{#inf@7,x,y:p(X),q(Y),X!=0,Y!=0}.";
+
+fn ignored_shape_limit(
+    resource: AdmissionResource,
+    configure: impl Fn(&mut AdmissionLimits, usize),
+) {
+    let attempt = |maximum| {
+        let mut limits = FormulaLimits::default();
+        configure(&mut limits.objective, maximum);
+        admit(IGNORED_SHAPE, limits)
+    };
+    let exact = attempt(2).unwrap();
+    assert!(!exact.objectives().is_present());
+    assert_eq!(
+        exhaustive(&exact),
+        Records::from([(["p(1)".to_owned(), "q(2)".to_owned()].into(), None,)])
+    );
+    let error = attempt(1).unwrap_err();
+    assert!(!error.diagnostics().is_empty());
+    assert!(
+        matches!(error, FormulaFailure::Objective {
+        error: AdmissionError::Limit { resource: actual, template: Some(0), actual: 2, limit: 1 }, ..
+    } if actual == resource),
+        "{resource:?}: {error}"
+    );
+}
+
+#[test]
+fn ignored_objectives_retain_tuple_limits() {
+    ignored_shape_limit(AdmissionResource::TupleWidth, |limits, maximum| {
+        limits.max_tuple_width = maximum;
+    });
+}
+
+#[test]
+fn ignored_objectives_retain_positive_body_limits() {
+    ignored_shape_limit(AdmissionResource::PositiveBody, |limits, maximum| {
+        limits.max_positive_body = maximum;
+    });
+}
+
+#[test]
+fn ignored_objectives_retain_filter_limits() {
+    ignored_shape_limit(AdmissionResource::Filters, |limits, maximum| {
+        limits.max_filters = maximum;
+    });
+}
+
+#[test]
+fn ignored_objectives_retain_variable_limits() {
+    ignored_shape_limit(AdmissionResource::Variables, |limits, maximum| {
+        limits.max_variables_per_template = maximum;
+    });
+}
+
+fn refused_endpoint(source: &str, expected: ProfileFeature) {
+    let error = admit(source, FormulaLimits::default()).unwrap_err();
+    assert!(!error.diagnostics().is_empty(), "{source}");
+    assert!(
+        matches!(error, FormulaFailure::Expansion(ExpansionFailure::Admission(
+        AdmissionFailure::Profile { feature, .. }
+    )) if feature == expected),
+        "{source}: {error}"
+    );
+}
+
+#[test]
+fn endpoint_priorities_remain_refused() {
+    for endpoint in ["#inf", "#sup"] {
+        for source in [
+            format!("#minimize{{foo@{endpoint}}}."),
+            format!("#maximize{{foo@{endpoint}}}."),
+            format!(":~.[foo@{endpoint}]"),
+        ] {
+            refused_endpoint(&source, ProfileFeature::Objective);
+        }
+    }
+}
+
+#[test]
+fn endpoint_tuple_components_remain_refused() {
+    for endpoint in ["#inf", "#sup"] {
+        for source in [
+            format!("#minimize{{foo@7,{endpoint}}}."),
+            format!("#maximize{{foo@7,{endpoint}}}."),
+            format!(":~.[foo@7,{endpoint}]"),
+        ] {
+            refused_endpoint(&source, ProfileFeature::Symbol);
+        }
+    }
+}
+
+#[test]
+fn endpoint_objective_filters_remain_refused() {
+    for endpoint in ["#inf", "#sup"] {
+        for source in [
+            format!("#minimize{{foo@7:{endpoint}=1}}."),
+            format!("#maximize{{foo@7:1!={endpoint}}}."),
+            format!(":~{endpoint}=1.[foo@7]"),
+        ] {
+            refused_endpoint(&source, ProfileFeature::Symbol);
+        }
+    }
+}
+
+#[derive(Default)]
+struct EndlessOutput {
+    consumed: usize,
+}
+
+impl std::io::Read for EndlessOutput {
+    fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+        output.fill(b'x');
+        self.consumed += output.len();
+        Ok(output.len())
+    }
+}
+
+#[test]
+fn completed_capture_preserves_exact_combined_output() {
+    for (stdout, stderr) in [("", ""), ("abc", ""), ("", "def"), ("abc", "def")] {
+        let maximum = stdout.len() + stderr.len();
+        let (actual, diagnostics) =
+            reference::read_capture(stdout.as_bytes(), stderr.as_bytes(), maximum).unwrap();
+        assert_eq!(actual, stdout.as_bytes());
+        assert_eq!(diagnostics, stderr.as_bytes());
+    }
+}
+
+#[test]
+fn completed_capture_bounds_stdout_reads() {
+    let mut stdout = EndlessOutput::default();
+    let mut stderr = EndlessOutput::default();
+    let error = reference::read_capture(&mut stdout, &mut stderr, 16).unwrap_err();
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    assert_eq!(stdout.consumed, 17);
+    assert_eq!(stderr.consumed, 0);
+}
+
+#[test]
+fn completed_capture_bounds_stderr_reads() {
+    let mut stderr = EndlessOutput::default();
+    let error = reference::read_capture("12345678".as_bytes(), &mut stderr, 16).unwrap_err();
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    assert_eq!(stderr.consumed, 9);
+}
+
+#[test]
+fn completed_capture_propagates_read_failures() {
+    struct FailedOutput;
+    impl std::io::Read for FailedOutput {
+        fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::other("capture read failed"))
+        }
+    }
+    let mut stderr = EndlessOutput::default();
+    let error = reference::read_capture(FailedOutput, &mut stderr, 16).unwrap_err();
+    assert_eq!(error.kind(), std::io::ErrorKind::Other);
+    assert_eq!(stderr.consumed, 0);
+    let error = reference::read_capture("retained".as_bytes(), FailedOutput, 16).unwrap_err();
+    assert_eq!(error.kind(), std::io::ErrorKind::Other);
+}
+
+#[test]
+fn completed_capture_refuses_unrepresentable_limits() {
+    let mut stdout = EndlessOutput::default();
+    let mut stderr = EndlessOutput::default();
+    let error = reference::read_capture(&mut stdout, &mut stderr, usize::MAX).unwrap_err();
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+    assert_eq!(stdout.consumed, 0);
+    assert_eq!(stderr.consumed, 0);
 }
 
 #[test]
