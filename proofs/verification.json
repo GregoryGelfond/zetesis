@@ -7,8 +7,8 @@
   "platform": "arm64-apple-darwin24.6.0",
   "python_version": "Python 3.14.7",
   "external_packages": [],
-  "semantic_modules": 81,
-  "theorems_audited": 897,
+  "semantic_modules": 83,
+  "theorems_audited": 923,
   "path_convention": {
     "command_cwd": "Paths are relative to the repository root; proofs denotes its Lean package directory.",
     "record_members": "Source, generated-artifact and log paths are relative to proofs/.",
@@ -23,8 +23,8 @@
         "--version"
       ],
       "cwd": "proofs",
-      "started_utc": "2026-09-09T16:21:33.575Z",
-      "elapsed_seconds": 0.31527125,
+      "started_utc": "2026-09-09T18:00:18.871Z",
+      "elapsed_seconds": 2.692915625,
       "exit_code": 0,
       "result": "PASS",
       "log": "verification/current/version.log"
@@ -35,8 +35,8 @@
         "clean"
       ],
       "cwd": "proofs",
-      "started_utc": "2026-09-09T16:21:33.892Z",
-      "elapsed_seconds": 0.29799025,
+      "started_utc": "2026-09-09T18:00:21.568Z",
+      "elapsed_seconds": 0.28601091600000017,
       "exit_code": 0,
       "result": "PASS",
       "log": "verification/current/clean.log"
@@ -47,8 +47,8 @@
         "build"
       ],
       "cwd": "proofs",
-      "started_utc": "2026-09-09T16:21:34.190Z",
-      "elapsed_seconds": 7.43557425,
+      "started_utc": "2026-09-09T18:00:21.854Z",
+      "elapsed_seconds": 8.532043958000001,
       "exit_code": 0,
       "result": "PASS",
       "log": "verification/current/build.log"
@@ -60,8 +60,8 @@
         "for source in Zetesis/*.lean; do lake env lean -DautoImplicit=false -DwarningAsError=true \"$source\" || exit \"$?\"; done"
       ],
       "cwd": "proofs",
-      "started_utc": "2026-09-09T16:21:41.626Z",
-      "elapsed_seconds": 48.772384667,
+      "started_utc": "2026-09-09T18:00:30.386Z",
+      "elapsed_seconds": 53.711797958000005,
       "exit_code": 0,
       "result": "PASS",
       "log": "verification/current/strict-modules.log"
@@ -76,8 +76,8 @@
         "Audit.lean"
       ],
       "cwd": "proofs",
-      "started_utc": "2026-09-09T16:22:30.398Z",
-      "elapsed_seconds": 0.6064303329999966,
+      "started_utc": "2026-09-09T18:01:24.098Z",
+      "elapsed_seconds": 0.6438958749999947,
       "exit_code": 0,
       "result": "PASS",
       "log": "verification/current/audit.log"
@@ -94,8 +94,8 @@
         "test_proof_record.py"
       ],
       "cwd": "proofs",
-      "started_utc": "2026-09-09T16:22:31.005Z",
-      "elapsed_seconds": 2.9197704169999996,
+      "started_utc": "2026-09-09T18:01:24.743Z",
+      "elapsed_seconds": 2.6920539580000042,
       "exit_code": 0,
       "result": "PASS",
       "log": "verification/current/record-regressions.log"
@@ -106,8 +106,8 @@
         "--version"
       ],
       "cwd": "proofs",
-      "started_utc": "2026-09-09T16:22:33.925Z",
-      "elapsed_seconds": 0.007845041999993555,
+      "started_utc": "2026-09-09T18:01:27.435Z",
+      "elapsed_seconds": 0.008547458999993977,
       "exit_code": 0,
       "result": "PASS",
       "log": "verification/current/python-version.log"
@@ -118,8 +118,8 @@
         "../scripts/proof_record.py"
       ],
       "cwd": "proofs",
-      "started_utc": "2026-09-09T16:22:33.937Z",
-      "elapsed_seconds": 0.13199558299999625,
+      "started_utc": "2026-09-09T18:01:27.450Z",
+      "elapsed_seconds": 0.1621166249999951,
       "exit_code": 0,
       "result": "PASS",
       "log": "verification/current/record-check.log"
@@ -134,8 +134,8 @@
   "proof_holes": false,
   "native_evaluation_proof_shortcuts": false,
   "source_sha256": {
-    "Audit.lean": "cceb9bd24968343684f8d786d94154521ebd2a5500e37d3bcd08449e0d9e307d",
-    "Zetesis.lean": "06ebd9d21852a476d620c987d7789d5574daca08fe4b92eac9430f9bce26bf20",
+    "Audit.lean": "81e42799e4b98b5049c60d14e59ca6e0dbc06130fc3d6f9bd99314035c919196",
+    "Zetesis.lean": "fddcbadf4e3338b16d98ddd3313527951fce6079b2cd31651052d84237c7b589",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
     "Zetesis/AggregateConsumers.lean": "41aded89dbfaa79833ed3b336030ef4b08afa5be8e7029060416c2f8de59ef97",
@@ -144,6 +144,7 @@
     "Zetesis/AggregateReduct.lean": "c5901d211c3bd3fffe388d87fa77efd1b66a79c3024cdec6dd63b7e77521a556",
     "Zetesis/BatchAccounting.lean": "c6ff03ea70ee1eb9afbbba472bfe10c0bd77e231b8623c4157da91fbb5a5c615",
     "Zetesis/BinaryWatch.lean": "c6391510df44d983c95f3c084aaba1336fdf88c47eded51b16e193ccd88110b4",
+    "Zetesis/BooleanHeadElements.lean": "1a8601feb54155f84d1fc9cb784236f7ba19471a3f7a129da203e94cb45f6ef6",
     "Zetesis/BooleanHeads.lean": "6c1bdb43ab5b5a4d5753f9396e89adc2e9c52cfa9a1df56860ad8d54005d4c27",
     "Zetesis/Bounds.lean": "fdf70e67adcee33ef9a9463eff92ac7cf9977f98cce1e969e189c26fbe11416d",
     "Zetesis/CandidateCursor.lean": "09bba309247ba7b7300dd8f6994ecb8482ac5b14fbfd356ab8c24103fbfe1039",
@@ -164,6 +165,7 @@
     "Zetesis/Events.lean": "ca19932a7b9465055c0b660606bad522c02c2438a384e6d6762a852418c26ee6",
     "Zetesis/Examples.lean": "858524400af04e29312fdcfcc5127d38dd28ebf68f54d119cd6acafe7b4923dd",
     "Zetesis/ExtremumCandidates.lean": "412cfbd3a4bdfc757dbb5be010c6c74c806d35bd268c7d87ba4ab50d8c0c8477",
+    "Zetesis/ExtremumHeadActivity.lean": "2fbfd68e7f63d1860b667ab296e18c7a483f119be206e075ab443d208bd90681",
     "Zetesis/ExtremumPresence.lean": "03e419e744139ab81f1f89130cd187baa22f54fb50f9ddbc94b7e7dc9fac742e",
     "Zetesis/Feedback.lean": "55c1f1a03e5b831ae91fbb238829106bd56ec673cab0ee083a6431f8a579b04e",
     "Zetesis/Ferraris.lean": "699c533961d4e629241a879d8203fe647258ba0d2191e2faa9c119119d49180a",
@@ -222,27 +224,27 @@
     "lean-toolchain": "3aac669c7a910ec2389f4e4f921b605adf6ebf2d1e0c9b9cd0be4d33f3f5db71"
   },
   "generated_artifact_sha256": {
-    "README.md": "98188a900d739b0b5412c63757fc36b4495aef5c58c8d03c34340acdf31f03a1",
-    "axiom-audit.txt": "5809ead707d631f668956d6af1f7279e9fa7ff049a46fb4b2b663450b13990e0",
-    "theorems.json": "6364dab4eff48912761454f24055e09d03fcc924d54b81d2f1cb131602a35f8a"
+    "README.md": "dd7cbd1eb9c46dd7ecd17dd59a849f0d2c9d159d734b9d66800aaff30d151998",
+    "axiom-audit.txt": "8b0909403a76692e8c86e403bc0d3f049e34d95ebc20a0db3d4d7a9cc108c2fa",
+    "theorems.json": "b2a935fd1290a576853e0b0af56513a441db8234e16efaae329a9a8f1db4d824"
   },
   "verification_log_sha256": {
     "verification/current/version.log": "4762d596346ad354e28668de62b7eeae7de5d531b9a7b1c182ca59cfacd81bdd",
     "verification/current/clean.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "verification/current/build.log": "a9f5d98e80a4c5c7316cbe92bef4eeb4c8d94854ddfdf006c136672570e2bf3a",
+    "verification/current/build.log": "36ed8aa935b932468feb7da85e288042016b0966137fd9854db21084f2951393",
     "verification/current/strict-modules.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "verification/current/audit.log": "5809ead707d631f668956d6af1f7279e9fa7ff049a46fb4b2b663450b13990e0",
-    "verification/current/record-regressions.log": "fd6fe1d33f3f4060896a1aa6688a944d31415832b8fa5b8bf6bba8b3477eafa4",
+    "verification/current/audit.log": "8b0909403a76692e8c86e403bc0d3f049e34d95ebc20a0db3d4d7a9cc108c2fa",
+    "verification/current/record-regressions.log": "a4b70b3acf7307e336f6eb5d3ed5babe6ba9ef446e2a0d0d1e2e785bfd5c766c",
     "verification/current/python-version.log": "0366d77cc1f1ac88ea458231ba4f639323d5caf34de0d50b7618277fd4395f1f",
-    "verification/current/record-check.log": "89d95605c49e94b239c8b67c378c2641188366e2d37280b6cc3d7b7a2605d051"
+    "verification/current/record-check.log": "27d9c491c25bc454bc598700897815b8c89688fa881b0879793264d0ba3c08bf"
   },
   "audit_consistency": {
-    "source_theorem_declarations": 897,
-    "indexed_theorems": 897,
-    "printed_axiom_entries": 897,
-    "unique_qualified_names": 897,
+    "source_theorem_declarations": 923,
+    "indexed_theorems": 923,
+    "printed_axiom_entries": 923,
+    "unique_qualified_names": 923,
     "source_index_line_check": "PASS",
     "allowed_transitive_axioms_only": "PASS"
   },
-  "refinement_boundary": "Kernel-checked mathematical definitions and laws, including original world-view capture and weighted whole-tuple head activity. Concrete subject identity, source grounding, Rust representations, resource behavior, scheduling and WGSL execution remain separate unproved implementation correspondences."
+  "refinement_boundary": "Kernel-checked mathematical definitions and laws, including complete-tuple extrema and unsigned Boolean head activity under an explicit key contract. Concrete source occurrence preservation, grounding, optimized comparison construction, Rust representations, resource behavior, scheduling and WGSL execution remain separate unproved implementation correspondences."
 }

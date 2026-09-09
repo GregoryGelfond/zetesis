@@ -16,6 +16,10 @@ occurrence identity for Boolean operands within one activated outer group. Local
 witnesses of one Boolean occurrence share a key; two source occurrences do not.
 `ChoiceKey` records this distinction without identifying a key with its Boolean
 value. A completed source adapter must supply those identities and finite rows.
+This is the adopted Boolean-choice extension contract; its source grammar is
+broader than ASP-Core-2 choice elements, whose heads are classical atoms. The
+laws below do not prescribe clingo's internal representation or derive this
+extension convention from the ASP-Core-2 specification.
 
 The canonical mask formula supports any fixed numeric guard. These laws do not
 prove source binding/occurrence assignment, term evaluation, machine arithmetic,

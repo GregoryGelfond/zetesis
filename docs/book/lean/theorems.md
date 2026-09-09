@@ -49,6 +49,29 @@ the candidate without supplying reduct support. The canonical finite mask
 formula is the mathematical reference; the optimized Rust lowering remains a
 separate correspondence.
 
+`ExtremumHeadActivity.formula_original` and `formula_frozen` connect the same
+complete-key activities to numeric minimum and maximum. Empty selections have
+explicit infinite extrema; `finite_measure_has_witness` requires a selected,
+eligible tuple for a finite result. `bound_frozen` retains candidate-only bound
+checking, and `stable_in_context` preserves the complete head group when rows
+are duplicated or reordered without changing their keys. These laws assume
+finite complete tables and mathematical integers; they do not verify source
+enumeration, optimized comparison construction or machine endpoints.
+
+`BooleanHeadElements` represents an atom or a truth constant explicitly.
+`activity_original` and `activity_frozen` retain the operand and eligibility
+semantics; `remove_boolean_permissions` removes constants from atom permissions.
+`boolean_group_in_context` proves that a Boolean-only head group can filter
+the context's answer sets by its bound without creating atom support. Ordinary
+choice keys distinguish Boolean element occurrences from atom identities;
+explicit aggregate keys remain complete tuples. These are distinct source
+contracts, not requirements to reproduce another solver's internal lowering.
+Assigning those keys from the concrete source remains a refinement obligation.
+Boolean choice elements follow an explicitly adopted compatibility extension;
+the [ASP-Core-2 choice grammar (§4)](https://arxiv.org/pdf/1911.04326) covers
+classical atom heads. Observable clingo comparisons corroborate the extension
+contract; they do not make its internal data structures authoritative.
+
 `AggregateReduct.direct_reduct` relates the failing-subset formula to original
 and frozen eligibility under complete masks. `AggregateRanges` establishes bounds
 on mathematical signed partial sums. `AggregateDependencies` composes complete

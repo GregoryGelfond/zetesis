@@ -73,6 +73,24 @@
 'Zetesis.BatchAccounting.propose_accounted' depends on axioms: [propext]
 'Zetesis.BinaryWatch.positions_exhausted' depends on axioms: [propext, Quot.sound]
 'Zetesis.BinaryWatch.replacement_absent' depends on axioms: [propext, Quot.sound]
+'Zetesis.BooleanHeadElements.activity_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.BooleanHeadElements.activity_original' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.BooleanHeadElements.atom_choice_key' does not depend on any axioms
+'Zetesis.BooleanHeadElements.boolean_group_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.BooleanHeadElements.boolean_keys_distinct' does not depend on any axioms
+'Zetesis.BooleanHeadElements.boolean_permission_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.BooleanHeadElements.boolean_witness_key' does not depend on any axioms
+'Zetesis.BooleanHeadElements.coalesced_group_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.BooleanHeadElements.eligibility_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.BooleanHeadElements.eligibility_original' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.BooleanHeadElements.formula_original' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.BooleanHeadElements.operand_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.BooleanHeadElements.operand_original' depends on axioms: [propext]
+'Zetesis.BooleanHeadElements.permission_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.BooleanHeadElements.permission_original' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.BooleanHeadElements.permissions_coalesced' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.BooleanHeadElements.remove_boolean_permissions' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.BooleanHeadElements.same_rows_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.BooleanHeads.constant_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.BooleanHeads.constant_original' depends on axioms: [propext]
 'Zetesis.BooleanHeads.double_negative_constant_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -319,6 +337,14 @@
 'Zetesis.ExtremumCandidates.extreme_some_mem' depends on axioms: [propext]
 'Zetesis.ExtremumCandidates.finite_ne_infimum' does not depend on any axioms
 'Zetesis.ExtremumCandidates.finite_ne_supremum' does not depend on any axioms
+'Zetesis.ExtremumHeadActivity.bound_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ExtremumHeadActivity.finite_measure_has_witness' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ExtremumHeadActivity.formula_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ExtremumHeadActivity.formula_original' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ExtremumHeadActivity.inactive_measure' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ExtremumHeadActivity.mem_values' depends on axioms: [propext, Quot.sound]
+'Zetesis.ExtremumHeadActivity.same_rows_preserve_measure' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ExtremumHeadActivity.stable_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ExtremumPresence.mandatory_class_excludes_numeric_result' depends on axioms: [propext, Quot.sound]
 'Zetesis.ExtremumPresence.mandatory_dominance_excludes_numeric' does not depend on any axioms
 'Zetesis.ExtremumPresence.numeric_presence_transport' depends on axioms: [propext, Quot.sound]

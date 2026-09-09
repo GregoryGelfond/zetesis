@@ -7,6 +7,9 @@ use zetesis_cpu::Control;
 #[path = "support/formula_records.rs"]
 mod formula_records;
 
+#[path = "support/head_element_sources.rs"]
+mod head_element_sources;
+
 #[cfg(feature = "gpu")]
 #[path = "support/bounded_writer.rs"]
 mod bounded_writer;
@@ -60,6 +63,45 @@ fn complete_records_preserve_objective_presence() {
     assert_eq!(absent[0].0, present[0].0);
     assert_eq!(absent[0].1, None);
     assert_eq!(present[0].1, Some(vec![(3, 0)]));
+}
+
+#[test]
+fn head_elements_preserve_complete_source_answers() {
+    use zetesis_core::{Atom, Predicate, Value};
+
+    let atom = |name| Atom::new(Predicate::new(name, 0).unwrap(), Vec::new()).unwrap();
+    let a = atom("a");
+    let b = atom("b");
+    let d =
+        |number| Atom::new(Predicate::new("d", 1).unwrap(), vec![Value::Number(number)]).unwrap();
+    let expected = [
+        vec![vec![a.clone()], vec![b.clone()], vec![a.clone(), b.clone()]],
+        vec![vec![a.clone()]],
+        vec![vec![], vec![a.clone()]],
+        vec![vec![a.clone()]],
+        vec![vec![d(1), d(2)]],
+        vec![vec![a.clone()], vec![b]],
+        vec![vec![], vec![a.clone()]],
+        vec![vec![]],
+        vec![],
+        vec![vec![], vec![a]],
+    ];
+    assert_eq!(expected.len(), head_element_sources::SOURCES.len());
+    for (source, answers) in head_element_sources::SOURCES.into_iter().zip(expected) {
+        let mut expected: Vec<_> = answers
+            .into_iter()
+            .map(|mut atoms| {
+                atoms.sort();
+                (atoms, None)
+            })
+            .collect();
+        expected.sort();
+        assert_eq!(
+            formula_records::full_records(&cpu_output(source, true)),
+            expected,
+            "{source}"
+        );
+    }
 }
 
 #[test]
@@ -199,6 +241,7 @@ mod physical {
         .chain(super::count_objective_sources::SATISFIABLE)
         .chain([super::count_objective_sources::INCONSISTENT])
         .chain(super::language_value_sources::SOURCES)
+        .chain(super::head_element_sources::SOURCES)
         {
             for json in [false, true] {
                 qualify_formula_output(source, backend, json);

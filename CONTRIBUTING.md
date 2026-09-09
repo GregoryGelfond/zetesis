@@ -176,6 +176,10 @@ exercise that same proposition; neither test count nor identifier length measure
 assertion strength.
 
 Clingo is an external qualification oracle, never a production solver dependency.
+Its observable results corroborate the intended answer-set semantics; its
+internal representations and algorithms are not an implementation specification.
+Investigate a disagreement against the declared semantics rather than copying
+internal behavior or assuming either implementation is correct.
 Preserve original corpus inputs. Retain complete models, optimal ties, objective
 priorities and completion evidence in comparisons. Match candidates and work
 where a comparison claims to do so; record toolchains, binary/source identities,

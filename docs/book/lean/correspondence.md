@@ -21,6 +21,13 @@ DAG construction. Likewise, `FrozenReduct` is a Rust representation of a fixed
 candidate's reduct; its existence does not close the Rust-to-Lean mask
 correspondence.
 
+The head-element laws assume a correctly identified activity family. Explicit
+aggregate elements use complete tuple keys; ordinary Boolean choices use original
+source occurrences, with local witnesses coalesced within an occurrence. The Rust
+source adapter checks syntax-tree and provenance correspondence before retaining
+those keys. Tests cover duplicate rules, separate files and finite interpretations;
+proving this adapter implements the Lean family remains a separate obligation.
+
 ## Read hypotheses as caller obligations
 
 For a frozen mask, correctness means agreement with the fixed candidate's

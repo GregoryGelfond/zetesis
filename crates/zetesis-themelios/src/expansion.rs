@@ -21,7 +21,8 @@ pub struct ExpansionLimits {
     pub max_templates: usize,
     /// Maximum intermediate scalar alternatives, emitted fact arguments, and
     /// conservatively counted nodes in finite-pool source alternatives and
-    /// compiled structural patterns.
+    /// compiled structural patterns. Original Boolean choice rules additionally
+    /// reserve selected syntax nodes before their independent raising.
     pub max_values: usize,
     /// Maximum scalar payload bytes copied during substitution/fact emission
     /// plus finite-pool cursor positions, copied term cells/text, constructor-plan
@@ -35,11 +36,13 @@ pub struct ExpansionLimits {
     /// including required-input copies, binding vectors and source atom/body-element
     /// carriers. Aggregate consumer plans reserve instruction cells, required
     /// outer slots, readiness/producers and temporary scheduling cells.
+    /// Ordinary Boolean choice keys additionally reserve their scalar identity payload.
     /// Ordinary aggregate, choice and conditional scope clones remain
     /// excluded, as do other AST carriers, provenance and allocator overhead.
     /// Original source storage remains bounded by admission options.
     pub max_scalar_bytes: usize,
-    /// Maximum original rule-location copies in the emitted template evidence.
+    /// Maximum original locations reserved for template evidence and independently
+    /// raised Boolean choice rules, including their nested occurrence evidence.
     pub max_origin_locations: usize,
     /// Maximum original `#defined` and `#show` occurrences before deduplication.
     pub max_metadata_statements: usize,
@@ -68,12 +71,13 @@ pub enum ExpansionResource {
     TermWork,
     /// Emitted core templates.
     Templates,
-    /// Intermediate alternatives, emitted fact arguments and finite-pool source nodes.
+    /// Intermediate alternatives, emitted fact arguments, finite-pool source nodes
+    /// and independently raised Boolean choice syntax nodes.
     Values,
     /// Copied scalar payload, finite-pool positions, term/plan storage and
     /// constructed/extracted value reservations, including structural pattern deltas.
     ScalarBytes,
-    /// Copies of original parsed rule locations across emitted templates.
+    /// Original locations in emitted templates and Boolean choice occurrence evidence.
     Origins,
     /// Original declaration/display occurrences, counted before canonicalization.
     MetadataStatements,

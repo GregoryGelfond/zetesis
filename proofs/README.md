@@ -26,6 +26,8 @@ conceptual overview.
 | What does a completed membership result establish? | [CertifiedExecution](Zetesis/CertifiedExecution.lean) and its [worked proof](guide/certified-membership.md) separate a verified result from unfinished work. |
 | When does enumeration establish the original world view? | [WorldViews](Zetesis/WorldViews.lean) composes exact membership, original candidate coverage and complete capture; optimal selection remains distinct. |
 | How do weighted heads handle shared atoms and tuples? | [WeightedHeadActivity](Zetesis/WeightedHeadActivity.lean) connects distinct tuple sums to canonical guards and candidate-only bounds. |
+| How do extrema heads handle those aliases? | [ExtremumHeadActivity](Zetesis/ExtremumHeadActivity.lean) connects selected complete tuples to numeric extrema, explicit empty results and independent atom permissions. |
+| Can a truth constant supply atom support? | [BooleanHeadElements](Zetesis/BooleanHeadElements.lean) separates Boolean activity from atom permission and preserves bounded head groups in context. |
 | Which implementation correspondences remain open? | The manual's [proof boundary](../docs/book/lean/correspondence.md) separates mathematical laws from executable refinement. |
 
 For example, `NormalFerraris.answer_set_iff` relates the two independently defined

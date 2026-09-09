@@ -142,7 +142,9 @@ Theory atoms, Python/Lua scripting, `#heuristic` and `#edge` are outside the cur
 supported scope; Rust ground-time functions and broader incremental integration
 remain planned. Unsupported constructs receive explicit refusals.
 The [admitted-language reference](docs/book/reference/language.md) records the
-precise boundaries, including shared atoms and tuples in numeric weighted heads.
+precise boundaries, including shared atoms and tuples in numeric aggregate heads.
+Unsigned Boolean choice and aggregate-head elements carry truth without creating
+atoms; their activity and support obligations remain separate.
 
 The [neuromorphic appendix](docs/book/appendices/neuromorphic.md) specifies a
 possible Loihi 2/SpiNNaker2 backend, its exact event protocol and its qualification

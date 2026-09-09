@@ -375,6 +375,96 @@
     "line": 45
   },
   {
+    "name": "Zetesis.BooleanHeadElements.activity_frozen",
+    "file": "Zetesis/BooleanHeadElements.lean",
+    "line": 129
+  },
+  {
+    "name": "Zetesis.BooleanHeadElements.activity_original",
+    "file": "Zetesis/BooleanHeadElements.lean",
+    "line": 114
+  },
+  {
+    "name": "Zetesis.BooleanHeadElements.atom_choice_key",
+    "file": "Zetesis/BooleanHeadElements.lean",
+    "line": 92
+  },
+  {
+    "name": "Zetesis.BooleanHeadElements.boolean_group_in_context",
+    "file": "Zetesis/BooleanHeadElements.lean",
+    "line": 359
+  },
+  {
+    "name": "Zetesis.BooleanHeadElements.boolean_keys_distinct",
+    "file": "Zetesis/BooleanHeadElements.lean",
+    "line": 80
+  },
+  {
+    "name": "Zetesis.BooleanHeadElements.boolean_permission_frozen",
+    "file": "Zetesis/BooleanHeadElements.lean",
+    "line": 188
+  },
+  {
+    "name": "Zetesis.BooleanHeadElements.boolean_witness_key",
+    "file": "Zetesis/BooleanHeadElements.lean",
+    "line": 87
+  },
+  {
+    "name": "Zetesis.BooleanHeadElements.coalesced_group_in_context",
+    "file": "Zetesis/BooleanHeadElements.lean",
+    "line": 344
+  },
+  {
+    "name": "Zetesis.BooleanHeadElements.eligibility_frozen",
+    "file": "Zetesis/BooleanHeadElements.lean",
+    "line": 255
+  },
+  {
+    "name": "Zetesis.BooleanHeadElements.eligibility_original",
+    "file": "Zetesis/BooleanHeadElements.lean",
+    "line": 241
+  },
+  {
+    "name": "Zetesis.BooleanHeadElements.formula_original",
+    "file": "Zetesis/BooleanHeadElements.lean",
+    "line": 325
+  },
+  {
+    "name": "Zetesis.BooleanHeadElements.operand_frozen",
+    "file": "Zetesis/BooleanHeadElements.lean",
+    "line": 60
+  },
+  {
+    "name": "Zetesis.BooleanHeadElements.operand_original",
+    "file": "Zetesis/BooleanHeadElements.lean",
+    "line": 53
+  },
+  {
+    "name": "Zetesis.BooleanHeadElements.permission_frozen",
+    "file": "Zetesis/BooleanHeadElements.lean",
+    "line": 158
+  },
+  {
+    "name": "Zetesis.BooleanHeadElements.permission_original",
+    "file": "Zetesis/BooleanHeadElements.lean",
+    "line": 150
+  },
+  {
+    "name": "Zetesis.BooleanHeadElements.permissions_coalesced",
+    "file": "Zetesis/BooleanHeadElements.lean",
+    "line": 269
+  },
+  {
+    "name": "Zetesis.BooleanHeadElements.remove_boolean_permissions",
+    "file": "Zetesis/BooleanHeadElements.lean",
+    "line": 211
+  },
+  {
+    "name": "Zetesis.BooleanHeadElements.same_rows_in_context",
+    "file": "Zetesis/BooleanHeadElements.lean",
+    "line": 407
+  },
+  {
     "name": "Zetesis.BooleanHeads.constant_frozen",
     "file": "Zetesis/BooleanHeads.lean",
     "line": 33
@@ -1533,6 +1623,46 @@
     "name": "Zetesis.ExtremumCandidates.finite_ne_supremum",
     "file": "Zetesis/ExtremumCandidates.lean",
     "line": 73
+  },
+  {
+    "name": "Zetesis.ExtremumHeadActivity.bound_frozen",
+    "file": "Zetesis/ExtremumHeadActivity.lean",
+    "line": 168
+  },
+  {
+    "name": "Zetesis.ExtremumHeadActivity.finite_measure_has_witness",
+    "file": "Zetesis/ExtremumHeadActivity.lean",
+    "line": 130
+  },
+  {
+    "name": "Zetesis.ExtremumHeadActivity.formula_frozen",
+    "file": "Zetesis/ExtremumHeadActivity.lean",
+    "line": 87
+  },
+  {
+    "name": "Zetesis.ExtremumHeadActivity.formula_original",
+    "file": "Zetesis/ExtremumHeadActivity.lean",
+    "line": 67
+  },
+  {
+    "name": "Zetesis.ExtremumHeadActivity.inactive_measure",
+    "file": "Zetesis/ExtremumHeadActivity.lean",
+    "line": 107
+  },
+  {
+    "name": "Zetesis.ExtremumHeadActivity.mem_values",
+    "file": "Zetesis/ExtremumHeadActivity.lean",
+    "line": 40
+  },
+  {
+    "name": "Zetesis.ExtremumHeadActivity.same_rows_preserve_measure",
+    "file": "Zetesis/ExtremumHeadActivity.lean",
+    "line": 156
+  },
+  {
+    "name": "Zetesis.ExtremumHeadActivity.stable_in_context",
+    "file": "Zetesis/ExtremumHeadActivity.lean",
+    "line": 179
   },
   {
     "name": "Zetesis.ExtremumPresence.mandatory_class_excludes_numeric_result",
