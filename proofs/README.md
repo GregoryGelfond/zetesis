@@ -28,6 +28,8 @@ conceptual overview.
 | How do weighted heads handle shared atoms and tuples? | [WeightedHeadActivity](Zetesis/WeightedHeadActivity.lean) connects distinct tuple sums to canonical guards and candidate-only bounds. |
 | How do extrema heads handle those aliases? | [ExtremumHeadActivity](Zetesis/ExtremumHeadActivity.lean) connects selected complete tuples to numeric extrema, explicit empty results and independent atom permissions. |
 | Can a truth constant supply atom support? | [BooleanHeadElements](Zetesis/BooleanHeadElements.lean) separates Boolean activity from atom permission and preserves bounded head groups in context. |
+| What changes when a choice operand has default negation? | [SignedHeadElements](Zetesis/SignedHeadElements.lean) keeps signed contribution identity, candidate-frozen operand truth and positive-only permissions separate; eligibility still has its own reduct. |
+| How does a consumer apply the normal/Ferraris bridge? | [The checked choices example](Zetesis/Examples/Choices.lean) proves that `{a}` is an answer set of the guided tour's two-rule program through its least reduct closure. |
 | Which implementation correspondences remain open? | The manual's [proof boundary](../docs/book/lean/correspondence.md) separates mathematical laws from executable refinement. |
 
 For example, `NormalFerraris.answer_set_iff` relates the two independently defined
