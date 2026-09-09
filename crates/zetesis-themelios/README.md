@@ -88,10 +88,14 @@ default-negated and double-negated atoms and Boolean constants. Boolean constant
 create no atoms or support. Complete sibling and body validation precedes
 simplification, so a true head cannot hide unsafe source or exhausted limits.
 
-Head conditions are limited to empty or explicitly true Boolean conditions.
-General conditional disjunction remains unsupported. Boolean choice elements
-and negative choice heads remain unsupported. Choice-head intervals expand
-within one group; disjunctive intervals expand whole rule instances.
+Conditional disjuncts are limited to empty or explicitly true Boolean conditions.
+General conditional disjunction remains unsupported. Ordinary choices and all
+five function heads admit atomic and Boolean operands with `not` and `not not`.
+Default-negated operands retain candidate-frozen truth and supply no positive
+producer support. Ordinary atomic contributions use the sign and complete atom
+as their key; Boolean contributions retain their written source occurrences.
+Choice-head intervals expand within one group; disjunctive intervals expand
+whole rule instances.
 
 Finite conditional choices retain each head's eligibility, with bounds acting
 as constraints rather than support. Universal body conditionals retain
@@ -121,9 +125,9 @@ Self-dependent/cyclic generators and unsupported local consumers remain typed
 refusals. Body extrema use ASP term order, including real `#inf`/`#sup` values
 and structural terms, subject to the numeric endpoint guard above.
 
-Count heads separate permission to select a head atom from complete-tuple
-activity. A tuple is active if any row has both its head selected and its own
-eligibility satisfied. Consequently:
+Count heads separate permission to select an unsigned head atom from
+complete-tuple activity. A tuple is active if any row has a true signed head
+operand and satisfies its own eligibility. Consequently:
 
 ```asp
 1#count{1:a;1:b}1.  % {a}, {b}, {a,b}
@@ -138,10 +142,13 @@ positive/default/double-negated eligibility retain their own scopes.
 Weighted heads use the same separate atom permission and complete-tuple activity.
 `#sum` accepts signed numeric weights; head `#sum+` accepts nonnegative numeric
 weights. A selected complete tuple contributes once, even when several of its
-eligible head atoms are selected. Distinct tuples sharing a head still contribute
-separately: `3#sum{1:a;2:a}3.` admits `{a}`. A zero weight still permits its head.
-Extrema heads retain a stricter complete-tuple/atom bijection. Nonnumeric head
-weights, negative head `#sum+` weights and nonnumeric extrema heads remain
+head operands are true. Distinct tuples sharing a head still contribute
+separately: `3#sum{1:a;2:a}3.` admits `{a}`. A zero weight still permits an
+unsigned atomic head. Numeric extrema use the same complete-tuple activity;
+atoms may occur under several tuples and several operands may share one tuple.
+The optional count specialization requires a stronger tuple/atom bijection and
+wholly unsigned atomic groups. Nonnumeric head weights, negative head `#sum+`
+weights and nonnumeric extrema heads remain
 unsupported.
 Empty minima and maxima are `#sup` and `#inf`; bounds never create support.
 Objective-relevant function-head producers remain refused, including count heads.
@@ -172,6 +179,11 @@ Relevant negative, disjunctive, conditional and general aggregate producers are
 refused. A structural certificate admits specified total assignments and acyclic
 bijective predicate forwarding. It does not admit arbitrary joins, filters,
 alternative producers or constructed forwarding arguments.
+
+An ordinary choice containing only default-negated occurrences does not create
+a competing positive producer. Such occurrences can compose with certified
+forwarding or assignment dependencies; their bounds still constrain the answers.
+This does not remove the separate function-head or objective-condition refusals.
 
 For variable objective weights, a mixed numeric/nonnumeric extrema carrier needs
 an additional completed-presence certificate. Its admitted flat profile has an
