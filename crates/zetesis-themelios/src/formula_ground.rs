@@ -510,8 +510,16 @@ impl Builder<'_> {
                 let mut disjunction = 0;
                 let mut distinct = BTreeSet::new();
                 for head in heads {
-                    let atom = self.atom(&head.atom, assignment, rule.location)?;
-                    let mut literal = atom;
+                    let (mut literal, atom) = match &head.operand {
+                        crate::formula_ir::HeadOperand::Atom(pattern) => {
+                            let atom = self.atom(pattern, assignment, rule.location)?;
+                            (atom, Some(atom))
+                        }
+                        // Builder::new fixes falsum at node 0 and verum at node 1.
+                        crate::formula_ir::HeadOperand::Boolean(value) => {
+                            (usize::from(*value), None)
+                        }
+                    };
                     if head.negation != DefaultNegation::None {
                         literal = self.neg(literal, rule.location)?;
                     }
@@ -522,12 +530,14 @@ impl Builder<'_> {
                         disjunction = self.or(disjunction, literal, rule.location)?;
                         // Necessary support is the original body for each head,
                         // not a shifted rule excluding the other disjuncts.
-                        if head.positive_atom().is_some() {
-                            self.producer(atom, body, rule)?;
-                        } else {
-                            // A negative occurrence contributes provenance for
-                            // its atom's guard, without supplying any support.
-                            self.head_origins(atom, rule)?;
+                        if let Some(atom) = atom {
+                            if head.positive_atom().is_some() {
+                                self.producer(atom, body, rule)?;
+                            } else {
+                                // A negative occurrence contributes provenance for
+                                // its atom's guard, without supplying any support.
+                                self.head_origins(atom, rule)?;
+                            }
                         }
                     }
                 }

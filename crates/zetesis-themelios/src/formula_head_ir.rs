@@ -13,7 +13,7 @@ use themelios_program::term::{Term, Variable};
 
 use crate::diagnostic::unsupported;
 use crate::formula::ceiling;
-use crate::formula_ir::{Compiler, DisjunctIr, LiteralIr, Variables};
+use crate::formula_ir::{Compiler, DisjunctIr, HeadOperand, LiteralIr, Variables};
 use crate::{ExpansionResource, FormulaFailure, FormulaResource, ProfileFeature};
 
 impl Compiler<'_> {
@@ -23,6 +23,12 @@ impl Compiler<'_> {
         variables: &mut Variables,
         body: &mut Vec<LiteralIr>,
     ) -> Result<DisjunctIr, FormulaFailure> {
+        if matches!(literal.inner, LiteralInner::True | LiteralInner::False) {
+            return Ok(DisjunctIr {
+                negation: literal.negation,
+                operand: HeadOperand::Boolean(matches!(literal.inner, LiteralInner::True)),
+            });
+        }
         let LiteralInner::Atom(atom) = &literal.inner else {
             return Err(unsupported(ProfileFeature::Head, self.location).into());
         };
@@ -37,7 +43,7 @@ impl Compiler<'_> {
         };
         Ok(DisjunctIr {
             negation: literal.negation,
-            atom: pattern,
+            operand: HeadOperand::Atom(pattern),
         })
     }
 

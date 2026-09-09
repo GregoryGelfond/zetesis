@@ -1,0 +1,305 @@
+//! Boolean heads retain their original truth without supplying atom support.
+
+#[path = "support/boolean_heads.rs"]
+mod cases;
+#[path = "support/finite_bindings.rs"]
+mod reference;
+
+use std::collections::BTreeSet;
+
+use cases::CASES;
+use proptest::prelude::*;
+use reference::{Models, atom_text, exhaustive, external, holds, native, values};
+use zetesis_themelios::{
+    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
+    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_formula,
+};
+
+fn input(source: &str) -> AdmittedFormula {
+    limited(source, FormulaLimits::default()).unwrap_or_else(|error| panic!("{source}: {error}"))
+}
+
+fn limited(source: &str, limits: FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {
+    admit_formula(
+        source.into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        limits,
+    )
+}
+
+fn expected(records: &[&[&str]]) -> Models {
+    records
+        .iter()
+        .map(|record| record.iter().map(|name| (*name).to_owned()).collect())
+        .collect()
+}
+
+#[test]
+fn complete_models_match_original_contracts() {
+    for &(source, records) in CASES {
+        assert_eq!(native(&input(source)), expected(records), "{source}");
+    }
+}
+
+#[test]
+fn stability_matches_independent_subset_enumeration() {
+    for &(source, _) in CASES {
+        let admitted = input(source);
+        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
+    }
+}
+
+#[test]
+fn original_source_text_is_retained() {
+    for &(source, _) in CASES {
+        assert_eq!(input(source).source().text(), source);
+    }
+}
+
+#[test]
+fn boolean_constants_introduce_no_atoms() {
+    for source in [
+        "#true.",
+        "#false.",
+        "not #true.",
+        "not #false.",
+        "not not #true.",
+        "not not #false.",
+    ] {
+        assert!(input(source).atoms().is_empty(), "{source}");
+    }
+}
+
+#[test]
+#[ignore = "requires an independently installed clingo"]
+fn original_sources_match_clingo_full_models() {
+    let mut models = 0;
+    for &(source, records) in CASES {
+        let result = external(source, true);
+        assert_eq!(result["Models"]["More"], "no");
+        let mut actual = Models::new();
+        let mut count = 0;
+        for call in result["Call"].as_array().unwrap() {
+            if let Some(witnesses) = call["Witnesses"].as_array() {
+                for witness in witnesses {
+                    assert!(witness["Costs"].is_null());
+                    count += 1;
+                    assert!(
+                        actual.insert(
+                            witness["Value"]
+                                .as_array()
+                                .unwrap()
+                                .iter()
+                                .map(|value| value.as_str().unwrap().to_owned())
+                                .collect()
+                        )
+                    );
+                }
+            }
+        }
+        assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
+        assert_eq!(actual, expected(records), "{source}");
+        assert_eq!(native(&input(source)), actual, "{source}");
+        models += count;
+    }
+    println!("complete_sources={} full_models={models}", CASES.len());
+}
+
+/// A separate finite formula tree evaluates every subtree in the original M
+/// before testing its reduct in J. It shares no lowering or truth machinery.
+#[derive(Clone)]
+enum Formula {
+    Boolean(bool),
+    Atom(usize),
+    Or(Box<Self>, Box<Self>),
+    Implies(Box<Self>, Box<Self>),
+}
+
+impl Formula {
+    fn truth(&self, tested: usize, frozen: Option<usize>) -> bool {
+        if frozen.is_some_and(|outer| !self.truth(outer, None)) {
+            return false;
+        }
+        match self {
+            Self::Boolean(value) => *value,
+            Self::Atom(atom) => tested & (1 << atom) != 0,
+            Self::Or(left, right) => left.truth(tested, frozen) || right.truth(tested, frozen),
+            Self::Implies(left, right) => {
+                !left.truth(tested, frozen) || right.truth(tested, frozen)
+            }
+        }
+    }
+
+    fn negated(self) -> Self {
+        Self::Implies(Box::new(self), Box::new(Self::Boolean(false)))
+    }
+
+    fn or(self, other: Self) -> Self {
+        Self::Or(Box::new(self), Box::new(other))
+    }
+}
+
+const ATOMS: [&str; 3] = ["a", "b", "c"];
+
+fn literal(operand: u8, negations: u8) -> (String, Formula) {
+    let (text, mut formula) = match operand {
+        0 => ("#false", Formula::Boolean(false)),
+        1 => ("#true", Formula::Boolean(true)),
+        atom => {
+            let index = usize::from(atom - 2);
+            (ATOMS[index], Formula::Atom(index))
+        }
+    };
+    for _ in 0..negations {
+        formula = formula.negated();
+    }
+    (
+        format!("{}{text}", "not ".repeat(usize::from(negations))),
+        formula,
+    )
+}
+
+fn original_rules(heads: &[(u8, u8)], body: (u8, u8)) -> (String, Vec<Formula>) {
+    // Independent choices ensure all three named atoms have producer evidence,
+    // so candidate-only support guards are true in every original M.
+    let mut theory: Vec<_> = (0..ATOMS.len())
+        .map(|atom| Formula::Atom(atom).or(Formula::Atom(atom).negated()))
+        .collect();
+    let mut sources = Vec::new();
+    let mut head = Formula::Boolean(false);
+    for &(operand, negations) in heads {
+        let (source, formula) = literal(operand, negations);
+        sources.push(source);
+        head = head.or(formula);
+    }
+    let (source_body, body) = literal(body.0, body.1);
+    theory.push(Formula::Implies(Box::new(body), Box::new(head)));
+    (
+        format!("{{a;b;c}}.{}:-{source_body}.", sources.join("|")),
+        theory,
+    )
+}
+
+fn frozen_pairs(source: &str, theory: &[Formula]) {
+    let admitted = input(source);
+    let names: Vec<_> = admitted.atoms().iter().map(atom_text).collect();
+    assert_eq!(
+        names.iter().map(String::as_str).collect::<BTreeSet<_>>(),
+        ATOMS.into()
+    );
+    let remap = |mask: usize| {
+        ATOMS.iter().enumerate().fold(0, |result, (index, name)| {
+            result
+                | (usize::from(mask & (1 << index) != 0)
+                    << names.iter().position(|value| value == name).unwrap())
+        })
+    };
+    for outer in 0..1 << ATOMS.len() {
+        let original = values(admitted.theory(), remap(outer), None);
+        assert_eq!(
+            holds(admitted.theory(), &original),
+            theory.iter().all(|f| f.truth(outer, None)),
+            "{source}: M={outer}"
+        );
+        for inner in 0..1 << ATOMS.len() {
+            assert_eq!(
+                holds(
+                    admitted.theory(),
+                    &values(admitted.theory(), remap(inner), Some(&original))
+                ),
+                theory.iter().all(|f| f.truth(inner, Some(outer))),
+                "{source}: M={outer} J={inner}"
+            );
+        }
+    }
+}
+
+#[test]
+fn signed_constants_preserve_every_frozen_world() {
+    let mut cases = 0;
+    for boolean in 0..2 {
+        for sign in 0..3 {
+            for body in 0..5 {
+                for body_sign in 0..3 {
+                    let (source, theory) =
+                        original_rules(&[(boolean, sign), (2, 0)], (body, body_sign));
+                    frozen_pairs(&source, &theory);
+                    cases += 1;
+                }
+            }
+        }
+    }
+    println!("manual_programs={cases} frozen_pairs={}", cases * 64);
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(128))]
+    #[test]
+    fn generated_heads_preserve_every_frozen_world(
+        heads in prop::collection::vec((0_u8..5, 0_u8..3), 1..5),
+        body in (0_u8..5, 0_u8..3),
+    ) {
+        let (source, theory) = original_rules(&heads, body);
+        frozen_pairs(&source, &theory);
+    }
+}
+
+#[test]
+fn tautologies_preserve_variable_safety() {
+    for source in ["#true|p(X).", "#true:-not p(X).", "#true|p(2..1,X)."] {
+        let error = limited(source, FormulaLimits::default()).unwrap_err();
+        assert!(!error.diagnostics().is_empty(), "{source}");
+        assert!(
+            matches!(error, FormulaFailure::UnsafeVariable { .. }),
+            "{source}: {error}"
+        );
+    }
+}
+
+#[test]
+fn unsupported_conditions_remain_located_refusals() {
+    for source in ["#true:a;b.", "#true:#false;b.", "#true:1=1;b."] {
+        let error = limited(source, FormulaLimits::default()).unwrap_err();
+        assert!(!error.diagnostics().is_empty());
+        assert!(matches!(
+            error,
+            FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
+                feature: ProfileFeature::ConditionalDisjunction,
+                ..
+            }))
+        ));
+    }
+}
+
+#[test]
+fn boolean_disjuncts_preserve_objective_guards() {
+    for source in [
+        "#true|a.#minimize{1@7:a}.",
+        "#false|a.#minimize{1@7:a}.",
+        "#true|not a.#minimize{1@7:a}.",
+    ] {
+        let error = limited(source, FormulaLimits::default()).unwrap_err();
+        assert!(!error.diagnostics().is_empty());
+        assert!(matches!(
+            error,
+            FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
+                feature: ProfileFeature::ObjectiveDisjunctionDependency,
+                ..
+            }))
+        ));
+    }
+}
+
+#[test]
+fn head_element_limits_count_boolean_operands() {
+    for (source, count) in [("#true.", 1), ("#true|a.", 2), ("not #false|a|b.", 3)] {
+        let mut limits = FormulaLimits::default();
+        limits.max_disjunction_elements = count;
+        assert!(limited(source, limits).is_ok());
+        limits.max_disjunction_elements = count - 1;
+        assert!(
+            matches!(limited(source, limits), Err(FormulaFailure::Limit { resource: FormulaResource::DisjunctionElements, observed, .. }) if observed == count as u128)
+        );
+    }
+}

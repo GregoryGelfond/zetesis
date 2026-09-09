@@ -73,7 +73,9 @@ fn definitions(rules: &[RuleIr]) -> BTreeMap<Signature, Option<&RuleIr>> {
             HeadIr::Normal(None) => {}
             HeadIr::Disjunction(heads) => {
                 for head in heads {
-                    record(&head.atom);
+                    if let Some(atom) = head.atom() {
+                        record(atom);
+                    }
                 }
             }
             HeadIr::Choice(group) => {

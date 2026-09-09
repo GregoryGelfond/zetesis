@@ -69,11 +69,26 @@ pub(crate) struct ChoiceIr {
 /// A semantic head occurrence; default negation never supplies positive support.
 pub(crate) struct DisjunctIr {
     pub negation: DefaultNegation,
-    pub atom: AtomPattern,
+    pub operand: HeadOperand,
+}
+/// Boolean head operands carry truth without introducing a semantic atom.
+pub(crate) enum HeadOperand {
+    Atom(AtomPattern),
+    Boolean(bool),
 }
 impl DisjunctIr {
+    pub(crate) fn atom(&self) -> Option<&AtomPattern> {
+        match &self.operand {
+            HeadOperand::Atom(atom) => Some(atom),
+            HeadOperand::Boolean(_) => None,
+        }
+    }
     pub(crate) fn positive_atom(&self) -> Option<&AtomPattern> {
-        (self.negation == DefaultNegation::None).then_some(&self.atom)
+        if self.negation == DefaultNegation::None {
+            self.atom()
+        } else {
+            None
+        }
     }
 }
 /// Numeric function used only for the bound constraint; every element retains
@@ -583,7 +598,22 @@ impl Compiler<'_> {
         // a head variable cannot accidentally become safe inside an aggregate.
         let ordinary = match rule.head().get() {
             Head::Falsum => Some(HeadIr::Normal(None)),
-            Head::Literal(literal) if literal.negation == DefaultNegation::None => {
+            Head::Verum => {
+                ceiling(
+                    FormulaResource::DisjunctionElements,
+                    1,
+                    self.limits.max_disjunction_elements as u128,
+                    self.location,
+                )?;
+                Some(HeadIr::Disjunction(vec![DisjunctIr {
+                    negation: DefaultNegation::None,
+                    operand: HeadOperand::Boolean(true),
+                }]))
+            }
+            Head::Literal(literal)
+                if literal.negation == DefaultNegation::None
+                    && matches!(literal.inner, LiteralInner::Atom(_)) =>
+            {
                 Some(HeadIr::Normal(Some(self.generated_head(
                     literal,
                     &mut variables,
