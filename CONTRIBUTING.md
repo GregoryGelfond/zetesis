@@ -196,3 +196,26 @@ an alternate source tree may not reuse it. Preserve source and executable
 identities with experimental evidence. If a target has been shared across those
 trees, treat its checks as provisional and qualify again from a fresh target.
 Matching Cargo artifact filenames do not attest which source tree produced them.
+
+## Repository presentation
+
+Keep the GitHub description, topics, README badges and release metadata aligned
+with the maintained language and execution references. Describe implemented
+capabilities separately from planned work. Lean semantic laws do not justify a
+formally verified implementation badge; physical Metal tests do not qualify
+other GPUs. A CI badge must identify an active workflow, and a coverage claim
+must identify its measured source revision, profile and backend scope. Do not
+substitute local results for hosted CI status.
+
+Language statistics describe tracked code. Use Linguist attributes only for
+documented provenance: preserved third-party source is vendored, and generated
+snapshots are generated. Keep authored tooling and runtime shaders visible even
+when their languages differ from Rust and Lean. Removing a language from the
+project requires replacing or retiring its maintained code, not concealing it
+from the statistics. Preserve byte-exact corpus attributes and source hashes.
+
+Release tags and notes must correspond to the version actually released and its
+qualified scope. Historical archive tags are not releases. Link badges and the
+repository homepage only to resources that exist and are accessible to their
+intended audience; update version, license and toolchain claims together with
+their source declarations.

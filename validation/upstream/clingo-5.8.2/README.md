@@ -9,15 +9,15 @@ zetesis-corpus verify validation/upstream/clingo-5.8.2/curated
 
 This verifies 24 exact ASP files, the sealed provenance/license and 73 recorded
 full-model occurrences without reading C++ or running a solver. The
-[curation record](../../../docs/verification/corpus-curation-20260907/README.md)
-describes the independent import/verification checks. Fixture integrity alone
+[validation library guide](../../../crates/zetesis-validation/README.md#compose-capture-contracts-and-publication)
+describes the import and verification boundary. Fixture integrity alone
 is not model parity; the Rust comparison campaign below checks live solvers.
 
 These 24 objective-free semantic assertions come from clingo v5.8.2, commit
 `a99ffb2a58293c68b28fcc283a1d1c9ccad900fe`. The original C++ files and solver
 helper are preserved under `originals/`, with their MIT copyright notices and
-the upstream license. They were copied read-only from the local clingo checkout
-under archeion. They are third-party material, not newly authored zetesis tests.
+the upstream license. They are third-party material, not newly authored zetesis
+tests.
 
 `cases.jsonl` retains the assertion identity, original byte/line span, exact C++
 assertion, decoded ASP bytes, source hashes, helper arguments, expected helper
