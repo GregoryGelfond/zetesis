@@ -99,7 +99,7 @@ impl<A> HeadLiteral<A> {
         }
     }
 }
-/// Numeric function used only for the bound constraint; every element retains
+/// Aggregate measure used only for the bound constraint; every element retains
 /// its signed activity and separate unsigned atom permission, including neutral contributions.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum HeadMeasure {

@@ -207,7 +207,7 @@ proptest::proptest! {
 
 #[test]
 fn false_constants_cannot_hide_invalid_weights() {
-    for function in ["#sum", "#sum+", "#min", "#max"] {
+    for function in ["#sum", "#sum+"] {
         let source = format!("0{function}{{word:#false}}0:-#false.");
         let error = admit_formula(
             source,

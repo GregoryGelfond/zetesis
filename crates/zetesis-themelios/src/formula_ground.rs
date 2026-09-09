@@ -633,9 +633,13 @@ impl Builder<'_> {
         }
         if !guards.is_empty() {
             let mut selected = HeadContributions::new(kind);
-            for (weight, condition) in activity.into_values() {
-                if let Some(weight) = weight {
-                    selected.push(weight, condition);
+            for (key, condition) in activity {
+                if let Some(contribution) = crate::formula_head_aggregate::contribution(
+                    *measure,
+                    key.first(),
+                    rule.location,
+                )? {
+                    selected.push(contribution, condition, self.budget, rule.location)?;
                 }
             }
             let within = self.aggregate_guards_with_capture(
@@ -703,10 +707,8 @@ impl Builder<'_> {
         support: &Support,
         rule: &RuleIr,
     ) -> Result<HeadGroup, FormulaFailure> {
-        let ChoiceIr {
-            measure, elements, ..
-        } = group;
         let mut result = HeadGroup::default();
+        let elements = &group.elements;
         for element in elements {
             let mut local = Join::new(
                 &element.condition,
@@ -746,7 +748,6 @@ impl Builder<'_> {
                                     &mut result,
                                     HeadKey::BooleanOccurrence(*occurrence),
                                     selected,
-                                    *measure,
                                     rule.location,
                                 )?;
                             }
@@ -759,20 +760,13 @@ impl Builder<'_> {
                                     atom.expect("atomic element key"),
                                 ),
                                 selected,
-                                *measure,
                                 rule.location,
                             )?;
                         }
                         HeadElementKey::Tuple(terms) => {
                             let key =
                                 HeadKey::Tuple(self.head_tuple(terms, &binding, rule.location)?);
-                            self.head_activity(
-                                &mut result,
-                                key,
-                                selected,
-                                *measure,
-                                rule.location,
-                            )?;
+                            self.head_activity(&mut result, key, selected, rule.location)?;
                         }
                     }
                 }
@@ -786,15 +780,9 @@ impl Builder<'_> {
         group: &mut HeadGroup,
         key: HeadKey,
         selected: usize,
-        measure: HeadMeasure,
         location: Location,
     ) -> Result<(), FormulaFailure> {
-        let first = match &key {
-            HeadKey::Tuple(tuple) => tuple.first(),
-            HeadKey::Atom(..) | HeadKey::BooleanOccurrence(_) => None,
-        };
-        let weight = crate::formula_head_aggregate::weight(measure, first, location)?;
-        let previous = group.activity.get(&key).map_or(0, |(_, node)| *node);
+        let previous = group.activity.get(&key).copied().unwrap_or(0);
         if !group.activity.contains_key(&key) {
             ceiling(
                 FormulaResource::AggregateElements,
@@ -804,7 +792,7 @@ impl Builder<'_> {
             )?;
         }
         let activity = self.or(previous, selected, location)?;
-        group.activity.insert(key, (weight, activity));
+        group.activity.insert(key, activity);
         Ok(())
     }
 
@@ -853,7 +841,7 @@ impl Builder<'_> {
 #[derive(Default)]
 struct HeadGroup {
     eligible: BTreeMap<usize, usize>,
-    activity: BTreeMap<HeadKey, (Option<i32>, usize)>,
+    activity: BTreeMap<HeadKey, usize>,
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -861,6 +849,15 @@ enum HeadKey {
     Tuple(Vec<Value>),
     Atom(DefaultNegation, usize),
     BooleanOccurrence(Location),
+}
+
+impl HeadKey {
+    fn first(&self) -> Option<&Value> {
+        match self {
+            Self::Tuple(tuple) => tuple.first(),
+            Self::Atom(..) | Self::BooleanOccurrence(_) => None,
+        }
+    }
 }
 
 /// One storage family for coalesced tuple contributions. Each entry retains
@@ -879,14 +876,28 @@ impl HeadContributions {
         }
     }
 
-    fn push(&mut self, weight: i32, condition: usize) {
-        match self {
-            Self::Numeric(elements) => elements.push(AggregateElement { weight, condition }),
-            Self::Extrema(elements) => elements.push(ValueExtremumElement {
-                value: Value::Number(weight),
-                condition,
-            }),
+    fn push(
+        &mut self,
+        contribution: crate::formula_head_aggregate::Contribution<'_>,
+        condition: usize,
+        budget: &mut Budget,
+        location: Location,
+    ) -> Result<(), FormulaFailure> {
+        use crate::formula_head_aggregate::Contribution;
+
+        match (self, contribution) {
+            (Self::Numeric(elements), Contribution::Numeric(weight)) => {
+                elements.push(AggregateElement { weight, condition });
+            }
+            (Self::Extrema(elements), Contribution::Extremum(value)) => {
+                elements.push(ValueExtremumElement {
+                    value: formula_support::copy(value, budget, location)?,
+                    condition,
+                });
+            }
+            _ => unreachable!("group measure determines its contribution family"),
         }
+        Ok(())
     }
 
     fn finish(self) -> GroundAggregate {

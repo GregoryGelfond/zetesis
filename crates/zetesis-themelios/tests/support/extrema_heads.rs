@@ -93,4 +93,90 @@ const CASES: &[(&str, &str)] = &[
     ),
     ("1#max{}1:-#false.", ":-#false,not 1#max{}1."),
     ("a.0#min{0: -a}0.", "a.{-a}.:-not 0#min{0: -a}0."),
+    ("#min{word:a}=word.", "{a}.:-not #min{word:a}=word."),
+    (
+        "#min{\"word\":a}=\"word\".",
+        "{a}.:-not #min{\"word\":a}=\"word\".",
+    ),
+    ("#min{-word:a}=-word.", "{a}.:-not #min{-word:a}=-word."),
+    ("#min{f(1):a}=f(1).", "{a}.:-not #min{f(1):a}=f(1)."),
+    ("#min{(1,2):a}=(1,2).", "{a}.:-not #min{(1,2):a}=(1,2)."),
+    ("#min{#inf:a}=#inf.", "{a}.:-not #min{#inf:a}=#inf."),
+    ("#min{#sup:a}=#sup.", "{a}.:-not #min{#sup:a}=#sup."),
+    ("#max{word:a}=word.", "{a}.:-not #max{word:a}=word."),
+    (
+        "#max{\"word\":a}=\"word\".",
+        "{a}.:-not #max{\"word\":a}=\"word\".",
+    ),
+    ("#max{-word:a}=-word.", "{a}.:-not #max{-word:a}=-word."),
+    ("#max{f(1):a}=f(1).", "{a}.:-not #max{f(1):a}=f(1)."),
+    ("#max{(1,2):a}=(1,2).", "{a}.:-not #max{(1,2):a}=(1,2)."),
+    ("#max{#inf:a}=#inf.", "{a}.:-not #max{#inf:a}=#inf."),
+    ("#max{#sup:a}=#sup.", "{a}.:-not #max{#sup:a}=#sup."),
+    (
+        "#min{word:a;\"word\":b}=word.",
+        "{a;b}.:-not #min{word:a;\"word\":b}=word.",
+    ),
+    (
+        "#max{word:a;\"word\":b}=word.",
+        "{a;b}.:-not #max{word:a;\"word\":b}=word.",
+    ),
+    (
+        "#min{word,k:a;word,k:b}=word.",
+        "{a;b}.:-not #min{word,k:a;word,k:b}=word.",
+    ),
+    (
+        "#max{word:a;f(1):a}=f(1).",
+        "{a}.:-not #max{word:a;f(1):a}=f(1).",
+    ),
+    (
+        "{a}.#min{word:not a;\"word\":b}=word.",
+        "{a;b}.:-not #min{word:not a;\"word\":b}=word.",
+    ),
+    (
+        "#min{word:#true;\"word\":b}=word.",
+        "{b}.:-not #min{word:#true;\"word\":b}=word.",
+    ),
+    (
+        "#max{word:#false;\"word\":b}=word.",
+        "{b}.:-not #max{word:#false;\"word\":b}=word.",
+    ),
+    ("#min{word:a:a}=word.", "{a:a}.:-not #min{word:a,a}=word."),
+    (
+        "{b}.#max{word:a:not b}=word.",
+        "{b}.{a:not b}.:-not #max{word:a,not b}=word.",
+    ),
+    (
+        "{e}.#max{word:a;f(1):b}=word:-e.",
+        "{e}.{a;b}:-e.:-e,not #max{word:a;f(1):b}=word.",
+    ),
+    ("#min{#sup:a}=#sup.", "{a}.:-not #min{#sup:a}=#sup."),
+    ("#max{#inf:a}=#inf.", "{a}.:-not #max{#inf:a}=#inf."),
+    (
+        "d(word;f(1)).#min{X:p(X):d(X)}=word.",
+        "d(word;f(1)).{p(X):d(X)}.:-not #min{X:p(X),d(X)}=word.",
+    ),
+    ("#min{word:a}.", "{a}."),
+    ("#max{f(1):a}.", "{a}."),
+    (
+        "#min{f(g(2),z):a}=f(g(2),z).",
+        "{a}.:-not #min{f(g(2),z):a}=f(g(2),z).",
+    ),
+    ("#max{-f(2):a}=-f(2).", "{a}.:-not #max{-f(2):a}=-f(2)."),
+    (
+        "#min{word:not not a}=word.",
+        ":-not #min{word:not not a}=word.",
+    ),
+    (
+        "#max{word:not #false}=word.",
+        ":-not #max{word:not #false}=word.",
+    ),
+    (
+        "#min{word:not not #true}=word.",
+        ":-not #min{word:not not #true}=word.",
+    ),
+    (
+        "#min{word:#false;word:a}=word.",
+        "{a}.:-not #min{word:#false;word:a}=word.",
+    ),
 ];

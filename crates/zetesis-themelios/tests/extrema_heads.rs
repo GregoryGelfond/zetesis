@@ -1,9 +1,11 @@
-//! Numeric extrema heads retain permissions independently of selected values.
+//! Extrema heads retain permissions independently of selected logical values.
 
 #[path = "support/extrema_heads.rs"]
 mod cases;
 #[path = "support/finite_bindings.rs"]
 mod reference;
+#[path = "support/logical_extrema_semantics.rs"]
+mod logical;
 
 use std::collections::BTreeSet;
 
@@ -239,24 +241,169 @@ fn aliased_atoms_select_every_eligible_tuple() {
 }
 
 #[test]
-fn invalid_declared_values_survive_false_activation() {
+fn logical_values_remain_admitted_under_false_activation() {
     for function in ["#min", "#max"] {
         for value in ["word", "#inf", "#sup", "f(1)", "(1,2)"] {
-            profile(
-                &format!("0<={function}{{{value}:a}}:-#false."),
-                ProfileFeature::HeadAggregateWeight,
+            assert_eq!(
+                native(&input(&format!("0<={function}{{{value}:a}}:-#false."))),
+                Models::from([BTreeSet::new()]),
             );
         }
     }
 }
 
 #[test]
-fn completed_nonnumeric_values_remain_refused() {
+fn completed_logical_values_keep_element_permission() {
+    let expected = Models::from([BTreeSet::from(["v(word)".into(), "a".into()])]);
     for function in ["#min", "#max"] {
-        profile(
-            &format!("v(word).0<={function}{{X:a:v(X)}}."),
-            ProfileFeature::HeadAggregateWeight,
+        assert_eq!(
+            native(&input(&format!("v(word).{function}{{X:a:v(X)}}=word."))),
+            expected,
         );
+    }
+}
+
+#[test]
+fn real_empty_sentinels_do_not_erase_head_permission() {
+    for source in ["#min{#sup:a}=#sup.", "#max{#inf:a}=#inf."] {
+        assert_eq!(
+            native(&input(source)),
+            Models::from([BTreeSet::new(), BTreeSet::from(["a".into()])]),
+        );
+    }
+}
+
+#[test]
+fn logical_term_order_is_distinct_from_storage_order() {
+    assert_eq!(
+        native(&input("#min{word:a;\"word\":b}=word.")),
+        Models::from([
+            BTreeSet::from(["a".into()]),
+            BTreeSet::from(["a".into(), "b".into()]),
+        ]),
+    );
+}
+
+#[test]
+fn logical_aliases_retain_each_positive_permission() {
+    for function in ["#min", "#max"] {
+        assert_eq!(
+            native(&input(&format!("{function}{{f(1),k:a;f(1),k:b}}=f(1)."))),
+            Models::from([
+                BTreeSet::from(["a".into()]),
+                BTreeSet::from(["b".into()]),
+                BTreeSet::from(["a".into(), "b".into()]),
+            ]),
+        );
+    }
+}
+
+#[test]
+fn logical_boolean_values_create_no_atoms() {
+    for function in ["#min", "#max"] {
+        for head in ["#true", "not #false", "not not #true"] {
+            let admitted = input(&format!("{function}{{f(1):{head}}}=f(1)."));
+            assert!(admitted.atoms().is_empty());
+            assert_eq!(native(&admitted), Models::from([BTreeSet::new()]));
+        }
+    }
+}
+
+#[test]
+fn logical_keys_retain_the_complete_tuple_budget() {
+    for function in ["#min", "#max"] {
+        let limits = FormulaLimits {
+            aggregate: zetesis_ferraris::AggregateLimits {
+                max_elements: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert!(
+            admit_formula(
+                format!("{function}{{f(1),k:a;f(1),k:b}}=f(1)."),
+                options(),
+                ExpansionLimits::default(),
+                limits,
+            )
+            .is_ok()
+        );
+        let error = admit_formula(
+            format!("{function}{{f(1),k:a;f(1),l:a}}=f(1)."),
+            options(),
+            ExpansionLimits::default(),
+            limits,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(
+                error,
+                FormulaFailure::Limit {
+                    resource: FormulaResource::AggregateElements,
+                    limit: 1,
+                    observed: 2,
+                    ..
+                }
+            ),
+            "{error}"
+        );
+        assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+    }
+}
+
+#[test]
+fn logical_values_retain_scalar_storage_limits() {
+    let source = "#min{f(\"retained payload\"),k:a}=f(\"retained payload\").";
+    let error = admit_formula(
+        source.into(),
+        options(),
+        ExpansionLimits {
+            max_scalar_bytes: 0,
+            ..Default::default()
+        },
+        FormulaLimits::default(),
+    )
+    .unwrap_err();
+    assert!(
+        matches!(
+            error,
+            FormulaFailure::Expansion(ExpansionFailure::Limit {
+                resource: zetesis_themelios::ExpansionResource::ScalarBytes,
+                ..
+            })
+        ),
+        "{error}"
+    );
+    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+}
+
+#[test]
+fn logical_extrema_do_not_certify_atom_counts() {
+    for source in [
+        "#min{f(1):a;f(1):b}=f(1).{a;c}1.{b;d}1.",
+        "#max{word:#true;word:a;word:b}=word.{a;c}1.{b;d}1.",
+    ] {
+        let ordinary = input(source);
+        let planned = prepare_formula(
+            source.into(),
+            options(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        )
+        .unwrap()
+        .ground_with_count_plan(
+            zetesis_themelios::CountPlanLimits::default(),
+            &zetesis_cpu::Control::default(),
+            None,
+        )
+        .unwrap();
+        assert!(matches!(
+            planned.count_plan(),
+            zetesis_themelios::CountPlanStatus::NoPlan(_)
+        ));
+        assert_eq!(planned.atoms(), ordinary.atoms());
+        assert_eq!(planned.theory().nodes(), ordinary.theory().nodes());
+        assert_eq!(planned.theory().roots(), ordinary.theory().roots());
     }
 }
 
@@ -318,10 +465,12 @@ fn numeric_neighbors_remain_distinct_from_empty_values() {
 #[test]
 fn extrema_producers_preserve_objective_refusals() {
     for function in ["#min", "#max"] {
-        profile(
-            &format!("1{function}{{1:a}}1.#minimize{{1:a}}."),
-            ProfileFeature::ObjectiveAggregateDependency,
-        );
+        for value in ["1", "word", "f(1)", "#inf", "#sup"] {
+            profile(
+                &format!("{function}{{{value}:a}}={value}.#minimize{{1:a}}."),
+                ProfileFeature::ObjectiveAggregateDependency,
+            );
+        }
     }
 }
 
@@ -390,6 +539,28 @@ fn original_sources_remain_owned() {
 
 proptest::proptest! {
     #![proptest_config(proptest::test_runner::Config::with_cases(128))]
+    #[test]
+    fn logical_extrema_match_independent_frozen_worlds(
+        rows in proptest::collection::vec((0_u8..9, 0_u8..3, 0_u8..12, 0_u8..10), 1..7),
+        bound in 0_u8..9, relation in 0_u8..6, body in 0_u8..4,
+        maximum in proptest::bool::ANY,
+    ) {
+        logical::Selection { rows, bound, relation, body, maximum }.check_frozen();
+    }
+
+    #[test]
+    fn duplicate_logical_rows_preserve_full_models(
+        rows in proptest::collection::vec((0_u8..9, 0_u8..3, 0_u8..12, 0_u8..10), 1..6),
+        bound in 0_u8..9, relation in 0_u8..6, body in 0_u8..4,
+        maximum in proptest::bool::ANY,
+    ) {
+        let mut selection = logical::Selection { rows, bound, relation, body, maximum };
+        let expected = native(&input(&selection.source()));
+        selection.rows.extend(selection.rows.clone());
+        selection.rows.reverse();
+        proptest::prop_assert_eq!(native(&input(&selection.source())), expected);
+    }
+
     #[test]
     fn extrema_bounds_match_direct_selection_truth(
         first in -3_i32..4, second in -3_i32..4, bound in -3_i32..4,

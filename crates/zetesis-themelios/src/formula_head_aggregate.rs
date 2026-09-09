@@ -1,4 +1,4 @@
-//! Finite numeric aggregate heads retain separate permission and measure.
+//! Finite aggregate heads retain separate permission and measure.
 //! Complete tuple validation precedes support or final lowering. Every measure
 //! permits either tuple/atom alias direction. Neither bounds nor tuple weights
 //! supply bindings or support.
@@ -56,10 +56,10 @@ impl Compiler<'_> {
             // are checked by the same selector on complete possible local rows.
             match tuple.first() {
                 Some(Term::Constant(value)) => {
-                    weight(measure, Some(value), self.location)?;
+                    contribution(measure, Some(value), self.location)?;
                 }
                 None => {
-                    weight(measure, None, self.location)?;
+                    contribution(measure, None, self.location)?;
                 }
                 Some(Term::Variable(_)) => {}
             }
@@ -159,7 +159,7 @@ pub(super) fn validate_group(
                 )?;
                 tuple.push(value.clone());
             }
-            weight(*measure, tuple.first(), location)?;
+            contribution(*measure, tuple.first(), location)?;
             let head = head_identity(&element.head, &binding, budget, location)?;
             if tuples.get(&tuple).is_some_and(|previous| *previous != head)
                 || head
@@ -229,28 +229,40 @@ fn head_identity(
     })
 }
 
-/// Numeric contribution is independent of permission to select the head.
-/// Count ignores tuple values; other measures require a numeric first term. Zero sum+
-/// contributes nothing but never removes an eligible head. Negative sum+ values
-/// retain an explicit profile refusal pending a separate semantic contract.
-pub(super) fn weight(
+/// A selected tuple contributes either an integer or a complete logical value.
+/// Borrowing preserves allocation-free validation; final lowering charges the
+/// retained extremum value before copying its scalar or structural payload.
+pub(super) enum Contribution<'a> {
+    Numeric(i32),
+    Extremum(&'a Value),
+}
+
+/// Contribution is independent of permission to select the head. Count ignores
+/// tuple values; sums require a numeric first term, and extrema retain its full
+/// logical value. Zero sum+ contributes nothing without removing permission.
+/// Missing measures, nonnumeric sums and negative sum+ retain explicit refusals.
+pub(super) fn contribution(
     measure: HeadMeasure,
     first: Option<&Value>,
     location: Location,
-) -> Result<Option<i32>, FormulaFailure> {
+) -> Result<Option<Contribution<'_>>, FormulaFailure> {
     if measure == HeadMeasure::Count {
-        return Ok(Some(1));
+        return Ok(Some(Contribution::Numeric(1)));
+    }
+    if matches!(measure, HeadMeasure::Min | HeadMeasure::Max) {
+        let value = first.ok_or_else(|| {
+            FormulaFailure::from(unsupported(ProfileFeature::HeadAggregateWeight, location))
+        })?;
+        crate::formula_assignment::extremum_value(value, location)?;
+        return Ok(Some(Contribution::Extremum(value)));
     }
     let Some(Value::Number(value)) = first else {
         return Err(unsupported(ProfileFeature::HeadAggregateWeight, location).into());
     };
-    if matches!(measure, HeadMeasure::Min | HeadMeasure::Max) {
-        crate::formula_assignment::extremum_value(&Value::Number(*value), location)?;
-    }
     if measure == HeadMeasure::SumPlus && *value < 0 {
         return Err(unsupported(ProfileFeature::HeadAggregateWeight, location).into());
     }
-    Ok((measure != HeadMeasure::SumPlus || *value > 0).then_some(*value))
+    Ok((measure != HeadMeasure::SumPlus || *value > 0).then_some(Contribution::Numeric(*value)))
 }
 
 #[cfg(test)]

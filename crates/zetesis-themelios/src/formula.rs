@@ -565,12 +565,13 @@ pub(crate) struct Compiled {
 /// Atom-only count certificates require wholly unsigned atomic groups with
 /// a tuple/atom bijection. Head bounds are constraints and never invent support.
 /// Numeric measure is separate from permission: zero-weight heads remain
-/// selectable. Missing or nonnumeric weights and negative sum+ head weights
-/// have an explicit zetesis profile refusal, including closed weights in
+/// selectable. Missing measures, nonnumeric sum weights and negative sum+ head
+/// weights have an explicit zetesis profile refusal, including closed weights in
 /// statically inactive rules. Positive, default-negated and double-negated
 /// ordinary element conditions retain their original eligibility formulas.
-/// Min/max guards use ASP term order and real empty extrema; first tuple values
-/// remain numeric, with the existing internal integer-endpoint limitation.
+/// Min/max first tuple values and guards use complete finite logical values in
+/// ASP term order, including genuine extrema and structured values. Empty min is
+/// `#sup`; empty max is `#inf`. The integer-endpoint limitation remains separate.
 /// Necessary producer guards are double-negated and therefore leave reduct subsets
 /// unconstrained whenever the candidate passes them. Grounding uses complete
 /// relational joins over a bounded possible-positive closure. Gates are ignored
