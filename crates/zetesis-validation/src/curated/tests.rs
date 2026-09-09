@@ -1,5 +1,5 @@
 //! Adversarial contracts are checked independently of the manifest seal.
-use super::{Error, Limits, Resource, contracts, cpp, document, files};
+use super::{Error, Limits, Resource, assertion, contracts, document, files};
 use std::path::Path;
 
 fn document() -> document::Document {
@@ -192,7 +192,7 @@ fn atom_occurrences_obey_their_inclusive_ceiling() {
 #[test]
 fn adjacent_literals_retain_their_decoded_bytes() {
     assert_eq!(
-        cpp::literals(r#""a.\n" /*x*/ "b(\"x\").""#).unwrap(),
+        assertion::literals(r#""a.\n" /*x*/ "b(\"x\").""#).unwrap(),
         "a.\nb(\"x\")."
     );
 }
@@ -206,26 +206,26 @@ fn unsupported_cpp_literals_are_explicit_refusals() {
         r#""\v""#,
         "",
     ] {
-        assert!(cpp::literals(literal).is_err(), "{literal}");
+        assert!(assertion::literals(literal).is_err(), "{literal}");
     }
 }
 #[test]
 fn delimiters_inside_strings_do_not_split_arguments() {
     let text = r#"("p(1;2).", {"x,]"}, /* ) */ {1,2})"#;
-    let (end, commas) = cpp::balanced(text, 0).unwrap();
+    let (end, commas) = assertion::balanced(text, 0).unwrap();
     assert_eq!(end, text.len() - 1);
     assert_eq!(commas.len(), 2);
 }
 #[test]
 fn malformed_cpp_delimiters_are_refused() {
     for text in ["([)]", "(\"p.", "(p", "('x')", "abc()", "(α)"] {
-        assert!(cpp::balanced(text, 0).is_err(), "{text}");
+        assert!(assertion::balanced(text, 0).is_err(), "{text}");
     }
 }
 #[test]
 fn helper_output_keeps_model_multiplicity() {
     assert_eq!(
-        cpp::helper_models("([[],[]],[])").unwrap(),
+        assertion::helper_models("([[],[]],[])").unwrap(),
         vec![Vec::<String>::new(), Vec::new()]
     );
 }
@@ -252,5 +252,63 @@ fn a_directory_is_not_a_source_file() {
     assert!(matches!(
         files::read(Path::new(root.path()), 10, Resource::SourceBytes),
         Err(Error::Path(_))
+    ));
+}
+
+#[test]
+fn changed_source_cannot_match_the_preserved_assertion() {
+    let document = document();
+    let case = &document.cases[0];
+    assert!(matches!(
+        contracts::source(case, "different."),
+        Err(Error::Contract(_))
+    ));
+}
+
+#[test]
+fn changed_helper_arguments_cannot_match_the_assertion() {
+    let mut document = document();
+    let case = &mut document.cases[0];
+    let (source, _, _) = assertion::assertion(&case.provenance.assertion).unwrap();
+    case.provenance.helper_arguments = vec!["different".into()];
+    assert!(matches!(
+        contracts::source(case, &source),
+        Err(Error::Contract(_))
+    ));
+}
+
+#[test]
+fn changed_helper_output_cannot_match_the_assertion() {
+    let mut document = document();
+    let case = &mut document.cases[0];
+    let (source, _, _) = assertion::assertion(&case.provenance.assertion).unwrap();
+    case.provenance.expected_helper_output = "([],[])".into();
+    assert!(matches!(
+        contracts::source(case, &source),
+        Err(Error::Contract(_))
+    ));
+}
+
+#[test]
+fn changed_prefixes_cannot_match_the_assertion() {
+    let mut document = document();
+    let case = &mut document.cases[0];
+    let (source, _, _) = assertion::assertion(&case.provenance.assertion).unwrap();
+    case.contract.prefixes = vec!["different".into()];
+    assert!(matches!(
+        contracts::source(case, &source),
+        Err(Error::Contract(_))
+    ));
+}
+
+#[test]
+fn changed_projected_models_cannot_match_the_assertion() {
+    let mut document = document();
+    let case = &mut document.cases[0];
+    let (source, _, _) = assertion::assertion(&case.provenance.assertion).unwrap();
+    case.contract.helper_models.clear();
+    assert!(matches!(
+        contracts::source(case, &source),
+        Err(Error::Contract(_))
     ));
 }

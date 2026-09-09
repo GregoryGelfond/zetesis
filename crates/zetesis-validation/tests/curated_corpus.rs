@@ -6,11 +6,11 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use zetesis_validation::curated::{self, Corpus, Error, Limits, Resource};
 
-fn legacy() -> PathBuf {
+fn upstream_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../validation/upstream/clingo-5.8.2")
 }
 fn curated_root() -> PathBuf {
-    legacy().join("curated")
+    upstream_root().join("curated")
 }
 fn verified() -> Corpus {
     curated::open(&curated_root(), Limits::default()).unwrap()
@@ -32,22 +32,6 @@ fn isolated() -> tempfile::TempDir {
     }
     directory
 }
-fn copied_legacy() -> tempfile::TempDir {
-    let directory = tempfile::tempdir().unwrap();
-    copy_file(
-        &legacy().join("cases.jsonl"),
-        &directory.path().join("cases.jsonl"),
-    );
-    copy_file(
-        &legacy().join("originals/LICENSE.md"),
-        &directory.path().join("originals/LICENSE.md"),
-    );
-    for origin in verified().origins() {
-        let relative = Path::new("originals").join(origin.path());
-        copy_file(&legacy().join(&relative), &directory.path().join(relative));
-    }
-    directory
-}
 fn assert_limit(error: &Error, resource: Resource, observed: usize, limit: usize) {
     assert!(
         matches!(error, Error::Limit { resource: actual, observed: amount, limit: allowance }
@@ -65,93 +49,47 @@ fn verification_needs_only_curated_data() {
 }
 
 #[test]
-fn retained_sources_match_every_legacy_byte() {
+fn full_models_match_independently_captured_reference_envelopes() {
+    let records: Vec<Value> =
+        serde_json::from_str(include_str!("support/selected/reports.json")).unwrap();
     let corpus = verified();
-    let original = fs::read_to_string(legacy().join("cases.jsonl")).unwrap();
-    for (case, line) in corpus.cases().iter().zip(original.lines()) {
-        let old: Value = serde_json::from_str(line).unwrap();
-        assert_eq!(case.id(), old["id"].as_str().unwrap());
-        assert_eq!(
-            case.source().as_bytes(),
-            old["source"].as_str().unwrap().as_bytes()
-        );
-        assert_eq!(case.source_sha256(), old["source_sha256"].as_str().unwrap());
-    }
-}
-
-#[test]
-fn complete_model_contracts_retain_all_seventy_three_occurrences() {
-    let corpus = verified();
-    let original = fs::read_to_string(legacy().join("cases.jsonl")).unwrap();
-    for (case, line) in corpus.cases().iter().zip(original.lines()) {
-        let old: Value = serde_json::from_str(line).unwrap();
-        let models: Vec<Vec<String>> = serde_json::from_value(old["models"].clone()).unwrap();
-        assert_eq!(case.contract().full_models(), models);
-    }
-    assert_eq!(
-        corpus
-            .cases()
+    assert_eq!(records.len(), corpus.cases().len());
+    let mut occurrences = 0;
+    for case in corpus.cases() {
+        let matching: Vec<_> = records
             .iter()
-            .map(|case| case.contract().full_models().len())
-            .sum::<usize>(),
-        73
-    );
-}
-
-#[test]
-fn helper_views_retain_the_original_projection_contract() {
-    let corpus = verified();
-    let original = fs::read_to_string(legacy().join("cases.jsonl")).unwrap();
-    for (case, line) in corpus.cases().iter().zip(original.lines()) {
-        let old: Value = serde_json::from_str(line).unwrap();
-        let prefixes: Vec<String> = serde_json::from_value(old["filters"].clone()).unwrap();
-        let models: Vec<Vec<String>> =
-            serde_json::from_value(old["expected_helper_models"].clone()).unwrap();
-        assert_eq!(case.contract().prefixes(), prefixes);
-        assert_eq!(case.contract().helper_models(), models);
+            .filter(|record| record["id"] == case.id())
+            .collect();
+        assert_eq!(matching.len(), 1, "one reference envelope per source");
+        let reference = &matching[0]["reference"];
+        assert_eq!(reference["Models"]["More"], "no");
+        let mut expected: Vec<Vec<String>> = reference["Call"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
+            .map(|witness| serde_json::from_value(witness["Value"].clone()).unwrap())
+            .collect();
+        for model in &mut expected {
+            model.sort();
+        }
+        expected.sort();
+        let mut actual = case.contract().full_models().to_vec();
+        for model in &mut actual {
+            model.sort();
+        }
+        actual.sort();
+        assert_eq!(actual, expected, "{}", case.id());
+        occurrences += actual.len();
     }
+    assert_eq!(occurrences, 73);
 }
 
 #[test]
-fn provenance_resolves_to_exact_original_assertions() {
-    for case in verified().cases() {
-        let provenance = case.provenance();
-        let original =
-            fs::read_to_string(legacy().join("originals").join(provenance.source_file())).unwrap();
-        assert_eq!(&original[provenance.bytes()], provenance.assertion());
-        assert_eq!(
-            original[..provenance.bytes().start]
-                .bytes()
-                .filter(|&byte| byte == b'\n')
-                .count()
-                + 1,
-            *provenance.lines().start()
-        );
-        assert_eq!(
-            original[..provenance.bytes().end]
-                .bytes()
-                .filter(|&byte| byte == b'\n')
-                .count()
-                + 1,
-            *provenance.lines().end()
-        );
-        assert!(case.id().ends_with(&format!(
-            "/{}/{:02}",
-            provenance.section(),
-            provenance.assertion_ordinal()
-        )));
-        assert!(provenance.helper_arguments().len() <= 1);
-        assert!(!provenance.expected_helper_output().is_empty());
-    }
-}
-
-#[test]
-fn copyright_notices_remain_verbatim() {
+fn provenance_identifies_the_public_originals() {
     let corpus = verified();
+    assert_eq!(corpus.origins().count(), 3);
     for origin in corpus.origins() {
-        let original = fs::read_to_string(legacy().join("originals").join(origin.path())).unwrap();
-        let notice = &original[..original.find("// }}}").unwrap() + 6];
-        assert_eq!(origin.copyright_notice(), notice);
         assert_eq!(
             origin.url(),
             format!(
@@ -161,8 +99,73 @@ fn copyright_notices_remain_verbatim() {
             )
         );
         assert_eq!(origin.sha256().len(), 64);
+        assert!(
+            origin
+                .copyright_notice()
+                .contains("Copyright 2017 Roland Kaminski")
+        );
+        assert!(
+            origin
+                .copyright_notice()
+                .contains("Permission is hereby granted")
+        );
+        assert!(
+            origin
+                .copyright_notice()
+                .contains("THE SOFTWARE IS PROVIDED")
+        );
     }
-    assert!(corpus.cases().iter().all(|case| case.license() == "MIT"));
+    for case in corpus.cases() {
+        assert_eq!(case.license(), "MIT");
+        let provenance = case.provenance();
+        assert!(
+            corpus
+                .origins()
+                .any(|origin| origin.path() == provenance.source_file())
+        );
+        assert_eq!(provenance.bytes().len(), provenance.assertion().len());
+        assert_eq!(
+            *provenance.lines().end() - *provenance.lines().start(),
+            provenance
+                .assertion()
+                .bytes()
+                .filter(|byte| *byte == b'\n')
+                .count()
+        );
+        assert!(case.id().ends_with(&format!(
+            "/{}/{:02}",
+            provenance.section(),
+            provenance.assertion_ordinal()
+        )));
+    }
+}
+
+#[test]
+fn license_bytes_obey_the_inclusive_limit() {
+    let count = fs::read(curated_root().join("LICENSE.md")).unwrap().len();
+    assert!(
+        curated::open(
+            &curated_root(),
+            Limits {
+                license_bytes: count,
+                ..Limits::default()
+            }
+        )
+        .is_ok()
+    );
+    assert_limit(
+        &curated::open(
+            &curated_root(),
+            Limits {
+                license_bytes: count - 1,
+                ..Limits::default()
+            },
+        )
+        .unwrap_err(),
+        Resource::LicenseBytes,
+        count,
+        count - 1,
+    );
 }
 
 #[test]
@@ -303,133 +306,6 @@ fn an_insufficient_case_limit_cannot_narrow_the_target() {
     );
 }
 
-#[test]
-fn import_reproduces_the_sealed_curated_data() {
-    let parent = tempfile::tempdir().unwrap();
-    let destination = parent.path().join("curated");
-    let corpus = curated::import_legacy(&legacy(), &destination, Limits::default()).unwrap();
-    assert_eq!(corpus.root(), destination.canonicalize().unwrap());
-    for name in ["manifest.json", "LICENSE.md"] {
-        assert_eq!(
-            fs::read(destination.join(name)).unwrap(),
-            fs::read(curated_root().join(name)).unwrap()
-        );
-    }
-    for case in corpus.cases() {
-        assert_eq!(
-            fs::read(destination.join(case.path())).unwrap(),
-            fs::read(curated_root().join(case.path())).unwrap()
-        );
-    }
-}
-
-#[test]
-fn import_never_replaces_an_existing_directory() {
-    let parent = tempfile::tempdir().unwrap();
-    fs::write(parent.path().join("retained"), b"parent data").unwrap();
-    assert!(matches!(
-        curated::import_legacy(&legacy(), parent.path(), Limits::default()),
-        Err(Error::DestinationExists(_))
-    ));
-    assert_eq!(
-        fs::read(parent.path().join("retained")).unwrap(),
-        b"parent data"
-    );
-}
-
-#[test]
-fn import_never_replaces_an_existing_file() {
-    let parent = tempfile::tempdir().unwrap();
-    let destination = parent.path().join("retained");
-    fs::write(&destination, b"existing data").unwrap();
-    assert!(matches!(
-        curated::import_legacy(&legacy(), &destination, Limits::default()),
-        Err(Error::DestinationExists(_))
-    ));
-    assert_eq!(fs::read(destination).unwrap(), b"existing data");
-}
-
-#[test]
-fn import_never_replaces_a_hard_link_to_its_catalog() {
-    let parent = tempfile::tempdir().unwrap();
-    let catalog = parent.path().join("catalog");
-    fs::copy(legacy().join("cases.jsonl"), &catalog).unwrap();
-    let destination = parent.path().join("alias");
-    fs::hard_link(&catalog, &destination).unwrap();
-    let before = fs::read(&catalog).unwrap();
-    assert!(matches!(
-        curated::import_legacy(&legacy(), &destination, Limits::default()),
-        Err(Error::DestinationExists(_))
-    ));
-    assert_eq!(fs::read(catalog).unwrap(), before);
-}
-
-#[test]
-fn import_cannot_publish_inside_preserved_originals() {
-    let directory = copied_legacy();
-    let destination = directory.path().join("originals/curated");
-    assert!(matches!(
-        curated::import_legacy(directory.path(), &destination, Limits::default()),
-        Err(Error::Path(_))
-    ));
-    assert!(!destination.exists());
-}
-
-#[test]
-fn a_damaged_original_fails_before_publication() {
-    let directory = copied_legacy();
-    let origin = verified().origins().next().unwrap().path().to_owned();
-    fs::write(directory.path().join("originals").join(origin), b"damaged").unwrap();
-    let destination = directory.path().join("curated");
-    assert!(matches!(
-        curated::import_legacy(directory.path(), &destination, Limits::default()),
-        Err(Error::Digest { .. })
-    ));
-    assert!(!destination.exists());
-}
-
-#[test]
-fn a_changed_assertion_coordinate_fails_before_publication() {
-    let directory = copied_legacy();
-    let catalog = fs::read_to_string(directory.path().join("cases.jsonl")).unwrap();
-    let mut lines = catalog.lines();
-    let mut first: Value = serde_json::from_str(lines.next().unwrap()).unwrap();
-    first["byte_start"] = Value::from(0);
-    let mut changed = serde_json::to_string(&first).unwrap();
-    changed.push('\n');
-    for line in lines {
-        changed.push_str(line);
-        changed.push('\n');
-    }
-    fs::write(directory.path().join("cases.jsonl"), changed).unwrap();
-    let destination = directory.path().join("curated");
-    assert!(matches!(
-        curated::import_legacy(directory.path(), &destination, Limits::default()),
-        Err(Error::Contract(_))
-    ));
-    assert!(!destination.exists());
-}
-
-#[test]
-fn native_admission_labels_do_not_change_the_curated_target() {
-    let directory = copied_legacy();
-    let catalog = fs::read_to_string(directory.path().join("cases.jsonl")).unwrap();
-    let mut changed = String::new();
-    for line in catalog.lines() {
-        let mut case: Value = serde_json::from_str(line).unwrap();
-        case["native"] = Value::from("policy-owned-elsewhere");
-        changed.push_str(&serde_json::to_string(&case).unwrap());
-        changed.push('\n');
-    }
-    fs::write(directory.path().join("cases.jsonl"), changed).unwrap();
-    let destination = directory.path().join("curated");
-    curated::import_legacy(directory.path(), &destination, Limits::default()).unwrap();
-    assert_eq!(
-        fs::read(destination.join("manifest.json")).unwrap(),
-        fs::read(curated_root().join("manifest.json")).unwrap()
-    );
-}
-
 #[cfg(unix)]
 #[test]
 fn a_source_symlink_cannot_escape_the_corpus_root() {
@@ -444,19 +320,6 @@ fn a_source_symlink_cannot_escape_the_corpus_root() {
         curated::open(directory.path(), Limits::default()),
         Err(Error::Path(_))
     ));
-}
-
-#[cfg(unix)]
-#[test]
-fn import_never_replaces_a_dangling_symlink() {
-    let parent = tempfile::tempdir().unwrap();
-    let destination = parent.path().join("dangling");
-    std::os::unix::fs::symlink("missing", &destination).unwrap();
-    assert!(matches!(
-        curated::import_legacy(&legacy(), &destination, Limits::default()),
-        Err(Error::DestinationExists(_))
-    ));
-    assert_eq!(fs::read_link(destination).unwrap(), Path::new("missing"));
 }
 
 #[test]
@@ -488,135 +351,6 @@ fn the_verify_command_does_not_publish_success_for_a_missing_corpus() {
     assert_eq!(output.status.code(), Some(2));
     assert!(output.stdout.is_empty());
     assert!(!output.stderr.is_empty());
-}
-
-fn change_first_legacy(directory: &Path, field: &str, value: Value) {
-    let path = directory.join("cases.jsonl");
-    let catalog = fs::read_to_string(&path).unwrap();
-    let mut cases = catalog
-        .lines()
-        .map(|line| serde_json::from_str::<Value>(line).unwrap());
-    let mut first = cases.next().unwrap();
-    first[field] = value;
-    let mut changed = serde_json::to_string(&first).unwrap();
-    changed.push('\n');
-    for case in cases {
-        changed.push_str(&serde_json::to_string(&case).unwrap());
-        changed.push('\n');
-    }
-    fs::write(path, changed).unwrap();
-}
-
-#[test]
-fn altered_original_authority_cannot_be_imported() {
-    for (field, value) in [
-        ("source_file", Value::from("unknown.cc")),
-        ("byte_end", Value::from(u64::MAX)),
-        ("file_sha256", Value::from("0".repeat(64))),
-        ("section", Value::from("different section")),
-        ("assertion_ordinal", Value::from(999)),
-    ] {
-        let directory = copied_legacy();
-        change_first_legacy(directory.path(), field, value);
-        let destination = directory.path().join("new-corpus");
-        assert!(
-            matches!(
-                curated::import_legacy(directory.path(), &destination, Limits::default()),
-                Err(Error::Contract(_))
-            ),
-            "{field}"
-        );
-        assert!(!destination.exists());
-    }
-}
-
-#[test]
-fn altered_decoded_assertions_cannot_be_imported() {
-    for (field, value) in [
-        ("source", Value::from("different.")),
-        ("helper_arguments", serde_json::json!(["{\"different\"}"])),
-        ("expected_helper_output", Value::from("([],[])")),
-        ("filters", serde_json::json!(["different"])),
-        ("expected_helper_models", serde_json::json!([])),
-    ] {
-        let directory = copied_legacy();
-        change_first_legacy(directory.path(), field, value);
-        let destination = directory.path().join("new-corpus");
-        assert!(
-            matches!(
-                curated::import_legacy(directory.path(), &destination, Limits::default()),
-                Err(Error::Contract(_))
-            ),
-            "{field}"
-        );
-        assert!(!destination.exists());
-    }
-}
-
-#[test]
-fn unknown_catalog_fields_cannot_change_import_policy() {
-    let directory = copied_legacy();
-    change_first_legacy(directory.path(), "skip_verification", Value::Bool(true));
-    let destination = directory.path().join("new-corpus");
-    let error =
-        curated::import_legacy(directory.path(), &destination, Limits::default()).unwrap_err();
-    assert!(matches!(error, Error::Json(_)));
-    assert!(
-        std::error::Error::source(&error)
-            .unwrap()
-            .is::<serde_json::Error>()
-    );
-    assert!(!destination.exists());
-}
-
-#[test]
-fn invalid_catalog_utf8_never_creates_output() {
-    let directory = copied_legacy();
-    fs::write(directory.path().join("cases.jsonl"), [0xff]).unwrap();
-    let destination = directory.path().join("new-corpus");
-    assert!(matches!(
-        curated::import_legacy(directory.path(), &destination, Limits::default()),
-        Err(Error::Contract(_))
-    ));
-    assert!(!destination.exists());
-}
-
-#[test]
-fn original_byte_limits_include_the_largest_authority() {
-    let length = verified()
-        .origins()
-        .map(|origin| {
-            fs::read(legacy().join("originals").join(origin.path()))
-                .unwrap()
-                .len()
-        })
-        .chain([fs::read(legacy().join("originals/LICENSE.md"))
-            .unwrap()
-            .len()])
-        .max()
-        .unwrap();
-    let parent = tempfile::tempdir().unwrap();
-    let limits = Limits {
-        original_bytes: length,
-        ..Limits::default()
-    };
-    curated::import_legacy(&legacy(), &parent.path().join("fits"), limits).unwrap();
-    let refused = parent.path().join("refused");
-    assert_limit(
-        &curated::import_legacy(
-            &legacy(),
-            &refused,
-            Limits {
-                original_bytes: length - 1,
-                ..limits
-            },
-        )
-        .unwrap_err(),
-        Resource::OriginalBytes,
-        length,
-        length - 1,
-    );
-    assert!(!refused.exists());
 }
 
 #[test]

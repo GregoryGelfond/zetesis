@@ -1,7 +1,7 @@
 //! Integrity of identities and full-model versus selected-display contracts.
 
 use super::document::{CaseRecord, Document};
-use super::{Error, Limits, Resource, UPSTREAM_REVISION, ceiling, files};
+use super::{Error, Limits, Resource, UPSTREAM_REVISION, assertion, ceiling, files};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(super) const ORIGINALS: &[(&str, &str)] = &[
@@ -142,6 +142,25 @@ fn identity(
     {
         return Err(Error::Contract(format!(
             "{}: invalid source digest",
+            case.id
+        )));
+    }
+    Ok(())
+}
+
+/// Reconcile the preserved assertion with separately stored source and contracts.
+/// Full-model expectations stay independent of the original helper's projection.
+pub(super) fn source(case: &CaseRecord, source: &str) -> Result<(), Error> {
+    let provenance = &case.provenance;
+    let (decoded, arguments, expected) = assertion::assertion(&provenance.assertion)?;
+    if decoded != source
+        || arguments != provenance.helper_arguments
+        || expected != provenance.expected_helper_output
+        || assertion::prefixes(&arguments)? != case.contract.prefixes
+        || assertion::helper_models(&expected)? != case.contract.helper_models
+    {
+        return Err(Error::Contract(format!(
+            "{}: assertion differs from decoded source or helper contract",
             case.id
         )));
     }

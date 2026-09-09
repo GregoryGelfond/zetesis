@@ -300,7 +300,7 @@ fn seals(corpus: &curated::Corpus, request: &Request<'_>) -> Result<Vec<FileSeal
     seals.push(manifest);
     let license = identity::seal(
         &request.corpus.join("LICENSE.md"),
-        request.limits.corpus.original_bytes,
+        request.limits.corpus.license_bytes,
     )?;
     if license.sha256() != curated::LICENSE_SHA256 {
         return Err(Error::Path {

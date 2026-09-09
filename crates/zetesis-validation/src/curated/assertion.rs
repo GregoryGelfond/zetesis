@@ -1,4 +1,8 @@
-//! Deliberately restricted import-only ordinary C++ literal decoding.
+//! Restricted decoding of preserved assertion excerpts, not C++ source files.
+//!
+//! Only the pinned REQUIRE/solve literal forms and helper output are accepted.
+//! Every cursor advances within its manifest-bounded excerpt; balanced delimiters
+//! use an explicit stack. Decoding retains at most linear excerpt-sized storage.
 
 use super::Error;
 
@@ -230,59 +234,6 @@ pub(super) fn helper_models(text: &str) -> Result<Vec<Vec<String>>, Error> {
     }
     models.sort();
     Ok(models)
-}
-
-pub(super) fn identity(text: &str, target: usize) -> Result<(String, usize), Error> {
-    let bytes = text.as_bytes();
-    let mut offset = 0;
-    let mut section = String::new();
-    let mut ordinal = 0;
-    while offset <= target {
-        offset = trivia(text, offset)?;
-        if offset > target {
-            break;
-        }
-        if bytes.get(offset) == Some(&b'"') {
-            offset = string_end(text, offset)?;
-            continue;
-        }
-        let start = offset;
-        if bytes
-            .get(offset)
-            .is_some_and(|byte| byte.is_ascii_alphabetic() || *byte == b'_')
-        {
-            offset += 1;
-            while bytes
-                .get(offset)
-                .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
-            {
-                offset += 1;
-            }
-            let token = &text[start..offset];
-            if token == "SECTION" {
-                let opening = trivia(text, offset)?;
-                let (end, _) = balanced(text, opening)?;
-                section = literals(&text[opening + 1..end])?;
-                ordinal = 0;
-                offset = end + 1;
-            } else if token == "REQUIRE" {
-                ordinal += 1;
-                if start == target {
-                    return Ok((section, ordinal));
-                }
-            }
-        } else {
-            if bytes.get(offset).is_some_and(|byte| !byte.is_ascii()) {
-                return Err(Error::Literal(
-                    "non-ASCII C++ token outside a string".into(),
-                ));
-            }
-            offset += 1;
-        }
-    }
-    Err(Error::Literal(
-        "byte span does not start at a selected REQUIRE".into(),
-    ))
 }
 
 #[cfg(test)]

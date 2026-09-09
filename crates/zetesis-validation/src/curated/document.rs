@@ -143,7 +143,7 @@ impl<'a> Origin<'a> {
     pub fn url(self) -> &'a str {
         &self.record.url
     }
-    /// Exact original file identity, checked during import.
+    /// Pinned original-file identity; the original file is not read by verification.
     #[must_use]
     pub fn sha256(self) -> &'a str {
         &self.record.sha256
@@ -242,8 +242,8 @@ pub(super) fn load(root: PathBuf, document: Document, limits: Limits) -> Result<
     validate(&document, limits)?;
     let license = files::read(
         &files::confined(&root, &document.license_path)?,
-        limits.original_bytes,
-        Resource::OriginalBytes,
+        limits.license_bytes,
+        Resource::LicenseBytes,
     )?;
     files::digest(&document.license_path, &license, &document.license_sha256)?;
     let mut cases = Vec::new();
@@ -259,6 +259,7 @@ pub(super) fn load(root: PathBuf, document: Document, limits: Limits) -> Result<
         files::digest(&record.path, &bytes, &record.source_sha256)?;
         let source = String::from_utf8(bytes)
             .map_err(|_| Error::Contract(format!("{}: source must be UTF-8", record.id)))?;
+        contracts::source(&record, &source)?;
         cases.push(Case { record, source });
     }
     Ok(Corpus {

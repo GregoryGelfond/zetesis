@@ -173,10 +173,13 @@ report publication. See [performance](src/performance.rs),
 | `selected::run` | Private source copies, selected comparisons and before/after seals. |
 | `Report::publish` | A separate bounded publication step that refuses an existing destination. |
 
-Normal curated verification reads its manifest, license and ASP sources; it
-does not parse C++ or invoke clingo. The explicit legacy import adapter decodes
-only its pinned fixture format. Import is not general C++ parsing, and changing
-a pinned manifest requires a deliberate source/provenance update.
+Curated verification reads its pinned manifest, license and ASP sources. A
+bounded decoder reconciles preserved assertion excerpts with exact source bytes,
+helper arguments and selected-model expectations, without reading C++ files or
+invoking a solver. Public upstream revision links, whole-file hashes and original
+spans remain inspectable provenance; complete model contracts stay separate from
+the helper's display projection. Updating a pinned manifest requires a deliberate
+source/provenance review.
 
 On Linux/macOS, process capture uses the safe process-group backend.
 `Stop::Completed` means the direct child was reaped and both captured streams

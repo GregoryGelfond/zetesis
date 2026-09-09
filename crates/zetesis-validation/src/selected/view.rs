@@ -27,7 +27,7 @@ impl Serialize for Limits {
                 "manifest_bytes": self.corpus.manifest_bytes,
                 "source_bytes": self.corpus.source_bytes,
                 "total_source_bytes": self.corpus.total_source_bytes,
-                "original_bytes": self.corpus.original_bytes,
+                "license_bytes": self.corpus.license_bytes,
                 "cases": self.corpus.cases,
                 "models": self.corpus.models,
                 "atoms": self.corpus.atoms,

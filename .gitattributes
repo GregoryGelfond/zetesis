@@ -2,8 +2,5 @@
 # Corpus and evidence manifests validate exact hashes, including line endings.
 * -text
 
-# Preserved third-party source is provenance, not authored solver code.
-validation/upstream/clingo-5.8.2/originals/** linguist-vendored
-
 # These experiment snapshots are produced by the recorded shader generator.
 experiments/gate-transfer/generated/*.wgsl linguist-generated

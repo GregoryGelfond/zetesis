@@ -1,4 +1,4 @@
-//! Thin views of curated verification, legacy import and selected comparisons.
+//! Thin views of curated verification and selected comparisons.
 use clap::{Parser, Subcommand};
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -43,13 +43,6 @@ enum Action {
     Verify {
         /// Curated directory containing manifest.json and programs/.
         root: PathBuf,
-    },
-    /// Verify preserved legacy originals and write a new curated directory.
-    Import {
-        /// Legacy directory containing cases.jsonl and originals/.
-        legacy: PathBuf,
-        /// New destination; existing paths are never replaced.
-        destination: PathBuf,
     },
 }
 fn execute(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
@@ -103,10 +96,6 @@ fn execute(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
             });
         }
         Action::Verify { root } => curated::open(&root, Limits::default())?,
-        Action::Import {
-            legacy,
-            destination,
-        } => curated::import_legacy(&legacy, &destination, Limits::default())?,
     };
     let report = serde_json::json!({"schema":1,"integrity":"verified","semantic_solver_run":false,"manifest_sha256":curated::MANIFEST_SHA256,"cases":corpus.cases().len(),"full_model_occurrences":corpus.cases().iter().map(|case|case.contract().full_models().len()).sum::<usize>()});
     write_json(&report)?;

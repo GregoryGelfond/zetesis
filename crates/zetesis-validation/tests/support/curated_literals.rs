@@ -1,4 +1,4 @@
-//! Restricted import syntax must fail closed before provenance is trusted.
+//! Preserved assertion syntax must fail closed before its decoding is trusted.
 
 use super::*;
 
@@ -12,7 +12,7 @@ fn adjacent_literals_preserve_decoded_source_bytes() {
 #[test]
 fn unsupported_literal_forms_fail_closed() {
     // Raw/prefixed strings, unsupported escapes and literal newlines require
-    // a different import contract; none may silently change the source bytes.
+    // a different decoding contract; none may silently change the source bytes.
     for input in [
         "",
         "/* empty */",
@@ -149,19 +149,5 @@ fn malformed_helper_families_fail_closed() {
             matches!(helper_models(input), Err(Error::Literal(_))),
             "{input:?}"
         );
-    }
-}
-
-#[test]
-fn assertion_identity_ignores_quoted_and_commented_tokens() {
-    let input = "SECTION(\"old\") REQUIRE(1) SECTION(\"new\") \"REQUIRE\" /* REQUIRE */ REQUIRE(2) REQUIRE(3)";
-    let target = input.rfind("REQUIRE").unwrap();
-    assert_eq!(identity(input, target).unwrap(), ("new".into(), 2));
-}
-
-#[test]
-fn nonassertion_coordinates_are_refused() {
-    for (input, target) in [("REQUIRE(1)", 1), ("/* REQUIRE */", 3), ("λ REQUIRE(1)", 3)] {
-        assert!(matches!(identity(input, target), Err(Error::Literal(_))));
     }
 }

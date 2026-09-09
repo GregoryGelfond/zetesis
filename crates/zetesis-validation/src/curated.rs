@@ -1,20 +1,20 @@
 //! Exact selected clingo sources, provenance, and complete model contracts.
 //!
 //! Normal verification reads only the curated manifest, license, and `.lp`
-//! files. The explicit legacy importer additionally checks preserved originals
-//! and their restricted C++ literal spelling. Neither operation runs a solver.
+//! files. Preserved assertion excerpts independently decode to those source
+//! bytes and helper expectations. Verification never reads C++ files or runs a solver.
+//! Upstream hashes, notices and spans are recorded provenance: checking the
+//! original span correspondence requires retrieving the linked upstream files.
 
 mod document;
 mod files;
 mod contracts;
-mod cpp;
-mod import;
+mod assertion;
 
 use std::fmt;
 use std::path::{Path, PathBuf};
 
 pub use document::{Case, Contract, Corpus, Origin, Provenance};
-pub use import::import_legacy;
 
 /// Immutable curated target identity, independent of native admission labels.
 pub const MANIFEST_SHA256: &str =
@@ -27,18 +27,18 @@ pub(super) const LICENSE_SHA256: &str =
 
 /// Inclusive serialized-input and retained-source ceilings. Zero means zero.
 /// JSON allocations are bounded by the manifest byte ceiling; these measures
-/// do not claim allocator overhead or RSS. Import reads originals sequentially
-/// and retains the three pinned original texts while checking assertions.
+/// do not claim allocator overhead or RSS. Assertion decoding uses temporary
+/// storage linear in each excerpt, bounded by the manifest byte ceiling.
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {
-    /// Maximum bytes in either manifest or legacy JSONL catalog.
+    /// Maximum serialized manifest bytes, including assertion excerpts.
     pub manifest_bytes: usize,
     /// Maximum bytes in one decoded source file.
     pub source_bytes: usize,
     /// Maximum combined bytes of retained decoded source files.
     pub total_source_bytes: usize,
-    /// Maximum bytes in one original C++ file or the license.
-    pub original_bytes: usize,
+    /// Maximum bytes in the retained MIT license.
+    pub license_bytes: usize,
     /// Maximum cases before processing their source files.
     pub cases: usize,
     /// Maximum recorded full-model occurrences across the corpus.
@@ -52,7 +52,7 @@ impl Default for Limits {
             manifest_bytes: 1_048_576,
             source_bytes: 65_536,
             total_source_bytes: 1_048_576,
-            original_bytes: 1_048_576,
+            license_bytes: 1_048_576,
             cases: 24,
             models: 4_096,
             atoms: 65_536,
@@ -63,14 +63,14 @@ impl Default for Limits {
 /// A precisely scoped corpus integrity resource.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Resource {
-    /// Serialized manifest/catalog bytes.
+    /// Serialized manifest bytes.
     ManifestBytes,
     /// Bytes of one decoded source.
     SourceBytes,
     /// Combined retained source bytes.
     TotalSourceBytes,
-    /// Bytes of one original authority file.
-    OriginalBytes,
+    /// Bytes of the retained license.
+    LicenseBytes,
     /// Case records.
     Cases,
     /// Full-model occurrences, retaining multiplicities.
@@ -100,7 +100,7 @@ pub enum Error {
         /// Inclusive allowance.
         limit: usize,
     },
-    /// Source, license, authority, or manifest bytes differ from their seal.
+    /// Source, license, or manifest bytes differ from their seal.
     Digest {
         /// Named input.
         path: String,
@@ -113,19 +113,8 @@ pub enum Error {
     Path(String),
     /// A case, provenance, or model contract is inconsistent.
     Contract(String),
-    /// The restricted importer encountered unsupported C++ spelling.
+    /// A preserved assertion uses spelling outside the declared literal subset.
     Literal(String),
-    /// Import will not replace any existing destination.
-    DestinationExists(PathBuf),
-    /// Publication failed and removal of the new directory also failed.
-    ImportCleanup {
-        /// Newly created directory that may retain incomplete output.
-        destination: PathBuf,
-        /// Original publication or verification failure.
-        failure: Box<Error>,
-        /// Secondary cleanup failure, without replacing the original cause.
-        cleanup: std::io::Error,
-    },
 }
 impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -150,20 +139,6 @@ impl fmt::Display for Error {
             Self::Literal(reason) => {
                 write!(formatter, "unsupported C++ literal contract: {reason}")
             }
-            Self::DestinationExists(path) => write!(
-                formatter,
-                "import destination already exists: {}",
-                path.display()
-            ),
-            Self::ImportCleanup {
-                destination,
-                failure,
-                cleanup,
-            } => write!(
-                formatter,
-                "{failure}; cleanup of {} also failed: {cleanup}",
-                destination.display()
-            ),
         }
     }
 }
@@ -172,7 +147,6 @@ impl std::error::Error for Error {
         match self {
             Self::Io { source, .. } => Some(source),
             Self::Json(error) => Some(error),
-            Self::ImportCleanup { failure, .. } => Some(failure.as_ref()),
             _ => None,
         }
     }
@@ -197,6 +171,8 @@ pub(super) fn ceiling(resource: Resource, observed: u128, limit: usize) -> Resul
 /// Verify the pinned curated target and retain its exact UTF-8 source bytes.
 /// Returned paths describe verified inputs; later filesystem changes do not
 /// change the retained sources. No original C++ files or subprocesses are read.
+/// Original-file spans are recorded metadata, not freshly authenticated by this
+/// operation. Retained assertion excerpts are decoded and checked against sources.
 ///
 /// # Errors
 /// Refuses changed seals, malformed/duplicate contracts, unconfined paths,
