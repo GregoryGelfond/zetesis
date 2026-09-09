@@ -371,6 +371,9 @@ fn bundle_origins_do_not_multiply_activity() {
         ("1{#true;a}1.", 1, true),
         ("2{#true;#true;a}2.", 1, true),
         ("2{#true}2.", 0, false),
+        ("1{not #false;a}1.", 1, true),
+        ("2{not not #true;not not #true;a}2.", 1, true),
+        ("2{not #false}2.", 0, false),
     ] {
         let directory = tempfile::tempdir().unwrap();
         std::fs::write(
@@ -498,6 +501,8 @@ fn merged_bundle_rules_keep_original_multiplicity() {
         ["1{#true}1.", "1{#true;#true}1."],
         ["1{#true;#true}1.", "1{#true}1."],
         ["2{#true;#true}2.", "2{#true}2."],
+        ["1{not #false}1.", "1{not #false;not #false}1."],
+        ["1{not not #true;not not #true}1.", "1{not not #true}1."],
     ] {
         let directory = tempfile::tempdir().unwrap();
         std::fs::write(

@@ -133,6 +133,25 @@ fn original_signed_sources_match_clingo() {
     }
 }
 
+#[test]
+#[ignore = "requires an independently installed clingo"]
+fn signed_measure_contexts_match_clingo() {
+    // Change both head sign and measure while retaining recursive eligibility,
+    // a shared complete tuple and independent possible producer support.
+    for measure in 0..6 {
+        for head in 0..12 {
+            let selection = Selection {
+                rows: vec![(1, 0, head, 0), (1, 0, head, 4), (2, 1, 0, 2)],
+                lower: 1,
+                upper: 2,
+                body: head % 4,
+                measure,
+            };
+            external(&selection.source());
+        }
+    }
+}
+
 proptest::proptest! {
     #![proptest_config(proptest::test_runner::Config::with_cases(128))]
 
