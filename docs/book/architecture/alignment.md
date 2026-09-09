@@ -38,6 +38,13 @@ Sparse joins, bitwise operations and integer reductions often preserve the
 problem's structure more directly. Efficient scheduling follows the representation
 and its dependencies; it does not change the answer-set definition.
 
+The pseudocode below exposes those compositions before discussing scheduling.
+`Bind`, `Filter`, `Gate` and `Project` are actual definitions in the lifted Lean
+model. Names such as `FoldDAG` and `RootValues` describe operations in the Rust
+implementation; they do not assert that all stages already share an executable
+combinator API. Relations, atom sets, truth arrays and completion evidence remain
+different types of value.
+
 | ASP operation | Execution interpretation | Where to read the implementation |
 | --- | --- | --- |
 | Instantiate a rule body | Join positive witnesses, agree on repeated variables, filter scalar conditions, project an instance | [`source::scan`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/oracle/source.rs); [source preparation](grounding.md) |
@@ -62,38 +69,43 @@ Binding joins `reachable` and `open`; a candidate-fixed gate checks `blocked`;
 projection produces `reachable(Y)`. Union combines consequences from all rules.
 For a fixed candidate `M`, write the resulting consequence operation as `T_M`.
 
-Conceptually, the operation has the following structure, with local binding and
-filter requirements supplied by the admitted rule:
+The four primitives have separate subjects. `Bind(t)` maps an interpretation to
+the substitutions whose positive antecedents hold. `Filter(t)` retains bindings
+satisfying the template's scalar conditions. `Gate(t, M)` retains bindings whose
+true/false gates agree with the immutable candidate. `Project(t)` maps surviving
+bindings to head atoms, coalescing duplicate heads at the set level.
+
+With composition read from right to left, the normal-program pipeline is:
 
 ```text
-T_M = union over rules of (Project ∘ Gate_M ∘ Filter ∘ Bind)
-next(X) = X ∪ T_M(X)
+Rows(t, M)          = Gate(t, M) ∘ Filter(t) ∘ Bind(t)
+RuleTransform(t, M) = Project(t) ∘ Rows(t, M)
+T_M(X)              = Union { RuleTransform(t, M)(X) | t is a head rule of P }
+Gamma(P, M)         = Least(T_M)
+
+ConstraintTriggered(c, M, X) = Exists(Rows(c, M)(X))
+ConstraintsOK(P, M, X)       = NOT Exists { c | c is a constraint of P
+                                             AND ConstraintTriggered(c, M, X) }
+
+NormalMembership(P, M) = Equal(Gamma(P, M), M) AND ConstraintsOK(P, M, M)
 ```
 
-For the positive normal reduct, this operation is monotone in `X`. Starting from
-the empty interpretation yields only justified consequences; reaching closure
-establishes the least result. Facts contribute without positive antecedents.
-Constraints are checked separately and derive no head.
+This is [the lifted rule composition](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Lifted.lean),
+followed by the closure and constraint condition in
+[`Semantics.stable_iff_gamma`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Semantics.lean).
+Fixing `M` supplies the normal reduct by fixing its gates; it need not allocate
+a second program. Constraints reuse the binding/filter/gate pipeline but finish
+with an existential reduction instead of head projection. Facts contribute
+without positive antecedents. The binding relations specify valid substitutions;
+the notation does not require materializing their entire carrier.
 
-The pseudocode below describes the logical algorithm. Each scan must finish;
-limits, cancellation or an execution failure return `Unfinished` rather than
-the Boolean answer suggested by an incomplete prefix.
+For the positive normal reduct, `T_M` is monotone. Its least closure is realized
+by the inflationary recurrence:
 
 ```text
-check_normal(P, M):
-    R := freeze_normal_reduct(P, M)
-    X := empty interpretation
-    repeat:
-        H := complete_enabled_heads(R, X)
-        Y := X union H
-        if Y = X:
-            break
-        X := Y
-    if any constraint of R has a true body in X:
-        return Rejected
-    if X != M:
-        return Rejected
-    return Accepted(M)
+X_0     = empty interpretation
+X_(n+1) = Union(X_n, T_M(X_n))
+Gamma(P, M) = X_n when a complete round establishes X_(n+1) = X_n
 ```
 
 **Invariant:** `X` is contained in the least closure of the frozen positive
@@ -101,10 +113,32 @@ rules. Every changing round adds an atom; a finite carrier bounds such rounds.
 An unchanged *complete* scan proves closure. Together these facts establish
 leastness; equality with `M` supplies the answer-set test.
 
+The bounded implementation lifts these logical operations into explicit
+completion results. Only a completed membership decision can be classified:
+
+```text
+Completed(true)  => Accepted(M)
+Completed(false) => Rejected
+Stopped(reason) => Unfinished(reason)
+```
+
+A witnessed constraint can refute membership immediately. An empty *prefix* of
+its bindings cannot establish that no violation exists. Likewise, a source scan
+must cover the current `X` and frozen `M` before its unchanged output certifies
+closure. These obligations belong to the primitives' realization, not just to
+the outer loop.
+
 The relational implementation can propose only a **gate seed**, compute its
-closure `X`, and compare `X`'s gate projection with that seed. It thereby avoids
-guessing every derived atom. The seed must cover every gate that can affect the
-reduct; the resulting `X`, not the seed alone, is the answer interpretation.
+closure `X`, and compare `X`'s gate projection with that seed:
+
+```text
+X = Gamma(P, z)
+AcceptSeed(P, S, z) = Equal(X intersection S, z) AND ConstraintsOK(P, z, X)
+```
+
+Here `S` contains every gate atom, and `z` denotes the gates selected true; other
+atoms of `S` are selected false. This avoids guessing every derived atom. The
+resulting `X`, not the seed alone, is the answer interpretation.
 Eager scans and lazy joins implement this same contract. Shared lazy scans may
 offer instances from a union of worlds, but each world must recheck its own
 antecedents before deriving a head.
@@ -117,40 +151,49 @@ oracle below retains subset minimality.
 
 Let the original finite theory `T` be a directed acyclic graph whose children
 precede their parents. A node denotes an atom, falsum, conjunction, disjunction
-or implication. Classical evaluation is a topological fold. Freezing stores that
-fold's values for `M`; a later query evaluates the same nodes in `J` while masking
-every candidate-false node to falsum.
+or implication. Classical evaluation composes local truth operations with a
+topological fold and a reduction over asserted roots. Define the local operation
+using the already computed child values `V`:
 
 ```text
-evaluate(T, I, frozen = absent):
-    values := empty node array
-    for node in T, children before parents:
-        value := classical_operation(node, I, values_of_children)
-        if frozen is present:
-            value := value AND frozen[node]
-        append value to values
-    return values
+NodeTruth(I, Atom(a),             V) = Member(I, a)
+NodeTruth(I, Falsum,              V) = false
+NodeTruth(I, And(left,right),     V) = V[left] AND V[right]
+NodeTruth(I, Or(left,right),      V) = V[left] OR V[right]
+NodeTruth(I, Implies(left,right), V) = NOT V[left] OR V[right]
 
-satisfies_roots(T, values):
-    return ALL(values[root] for root in T.asserted_roots)
+Truth(T, I)  = FoldDAG(NodeTruth(I), T)
+Models(T, I) = All(RootValues(T, Truth(T, I)))
 
-check_general(T, M):
-    frozen := evaluate(T, M)
-    if not satisfies_roots(T, frozen):
-        return Rejected
-    result := search_proper_subsets(M, using the fixed predicate:
-        J => satisfies_roots(T, evaluate(T, J, frozen)))
-    match result:
-        Found(J)        => RejectedWithCounterexample(J)
-        Exhausted       => Accepted(M)
-        Stopped(reason) => Unfinished(reason)
+frozen = Truth(T, M)                         // immutable, bound to T and M
+ReductNode(J, node, V) = NodeTruth(J, node, V) AND frozen[node]
+ReductTruth(T, M, J)   = FoldDAG(ReductNode(J), T)
+ModelsReduct(T, M, J)  = All(RootValues(T, ReductTruth(T, M, J)))
+
+Countermodel(T, M, J) = ProperSubset(J, M) AND ModelsReduct(T, M, J)
+GeneralMembership(T, M) = All(RootValues(T, frozen))
+                         AND NOT Exists(J => Countermodel(T, M, J))
 ```
+
+`FoldDAG` visits children before their parents; `RootValues` gathers the asserted
+roots and `All` reduces their truth values. The reduct changes the node operation
+by composing it with the fixed candidate mask. Its parents consume the *masked*
+child values. Masking only after an ordinary evaluation of the whole graph would
+not implement this definition. Default negation is implication to falsum and
+uses the same construction; double negation cannot be collapsed to an atom.
 
 **Invariant:** after each graph step, the stored value is that node's classical
 truth, or its reduct truth when a frozen mask is supplied. The mask belongs to
 the original `M` for the entire query. The countermodel search ranges over
 `J ⊊ M`, excluding `M` itself; its exhaustion must establish coverage of that
-space. For an empty `M`, there are no proper subsets.
+space. For an empty `M`, there are no proper subsets. After candidate satisfaction
+has completed successfully, the existential question has three distinct outcomes:
+
+```text
+Found(J)        => RejectedWithCounterexample(J)
+Exhausted       => Accepted(M)
+Stopped(reason) => Unfinished(reason)
+```
 
 The small reference checker explicitly enumerates subsets. Ordinary solving
 uses propagation and native search to discharge the same existential question.
@@ -171,25 +214,19 @@ requirements. A source generator can reduce materialization, and a search
 generator can avoid already excluded interpretations, provided neither loses an
 answer of the original program.
 
+The scheduling layer applies the appropriate membership composition to
+independent subjects:
+
 ```text
-enumerate(P):
-    generator := proposals_for_original_program(P)
-    while generator has unaccounted work:
-        batch := generator.next_bounded_batch()
-        checks := check_each_proposal(P, batch)  // independent subjects
-        for each completed check:
-            commit its verdict to the corresponding proposal
-            if accepted:
-                emit its checked AnswerSet
-        if any required work stopped:
-            return Incomplete(with retained progress)
-        generator.apply_only_sound_feedback(checks)
-    return Exhausted
+BatchCheck(P, proposals) = Map(proposal => Check(P, proposal), proposals)
 ```
 
-This is a scheduling contract, not a claim that every backend implements an
-identical loop or commit granularity. Candidate rows cannot share truth by
-accident. A rejected proposal, a pending query and a committed answer remain
+This denotes an independent map, not a new uniform backend API. It does not
+require every backend to implement an identical loop or commit granularity.
+Completed verdicts are committed to their corresponding proposals; interrupted
+or uncompleted obligations remain pending and prevent an exhaustion claim.
+Generator feedback must preserve every answer still to be found. Candidate rows
+cannot share truth by accident. A rejected proposal, a pending query and a committed answer remain
 different states. General subset blocking is not licensed merely by finding an
 answer: for example, `{a}.` admits both the empty answer and `{a}`.
 
@@ -200,12 +237,23 @@ for every proposal before claiming exhaustion.
 
 ## The correspondence in Lean
 
+[`Lifted.lean`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Lifted.lean)
+defines the four rule primitives and `RuleTransform`. `composition_exact` equates
+their composition with direct rule consequence; `ruleTransform_monotone` proves
+growth under positive input. `family_exact`, `materialized_constraint_exact` and
+`lazy_step_exact` require source coverage for the actual candidate and consequence
+snapshot. An exhausted materialization queue alone is insufficient.
+
 [`Transformers.lean`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Transformers.lean)
 defines composition, parallel union, filters, relational image, least closure
 and world-indexed batches. `finiteIter_sound` and `finiteIter_exact_if_closed`
 capture the positive-inference argument. `least_batch` states that independent
 worlds retain their individual least closures. `fusion_preserves_least` requires
 pointwise equivalence of the substituted operations, not agreement on one run.
+
+[`Semantics.stable_iff_exists_seed`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Semantics.lean)
+connects accepted seed projection and its closure to answer sets, under the
+explicit gate-carrier hypothesis.
 
 [`NormalFerraris.ferraris_answer_set_iff_closure`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/NormalFerraris.lean)
 connects normal-rule closure to formula answer-set semantics.
