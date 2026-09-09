@@ -4,7 +4,8 @@ use proptest::prelude::*;
 use proptest::test_runner::FileFailurePersistence;
 use zetesis_cpu::Control;
 use zetesis_ferraris::{
-    AdmissionLimits, Interpretation, Limits, Node, Theory, Verdict, check, models, models_reduct,
+    AdmissionLimits, FrozenReduct, Interpretation, Limits, Node, Theory, Verdict, check, models,
+    models_reduct,
 };
 
 const MAX_EXPANSION: usize = 1024;
@@ -179,6 +180,13 @@ proptest! {
         prop_assert_eq!(models(&theory, &candidate, limits, &control).unwrap(), classical);
         prop_assert_eq!(models_reduct(&theory, &candidate, &tested, limits, &control).unwrap(),
             reduct.iter().all(|root| root.eval(case.tested)));
+        let frozen = FrozenReduct::new(&candidate, limits, &control).unwrap();
+        for world in 0..1u8 << case.atoms {
+            prop_assert_eq!(
+                frozen.is_satisfied_by(&interpretation(&theory, world), limits, &control).unwrap(),
+                reduct.iter().all(|root| root.eval(world))
+            );
+        }
         let stable = classical && !(0..1u8 << case.atoms).any(|subset| {
             subset != case.candidate && subset & !case.candidate == 0
                 && reduct.iter().all(|root| root.eval(subset))
@@ -192,5 +200,37 @@ proptest! {
             prop_assert_eq!(subset & !case.candidate, 0);
             prop_assert!(reduct.iter().all(|root| root.eval(subset)));
         }
+    }
+
+    #[test]
+    fn frozen_queries_obey_materialized_root_work(case in cases()) {
+        let reduct: Vec<_> = case.roots.iter()
+            .map(|root| Tree::expand(&case.nodes, *root).reduct(case.candidate))
+            .collect();
+        let root_tests = reduct.iter().position(|root| !root.eval(case.tested))
+            .map_or(reduct.len(), |failed| failed + 1);
+        let theory = Theory::new(case.atoms, case.nodes, case.roots, AdmissionLimits::default())
+            .unwrap();
+        let candidate = interpretation(&theory, case.candidate);
+        let tested = interpretation(&theory, case.tested);
+        let node_work = u64::try_from(theory.nodes().len()).unwrap();
+        let tested_work = node_work + u64::try_from(root_tests).unwrap();
+        let limits = |max_work| Limits { max_work, max_subsets: 0 };
+        let control = Control::default();
+        let frozen = FrozenReduct::new(&candidate, limits(node_work), &control).unwrap();
+        let expected = reduct.iter().all(|root| root.eval(case.tested));
+        prop_assert_eq!(frozen.is_satisfied_by(&tested, limits(tested_work), &control).unwrap(), expected);
+        prop_assert_eq!(
+            frozen.is_satisfied_by(&tested, limits(tested_work - 1), &control).unwrap_err(),
+            zetesis_cpu::Stop::WorkLimit
+        );
+        prop_assert_eq!(
+            models_reduct(&theory, &candidate, &tested, limits(node_work + tested_work), &control).unwrap(),
+            expected
+        );
+        prop_assert_eq!(
+            models_reduct(&theory, &candidate, &tested, limits(node_work + tested_work - 1), &control).unwrap_err(),
+            zetesis_cpu::Stop::WorkLimit
+        );
     }
 }

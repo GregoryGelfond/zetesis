@@ -31,6 +31,34 @@ interpretations, including nested implication and non-Horn reducts. Boundary
 tests cover finite identities, packed words, empty theories, exact limits,
 cancellation, and deadlines.
 
+## Reusing a candidate's reduct
+
+`FrozenReduct::new(&candidate, limits, control)` freezes the candidate's own
+theory once. The value borrows that exact interpretation and owns its Boolean
+truth mask. `is_satisfied_by(&tested, limits, control)` tests any interpretation
+of the same theory instance, including interpretations outside the candidate.
+Independent admission of identical syntax does not preserve instance identity.
+No candidate words or original DAG are copied; `candidate()` and `theory()`
+expose the bound subject. A frozen value is neither a model certificate nor an
+answer set. Use the checked membership API for that conclusion.
+
+Construction charges one evaluation per DAG node and retains one Boolean per
+node. Each query allocates its own temporary Boolean workspace and charges one
+evaluation per node, followed by root tests through the first failure. The value
+is immutable and can be shared between independent callers. Construction and
+each query have separate work budgets; these operations perform no subset search.
+Cancellation, deadlines, foreign identity, allocation failure and exhausted
+work remain explicit stops. A stopped query leaves the freeze unchanged.
+
+The existing `models_reduct` wrapper still freezes anew on each call and uses one
+combined work budget. Its identity checks and stop precedence are unchanged.
+The exhaustive `check` operation already freezes once per candidate, so this API
+does not speed up that checker. It gives library callers a way to avoid repeated
+freezing when they separately test multiple interpretations against one reduct.
+The `frozen_reduct` Criterion benchmark compares these caller patterns, including
+and excluding initial freezing explicitly. It measures neither ordinary solving
+nor grounding. No timing improvement is claimed without measurements.
+
 Proptest adds generated DAGs with one to six atoms, up to 48 topological nodes,
 shared subexpressions, deep chains, multiple roots, and permuted atom indices.
 Each generated case checks classical truth, a frozen reduct under an arbitrary

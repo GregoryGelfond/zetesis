@@ -1,4 +1,4 @@
-use crate::{Interpretation, Node, Theory};
+use crate::{FrozenReduct, Interpretation, Node, Theory};
 use zetesis_cpu::{Control, Stop};
 
 /// Per-call bounds for exact finite checking. Exceeding a bound is incomplete,
@@ -87,7 +87,7 @@ impl Work<'_> {
     }
 }
 
-fn identities(theory: &Theory, interpretation: &Interpretation) -> Result<(), Stop> {
+pub(super) fn identities(theory: &Theory, interpretation: &Interpretation) -> Result<(), Stop> {
     if theory.same_instance(interpretation.theory()) {
         Ok(())
     } else {
@@ -95,7 +95,7 @@ fn identities(theory: &Theory, interpretation: &Interpretation) -> Result<(), St
     }
 }
 
-fn reserve<T>(count: usize) -> Result<Vec<T>, Stop> {
+pub(super) fn reserve<T>(count: usize) -> Result<Vec<T>, Stop> {
     let mut vector = Vec::new();
     vector
         .try_reserve_exact(count)
@@ -127,7 +127,7 @@ pub(super) fn evaluate(
     Ok(())
 }
 
-fn failed_root(
+pub(super) fn failed_root(
     theory: &Theory,
     values: &[bool],
     work: &mut Work<'_>,
@@ -165,6 +165,9 @@ pub fn models(
 
 /// Satisfaction in `tested` of the formula reduct frozen in `candidate`.
 /// No subset relation is required; minimality search imposes that separately.
+/// This call freezes the candidate anew and shares one work budget between
+/// freezing and testing. Use [`FrozenReduct`] to reuse a freeze across tests,
+/// with a separate budget for construction and each satisfaction query.
 ///
 /// # Errors
 /// Refuses foreign interpretations, cancellation, deadlines, allocation, or work limits.
@@ -183,11 +186,9 @@ pub fn models_reduct(
         control,
         statistics: Statistics::default(),
     };
-    let mut frozen = reserve(theory.nodes().len())?;
     let mut values = reserve(theory.nodes().len())?;
-    evaluate(theory, candidate, None, &mut frozen, &mut work)?;
-    evaluate(theory, tested, Some(&frozen), &mut values, &mut work)?;
-    Ok(failed_root(theory, &values, &mut work)?.is_none())
+    let reduct = FrozenReduct::freeze(candidate, &mut work)?;
+    reduct.satisfied_by(tested, &mut values, &mut work)
 }
 
 /// Decide stable-model membership by classical satisfaction and exhaustive
@@ -266,4 +267,17 @@ pub fn check(
         verdict: Verdict::Stable,
         statistics: work.statistics,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::reserve;
+    use zetesis_cpu::Stop;
+
+    #[test]
+    fn unrepresentable_workspace_returns_allocation_stop() {
+        // Capacity overflow is deterministic and needs no process allocator hook.
+        // Every frozen truth mask and tested workspace uses this reservation.
+        assert_eq!(reserve::<bool>(usize::MAX).unwrap_err(), Stop::Allocation);
+    }
 }

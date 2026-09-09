@@ -3,8 +3,8 @@
 use std::time::Instant;
 use zetesis_cpu::{Control, Stop};
 use zetesis_ferraris::{
-    AdmissionError, AdmissionLimits, Interpretation, Limits, Node, Theory, Verdict, check, models,
-    models_reduct,
+    AdmissionError, AdmissionLimits, FrozenReduct, Interpretation, Limits, Node, Theory, Verdict,
+    check, models, models_reduct,
 };
 
 #[derive(Clone, Debug)]
@@ -67,6 +67,7 @@ fn compare(formulas: &[Expr]) {
             classical
         );
         let reduct: Vec<_> = formulas.iter().map(|expr| expr.reduct(candidate)).collect();
+        let frozen = FrozenReduct::new(&model, Limits::default(), &control).unwrap();
         for tested in 0..4 {
             let actual = models_reduct(
                 &program,
@@ -80,6 +81,17 @@ fn compare(formulas: &[Expr]) {
                 actual,
                 reduct.iter().all(|expr| expr.eval(tested)),
                 "M={candidate}, J={tested}, {formulas:?}"
+            );
+            assert_eq!(
+                frozen
+                    .is_satisfied_by(
+                        &interpretation(&program, tested),
+                        Limits::default(),
+                        &control,
+                    )
+                    .unwrap(),
+                actual,
+                "reused freeze: M={candidate}, J={tested}, {formulas:?}"
             );
         }
         let stable = classical

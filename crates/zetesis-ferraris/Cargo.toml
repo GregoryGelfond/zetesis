@@ -20,5 +20,9 @@ tempfile = "3"
 name = "native_aggregates"
 harness = false
 
+[[bench]]
+name = "frozen_reduct"
+harness = false
+
 [lints]
 workspace = true
