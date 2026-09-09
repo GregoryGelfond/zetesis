@@ -276,7 +276,8 @@ fn refusal(error: &FormulaFailure, expected: &str) {
 #[test]
 fn original_sources_match_complete_models_or_reviewed_profile_refusals() {
     // The original generative_double_condition source is now admitted by the
-    // finite comparison binding plan; its complete external record is unchanged.
+    // finite comparison binding plan. The negative anonymous consequent now
+    // admits a complete projection. Both complete external records are unchanged.
     let cases = cases();
     assert_eq!(cases.len(), 91);
     let mut admitted = 0;
@@ -302,7 +303,7 @@ fn original_sources_match_complete_models_or_reviewed_profile_refusals() {
             valid_refused += usize::from(row["valid"] == true);
         }
     }
-    assert_eq!((admitted, refused, models, valid_refused), (81, 10, 225, 6));
+    assert_eq!((admitted, refused, models, valid_refused), (82, 9, 226, 5));
 }
 
 /// A separate tree definition, with no production DAG construction or reduct API.

@@ -80,7 +80,7 @@
 {"name":"consequent_cannot_bind","source":"z:-p(X):X!=0.","source_sha256":"9dda04e21b9a0507a00539b4b6be4e62968032b9dd7f3476d6d76128ab4ea9a7","valid":false,"native":"UnsafeVariable","models":[]}
 {"name":"consequent_only_cross_conditional","source":"z:-p(X):a;r(X):d(X).","source_sha256":"0a13891d57b386373e1a912423805beed3f5e5d7e233aa6edd0cd27a48c145ee","valid":true,"native":"admit","models":[["z"]]}
 {"name":"positive_anonymous_consequent","source":"d(1).z:-p(_):d(X).","source_sha256":"b8a17d93963d96566000a8f6e1c657ee71faf2f1a6065cfff8f44cb46f2b59a4","valid":true,"native":"admit","models":[["d(1)"]]}
-{"name":"negative_anonymous_consequent","source":"d(1).z:-not p(_):d(X).","source_sha256":"3ddb2ab334c9ca209a79a85ee14fe215f3bf1663bc393758dd7ba8ca06da6f82","valid":true,"native":"UnsafeVariable","models":[["d(1)","z"]]}
+{"name":"negative_anonymous_consequent","source":"d(1).z:-not p(_):d(X).","source_sha256":"3ddb2ab334c9ca209a79a85ee14fe215f3bf1663bc393758dd7ba8ca06da6f82","valid":true,"native":"admit","models":[["d(1)","z"]]}
 {"name":"generative_double_condition","source":"z:-p(X):not not X=1.","source_sha256":"5e243c4e6e6c514bfe31d45a8b1f0485c03661197b61b9343010b174ec35a159","valid":true,"native":"admit","models":[[]]}
 {"name":"undefined_consequent","source":"d(0).z:-1/X=1:d(X).","source_sha256":"fe3287e6c5a68214e7733be1a5144dbb56d338e7923eafb05c93513d3a059745","valid":true,"native":"Evaluation","models":[["d(0)"]]}
 {"name":"undefined_condition","source":"d(0).z:-p(X):d(X),not 1/X=1.","source_sha256":"b786f724ae3670702f4f945de56c06043d06f89ce0f6a106fbc613778645925a","valid":true,"native":"Evaluation","models":[["d(0)","z"]]}
