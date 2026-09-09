@@ -297,6 +297,8 @@ fn late_mismatch_leaves_the_next_row_unbound() {
 #[test]
 fn inverse_consequent_remains_a_typed_refusal() {
     let source = "{p(f(1))}.q:-p(f(X+1)):#true.";
+    // Evaluated witnesses now reach input-safety checking. Capturing f(1)
+    // supplies the compared value, but cannot invert X+1 to bind X.
     assert!(
         matches!(
             admit_formula(
@@ -305,12 +307,7 @@ fn inverse_consequent_remains_a_typed_refusal() {
                 ExpansionLimits::default(),
                 FormulaLimits::default()
             ),
-            Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
-                zetesis_themelios::AdmissionFailure::Profile {
-                    feature: zetesis_themelios::ProfileFeature::Term,
-                    ..
-                }
-            )))
+            Err(FormulaFailure::UnboundArgumentInput { .. })
         ),
         "{source}"
     );
