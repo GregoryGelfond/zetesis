@@ -80,13 +80,9 @@ collection limits cannot produce a complete value. A model whose score or
 storage admission failed can remain in verified accounting without appearing in
 the retained prefix. No partial result is treated as a smaller program.
 
-This contract deliberately differs from the September 2026 themelios solve/query
-design drafts, which describe a nonempty lazy `WorldView` and select optimal
-answers under objectives. Zetesis uses the original unrestricted family and
-an opt-in complete collection, including the empty inconsistent family. The
-streaming `Session` remains the surface for partial observations. These types
-do not implement a themelios-solve backend or imply compatibility with a future
-themelios-query runtime.
+These are zetesis's collection guarantees. The streaming `Session` remains the
+surface for partial observations. Interoperability with another library's solver
+or query interfaces requires a separate adapter contract.
 
 ## Reuse and identity
 

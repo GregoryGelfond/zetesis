@@ -3,6 +3,11 @@
 Use the narrowest capability that represents your input and the question you
 need to answer. Parsing command-line arguments is not required to use the solver.
 
+The examples in this part use zetesis's public APIs. `zetesis_themelios` is the
+solver's own source-admission and preparation crate; `zetesis_cli` exposes its
+composed solving sessions. The themelios library's parsing, logical-program
+construction and standalone analysis APIs belong to its own manual.
+
 | Input or task | Library and entry points |
 | --- | --- |
 | Original ASP source | `zetesis_themelios::admit`, `admit_extended`, `prepare_formula`, `admit_formula`, and their bundle APIs |
@@ -29,10 +34,10 @@ Start with the [runnable tour](../architecture/tour.md) for a complete source-to
 path. The [source preparation example](source.md) separates analysis from eager
 materialization and shows when analysis describes only a dependency projection.
 
-`zetesis_themelios::{base, syntax, logical, analysis}` re-export the corresponding
-themelios tiers. Use their terms and source identities at the source boundary.
-A formula atom index or dense relational ID is an execution representation,
-not a replacement source symbol or a transferable identity across admissions.
+Some source and analysis values exposed by zetesis use themelios types. Their
+meaning matters when inspecting a prepared input, especially its analysis basis
+and source identities. A formula atom index or dense relational ID is local to
+its admitted owner; it is not a transferable identity across admissions.
 
 ## Owners preserve coherence
 

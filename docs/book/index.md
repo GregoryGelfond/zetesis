@@ -18,6 +18,11 @@ This book has three parts:
   and basic mathematical proof reading; the worked argument does not require
   tactic fluency. Changing or extending proofs does require Lean.
 
+The Rust examples teach zetesis's preparation, solving and result APIs. The
+themelios library has a separate documentation scope for its own APIs and solver
+integration. This book explains shared source/analysis types where they affect
+the guarantees of a zetesis operation.
+
 The mathematical library is a deliverable in its own right. It can be imported
 without running the Rust solver. Its checked theorems establish the stated
 mathematics; they do not yet constitute end-to-end verification of the Rust

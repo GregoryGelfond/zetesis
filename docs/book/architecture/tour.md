@@ -30,12 +30,14 @@ through `WorldView`. Run its assertions with:
 cargo run --locked -p zetesis-cli --no-default-features --example book-session
 ```
 
-## From source to a logical program
+## From source to admitted solver input
 
-themelios supplies lossless parsing and an owned logical `Program`. The
-zetesis frontend checks its supported profile and creates an admitted
-representation, preserving source metadata. For these normal rules it can retain
-relational templates, rather than requiring a complete ground-rule graph.
+The Rust example passes source text to `zetesis_themelios::admit`, zetesis's
+normal-profile admission operation. Internally, themelios supplies lossless
+parsing and the logical program representation. Zetesis checks its supported
+profile and creates an admitted owner, preserving source metadata. For these
+normal rules it can retain relational templates without requiring a complete
+ground-rule graph.
 Admission establishes a well-formed input for a particular execution profile.
 It does not establish satisfiability.
 

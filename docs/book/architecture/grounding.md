@@ -16,6 +16,35 @@ The [checked source-preparation example](../rust/source.md) follows
 collection. It contrasts two Boolean source families whose different counting
 identities must survive materialization.
 
+## Preserving source identity
+
+Zetesis's private
+[`Catalog`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_choice_source.rs)
+checks that each retained Boolean choice family corresponds to an original
+enclosing rule and its written element occurrences. It uses the pinned themelios
+parser and original coordinates, and refuses correspondence it cannot establish.
+In particular, merging two whole rules must not combine their separate counting
+groups. This source preservation supports subsequent lowering; successful
+correspondence checking does not prove the lowering's answer-set semantics.
+
+At the formula boundary, tuple activity and atom permission remain independent.
+For `{a}.1#count{1:#true:a;1:b}1.`, `a` activates the shared tuple through its
+Boolean occurrence; an eligible selected `b` activates that same tuple through
+an atomic occurrence. The tuple contributes once, while only positive atomic
+head occurrences can supply atom permission. Neither a true Boolean nor a
+satisfied bound supplies support for an atom in its condition. The exact three
+answers `{a}`, `{b}` and `{a,b}` are covered by the maintained
+[Boolean element contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/boolean_element_contracts.rs).
+
+`BooleanHeadElements.coalesced_group_in_context` proves preservation for an
+assumed keyed row family and covering atomic permissions;
+`boolean_group_in_context` establishes that a Boolean-only measured head filters
+the context's answers without supplying new atom support. Their
+[proof boundary](../lean/correspondence.md) leaves source occurrence assignment,
+Rust formula construction and execution refinement open. These are obligations
+of zetesis's source bridge and solver; this architectural account is separate
+from teaching themelios's parsing and logical-program APIs.
+
 ## Eager and lazy execution
 
 For admitted relational programs, **eager** grounding explicitly compiles a

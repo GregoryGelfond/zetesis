@@ -1,10 +1,13 @@
 # Preparing source and interpreting analysis
 
-Use `prepare_formula` when you need to inspect source analysis before requesting
-eager materialization. It owns the source, checked intermediate representation,
-metadata and remaining expansion budget. `ground(self)` consumes that preparation
-and produces an `AdmittedFormula`; it computes no answer sets. A session borrows
-that coherent owner through `PreparedInput::formula`.
+Use `zetesis_themelios::prepare_formula` to prepare input for zetesis's finite
+formula solver and inspect the analysis it retains before eager materialization.
+`zetesis_themelios` is zetesis's source bridge; this workflow does not require
+constructing an upstream parser or logical program. The returned
+`PreparedFormula` owns source, metadata, checked intermediate representation and
+the remaining expansion budget. `ground(self)` consumes that preparation and
+produces an `AdmittedFormula`; it computes no answer sets.
+`zetesis_cli::PreparedInput::formula` then borrows that owner for a session.
 
 ```text
 source → prepare_formula → PreparedFormula → ground → AdmittedFormula
@@ -19,8 +22,9 @@ a convenience for avoiding another parse.
 
 ## Know which program was analyzed
 
-`analyzed_program()` is the exact input described by `source_analysis()`.
-Read `analysis_basis()` before interpreting its properties:
+The analysis accessors are part of the prepared solver input's inspection
+contract. `source_analysis()` describes exactly the value exposed by
+`analyzed_program()`. Read `analysis_basis()` before interpreting its properties:
 
 | Basis | Meaning of the retained program |
 | --- | --- |
@@ -33,7 +37,7 @@ execution profile that the admission API refuses.
 
 The distinction is observable for the adopted Boolean choice extension:
 `2{#true;#true}2.` has one empty answer set. Its two written Boolean occurrences
-must stay distinct even if a set-based logical program coalesces their contents.
+must stay distinct in the formula solver's counting family.
 By contrast, `2#count{1:#true;1:#true}2.` has no answer set: both elements name
 the same complete tuple. Ordinary Boolean choices therefore retain a separate
 source-occurrence family while exposing a dependency projection for analysis.
@@ -67,34 +71,14 @@ rules, so consumers must not assume that one root always corresponds to one
 written statement. The admitted owner also retains objectives and observations
 separately from theory roots.
 
-The private source catalog checks that each retained Boolean choice family
-corresponds to an original enclosing rule and its written element occurrences.
-It uses the pinned parser and original coordinates, and refuses correspondence
-it cannot establish. In particular, merging two whole rules must not combine
-their separate counting groups. This source preservation supports the subsequent
-lowering; successful correspondence checking does not prove that lowering's
-answer-set semantics.
+The example checks that emitted root evidence retains the source identity
+supplied in `AdmissionOptions`. It leaves syntax traversal to themelios's API
+documentation. For the internal occurrence catalog, tuple activity and their
+proof obligations, see [source identity in grounding](../architecture/grounding.md#preserving-source-identity).
 
-At the formula boundary, tuple activity and atom permission remain independent.
-For `{a}.1#count{1:#true:a;1:b}1.`, `a` activates the shared tuple through its
-Boolean occurrence; an eligible selected `b` activates that same tuple through
-an atomic occurrence. The tuple contributes once, while only atomic head
-occurrences can supply atom permission. Neither a true Boolean nor a satisfied
-bound supplies support for an atom in its condition. The exact three answers
-`{a}`, `{b}` and `{a,b}` are covered by the maintained
-[Boolean element contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/boolean_element_contracts.rs).
-
-The implementation declarations are
+The public implementation declarations are
 [`PreparedFormula`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula/preparation.rs),
-[`AnalysisBasis`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula.rs),
-and the private
-[`Catalog`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_choice_source.rs).
-`BooleanHeadElements.coalesced_group_in_context` proves preservation for an
-assumed complete keyed row family and covering atomic permissions;
-`boolean_group_in_context` establishes that a Boolean-only measured head filters
-the context's answers without supplying new atom support. Their
-[proof boundary](../lean/correspondence.md) leaves source occurrence assignment,
-Rust formula construction and execution refinement open.
+[`AnalysisBasis` and `AdmittedFormula`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula.rs).
 
 ## Work and retained space
 

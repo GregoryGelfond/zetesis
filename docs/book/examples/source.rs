@@ -1,4 +1,4 @@
-//! Inspect the analysis owner before constructing and solving a finite theory.
+//! Prepare zetesis input, inspect its analysis contract and collect its answers.
 
 // ANCHOR: example
 use zetesis_cli::{Backend, PreparedInput, SolveConfig, WorldView, WorldViewLimits};
@@ -9,36 +9,27 @@ use zetesis_themelios::{
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let options = AdmissionOptions::default();
     // Two written Boolean choices contribute twice. Two occurrences of one
     // explicit tuple contribute once. Neither program introduces an atom.
     let cases = [
-        (
-            "2{#true;#true}2.",
-            AnalysisBasis::DependencyProjection,
-            1,
-            1,
-        ),
+        ("2{#true;#true}2.", AnalysisBasis::DependencyProjection, 1),
         (
             "2#count{1:#true;1:#true}2.",
             AnalysisBasis::NormalizedProgram,
-            1,
             0,
         ),
-        ("", AnalysisBasis::NormalizedProgram, 0, 1),
-        (":-.", AnalysisBasis::NormalizedProgram, 1, 0),
+        ("", AnalysisBasis::NormalizedProgram, 1),
+        (":-.", AnalysisBasis::NormalizedProgram, 0),
     ];
-    for (source, basis, statement_count, answer_count) in cases {
+    for (source, basis, answer_count) in cases {
         let prepared = prepare_formula(
             source.into(),
-            AdmissionOptions::default(),
+            options,
             ExpansionLimits::default(),
             FormulaLimits::default(),
         )?;
         assert_eq!(prepared.analysis_basis(), basis);
-        assert_eq!(
-            prepared.analyzed_program().statements().count(),
-            statement_count
-        );
         // This verdict describes the inspected analysis input. In the first
         // case it is not a source-semantic safety or class certificate.
         assert!(prepared.source_analysis().safety().is_safe());
@@ -50,12 +41,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             admitted.formula_origins().len(),
             admitted.theory().roots().len()
         );
-        if statement_count > 0 {
+        if !source.is_empty() {
             assert!(admitted.formula_origins().iter().flatten().next().is_some());
         }
-        assert!(admitted.formula_origins().iter().flatten().all(|origin| {
-            origin.source == admitted.source().id() && admitted.source().slice(origin.span).is_ok()
-        }));
+        assert!(
+            admitted
+                .formula_origins()
+                .iter()
+                .flatten()
+                .all(|origin| origin.source == options.source_id)
+        );
         let family = WorldView::collect(
             PreparedInput::formula(&admitted),
             SolveConfig {
@@ -77,7 +72,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // A resource refusal is located evidence about preparation, not UNSAT.
-    let options = AdmissionOptions::default();
     let error = prepare_formula(
         "p.".into(),
         options,
