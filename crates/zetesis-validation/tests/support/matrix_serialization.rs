@@ -42,6 +42,7 @@ fn malformed_utf8_uses_an_explicit_byte_view() {
 #[test]
 fn matrix_capture_view_preserves_invocation_metadata() {
     let capture = Capture {
+        helper_child_id: None,
         executable: "/sealed/zetesis".into(),
         arguments: vec!["--json".into()],
         directory: "/private/source".into(),

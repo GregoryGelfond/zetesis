@@ -1,6 +1,9 @@
 //! Sequential bounded processes around pure schedule and display comparisons.
+mod memory;
+mod metadata;
+
 use super::capture::unix_ns;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsString;
 use std::path::Path;
 use std::time::Instant;
@@ -16,10 +19,15 @@ use crate::{answers, examples, process};
 #[path = "../../tests/support/performance_sources.rs"]
 mod tests;
 
-pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
+pub(super) fn campaign(request: &Request<'_>, helper: Option<&Path>) -> Result<Report, Error> {
     if !cfg!(any(target_os = "linux", target_os = "macos")) {
         return Err(Error::Configuration(
             "bounded process capture requires Linux or macOS",
+        ));
+    }
+    if request.schedule.memory_runs() > 0 && helper.is_none() {
+        return Err(Error::Configuration(
+            "memory observations require run_with_runner and a fresh helper",
         ));
     }
     let deadline = Instant::now()
@@ -30,8 +38,11 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
     let started_unix_ns =
         unix_ns().ok_or(Error::Configuration("UTC metadata precedes Unix epoch"))?;
     let corpus = examples::load(request.corpus, request.limits.corpus).map_err(Error::Corpus)?;
-    let sources = source_paths(&corpus, request.schedule.suite())?;
-    let before = seals(
+    let sources = match request.schedule.suite() {
+        Some(suite) => source_paths(&corpus, suite)?,
+        None => selected_sources(&corpus, request.schedule.cases())?,
+    };
+    let mut before = seals(
         &corpus,
         &sources,
         request.corpus,
@@ -39,23 +50,34 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
         request.reference,
         request.limits,
     )?;
+    if let Some(helper) = helper {
+        if !helper.is_absolute() {
+            return Err(Error::Configuration("memory helper must be absolute"));
+        }
+        before.push(identity::seal(helper, request.limits.max_executable_bytes)?);
+    }
     let destination = publication::prepare(request.report, corpus.root(), &before)?;
     let directory = tempfile::tempdir()
         .map_err(|source| super::io(Path::new("private performance sources"), source))?;
     let mut report = Report {
-        schema: 1,
+        schema: if request.schedule.extended() { 2 } else { 1 },
         manifest_sha256: examples::MANIFEST_SHA256,
-        schedule: request.schedule,
+        schedule: request.schedule.clone(),
         limits: request.limits,
         started_unix_ns,
         finished_unix_ns: None,
         wall_scope: "fresh_process_spawn_capture_reap; output_included; comparison_hashing_excluded; no_cold_cache_claim",
         comparison_scope: "complete_selected_displays_with_symbol_and_model_multiplicities; final_optimum_ties_and_costs; hidden_interpretations_unavailable",
-        peak_rss: "unavailable: direct-child capture does not retain rusage",
+        peak_rss: if request.schedule.memory_runs() > 0 {
+            "separate_fresh_helper_RUSAGE_CHILDREN; excludes_helper; may_include_usage_propagated_by_waited_descendants; not_simultaneous_tree_RSS_or_device_memory; macOS_bytes_Linux_KiB_converted_to_bytes"
+        } else {
+            "unavailable: direct-child capture does not retain rusage"
+        },
         gpu_measurement: "unavailable: this fixed CPU campaign is not the full94 eager/lazy CPU/Metal matrix",
         before,
         after: Vec::new(),
         metadata: Vec::new(),
+        metadata_complete: false,
         samples: Vec::new(),
         total_capture_bytes: 0,
         faults: Vec::new(),
@@ -70,7 +92,14 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
     ) {
         Ok(private) => {
             report.before.extend(private);
-            execute(request, &corpus, directory.path(), deadline, &mut report);
+            execute(
+                request,
+                &corpus,
+                directory.path(),
+                deadline,
+                &mut report,
+                helper,
+            );
         }
         Err(error) => report.faults.push(Fault::InputWrite(error.to_string())),
     }
@@ -89,14 +118,21 @@ pub(super) fn source_paths(
     corpus: &examples::Corpus,
     suite: Suite,
 ) -> Result<BTreeSet<&str>, Error> {
+    selected_sources(corpus, suite.cases())
+}
+
+fn selected_sources<'a>(
+    corpus: &'a examples::Corpus,
+    cases: &[Case],
+) -> Result<BTreeSet<&'a str>, Error> {
     let mut sources = BTreeSet::new();
-    for selected in suite.cases() {
+    for selected in cases {
         let case = corpus
             .cases()
             .iter()
             .find(|case| case.path() == selected.path())
             .ok_or(Error::Configuration(
-                "fixed performance case is missing from sealed corpus",
+                "selected performance case is missing from sealed corpus",
             ))?;
         sources.extend(case.transitive_source_paths().iter().map(String::as_str));
     }
@@ -190,59 +226,80 @@ fn execute(
     directory: &Path,
     deadline: Instant,
     report: &mut Report,
+    helper: Option<&Path>,
 ) {
-    for (executable, argument) in [
-        (request.native, "--version"),
-        (request.native, "--help-all"),
-        (request.reference, "--version"),
-    ] {
-        let Some(capture) = invoke(
-            executable,
-            vec![argument.into()],
-            directory,
-            deadline,
-            report,
-        ) else {
-            return;
-        };
-        let complete = capture.complete(false);
-        report.metadata.push(capture);
-        if !complete {
-            report.faults.push(Fault::Metadata);
-            return;
-        }
+    if !metadata::collect(request, directory, deadline, report) {
+        return;
     }
-    let mut references: [Option<answers::ReportedAnswers>; Case::ALL.len()] =
-        std::array::from_fn(|_| None);
+    let mut references = BTreeMap::new();
     for slot in request.schedule.slots() {
         let case = corpus
             .cases()
             .iter()
             .find(|case| case.path() == slot.case.path())
             .expect("fixed source cases validated before execution");
-        let (executable, arguments) = arguments(request, directory, slot);
-        let Some(capture) = invoke(executable, arguments, directory, deadline, report) else {
-            break;
+        let (executable, arguments) = arguments(request, directory, &slot);
+        let memory_path = directory.join("child-rss.json");
+        let (capture, memory) = if slot.phase == Phase::Memory {
+            let Some(capture) = memory::invoke(
+                helper.expect("memory helper admitted"),
+                process::Invocation {
+                    executable,
+                    arguments: &arguments,
+                    directory,
+                },
+                &memory_path,
+                deadline,
+                report,
+            ) else {
+                break;
+            };
+            let memory = memory::read(&memory_path, capture.helper_child_id());
+            (capture, Some(memory))
+        } else {
+            let Some(capture) = invoke(executable, arguments, directory, deadline, report) else {
+                break;
+            };
+            (capture, None)
         };
         let mut sample = Sample {
-            slot,
+            slot: slot.clone(),
             capture,
             decision: Decision::Pass,
             detail: None,
             selected_models: None,
             cost: None,
             diagnostics: None,
+            memory: None,
+            memory_record: None,
         };
+        if let Some((raw, memory)) = memory {
+            sample.memory_record = Some(raw);
+            match memory {
+                Ok(memory) => sample.memory = Some(memory),
+                Err(detail) => {
+                    sample.decision = if sample.capture.complete(false) {
+                        Decision::InvalidMemory
+                    } else {
+                        Decision::InvocationFailure
+                    };
+                    sample.detail = Some(detail);
+                    report.samples.push(sample);
+                    report.faults.push(Fault::Observation);
+                    break;
+                }
+            }
+        }
         let result = qualify(
             &mut sample,
             case.contract(),
-            references[slot.case.index()].as_ref(),
+            references.get(slot.case.path()),
             request.limits.answers,
         );
         match result {
             Ok(answer) => {
                 if slot.phase == Phase::Qualification && slot.producer == Producer::Reference {
-                    references[slot.case.index()] = Some(answer);
+                    references.insert(slot.case.path().to_owned(), answer);
                 }
             }
             Err((decision, detail)) => {
@@ -259,7 +316,11 @@ fn execute(
     }
 }
 
-fn arguments<'a>(request: &Request<'a>, directory: &Path, slot: Slot) -> (&'a Path, Vec<OsString>) {
+fn arguments<'a>(
+    request: &Request<'a>,
+    directory: &Path,
+    slot: &Slot,
+) -> (&'a Path, Vec<OsString>) {
     let (executable, flags): (_, &[&str]) = match slot.producer {
         Producer::Native => (
             request.native,
@@ -307,11 +368,27 @@ fn qualify(
 ) -> Result<answers::ReportedAnswers, (Decision, String)> {
     if !sample
         .capture
-        .complete(sample.slot.producer == Producer::Reference)
+        .complete(sample.slot.phase != Phase::Memory && sample.slot.producer == Producer::Reference)
     {
         return Err((
             Decision::InvocationFailure,
             "capture/exit/cleanup did not complete successfully".into(),
+        ));
+    }
+    if sample.slot.phase == Phase::Memory
+        && !sample.memory.is_some_and(|memory| {
+            memory.valid()
+                && memory.signal.is_none()
+                && match memory.exit_code {
+                    Some(0) => true,
+                    Some(10 | 20 | 30) => sample.slot.producer == Producer::Reference,
+                    _ => false,
+                }
+        })
+    {
+        return Err((
+            Decision::InvocationFailure,
+            "child RSS record lacks an accepted solver exit".into(),
         ));
     }
     let parsed = match sample.slot.producer {
@@ -360,6 +437,17 @@ fn invoke(
     deadline: Instant,
     report: &mut Report,
 ) -> Option<Capture> {
+    launch(executable, arguments, directory, deadline, report, false)
+}
+
+fn launch(
+    executable: &Path,
+    arguments: Vec<OsString>,
+    directory: &Path,
+    deadline: Instant,
+    report: &mut Report,
+    supervised: bool,
+) -> Option<Capture> {
     let remaining_time = deadline.saturating_duration_since(Instant::now());
     if remaining_time.is_zero() {
         report.faults.push(Fault::Deadline);
@@ -378,7 +466,11 @@ fn invoke(
         max_output_bytes: report.limits.process.max_output_bytes.min(remaining_bytes),
         ..report.limits.process
     };
-    let (record, cleanup_fault) = super::capture::invoke(executable, arguments, directory, limits);
+    let (record, cleanup_fault) = if supervised {
+        super::capture::supervised(executable, arguments, directory, limits)
+    } else {
+        super::capture::invoke(executable, arguments, directory, limits)
+    };
     if let Some(fault) = cleanup_fault {
         report.faults.push(Fault::ChildCleanup(fault));
     }

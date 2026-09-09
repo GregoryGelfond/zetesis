@@ -19,6 +19,25 @@ pub(super) fn invoke(
     directory: &Path,
     limits: process::Limits,
 ) -> (Capture, Option<String>) {
+    capture(executable, arguments, directory, limits, false)
+}
+
+pub(super) fn supervised(
+    executable: &Path,
+    arguments: Vec<OsString>,
+    directory: &Path,
+    limits: process::Limits,
+) -> (Capture, Option<String>) {
+    capture(executable, arguments, directory, limits, true)
+}
+
+fn capture(
+    executable: &Path,
+    arguments: Vec<OsString>,
+    directory: &Path,
+    limits: process::Limits,
+    supervised: bool,
+) -> (Capture, Option<String>) {
     let mut cleanup_fault = None;
     let mut record = Capture {
         executable: executable.into(),
@@ -33,18 +52,23 @@ pub(super) fn invoke(
         failure: None,
         cleanup_failure: None,
         unresolved_child: None,
+        helper_child_id: None,
     };
-    match process::invoke(
-        process::Invocation {
-            executable,
-            arguments: &record.arguments,
-            directory,
-        },
-        limits,
-    ) {
+    let invocation = process::Invocation {
+        executable,
+        arguments: &record.arguments,
+        directory,
+    };
+    let outcome = if supervised {
+        process::invoke_supervised(invocation, limits)
+    } else {
+        process::invoke(invocation, limits)
+    };
+    match outcome {
         Err(error) => record.failure = Some(InvocationFailure::start(&error)),
         Ok(outcome) => {
             let (capture, pending) = outcome.into_parts();
+            record.helper_child_id = supervised.then_some(capture.child_id());
             record.stop = Some(capture.stop());
             record.exit = capture.exit();
             record.elapsed_ns = Some(capture.elapsed().as_nanos());

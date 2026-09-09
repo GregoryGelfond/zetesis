@@ -23,6 +23,7 @@ pub(super) fn invoke(
     limits: Limits,
     started: Instant,
     deadline: Instant,
+    supervised: bool,
 ) -> Result<Outcome, StartError> {
     let mut child = Command::new(invocation.executable)
         .args(invocation.arguments)
@@ -41,6 +42,7 @@ pub(super) fn invoke(
         group_owned: true,
     };
     let mut capture = Capture {
+        child_id: owned.child.id(),
         stop: Stop::Failure,
         exit: None,
         elapsed: Duration::ZERO,
@@ -66,6 +68,29 @@ pub(super) fn invoke(
     // already admitted and close both pipes before bounded group cleanup.
     drop(stdout);
     drop(stderr);
+    if supervised && capture.stop == Stop::Completed && owned.group_owned {
+        match helper_succeeded(&owned) {
+            Ok(true) => {}
+            Ok(false) => {
+                // A failed helper may have left its solver after closing pipes.
+                // The waitable helper still reserves this group ID.
+                if let Err(error) =
+                    pid(&owned).and_then(|pid| match kill_process_group(pid, Signal::KILL) {
+                        Ok(()) | Err(rustix::io::Errno::SRCH) => Ok(()),
+                        Err(error) => Err(error.into()),
+                    })
+                {
+                    capture.failure = Some(Failure::new(Operation::TerminateGroup, error));
+                    capture.stop = Stop::Failure;
+                }
+            }
+            Err(error) => {
+                owned.group_owned = false;
+                capture.failure = Some(Failure::new(Operation::ObserveExit, error));
+                capture.stop = Stop::Failure;
+            }
+        }
+    }
     let cleanup = finish(
         owned,
         limits.cleanup_timeout,
@@ -196,6 +221,15 @@ fn observe(child: &PendingChild) -> io::Result<bool> {
         WaitIdOptions::EXITED | WaitIdOptions::NOHANG | WaitIdOptions::NOWAIT,
     )
     .map(|status| status.is_some())
+    .map_err(Into::into)
+}
+
+fn helper_succeeded(child: &PendingChild) -> io::Result<bool> {
+    waitid(
+        WaitId::Pid(pid(child)?),
+        WaitIdOptions::EXITED | WaitIdOptions::NOHANG | WaitIdOptions::NOWAIT,
+    )
+    .map(|status| status.is_some_and(|status| status.exit_status() == Some(0)))
     .map_err(Into::into)
 }
 

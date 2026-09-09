@@ -52,6 +52,7 @@ fn sample() -> Sample {
             failure: None,
             cleanup_failure: None,
             unresolved_child: None,
+            helper_child_id: None,
         }),
         decision: Decision::Pass,
         detail: None,

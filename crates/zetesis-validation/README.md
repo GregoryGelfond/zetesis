@@ -146,6 +146,19 @@ Arrange a quiet measurement window and choose explicit invocation/campaign
 deadlines appropriate to the suite. Input/executable seals do not capture
 thermal state, dynamic libraries or the rest of the host environment.
 
+Repeated `--case <manifest-relative.lp>` selects arbitrary runnable clean corpus
+cases for the ordinary CPU campaign. Add `--memory-runs 5` for separate paired
+child RSS observations; these never enter timed samples. The CLI seals its own
+runner executable alongside the solvers and selected transitive source closure.
+Full native help is captured when short help advertises it, under the same
+capture limits, with no fallback after a failed full-help query.
+
+Explicit selections and memory populations use ordinary report schema 2.
+Named presets without those extensions retain schema 1. Completed schema-2
+reports include separate wall-nanosecond and RSS-byte distributions, with exact
+inclusive quartiles encoded as `whole + quarters / 4`. Failed campaigns retain
+their evidence and have no accepted summary. Matrix report schemas are separate.
+
 Every scheduled attempt is retained. A failed cell records skipped later
 positions; samples are not silently replaced. `accounted` means every position
 has a disposition, whereas `passed` requires all requested observations to pass.
@@ -156,11 +169,16 @@ interleaved with solving; a missing duration stays unavailable. Logical payload,
 transfer and authored allocation counts are not RSS. Neither successful parity
 nor reduced storage implies a speedup.
 
-The reusable entry points are `performance::run(&Request)` and
-`performance::matrix::run(&Request)`. They own bounded acquisition and separate
+The reusable entry points are `performance::run(&Request)`,
+`performance::run_with_runner(&Request, runner)` and
+`performance::matrix::run(&Request)`. `Schedule::for_cases` validates bounded
+explicit selections; `Schedule::with_memory` appends the separate population.
+`run_with_runner` seals the supplied executable and uses it as a fresh helper
+only for resource samples. They own bounded acquisition and separate
 report publication. See [performance](src/performance.rs),
 [matrix scheduling](tests/matrix_schedule.rs) and
-[matrix accounting](tests/matrix_campaign.rs).
+[matrix accounting](tests/matrix_campaign.rs). The [comparison guide](../../scripts/README-comparison.md)
+documents reproducible commands, limits and protocol boundaries.
 
 ## Compose capture, contracts and publication
 
@@ -169,6 +187,7 @@ report publication. See [performance](src/performance.rs),
 | `examples::load`, `verify_originals`, `Contract::check` | Source integrity and declared expected outcomes; callers establish capture and producer completion. |
 | `curated::open` | Bounded verified sources, provenance and immutable selected contracts. |
 | `process::invoke` | Explicit executable/arguments/directory with bounded stdout/stderr capture and typed cleanup outcomes. |
+| `process::invoke_supervised` | Separately supervise trusted helpers, retaining their group reservation through cleanup after failed helper completion. |
 | `answers` | Bounded decoding and reconciliation of reported answers. |
 | `selected::run` | Private source copies, selected comparisons and before/after seals. |
 | `Report::publish` | A separate bounded publication step that refuses an existing destination. |
@@ -193,6 +212,16 @@ or machine quiescence. Descendants that leave the group are outside that cleanup
 contract. Unresolved direct children remain explicit `PendingChild` values;
 drop does not silently wait in the background. Other-platform compatibility
 capture has a weaker contract.
+
+Resource samples use a fresh Rust helper's `RUSAGE_CHILDREN`, excluding the
+helper's own RSS. macOS bytes and Linux KiB are recorded and converted explicitly.
+Usage propagated from descendants waited for by the solver can contribute; this
+is not simultaneous process-tree RSS or device memory. The parent exclusively
+waits for the helper, and the helper exclusively waits for its solver in the
+inherited group. The trusted helper may report success only after that wait and
+resource-record publication. Acceptance also requires the separate solver exit,
+distinct PID and platform-correct units. Failed helpers trigger group cleanup,
+including when a remaining solver has closed both inherited output pipes.
 
 Timeout, cleanup deadline, retained capture bytes, decoded structure and report
 bytes have separate ceilings. Byte limits include failed prefixes but exclude

@@ -27,6 +27,8 @@ use serde::Serialize;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod posix;
 
+pub mod memory;
+
 /// Borrowed process arguments. Both paths must be absolute.
 #[derive(Clone, Copy, Debug)]
 pub struct Invocation<'a> {
@@ -191,6 +193,7 @@ impl std::error::Error for StartError {
 /// Immutable retained bytes and direct-child evidence.
 #[derive(Debug)]
 pub struct Capture {
+    child_id: u32,
     stop: Stop,
     exit: Option<Exit>,
     elapsed: Duration,
@@ -200,6 +203,11 @@ pub struct Capture {
     cleanup_failure: Option<Failure>,
 }
 impl Capture {
+    /// Direct child created by this invocation; identity is not a liveness claim.
+    #[must_use]
+    pub const fn child_id(&self) -> u32 {
+        self.child_id
+    }
     /// Reason capture polling stopped.
     #[must_use]
     pub const fn stop(&self) -> Stop {
@@ -343,6 +351,35 @@ pub struct Cleanup {
 /// Returns a typed refusal only before spawning. Every post-spawn failure
 /// returns an [`Outcome`] with partial capture and explicit cleanup ownership.
 pub fn invoke(invocation: Invocation<'_>, limits: Limits) -> Result<Outcome, StartError> {
+    start(invocation, limits, false)
+}
+
+/// Capture a helper whose descendants inherit its process group.
+///
+/// Unlike [`invoke`], nonzero or signalled helper completion also attempts group
+/// termination while its waitable leader reserves its group ID, before reaping it.
+/// This covers failed helpers whose solver closed both output pipes. It does
+/// not certify escaped-descendant cleanup or provide their wait status. The
+/// trusted helper must return zero only after waiting for its sole solver and
+/// publishing the solver's separate exit record. Zero is not a general process
+/// tree completion guarantee; the caller must validate that additional record.
+/// This extra supervision is excluded from the ordinary timing protocol.
+///
+/// # Errors
+/// Returns the same pre-spawn refusals as [`invoke`]; post-spawn faults retain
+/// bounded capture and explicit helper cleanup ownership.
+pub fn invoke_supervised(
+    invocation: Invocation<'_>,
+    limits: Limits,
+) -> Result<Outcome, StartError> {
+    start(invocation, limits, true)
+}
+
+fn start(
+    invocation: Invocation<'_>,
+    limits: Limits,
+    supervised: bool,
+) -> Result<Outcome, StartError> {
     if !invocation.executable.is_absolute() || !invocation.directory.is_absolute() {
         return Err(StartError::RelativePath);
     }
@@ -355,11 +392,11 @@ pub fn invoke(invocation: Invocation<'_>, limits: Limits) -> Result<Outcome, Sta
         .ok_or(StartError::DeadlineOverflow)?;
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
-        posix::invoke(invocation, limits, started, deadline)
+        posix::invoke(invocation, limits, started, deadline, supervised)
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
-        let _ = deadline;
+        let _ = (deadline, supervised);
         Err(StartError::UnsupportedPlatform)
     }
 }

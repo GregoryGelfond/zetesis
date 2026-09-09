@@ -5,7 +5,8 @@
 //! interval; comparison and hashing are outside it. Native human output and
 //! clingo JSON have different encoding costs. Instrumented native diagnostics
 //! are separate samples and never enter the uninstrumented timing population.
-//! This campaign measures neither peak RSS nor GPU execution. It is not the
+//! Separate fresh-helper child RSS samples are optional; they never enter the
+//! ordinary timing population. This campaign does not measure GPU execution. It is not the
 //! complete eager/lazy × CPU/Metal corpus matrix.
 //!
 //! Callers arrange a quiet measurement window after build qualification. Input
@@ -18,6 +19,7 @@ pub mod matrix;
 mod record;
 mod run;
 mod timing;
+mod summary;
 mod view;
 #[path = "phase.rs"]
 mod phase;
@@ -33,6 +35,7 @@ use crate::selected::{Change, FileSeal, publication};
 
 pub use config::{Case, Limits, Phase, Producer, Request, Schedule, Slot, Suite};
 pub use record::{Capture, Decision, Fault, Sample};
+pub use summary::{Distribution, Quartile, Summary};
 pub use timing::{Diagnostics, Measurement};
 
 /// Setup or evidence-publication failure, never an answer-set verdict.
@@ -85,6 +88,8 @@ pub struct Report {
     before: Vec<FileSeal>,
     after: Vec<Change>,
     metadata: Vec<Capture>,
+    #[serde(skip)]
+    metadata_complete: bool,
     samples: Vec<Sample>,
     total_capture_bytes: usize,
     faults: Vec<Fault>,
@@ -103,7 +108,7 @@ impl Report {
                 .samples
                 .iter()
                 .all(|sample| sample.decision() == Decision::Pass)
-            && self.metadata.len() == 3
+            && self.metadata_complete
             && self.metadata.iter().all(|capture| capture.complete(false))
             && self.after.iter().all(Change::unchanged)
             && self.finished_unix_ns.is_some()
@@ -112,8 +117,8 @@ impl Report {
     }
     /// Exact fixed execution order, independent of sample success or duration.
     #[must_use]
-    pub const fn schedule(&self) -> Schedule {
-        self.schedule
+    pub fn schedule(&self) -> Schedule {
+        self.schedule.clone()
     }
     /// Complete requested resource configuration, with each independent ceiling.
     #[must_use]
@@ -176,11 +181,25 @@ impl Report {
             &view::Published {
                 passed: self.passed(),
                 report: self,
+                summary: if self.schema == 2 {
+                    self.summaries()
+                } else {
+                    None
+                },
             },
             &self.destination,
             self.limits.max_report_bytes,
         )
         .map_err(Error::Boundary)
+    }
+
+    /// Exact inclusive quartiles from completely qualified populations only.
+    /// Timed wall nanoseconds and separate child peak RSS bytes never mix.
+    /// Failed campaigns return absence, not a summary of a surviving prefix.
+    /// Work is O(cases × samples + samples log samples), with bounded sample storage.
+    #[must_use]
+    pub fn summaries(&self) -> Option<Vec<Summary>> {
+        self.passed().then(|| summary::collect(self))
     }
 }
 
@@ -198,7 +217,19 @@ impl Report {
 /// # Errors
 /// Returns setup, identity or configuration failure before solver execution.
 pub fn run(request: &Request<'_>) -> Result<Report, Error> {
-    run::campaign(request)
+    run::campaign(request, None)
+}
+
+/// Seal the comparison runner as well as both solver executables.
+/// If resource rounds are requested, the absolute runner must implement the
+/// trusted `zetesis-perf __measure-child` protocol. Only [`Phase::Memory`] launches it;
+/// qualification, warmup, timed and diagnostic calls retain their direct path.
+///
+/// # Errors
+/// Returns the setup/publication refusals of [`run`], including missing helper
+/// identity. Resource-record failures remain retained observation failures.
+pub fn run_with_runner(request: &Request<'_>, runner: &Path) -> Result<Report, Error> {
+    run::campaign(request, Some(runner))
 }
 
 fn io(path: &Path, source: std::io::Error) -> Error {

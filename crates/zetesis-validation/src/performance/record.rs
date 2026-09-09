@@ -40,6 +40,8 @@ pub enum Decision {
     ModelMismatch,
     /// Separate phase statistics were missing, malformed or incomplete.
     InvalidDiagnostics,
+    /// A separate child resource record was absent, invalid or contradicted completion.
+    InvalidMemory,
 }
 /// Exact primary invocation and its bounded raw outputs.
 #[derive(Debug, Serialize)]
@@ -56,8 +58,16 @@ pub struct Capture {
     pub(super) failure: Option<InvocationFailure>,
     pub(super) cleanup_failure: Option<InvocationFailure>,
     pub(super) unresolved_child: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) helper_child_id: Option<u32>,
 }
 impl Capture {
+    /// Direct helper ID for separately supervised resource samples.
+    /// Ordinary timing captures omit this optional extension.
+    #[must_use]
+    pub const fn helper_child_id(&self) -> Option<u32> {
+        self.helper_child_id
+    }
     /// Selected executable's absolute path.
     #[must_use]
     pub fn executable(&self) -> &Path {
@@ -140,12 +150,16 @@ pub struct Sample {
     pub(super) selected_models: Option<u64>,
     pub(super) cost: Option<Vec<i64>>,
     pub(super) diagnostics: Option<Diagnostics>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) memory: Option<process::memory::Measurement>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) memory_record: Option<Vec<u8>>,
 }
 impl Sample {
     /// Immutable schedule coordinates.
     #[must_use]
-    pub const fn slot(&self) -> Slot {
-        self.slot
+    pub fn slot(&self) -> Slot {
+        self.slot.clone()
     }
     /// Complete raw evidence from this observation.
     #[must_use]
@@ -176,5 +190,15 @@ impl Sample {
     #[must_use]
     pub const fn diagnostics(&self) -> Option<&Diagnostics> {
         self.diagnostics.as_ref()
+    }
+    /// Separate child peak RSS and exit evidence; never a timed observation.
+    #[must_use]
+    pub const fn memory(&self) -> Option<process::memory::Measurement> {
+        self.memory
+    }
+    /// Bounded raw helper record, including invalid prefixes, separate from pipe capture.
+    #[must_use]
+    pub fn memory_record(&self) -> Option<&[u8]> {
+        self.memory_record.as_deref()
     }
 }

@@ -13,6 +13,9 @@ use zetesis_validation::{
     performance::{self, Case, Decision, Phase, Producer, Schedule, Suite},
 };
 
+#[path = "support/comparison_extensions.rs"]
+mod comparison_extensions;
+
 struct Fixture {
     directory: tempfile::TempDir,
     corpus: PathBuf,
@@ -64,7 +67,14 @@ impl Fixture {
         let mut reference_script = String::from(
             "if [ \"$#\" -eq 1 ]; then echo reference-fixture; exit 0; fi\nfor input do :; done\n",
         );
-        for (index, selected) in Case::ALL.into_iter().enumerate() {
+        for (index, selected) in Case::ALL
+            .into_iter()
+            .chain([
+                Case::Selected("scenarios/shortest-path/variant-01/01-basic.lp".into()),
+                Case::Selected("scenarios/shortest-path/variant-01/04-no-path.lp".into()),
+            ])
+            .enumerate()
+        {
             let case = verified
                 .cases()
                 .iter()
@@ -124,6 +134,12 @@ impl Fixture {
 fn producer_reports(contract: &examples::Contract) -> (String, Value) {
     // These fixtures establish interchange comparison, not ASP semantics.
     // The independent real campaign remains separately qualified.
+    if contract.satisfiability() == examples::Satisfiability::Unsat {
+        return (
+            "UNSATISFIABLE\nModels: 0\nCoverage: exhausted\n".into(),
+            json!({"Result":"UNSATISFIABLE","Models":{"More":"no","Number":0},"Call":[{}]}),
+        );
+    }
     let symbols = contract
         .witnesses()
         .first()
@@ -194,12 +210,12 @@ fn all_qualification_pairs_precede_timed_observations() {
 
 #[test]
 fn each_input_alternates_the_first_timed_producer() {
-    for &case in Suite::Baseline.cases() {
+    for case in Suite::Baseline.cases() {
         let slots: Vec<_> = Schedule::new(0, 4)
             .unwrap()
             .slots()
             .into_iter()
-            .filter(|slot| slot.case == case && slot.phase == Phase::Timed)
+            .filter(|slot| &slot.case == case && slot.phase == Phase::Timed)
             .collect();
         let first: Vec<_> = slots.chunks_exact(2).map(|pair| pair[0].producer).collect();
         assert!(first.windows(2).all(|pair| pair[0] != pair[1]));
@@ -428,11 +444,11 @@ fn the_largest_schedule_preserves_every_authored_round() {
         (Phase::Warmup, schedule.warmups()),
         (Phase::Timed, schedule.repetitions()),
     ] {
-        for &case in Suite::Baseline.cases() {
+        for case in Suite::Baseline.cases() {
             let slots: Vec<_> = schedule
                 .slots()
                 .into_iter()
-                .filter(|slot| slot.phase == phase && slot.case == case)
+                .filter(|slot| slot.phase == phase && &slot.case == case)
                 .collect();
             assert_eq!(slots.len(), rounds * 2);
             for (round, pair) in slots.chunks_exact(2).enumerate() {
@@ -771,6 +787,15 @@ fn cli_suite(
     repetitions: &str,
     suite: Option<&str>,
 ) -> zetesis_validation::process::Capture {
+    cli_options(fixture, repetitions, suite, &[])
+}
+
+fn cli_options(
+    fixture: &Fixture,
+    repetitions: &str,
+    suite: Option<&str>,
+    options: &[std::ffi::OsString],
+) -> zetesis_validation::process::Capture {
     use zetesis_validation::process::{self, Invocation, Limits};
     let mut arguments = vec![
         fixture.corpus.clone().into_os_string(),
@@ -788,6 +813,7 @@ fn cli_suite(
     if let Some(suite) = suite {
         arguments.extend(["--suite".into(), suite.into()]);
     }
+    arguments.extend_from_slice(options);
     let outcome = process::invoke(
         Invocation {
             executable: Path::new(env!("CARGO_BIN_EXE_zetesis-perf")),
@@ -859,7 +885,7 @@ fn the_default_schedule_preserves_the_qualified_baseline() {
     let schedule = Schedule::default();
     assert_eq!(serde_json::to_value(schedule.slots()).unwrap(), expected);
     assert_eq!(
-        serde_json::to_value(schedule).unwrap(),
+        serde_json::to_value(&schedule).unwrap(),
         json!({"warmups":3,"repetitions":21})
     );
     assert_eq!(schedule.expected_samples(), 153);
@@ -868,11 +894,11 @@ fn the_default_schedule_preserves_the_qualified_baseline() {
 #[test]
 fn the_case_catalog_covers_both_suites_without_aliases() {
     use std::collections::BTreeSet;
-    let all: BTreeSet<_> = Case::ALL.into_iter().map(Case::path).collect();
+    let all: BTreeSet<_> = Case::ALL.iter().map(Case::path).collect();
     let selected: BTreeSet<_> = [Suite::Baseline, Suite::Queens]
         .into_iter()
         .flat_map(Suite::cases)
-        .map(|case| case.path())
+        .map(Case::path)
         .collect();
     assert_eq!(all.len(), 8);
     assert_eq!(selected, all);
@@ -931,7 +957,10 @@ fn queens_diagnostics_cover_each_variant_once() {
             .all(|slot| slot.producer == Producer::Native)
     );
     assert_eq!(
-        diagnostics.iter().map(|slot| slot.case).collect::<Vec<_>>(),
+        diagnostics
+            .iter()
+            .map(|slot| slot.case.clone())
+            .collect::<Vec<_>>(),
         Suite::Queens.cases()
     );
     assert!(

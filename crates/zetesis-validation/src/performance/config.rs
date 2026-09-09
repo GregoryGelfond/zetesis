@@ -6,7 +6,7 @@ use std::path::Path;
 use std::time::Duration;
 
 /// Pinned CPU inputs, without source rewriting or parameter overrides.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Case {
     /// Unique SEND + MORE = MONEY answer set.
@@ -27,9 +27,12 @@ pub enum Case {
     Queens05,
     /// Eight queens with bounds in generating choices, variant 06.
     Queens06,
+    /// Explicit path from the independently verified clean corpus manifest.
+    Selected(String),
 }
 impl Case {
-    /// Complete supported input catalog. Suite order is specified separately.
+    /// Authored preset catalog. Explicit manifest cases are admitted separately.
+    /// Suite order is specified separately.
     pub const ALL: [Self; 8] = [
         Self::Send,
         Self::Queens02,
@@ -42,7 +45,7 @@ impl Case {
     ];
     /// Entry path relative to the sealed clean corpus.
     #[must_use]
-    pub const fn path(self) -> &'static str {
+    pub fn path(&self) -> &str {
         match self {
             Self::Send => "standalone/send-money/send-money.lp",
             Self::Queens02 => "standalone/n-queens/variant-02.lp",
@@ -52,18 +55,7 @@ impl Case {
             Self::Queens04 => "standalone/n-queens/variant-04.lp",
             Self::Queens05 => "standalone/n-queens/variant-05.lp",
             Self::Queens06 => "standalone/n-queens/variant-06.lp",
-        }
-    }
-    pub(super) const fn index(self) -> usize {
-        match self {
-            Self::Send => 0,
-            Self::Queens02 => 1,
-            Self::TaskAllocation => 2,
-            Self::Queens01 => 3,
-            Self::Queens03 => 4,
-            Self::Queens04 => 5,
-            Self::Queens05 => 6,
-            Self::Queens06 => 7,
+            Self::Selected(path) => path,
         }
     }
 }
@@ -114,6 +106,8 @@ pub enum Phase {
     Timed,
     /// Separate native `--stats` invocation.
     Diagnostics,
+    /// Separate fresh-helper child RSS observation, excluded from timed summaries.
+    Memory,
 }
 /// Producer identity within a paired semantic task.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -125,7 +119,7 @@ pub enum Producer {
     Reference,
 }
 /// One exact authored schedule position.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Slot {
     /// Input whose complete selected family is required.
     pub case: Case,
@@ -137,7 +131,7 @@ pub struct Slot {
     pub producer: Producer,
 }
 /// Number of paired rounds; bounded construction prevents unbounded schedules.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Schedule {
     // Preserve the schema-1 baseline representation and its historical `queens`
     // case identifier. Non-baseline schedules state their suite explicitly.
@@ -145,6 +139,10 @@ pub struct Schedule {
     suite: Suite,
     warmups: usize,
     repetitions: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    selected: Option<Vec<Case>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    memory_runs: Option<std::num::NonZeroUsize>,
 }
 impl Default for Schedule {
     fn default() -> Self {
@@ -152,6 +150,8 @@ impl Default for Schedule {
             suite: Suite::Baseline,
             warmups: 3,
             repetitions: 21,
+            selected: None,
+            memory_runs: None,
         }
     }
 }
@@ -179,33 +179,109 @@ impl Schedule {
             suite,
             warmups,
             repetitions,
+            selected: None,
+            memory_runs: None,
         })
     }
-    /// Authored source selection; independent of the solver's grounding policy.
+
+    /// Select one through 94 distinct manifest-relative cases in caller order.
+    /// Each path is bounded by 1024 bytes and must be a normal relative path.
+    /// Corpus admission later requires every path to identify a runnable case.
+    ///
+    /// # Errors
+    /// Refuses path/count/schedule bounds, duplicate or escaping selections.
+    pub fn for_cases(
+        paths: Vec<String>,
+        warmups: usize,
+        repetitions: usize,
+    ) -> Result<Self, Error> {
+        use std::collections::BTreeSet;
+        use std::path::Component;
+        if paths.is_empty() || paths.len() > 94 {
+            return Err(Error::Configuration("selected cases must be 1..=94"));
+        }
+        let mut seen = BTreeSet::new();
+        for path in &paths {
+            if path.is_empty()
+                || path.len() > 1024
+                || !seen.insert(path)
+                || Path::new(path)
+                    .components()
+                    .any(|part| !matches!(part, Component::Normal(_)))
+            {
+                return Err(Error::Configuration(
+                    "selected cases require distinct normal relative paths of 1..=1024 bytes",
+                ));
+            }
+        }
+        let mut schedule = Self::new(warmups, repetitions)?;
+        schedule.selected = Some(paths.into_iter().map(Case::Selected).collect());
+        Ok(schedule)
+    }
+
+    /// Append zero through 41 separate paired child-RSS observations per case.
+    /// These never alter qualification, warmup, timed or diagnostic positions.
+    ///
+    /// # Errors
+    /// Refuses more than 41 resource observations per solver and case.
+    pub fn with_memory(mut self, rounds: usize) -> Result<Self, Error> {
+        if rounds > 41 {
+            return Err(Error::Configuration("memory rounds must be 0..=41"));
+        }
+        self.memory_runs = std::num::NonZeroUsize::new(rounds);
+        Ok(self)
+    }
+
+    /// Ordered cases, including explicit manifest selections when supplied.
     #[must_use]
-    pub const fn suite(self) -> Suite {
-        self.suite
+    pub fn cases(&self) -> &[Case] {
+        self.selected
+            .as_deref()
+            .unwrap_or_else(|| self.suite.cases())
+    }
+
+    /// Number of separate resource observations per solver and case.
+    #[must_use]
+    pub const fn memory_runs(&self) -> usize {
+        match self.memory_runs {
+            Some(rounds) => rounds.get(),
+            None => 0,
+        }
+    }
+
+    pub(super) fn extended(&self) -> bool {
+        self.selected.is_some() || self.memory_runs.is_some()
+    }
+    /// Named preset, absent for an explicit manifest selection. Use [`Self::cases`]
+    /// for the actual source selection independently of how it was requested.
+    #[must_use]
+    pub const fn suite(&self) -> Option<Suite> {
+        if self.selected.is_some() {
+            None
+        } else {
+            Some(self.suite)
+        }
     }
     /// Number of solve observations, excluding the three executable metadata calls.
     #[must_use]
-    pub const fn expected_samples(self) -> usize {
-        self.suite.cases().len() * (2 * (1 + self.warmups + self.repetitions) + 1)
+    pub fn expected_samples(&self) -> usize {
+        self.cases().len() * (2 * (1 + self.warmups + self.repetitions + self.memory_runs()) + 1)
     }
     /// Requested warmup pairs per input.
     #[must_use]
-    pub const fn warmups(self) -> usize {
+    pub const fn warmups(&self) -> usize {
         self.warmups
     }
     /// Requested timed pairs per input.
     #[must_use]
-    pub const fn repetitions(self) -> usize {
+    pub const fn repetitions(&self) -> usize {
         self.repetitions
     }
     /// Complete deterministic schedule. Case order rotates between rounds; each
     /// case's producer order alternates. Qualification always runs reference first.
     #[must_use]
-    pub fn slots(self) -> Vec<Slot> {
-        let cases = self.suite.cases();
+    pub fn slots(&self) -> Vec<Slot> {
+        let cases = self.cases();
         let mut slots = Vec::with_capacity(self.expected_samples());
         for (phase, rounds) in [
             (Phase::Qualification, 1),
@@ -215,7 +291,7 @@ impl Schedule {
             for round in 0..rounds {
                 for position in 0..cases.len() {
                     let index = (position + round) % cases.len();
-                    let case = cases[index];
+                    let case = &cases[index];
                     let native_first =
                         phase != Phase::Qualification && (round + index).is_multiple_of(2);
                     let producers = if native_first {
@@ -224,7 +300,7 @@ impl Schedule {
                         [Producer::Reference, Producer::Native]
                     };
                     slots.extend(producers.map(|producer| Slot {
-                        case,
+                        case: case.clone(),
                         phase,
                         round,
                         producer,
@@ -232,12 +308,27 @@ impl Schedule {
                 }
             }
         }
-        slots.extend(cases.iter().copied().map(|case| Slot {
+        slots.extend(cases.iter().cloned().map(|case| Slot {
             case,
             phase: Phase::Diagnostics,
             round: 0,
             producer: Producer::Native,
         }));
+        for round in 0..self.memory_runs() {
+            for (index, case) in cases.iter().enumerate() {
+                let producers = if (round + index).is_multiple_of(2) {
+                    [Producer::Native, Producer::Reference]
+                } else {
+                    [Producer::Reference, Producer::Native]
+                };
+                slots.extend(producers.map(|producer| Slot {
+                    case: case.clone(),
+                    phase: Phase::Memory,
+                    round,
+                    producer,
+                }));
+            }
+        }
         slots
     }
 }
@@ -278,7 +369,7 @@ impl Default for Limits {
     }
 }
 /// All paths and limits needed for a self-contained selected CPU refresh.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Request<'a> {
     /// Clean examples root containing the pinned manifest and sources.
     pub corpus: &'a Path,

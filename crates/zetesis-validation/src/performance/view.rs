@@ -7,6 +7,8 @@ pub(super) struct Published<'a> {
     pub passed: bool,
     #[serde(flatten)]
     pub report: &'a Report,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub summary: Option<Vec<super::Summary>>,
 }
 impl Serialize for Limits {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {

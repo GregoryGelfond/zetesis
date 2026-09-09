@@ -125,3 +125,28 @@ fn frozen_production_reports_preserve_display_identity() {
         assert_eq!(reported.displays(), &[(models[0].clone(), 1)]);
     }
 }
+
+#[test]
+fn frozen_optimal_reports_preserve_complete_cost_vectors() {
+    let document: Value =
+        serde_json::from_str(include_str!("fixtures/optimal-protocol.json")).unwrap();
+    for case in document["cases"].as_array().unwrap() {
+        let costs: Vec<i64> = serde_json::from_value(case["expected_cost"].clone()).unwrap();
+        let reports: Vec<_> = case["runs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|run| {
+                let source = run["stdout"].as_str().unwrap().as_bytes();
+                match run["solver"].as_str().unwrap() {
+                    "zetesis" => answers::native_text(source, true, Limits::default()),
+                    "clingo" => answers::clingo_json(source, Limits::default()),
+                    other => panic!("unrecognized fixture producer: {other}"),
+                }
+                .unwrap()
+            })
+            .collect();
+        assert_eq!(reports[0].cost(), Some(costs.as_slice()));
+        assert!(answers::same_displays(&reports[0], &reports[1]));
+    }
+}

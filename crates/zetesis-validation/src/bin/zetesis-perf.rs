@@ -19,6 +19,12 @@ enum SuiteArgument {
     about = "Compare clean ASP cases with retained parity, timing and execution evidence"
 )]
 struct Options {
+    /// Select a manifest-relative clean corpus case; repeat for an ordinary CPU campaign.
+    #[arg(long = "case", conflicts_with_all = ["profile", "workers", "completion_workers", "clingo_workers", "batch_size", "native_report_bytes"])]
+    cases: Vec<String>,
+    /// Separate child RSS rounds per solver/case, zero through 41 (ordinary CPU only).
+    #[arg(long, default_value_t = 0)]
+    memory_runs: usize,
     /// Explicit instrumented profile; repeat for a matrix. Corpus defaults to all four.
     #[arg(long, value_enum)]
     profile: Vec<ProfileArgument>,
@@ -75,6 +81,9 @@ struct Options {
 }
 fn execute(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
     if matches!(options.suite, SuiteArgument::Corpus) || !options.profile.is_empty() {
+        if !options.cases.is_empty() || options.memory_runs > 0 {
+            return Err("--case and --memory-runs require the ordinary CPU campaign".into());
+        }
         return matrix(options);
     }
     if options.workers.is_some()
@@ -95,12 +104,8 @@ fn execute(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
     }
     limits.max_total_capture_bytes = options.capture_bytes;
     limits.max_report_bytes = options.report_bytes;
-    let report = performance::run(&Request {
-        corpus: &options.root,
-        native: &native,
-        reference: &reference,
-        report: &options.report,
-        schedule: Schedule::for_suite(
+    let schedule = if options.cases.is_empty() {
+        Schedule::for_suite(
             match options.suite {
                 SuiteArgument::Baseline => Suite::Baseline,
                 SuiteArgument::Queens => Suite::Queens,
@@ -108,9 +113,31 @@ fn execute(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
             },
             options.warmups,
             options.repetitions.unwrap_or(21),
-        )?,
+        )?
+    } else {
+        if !matches!(options.suite, SuiteArgument::Baseline) {
+            return Err("explicit --case cannot be combined with a named nondefault suite".into());
+        }
+        Schedule::for_cases(
+            options.cases,
+            options.warmups,
+            options.repetitions.unwrap_or(21),
+        )?
+    }
+    .with_memory(options.memory_runs)?;
+    let request = Request {
+        corpus: &options.root,
+        native: &native,
+        reference: &reference,
+        report: &options.report,
+        schedule,
         limits,
-    })?;
+    };
+    let report = if options.memory_runs > 0 || request.schedule.suite().is_none() {
+        performance::run_with_runner(&request, &std::env::current_exe()?)?
+    } else {
+        performance::run(&request)?
+    };
     report.publish()?;
     writeln!(
         io::stdout().lock(),
@@ -126,6 +153,9 @@ fn execute(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
     })
 }
 fn main() -> ExitCode {
+    if std::env::args_os().nth(1).as_deref() == Some(std::ffi::OsStr::new("__measure-child")) {
+        return measure_child();
+    }
     match execute(Options::parse()) {
         Ok(code) => code,
         Err(error) => {
@@ -133,6 +163,45 @@ fn main() -> ExitCode {
             ExitCode::from(2)
         }
     }
+}
+
+#[derive(Parser)]
+struct ChildOptions {
+    /// Private new resource-record path.
+    record: PathBuf,
+    /// Absolute solver executable followed by its unmodified arguments.
+    #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
+    command: Vec<std::ffi::OsString>,
+}
+
+fn measure_child() -> ExitCode {
+    let options = ChildOptions::parse_from(std::env::args_os().skip(1));
+    match child_record(options) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            let _ = writeln!(io::stderr().lock(), "zetesis-perf child RSS: {error}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+fn child_record(options: ChildOptions) -> Result<(), Box<dyn std::error::Error>> {
+    let (executable, arguments) = options.command.split_first().ok_or("missing solver")?;
+    // This entry point starts no other children: resource usage belongs solely
+    // to this one waited-for solver invocation, excluding the helper itself.
+    let record =
+        zetesis_validation::process::memory::measure(zetesis_validation::process::Invocation {
+            executable: std::path::Path::new(executable),
+            arguments,
+            directory: &std::env::current_dir()?,
+        })?;
+    let mut output = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(options.record)?;
+    serde_json::to_writer(&mut output, &record)?;
+    output.flush()?;
+    Ok(())
 }
 
 #[derive(Clone, Copy, ValueEnum)]

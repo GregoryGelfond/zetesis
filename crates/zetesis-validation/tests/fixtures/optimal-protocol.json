@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "purpose": "Frozen completed-output decoder fixtures; captured timing fields are not benchmark evidence. The capture does not establish a native executable hash.",
+  "cases": [
+    {
+      "source": "scenarios/task-allocation/variant-01/01-basic.lp",
+      "corpus_revision": "38f0660ded448ed268c5a68759ceb0e2840dd497",
+      "original_sha256": "f6d7bdaa1b1652d60e27f4b6d03fa35f5ea5480b1123092dcc32a2542bd97993",
+      "source_sha256": "3ceca57a8620f3d7eb8beb205e2a7e3ac5664120b9ba62b40929079ebdb24f3f",
+      "expected_cost": [
+        5
+      ],
+      "runs": [
+        {
+          "solver": "zetesis",
+          "exit_code": 0,
+          "stdout": "Answer: 1\nassigned_cost(a1,t1,3) assigned_cost(a2,t2,2) assigned_to(a1,t1) assigned_to(a2,t2)\nOptimization: 5\nIncumbent ties: 1; stable models scored: 2; objective work: 556\nOPTIMUM FOUND\nCoverage: exhausted\nModels: 1; candidates examined: 2; gate tuples discovered: n/a (formula search)\n",
+          "captured_stdout_sha256": "2a2ed7b2a9c9ead8bc6bd6b2e41c581b754c317c9cf74ab75af85691df3c2faa",
+          "normalization": "none"
+        },
+        {
+          "solver": "clingo",
+          "exit_code": 30,
+          "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"scenarios/task-allocation/variant-01/01-basic.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"assigned_cost(a2,t1,5)\", \"assigned_to(a2,t1)\", \"assigned_cost(a1,t2,4)\", \"assigned_to(a1,t2)\"\n          ],\n          \"Costs\": [\n            9\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"assigned_cost(a2,t1,5)\", \"assigned_to(a2,t1)\", \"assigned_cost(a2,t2,2)\", \"assigned_to(a2,t2)\"\n          ],\n          \"Costs\": [\n            7\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"assigned_cost(a1,t1,3)\", \"assigned_to(a1,t1)\", \"assigned_cost(a2,t2,2)\", \"assigned_to(a2,t2)\"\n          ],\n          \"Costs\": [\n            5\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"assigned_cost(a1,t1,3)\", \"assigned_to(a1,t1)\", \"assigned_cost(a2,t2,2)\", \"assigned_to(a2,t2)\"\n          ],\n          \"Costs\": [\n            5\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 4,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 1,\n    \"Costs\": [\n      5\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+          "captured_stdout_sha256": "6c5a90c93e1d42eb7cf265723ee7fa98611411f6564ddf9e470e51cd17efe1f6",
+          "normalization": "only the absolute Input pathname is replaced with the source path"
+        }
+      ]
+    },
+    {
+      "source": "scenarios/shortest-path/variant-01/01-basic.lp",
+      "corpus_revision": "38f0660ded448ed268c5a68759ceb0e2840dd497",
+      "original_sha256": "c01b190e20ac0b589825857a21de6d93ff8433cf0fe51f4625ced23f20db1364",
+      "source_sha256": "e249cd28f18a406a41533ae04cd5e862c8a224acb53e91e97eb13f9bddbefdfb",
+      "expected_cost": [
+        2,
+        2
+      ],
+      "runs": [
+        {
+          "solver": "zetesis",
+          "exit_code": 0,
+          "stdout": "Answer: 1\nend(c) included(a,b,1) included(b,c,1) start(a)\nOptimization: 2 2\nIncumbent ties: 1; stable models scored: 1; objective work: 149\nOPTIMUM FOUND\nCoverage: exhausted\nModels: 1; candidates examined: 1; gate tuples discovered: n/a (formula search)\n",
+          "captured_stdout_sha256": "2c409c11be5119ce51cd7298724dfa383c07634199bcf29fa1a0934f5bf6cdc3",
+          "normalization": "none"
+        },
+        {
+          "solver": "clingo",
+          "exit_code": 30,
+          "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"scenarios/shortest-path/variant-01/01-basic.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.001,\n          \"Value\": [\n            \"end(c)\", \"start(a)\", \"included(a,b,1)\", \"included(b,c,1)\"\n          ],\n          \"Costs\": [\n            2, 2\n          ]\n        },\n        {\n          \"Time\": 0.001,\n          \"Value\": [\n            \"end(c)\", \"start(a)\", \"included(a,b,1)\", \"included(b,c,1)\"\n          ],\n          \"Costs\": [\n            2, 2\n          ]\n        }\n      ],\n      \"Stop\": 0.001\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 1,\n    \"Costs\": [\n      2, 2\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.001,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.001\n  }\n}\n",
+          "captured_stdout_sha256": "0fedaeefbfa59de17f0d85ab42db0d76c2bbd159ed85f0c3f123e9823d479c63",
+          "normalization": "only the absolute Input pathname is replaced with the source path"
+        }
+      ]
+    }
+  ]
+}
