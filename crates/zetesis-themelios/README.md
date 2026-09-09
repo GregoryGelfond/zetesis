@@ -328,9 +328,11 @@ patterns obtain finite witnesses from completed possible-support rows. For examp
 anonymous values and predicate/constructor signs. Repeated or prebound names must
 agree; a failed row cannot leave bindings for the next row. Witness names are
 private to each alternative and cannot establish condition or outer-rule safety.
-Evaluated negative arguments consume independently bound inputs. Evaluated
-positions mixed with local witness extraction, arithmetic inversion, negative
-anonymous witnesses and nested pools remain explicit profile boundaries.
+Evaluated negative arguments consume independently bound inputs. Positive local
+witnesses additionally check evaluated positions after all their inputs are
+established, including inputs captured structurally in that same row. Arithmetic
+inversion, negative anonymous witnesses and nested pools retain their explicit
+profile boundaries.
 Original condition formulas are retained; possible support does not
 substitute for their truth. Pooled analysis syntax uses the explicit
 `DependencyProjection` basis described above, without changing runtime reduct
@@ -592,9 +594,12 @@ optional CountPlan behavior without changing the original theory. The
 `CountHeadActivity` Lean laws describe the semantic row/tuple contract; they do
 not prove the Rust compiler or its resource accounting.
 
-`tests/objective_forwarding.rs` records 38 admitted originals with 69 complete
-model/cost records, plus 10 mixed-extrema refusal controls. The refused sources
-retain external observations but are not native parity successes. Independent
+The original `tests/objective_forwarding.rs` campaign records 38 admitted sources
+with 69 complete model/cost records and ten mixed-extrema refusal probes. Seven
+of those probes now pass under the separate
+[flat-presence certificate](../../docs/verification/objective-flat-presence-20260908/README.md);
+the three broader profiles remain refusals. The new presence harness keeps 29
+unchanged originals and 59 complete reference records. Independent
 ordinary formulas agree for all 243 `J ⊆ M` pairs on a five-atom example. Tests
 also retain original-theory identity, generated-position restrictions and exact
 resource boundaries. Complete enumeration followed by optimum-tie selection

@@ -1,4 +1,4 @@
-//! Independent model records qualify composition across three source extensions.
+//! Independent model records qualify composition across the bounded source extensions.
 
 #[path = "support/language_value_sources.rs"]
 mod language_value_sources;
@@ -24,55 +24,81 @@ mod source_records;
 
 type Record = (BTreeSet<Atom>, Option<Vec<(i32, i64)>>);
 
+enum Observer {
+    Direct,
+    Forwarded,
+}
+
 struct Expected {
-    pairs: &'static [u8],
+    choices: &'static [u8],
     marker: bool,
+    observer: Option<Observer>,
     costs: Option<&'static [(i32, i64)]>,
 }
 
 // Bit one selects p(1,2); bit two selects p(2,4). The original conditional
-// derives q exactly for the first pair. These are complete semantic atoms,
+// derives q exactly for the first pair. Bit four selects a when an observer exists. These are complete semantic atoms,
 // including atoms hidden by any future rendering choice.
-const EXPECTED: [Expected; 8] = [
+const EXPECTED: [Expected; language_value_sources::SOURCES.len()] = [
     Expected {
-        pairs: &[0, 1, 2, 3],
+        choices: &[0, 1, 2, 3],
         marker: false,
+        observer: None,
         costs: None,
     },
     Expected {
-        pairs: &[0, 1, 2, 3],
+        choices: &[0, 1, 2, 3],
         marker: true,
+        observer: None,
         costs: None,
     },
     Expected {
-        pairs: &[0, 1, 2, 3],
+        choices: &[0, 1, 2, 3],
         marker: false,
+        observer: None,
         costs: Some(&[(3, 0)]),
     },
     Expected {
         // Equal complete objective keys coalesce: either pair earns weight two.
-        pairs: &[1, 2, 3],
+        choices: &[1, 2, 3],
         marker: true,
+        observer: None,
         costs: Some(&[(3, -2)]),
     },
     Expected {
-        pairs: &[0],
+        choices: &[0],
         marker: false,
+        observer: None,
         costs: Some(&[(3, 0)]),
     },
     Expected {
-        pairs: &[],
+        choices: &[],
         marker: false,
+        observer: None,
         costs: None,
     },
     Expected {
-        pairs: &[0, 1, 2, 3],
+        choices: &[0, 1, 2, 3],
         marker: true,
+        observer: None,
         costs: None,
     },
     Expected {
-        pairs: &[0, 1, 2, 3],
+        choices: &[0, 1, 2, 3],
         marker: false,
+        observer: None,
+        costs: Some(&[(3, 0)]),
+    },
+    Expected {
+        choices: &[0, 1, 2, 3, 4, 5, 6, 7],
+        marker: false,
+        observer: Some(Observer::Direct),
+        costs: None,
+    },
+    Expected {
+        choices: &[0, 1, 2, 3, 4, 5, 6, 7],
+        marker: true,
+        observer: Some(Observer::Forwarded),
         costs: Some(&[(3, 0)]),
     },
 ];
@@ -83,7 +109,7 @@ fn atom(name: &str, values: Vec<Value>) -> Atom {
 
 fn records(expected: &Expected) -> BTreeSet<Record> {
     expected
-        .pairs
+        .choices
         .iter()
         .map(|mask| {
             let mut atoms = BTreeSet::new();
@@ -96,6 +122,16 @@ fn records(expected: &Expected) -> BTreeSet<Record> {
             }
             if expected.marker {
                 atoms.insert(atom("marker", vec![]));
+            }
+            if let Some(observer) = &expected.observer {
+                atoms.insert(atom("b", vec![]));
+                atoms.insert(atom("n", vec![Value::Symbol("foo".into())]));
+                if mask & 4 != 0 {
+                    atoms.insert(atom("a", vec![]));
+                }
+                if matches!(observer, Observer::Forwarded) {
+                    atoms.insert(atom("v", vec![Value::Symbol("foo".into())]));
+                }
             }
             (atoms, expected.costs.map(<[_]>::to_vec))
         })
@@ -143,10 +179,10 @@ fn source_extensions_preserve_complete_session_records() {
                     let outcome = session.outcome().unwrap();
                     assert_eq!(actual, records(expected), "{source}");
                     assert_eq!(outcome.completion(), Some(Completion::Exhausted));
-                    assert_eq!(outcome.unsatisfiable(), expected.pairs.is_empty());
+                    assert_eq!(outcome.unsatisfiable(), expected.choices.is_empty());
                     assert_eq!(
                         outcome.optimum_proved(),
-                        expected.costs.is_some() && !expected.pairs.is_empty()
+                        expected.costs.is_some() && !expected.choices.is_empty()
                     );
                     let restrictions = outcome
                         .countermodel_statistics()
@@ -217,16 +253,16 @@ fn automatic_admission_preserves_typed_json_records() {
                 )));
             }
             assert_eq!(actual, records(expected), "{grounder}: {source}");
-            assert_eq!(answers.satisfiable(), !expected.pairs.is_empty());
+            assert_eq!(answers.satisfiable(), !expected.choices.is_empty());
         }
     }
 }
 
 #[test]
 fn stopped_composition_preserves_objective_presence() {
-    // Both programs have four full answer sets. Only the second retains a
-    // numeric-zero priority; the first has no objective after nonnumeric weights.
-    for index in [0, 2] {
+    // Each pair contrasts absent objectives with a retained numeric-zero
+    // priority, first for literals and then for proved extremum exclusions.
+    for index in [0, 2, 8, 9] {
         let input = source_records::admit(
             language_value_sources::SOURCES[index],
             FormulaLimits::default(),

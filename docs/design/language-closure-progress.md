@@ -45,8 +45,8 @@ than silently broadening the successful composition claim.
 That checkpoint left nonnumeric literal objective weights, broader objective
 presence carriers and objective-relevant function heads as concrete follow-ons.
 The [current language-values tranche](language-values-tranche.md) implements
-literal weights, Boolean heads and evaluated local witnesses, with a separate
-proposed bounded presence extension. Its qualification is recorded separately;
+literal weights, Boolean heads, evaluated local witnesses and a separate
+bounded presence extension. Its qualification is recorded separately;
 the results below describe the prior qualified checkpoint. The
 Lean library adds nine `CountHeadActivity` and six `ObjectiveTransport` laws,
 with a clean 834-theorem/74-module build and full axiom audit. These semantic
