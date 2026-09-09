@@ -20,3 +20,37 @@ Record consistency does not establish that commands ran. Run the pinned `lake
 build` and strict `Audit.lean` command independently; neither hashes nor a passing
 maintenance check replace Lean kernel checking or prove a Rust/WGSL refinement.
 The synthetic regression fixtures make no claim of kernel acceptance.
+
+## Coverage and source identity
+
+`coverage` separates floor policy, version observations, exact physical test
+selection and libtest output checks from execution. It retains the existing
+`toolchain.json` schema and independent workspace/CPU-only CLI populations. No
+floor or filename filter is changed. The shell driver keeps the exclusive lock,
+fresh cleanup, ordered commands and incomplete status until both floors pass.
+The nine physical groups still contain 27 exact tests; the Rust checker rejects
+selection drift, zero matches and incomplete individual outcomes.
+
+`scripts/maintenance.sh` launches the current source-tree command. Set
+`ZETESIS_MAINTENANCE` to an explicit prebuilt executable for frozen engineering
+checks; it is an executable path, not shell text. Version strings are observations
+supplied by the caller, not evidence that this library executed those tools.
+`inventory::sources` hashes the declared Cargo/Rust/WGSL boundary; this is not a
+complete dependency or source-to-binary seal.
+
+Policy input and physical logs have a 16 MiB inclusive ceiling. LLVM executable
+identity reads have a 256 MiB ceiling. Proof/source reads expose their own limits;
+these describe bytes and traversal work, not allocator RSS. Semantic inventories
+refuse symbolic links. Confined recorded-file paths do not establish a filesystem
+snapshot or protection against concurrent replacement by another process.
+
+```sh
+cargo test --locked -p zetesis-maintenance --all-features
+cargo clippy --locked -p zetesis-maintenance --all-targets --all-features -- -D warnings
+```
+
+The `test-fixtures` feature enables a deterministic Rust subprocess stand-in.
+Tests execute the actual shell drivers with those stand-ins and inspect command
+order, profiles, status publication, failures and cleanup; they do not compile
+programs, execute Lean, collect coverage or exercise Metal. Real compiler,
+coverage and device qualification remain separate gates.

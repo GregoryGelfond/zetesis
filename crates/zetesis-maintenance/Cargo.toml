@@ -1,5 +1,6 @@
 [package]
 name = "zetesis-maintenance"
+default-run = "zetesis-maintenance"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -18,3 +19,11 @@ tempfile = "3"
 
 [lints]
 workspace = true
+
+[features]
+test-fixtures = []
+
+[[bin]]
+name = "zetesis-maintenance-fixture"
+path = "tests/support/fixture_main.rs"
+required-features = ["test-fixtures"]

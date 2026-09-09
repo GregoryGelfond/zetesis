@@ -17,19 +17,7 @@ command -v zetesis-bench >> "$result_dir/binary-paths.txt"
 zetesis --version > "$result_dir/version.txt"
 shasum -a 256 "$(command -v zetesis)" "$(command -v zetesis-bench)" \
     > "$result_dir/binary-sha256.txt"
-python3 - "$repo_dir" > "$result_dir/source-sha256.json" <<'PY'
-import hashlib
-import json
-from pathlib import Path
-import sys
-
-root = Path(sys.argv[1])
-paths = [root / name for name in ("Cargo.toml", "Cargo.lock", "rust-toolchain.toml")]
-paths.extend(p for p in (root / "crates").rglob("*")
-             if p.is_file() and (p.suffix in (".rs", ".wgsl") or p.name == "Cargo.toml"))
-print(json.dumps({str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
-                  for p in sorted(paths)}, indent=2))
-PY
+"$repo_dir/scripts/maintenance.sh" sources --root "$repo_dir" > "$result_dir/source-sha256.json"
 uname -a > "$result_dir/system.txt"
 system_profiler SPDisplaysDataType -json > "$result_dir/graphics.json"
 zetesis devices > "$result_dir/devices.txt" 2> "$result_dir/device-diagnostics.txt"

@@ -107,7 +107,15 @@ impl Tree {
         directory: &str,
         suffix: &str,
     ) -> Result<BTreeSet<String>, Error> {
-        let mut pending = vec![self.root.join(directory)];
+        let directory = self.root.join(directory);
+        let kind = fs::symlink_metadata(&directory)
+            .map_err(|error| io(&directory, error))?
+            .file_type();
+        require(
+            kind.is_dir() && !kind.is_symlink(),
+            "inventory root must be a real directory",
+        )?;
+        let mut pending = vec![directory];
         let mut result = BTreeSet::new();
         let mut remaining = self.limits.entries;
         while let Some(directory) = pending.pop() {
@@ -119,6 +127,10 @@ impl Tree {
                 })?;
                 let path = entry.path();
                 let kind = entry.file_type().map_err(|error| io(&path, error))?;
+                require(
+                    !kind.is_symlink(),
+                    "inventory cannot contain symbolic links",
+                )?;
                 if kind.is_dir() {
                     pending.push(path);
                 } else if path.to_string_lossy().ends_with(suffix) {

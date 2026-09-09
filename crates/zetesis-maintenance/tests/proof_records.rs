@@ -370,3 +370,31 @@ fn proof_cli_cannot_certify_a_stale_alternative_record() {
     assert_eq!(result.status.code(), Some(1));
     assert!(!String::from_utf8(result.stdout).unwrap().contains("PASS"));
 }
+
+#[cfg(unix)]
+#[test]
+fn semantic_inventory_refuses_symlinked_subtrees() {
+    let f = Fixture::new();
+    let elsewhere = tempfile::tempdir().unwrap();
+    std::os::unix::fs::symlink(elsewhere.path(), f.root().join("Zetesis/Hidden")).unwrap();
+    f.reject();
+}
+#[cfg(unix)]
+#[test]
+fn semantic_inventory_refuses_a_symlinked_root() {
+    let f = Fixture::new();
+    fs::rename(f.root().join("Zetesis"), f.root().join("Elsewhere")).unwrap();
+    std::os::unix::fs::symlink(f.root().join("Elsewhere"), f.root().join("Zetesis")).unwrap();
+    f.reject();
+}
+#[cfg(unix)]
+#[test]
+fn recorded_file_symlinks_cannot_escape_the_root() {
+    let f = Fixture::new();
+    let elsewhere = tempfile::tempdir().unwrap();
+    let file = elsewhere.path().join("build.log");
+    fs::write(&file, f.read("verification/current/build.log")).unwrap();
+    fs::remove_file(f.root().join("verification/current/build.log")).unwrap();
+    std::os::unix::fs::symlink(file, f.root().join("verification/current/build.log")).unwrap();
+    f.reject();
+}

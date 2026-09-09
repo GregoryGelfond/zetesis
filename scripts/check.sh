@@ -56,7 +56,7 @@ if [ "$mode" = oracle ] || [ "$mode" = full ]; then
 fi
 if [ "$mode" = proofs ] || [ "$mode" = full ]; then
     (cd proofs && lake build && lake env lean -DautoImplicit=false -DwarningAsError=true Audit.lean)
-    python3 scripts/proof_record.py
+    scripts/maintenance.sh proof-record
 fi
 if [ "$mode" = coverage ] || [ "$mode" = full ]; then
     if [ "$coverage_option" = --metal ]; then

@@ -92,32 +92,7 @@ jobs:
           tool: cargo-llvm-cov@0.8.7
       - name: Preserve the committed floor
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import json
-          import os
-          import re
-          import subprocess
-
-          event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
-          previous = event.get("pull_request", {}).get("base", {}).get("sha") or event.get("before")
-          if previous and previous != "0" * 40:
-              if not re.fullmatch(r"[0-9a-f]{40}", previous):
-                  raise SystemExit("Invalid previous revision for coverage floor comparison.")
-              path = "scripts/coverage-floor.txt"
-              old = subprocess.run(["git", "show", f"{previous}:{path}"], text=True, capture_output=True)
-              if old.returncode == 0 and old.stdout.strip() != "UNMEASURED":
-                  before = int(old.stdout.strip())
-                  after = int(Path(path).read_text().strip())
-                  if after < before:
-                      raise SystemExit(f"Coverage floor cannot decrease: {before} -> {after}")
-              elif old.returncode != 0:
-                  # Only absence at the prior revision permits initial adoption.
-                  exists = subprocess.run(["git", "ls-tree", previous, "--", path], check=True,
-                                          text=True, capture_output=True)
-                  if exists.stdout:
-                      raise SystemExit("Could not read the previous coverage floor.")
-          PY
+          scripts/coverage-ratchet.sh
       - name: Initial runner disk usage
         run: df -h .
       - run: ./scripts/coverage.sh gate

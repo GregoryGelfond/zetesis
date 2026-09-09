@@ -38,20 +38,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 # A previous complete report never certifies an interrupted new run.
 printf '%s\n' incomplete > "$coverage_dir/status.txt"
-floor=$(python3 - "$mode" scripts/coverage-floor.txt <<'PY'
-from pathlib import Path
-import sys
-
-mode, path = sys.argv[1:]
-value = Path(path).read_text().strip()
-if value == "UNMEASURED":
-    if mode == "gate":
-        sys.exit("Coverage floor is unmeasured; run baseline and review its evidence first.")
-elif not value.isascii() or not value.isdecimal() or not 0 <= int(value) <= 100:
-    sys.exit("Coverage floor must be UNMEASURED or an integer percentage from 0 to 100.")
-print(value)
-PY
-)
+floor=$(scripts/maintenance.sh coverage-floor --mode "$mode" --path scripts/coverage-floor.txt)
 
 tool_version=$(cargo +1.97.1 llvm-cov --version)
 if [ "$tool_version" != 'cargo-llvm-cov 0.8.7' ]; then
@@ -70,74 +57,17 @@ if [ -z "${LLVM_COV:-}" ]; then
     LLVM_PROFDATA="$sysroot/lib/rustlib/$host/bin/llvm-profdata"
 fi
 export LLVM_COV LLVM_PROFDATA
-python3 - "$coverage_dir/toolchain.json" "$mode" "$floor" "$metal" "$metal_groups" <<'PY'
-from pathlib import Path
-import hashlib
-import json
-import os
-import re
-import subprocess
-import sys
-
-def output(command):
-    return subprocess.check_output(command, text=True).strip()
-
-rust = output(["rustc", "+1.97.1", "-vV"])
-match = re.search(r"^LLVM version: ([0-9]+\.[0-9]+\.[0-9]+)$", rust, re.M)
-if not match:
-    sys.exit("Pinned rustc did not report its LLVM version.")
-accepted_versions = {match.group(1), match.group(1) + "-rust-1.97.1-stable"}
-tools = {}
-for name in ["LLVM_COV", "LLVM_PROFDATA"]:
-    path = Path(os.environ[name]).resolve(strict=True)
-    version = output([str(path), "--version"])
-    llvm = re.findall(r"^[ \t]*LLVM version ([^\r\n]+)$", version, re.M)
-    if len(llvm) != 1 or llvm[0].strip() not in accepted_versions:
-        sys.exit(f"{name} does not match rustc LLVM {match.group(1)}: {version}")
-    tools[name] = {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "version": version}
-physical_groups = []
-if sys.argv[4] == "--metal":
-    for row in sys.argv[5].splitlines():
-        group, target, expected, names = row.split("|")
-        tests = names.split()
-        if len(tests) != int(expected) or len(set(tests)) != len(tests):
-            sys.exit(f"Invalid physical coverage selection: {group}")
-        physical_groups.append({
-            "group": group, "target_kind": "lib" if target == "lib" else "test",
-            "target": "workspace libraries" if target == "lib" else target,
-            "tests": tests, "expected_tests": int(expected),
-        })
-    # These totals describe this reviewed scope, independently of each row.
-    if (len(physical_groups) != 9 or
-            len({group["group"] for group in physical_groups}) != 9 or
-            sum(group["expected_tests"] for group in physical_groups) != 27):
-        sys.exit("Physical coverage requires all nine groups and 27 named tests.")
-physical_tests = [test for group in physical_groups for test in group["tests"]]
-Path(sys.argv[1]).write_text(json.dumps({
-    "mode": sys.argv[2], "committed_floor": sys.argv[3], "rustc": rust,
-    "cargo_llvm_cov": "0.8.7", "llvm_tools": tools,
-    "primary": "workspace --all-features", "supplemental": "zetesis-cli --no-default-features",
-    "floor_profiles": ["workspace", "cli-cpu"],
-    "default_filename_filters": "cargo-llvm-cov 0.8.7 src/report.rs::ignore_filename_regex",
-    "project_added_filename_filters": [],
-    "profiles_merged": False,
-    "profile_merge_scope": (
-        "profiles_merged describes floor profiles; raw execution profiles combine "
-        "only within their own floor profile"
-    ),
-    "workspace_execution": "portable+metal" if physical_tests else "portable",
-    "workspace_stages": ["portable", "metal"] if physical_tests else ["portable"],
-    "physical_test_groups": physical_groups,
-    "physical_tests": physical_tests,
-    "expected_physical_tests": len(physical_tests),
-    "physical_scope": (
-        "27 exact Metal tests: native aggregate reduction and measurement, lazy "
-        "transport and source closure, tight and formula oracles, and ordinary "
-        "lazy/formula CLI paths and complete-world-view collection. "
-        "Unlisted tests and Vulkan are not selected."
-    ) if physical_tests else None,
-}, indent=2) + "\n")
-PY
+rust_version=$(rustc +1.97.1 -vV)
+cov_version=$("$LLVM_COV" --version)
+profdata_version=$("$LLVM_PROFDATA" --version)
+set -- coverage-metadata --mode "$mode" --floor "$floor" \
+    --rustc-version "$rust_version" --llvm-cov "$LLVM_COV" \
+    --llvm-cov-version "$cov_version" --llvm-profdata "$LLVM_PROFDATA" \
+    --llvm-profdata-version "$profdata_version"
+if [ "$metal" = --metal ]; then
+    set -- "$@" --metal-groups "$metal_groups"
+fi
+scripts/maintenance.sh "$@" > "$coverage_dir/toolchain.json"
 
 write_report() {
     destination=$1
@@ -179,37 +109,8 @@ run_metal_group() {
     # Cargo permits a successful zero-match selection. Check both named test
     # records and pinned libtest summaries; output within a test may share its
     # first line under --nocapture. Other workspace libraries may report zero.
-    if ! python3 - "$physical_log" "$group" "$target" "$expected" "$names" <<'PY'
-from collections import Counter
-from pathlib import Path
-import re
-import sys
-
-path, group, target, expected, names = sys.argv[1:]
-output = Path(path).read_text()
-records = re.findall(r"^test (\S+) \.\.\.[ \t]*(.*?)(?=^test |\Z)", output, re.M | re.S)
-selected = [name for name, _ in records]
-# With serial --nocapture output, each test block ends in its own outcome.
-# A summary cannot substitute for a missing individual outcome record.
-passed_records = all(re.search(r"(?:^|\n)ok[ \t\r\n]*\Z", body) for _, body in records)
-summaries = re.findall(r"^test result: .*$", output, re.M)
-counts = []
-for summary in summaries:
-    match = re.fullmatch(
-        r"test result: ok\. ([0-9]+) passed; 0 failed; 0 ignored; 0 measured; "
-        r"[0-9]+ filtered out; finished in [^\r\n]+", summary)
-    if not match:
-        break
-    counts.append(int(match.group(1)))
-else:
-    positive = [count for count in counts if count > 0]
-    if (Counter(selected) == Counter(names.split()) and passed_records and
-            positive == [int(expected)] and
-            (target == "lib" or len(counts) == 1)):
-        sys.exit(0)
-sys.exit(f"Physical coverage group {group} requires exactly {expected} "
-         "named passing tests and complete libtest summaries.")
-PY
+    if ! scripts/maintenance.sh coverage-physical --log "$physical_log" \
+        --group "$group" --table "$metal_groups"
     then
         return 1
     fi

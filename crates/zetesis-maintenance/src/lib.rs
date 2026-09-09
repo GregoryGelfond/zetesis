@@ -8,6 +8,8 @@
 
 mod files;
 mod json;
+pub mod coverage;
+pub mod inventory;
 pub mod proofs;
 
 use std::{fmt, io, path::PathBuf};
