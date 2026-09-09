@@ -5,7 +5,7 @@ need to answer. Parsing command-line arguments is not required to use the solver
 
 | Input or task | Library and entry points |
 | --- | --- |
-| Original ASP source | `zetesis_themelios::admit`, `admit_extended`, `admit_formula`, and their bundle APIs |
+| Original ASP source | `zetesis_themelios::admit`, `admit_extended`, `prepare_formula`, `admit_formula`, and their bundle APIs |
 | Ordinary solve over an admitted owner | `zetesis_cli::{PreparedInput, Session, SolveConfig}` |
 | All original answers, streamed or completely collected | `Session::enumerate`, `WorldView::collect`, checked `AnswerSet` |
 | Finite relational templates and atoms | `zetesis_core::{Program, Template, Atom, Seed}` |
@@ -24,6 +24,10 @@ solver session. It is the appropriate existing entry point when an application
 wants the solver's composed behavior. The lower libraries remain usable
 independently; a caller building a theory need not parse source, and a caller
 preparing a program need not search it.
+
+Start with the [runnable tour](../architecture/tour.md) for a complete source-to-answer
+path. The [source preparation example](source.md) separates analysis from eager
+materialization and shows when analysis describes only a dependency projection.
 
 `zetesis_themelios::{base, syntax, logical, analysis}` re-export the corresponding
 themelios tiers. Use their terms and source identities at the source boundary.

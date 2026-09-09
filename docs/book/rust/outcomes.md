@@ -34,6 +34,64 @@ Unrestricted enumeration evaluates scores without retaining incumbents. Its
 `retained_models()` is zero. Those fields describe objective-search retention,
 not the number of answers in a `WorldView` or a consumer's own collection.
 
+## Check selection and complete capture
+
+The next example uses `1{a;b}1.` with costs `1` for `{a}` and `2` for `{b}` at
+priority `2`. Its `#show.` declaration hides both atoms from display. Every
+library answer still contains its complete interpretation: two visually empty
+answers are not one answer set.
+
+| Operation | Requested family | Completed result in this example |
+| --- | --- | --- |
+| `Session::new` | Objective-selected answers | `{a}` at cost `1`; optimum proved |
+| `Session::enumerate` | All original answers | `{a}` at cost `1` and `{b}` at cost `2` |
+| `WorldView::collect` | All original answers, completely retained | The same two scored answers |
+| Collection limited to one answer | All original answers | Typed failure retaining one checked answer |
+
+Each operation starts a fresh session over the same admitted owner. The example
+checks exact full interpretations and priority/cost pairs without depending on
+enumeration order. It pins CPU execution and one-at-a-time batches to make the
+small failure-accounting example easy to inspect.
+
+```rust
+# extern crate zetesis_cli;
+# extern crate zetesis_core;
+# extern crate zetesis_cpu;
+# extern crate zetesis_themelios;
+{{#include ../examples/selection.rs:example}}
+```
+
+Run it from the checkout root with:
+
+```sh
+cargo run --locked -p zetesis-cli --no-default-features --example book-selection
+```
+
+The failed collection has checked two models but retained only one. The second
+model was already verified when the collection refused its storage, and the
+iterator has not completed the final exhaustion step. Thus the failure carries
+`verified_models() == 2` and `completion() == None`; its checked prefix cannot be
+relabelled a complete one-answer world view. Larger batches can also retain
+queued membership results in verification accounting before those answers are
+scored or yielded. The retained answer's subject remains the original owner.
+
+`Session::new` with an objective must finish its search phase before yielding
+retained incumbents. Streaming all answers can release each answer after use;
+complete collection retains the full family. With `K` answers and full payload
+sizes `s₁, …, sₖ`, collection requires space proportional to their sum in addition
+to the search engine and shared subject. `K` can be exponential in the atom
+carrier. Objective selection retains incumbent ties under its separate limits;
+the one optimum in this fixture does not bound the number of ties in general.
+
+See the implementation contracts in
+[`Session`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cli/src/session.rs),
+[`SemanticOutcome`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cli/src/semantic_outcome.rs)
+and [`WorldView::collect`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cli/src/world_view.rs).
+The [world-view regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cli/tests/world_views.rs)
+cover additional search, scoring and storage failures. The
+[source preparation example](source.md) separately checks empty and inconsistent
+programs; neither an empty display nor a retained prefix decides inconsistency.
+
 ## Resource contracts
 
 Each operation names the resources it bounds: source bytes, syntax depth, atoms,

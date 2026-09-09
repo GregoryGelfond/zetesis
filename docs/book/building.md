@@ -27,9 +27,10 @@ sibling rustdoc tree. Source links lead to the maintained repository paths.
 
 ## Check the Rust examples
 
-The session and reduct examples are included from Rust files under
-`docs/book/examples`; the code displayed in the chapters is the code tested by
-mdBook. Build their dependencies without requiring a physical GPU, then run:
+The session, source-preparation, objective-selection and reduct examples are
+included from Rust files under `docs/book/examples`; the code displayed in the
+chapters is the code tested by mdBook. Build their dependencies without requiring
+a physical GPU, then run:
 
 ```sh
 cargo build --locked -p zetesis-cli --lib --no-default-features --target-dir target/book-tests
@@ -46,8 +47,29 @@ support or performance claim follows from these portable example tests.
 The same files are registered as Cargo examples, so workspace formatting and
 all-target Clippy checks apply to them. The authored-lint inventory includes
 `docs/book/examples` as a maintained source root.
-Lean blocks are excerpts or consumer examples, not Rust doctests. Build their
-own package with:
+
+To run one example as an ordinary consumer from the checkout root:
+
+```sh
+cargo run --locked -p zetesis-cli --no-default-features --example book-session
+cargo run --locked -p zetesis-cli --no-default-features --example book-source
+cargo run --locked -p zetesis-cli --no-default-features --example book-selection
+```
+
+The tour's ASP fixture is included directly in the chapter. A Cargo example test
+checks that its bytes match the session example's source literal; the literal
+keeps the displayed Rust independently runnable without a working-directory
+assumption. That example enables its test harness in Cargo, so the ordinary
+workspace test gate runs the correspondence assertion. Run it alone with:
+
+```sh
+cargo test --locked -p zetesis-cli --no-default-features --example book-session
+```
+
+Lean blocks are excerpts or consumer examples, not Rust doctests. The normal-rule
+chapter includes named anchors from the maintained `Zetesis.Examples.Choices`
+module; its declarations are imported by the proof package's checked umbrella.
+Build that package with:
 
 ```sh
 cd proofs

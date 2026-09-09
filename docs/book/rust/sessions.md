@@ -33,6 +33,10 @@ an active objective selects incumbent ties; without an objective it enumerates
 the original family. `SemanticOutcome::selection()` records `All` or `Optimal`
 independently of whether that search finished.
 
+The [checked selection example](outcomes.md#check-selection-and-complete-capture)
+compares these two constructors on the same objective-bearing source, including
+full hidden atoms, costs and a deliberately incomplete collection.
+
 `models: 0` requests exhaustive enumeration. In unrestricted enumeration, a positive model
 limit can terminate successfully at that limit without exhausting the search.
 Dropping the iterator or calling `stop()` early does not imply that unseen
@@ -54,6 +58,9 @@ session and returns its complete original answer-set family only after
 exhaustion. Use `models: 0`; a positive model limit is honored and can prevent
 completion. Every member retains its full interpretation and original subject.
 Objectives annotate the members with scores without removing nonoptimal answers.
+
+The [source preparation example](source.md) checks the distinct empty-program
+and inconsistent-program outcomes through this same API.
 
 An inconsistent program has an empty `WorldView`. An empty program has a world
 view containing one empty `AnswerSet`. Thus `WorldView::is_empty()` establishes

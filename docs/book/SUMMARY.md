@@ -13,6 +13,7 @@
 # Part II — The Rust library programmer's manual
 
 - [Choosing a library boundary](rust/libraries.md)
+- [Preparing source and interpreting analysis](rust/source.md)
 - [Embedding an ordinary solve](rust/sessions.md)
 - [Working with finite reducts](rust/reducts.md)
 - [Parallel and lazy checking](rust/parallel.md)

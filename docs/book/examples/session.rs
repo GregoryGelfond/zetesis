@@ -5,15 +5,14 @@ use std::collections::BTreeSet;
 use zetesis_cli::{
     Backend, Completion, PreparedInput, Session, SolveConfig, WorldView, WorldViewLimits,
 };
-use zetesis_core::{Atom, Predicate};
-use zetesis_cpu::Control;
+use zetesis_core::{Atom, Predicate, Seed};
+use zetesis_cpu::{Control, Limits, check};
 use zetesis_themelios::{AdmissionOptions, admit};
 
+const CHOICES: &str = "a :- not b.\nb :- not a.\n";
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let admitted = admit(
-        "a :- not b. b :- not a.".into(),
-        AdmissionOptions::default(),
-    )?;
+    let admitted = admit(CHOICES.into(), AdmissionOptions::default())?;
     let config = SolveConfig {
         backend: Backend::Cpu,
         models: 0,
@@ -36,11 +35,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let b = Atom::new(Predicate::new("b", 0)?, vec![])?;
     assert_eq!(
         family,
-        BTreeSet::from([BTreeSet::from([a]), BTreeSet::from([b])])
+        BTreeSet::from([BTreeSet::from([a.clone()]), BTreeSet::from([b])])
     );
     assert_eq!(outcome.verified_models(), 2);
     assert_eq!(outcome.completion(), Some(Completion::Exhausted));
     assert!(!outcome.unsatisfiable());
+
+    // Check the tour's representative seed directly, without a search session.
+    let seed = Seed::new(admitted.program(), [a.clone()])?;
+    let checked = check(
+        admitted.program(),
+        &seed,
+        Limits::default(),
+        &Control::default(),
+    )?;
+    assert!(checked.accepted());
+    assert_eq!(checked.closure().atoms(), &BTreeSet::from([a]));
 
     // A fresh bounded collection owns the complete-family claim. A Vec gathered
     // from an arbitrary stream cannot acquire it from a separate outcome.
@@ -58,3 +68,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 // ANCHOR_END: example
+
+#[test]
+fn tour_fixture_matches_the_session_source() {
+    assert_eq!(CHOICES, include_str!("choices.lp"));
+}

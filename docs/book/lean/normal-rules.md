@@ -59,6 +59,48 @@ closure plus constraints is therefore an exact Ferraris answer-set test.
 The reduct remains the common foundation; a least-model procedure is justified
 for this fragment.
 
+## Apply the bridge to the tour
+
+The maintained consumer
+[`Zetesis.Examples.Choices`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Examples/Choices.lean)
+imports `Zetesis.NormalFerraris` and opens `Semantics`. Its declarations below
+are included directly from the module checked by the Lean package.
+
+The [guided tour](../architecture/tour.md) uses `a :- not b. b :- not a.`.
+In a normalized rule, the fields are its optional head, positive body, frozen
+true gates, frozen false gates and ground filter. Both rules have empty positive
+bodies and discharged filters. This consumer chooses the interpretation `{a}`:
+
+```lean
+{{#include ../../../proofs/Zetesis/Examples/Choices.lean:choices_program}}
+```
+
+`Gamma program candidate` is the least consequence set of the reduct frozen at
+that candidate. To show it equals `{a}`, `consequence` first establishes that
+the one-step consequence predicate selects exactly `a`, for any growing set
+`X`. `closed` says that `{a}` contains all those consequences. `generated` proves
+the opposite inclusion in the least closure using `gamma_closed`. The two
+inclusions establish equality:
+
+```lean
+{{#include ../../../proofs/Zetesis/Examples/Choices.lean:choices_closure}}
+```
+
+Closure equality is not sufficient when constraints are present. Here the
+separate `constraints` claim holds because both rules have heads. Applying
+`ferraris_answer_set_iff_closure` then establishes the translated program's
+Ferraris answer-set membership:
+
+```lean
+{{#include ../../../proofs/Zetesis/Examples/Choices.lean:choices_answer_set}}
+```
+
+This proves one mathematical candidate's membership. The Rust session example
+checks both `{a}` and `{b}` and exhausted enumeration on the original source;
+this Lean consumer proves neither that completeness result nor the parser-to-Rust
+correspondence. It demonstrates how to consume the semantic bridge with explicit
+closure and constraint evidence.
+
 ## What the bridge leaves open
 
 The subset condition belongs to this bridge's frozen-model law. It does not
@@ -73,4 +115,3 @@ support guards of `from_ground_program_supported` also need their own argument.
 The bridge covers normalized single-head rules and constraints, including true
 choice gates; it does not translate every source disjunction or aggregate into
 that fragment.
-

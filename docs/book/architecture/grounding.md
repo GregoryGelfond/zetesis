@@ -11,6 +11,11 @@ safety, arithmetic evaluation and resource limits can still fail. A frontend
 syntax diagnostic, an unsupported zetesis construct, and an exceeded resource
 ceiling have distinct meanings; none denotes an inconsistent program.
 
+The [checked source-preparation example](../rust/source.md) follows
+`prepare_formula`, the retained analysis basis, `ground` and a complete CPU
+collection. It contrasts two Boolean source families whose different counting
+identities must survive materialization.
+
 ## Eager and lazy execution
 
 For admitted relational programs, **eager** grounding explicitly compiles a
@@ -57,4 +62,3 @@ They do not prune future snapshots or the candidate carrier.
 
 See [lazy checking](../rust/parallel.md) for the injected execution contract,
 and [the theorem map](../lean/theorems.md) for the corresponding coverage laws.
-
