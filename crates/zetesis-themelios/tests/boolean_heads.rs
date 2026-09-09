@@ -2,6 +2,8 @@
 
 #[path = "support/boolean_heads.rs"]
 mod cases;
+#[path = "support/boolean_elements.rs"]
+mod elements;
 #[path = "support/finite_bindings.rs"]
 mod reference;
 

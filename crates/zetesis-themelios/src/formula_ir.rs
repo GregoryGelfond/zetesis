@@ -71,17 +71,24 @@ pub(crate) struct DisjunctIr {
     pub negation: DefaultNegation,
     pub operand: HeadOperand,
 }
-/// Boolean head operands carry truth without introducing a semantic atom.
-pub(crate) enum HeadOperand {
-    Atom(AtomPattern),
+/// The same semantic distinction precedes and follows atom instantiation.
+/// Boolean operands carry truth without introducing a semantic atom.
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) enum HeadOperand<A = AtomPattern> {
+    Atom(A),
     Boolean(bool),
+}
+impl<A> HeadOperand<A> {
+    pub(crate) fn atom(&self) -> Option<&A> {
+        match self {
+            Self::Atom(atom) => Some(atom),
+            Self::Boolean(_) => None,
+        }
+    }
 }
 impl DisjunctIr {
     pub(crate) fn atom(&self) -> Option<&AtomPattern> {
-        match &self.operand {
-            HeadOperand::Atom(atom) => Some(atom),
-            HeadOperand::Boolean(_) => None,
-        }
+        self.operand.atom()
     }
     pub(crate) fn positive_atom(&self) -> Option<&AtomPattern> {
         if self.negation == DefaultNegation::None {
@@ -102,11 +109,25 @@ pub(crate) enum HeadMeasure {
     Max,
 }
 pub(crate) struct Element {
-    /// Function heads carry a full tuple on every element; ordinary choices carry none.
-    pub tuple: Option<Vec<CoreTerm>>,
-    pub head: AtomPattern,
+    pub key: HeadElementKey,
+    pub head: HeadOperand,
     pub condition: Vec<LiteralIr>,
     pub variables: usize,
+}
+/// Complete tuples have set identity. Ordinary atoms use their grounded atom;
+/// ordinary Boolean elements instead retain every original source occurrence.
+pub(crate) enum HeadElementKey {
+    Atom,
+    BooleanOccurrences(Vec<Location>),
+    Tuple(Vec<CoreTerm>),
+}
+impl HeadElementKey {
+    pub(crate) fn tuple(&self) -> Option<&[CoreTerm]> {
+        match self {
+            Self::Tuple(terms) => Some(terms),
+            Self::Atom | Self::BooleanOccurrences(_) => None,
+        }
+    }
 }
 pub(crate) enum LiteralIr {
     Atom(DefaultNegation, AtomPattern),
@@ -182,6 +203,7 @@ pub(crate) enum Operation {
 
 pub(crate) fn prepare(
     source: &SourceProgram,
+    choices: &crate::formula_choice_source::Catalog,
     options: AdmissionOptions,
     limits: &FormulaLimits,
     budget: &mut Budget,
@@ -202,7 +224,8 @@ pub(crate) fn prepare(
         dependency_projection: false,
         location: fallback,
     };
-    for carrier in source.statements() {
+    for carrier in choices.statements(source, fallback) {
+        let carrier = carrier?;
         if matches!(
             carrier.get(),
             Statement::Const(_) | Statement::Defined(_) | Statement::Show(_)
@@ -588,6 +611,7 @@ impl Compiler<'_> {
         &mut self,
         rule: &Rule,
         origins: Vec<Location>,
+        choice_source: Option<&Choice>,
     ) -> Result<RuleIr, FormulaFailure> {
         let mut variables = Variables::default();
         let mut body = Vec::new();
@@ -672,7 +696,7 @@ impl Compiler<'_> {
             let (measure, elements) = match rule.head().get() {
                 Head::Choice(choice) => (
                     HeadMeasure::Count,
-                    self.choice_elements(choice, &variables)?,
+                    self.choice_elements(choice, choice_source, &variables)?,
                 ),
                 Head::Aggregate(aggregate) => {
                     self.aggregate_head_elements(aggregate, &variables)?
@@ -718,22 +742,49 @@ impl Compiler<'_> {
     fn choice_elements(
         &mut self,
         choice: &Choice,
+        source: Option<&Choice>,
         variables: &Variables,
     ) -> Result<Vec<Element>, FormulaFailure> {
         let mut elements = Vec::new();
+        let mut source_booleans = source
+            .into_iter()
+            .flat_map(Choice::elements)
+            .filter(|element| {
+                matches!(
+                    element.get().literal().inner,
+                    themelios_program::program::LiteralInner::True
+                        | themelios_program::program::LiteralInner::False
+                )
+            });
         for element in choice.elements() {
             let mut local = variables.clone();
             let mut condition = Vec::new();
             let head = self.choice_head(element.get().literal(), &mut local, &mut condition)?;
+            let key = match &head {
+                HeadOperand::Atom(_) => HeadElementKey::Atom,
+                HeadOperand::Boolean(_) => {
+                    // The owned analysis set forgets Boolean multiplicity; it
+                    // represents dependencies, not this group's exact measure.
+                    self.dependency_projection = true;
+                    HeadElementKey::BooleanOccurrences(
+                        self.boolean_occurrences(element.get(), source_booleans.next())?,
+                    )
+                }
+            };
             condition.extend(self.condition(element.get().condition(), &mut local)?);
             self.bindings(&mut condition, &mut local)?;
             self.variable_limit(&local)?;
             local.safety(self.location)?;
             elements.push(Element {
-                tuple: None,
+                key,
                 head,
                 condition,
                 variables: local.count,
+            });
+        }
+        if source_booleans.next().is_some() {
+            return Err(FormulaFailure::ChoiceSource {
+                location: self.location,
             });
         }
         Ok(elements)

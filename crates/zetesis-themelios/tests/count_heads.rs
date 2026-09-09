@@ -365,7 +365,7 @@ fn unadmitted_head_profiles_have_explicit_refusals() {
     for (source, expected) in [
         ("1#count{1:not a}1.", ProfileFeature::NegatedHead),
         ("1#count{1:not not a}1.", ProfileFeature::NegatedHead),
-        ("1#count{1:#true}1.", ProfileFeature::Head),
+        ("1#count{1:not #true}1.", ProfileFeature::NegatedHead),
         (
             "1#count{1:a}1.#minimize{1:a}.",
             ProfileFeature::ObjectiveAggregateDependency,

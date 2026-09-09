@@ -15,8 +15,8 @@ use zetesis_ferraris::{
 use crate::expansion::Budget;
 use crate::formula::{Compiled, ceiling};
 use crate::formula_ir::{
-    AggregateGuard, AggregateIr, AggregateKey, ChoiceIr, Element, HeadIr, HeadMeasure, LiteralIr,
-    ObjectiveIr, Prepared, Projection, RuleIr, value_bytes,
+    AggregateGuard, AggregateIr, AggregateKey, ChoiceIr, HeadElementKey, HeadIr, HeadMeasure,
+    HeadOperand, LiteralIr, ObjectiveIr, Prepared, Projection, RuleIr, value_bytes,
 };
 use crate::formula_support::{self, Counters, Join, Support};
 use crate::grounding_observer::Event;
@@ -710,47 +710,99 @@ impl Builder<'_> {
                 local.next(self.limits, self.budget, &mut self.counters, rule.location)?
             {
                 let condition = self.body(&element.condition, &binding, rule.location, support)?;
-                let head = self.atom(&element.head, &binding, rule.location)?;
-                let previous = result.eligible.get(&head).copied().unwrap_or(0);
-                result
-                    .eligible
-                    .insert(head, self.or(previous, condition, rule.location)?);
-                if !group.guards.is_empty() {
-                    let key = self.head_key(element, &binding, head, rule.location)?;
-                    let first = match &key {
-                        HeadKey::Tuple(tuple) => tuple.first(),
-                        HeadKey::Atom(_) => None,
-                    };
-                    let weight =
-                        crate::formula_head_aggregate::weight(*measure, first, rule.location)?;
-                    let previous = result.activity.get(&key).map_or(0, |(_, node)| *node);
-                    if !result.activity.contains_key(&key) {
-                        ceiling(
-                            FormulaResource::AggregateElements,
-                            result.activity.len() as u128 + 1,
-                            self.limits.aggregate.max_elements as u128,
-                            rule.location,
-                        )?;
+                let head = match &element.head {
+                    HeadOperand::Atom(atom) => {
+                        let head = self.atom(atom, &binding, rule.location)?;
+                        let previous = result.eligible.get(&head).copied().unwrap_or(0);
+                        result
+                            .eligible
+                            .insert(head, self.or(previous, condition, rule.location)?);
+                        head
                     }
+                    // A constant can affect the bound but never creates a
+                    // producer, permission formula or semantic atom.
+                    HeadOperand::Boolean(value) => usize::from(*value),
+                };
+                if !group.guards.is_empty() {
                     let selected = self.and(condition, head, rule.location)?;
-                    let activity = self.or(previous, selected, rule.location)?;
-                    result.activity.insert(key, (weight, activity));
+                    match &element.key {
+                        HeadElementKey::BooleanOccurrences(occurrences) => {
+                            for occurrence in occurrences {
+                                self.work(rule.location)?;
+                                self.budget.charge(
+                                    ExpansionResource::ScalarBytes,
+                                    size_of::<Location>() as u128,
+                                    rule.location,
+                                )?;
+                                self.head_activity(
+                                    &mut result,
+                                    HeadKey::BooleanOccurrence(*occurrence),
+                                    selected,
+                                    *measure,
+                                    rule.location,
+                                )?;
+                            }
+                        }
+                        HeadElementKey::Atom => {
+                            self.head_activity(
+                                &mut result,
+                                HeadKey::Atom(head),
+                                selected,
+                                *measure,
+                                rule.location,
+                            )?;
+                        }
+                        HeadElementKey::Tuple(terms) => {
+                            let key =
+                                HeadKey::Tuple(self.head_tuple(terms, &binding, rule.location)?);
+                            self.head_activity(
+                                &mut result,
+                                key,
+                                selected,
+                                *measure,
+                                rule.location,
+                            )?;
+                        }
+                    }
                 }
             }
         }
         Ok(result)
     }
 
-    fn head_key(
+    fn head_activity(
         &mut self,
-        element: &Element,
-        assignment: &[Value],
-        head: usize,
+        group: &mut HeadGroup,
+        key: HeadKey,
+        selected: usize,
+        measure: HeadMeasure,
         location: Location,
-    ) -> Result<HeadKey, FormulaFailure> {
-        let Some(terms) = &element.tuple else {
-            return Ok(HeadKey::Atom(head));
+    ) -> Result<(), FormulaFailure> {
+        let first = match &key {
+            HeadKey::Tuple(tuple) => tuple.first(),
+            HeadKey::Atom(_) | HeadKey::BooleanOccurrence(_) => None,
         };
+        let weight = crate::formula_head_aggregate::weight(measure, first, location)?;
+        let previous = group.activity.get(&key).map_or(0, |(_, node)| *node);
+        if !group.activity.contains_key(&key) {
+            ceiling(
+                FormulaResource::AggregateElements,
+                group.activity.len() as u128 + 1,
+                self.limits.aggregate.max_elements as u128,
+                location,
+            )?;
+        }
+        let activity = self.or(previous, selected, location)?;
+        group.activity.insert(key, (weight, activity));
+        Ok(())
+    }
+
+    fn head_tuple(
+        &mut self,
+        terms: &[zetesis_core::Term],
+        assignment: &[Value],
+        location: Location,
+    ) -> Result<Vec<Value>, FormulaFailure> {
         let mut tuple = Vec::new();
         for term in terms {
             self.work(location)?;
@@ -762,7 +814,7 @@ impl Builder<'_> {
             )?;
             tuple.push(value.clone());
         }
-        Ok(HeadKey::Tuple(tuple))
+        Ok(tuple)
     }
 
     fn choice_permissions(
@@ -784,7 +836,8 @@ impl Builder<'_> {
 }
 
 /// Permission coalesces by head atom; measure activity coalesces independently
-/// by the complete tuple. An ordinary choice uses its atom as the implicit key.
+/// by the complete tuple. An ordinary atom choice uses its atom as the implicit
+/// key; a Boolean choice uses its source occurrence within this outer group.
 #[derive(Default)]
 struct HeadGroup {
     eligible: BTreeMap<usize, usize>,
@@ -795,6 +848,7 @@ struct HeadGroup {
 enum HeadKey {
     Tuple(Vec<Value>),
     Atom(usize),
+    BooleanOccurrence(Location),
 }
 
 /// One storage family for coalesced tuple contributions. Each entry retains

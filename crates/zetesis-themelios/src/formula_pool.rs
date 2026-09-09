@@ -30,6 +30,16 @@ impl Compiler<'_> {
         rules: &mut Vec<RuleIr>,
         analyzed: &mut Vec<WithProvenance<Statement>>,
     ) -> Result<(), FormulaFailure> {
+        // Local atom pooling reconstructs choice element carriers. Boolean
+        // literals and their conditions remain equal, so their exact source
+        // keys are recovered from this same rule before that reconstruction.
+        let choice_source = match statement.get() {
+            Statement::Rule(rule) => match rule.head().get() {
+                Head::Choice(choice) => Some(choice),
+                _ => None,
+            },
+            _ => None,
+        };
         if let Some(mut cursor) = Cursor::new(
             statement,
             origins.len(),
@@ -42,7 +52,7 @@ impl Compiler<'_> {
                 let Statement::Rule(rule) = statement.get() else {
                     unreachable!("pool expansion retains a rule")
                 };
-                rules.push(self.rule(rule, origins.to_vec())?);
+                rules.push(self.rule(rule, origins.to_vec(), choice_source)?);
                 analyzed.push(self.conditional_projection(&statement, projection_nodes)?);
             }
         } else {
@@ -56,7 +66,7 @@ impl Compiler<'_> {
             let Statement::Rule(rule) = statement.get() else {
                 return Err(unsupported(ProfileFeature::Statement, self.location).into());
             };
-            rules.push(self.rule(rule, origins.to_vec())?);
+            rules.push(self.rule(rule, origins.to_vec(), choice_source)?);
             analyzed.push(self.conditional_projection(statement, projection_nodes)?);
         }
         Ok(())

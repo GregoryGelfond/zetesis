@@ -239,15 +239,17 @@ pub(crate) fn build(
                             while let Some(binding) =
                                 local.next(limits, budget, counters, rule.location)?
                             {
-                                derive(
-                                    &element.head,
-                                    &binding,
-                                    &support,
-                                    &mut delta,
-                                    limits,
-                                    budget,
-                                    rule.location,
-                                )?;
+                                if let Some(head) = element.head.atom() {
+                                    derive(
+                                        head,
+                                        &binding,
+                                        &support,
+                                        &mut delta,
+                                        limits,
+                                        budget,
+                                        rule.location,
+                                    )?;
+                                }
                             }
                         }
                     }

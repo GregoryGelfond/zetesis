@@ -80,7 +80,9 @@ fn definitions(rules: &[RuleIr]) -> BTreeMap<Signature, Option<&RuleIr>> {
             }
             HeadIr::Choice(group) => {
                 for element in &group.elements {
-                    record(&element.head);
+                    if let Some(head) = element.head.atom() {
+                        record(head);
+                    }
                 }
             }
         }

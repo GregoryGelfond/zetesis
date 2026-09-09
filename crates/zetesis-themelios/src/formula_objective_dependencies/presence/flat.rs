@@ -181,18 +181,21 @@ fn activity(
             HeadIr::Choice(group) => {
                 for element in &group.elements {
                     context.inspect()?;
-                    if element.head.predicate() != atom.predicate() {
+                    let Some(head) = element.head.atom() else {
+                        continue;
+                    };
+                    if head.predicate() != atom.predicate() {
                         continue;
                     }
                     if !producer.body.is_empty()
                         || !group.guards.is_empty()
-                        || element.tuple.is_some()
+                        || element.key.tuple().is_some()
                         || !element.condition.is_empty()
-                        || !context.closed(&element.head)?
+                        || !context.closed(head)?
                     {
                         return Ok(None);
                     }
-                    if element.head == *atom && activity != Activity::Required {
+                    if head == atom && activity != Activity::Required {
                         activity = Activity::Optional;
                     }
                 }
@@ -331,7 +334,11 @@ fn unique(
             HeadIr::Choice(group) => {
                 for element in &group.elements {
                     context.inspect()?;
-                    if element.head.predicate() == predicate {
+                    if element
+                        .head
+                        .atom()
+                        .is_some_and(|head| head.predicate() == predicate)
+                    {
                         return Ok(false);
                     }
                 }
