@@ -84,7 +84,18 @@ fn head_elements_preserve_complete_source_answers() {
         vec![vec![], vec![a.clone()]],
         vec![vec![]],
         vec![],
+        vec![vec![], vec![a.clone()]],
+        vec![vec![]],
+        vec![vec![a.clone()]],
+        vec![],
+        vec![vec![]],
+        vec![vec![d(1), d(2)]],
+        vec![vec![], vec![a.clone()]],
+        vec![vec![], vec![a.clone()]],
+        vec![vec![], vec![a.clone()]],
+        vec![vec![], vec![a.clone()]],
         vec![vec![], vec![a]],
+        vec![],
     ];
     assert_eq!(expected.len(), head_element_sources::SOURCES.len());
     for (source, answers) in head_element_sources::SOURCES.into_iter().zip(expected) {
@@ -236,6 +247,7 @@ mod physical {
             "{d}.0#sum{0:a:not d}0.",
             "{d}.1#sum+{1:a:not d}1.",
             "0#sum+{0:a}0.",
+            "{x;y}.1#count{0:not a;0:a}1.#minimize{1@3,k:x;0@1,l:y}.",
         ]
         .into_iter()
         .chain(super::count_objective_sources::SATISFIABLE)

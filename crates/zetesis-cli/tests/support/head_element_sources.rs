@@ -1,6 +1,6 @@
 //! Original programs shared by source execution and physical qualification.
 
-pub const SOURCES: [&str; 10] = [
+pub const SOURCES: [&str; 21] = [
     "1#min{1:a;1:b}1.",
     "1#max{0:a;1:a}1.",
     "1#min{1:#true;1:a}1.",
@@ -11,4 +11,15 @@ pub const SOURCES: [&str; 10] = [
     "0{#false;a}0.",
     "a:-a.1{#true:a}1.",
     "0#sum+{0:#true;0:a}0.",
+    "1{a;not a;not not a}1.",
+    "2{a;not not a}2.",
+    "a:-a.1{not not a}1.",
+    "2{not #false;not not #true}2.",
+    "d(1..2).1{not #false:d(X)}1.",
+    "1#count{1:not a;1:a}1.",
+    "1#sum{1:not a;1:a}1.",
+    "1#sum+{1:not a;1:a}1.",
+    "1#min{1:not a;1:a}1.",
+    "1#max{1:not a;1:a}1.",
+    "2{not #false;not #false}2.2{not #false}2.",
 ];

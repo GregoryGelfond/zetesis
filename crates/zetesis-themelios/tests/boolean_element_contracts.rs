@@ -342,36 +342,6 @@ fn constants_do_not_certify_atom_count_plans() {
 }
 
 #[test]
-fn signed_constant_elements_remain_refused() {
-    for literal in ["not #true", "not #false", "not not #true", "not not #false"] {
-        for source in [
-            format!("1{{{literal}}}1."),
-            format!("1#count{{0:{literal}}}1."),
-        ] {
-            let error = admit_formula(
-                source,
-                AdmissionOptions::default(),
-                ExpansionLimits::default(),
-                FormulaLimits::default(),
-            )
-            .unwrap_err();
-            assert!(
-                matches!(
-                    error,
-                    FormulaFailure::Expansion(ExpansionFailure::Admission(
-                        AdmissionFailure::Profile {
-                            feature: ProfileFeature::NegatedHead,
-                            ..
-                        }
-                    ))
-                ),
-                "{error}"
-            );
-        }
-    }
-}
-
-#[test]
 fn tuple_producers_keep_objective_refusals() {
     for function in ["#count", "#sum", "#sum+", "#min", "#max"] {
         let source = format!("1{function}{{1:#true;1:a}}1.#minimize{{1:a}}.");

@@ -99,14 +99,18 @@ pub(super) fn cost_records(source: &str) -> BTreeSet<(BTreeSet<String>, Option<V
 #[derive(Clone, Copy)]
 struct World([bool; 4]);
 
+const OPERAND_KINDS: u8 = 4;
+const SIGNED_OPERANDS: usize = 12;
+
 impl World {
     fn head(self, index: u8) -> bool {
-        match index {
-            0 | 1 => self.0[usize::from(index)],
+        let value = match index % OPERAND_KINDS {
+            operand @ (0 | 1) => self.0[usize::from(operand)],
             2 => true,
             3 => false,
             _ => unreachable!("two atoms and two Boolean values"),
-        }
+        };
+        signed(index / OPERAND_KINDS, value, None)
     }
 }
 
@@ -137,6 +141,7 @@ fn eligible(mode: u8, outer: World, inner: Option<World>) -> bool {
 }
 
 /// Each row is (numeric value, tuple suffix, head, eligibility).
+/// Heads enumerate a, c, true, false under no, single, then double negation.
 /// Measures are min, max, count, sum, sum+, and implicit choice count.
 pub(super) struct Selection {
     pub rows: Vec<(i32, u8, u8, u8)>,
@@ -165,18 +170,18 @@ impl Selection {
             2 => Some(i64::try_from(tuples.len()).unwrap()),
             3 | 4 => Some(tuples.iter().map(|row| i64::from(row.0)).sum()),
             5 => {
-                // The declared extension convention coalesces atom choices by
-                // atom, while Boolean source occurrences have distinct keys.
+                // Atom keys include their sign. Boolean source occurrences
+                // have distinct keys even when their truth values agree.
                 let identities: BTreeSet<_> = self
                     .rows
                     .iter()
                     .enumerate()
                     .filter(|(_, row)| active(row))
                     .map(|(index, row)| {
-                        if row.2 < 2 {
+                        if row.2 % OPERAND_KINDS < 2 {
                             usize::from(row.2)
                         } else {
-                            index + 2
+                            index + SIGNED_OPERANDS
                         }
                     })
                     .collect();
@@ -231,7 +236,8 @@ impl Selection {
             if self.measure != 5 {
                 write!(source, "{value},{key}:").unwrap();
             }
-            source.push_str(["a", "c", "#true", "#false"][usize::from(head)]);
+            source.push_str(["", "not ", "not not "][usize::from(head / OPERAND_KINDS)]);
+            source.push_str(["a", "c", "#true", "#false"][usize::from(head % OPERAND_KINDS)]);
             source.push_str(
                 [
                     "",

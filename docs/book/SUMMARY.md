@@ -33,5 +33,6 @@
 ---
 
 [Admitted language](reference/language.md)
+[Language coverage obligations](reference/language-coverage.md)
 [Vocabulary](vocabulary.md)
 [Building the documentation](building.md)
