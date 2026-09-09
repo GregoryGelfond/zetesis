@@ -155,10 +155,12 @@ obligations. Native execution and performance on those platforms remain unproven
 
 The self-contained [kr-domains examples](examples/kr-domains/README.md) include
 94 non-clingcon cases and 14 shared encodings, with source hashes, licenses and
-annotation-removal provenance. Regression comparisons check complete answer sets,
-objective costs and optimum ties. Reproduce comparisons with the Rust
+annotation-removal provenance. Regression comparisons check completed displayed
+answer multisets, model counts, objective costs and optimum ties. Reproduce comparisons with the Rust
 [validation tools](crates/zetesis-validation/README.md); distinguish matched
 end-to-end solves from kernel measurements when comparing performance.
+The [validation chapter](docs/book/reference/validation.md) explains which
+claims the corpus, proof and physical execution checks can establish.
 
 See [Contributing](CONTRIBUTING.md) for development and verification requirements,
 and [build the book](docs/book/building.md) to read the complete manual locally.

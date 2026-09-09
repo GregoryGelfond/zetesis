@@ -63,7 +63,7 @@ proof-evaluation shortcuts are not admitted.
 From the repository root, check the retained record with:
 
 ```sh
-python3 scripts/proof_record.py
+cargo run --locked -p zetesis-maintenance -- proof-record --proofs-dir proofs
 ```
 
 [verification.json](verification.json) identifies the recorded source hashes,

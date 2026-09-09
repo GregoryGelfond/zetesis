@@ -35,5 +35,6 @@
 
 [Admitted language](reference/language.md)
 [Language coverage obligations](reference/language-coverage.md)
+[Validating an implementation change](reference/validation.md)
 [Vocabulary](vocabulary.md)
 [Building the documentation](building.md)

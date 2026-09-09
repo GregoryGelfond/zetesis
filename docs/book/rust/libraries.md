@@ -23,12 +23,19 @@ construction and standalone analysis APIs belong to its own manual.
 | Model-relative objective evaluation | `zetesis_objective` |
 | Source-domain analysis | `zetesis_domain` |
 | Reproducible comparisons and measurements | `zetesis_validation`, `zetesis_experiments` |
+| Repository proof records and qualification policy | `zetesis_maintenance` |
 
 Despite its current crate name, `zetesis-cli` exposes a writer-free ordinary
 solver session. It is the appropriate existing entry point when an application
 wants the solver's composed behavior. The lower libraries remain usable
 independently; a caller building a theory need not parse source, and a caller
 preparing a program need not search it.
+
+Validation and repository maintenance are distinct development capabilities.
+`zetesis_validation` checks captured answer sets and comparison contracts;
+`zetesis_maintenance` checks recorded proof evidence and qualification policy.
+Neither is a production solver dependency. A consistent proof record does not
+establish that Lean ran or that a Rust implementation satisfies its theorems.
 
 Start with the [runnable tour](../architecture/tour.md) for a complete source-to-answer
 path. The [source preparation example](source.md) separates analysis from eager

@@ -6,6 +6,9 @@ The manual uses mdBook 0.5.4. Run the following from the repository root:
 scripts/check.sh book
 ```
 
+For semantic regressions, proof records and execution measurements, see
+[Validating an implementation change](reference/validation.md).
+
 This checks the book build and the displayed Rust examples. To build only the
 HTML:
 
