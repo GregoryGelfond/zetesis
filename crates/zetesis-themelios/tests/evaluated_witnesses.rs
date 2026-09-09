@@ -14,19 +14,23 @@ use zetesis_themelios::{
 fn limited(
     source: &str,
     expansion: ExpansionLimits,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
 ) -> Result<AdmittedFormula, FormulaFailure> {
     admit_formula(
         source.into(),
         AdmissionOptions::default(),
         expansion,
-        limits,
+        *limits,
     )
 }
 
 fn input(source: &str) -> AdmittedFormula {
-    limited(source, ExpansionLimits::default(), FormulaLimits::default())
-        .unwrap_or_else(|error| panic!("{source}: {error}"))
+    limited(
+        source,
+        ExpansionLimits::default(),
+        &FormulaLimits::default(),
+    )
+    .unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 
 // These independently written finite substitutions retain whole source atoms.
@@ -219,7 +223,11 @@ fn witness_inputs_cannot_establish_condition_safety() {
     ] {
         assert!(
             matches!(
-                limited(source, ExpansionLimits::default(), FormulaLimits::default()),
+                limited(
+                    source,
+                    ExpansionLimits::default(),
+                    &FormulaLimits::default()
+                ),
                 Err(FormulaFailure::UnsafeVariable { .. })
             ),
             "{source}"
@@ -236,7 +244,11 @@ fn witness_inputs_cannot_escape_the_alternative() {
     ] {
         assert!(
             matches!(
-                limited(source, ExpansionLimits::default(), FormulaLimits::default()),
+                limited(
+                    source,
+                    ExpansionLimits::default(),
+                    &FormulaLimits::default()
+                ),
                 Err(FormulaFailure::UnsafeVariable { .. })
             ),
             "{source}"
@@ -253,8 +265,12 @@ fn arithmetic_cannot_invert_a_captured_value() {
         "q:-p(X,X+Y):#false.",
         "q:-p(X,X+_):#true.",
     ] {
-        let error =
-            limited(source, ExpansionLimits::default(), FormulaLimits::default()).unwrap_err();
+        let error = limited(
+            source,
+            ExpansionLimits::default(),
+            &FormulaLimits::default(),
+        )
+        .unwrap_err();
         assert!(
             matches!(error, FormulaFailure::UnboundArgumentInput { .. }),
             "{source}: {error}"
@@ -293,7 +309,7 @@ fn negative_witnesses_cannot_supply_inputs() {
                     limited(
                         &source,
                         ExpansionLimits::default(),
-                        FormulaLimits::default()
+                        &FormulaLimits::default()
                     ),
                     Err(FormulaFailure::UnsafeVariable { .. })
                 ),
@@ -311,7 +327,11 @@ fn nested_alternatives_remain_explicit_refusals() {
     ] {
         assert!(
             matches!(
-                limited(source, ExpansionLimits::default(), FormulaLimits::default()),
+                limited(
+                    source,
+                    ExpansionLimits::default(),
+                    &FormulaLimits::default()
+                ),
                 Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
                     zetesis_themelios::AdmissionFailure::Profile {
                         feature: zetesis_themelios::ProfileFeature::Term,
@@ -328,7 +348,12 @@ fn nested_alternatives_remain_explicit_refusals() {
 fn undefined_arithmetic_requires_a_complete_row() {
     for source in ["q:-p(X,X/0):#true.", "p(g(1,2)).q:-p(f(X,X/0)):#true."] {
         assert!(
-            limited(source, ExpansionLimits::default(), FormulaLimits::default()).is_ok(),
+            limited(
+                source,
+                ExpansionLimits::default(),
+                &FormulaLimits::default()
+            )
+            .is_ok(),
             "{source}"
         );
     }
@@ -336,7 +361,7 @@ fn undefined_arithmetic_requires_a_complete_row() {
         limited(
             "p(1,2).q:-p(X,X/0):#true.",
             ExpansionLimits::default(),
-            FormulaLimits::default()
+            &FormulaLimits::default()
         ),
         Err(FormulaFailure::Expansion(
             ExpansionFailure::Evaluation { .. }
@@ -351,7 +376,7 @@ fn checked_arithmetic_preserves_failure_provenance() {
         let error = limited(
             &source,
             ExpansionLimits::default(),
-            FormulaLimits::default(),
+            &FormulaLimits::default(),
         )
         .unwrap_err();
         assert!(
@@ -467,7 +492,7 @@ fn source_work_limit_is_inclusive() {
                     max_term_work: cap,
                     ..Default::default()
                 },
-                FormulaLimits::default(),
+                &FormulaLimits::default(),
             )
         },
         |error| {
@@ -493,7 +518,7 @@ fn source_storage_limit_is_inclusive() {
                     max_scalar_bytes: cap,
                     ..Default::default()
                 },
-                FormulaLimits::default(),
+                &FormulaLimits::default(),
             )
         },
         |error| {
@@ -516,7 +541,7 @@ fn substitution_limit_is_inclusive() {
             limited(
                 BOUNDED,
                 ExpansionLimits::default(),
-                FormulaLimits {
+                &FormulaLimits {
                     max_substitutions: cap as u64,
                     ..Default::default()
                 },
@@ -534,7 +559,7 @@ fn work_prefixes_cannot_publish_partial_theories() {
         match limited(
             CASES[0].0,
             ExpansionLimits::default(),
-            FormulaLimits {
+            &FormulaLimits {
                 max_work: cap,
                 ..Default::default()
             },

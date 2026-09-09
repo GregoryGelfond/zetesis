@@ -174,7 +174,7 @@ Metal has been physically qualified on an Apple M4 Pro for the recorded builds.
 The static closure oracle uses a bounded ground graph; general formula execution
 batches GPU propagation and exact CPU residual completion. Source loading,
 parsing, materialization, candidate generation and objective work still run on
-the host. The current checkpoint's [25 physical Metal regressions](docs/verification/language-closure-tranche-20260908/README.md)
+the host. The last promoted checkpoint's [25 physical Metal regressions](docs/verification/language-closure-tranche-20260908/README.md)
 pass for frozen instrumented executables, covering lazy transport reuse, complete
 closures, tight support, native aggregates, ordinary solving and admitted
 weighted heads. Combined count-head/objective cases preserve absent costs and

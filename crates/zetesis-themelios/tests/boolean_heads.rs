@@ -17,15 +17,15 @@ use zetesis_themelios::{
 };
 
 fn input(source: &str) -> AdmittedFormula {
-    limited(source, FormulaLimits::default()).unwrap_or_else(|error| panic!("{source}: {error}"))
+    limited(source, &FormulaLimits::default()).unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 
-fn limited(source: &str, limits: FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {
+fn limited(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {
     admit_formula(
         source.into(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        limits,
+        *limits,
     )
 }
 
@@ -249,7 +249,7 @@ proptest! {
 #[test]
 fn tautologies_preserve_variable_safety() {
     for source in ["#true|p(X).", "#true:-not p(X).", "#true|p(2..1,X)."] {
-        let error = limited(source, FormulaLimits::default()).unwrap_err();
+        let error = limited(source, &FormulaLimits::default()).unwrap_err();
         assert!(!error.diagnostics().is_empty(), "{source}");
         assert!(
             matches!(error, FormulaFailure::UnsafeVariable { .. }),
@@ -261,7 +261,7 @@ fn tautologies_preserve_variable_safety() {
 #[test]
 fn unsupported_conditions_remain_located_refusals() {
     for source in ["#true:a;b.", "#true:#false;b.", "#true:1=1;b."] {
-        let error = limited(source, FormulaLimits::default()).unwrap_err();
+        let error = limited(source, &FormulaLimits::default()).unwrap_err();
         assert!(!error.diagnostics().is_empty());
         assert!(matches!(
             error,
@@ -280,7 +280,7 @@ fn boolean_disjuncts_preserve_objective_guards() {
         "#false|a.#minimize{1@7:a}.",
         "#true|not a.#minimize{1@7:a}.",
     ] {
-        let error = limited(source, FormulaLimits::default()).unwrap_err();
+        let error = limited(source, &FormulaLimits::default()).unwrap_err();
         assert!(!error.diagnostics().is_empty());
         assert!(matches!(
             error,
@@ -299,10 +299,10 @@ fn head_element_limits_count_boolean_operands() {
             max_disjunction_elements: count,
             ..FormulaLimits::default()
         };
-        assert!(limited(source, limits).is_ok());
+        assert!(limited(source, &limits).is_ok());
         limits.max_disjunction_elements = count - 1;
         assert!(
-            matches!(limited(source, limits), Err(FormulaFailure::Limit { resource: FormulaResource::DisjunctionElements, observed, .. }) if observed == count as u128)
+            matches!(limited(source, &limits), Err(FormulaFailure::Limit { resource: FormulaResource::DisjunctionElements, observed, .. }) if observed == count as u128)
         );
     }
 }
@@ -310,7 +310,7 @@ fn head_element_limits_count_boolean_operands() {
 #[test]
 fn tautologies_preserve_arithmetic_refusals() {
     for source in ["#true|p(1/0).", "#true|p(2147483647+1)."] {
-        let error = limited(source, FormulaLimits::default()).unwrap_err();
+        let error = limited(source, &FormulaLimits::default()).unwrap_err();
         assert!(!error.diagnostics().is_empty(), "{source}");
         assert!(
             matches!(
@@ -346,7 +346,7 @@ fn exact_formula_budget(resource: FormulaResource, configure: impl Fn(&mut Formu
     let attempt = |limit| {
         let mut limits = FormulaLimits::default();
         configure(&mut limits, limit);
-        limited(BUDGET_SOURCE, limits)
+        limited(BUDGET_SOURCE, &limits)
     };
     let threshold = first_success(|limit| attempt(limit).is_ok());
     assert_eq!(

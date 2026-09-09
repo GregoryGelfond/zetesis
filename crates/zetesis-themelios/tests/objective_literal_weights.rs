@@ -141,7 +141,7 @@ fn ignored_shape_limit(
     let attempt = |maximum| {
         let mut limits = FormulaLimits::default();
         configure(&mut limits.objective, maximum);
-        admit(IGNORED_SHAPE, limits)
+        admit(IGNORED_SHAPE, &limits)
     };
     let exact = attempt(2).unwrap();
     assert!(!exact.objectives().is_present());
@@ -188,7 +188,7 @@ fn ignored_objectives_retain_variable_limits() {
 }
 
 fn refused_endpoint(source: &str, expected: ProfileFeature) {
-    let error = admit(source, FormulaLimits::default()).unwrap_err();
+    let error = admit(source, &FormulaLimits::default()).unwrap_err();
     assert!(!error.diagnostics().is_empty(), "{source}");
     assert!(
         matches!(error, FormulaFailure::Expansion(ExpansionFailure::Admission(
