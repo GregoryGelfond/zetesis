@@ -1,0 +1,17 @@
+[book]
+title = "The zetesis Book"
+authors = ["Gregory Gelfond"]
+language = "en"
+src = "docs/book"
+description = "Answer-set semantics, the Rust solver libraries, and the Lean proof library."
+
+[build]
+build-dir = "target/book"
+
+[rust]
+edition = "2024"
+
+[output.html]
+git-repository-url = "https://github.com/GregoryGelfond/zetesis"
+smart-punctuation = true
+
