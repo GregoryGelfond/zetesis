@@ -2044,10 +2044,12 @@ name = "zetesis-validation"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "proc-macro2",
  "rustix",
  "serde",
  "serde_json",
  "sha2",
+ "syn 2.0.119",
  "tempfile",
  "themelios-program",
  "zetesis-core",

@@ -18,6 +18,10 @@ themelios-program.workspace = true
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "1.1.4", features = ["fs", "process"] }
 
+[dev-dependencies]
+proc-macro2 = { version = "=1.0.107", features = ["span-locations"] }
+syn = "=2.0.119"
+
 [lints]
 workspace = true
 
