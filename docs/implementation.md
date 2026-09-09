@@ -506,21 +506,29 @@ For example, `{d}.q(K):-N=#count{1:d},K=1..N.` has the empty answer set and
 including when it instantiates a complete choice group or a head interval.
 
 Positive ordinary atoms may now bind local count-head witnesses and supply
-eligibility, including recursive and structured patterns. The complete
-tuple/atom bijection check precedes choice lowering. Duplicate witnesses retain
-their disjoined eligibility formulas; support membership never asserts them.
+eligibility, including recursive and structured patterns. Count groups separate
+per-atom permission from OR-coalesced complete-tuple activity, admitting both
+tuple/atom alias directions. Duplicate witnesses retain their disjoined
+eligibility formulas; support membership never asserts them. The optional source
+CountPlan retains its stricter bijection premise and declines aliases without
+refusing ordinary admission. See the
+[count-activity record](verification/count-head-activity-20260908/README.md).
 Default-negated and double-negated eligibility consume established inputs
 through the ordinary choice-condition path; they retain their original polarity.
 Head-local eligibility and outer-body negative gates may both read completed
 outer aggregate values, while retaining their separate source scopes.
 The [negative-eligibility record](verification/negative-count-eligibility-20260908/README.md)
 checks original/frozen truth, projection, safety and complete clingo models.
-Signed numeric `#sum` and nonnegative numeric `#sum+` heads reuse the checked
-correspondence. Permission rules retain every coalesced eligibility formula;
+Signed numeric `#sum`, nonnegative numeric `#sum+` and numeric-first-value
+`#min`/`#max` heads retain their checked tuple/atom bijection. Permission rules
+retain every coalesced eligibility formula;
 separate activated constraints inspect the numeric guard. Zero weights cannot
-erase permission. Negative `#sum+` head weights, nonnumeric sum weights, tuple
-aliases and extremal function heads retain located internal refusals. See the
+erase permission. Negative `#sum+` head weights, nonnumeric measured values,
+weighted/extrema aliases and guarded numeric endpoints retain located internal
+refusals. Objective-relevant function heads retain their separate dependency
+guard. See the
 [weighted-head record](verification/weighted-heads-20260908/README.md) and
+[numeric-extrema record](verification/extrema-heads-20260908/README.md), with their
 [composition laws](../proofs/Zetesis/HeadMeasures.lean); numeric compiler and
 source/refinement obligations remain explicit. The [bounds and eligibility record](verification/aggregate-bounds-20260907/README.md)
 contains independent original/frozen comparisons and exact resource checks.
@@ -548,12 +556,19 @@ claim. See its [crate contract](../crates/zetesis-domain/README.md).
 
 The `zetesis-objective` crate evaluates lifted positive joins over each verified
 stable model, coalesces (priority, weight, tuple) keys globally and returns checked
-signed costs at fixed descending priorities. The frontend discovers reachable
-objective slots from the possible-positive relation. Pure total count/sum
-assignment producers can feed positive objective observers under explicit
-variable-position and dependency checks. Broader negative or aggregate producer
-dependencies are refused; negative constraints remain allowed. The pinned
-themelios analysis supplies the dependency graph and retains its own safety
+signed costs at fixed descending priorities. The frontend establishes numeric
+priority presence from completed possible support under separate dependency and
+value-class checks. Resolved nonnumeric literal weights contribute no cost or
+priority after complete source-element validation; numeric zero retains its
+priority. Pure total count/sum/sum+/extrema assignment producers can feed positive
+objective observers through unique acyclic relation renamings and argument
+permutations under explicit variable-position and dependency checks. A bounded
+[flat-extrema certificate](design/objective-flat-presence.md) distinguishes
+mandatory nonnumeric bounds from optional numeric priority witnesses without
+removing proposals or original aggregate equalities. Broader mixed carriers,
+filtered/alternative/negative/disjunctive/conditional producers and
+objective-relevant function heads remain refused; negative constraints remain
+allowed. The pinned themelios analysis supplies the dependency graph and retains its own safety
 verdict. Clingo-specific assignment binding is checked locally; an upstream
 finiteness result alone is not a safety certificate. The
 [program-analysis contract](design/program-analysis.md) records this boundary.
@@ -573,10 +588,14 @@ passed all 94 unchanged entry graphs under default limits, preserving their
 original display/count/cost and optimum contracts. Hidden full models are not
 reconstructed from `#show`. The later [execution checkpoint](verification/execution-tranche-20260907/README.md)
 records its own completed qualification. The current
-[aggregate-bounds and lazy Metal checkpoint](verification/aggregate-bounds-tranche-20260907/README.md)
-passes final workspace/CPU tests, strict gates and fresh 94/24 release replays.
-Its local coverage passes both floors at the separately identified pre-styling
-revision; hosted CI checks coverage on the published revision.
+[promoted checkpoint](verification/language-closure-tranche-20260908/README.md)
+is main `363830b`, with the recorded portable/oracle gates, both independent
+coverage floors, 25 physical Metal tests and frozen 94/24 release comparisons.
+The [language-values source tranche](design/language-values-tranche.md) adds the
+bounded Boolean-head, objective-value/presence and evaluated-witness slices;
+its final integration qualification remains pending. Those source additions do
+not qualify a new installed executable. Hosted CI remains paused under the
+[local macOS policy](verification/local-macos-ci-20260908/README.md).
 General factored body construction, retained candidate traversal, root
 failed-literal propagation, indexed exact semantic blocks and optional objective
 bounds reduce repeated work without changing the original reduct. The
@@ -618,12 +637,13 @@ and abstract legal event traces. The independent reference campaign and producti
 conformance tests supply executable evidence separately. No theorem currently
 connects the concrete Rust structs, source adapter or shader to the Lean types.
 
-The [current clean audit](../proofs/verification/consumers-memory-20260908/README.md)
-checks 748 theorems in 61 modules. The latest twenty-five additions cover completed
-choice-body consumers, frozen negative eligibility, optional finite identities
-and immutable-world source membership. Complete carriers, faithful extraction, exact tuple/atom correspondence
-and complete source rounds are explicit premises where required;
-the laws do not establish source coverage, Rust scheduling/matching, machine
+The [last promoted Lean audit](../proofs/verification/language-closure-20260908/README.md)
+checks 834 laws in 74 modules, including separate count-head permission/activity
+and objective-transport laws. The current language-values slice adds scoped
+Boolean-head, objective-value/presence and evaluated-witness laws; final
+integrated qualification is separate. Complete carriers, faithful extraction,
+exact tuple/atom correspondence where required and complete source rounds are
+explicit premises. The laws do not establish source coverage, Rust scheduling/matching, machine
 resource behavior or device execution. Prior theorem sources and axiom sets are
 preserved. The completed local runtime gates and any new physical qualification
 are separate from this proof check. Release formalization focuses on foundations

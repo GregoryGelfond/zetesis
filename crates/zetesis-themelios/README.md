@@ -403,11 +403,20 @@ Formula results expose `objectives()`, `objective_origins()`, and `objective_dec
 
 The current objective profile accepts:
 
-- `#minimize` or `#maximize` with a scalar integer constant or positively bound variable as its weight;
+- `#minimize` or `#maximize` with a resolved scalar literal or positively bound variable as its weight;
 - a ground integer priority, defaulting to zero;
 - closed constant/whole-variable tuple components;
 - positive ordinary-atom conditions and scalar equality/disequality filters;
 - checked ground scalar normalization and global acyclic constants under the existing expansion limits.
+
+Resolved nonnumeric literal weights contribute neither cost nor priority.
+Admission still validates every element's priority, tuple, positive bindings,
+filters and source/resource limits before omitting its objective template.
+This includes `#inf` and `#sup` in the weight position; it does not broaden
+endpoint admission in other positions. An omitted nonnumeric weight remains
+distinct from an eligible numeric zero, which retains its priority. The
+[literal-weight record](../../docs/verification/objective-literal-values-20260908/README.md)
+states the admitted profile and original model/cost evidence.
 
 Positive weak constraints such as `:~ p(X). [2@1,X]` normalize into the same
 minimization path. Their bodies must already satisfy the positive ordinary
@@ -473,24 +482,40 @@ uses the pinned themelios dependency graph without recognizing domain names.
 When a generated value supplies a variable objective weight, relevant extrema
 assignments receive an additional presence check after support completion. A
 complete outer binding whose possible tuple carrier mixes numeric and
-nonnumeric first values receives a located `ObjectiveAggregateDependency`
-refusal. Otherwise an unrealizable numeric proposal could retain a zero priority
-slot when every actual extremum is symbolic. The check is conservative even
-when a numeric extremum dominates or an intervening numeric reduction might
-remove the concern. Numeric-only, nonnumeric-only and empty carriers, constant
-or zero objective weights, and different value classes in disjoint outer
-bindings retain their qualified profiles. An implicit empty endpoint is not a
-contributing tuple and does not trigger mixing.
+nonnumeric first values needs a completed-presence certificate: an unrealizable
+numeric proposal alone could otherwise retain a zero priority when every actual
+extremum is symbolic.
 
-This is an internal zetesis implementation boundary, not a themelios rejection
-or a modeling-error judgment. Preparation can succeed before materialization
-detects the mixed carrier. The scan uses the existing complete joins and
-work/substitution/scalar budgets; failure publishes no admitted objective
-program. The [presence design](../../docs/design/objective-presence.md) and
-[forwarding record](../../docs/verification/objective-forwarding-20260908/README.md)
-separate admitted observations from conservative refusals. These source slices
-do not enable objective-relevant function head producers or lazy formula
-execution.
+The [flat certificate](../../docs/design/objective-flat-presence.md) covers an
+unconditional unary assignment with closed tuple values. Each tuple condition
+is empty or one positive closed atom whose producers are ground facts or
+unconditional unbounded choices with closed heads and empty element conditions.
+The assignment has one producer; relevant downstream consumers may be unique
+unary positive renamings. Exact signed atom identity determines mandatory and
+optional occurrences, with a fact overriding an optional occurrence. Every
+possible numeric witness remains unless a mandatory nonnumeric tuple dominates
+all numbers for that extremum. Constraints and correlations between optional
+conditions cannot remove those witnesses. The certificate changes only completed
+priority presence, retaining every proposal, producer equality and original
+reduct formula.
+
+Mixed carriers outside that profile still receive located
+`ObjectiveAggregateDependency` refusals. Numeric-only, nonnumeric-only and empty
+carriers, constant or zero objective weights, and different value classes in
+disjoint outer bindings retain their separate profiles. An implicit empty
+endpoint is not a contributing tuple and does not trigger mixing. Outer-domain
+joins, filtered/alternative producers and nested reductions do not gain the flat
+certificate. These are zetesis implementation boundaries, not themelios
+rejections or modeling-error judgments.
+
+Preparation can succeed before materialization detects a mixed carrier. Complete
+joins retain work/substitution/scalar accounting, and certificate scans charge
+formula work. `FormulaLimits::max_objective_presence_entries` separately bounds
+simultaneously retained logical planning slots; it does not measure allocator
+bytes. Failure publishes no admitted objective program. The
+[presence design](../../docs/design/objective-presence.md) separates these
+completed-layout checks from model-relative scoring. These source slices do not
+enable objective-relevant function head producers or lazy formula execution.
 
 An objective template with no possible numeric-weight positive/filter binding is omitted. Original declaration locations remain available even when every objective is omitted. Enabled zero weights, cancellation, and priorities inactive in a particular stable model retain their priority slots. The evaluator globally coalesces contributions by `(priority, weight, tuple)`, including repeated bindings and separate source statements. It sums checked costs in descending priority order. Optimization orders verified stable models; it does not replace the reduct membership check. An incumbent is not a proved optimum until search coverage completes.
 
