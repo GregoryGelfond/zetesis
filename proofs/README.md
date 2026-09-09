@@ -24,6 +24,8 @@ conceptual overview.
 | What is an answer set under the formula reduct? | [Ferraris](Zetesis/Ferraris.lean) defines truth, the frozen reduct and subset minimality. |
 | Why does normalized least closure suffice? | [NormalFerraris](Zetesis/NormalFerraris.lean) proves equivalence with [Semantics](Zetesis/Semantics.lean); the [bridge guide](guide/normal-ferraris.md) explains the argument. |
 | What does a completed membership result establish? | [CertifiedExecution](Zetesis/CertifiedExecution.lean) and its [worked proof](guide/certified-membership.md) separate a verified result from unfinished work. |
+| When does enumeration establish the original world view? | [WorldViews](Zetesis/WorldViews.lean) composes exact membership, original candidate coverage and complete capture; optimal selection remains distinct. |
+| How do weighted heads handle shared atoms and tuples? | [WeightedHeadActivity](Zetesis/WeightedHeadActivity.lean) connects distinct tuple sums to canonical guards and candidate-only bounds. |
 | Which implementation correspondences remain open? | The manual's [proof boundary](../docs/book/lean/correspondence.md) separates mathematical laws from executable refinement. |
 
 For example, `NormalFerraris.answer_set_iff` relates the two independently defined

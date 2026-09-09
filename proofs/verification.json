@@ -7,8 +7,8 @@
   "platform": "arm64-apple-darwin24.6.0",
   "python_version": "Python 3.14.7",
   "external_packages": [],
-  "semantic_modules": 79,
-  "theorems_audited": 885,
+  "semantic_modules": 81,
+  "theorems_audited": 897,
   "path_convention": {
     "command_cwd": "Paths are relative to the repository root; proofs denotes its Lean package directory.",
     "record_members": "Source, generated-artifact and log paths are relative to proofs/.",
@@ -23,8 +23,8 @@
         "--version"
       ],
       "cwd": "proofs",
-      "started_utc": "2026-09-09T14:16:12.221Z",
-      "elapsed_seconds": 3.066175,
+      "started_utc": "2026-09-09T16:19:01.000Z",
+      "elapsed_seconds": 0.459321875,
       "exit_code": 0,
       "result": "PASS",
       "log": "verification/current/version.log"
@@ -35,8 +35,8 @@
         "clean"
       ],
       "cwd": "proofs",
-      "started_utc": "2026-09-09T14:16:15.292Z",
-      "elapsed_seconds": 0.292421,
+      "started_utc": "2026-09-09T16:19:01.465Z",
+      "elapsed_seconds": 0.416238292,
       "exit_code": 0,
       "result": "PASS",
       "log": "verification/current/clean.log"
@@ -47,8 +47,8 @@
         "build"
       ],
       "cwd": "proofs",
-      "started_utc": "2026-09-09T14:16:15.588Z",
-      "elapsed_seconds": 7.801283,
+      "started_utc": "2026-09-09T16:19:01.881Z",
+      "elapsed_seconds": 9.351952042,
       "exit_code": 0,
       "result": "PASS",
       "log": "verification/current/build.log"
@@ -57,11 +57,11 @@
       "command": [
         "sh",
         "-c",
-        "for zetesis_proof_source in Zetesis/*.lean; do printf '%s\\n' \"$zetesis_proof_source\"; lake env lean -DautoImplicit=false -DwarningAsError=true \"$zetesis_proof_source\" || exit \"$?\"; done"
+        "for source in Zetesis/*.lean; do lake env lean -DautoImplicit=false -DwarningAsError=true \"$source\" || exit \"$?\"; done"
       ],
       "cwd": "proofs",
-      "started_utc": "2026-09-09T14:16:23.390Z",
-      "elapsed_seconds": 49.17174,
+      "started_utc": "2026-09-09T16:19:11.233Z",
+      "elapsed_seconds": 55.463586709,
       "exit_code": 0,
       "result": "PASS",
       "log": "verification/current/strict-modules.log"
@@ -76,8 +76,8 @@
         "Audit.lean"
       ],
       "cwd": "proofs",
-      "started_utc": "2026-09-09T14:17:12.564Z",
-      "elapsed_seconds": 0.585484,
+      "started_utc": "2026-09-09T16:20:06.697Z",
+      "elapsed_seconds": 0.677390584000008,
       "exit_code": 0,
       "result": "PASS",
       "log": "verification/current/audit.log"
@@ -94,8 +94,8 @@
         "test_proof_record.py"
       ],
       "cwd": "proofs",
-      "started_utc": "2026-09-09T14:17:13.149Z",
-      "elapsed_seconds": 2.42457,
+      "started_utc": "2026-09-09T16:20:07.375Z",
+      "elapsed_seconds": 4.776661999999996,
       "exit_code": 0,
       "result": "PASS",
       "log": "verification/current/record-regressions.log"
@@ -106,8 +106,8 @@
         "--version"
       ],
       "cwd": "proofs",
-      "started_utc": "2026-09-09T14:18:13.755Z",
-      "elapsed_seconds": 0.008006,
+      "started_utc": "2026-09-09T16:20:12.152Z",
+      "elapsed_seconds": 0.0073253330000006825,
       "exit_code": 0,
       "result": "PASS",
       "log": "verification/current/python-version.log"
@@ -118,8 +118,8 @@
         "../scripts/proof_record.py"
       ],
       "cwd": "proofs",
-      "started_utc": "2026-09-09T14:19:34.544Z",
-      "elapsed_seconds": 0.13345,
+      "started_utc": "2026-09-09T16:20:12.165Z",
+      "elapsed_seconds": 0.1283287080000009,
       "exit_code": 0,
       "result": "PASS",
       "log": "verification/current/record-check.log"
@@ -134,8 +134,8 @@
   "proof_holes": false,
   "native_evaluation_proof_shortcuts": false,
   "source_sha256": {
-    "Audit.lean": "ce21725558b11535a4fb9410641a466c42b942c8e46b2cec4a7fdc5071f5d5f5",
-    "Zetesis.lean": "2dfaa5ce51e04ad6308a48dfc2d88c12f76491b579b12d9cb130f48b33f11770",
+    "Audit.lean": "5fdb034be3152d35c85af4e4843fef8b731ba3e39045267d8bca0ecaebdb159d",
+    "Zetesis.lean": "06ebd9d21852a476d620c987d7789d5574daca08fe4b92eac9430f9bce26bf20",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
     "Zetesis/AggregateConsumers.lean": "41aded89dbfaa79833ed3b336030ef4b08afa5be8e7029060416c2f8de59ef97",
@@ -214,33 +214,35 @@
     "Zetesis/TrueHeads.lean": "56df61283a0abbe6ded83b72c89a76b99952b0f5abee72efab9f7acbc1ce4060",
     "Zetesis/UniversalConditionals.lean": "7991b6e24afdc734713e7082b3543dbf41b544871ff620d65980e0767394ed9a",
     "Zetesis/ValueExtrema.lean": "1c8cbda687b98d9a866eec959fd264e05e7f894d55cd7d6439d49d76a95ada24",
+    "Zetesis/WeightedHeadActivity.lean": "ee64529c78f7a3746b89029c04abfcd797c0fa52a9ecac7ea96df2f9caea3ad9",
     "Zetesis/WorldMasks.lean": "ad0145f55bf5c1b0faffda9a20182bb9ff6f84226b7749760ffa290aeb451c59",
+    "Zetesis/WorldViews.lean": "581ab6a65fc2659b8695d49af1bae6ef61008cdc59156aaba5b0c164c23cef89",
     "lake-manifest.json": "69364e6460074266ebff2f411cee9d04264803f6f813e49150fa5daa67da8ddd",
     "lakefile.lean": "28bbc617e8994bd0b211465fd218c4f614fe8aed68b4c3cb6c9b08e7c07974ed",
     "lean-toolchain": "3aac669c7a910ec2389f4e4f921b605adf6ebf2d1e0c9b9cd0be4d33f3f5db71"
   },
   "generated_artifact_sha256": {
-    "README.md": "57afc97e95597bf51a65e38b5d9828fb75476844c9514f954ab7d560ef992d1f",
-    "axiom-audit.txt": "057bd6ea1c727f86a809f456588d79d0b5cefc9c29b13640454f391959294c30",
-    "theorems.json": "9e9b27b6e90f6e7ba41f8d6770a25c010e6240f3c0314521e2d1a951747e4d8b"
+    "README.md": "98188a900d739b0b5412c63757fc36b4495aef5c58c8d03c34340acdf31f03a1",
+    "axiom-audit.txt": "ed984d5ae1e978f3eaa19543a7407d7072cc6f008f4c16bf54f913b7ff1cde47",
+    "theorems.json": "d2cd28536ef409c6afa58ee383c850b48906df79243d1e7bebc19ccca8802f76"
   },
   "verification_log_sha256": {
-    "verification/current/audit.log": "057bd6ea1c727f86a809f456588d79d0b5cefc9c29b13640454f391959294c30",
-    "verification/current/build.log": "39c77d86ca641180646582b233607cea7b1a6e3c1d8fa0ca955ce5f2e64d3420",
+    "verification/current/version.log": "4762d596346ad354e28668de62b7eeae7de5d531b9a7b1c182ca59cfacd81bdd",
     "verification/current/clean.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "verification/current/build.log": "06e7365d9180160e1695b6e6ff10cc3c5dd1586dfe4ea71aba971e4e686c9b3e",
+    "verification/current/strict-modules.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "verification/current/audit.log": "ed984d5ae1e978f3eaa19543a7407d7072cc6f008f4c16bf54f913b7ff1cde47",
+    "verification/current/record-regressions.log": "74dfe351dd19e69fa449f6fe719f3a141f86d2b2d2f8d83e701bf491fbfe48e3",
     "verification/current/python-version.log": "0366d77cc1f1ac88ea458231ba4f639323d5caf34de0d50b7618277fd4395f1f",
-    "verification/current/record-check.log": "7a5e2e415fd17345ec0cc1eeced2dde9cd20503d433d175b77b117b5eee1e34f",
-    "verification/current/record-regressions.log": "ea505b1bf4b88247fb4254de0bc0dde93e78daac789b7317c49bd21faab7f49f",
-    "verification/current/strict-modules.log": "dd5d7a96aab4d7fa8815d5be3cbe992fa04fb0317df56a8dba55ef3325030c55",
-    "verification/current/version.log": "4762d596346ad354e28668de62b7eeae7de5d531b9a7b1c182ca59cfacd81bdd"
+    "verification/current/record-check.log": "89d95605c49e94b239c8b67c378c2641188366e2d37280b6cc3d7b7a2605d051"
   },
   "audit_consistency": {
-    "source_theorem_declarations": 885,
-    "indexed_theorems": 885,
-    "printed_axiom_entries": 885,
-    "unique_qualified_names": 885,
+    "source_theorem_declarations": 897,
+    "indexed_theorems": 897,
+    "printed_axiom_entries": 897,
+    "unique_qualified_names": 897,
     "source_index_line_check": "PASS",
     "allowed_transitive_axioms_only": "PASS"
   },
-  "refinement_boundary": "Kernel-checked mathematical definitions and laws, including normalized-rule/Ferraris answer-set equivalence under the explicit translation and filter applicability. Source grounding, concrete Rust representations, resource behavior, scheduling and WGSL execution remain separate unproved implementation correspondences."
+  "refinement_boundary": "Kernel-checked mathematical definitions and laws, including original world-view capture and weighted whole-tuple head activity. Concrete subject identity, source grounding, Rust representations, resource behavior, scheduling and WGSL execution remain separate unproved implementation correspondences."
 }

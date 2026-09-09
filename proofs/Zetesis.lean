@@ -40,6 +40,7 @@ import Zetesis.CertifiedExecution
 import Zetesis.ValueExtrema
 import Zetesis.FinitePools
 import Zetesis.Outcomes
+import Zetesis.WorldViews
 import Zetesis.StructuralBindings
 import Zetesis.FiniteValues
 import Zetesis.ConsequentAlternatives
@@ -71,6 +72,7 @@ import Zetesis.AggregateReduct
 import Zetesis.PartitionCapacities
 import Zetesis.AggregateRanges
 import Zetesis.CountHeadActivity
+import Zetesis.WeightedHeadActivity
 import Zetesis.ObjectiveTransport
 import Zetesis.BooleanHeads
 import Zetesis.EvaluatedWitnesses

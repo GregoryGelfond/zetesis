@@ -21,6 +21,8 @@ The maintained full index is
 | Can certificates and residual checks compose? | `CertifiedExecution.completed_membership_exact` | Sound verdict, exact residual answer and completed result |
 | Does batched enumeration cover the requested family? | `BatchAccounting.completed_results_exact` | Candidate coverage, sound committed classification and exhaustion |
 | Does no output mean inconsistency? | `Outcomes.empty_delivery_can_hide_a_valid_model` | Counterexample: absence of delivery is insufficient |
+| When does a collection represent a world view? | `WorldViews.completed_capture_represents_world_view` | Original answer coverage, exact completed classification and complete capture |
+| Does a complete optimal family suffice? | `WorldViews.optimal_family_omits_worse_answer` | A strictly worse original answer witnesses the difference |
 
 Each module is available under
 [`proofs/Zetesis`](https://github.com/GregoryGelfond/zetesis/tree/main/proofs/Zetesis).
@@ -39,6 +41,13 @@ and `EvaluatedWitnesses` address finite witnesses and checked construction.
 conditional and signed-head meaning. `CountHeadActivity` distinguishes
 head permission coalesced by atom from aggregate activity coalesced by complete
 tuple. Those equivalence relations cannot be interchanged.
+
+`WeightedHeadActivity.formula_original` extends that independent tuple activity
+to signed sums over a complete, duplicate-free key carrier.
+`WeightedHeadActivity.bound_frozen` shows why the activated bound constrains
+the candidate without supplying reduct support. The canonical finite mask
+formula is the mathematical reference; the optimized Rust lowering remains a
+separate correspondence.
 
 `AggregateReduct.direct_reduct` relates the failing-subset formula to original
 and frozen eligibility under complete masks. `AggregateRanges` establishes bounds

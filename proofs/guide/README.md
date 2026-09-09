@@ -11,12 +11,13 @@ and theorem hypotheses are authoritative; prose is a reading aid.
 | Can an aggregate be evaluated directly through the reduct? | [AggregateReduct](../Zetesis/AggregateReduct.lean) formalizes Ferraris Proposition 7: retain the original guard and evaluate the same guard over frozen eligibility. Whole-tuple grouping and concrete arithmetic remain separate obligations. |
 | When is parallel signed addition safe from intermediate overflow? | [AggregateRanges](../Zetesis/AggregateRanges.lean) bounds every mathematical intermediate sum by separate positive and negative carrier totals. The actual execution must preserve contribution occurrences and implement the admitted arithmetic. |
 | When do total and group capacities imply stronger local bounds? | [PartitionCapacities](../Zetesis/PartitionCapacities.lean) separates the counting argument from the caller's coverage and theory-entailment premises. |
-| What makes an interpretation a stable model? | [Ferraris](../Zetesis/Ferraris.lean): formula truth, the frozen reduct, minimality and their connection. |
+| What makes an interpretation an answer set? | [Ferraris](../Zetesis/Ferraris.lean): formula truth, the frozen reduct, minimality and their connection. |
 | Why does least closure suffice for the normal-rule specialization? | The [normalized/Ferraris bridge](normal-ferraris.md) proves that both independent answer-set definitions coincide, then connects Ferraris membership to [Semantics](../Zetesis/Semantics.lean)'s least closure. [Iteration](../Zetesis/Iteration.lean) addresses bounded closure computation. |
 | When can grounding remain incomplete while work proceeds? | [LiftedBridge](../Zetesis/LiftedBridge.lean): sound intermediate stages and explicit final coverage premises for stable acceptance. |
 | What permits a cheaper exact membership check? | [TightPlans](../Zetesis/TightPlans.lean) and [CertifiedExecution](../Zetesis/CertifiedExecution.lean), with the [worked structured proof](certified-membership.md). |
 | How do Boolean tables and producer reductions implement that certificate? | [TightEvaluation](../Zetesis/TightEvaluation.lean) proves the finite evaluator and support correspondence; [reading the argument](tight-evaluation.md) separates computed truth from unproved device transport. |
 | What does complete batched enumeration require? | [BatchAccounting](../Zetesis/BatchAccounting.lean): proposal, pending work, exact classification and exhaustion under supplied coverage. |
+| When does a retained collection represent the world view? | [WorldViews](../Zetesis/WorldViews.lean) composes original answer coverage, exact completed classification and complete capture. A sound prefix or complete optimal selection need not contain every original answer. |
 | Does publishing no answers establish UNSAT? | [Outcomes](../Zetesis/Outcomes.lean): completed semantic absence, sound delivery and a counterexample with no delivered records. |
 | How can candidate feedback preserve the original problem? | [Feedback](../Zetesis/Feedback.lean), [ObjectiveBounds](../Zetesis/ObjectiveBounds.lean) and [SignedObjectiveBounds](../Zetesis/SignedObjectiveBounds.lean). |
 | What must source transformations preserve? | [GroundGuards](../Zetesis/GroundGuards.lean), [UniversalConditionals](../Zetesis/UniversalConditionals.lean) and [FinitePools](../Zetesis/FinitePools.lean): original truth and frozen contexts under explicit coverage. |
@@ -33,8 +34,9 @@ instance merely because the law accepts a finite list.
 
 The [proof convention](../STYLE.md) explains how substantial arguments should be
 read and written. Small proofs may stay compact. Only the named pilot has been
-explicitly refactored under this convention so far; the library-wide migration is
-future work.
+explicitly identified as the worked example; new substantial proofs follow the
+same convention. The entire existing library has not been refactored into that
+style.
 
 The execution extensions connect these paths to [signed singleton heads](../Zetesis/SingletonHeads.lean),
 [constructor shape and extraction](../Zetesis/ConstructorPatterns.lean),
@@ -64,6 +66,13 @@ premise. [ObjectiveTransport](../Zetesis/ObjectiveTransport.lean) separately
 transports completed presence carriers and model-relative objective activation.
 Its premises do not establish a clingo-compatible priority layout from possible
 support. Neither addition proves the concrete source compiler.
+
+[WeightedHeadActivity](../Zetesis/WeightedHeadActivity.lean) reuses the independent
+tuple carrier for signed sums. Its canonical formula agrees with direct numeric
+selection, and its bound is evaluated only in the candidate. Identical complete
+row sets preserve the whole group in context for the same key carrier. Concrete
+signed lowering, source coverage and finite-width arithmetic remain separate
+implementation obligations.
 
 [EvaluationPrefix](../Zetesis/EvaluationPrefix.lean) specifies the live-prefix
 invariant beneath reusable expression storage. [LazyRounds](../Zetesis/LazyRounds.lean)
