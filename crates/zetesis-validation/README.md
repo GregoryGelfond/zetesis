@@ -52,6 +52,16 @@ A clean reference-only run says nothing about native compatibility.
 The command exits 0 when every case passes the requested mode, 1 for case failure,
 and 2 for setup, integrity or report-publication errors.
 
+Library consumers call `corpus_comparison::run(&Request, on_case)` and inspect
+typed `CaseResult` decisions and completed `ReportedAnswers`. The observer runs
+after each case, outside the child deadline; it must return promptly without
+changing inputs or interfering with execution. `Report::passed`,
+`answer_parity_passed` and `physical_status` answer distinct questions without
+parsing JSON. `Report::to_json` supplies the fallible schema-1 presentation view;
+publication belongs to the caller. A rendering failure does not alter the
+retained comparison decision. See [the corpus API](src/corpus_comparison.rs) and
+its [direct-consumer tests](tests/corpus_comparison.rs).
+
 ## Understand answer parity
 
 The kr-domains comparison checks complete displayed witness multisets, objective
@@ -190,7 +200,8 @@ documents reproducible commands, limits and protocol boundaries.
 | `process::invoke_supervised` | Separately supervise trusted helpers, retaining their group reservation through cleanup after failed helper completion. |
 | `answers` | Bounded decoding and reconciliation of reported answers. |
 | `selected::run` | Private source copies, selected comparisons and before/after seals. |
-| `Report::publish` | A separate bounded publication step that refuses an existing destination. |
+| `corpus_comparison::run` | Fixed corpus comparisons with typed outcomes and an explicit progress observer. |
+| `selected::Report::publish`, `performance::Report::publish` | Separate bounded publication that refuses an existing destination. |
 
 Curated verification reads its pinned manifest, license and ASP sources. A
 bounded decoder reconciles preserved assertion excerpts with exact source bytes,
