@@ -61,7 +61,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/plain.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -69,7 +69,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/plain.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.010,\n          \"Value\": [\n            \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.010,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.010\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.010,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.001\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -155,7 +155,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/mutual-cycle.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -163,7 +163,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/mutual-cycle.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\", \"b\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\", \"b\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -243,7 +243,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/unsupported-cycle.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -251,7 +251,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/unsupported-cycle.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -382,7 +382,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/negative-body.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -390,7 +390,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/negative-body.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        },\n        {\n          \"Time\": 0.001,\n          \"Value\": [\n            \"b\"\n          ]\n        }\n      ],\n      \"Stop\": 0.001\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 3,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.001,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 3,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -487,7 +487,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/double-negative-body.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -495,7 +495,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/double-negative-body.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -558,7 +558,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/duplicates.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -566,7 +566,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/duplicates.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -641,7 +641,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/constraint.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -649,7 +649,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/constraint.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -725,7 +725,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/other-producer.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -733,7 +733,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/other-producer.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -809,7 +809,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/one-way-cycle.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -817,7 +817,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/one-way-cycle.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -907,7 +907,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/consequence.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -915,7 +915,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/consequence.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\", \"c\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\", \"c\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\", \"c\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\", \"c\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -986,7 +986,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/false-body.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -994,7 +994,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/false-body.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -1088,7 +1088,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/head-overlap.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -1096,7 +1096,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/head-overlap.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"a\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"a\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -1173,7 +1173,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/scalar-identity.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -1181,7 +1181,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/scalar-identity.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"q(x)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"p(\\\"x\\\")\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"q(x)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"p(\\\"x\\\")\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -1257,7 +1257,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/ground-head-arithmetic.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -1265,7 +1265,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/ground-head-arithmetic.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a(3)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a(3)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -1394,7 +1394,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/shared-head-variable.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -1402,7 +1402,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/shared-head-variable.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"b(1)\", \"a(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"b(1)\", \"b(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"a(1)\", \"a(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"a(1)\", \"b(2)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 4,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"b(1)\", \"a(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"b(1)\", \"b(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"a(1)\", \"a(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"a(1)\", \"b(2)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 4,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -1549,7 +1549,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/repeated-head-variable.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -1557,7 +1557,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/repeated-head-variable.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"b(1)\", \"a(2,2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"b(1)\", \"b(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"a(1,1)\", \"a(2,2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"a(1,1)\", \"b(2)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 4,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"b(1)\", \"a(2,2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"b(1)\", \"b(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"a(1,1)\", \"a(2,2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"a(1,1)\", \"b(2)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 4,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -1888,7 +1888,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/all-head-separators.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -1896,7 +1896,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/all-head-separators.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"e(1)\", \"e(2)\", \"d(1)\", \"d(2)\", \"b(1)\", \"b(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"e(1)\", \"e(2)\", \"d(1)\", \"d(2)\", \"a(1)\", \"a(2)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"e(1)\", \"e(2)\", \"d(1)\", \"d(2)\", \"b(1)\", \"b(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"e(1)\", \"e(2)\", \"d(1)\", \"d(2)\", \"a(1)\", \"a(2)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -2159,7 +2159,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/ground-head-coalescing.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -2167,7 +2167,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/ground-head-coalescing.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"a(1)\", \"a(2)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"a(1)\", \"a(2)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -2309,7 +2309,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/some-head-already-supported.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -2317,7 +2317,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/some-head-already-supported.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"a\", \"c\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"a\", \"b(1)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"a\", \"c\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"a\", \"b(1)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -2417,7 +2417,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/filters.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -2425,7 +2425,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/filters.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"b(1)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"a(1)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"b(1)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"d(2)\", \"a(1)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -2540,7 +2540,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/range-body.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -2548,7 +2548,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/range-body.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b(1)\", \"a(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b(1)\", \"b(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a(1)\", \"a(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a(1)\", \"b(2)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 4,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b(1)\", \"a(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b(1)\", \"b(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a(1)\", \"a(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a(1)\", \"b(2)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 4,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -2641,7 +2641,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/arithmetic-body.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -2649,7 +2649,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/arithmetic-body.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"b(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"a(2)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"b(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"a(2)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -2734,7 +2734,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/count-body.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -2742,7 +2742,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/count-body.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.001,\n          \"Value\": [\n            \"d(1)\", \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.001,\n          \"Value\": [\n            \"d(1)\", \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.001\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.001,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -2811,7 +2811,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/recursive-count-body.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -2819,7 +2819,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/recursive-count-body.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -2924,7 +2924,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/priority-order.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -2932,7 +2932,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/priority-order.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            0, 2\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            0, 2\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 1,\n    \"Costs\": [\n      0, 2\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            0, 2\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            0, 2\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 1,\n    \"Costs\": [\n      0, 2\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -2955,7 +2955,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/priority-order.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -2963,7 +2963,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/priority-order.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -3076,7 +3076,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/present-zero-priorities.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -3084,7 +3084,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/present-zero-priorities.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            0, 0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            0, 0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ],\n          \"Costs\": [\n            0, 0\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 3,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 2,\n    \"Costs\": [\n      0, 0\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            0, 0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            0, 0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ],\n          \"Costs\": [\n            0, 0\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 3,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 2,\n    \"Costs\": [\n      0, 0\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -3110,7 +3110,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/present-zero-priorities.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -3118,7 +3118,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/present-zero-priorities.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -3229,7 +3229,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/duplicate-objective-key.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -3237,7 +3237,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/duplicate-objective-key.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            1\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            1\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ],\n          \"Costs\": [\n            1\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 3,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 2,\n    \"Costs\": [\n      1\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            1\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            1\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ],\n          \"Costs\": [\n            1\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 3,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 2,\n    \"Costs\": [\n      1\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -3262,7 +3262,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/duplicate-objective-key.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -3270,7 +3270,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/duplicate-objective-key.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -3389,7 +3389,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/cycle-duplicate-objective-key.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -3397,7 +3397,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/cycle-duplicate-objective-key.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\", \"b\"\n          ],\n          \"Costs\": [\n            1\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\", \"b\"\n          ],\n          \"Costs\": [\n            1\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 1,\n    \"Costs\": [\n      1\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\", \"b\"\n          ],\n          \"Costs\": [\n            1\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\", \"b\"\n          ],\n          \"Costs\": [\n            1\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 1,\n    \"Costs\": [\n      1\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -3420,7 +3420,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/cycle-duplicate-objective-key.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -3428,7 +3428,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/cycle-duplicate-objective-key.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\", \"b\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\", \"b\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -3534,7 +3534,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/negative-objective-weight.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -3542,7 +3542,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/negative-objective-weight.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ],\n          \"Costs\": [\n            -1\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ],\n          \"Costs\": [\n            -1\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 3,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 1,\n    \"Costs\": [\n      -1\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ],\n          \"Costs\": [\n            -1\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ],\n          \"Costs\": [\n            -1\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 3,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 1,\n    \"Costs\": [\n      -1\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -3564,7 +3564,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/negative-objective-weight.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -3572,7 +3572,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/negative-objective-weight.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -3648,7 +3648,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/impossible-objective-priority.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -3656,7 +3656,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/impossible-objective-priority.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -3674,7 +3674,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/impossible-objective-priority.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -3682,7 +3682,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/impossible-objective-priority.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -3779,7 +3779,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/constrained-objective-priority.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -3787,7 +3787,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/constrained-objective-priority.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        },\n        {\n          \"Time\": 0.001,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        }\n      ],\n      \"Stop\": 0.001\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 1,\n    \"Costs\": [\n      0\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.001,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 1,\n    \"Costs\": [\n      0\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -3809,7 +3809,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/constrained-objective-priority.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -3817,7 +3817,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/constrained-objective-priority.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -3853,7 +3853,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/unsafe-second-head.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -3861,8 +3861,8 @@
             ],
             "returncode": 65,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/unsafe-second-head.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"UNKNOWN\",\n  \"Models\": {\n    \"Number\": 0,\n    \"More\": \"yes\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
-            "stderr": "sources/unsafe-second-head.lp:1:7-27: error: unsafe variables in:\n  a(X)::;b(Y):::-[#inc_base];d(X).\nsources/unsafe-second-head.lp:1:16-17: note: 'Y' is unsafe\n\n*** ERROR: (clingo): grounding stopped because of errors\n"
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"UNKNOWN\",\n  \"Models\": {\n    \"Number\": 0,\n    \"More\": \"yes\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": "-:1:7-27: error: unsafe variables in:\n  a(X)::;b(Y):::-[#inc_base];d(X).\n-:1:16-17: note: 'Y' is unsafe\n\n*** ERROR: (clingo): grounding stopped because of errors\n"
           },
           "normalized": {
             "status": "incomplete_or_refused",
@@ -3891,7 +3891,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/unsafe-aggregate-local.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -3899,8 +3899,8 @@
             ],
             "returncode": 65,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/unsafe-aggregate-local.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"UNKNOWN\",\n  \"Models\": {\n    \"Number\": 0,\n    \"More\": \"yes\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
-            "stderr": "sources/unsafe-aggregate-local.lp:1:7-40: error: unsafe variables in:\n  a(X)::;b:::-[#inc_base];1<=#count{X:d(X)}.\nsources/unsafe-aggregate-local.lp:1:9-10: note: 'X' is unsafe\n\n*** ERROR: (clingo): grounding stopped because of errors\n"
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"UNKNOWN\",\n  \"Models\": {\n    \"Number\": 0,\n    \"More\": \"yes\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stderr": "-:1:7-40: error: unsafe variables in:\n  a(X)::;b:::-[#inc_base];1<=#count{X:d(X)}.\n-:1:9-10: note: 'X' is unsafe\n\n*** ERROR: (clingo): grounding stopped because of errors\n"
           },
           "normalized": {
             "status": "incomplete_or_refused",
@@ -3929,7 +3929,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/conditional-head.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -3937,7 +3937,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/conditional-head.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"a(1)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"b\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.001,\n          \"Value\": [\n            \"d(1)\", \"a(1)\"\n          ]\n        },\n        {\n          \"Time\": 0.001,\n          \"Value\": [\n            \"d(1)\", \"b\"\n          ]\n        }\n      ],\n      \"Stop\": 0.001\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.001,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -3980,7 +3980,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/default-negated-head.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -3988,7 +3988,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/default-negated-head.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -4060,7 +4060,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/strong-negated-head.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -4068,7 +4068,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/strong-negated-head.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"-b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"-b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -4114,7 +4114,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/infinite-head.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -4122,7 +4122,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/infinite-head.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"q(#sup)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"q(#sup)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -4161,7 +4161,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/interval-head.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -4169,7 +4169,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/interval-head.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a(1)\", \"a(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a(1)\", \"a(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -4209,7 +4209,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/pooled-head.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -4217,7 +4217,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/pooled-head.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a(2)\", \"a(1)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a(2)\", \"a(1)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -4266,7 +4266,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/variable-arithmetic-head.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -4274,7 +4274,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/variable-arithmetic-head.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"a(2)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"a(2)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -4325,7 +4325,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/objective-negative-dependency.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -4333,7 +4333,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/objective-negative-dependency.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\", \"c\"\n          ],\n          \"Costs\": [\n            1\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 3,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 1,\n    \"Costs\": [\n      0\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\", \"c\"\n          ],\n          \"Costs\": [\n            1\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 3,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 1,\n    \"Costs\": [\n      0\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -4355,7 +4355,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/objective-negative-dependency.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -4363,7 +4363,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/objective-negative-dependency.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\", \"c\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\", \"c\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -4414,7 +4414,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/objective-assignment-disjunction.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -4422,7 +4422,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/objective-assignment-disjunction.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"b\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"b\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 1,\n    \"Costs\": [\n      0\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"b\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"b\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 1,\n    \"Costs\": [\n      0\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -4445,7 +4445,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/objective-assignment-disjunction.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -4453,7 +4453,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/objective-assignment-disjunction.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"a(1)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"d(1)\", \"a(1)\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -4517,7 +4517,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/objective-generated-disjunction.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -4525,7 +4525,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/objective-generated-disjunction.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"x(1)\", \"y(1)\", \"z(1)\"\n          ],\n          \"Costs\": [\n            1\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"x(1)\", \"y(1)\", \"other\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"x(1)\", \"y(1)\", \"other\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"x(2)\", \"y(2)\", \"other\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 4,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 2,\n    \"Costs\": [\n      0\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"x(1)\", \"y(1)\", \"z(1)\"\n          ],\n          \"Costs\": [\n            1\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"x(1)\", \"y(1)\", \"other\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"x(1)\", \"y(1)\", \"other\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"x(2)\", \"y(2)\", \"other\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 4,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 2,\n    \"Costs\": [\n      0\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -4554,7 +4554,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/objective-generated-disjunction.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -4562,7 +4562,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/objective-generated-disjunction.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"x(1)\", \"y(1)\", \"z(1)\"\n          ]\n        },\n        {\n          \"Time\": 0.001,\n          \"Value\": [\n            \"x(2)\", \"y(2)\", \"z(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.001,\n          \"Value\": [\n            \"x(1)\", \"y(1)\", \"other\"\n          ]\n        },\n        {\n          \"Time\": 0.001,\n          \"Value\": [\n            \"x(2)\", \"y(2)\", \"other\"\n          ]\n        }\n      ],\n      \"Stop\": 0.001\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 4,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.001,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.001\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"x(1)\", \"y(1)\", \"z(1)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"x(2)\", \"y(2)\", \"z(2)\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"x(1)\", \"y(1)\", \"other\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"x(2)\", \"y(2)\", \"other\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 4,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -4701,7 +4701,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/unrelated-priorities.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -4709,7 +4709,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/unrelated-priorities.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ],\n          \"Costs\": [\n            1, 2\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ],\n          \"Costs\": [\n            1, 2\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"a\"\n          ],\n          \"Costs\": [\n            1, 2\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 3,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 2,\n    \"Costs\": [\n      1, 2\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ],\n          \"Costs\": [\n            1, 2\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ],\n          \"Costs\": [\n            1, 2\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"a\"\n          ],\n          \"Costs\": [\n            1, 2\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 3,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 2,\n    \"Costs\": [\n      1, 2\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -4737,7 +4737,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/unrelated-priorities.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -4745,7 +4745,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/unrelated-priorities.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -4862,7 +4862,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/unrelated-zero.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -4870,7 +4870,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/unrelated-zero.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"a\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 3,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 2,\n    \"Costs\": [\n      0\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"a\"\n          ],\n          \"Costs\": [\n            0\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 3,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 2,\n    \"Costs\": [\n      0\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -4897,7 +4897,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/unrelated-zero.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -4905,7 +4905,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/unrelated-zero.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -5030,7 +5030,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/unrelated-negative.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -5038,7 +5038,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/unrelated-negative.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ],\n          \"Costs\": [\n            -1\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ],\n          \"Costs\": [\n            -1\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"a\"\n          ],\n          \"Costs\": [\n            -1\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 3,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 2,\n    \"Costs\": [\n      -1\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ],\n          \"Costs\": [\n            -1\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ],\n          \"Costs\": [\n            -1\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"a\"\n          ],\n          \"Costs\": [\n            -1\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"OPTIMUM FOUND\",\n  \"Models\": {\n    \"Number\": 3,\n    \"More\": \"no\",\n    \"Optimum\": \"yes\",\n    \"Optimal\": 2,\n    \"Costs\": [\n      -1\n    ]\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -5065,7 +5065,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/unrelated-negative.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -5073,7 +5073,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/unrelated-negative.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"c\", \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -5118,7 +5118,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/objective-mandatory-sibling.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -5126,7 +5126,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/objective-mandatory-sibling.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -5166,7 +5166,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/objective-indirect-sibling.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -5174,7 +5174,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/objective-indirect-sibling.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 1,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -5217,7 +5217,7 @@
           "raw": {
             "command": [
               "clingo",
-              "sources/conditional-empty-head.lp",
+              "-",
               "--models=0",
               "--outf=2",
               "--warn=none",
@@ -5225,7 +5225,7 @@
             ],
             "returncode": 30,
             "stop": null,
-            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"sources/conditional-empty-head.lp\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
+            "stdout": "{\n  \"Solver\": \"clingo version 5.8.2\",\n  \"Input\": [\n    \"-\"\n  ],\n  \"Call\": [\n    {\n      \"Start\": 0.000,\n      \"Witnesses\": [\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"b\"\n          ]\n        },\n        {\n          \"Time\": 0.000,\n          \"Value\": [\n            \"a\"\n          ]\n        }\n      ],\n      \"Stop\": 0.000\n    }\n  ],\n  \"Result\": \"SATISFIABLE\",\n  \"Models\": {\n    \"Number\": 2,\n    \"More\": \"no\"\n  },\n  \"Calls\": 1,\n  \"Time\": {\n    \"Total\": 0.000,\n    \"Solve\": 0.000,\n    \"Model\": 0.000,\n    \"Unsat\": 0.000,\n    \"CPU\": 0.000\n  }\n}\n",
             "stderr": ""
           },
           "normalized": {
@@ -5247,6 +5247,36 @@
   ],
   "reference_binary": {
     "path": "clingo",
-    "sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015"
+    "resolution": "PATH",
+    "sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015",
+    "version_command": [
+      "clingo",
+      "--version"
+    ],
+    "version_stdout": "clingo version 5.8.2\nAddress model: 64-bit\n\nlibclingo version 5.8.2\nConfiguration: with Python 3.14.6, without Lua\n\nlibclasp version 3.4.1 (libpotassco version 1.2.0)\nConfiguration: WITH_THREADS=1\nCopyright (C) Benjamin Kaufmann\n\nLicense: The MIT License <https://opensource.org/licenses/MIT>\n",
+    "version_stderr": "",
+    "version_returncode": 0
+  },
+  "reference_capture": {
+    "input": "unchanged UTF-8 case.source bytes supplied on stdin; case.path is a logical source identity",
+    "started_at_utc": "2026-09-09T14:41:42.803Z",
+    "completed_at_utc": "2026-09-09T14:41:43.154Z",
+    "sources": 49,
+    "executions": 62,
+    "limits": {
+      "timeout_ms": 5000,
+      "max_bytes_per_stream": 4194304,
+      "max_combined_output_bytes": 8388608
+    },
+    "replaces_fixture_sha256": "9886783789b7c128c169bb0ab55b150d2f94aa8cde3458b34a923d08cbdd32e5",
+    "comparison": {
+      "source_bytes": "unchanged",
+      "manual_theories": "unchanged",
+      "expected_records": "unchanged",
+      "normalized_records": "unchanged",
+      "full_witness_cost_multisets": "equal",
+      "return_codes_and_completion_metadata": "equal",
+      "diagnostics": "equal after substituting the original source label with stdin label"
+    }
   }
 }
