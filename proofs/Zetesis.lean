@@ -45,6 +45,7 @@ import Zetesis.WorldViews
 import Zetesis.StructuralBindings
 import Zetesis.FiniteValues
 import Zetesis.ConsequentAlternatives
+import Zetesis.ProjectedConditionals
 import Zetesis.SingletonHeads
 import Zetesis.ConstructorPatterns
 import Zetesis.ScalarArithmetic
@@ -78,6 +79,7 @@ import Zetesis.ObjectiveTransport
 import Zetesis.BooleanHeads
 import Zetesis.BooleanHeadElements
 import Zetesis.SignedHeadElements
+import Zetesis.OrderedHeadActivity
 import Zetesis.Examples.Choices
 import Zetesis.EvaluatedWitnesses
 import Zetesis.ObjectiveValues

@@ -207,6 +207,7 @@ import Zetesis
 #print axioms Zetesis.ConditionalConsumers.covered_conditionals
 #print axioms Zetesis.ConsequentAlternatives.original_semantics
 #print axioms Zetesis.ConsequentAlternatives.frozen_semantics
+#print axioms Zetesis.ConsequentAlternatives.candidate_consequents
 #print axioms Zetesis.ConsequentAlternatives.empty_rows_original
 #print axioms Zetesis.ConsequentAlternatives.empty_rows_frozen
 #print axioms Zetesis.ConsequentAlternatives.empty_alternatives_original
@@ -584,6 +585,13 @@ import Zetesis
 #print axioms Zetesis.OptionalIndex.optional_round_trip
 #print axioms Zetesis.OptionalIndex.absence_exact
 #print axioms Zetesis.OptionalIndex.replacement_commutes
+#print axioms Zetesis.OrderedHeadActivity.mem_values
+#print axioms Zetesis.OrderedHeadActivity.frozen_selection
+#print axioms Zetesis.OrderedHeadActivity.selected_values
+#print axioms Zetesis.OrderedHeadActivity.formula_original
+#print axioms Zetesis.OrderedHeadActivity.formula_frozen
+#print axioms Zetesis.OrderedHeadActivity.measure_predicate
+#print axioms Zetesis.OrderedHeadActivity.bound_frozen
 #print axioms Zetesis.OrderedProbes.boundary_partitions
 #print axioms Zetesis.OrderedProbes.complete_match_retained
 #print axioms Zetesis.Outcomes.completed_unsatisfiable_iff_empty
@@ -613,6 +621,13 @@ import Zetesis
 #print axioms Zetesis.PositiveArguments.repeated_selection
 #print axioms Zetesis.PositiveArguments.original_atom_preserved
 #print axioms Zetesis.PositiveArguments.frozen_atom_preserved
+#print axioms Zetesis.ProjectedConditionals.complete_projection
+#print axioms Zetesis.ProjectedConditionals.original_semantics
+#print axioms Zetesis.ProjectedConditionals.frozen_semantics
+#print axioms Zetesis.ProjectedConditionals.negative_frozen
+#print axioms Zetesis.ProjectedConditionals.double_negative_frozen
+#print axioms Zetesis.ProjectedConditionals.empty_carriers_differ
+#print axioms Zetesis.ProjectedConditionals.omitted_witness_changes_negation
 #print axioms Zetesis.Propagation.narrow_decreases
 #print axioms Zetesis.Propagation.narrow_retains_completion
 #print axioms Zetesis.Propagation.narrow_models_iff

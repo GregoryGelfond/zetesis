@@ -1035,34 +1035,39 @@
     "line": 45
   },
   {
+    "name": "Zetesis.ConsequentAlternatives.candidate_consequents",
+    "file": "Zetesis/ConsequentAlternatives.lean",
+    "line": 59
+  },
+  {
     "name": "Zetesis.ConsequentAlternatives.empty_rows_original",
     "file": "Zetesis/ConsequentAlternatives.lean",
-    "line": 56
+    "line": 80
   },
   {
     "name": "Zetesis.ConsequentAlternatives.empty_rows_frozen",
     "file": "Zetesis/ConsequentAlternatives.lean",
-    "line": 61
+    "line": 85
   },
   {
     "name": "Zetesis.ConsequentAlternatives.empty_alternatives_original",
     "file": "Zetesis/ConsequentAlternatives.lean",
-    "line": 66
+    "line": 90
   },
   {
     "name": "Zetesis.ConsequentAlternatives.empty_alternatives_frozen",
     "file": "Zetesis/ConsequentAlternatives.lean",
-    "line": 72
+    "line": 96
   },
   {
     "name": "Zetesis.ConsequentAlternatives.polarity_placement_changes_truth",
     "file": "Zetesis/ConsequentAlternatives.lean",
-    "line": 83
+    "line": 107
   },
   {
     "name": "Zetesis.ConsequentAlternatives.alternative_collection_keeps_stability",
     "file": "Zetesis/ConsequentAlternatives.lean",
-    "line": 93
+    "line": 117
   },
   {
     "name": "Zetesis.ConstructorPatterns.function_shape_exact",
@@ -2920,6 +2925,41 @@
     "line": 78
   },
   {
+    "name": "Zetesis.OrderedHeadActivity.mem_values",
+    "file": "Zetesis/OrderedHeadActivity.lean",
+    "line": 41
+  },
+  {
+    "name": "Zetesis.OrderedHeadActivity.frozen_selection",
+    "file": "Zetesis/OrderedHeadActivity.lean",
+    "line": 59
+  },
+  {
+    "name": "Zetesis.OrderedHeadActivity.selected_values",
+    "file": "Zetesis/OrderedHeadActivity.lean",
+    "line": 69
+  },
+  {
+    "name": "Zetesis.OrderedHeadActivity.formula_original",
+    "file": "Zetesis/OrderedHeadActivity.lean",
+    "line": 107
+  },
+  {
+    "name": "Zetesis.OrderedHeadActivity.formula_frozen",
+    "file": "Zetesis/OrderedHeadActivity.lean",
+    "line": 118
+  },
+  {
+    "name": "Zetesis.OrderedHeadActivity.measure_predicate",
+    "file": "Zetesis/OrderedHeadActivity.lean",
+    "line": 129
+  },
+  {
+    "name": "Zetesis.OrderedHeadActivity.bound_frozen",
+    "file": "Zetesis/OrderedHeadActivity.lean",
+    "line": 163
+  },
+  {
     "name": "Zetesis.OrderedProbes.boundary_partitions",
     "file": "Zetesis/OrderedProbes.lean",
     "line": 43
@@ -3063,6 +3103,41 @@
     "name": "Zetesis.PositiveArguments.frozen_atom_preserved",
     "file": "Zetesis/PositiveArguments.lean",
     "line": 101
+  },
+  {
+    "name": "Zetesis.ProjectedConditionals.complete_projection",
+    "file": "Zetesis/ProjectedConditionals.lean",
+    "line": 47
+  },
+  {
+    "name": "Zetesis.ProjectedConditionals.original_semantics",
+    "file": "Zetesis/ProjectedConditionals.lean",
+    "line": 61
+  },
+  {
+    "name": "Zetesis.ProjectedConditionals.frozen_semantics",
+    "file": "Zetesis/ProjectedConditionals.lean",
+    "line": 81
+  },
+  {
+    "name": "Zetesis.ProjectedConditionals.negative_frozen",
+    "file": "Zetesis/ProjectedConditionals.lean",
+    "line": 94
+  },
+  {
+    "name": "Zetesis.ProjectedConditionals.double_negative_frozen",
+    "file": "Zetesis/ProjectedConditionals.lean",
+    "line": 107
+  },
+  {
+    "name": "Zetesis.ProjectedConditionals.empty_carriers_differ",
+    "file": "Zetesis/ProjectedConditionals.lean",
+    "line": 119
+  },
+  {
+    "name": "Zetesis.ProjectedConditionals.omitted_witness_changes_negation",
+    "file": "Zetesis/ProjectedConditionals.lean",
+    "line": 127
   },
   {
     "name": "Zetesis.Propagation.narrow_decreases",

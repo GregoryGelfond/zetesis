@@ -26,6 +26,8 @@ and theorem hypotheses are authoritative; prose is a reading aid.
 | How may an aggregate result feed a universal conditional? | [ConditionalConsumers](../Zetesis/ConditionalConsumers.lean) retains the original equality, activation and complete local implications under every frozen interpretation. A proposed value is not an established aggregate result. |
 | How does a weighted head separate permission from its bound? | [HeadMeasures](../Zetesis/HeadMeasures.lean) keeps the eligibility reduct in permission rules and numeric agreement in a candidate constraint. Numeric compilation and complete head carriers remain separate obligations. |
 | What does a signed choice or aggregate operand contribute? | [SignedHeadElements](../Zetesis/SignedHeadElements.lean) preserves sign-aware atom keys, Boolean occurrences and complete tuple keys. It proves frozen signed activity, positive-only permission coalescing and contextual answer-set preservation through the existing unsigned laws. |
+| How do nonnumeric extrema retain that separation? | [OrderedHeadActivity](../Zetesis/OrderedHeadActivity.lean) uses an arbitrary logical value carrier and explicit ordered-selection laws. It retains signed activity, independent permission and the candidate/frozen aggregate guard. |
+| How are negative anonymous consequents projected? | [ProjectedConditionals](../Zetesis/ProjectedConditionals.lean) places default negation after each complete existential witness projection and before the disjunction of source alternatives. It proves the finite-carrier bridge and distinguishes the different empty carriers. |
 | How can an application use the semantic bridge? | [The checked choices consumer](../Zetesis/Examples/Choices.lean) computes the guided tour candidate's least reduct closure and applies `NormalFerraris.ferraris_answer_set_iff_closure`. It establishes one answer set, not complete enumeration. |
 
 The intended layering is: logical definitions → reusable semantic laws → justified
@@ -97,6 +99,23 @@ projection families. [OuterRanges](../Zetesis/OuterRanges.lean) preserves the
 association between a completed outer value, its finite integer range and each
 original/frozen clause. Both make source binding and coverage assumptions visible
 instead of treating a proposed value as a logical conclusion.
+
+[ProjectedConditionals](../Zetesis/ProjectedConditionals.lean) composes those
+negative projection laws with [ConsequentAlternatives](../Zetesis/ConsequentAlternatives.lean).
+Every condition remains in its implication. When all consequent alternatives
+have candidate-only frozen truth, the complete conditional does too; that is an
+explicit hypothesis, not a law about arbitrary positive consequents. One empty
+anonymous witness family, no source alternatives and no condition rows have
+different meanings. Source enumeration must establish which complete carrier was
+supplied before the logical laws apply.
+
+[OrderedHeadActivity](../Zetesis/OrderedHeadActivity.lean) separates complete tuple
+keys from their first logical values. Canonical extrema evaluate the selected
+values in the candidate and again over frozen activity; the surrounding head
+bound is candidate-only. The efficient predicate-witness law assumes the relevant
+ordered-selection equation, so using it with Rust's term comparator requires an
+independent correspondence argument. These laws assign no behavior to omitted
+head values or disputed sum contribution cases.
 
 [JoinFrames](../Zetesis/JoinFrames.lean) follows the world-membership path into a
 finite execution schedule: reset the root, overwrite each child, then use it as

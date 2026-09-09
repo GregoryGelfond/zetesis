@@ -52,6 +52,30 @@ theorem frozen_semantics (M J : Atoms α) (rows : List (Row α)) :
   simp [body, UniversalConditionals.frozen_semantics,
     RuleFactorization.satisfies_any, RuleFactorization.reduct_any]
 
+/-- If every supplied consequent has candidate-only frozen truth, the complete
+    conditional has that property too. This premise holds for default-negated
+    projections, but not for arbitrary positive consequents. The implication
+    antecedents are retained: their reduct truth entails their original truth. -/
+theorem candidate_consequents (M J : Atoms α) (rows : List (Row α))
+    (frozen : ∀ row ∈ rows, ∀ alternative ∈ row.alternatives,
+      Satisfies J (Reduct M alternative) ↔ Satisfies M alternative) :
+    Satisfies J (Reduct M (body rows)) ↔ Satisfies M (body rows) := by
+  rw [frozen_semantics, original_semantics]
+  constructor
+  · intro reduced row member
+    exact (reduced row member).1
+  · intro original row member
+    refine ⟨original row member, ?_⟩
+    intro condition
+    have active : Satisfies M row.condition := by
+      classical
+      by_cases original : Satisfies M row.condition
+      · exact original
+      · rw [RuleFactorization.false_reduct M row.condition original] at condition
+        exact False.elim condition
+    obtain ⟨alternative, present, truth⟩ := original row member active
+    exact ⟨alternative, present, (frozen row member alternative present).mpr truth⟩
+
 /-- Vacuity assumes that the finite condition domain has been exhausted. -/
 theorem empty_rows_original (M : Atoms α) :
     Satisfies M (body ([] : List (Row α))) := by
