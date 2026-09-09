@@ -5,7 +5,7 @@ objective ordering, or a preserved relationship between representations. A
 passing process, a matching display and a verified reduct establish different
 things. Choose checks that observe the proposition you intend to claim.
 
-The tools are Rust libraries with command views. `zetesis_validation` owns
+The tools share Rust library APIs. `zetesis_validation` provides
 reported-answer comparison, corpus contracts and bounded process capture.
 `zetesis_maintenance` owns repository assurance policy and proof-record
 consistency. Neither participates in production answer-set search.
@@ -59,8 +59,10 @@ than interpreting every successful command as a semantic pass.
 Use `zetesis-perf` for matched end-to-end comparisons and the
 [comparison guide](../../../scripts/README-comparison.md) for its schedules,
 capture bounds and report formats. Direct wall time includes process startup,
-source loading, grounding, solving and captured output. Instrumented phase
-observations are separate samples. Keep the selected inputs, binaries, backend,
+source loading, grounding, solving and captured output. The CPU baseline keeps
+instrumented phase observations in separate samples. The explicit profile matrix
+includes JSON/statistics in its timed native runs and forms a separate
+population. Keep the selected inputs, binaries, backend,
 worker counts, limits and warmup schedule with each result.
 
 Stop competing builds, tests and measurements before a timing campaign. A small
