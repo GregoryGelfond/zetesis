@@ -9,11 +9,12 @@ use std::sync::{Arc, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use super::decision::CaptureStatus;
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
 pub(crate) struct Capture {
-    pub(crate) status: &'static str,
+    pub(crate) status: CaptureStatus,
     pub(crate) exit_code: Option<i32>,
     pub(crate) elapsed_ms: u128,
     pub(crate) stdout: String,
@@ -67,15 +68,15 @@ pub(crate) fn invoke(
         exceeded.clone(),
         sender,
     );
-    let mut status = "completed";
+    let mut status = CaptureStatus::Completed;
     let exit = loop {
         if exceeded.load(Ordering::Relaxed) {
-            status = "output_limit";
+            status = CaptureStatus::OutputLimit;
             let _ = child.kill();
             break child.wait().map_err(|error| error.to_string())?;
         }
         if Instant::now() >= deadline {
-            status = "timeout";
+            status = CaptureStatus::Timeout;
             let _ = child.kill();
             break child.wait().map_err(|error| error.to_string())?;
         }
@@ -94,10 +95,10 @@ pub(crate) fn invoke(
         }
     }
     if exceeded.load(Ordering::Relaxed) {
-        status = "output_limit";
+        status = CaptureStatus::OutputLimit;
     }
-    let output = read_capture(&mut stdout, status == "completed")?;
-    let errors = read_capture(&mut stderr, status == "completed")?;
+    let output = read_capture(&mut stdout, status == CaptureStatus::Completed)?;
+    let errors = read_capture(&mut stderr, status == CaptureStatus::Completed)?;
     Ok(Capture {
         status,
         exit_code: exit.code(),
@@ -157,7 +158,7 @@ fn read_capture(file: &mut std::fs::File, require_utf8: bool) -> Result<String, 
 
 #[cfg(all(test, unix))]
 mod tests {
-    use super::invoke;
+    use super::{CaptureStatus, invoke};
     use std::path::Path;
     use std::time::Duration;
 
@@ -171,7 +172,7 @@ mod tests {
             128,
         )
         .unwrap();
-        assert_eq!(captured.status, "output_limit");
+        assert_eq!(captured.status, CaptureStatus::OutputLimit);
         assert!(captured.stdout.len() + captured.stderr.len() <= 128);
     }
 
@@ -185,7 +186,7 @@ mod tests {
             128,
         )
         .unwrap();
-        assert_eq!(captured.status, "timeout");
+        assert_eq!(captured.status, CaptureStatus::Timeout);
         assert!(captured.elapsed_ms < 1_000);
     }
 }

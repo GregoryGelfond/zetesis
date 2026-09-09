@@ -3,7 +3,7 @@
 use serde_json::json;
 
 use super::{NATIVE, PHASE_TIMINGS, check, emitting, loaded, options};
-use crate::{NativeBackend, NativeOracle, runner};
+use crate::corpus_comparison::{NativeBackend, NativeOracle};
 
 const STAGES: &str = include_str!("stage_statistics.txt");
 
@@ -51,7 +51,7 @@ fn stage_evidence_is_retained_independently_of_solver_completion() {
     ] {
         let stderr = format!("{timing}{PHASE_TIMINGS}");
         options.zetesis = emitting(directory.path(), "native", stdout, &stderr, exit);
-        let (report, passed) = runner::run(&options, &loaded);
+        let (report, passed) = super::run(&options, &loaded);
         assert!(!passed, "one synthetic case is never the full corpus");
         assert_eq!(report["full_native_target_passed"], false);
         assert_eq!(report["full_physical_formula_route_passed"], false);

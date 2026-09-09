@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use zetesis_validation::examples::{self, Satisfiability};
+use crate::examples::{self, Satisfiability};
 
 use super::{Case, FileEntry, Loaded, Manifest, SourceView};
 

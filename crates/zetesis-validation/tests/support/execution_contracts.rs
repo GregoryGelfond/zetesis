@@ -2,8 +2,8 @@
 
 use std::fmt::Write as _;
 
-use crate::NativeBackend;
-use crate::normalize::{self, Answer};
+use crate::corpus_comparison::NativeBackend;
+use crate::corpus_comparison::normalize::{self, Answer};
 
 const GOOD: &str = include_str!("formula_statistics.txt");
 
@@ -29,7 +29,10 @@ fn outer_unsat() -> String {
 #[test]
 fn completed_dispatches_preserve_actual_adapter_and_accounting() {
     let record = super::formula(GOOD, NativeBackend::Metal, 64, &answer()).unwrap();
-    assert_eq!(record.status, "gpu_exercised");
+    assert_eq!(
+        record.status,
+        crate::corpus_comparison::execution::Status::GpuExercised
+    );
     assert_eq!(record.api, "Metal");
     assert_eq!(record.vendor_id, 0x106b);
     assert_eq!(record.adapter, "fixture adapter, Metal; vendor=0x106b");
@@ -84,7 +87,10 @@ fn residual_completion_and_outer_unsat_have_distinct_execution_scopes() {
     let unsat =
         normalize::native("UNSATISFIABLE\nCoverage: exhausted\nModels: 0\n", false).unwrap();
     let record = super::formula(&outer_unsat(), NativeBackend::Metal, 64, &unsat).unwrap();
-    assert_eq!(record.status, "outer_unsat_without_membership");
+    assert_eq!(
+        record.status,
+        crate::corpus_comparison::execution::Status::OuterUnsatWithoutMembership
+    );
     assert_eq!(record.gpu_batches, 0);
     assert!(super::formula(&outer_unsat(), NativeBackend::Metal, 64, &answer()).is_err());
 }
@@ -307,7 +313,7 @@ fn outer_unsat_without_membership_cannot_claim_unaccounted_device_work() {
         super::formula(&valid, NativeBackend::Metal, 64, &answer)
             .unwrap()
             .status,
-        "outer_unsat_without_membership"
+        crate::corpus_comparison::execution::Status::OuterUnsatWithoutMembership
     );
 }
 
@@ -378,7 +384,10 @@ fn current_completion_telemetry_preserves_legacy_without_inventing_bounded_histo
     )
     .unwrap();
     let completion = record.completion.unwrap();
-    assert_eq!(record.status, "gpu_exercised");
+    assert_eq!(
+        record.status,
+        crate::corpus_comparison::execution::Status::GpuExercised
+    );
     assert_eq!(completion.profile, "bounded_completion_v1");
     assert_eq!(
         (
@@ -451,7 +460,10 @@ fn current_residual_and_outer_unsat_accounting_reconcile_with_native_models() {
     let no_models =
         normalize::native("UNSATISFIABLE\nCoverage: exhausted\nModels: 0\n", false).unwrap();
     let record = super::formula(&unsat, NativeBackend::Metal, 64, &no_models).unwrap();
-    assert_eq!(record.status, "outer_unsat_without_membership");
+    assert_eq!(
+        record.status,
+        crate::corpus_comparison::execution::Status::OuterUnsatWithoutMembership
+    );
     assert_eq!(
         record
             .completion

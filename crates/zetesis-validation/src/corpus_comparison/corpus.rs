@@ -9,14 +9,14 @@ use std::path::{Component, Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::Options;
+use crate::corpus_comparison::Request;
 
 const REVISION: &str = "38f0660ded448ed268c5a68759ceb0e2840dd497";
 const MANIFEST_SHA256: &str = "372f44c59f3b6c530d50e6683e087dbceda028d54195b9f1de1ef610803c71fb";
 const MAX_MANIFEST: u64 = 4_194_304;
 const MAX_SOURCE: u64 = 1_048_576;
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub(crate) struct Manifest {
     pub(crate) revision: String,
     pub(crate) reference_toolchain: serde_json::Value,
@@ -24,13 +24,13 @@ pub(crate) struct Manifest {
     pub(crate) cases: Vec<Case>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub(crate) struct FileEntry {
     pub(crate) path: String,
     pub(crate) sha256: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub(crate) struct Case {
     pub(crate) path: String,
     pub(crate) sha256: String,
@@ -39,15 +39,16 @@ pub(crate) struct Case {
     pub(crate) expected_satisfiability: String,
     pub(crate) original_sha256: Option<String>,
     #[serde(skip)]
-    pub(crate) example_contract: Option<zetesis_validation::examples::Contract>,
+    pub(crate) example_contract: Option<crate::examples::Contract>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub(crate) struct Contract {
     pub(crate) tag: String,
     pub(crate) arguments: String,
 }
 
+#[derive(Clone, Debug)]
 pub(crate) struct Loaded {
     pub(crate) root: PathBuf,
     pub(crate) manifest: Manifest,
@@ -62,7 +63,7 @@ pub(crate) enum SourceView {
     AnnotationCleaned,
 }
 
-pub(crate) fn load(options: &Options) -> Result<Loaded, String> {
+pub(crate) fn load(options: &Request) -> Result<Loaded, String> {
     if options.corpus.is_none() && options.manifest.is_none() {
         return examples::load(&options.repo);
     }
@@ -174,19 +175,16 @@ fn bounded_read(path: &Path, maximum: u64) -> Result<Vec<u8>, String> {
 #[cfg(test)]
 mod tests {
     use super::{hash, load, verify};
-    use crate::Options;
-    use clap::Parser;
+    use crate::corpus_comparison::Request as Options;
     use std::path::PathBuf;
 
     #[test]
     fn complete_vendored_target_has_94_cases_and_matching_dependencies() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let options = Options::try_parse_from([
-            "zetesis-validate".into(),
-            "--repo".into(),
-            root.into_os_string(),
-        ])
-        .unwrap();
+        let options = Options {
+            repo: root.clone(),
+            ..Options::default()
+        };
         let loaded = load(&options).unwrap();
         assert_eq!(loaded.manifest.cases.len(), 94);
         assert_eq!(loaded.manifest.open_encodings.len(), 14);
@@ -222,12 +220,10 @@ mod tests {
     #[test]
     fn edited_manifest_cannot_redefine_the_pinned_target() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let mut options = Options::try_parse_from([
-            "zetesis-validate".into(),
-            "--repo".into(),
-            root.clone().into_os_string(),
-        ])
-        .unwrap();
+        let mut options = Options {
+            repo: root.clone(),
+            ..Options::default()
+        };
         let original = std::fs::read(root.join("validation/corpus/manifest.json")).unwrap();
         let mut document: serde_json::Value = serde_json::from_slice(&original).unwrap();
         // Keep the revision and population counts, but remove a required edge.
@@ -240,18 +236,19 @@ mod tests {
     }
 
     fn repository_options() -> Options {
-        let mut options = Options::try_parse_from(["zetesis-validate"]).unwrap();
-        options.repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        options
+        Options {
+            repo: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
+            ..Options::default()
+        }
     }
 
     #[test]
     fn default_loading_preserves_clean_case_metadata() {
         let options = repository_options();
         let loaded = load(&options).unwrap();
-        let expected = zetesis_validation::examples::load(
+        let expected = crate::examples::load(
             &options.repo.join("examples/kr-domains"),
-            zetesis_validation::examples::Limits::default(),
+            crate::examples::Limits::default(),
         )
         .unwrap();
         assert!(matches!(loaded.view, super::SourceView::AnnotationCleaned));
@@ -277,9 +274,9 @@ mod tests {
     fn clean_dependency_records_keep_the_complete_closure() {
         let options = repository_options();
         let loaded = load(&options).unwrap();
-        let expected = zetesis_validation::examples::load(
+        let expected = crate::examples::load(
             &options.repo.join("examples/kr-domains"),
-            zetesis_validation::examples::Limits::default(),
+            crate::examples::Limits::default(),
         )
         .unwrap();
         for (actual, source) in loaded.manifest.cases.iter().zip(expected.cases()) {

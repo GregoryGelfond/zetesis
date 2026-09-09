@@ -21,10 +21,7 @@ mod run;
 mod timing;
 mod summary;
 mod view;
-#[path = "phase.rs"]
-mod phase;
-#[path = "stage.rs"]
-mod stage;
+use crate::{phase, stage};
 
 use std::fmt;
 use std::path::Path;

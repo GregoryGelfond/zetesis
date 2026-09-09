@@ -6,11 +6,10 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Mutex, MutexGuard};
 
-use clap::Parser;
 use serde_json::{Value, json};
 
-use crate::corpus::{Case, Contract, Loaded, Manifest};
-use crate::{NativeBackend, NativeOracle, Options};
+use crate::corpus_comparison::corpus::{Case, Contract, Loaded, Manifest};
+use crate::corpus_comparison::{NativeBackend, NativeOracle, Request as Options};
 
 const NATIVE: &str = "Answer: 1\na\nSATISFIABLE\nCoverage: exhausted\nModels: 1\n";
 const PHASE_TIMINGS: &str = include_str!("phase_statistics.txt");
@@ -103,7 +102,7 @@ fn loaded(directory: &Path, count: usize) -> Loaded {
             cases: (0..count).map(|_| case()).collect(),
         },
         manifest_sha256: "synthetic runner fixture".into(),
-        view: crate::corpus::SourceView::Original,
+        view: crate::corpus_comparison::corpus::SourceView::Original,
     }
 }
 
@@ -140,11 +139,13 @@ impl DerefMut for FixtureOptions {
 
 fn options(directory: &Path) -> FixtureOptions {
     let campaign = fixture_campaign();
-    let mut options = Options::try_parse_from(["zetesis-validate"]).unwrap();
-    options.clingo = emitting(directory, "reference", &reference(), "", 30);
-    options.zetesis = emitting(directory, "native", NATIVE, "", 0);
-    options.timeout_ms = 2_000;
-    options.max_output_bytes = 4_096;
+    let options = Options {
+        clingo: emitting(directory, "reference", &reference(), "", 30),
+        zetesis: emitting(directory, "native", NATIVE, "", 0),
+        timeout_ms: 2_000,
+        max_output_bytes: 4_096,
+        ..Options::default()
+    };
     FixtureOptions {
         options,
         _campaign: campaign,
@@ -154,6 +155,7 @@ fn options(directory: &Path) -> FixtureOptions {
 fn check(options: &Options, loaded: &Loaded, expected: &str) -> Value {
     let mut pending = Vec::new();
     let result = super::check_case(options, loaded, &loaded.manifest.cases[0], &mut pending);
+    let result = result.to_json().unwrap();
     assert!(pending.is_empty());
     assert_eq!(result["status"], expected, "{result:#}");
     assert_eq!(result["path"], "synthetic.lp");
@@ -193,7 +195,7 @@ fn concurrent_fixture_publication_preserves_exact_process_results() {
                     );
                     let stderr = format!("stderr '{worker}/{round}'\n");
                     let executable = emitting(path, "solver ' name", &stdout, &stderr, 17);
-                    let captured = crate::process::invoke(
+                    let captured = crate::corpus_comparison::capture::invoke(
                         &executable,
                         &[],
                         path,
@@ -201,7 +203,7 @@ fn concurrent_fixture_publication_preserves_exact_process_results() {
                         4_096,
                     )
                     .unwrap();
-                    assert_eq!(captured.status, "completed", "{captured:?}");
+                    assert_eq!(captured.status, crate::corpus_comparison::decision::CaptureStatus::Completed, "{captured:?}");
                     assert_eq!(captured.exit_code, Some(17));
                     assert_eq!(captured.stdout, stdout);
                     assert_eq!(captured.stderr, stderr);
@@ -308,7 +310,7 @@ fn aggregate_reports_distinguish_reference_only_from_the_full_native_gate() {
     let directory = tempfile::tempdir().unwrap();
     let mut options = options(directory.path());
     let incomplete_target = loaded(directory.path(), 1);
-    let (report, passed) = super::run(&options, &incomplete_target);
+    let (report, passed) = run(&options, &incomplete_target);
     assert!(!passed);
     assert_eq!(report["status_counts"]["pass"], 1);
     assert_eq!(report["full_native_target_passed"], false);
@@ -325,7 +327,7 @@ fn aggregate_reports_distinguish_reference_only_from_the_full_native_gate() {
         "Stage timings: truncated\nPhase timings: truncated\n",
         0,
     );
-    let (report, passed) = super::run(&options, &complete_target);
+    let (report, passed) = run(&options, &complete_target);
     assert!(passed);
     assert_eq!(report["native_oracle"], "closure");
     assert_eq!(report["status_counts"]["pass"], 94);
@@ -346,7 +348,7 @@ fn aggregate_reports_distinguish_reference_only_from_the_full_native_gate() {
 
     options.reference_only = true;
     options.zetesis = directory.path().join("must-not-run");
-    let (report, passed) = super::run(&options, &complete_target);
+    let (report, passed) = run(&options, &complete_target);
     assert!(passed);
     assert_eq!(report["mode"], "reference_only");
     assert_eq!(report["status_counts"]["reference_pass"], 94);
@@ -368,7 +370,7 @@ fn aggregate_reports_distinguish_reference_only_from_the_full_native_gate() {
             .all(|case| case.get("native_process").is_none())
     );
 
-    let (report, passed) = super::run(&options, &loaded(directory.path(), 0));
+    let (report, passed) = run(&options, &loaded(directory.path(), 0));
     assert!(!passed);
     assert_eq!(report["case_count"], 0);
     assert_eq!(report["status_counts"], json!({}));
@@ -412,7 +414,7 @@ fn phase_measurements_preserve_failed_attempts_without_changing_semantic_decisio
         ),
     ] {
         options.zetesis = emitting(directory.path(), "native", stdout, &timing, exit);
-        let (report, passed) = super::run(&options, &loaded);
+        let (report, passed) = run(&options, &loaded);
         assert!(!passed, "one synthetic case is never the full corpus");
         let result = &report["cases"][0];
         assert_eq!(result["status"], expected);
@@ -535,7 +537,7 @@ fn full_campaign_separates_answer_parity_device_route_and_exercised_membership()
         include_str!("formula_statistics.txt"),
         0,
     );
-    let (report, passed) = super::run(&options, &loaded(directory.path(), 94));
+    let (report, passed) = run(&options, &loaded(directory.path(), 94));
     assert!(passed);
     assert_eq!(report["full_native_answer_parity_passed"], true);
     assert_eq!(report["full_physical_formula_route_passed"], true);
@@ -571,7 +573,7 @@ fn full_campaign_separates_answer_parity_device_route_and_exercised_membership()
         &stats,
         0,
     );
-    let (report, passed) = super::run(&options, &target);
+    let (report, passed) = run(&options, &target);
     assert!(
         !passed,
         "a campaign with no membership proposals never exercised a GPU oracle"
@@ -811,7 +813,7 @@ fn completion_requests_are_forwarded_captured_and_checked_without_losing_answer_
         .unwrap();
     assert_eq!(arguments[index + 1], "0");
     assert!(arguments.contains(&"--stats".into()));
-    let (report, passed) = super::run(&options, &loaded);
+    let (report, passed) = run(&options, &loaded);
     assert!(!passed);
     assert_eq!(report["native_completion_workers"], 4);
     assert_eq!(report["native_max_completion_scratch_bytes"], 0);
@@ -822,7 +824,7 @@ fn completion_requests_are_forwarded_captured_and_checked_without_losing_answer_
 
 fn typed_loaded(directory: &Path) -> Loaded {
     let mut loaded = loaded(directory, 1);
-    loaded.view = crate::corpus::SourceView::AnnotationCleaned;
+    loaded.view = crate::corpus_comparison::corpus::SourceView::AnnotationCleaned;
     let case = &mut loaded.manifest.cases[0];
     case.original_sha256 = Some("synthetic original identity; not a pinned corpus hash".into());
     case.contracts.clear();
@@ -967,4 +969,67 @@ fn clean_source_metadata_survives_failed_capture() {
     assert_eq!(result["sha256"], case.sha256);
     assert_eq!(result["original_sha256"], json!(case.original_sha256));
     assert_eq!(result["example_contract"], json!(case.example_contract));
+}
+
+fn run(request: &Options, loaded: &Loaded) -> (Value, bool) {
+    let report = super::run(request, loaded.clone(), |_| {});
+    let passed = report.passed();
+    let value = report.to_json().unwrap();
+    assert_eq!(value["requested_mode_passed"], passed);
+    assert_eq!(
+        value["full_native_answer_parity_passed"],
+        report.answer_parity_passed()
+    );
+    for (case, view) in report
+        .cases()
+        .iter()
+        .zip(value["cases"].as_array().unwrap())
+    {
+        assert_eq!(view["status"], case.decision().label());
+        assert_eq!(view["path"], case.path());
+    }
+    (value, passed)
+}
+
+#[test]
+fn progress_write_failure_does_not_change_acceptance() {
+    struct ClosedOutput;
+    impl Write for ClosedOutput {
+        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "closed progress view",
+            ))
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let directory = tempfile::tempdir().unwrap();
+    let options = options(directory.path());
+    let loaded = loaded(directory.path(), 94);
+    let mut failures = Vec::new();
+    let report = super::run(&options, loaded, |case| {
+        if let Err(error) = ClosedOutput.write_all(case.path().as_bytes()) {
+            failures.push(error.kind());
+        }
+    });
+    assert_eq!(failures, vec![std::io::ErrorKind::BrokenPipe; 94]);
+    assert!(report.passed());
+}
+
+#[test]
+fn unrepresentable_report_path_preserves_acceptance() {
+    use std::os::unix::ffi::OsStrExt;
+    let directory = tempfile::tempdir().unwrap();
+    let options = options(directory.path());
+    let mut report = super::run(&options, loaded(directory.path(), 94), |_| {});
+    // Exercise retained Unix path bytes without requiring a filesystem that
+    // permits non-UTF-8 names. Only the serialization input is varied here.
+    report
+        .corpus
+        .root
+        .push(std::ffi::OsStr::from_bytes(b"source-\xff"));
+    assert!(report.to_json().is_err());
+    assert!(report.passed());
 }

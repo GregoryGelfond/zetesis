@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use serde::Serialize;
 
-use crate::corpus::Case;
+use crate::corpus_comparison::corpus::Case;
 
 // A display is a multiset: an atom and a shown term can print the same symbol.
 // Sorted vectors retain those occurrences while ignoring output order.
@@ -20,29 +20,29 @@ pub(crate) struct Answer {
     pub(crate) model_count: u64,
     pub(crate) solver: String,
     #[serde(skip)]
-    reported: zetesis_validation::answers::ReportedAnswers,
+    pub(super) reported: crate::answers::ReportedAnswers,
 }
 
 pub(crate) fn reference(text: &str) -> Result<Answer, String> {
-    zetesis_validation::answers::clingo_json(
+    crate::answers::clingo_json(
         text.as_bytes(),
-        zetesis_validation::answers::Limits::for_bytes(text.len()),
+        crate::answers::Limits::for_bytes(text.len()),
     )
     .map(adapt)
     .map_err(|error| error.to_string())
 }
 
 pub(crate) fn native(text: &str, optimized: bool) -> Result<Answer, String> {
-    zetesis_validation::answers::native_text(
+    crate::answers::native_text(
         text.as_bytes(),
         optimized,
-        zetesis_validation::answers::Limits::for_bytes(text.len()),
+        crate::answers::Limits::for_bytes(text.len()),
     )
     .map(adapt)
     .map_err(|error| error.to_string())
 }
 
-fn adapt(answer: zetesis_validation::answers::ReportedAnswers) -> Answer {
+fn adapt(answer: crate::answers::ReportedAnswers) -> Answer {
     Answer {
         satisfiable: answer.satisfiable(),
         cost: answer.cost().map(<[i64]>::to_vec),
@@ -67,17 +67,14 @@ pub(crate) fn same(reference: &Answer, native: &Answer) -> bool {
 }
 
 fn integers(text: &str) -> Result<Vec<i64>, String> {
-    zetesis_validation::answers::parse_costs(
-        text,
-        zetesis_validation::answers::Limits::for_bytes(text.len()),
-    )
-    .map_err(|error| error.to_string())
+    crate::answers::parse_costs(text, crate::answers::Limits::for_bytes(text.len()))
+        .map_err(|error| error.to_string())
 }
 fn split_atoms(text: &str, comma_separated: bool) -> Result<Vec<String>, String> {
-    zetesis_validation::answers::split_display(
+    crate::answers::split_display(
         text,
         comma_separated,
-        zetesis_validation::answers::Limits::for_bytes(text.len()),
+        crate::answers::Limits::for_bytes(text.len()),
     )
     .map_err(|error| error.to_string())
 }

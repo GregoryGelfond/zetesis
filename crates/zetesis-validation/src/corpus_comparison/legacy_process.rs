@@ -5,12 +5,13 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use super::decision::CaptureStatus;
+use crate::process::{self, Invocation, Limits, PendingChild, Stop};
 use serde::Serialize;
-use zetesis_validation::process::{self, Invocation, Limits, PendingChild, Stop};
 
 #[derive(Debug, Serialize)]
 pub(crate) struct Capture {
-    pub(crate) status: &'static str,
+    pub(crate) status: CaptureStatus,
     pub(crate) exit_code: Option<i32>,
     pub(crate) elapsed_ms: u128,
     pub(crate) stdout: String,
@@ -53,11 +54,11 @@ pub(crate) fn invoke(
     let utf8 = capture.stdout_text().and_then(|_| capture.stderr_text());
     let lossy_text = utf8.is_err();
     let status = match capture.stop() {
-        Stop::Completed if lossy_text => "invalid_utf8",
-        Stop::Completed => "completed",
-        Stop::Deadline => "timeout",
-        Stop::OutputLimit => "output_limit",
-        Stop::Failure => "capture_failure",
+        Stop::Completed if lossy_text => CaptureStatus::InvalidUtf8,
+        Stop::Completed => CaptureStatus::Completed,
+        Stop::Deadline => CaptureStatus::Timeout,
+        Stop::OutputLimit => CaptureStatus::OutputLimit,
+        Stop::Failure => CaptureStatus::CaptureFailure,
     };
     Ok(Capture {
         status,
@@ -87,8 +88,8 @@ fn resolve(executable: &Path) -> Result<PathBuf, String> {
     if executable.components().count() != 1 || executable.is_absolute() {
         return std::path::absolute(executable).map_err(|error| error.to_string());
     }
-    // PATH policy belongs to the command adapter; the reusable runner accepts
-    // only a selected absolute executable. Preserve Command's executable search.
+    // Resolve anew for each invocation under this comparison's PATH policy.
+    // The shared capture API accepts only a selected absolute executable.
     let path = std::env::var_os("PATH").ok_or("PATH is absent")?;
     for directory in std::env::split_paths(&path) {
         let candidate = directory.join(executable);

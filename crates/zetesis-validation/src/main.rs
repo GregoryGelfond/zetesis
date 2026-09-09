@@ -1,21 +1,7 @@
 //! Independent full-corpus regression command. Never a production solver path.
 #![forbid(unsafe_code)]
 
-mod corpus;
-mod execution;
-mod normalize;
-mod phase;
-#[cfg_attr(
-    any(target_os = "linux", target_os = "macos"),
-    path = "legacy_process.rs"
-)]
-#[cfg_attr(
-    not(any(target_os = "linux", target_os = "macos")),
-    path = "process_portable.rs"
-)]
-mod process;
-mod runner;
-mod stage;
+use zetesis_validation::corpus_comparison;
 
 use std::io::{self, Write};
 use std::num::NonZeroUsize;
@@ -44,34 +30,6 @@ enum NativeBackend {
     Gl,
     Nvidia,
 }
-impl NativeBackend {
-    const fn label(self) -> &'static str {
-        match self {
-            Self::Cpu => "cpu",
-            Self::Auto => "auto",
-            Self::Gpu => "gpu",
-            Self::Metal => "metal",
-            Self::Vulkan => "vulkan",
-            Self::Dx12 => "dx12",
-            Self::Gl => "gl",
-            Self::Nvidia => "nvidia",
-        }
-    }
-
-    const fn physical(self) -> bool {
-        !matches!(self, Self::Cpu | Self::Auto)
-    }
-}
-impl NativeOracle {
-    const fn label(self) -> &'static str {
-        match self {
-            Self::Auto => "auto",
-            Self::Closure => "closure",
-            Self::Countermodel => "countermodel",
-        }
-    }
-}
-
 #[derive(Debug, Parser)]
 #[command(
     name = "zetesis-validate",
@@ -127,18 +85,6 @@ struct Options {
     max_output_bytes: usize,
 }
 
-impl Options {
-    fn physical_formula(&self) -> bool {
-        !self.reference_only
-            && self.native_backend.physical()
-            && self.native_oracle == NativeOracle::Countermodel
-    }
-
-    fn effective_native_stats(&self) -> bool {
-        self.native_stats || self.physical_formula() || self.native_completion_workers.get() > 1
-    }
-}
-
 fn main() -> ExitCode {
     let options = Options::parse();
     match execute(&options) {
@@ -152,12 +98,30 @@ fn main() -> ExitCode {
 }
 
 fn execute(options: &Options) -> Result<bool, String> {
-    if options.timeout_ms == 0 || options.max_output_bytes == 0 {
-        return Err("timeout and output ceilings must be positive".into());
-    }
-    let loaded = corpus::load(options)?;
-    let (report, passed) = runner::run(options, &loaded);
-    let mut bytes = serde_json::to_vec_pretty(&report).map_err(|error| error.to_string())?;
+    let request = corpus_comparison::Request {
+        repo: options.repo.clone(),
+        corpus: options.corpus.clone(),
+        manifest: options.manifest.clone(),
+        clingo: options.clingo.clone(),
+        zetesis: options.zetesis.clone(),
+        native_oracle: options.native_oracle.into(),
+        native_backend: options.native_backend.into(),
+        native_batch_size: options.native_batch_size,
+        native_completion_workers: options.native_completion_workers,
+        native_max_completion_scratch_bytes: options.native_max_completion_scratch_bytes,
+        native_stats: options.native_stats,
+        reference_only: options.reference_only,
+        timeout_ms: options.timeout_ms,
+        max_output_bytes: options.max_output_bytes,
+    };
+    let report = corpus_comparison::run(&request, |case| {
+        eprintln!("{}: {}", case.decision().label(), case.path());
+    })
+    .map_err(|error| error.to_string())?;
+    let passed = report.passed();
+    let mut bytes =
+        serde_json::to_vec_pretty(&report.to_json().map_err(|error| error.to_string())?)
+            .map_err(|error| error.to_string())?;
     bytes.push(b'\n');
     if let Some(path) = &options.report {
         std::fs::write(path, bytes)
@@ -169,4 +133,29 @@ fn execute(options: &Options) -> Result<bool, String> {
             .map_err(|error| error.to_string())?;
     }
     Ok(passed)
+}
+
+impl From<NativeOracle> for corpus_comparison::NativeOracle {
+    fn from(value: NativeOracle) -> Self {
+        match value {
+            NativeOracle::Auto => Self::Auto,
+            NativeOracle::Closure => Self::Closure,
+            NativeOracle::Countermodel => Self::Countermodel,
+        }
+    }
+}
+
+impl From<NativeBackend> for corpus_comparison::NativeBackend {
+    fn from(value: NativeBackend) -> Self {
+        match value {
+            NativeBackend::Cpu => Self::Cpu,
+            NativeBackend::Auto => Self::Auto,
+            NativeBackend::Gpu => Self::Gpu,
+            NativeBackend::Metal => Self::Metal,
+            NativeBackend::Vulkan => Self::Vulkan,
+            NativeBackend::Dx12 => Self::Dx12,
+            NativeBackend::Gl => Self::Gl,
+            NativeBackend::Nvidia => Self::Nvidia,
+        }
+    }
 }

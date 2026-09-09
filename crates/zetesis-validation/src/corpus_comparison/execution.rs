@@ -9,12 +9,19 @@ use serde::Serialize;
 mod completion;
 pub(crate) use completion::CompletionRequest;
 
-use crate::NativeBackend;
-use crate::normalize::Answer;
+use crate::corpus_comparison::NativeBackend;
+use crate::corpus_comparison::normalize::Answer;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum Status {
+    GpuExercised,
+    OuterUnsatWithoutMembership,
+}
 
 #[derive(Debug, Serialize)]
 pub(crate) struct FormulaExecution {
-    pub(crate) status: &'static str,
+    pub(crate) status: Status,
     pub(crate) adapter: String,
     pub(crate) api: String,
     pub(crate) vendor_id: u32,
@@ -115,7 +122,7 @@ fn qualify(
                 "zero-dispatch execution is not a completed outer-search UNSAT case".into(),
             );
         }
-        "outer_unsat_without_membership"
+        Status::OuterUnsatWithoutMembership
     } else {
         if batches == 0
             || batches > candidates
@@ -128,7 +135,7 @@ fn qualify(
         {
             return Err("formula GPU dispatch counts or authored limits are inconsistent".into());
         }
-        "gpu_exercised"
+        Status::GpuExercised
     };
     Ok(FormulaExecution {
         status,
@@ -381,5 +388,5 @@ fn batch_limits(text: &str) -> Result<(u64, u64, u64, u64), String> {
 }
 
 #[cfg(test)]
-#[path = "../tests/support/execution_contracts.rs"]
+#[path = "../../tests/support/execution_contracts.rs"]
 mod tests;
