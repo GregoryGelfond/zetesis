@@ -32,22 +32,32 @@ structure Witness (A : Type u) (V : Type v) where
   constraints : List (Nat × V)
   check : Binding V → Option Bool
 
-/-- The outer `none` is undefined evaluation; `some none` is a refused row.
-    Success returns exactly the matched environment, never a check-produced one. -/
-def matchChecked (before : Binding V) (row : Witness A V) :
-    Option (Option (Binding V)) :=
+/-- Evaluation failure and ordinary mismatch are distinct outcomes. Only success
+    carries an environment, which comes from extraction rather than evaluation. -/
+inductive Outcome (V : Type v) where
+  | undefined
+  | mismatch
+  | matched (binding : Binding V)
+
+/-- Identify complete successful matches without conflating their two refusals. -/
+def Outcome.accepted : Outcome V → Bool
+  | .matched _ => true
+  | .undefined | .mismatch => false
+
+/-- Success returns exactly the matched environment, never a check-produced one. -/
+def matchChecked (before : Binding V) (row : Witness A V) : Outcome V :=
   match matchRow row.shape before row.constraints with
-  | none => some none
+  | none => .mismatch
   | some after =>
     match row.check after with
-    | none => none
-    | some false => some none
-    | some true => some (some after)
+    | none => .undefined
+    | some false => .mismatch
+    | some true => .matched after
 
 /-- Successful selection consists of structural extraction followed by a true
     consuming check on that exact environment. There is no inverse step. -/
 theorem successful_selection (before after : Binding V) (row : Witness A V) :
-    matchChecked before row = some (some after) ↔
+    matchChecked before row = .matched after ↔
       matchRow row.shape before row.constraints = some after ∧ row.check after = some true := by
   cases matched : matchRow row.shape before row.constraints with
   | none => simp [matchChecked, matched]
@@ -68,7 +78,7 @@ theorem successful_selection (before after : Binding V) (row : Witness A V) :
         subst after
         simp [checked]
       | true =>
-        simp only [matchChecked, matched, checked, Option.some.injEq]
+        simp only [matchChecked, matched, checked, Option.some.injEq, Outcome.matched.injEq]
         constructor
         · intro equal
           subst after
@@ -77,7 +87,7 @@ theorem successful_selection (before after : Binding V) (row : Witness A V) :
 
 /-- Existing outer and condition values survive extraction and evaluation. -/
 theorem completed_condition_preserved (before after : Binding V) (row : Witness A V)
-    (success : matchChecked before row = some (some after)) : Extends before after := by
+    (success : matchChecked before row = .matched after) : Extends before after := by
   have matched : matchRow row.shape before row.constraints = some after :=
     ((successful_selection before after row).mp success).1
   exact StructuredWitnesses.completed_condition_preserved before after
@@ -86,25 +96,25 @@ theorem completed_condition_preserved (before after : Binding V) (row : Witness 
 /-- Undefined evaluation remains an explicit failure after a complete match. -/
 theorem undefined_selection (before after : Binding V) (row : Witness A V)
     (matched : matchRow row.shape before row.constraints = some after)
-    (undefined : row.check after = none) : matchChecked before row = none := by
+    (undefined : row.check after = none) : matchChecked before row = .undefined := by
   simp [matchChecked, matched, undefined]
 
 /-- A mismatch cannot evaluate an expression against an incomplete environment. -/
 theorem unmatched_row_skips_evaluation (before : Binding V) (row : Witness A V)
     (mismatch : matchRow row.shape before row.constraints = none) :
-    matchChecked before row = some none := by
+    matchChecked before row = .mismatch := by
   simp [matchChecked, mismatch]
 
 /-- A false consuming check refuses the row without returning extracted values. -/
 theorem false_check_refuses (before after : Binding V) (row : Witness A V)
     (matched : matchRow row.shape before row.constraints = some after)
-    (refused : row.check after = some false) : matchChecked before row = some none := by
+    (refused : row.check after = some false) : matchChecked before row = .mismatch := by
   simp [matchChecked, matched, refused]
 
 /-- This projection identifies successful rows only. A caller must separately
     propagate undefined evaluation; this list is not a failure-handling policy. -/
 def selected (before : Binding V) (rows : List (Witness A V)) : List (Witness A V) :=
-  rows.filter fun row => ((matchChecked before row).bind id).isSome
+  rows.filter fun row => (matchChecked before row).accepted
 
 /-- Exact membership relative to the supplied finite source carrier. -/
 theorem selected_iff (before : Binding V) (rows : List (Witness A V))
@@ -112,11 +122,9 @@ theorem selected_iff (before : Binding V) (rows : List (Witness A V))
     row ∈ selected before rows ↔ row ∈ rows ∧
       ∃ after, matchRow row.shape before row.constraints = some after ∧
         row.check after = some true := by
-  have accepted : ((matchChecked before row).bind id).isSome = true ↔
-      ∃ after, matchChecked before row = some (some after) := by
-    cases result : matchChecked before row with
-    | none => simp
-    | some found => cases found <;> simp
+  have accepted : (matchChecked before row).accepted = true ↔
+      ∃ after, matchChecked before row = .matched after := by
+    cases result : matchChecked before row <;> simp [Outcome.accepted]
   simp only [selected, List.mem_filter, accepted, successful_selection]
 
 def alternatives (before : Binding V) (rows : List (Witness A V)) : List (Formula A) :=
