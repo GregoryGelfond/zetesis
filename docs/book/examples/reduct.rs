@@ -1,5 +1,4 @@
-extern crate zetesis_cpu;
-extern crate zetesis_ferraris;
+//! Test a disjunction's frozen reduct against proper subsets of its candidate.
 
 // ANCHOR: example
 use zetesis_cpu::Control;
