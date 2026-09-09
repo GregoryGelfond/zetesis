@@ -19,7 +19,7 @@ eager. Selecting a GPU does not expand the accepted source language.
 | Normal rules and constraints | Safe finite relational rules, default and double negation, singleton unbounded choices | More general constructs use the formula profile |
 | Strong negation | Signed atom identities and coherence constraints; signed source and observation forms | Remaining constructor and condition profiles still apply |
 | Disjunction | Finite signed/evaluated disjunctive heads, including admitted top-level numeric intervals; direct formula compilation without shifting | Nontrivial conditional disjuncts, unsupported nested pools and objective-dependent producers |
-| Boolean literals | Signed `#true`/`#false` in rule bodies and choice/aggregate conditions; Boolean singleton heads and Boolean disjuncts with empty or explicitly true conditions; unsigned Boolean choice and function-head elements | Default-negated choice/head-aggregate elements and separate objective/observation condition profiles |
+| Boolean literals | Signed `#true`/`#false` in rule bodies and choice/aggregate conditions; Boolean singleton heads and Boolean disjuncts with empty or explicitly true conditions; signed Boolean choice and function-head elements | Separate objective/observation condition profiles |
 | Logical values | Closed signed functions, tuples, strings and extremal terms; complete variable copying, finite construction from bound inputs and structural comparisons | Nested pools/intervals and broader expression contexts remain restricted |
 | Positive witnesses | Constructor/tuple patterns preserve sign, name, arity and complete supporting atoms; evaluated positions consume bound inputs | Arithmetic inversion; a negative atom cannot supply a missing binding |
 | Comparisons | Equality/disequality, structural ordering, admitted flat-tuple equality and complete comparison chains, including default/double negation | Several unresolved variables in a generating chain and broader inverse binders |
@@ -54,7 +54,7 @@ can supply bounds; their original equalities and whole-group activation remain
 in the resulting formulas. Symbolic bounds and unsupported local generators
 remain implementation gaps.
 
-Unsigned `#true` and `#false` may occupy ordinary choice elements and elements
+Signed `#true` and `#false` may occupy ordinary choice elements and elements
 of `#count`, `#sum`, `#sum+`, `#min` and `#max` heads. A Boolean operand affects
 activity through its truth and its own condition. It introduces no atom and
 supplies no support for atoms in that condition. Thus `1{#true;a}1.` has only
@@ -66,9 +66,17 @@ outer group. All eligible local witnesses of that one element share its key.
 For example, `2{#true;#true}2.` has the empty answer set, but
 `d(1..2).2{#true:d(X)}2.` has no answer set: the two `d(X)` witnesses activate
 one occurrence. Separate written rules retain separate groups. In particular,
-`1{#true}1.1{#true;#true}1.` is inconsistent. Ordinary atomic choices continue
-to identify their contributions by complete atom; explicit function heads use
-complete tuple identity.
+`1{#true}1.1{#true;#true}1.` is inconsistent. Ordinary atomic choices identify
+their contributions by default-negation sign and complete atom; explicit
+function heads use complete tuple identity.
+
+Both atomic and Boolean operands admit `not` and `not not`. These forms evaluate
+their operand truth in the candidate and supply no positive producer support.
+Eligibility conditions retain their own reduct. Thus `{not not a}.` does not
+support `a`, while `{a}.` does. Ordinary `a` and `not not a` are distinct
+contributions: `1{a;not a;not not a}1.` has only the empty answer set, and
+`2{a;not not a}2.` has only `{a}`. Repeated occurrences of the same signed atom
+coalesce; repeated Boolean elements retain their separate occurrence keys.
 
 This Boolean counting rule is an adopted language extension. Its intended
 reduct laws and the remaining source-to-implementation correspondence are
@@ -79,9 +87,9 @@ separated in the [Lean proof boundary](../lean/correspondence.md).
 | Body `#count`, `#sum`, `#sum+` | Finite comparisons, recursive eligibility, complete-tuple coalescing and acyclic fresh-target assignments | Cyclic/self-dependent assignment generators, unsupported local generators and objective dependencies |
 | Body `#min`, `#max` | Comparisons over complete logical values; empty extrema; admitted acyclic assignments | Numeric endpoint guard below and unsupported consumer/observer combinations |
 | Assignment consumers | Dependency-ordered scalar/tuple filters and equalities, evaluated positive arguments/heads, admitted outer negative atoms, finite outer ranges, integer choice bounds, nonbinding aggregate guards and universal conditionals | Broader local scopes, objective-relevant new consumers and objective-relevant multiple assignments |
-| `#count` heads | Atomic permission coalesced by head atom and activity coalesced by complete tuple, including both alias directions and Boolean operands | Default-negated derived elements and unsupported eligibility/observer contexts |
-| `#sum`, `#sum+` heads | Signed numeric `#sum` and nonnegative numeric `#sum+`; atomic permission coalesced by head atom and activity coalesced by complete tuple, including both alias directions and Boolean operands; zero-weight atomic heads retain permission | Missing/nonnumeric measured values, negative `#sum+` weights, default-negated derived elements, unsupported eligibility contexts and objective-relevant heads remain refused |
-| `#min`, `#max` heads | Numeric first tuple values; atomic permission coalesced by head atom and activity coalesced by complete tuple, including both alias directions and Boolean operands | Missing/nonnumeric measured values, the numeric endpoint guard, default-negated derived elements, unsupported eligibility contexts and objective-relevant heads remain refused |
+| `#count` heads | Positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions and Boolean operands | Unsupported eligibility/observer contexts |
+| `#sum`, `#sum+` heads | Signed numeric `#sum` and nonnegative numeric `#sum+`; positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions and Boolean operands; zero-weight positive atomic heads retain permission | Missing/nonnumeric measured values, negative `#sum+` weights, unsupported eligibility contexts and objective-relevant heads remain refused |
+| `#min`, `#max` heads | Numeric first tuple values; positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions and Boolean operands | Missing/nonnumeric measured values, the numeric endpoint guard, unsupported eligibility contexts and objective-relevant heads remain refused |
 
 A tuple becomes active when any occurrence has a true head operand and satisfies
 its own condition. An atomic operand is true when that atom is selected;
@@ -102,7 +110,7 @@ Conversely, `1#max{0:a;1:a}1.` admits `{a}`, whose selection activates both
 complete tuples. An extremum bound supplies no support for an otherwise
 unsupported atom. The optional count specialization still requires its stronger
 tuple/atom bijection certificate; admitting aliases does not grant that certificate.
-Boolean operands also prevent a group from supplying that atom-only
+Default-negated or Boolean operands also prevent a group from supplying that atom-only
 certificate. Other independently qualified groups remain eligible for the
 specialization. A false operand or body does not bypass validation of a closed
 measured value: `0#sum{word:#false}0:-#false.` remains refused.

@@ -7,6 +7,10 @@
 mod reference;
 
 use reference::{Selection, cost_records, expected, external, input, models};
+use zetesis_themelios::{
+    AdmissionOptions, CountPlanLimits, CountPlanStatus, ExpansionLimits, FormulaLimits,
+    prepare_formula,
+};
 
 const CASES: &[(&str, &[&[&str]])] = &[
     ("{not a}.", &[&[]]),
@@ -60,6 +64,37 @@ fn signed_constants_introduce_no_atoms() {
         "0#sum{0:not #false;0:not not #true}0.",
     ] {
         assert!(input(source).atoms().is_empty(), "{source}");
+    }
+}
+
+#[test]
+fn independent_unsigned_groups_keep_count_plans() {
+    for source in [
+        "2{a;b;c;d}2.{a;b}1.{c;d}1.1{not e}1.",
+        "2{a;b;c;d}2.{a;b}1.{c;d}1.1#count{0:not e}1.",
+    ] {
+        let ordinary = input(source);
+        let planned = prepare_formula(
+            source.into(),
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        )
+        .unwrap()
+        .ground_with_count_plan(
+            CountPlanLimits::default(),
+            &zetesis_cpu::Control::default(),
+            None,
+        )
+        .unwrap();
+        let CountPlanStatus::Ready(plan) = planned.count_plan() else {
+            panic!("the independent unsigned atom partition remains applicable");
+        };
+        assert_eq!(plan.consequence_count(), 2);
+        assert!(planned.theory().same_instance(plan.original_theory()));
+        assert_eq!(planned.atoms(), ordinary.atoms());
+        assert_eq!(planned.theory().nodes(), ordinary.theory().nodes());
+        assert_eq!(planned.theory().roots(), ordinary.theory().roots());
     }
 }
 

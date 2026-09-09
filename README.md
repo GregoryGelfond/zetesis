@@ -143,8 +143,11 @@ supported scope; Rust ground-time functions and broader incremental integration
 remain planned. Unsupported constructs receive explicit refusals.
 The [admitted-language reference](docs/book/reference/language.md) records the
 precise boundaries, including shared atoms and tuples in numeric aggregate heads.
-Unsigned Boolean choice and aggregate-head elements carry truth without creating
-atoms; their activity and support obligations remain separate.
+Choice and aggregate-head elements preserve `not` and `not not` explicitly.
+Default-negated operands contribute activity without positive producer support;
+Boolean operands carry truth without creating atoms. The
+[language coverage checklist](docs/book/reference/language-coverage.md) identifies
+remaining obligations and unclassified scopes.
 
 The [neuromorphic appendix](docs/book/appendices/neuromorphic.md) specifies a
 possible Loihi 2/SpiNNaker2 backend, its exact event protocol and its qualification
