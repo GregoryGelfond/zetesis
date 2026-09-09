@@ -28,11 +28,15 @@ mixed-extrema refusal controls. A discovered pre-existing direct-observer
 cost-layout defect now receives a bounded refusal. That is a remaining zetesis
 implementation gap, not a themelios rejection or a modeling-error claim.
 
-Combined writer-free prepared sessions exercise five original programs with
+Combined writer-free prepared sessions exercise six original programs with
 independent aliased count heads and forwarded objective producers, across
-pruning on/off, one/four completion workers and batches of one/eight. All 40
-sessions exhaust the relevant search and retain the expected full optimal
-models; assertions require actual pruning and batched completion work. The
+pruning on/off, one/four completion workers and batches of one/eight. All 48
+sessions exhaust the relevant search and retain the expected full model/cost
+records, including all optimal ties where objectives remain present. Forwarded
+empty extrema preserve absent costs rather than inventing a zero priority.
+Assertions require actual pruning and batched completion work. Sixteen further
+sessions stop under scratch or candidate ceilings, retain pending work or an
+unproved incumbent, and make no optimum or exhaustive-coverage claim. The
 five corresponding objective-dependent count-head cases remain located
 refusals. Their clingo behavior is retained separately as gap evidence rather
 than silently broadening the successful composition claim.

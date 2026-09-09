@@ -243,6 +243,7 @@ mod physical {
     }
 
     fn qualify_formula_limits(backend: Backend) {
+        qualify_optimization_stop(backend);
         let source = "{a;b;c;d}.";
         let mut output = Vec::new();
         let report = run_with_diagnostics(
@@ -297,5 +298,49 @@ mod physical {
         );
         assert!(output.is_empty());
         assert!(broken.bytes().is_empty());
+    }
+
+    fn qualify_optimization_stop(backend: Backend) {
+        for pruning in [false, true] {
+            let mut configuration = options(&[
+                "--backend",
+                backend.argument(),
+                "--oracle",
+                "countermodel",
+                "--batch-size",
+                "7",
+                "--max-candidates",
+                "1",
+            ]);
+            if !pruning {
+                configuration.max_objective_bound_work = 0;
+            }
+            let mut output = Vec::new();
+            let report = run_with_diagnostics(
+                super::count_objective_sources::SATISFIABLE[0].into(),
+                &configuration,
+                &mut output,
+                &mut Vec::new(),
+                &Control::default(),
+            )
+            .unwrap();
+            assert_eq!(report.completion, Completion::Interrupted);
+            assert_eq!(report.checked, 1);
+            assert_eq!(report.optimization.unwrap().scored_models, 1);
+            let execution = report.formula_execution.unwrap();
+            assert!(execution.adapter.contains(backend.name()));
+            assert_eq!(execution.gpu_batches, 1);
+            assert_eq!(execution.gpu_candidates, 1);
+            assert_eq!(execution.gpu_decided + execution.cpu_residuals, 1);
+            assert_eq!(
+                (execution.pending_candidates, execution.queued_models),
+                (0, 0)
+            );
+            let text = std::str::from_utf8(&output).unwrap();
+            assert!(text.contains("INCOMPLETE"));
+            assert!(text.contains("Coverage: partial"));
+            assert!(!text.contains("OPTIMUM FOUND"));
+            assert!(!text.contains("Coverage: exhausted"));
+        }
     }
 }
