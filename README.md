@@ -260,17 +260,22 @@ Boolean heads, literal objective weights, bounded mixed-extrema presence and
 evaluated local witnesses in the source tree. Its combined library and ordinary
 CLI checks compare full models,
 objective absence, present zero priorities, tuple coalescing and optimum ties.
-Its [final local checks](docs/verification/language-values-tranche-20260908/README.md)
-pass 2,451 workspace tests/doc checks, 348 independent CPU-only CLI checks,
-76 external-oracle tests and fresh 94/24 release comparisons. The current
-[Lean audit](proofs/verification/language-values-20260908/README.md) checks
-864 laws across 78 modules. CPU-only CLI coverage passes at 93.3773%; portable
-workspace coverage is 90.2015%, below the unchanged 91% floor. The
-[returned 25-test Metal qualification](docs/verification/language-values-tranche-20260908/metal/README.md)
-passes on Apple M4 Pro. Workspace coverage with its matching profiles is
-93.6480%, so both independent 91% floors now pass. The portable-only result
-remains separately recorded. Promotion and installation are recorded after
-qualification.
+The subsequent [lint audit](docs/verification/lint-discipline-20260909/README.md)
+removes two unused-code suppressions, adds an authored-attribute regression and
+brings both maintained standalone Rust packages into the portable gate. Integrated
+checks pass 2,461 workspace tests/doc checks, 348 independent CPU-only CLI checks,
+25 standalone tests and 76 external-oracle tests. The release solver and validation
+commands remain byte-identical to the binaries that passed the 94/24 corpus
+comparisons. The [Lean audit](proofs/verification/language-values-20260908/README.md)
+still checks 864 laws across 78 modules.
+
+Fresh CPU-only CLI coverage passes at 93.3773%; portable workspace coverage is
+90.2015%, below the unchanged 91% floor. The
+[preceding 25-test Metal qualification](docs/verification/language-values-tranche-20260908/metal/README.md)
+passed on Apple M4 Pro, raising that build's workspace coverage to 93.6480%.
+The rebuilt instrumented binaries differ, so those physical profiles are retained
+as historical evidence. Matching physical qualification for the corrected build
+and promotion remain pending.
 
 The checkpoint includes the following scoped capabilities. The
 [previous checkpoint](docs/verification/aggregate-primitives-tranche-20260908/README.md)
