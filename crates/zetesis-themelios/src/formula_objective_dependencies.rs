@@ -196,11 +196,13 @@ fn total_dependency(
         {
             return false;
         }
+        // Only an unsigned choice occurrence competes as a value producer.
+        // Signed activity and bounds remain constraints of the original theory.
         if let HeadIr::Choice(group) = &rule.head
             && group
                 .elements
                 .iter()
-                .filter_map(|element| element.head.atom())
+                .filter_map(|element| element.head.positive_atom())
                 .any(|head| signature(head.predicate()) == *producer)
         {
             return false;

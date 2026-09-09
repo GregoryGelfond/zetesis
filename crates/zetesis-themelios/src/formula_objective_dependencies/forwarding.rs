@@ -57,8 +57,10 @@ pub(super) fn certify(
 }
 
 /// `None` records multiple definitions; a missing entry records no definition.
-/// Choice and disjunctive occurrences count, so an ordinary rule cannot certify
-/// a predicate that also has an independent producer.
+/// Unsigned choice occurrences count, so an ordinary rule cannot certify a
+/// predicate that also has an independent producer. Default-negated choice
+/// operands impose no producer permission; their active bounds remain in the
+/// original theory. Disjunctive objective dependencies retain their refusal.
 fn definitions(rules: &[RuleIr]) -> BTreeMap<Signature, Option<&RuleIr>> {
     let mut definitions = BTreeMap::new();
     for rule in rules {
@@ -80,7 +82,7 @@ fn definitions(rules: &[RuleIr]) -> BTreeMap<Signature, Option<&RuleIr>> {
             }
             HeadIr::Choice(group) => {
                 for element in &group.elements {
-                    if let Some(head) = element.head.atom() {
+                    if let Some(head) = element.head.positive_atom() {
                         record(head);
                     }
                 }

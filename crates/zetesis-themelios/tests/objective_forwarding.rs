@@ -36,6 +36,98 @@ fn forwarding_preserves_complete_model_cost_records() {
     assert_eq!(models, 69);
 }
 
+const SIGNED_BASE: &str = "{p}.value(N):-N=#count{1:p}.copied(N):-value(N).";
+const SIGNED_OBJECTIVE: &str = "#minimize{N:copied(N)}.";
+
+#[test]
+fn signed_choice_occurrences_do_not_define_observers() {
+    let baseline = admit(
+        &format!("{SIGNED_BASE}{SIGNED_OBJECTIVE}"),
+        &FormulaLimits::default(),
+    )
+    .unwrap();
+    let expected = exhaustive(&baseline);
+    for choice in [
+        "{not copied(0)}.",
+        "{not not copied(0)}.",
+        "{not copied(0);not not copied(1)}.",
+    ] {
+        let source = format!("{SIGNED_BASE}{choice}{SIGNED_OBJECTIVE}");
+        let input = admit(&source, &FormulaLimits::default())
+            .unwrap_or_else(|error| panic!("{source}: {error}"));
+        assert_eq!(exhaustive(&input), expected, "{source}");
+    }
+}
+
+#[test]
+fn signed_choices_preserve_assignment_dependencies() {
+    let base = "{p}.value(N):-N=#count{1:p}.copied(N):-N=#sum{X:value(X)}.";
+    let baseline = admit(
+        &format!("{base}{SIGNED_OBJECTIVE}"),
+        &FormulaLimits::default(),
+    )
+    .unwrap();
+    let expected = exhaustive(&baseline);
+    for choice in ["{not copied(0)}.", "{not not copied(0)}."] {
+        let source = format!("{base}{choice}{SIGNED_OBJECTIVE}");
+        let input = admit(&source, &FormulaLimits::default())
+            .unwrap_or_else(|error| panic!("{source}: {error}"));
+        assert_eq!(exhaustive(&input), expected, "{source}");
+    }
+}
+
+#[test]
+fn signed_choice_bounds_still_filter_observed_answers() {
+    for (choice, required) in [
+        ("1{not copied(0)}1.", "p"),
+        ("1{not not copied(0)}1.", "copied(0)"),
+    ] {
+        let source = format!("{SIGNED_BASE}{choice}{SIGNED_OBJECTIVE}");
+        let input = admit(&source, &FormulaLimits::default())
+            .unwrap_or_else(|error| panic!("{source}: {error}"));
+        let records = exhaustive(&input);
+        assert_eq!(records.len(), 1, "{source}");
+        assert!(
+            records.iter().all(|(atoms, _)| atoms.contains(required)),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn mixed_choice_observers_keep_the_producer_refusal() {
+    let source = format!("{SIGNED_BASE}{{not copied(0);copied(3)}}.{SIGNED_OBJECTIVE}");
+    let error = admit(&source, &FormulaLimits::default()).unwrap_err();
+    assert!(matches!(
+        error,
+        FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
+            feature: ProfileFeature::ObjectiveAggregateDependency,
+            ..
+        }))
+    ));
+}
+
+#[test]
+#[ignore = "requires independently installed clingo"]
+fn signed_observer_sources_match_clingo_costs() {
+    for base in [
+        SIGNED_BASE,
+        "{p}.value(N):-N=#count{1:p}.copied(N):-N=#sum{X:value(X)}.",
+    ] {
+        for choice in [
+            "",
+            "{not copied(0)}.",
+            "{not not copied(0)}.",
+            "1{not copied(0)}1.",
+            "1{not not copied(0)}1.",
+        ] {
+            let source = format!("{base}{choice}{SIGNED_OBJECTIVE}");
+            let input = admit(&source, &FormulaLimits::default()).unwrap();
+            assert_eq!(exhaustive(&input), clingo(&source), "{source}");
+        }
+    }
+}
+
 #[test]
 fn search_preserves_every_optimum_tie() {
     for case in cases(FIXTURE) {
