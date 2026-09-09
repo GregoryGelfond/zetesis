@@ -7,6 +7,7 @@
 - [A guided tour](architecture/tour.md)
 - [Programs, answer sets, and the reduct](architecture/semantics.md)
 - [Source programs and grounding](architecture/grounding.md)
+- [Grounding compared with clingo](architecture/grounding-comparison.md)
 - [Composing exact execution](architecture/execution.md)
 
 # Part II — The Rust library programmer's manual
@@ -27,5 +28,6 @@
 
 ---
 
+[Admitted language](reference/language.md)
 [Vocabulary](vocabulary.md)
 [Building the documentation](building.md)
