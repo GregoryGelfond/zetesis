@@ -122,6 +122,14 @@ arithmetic, resource charges, allocation and cleanup remain implementation
 correspondences. A smaller scratch prefix does not establish a timing or
 process-memory result.
 
+`EvaluationPrefix.reset_preservation` states that an empty live prefix hides all
+earlier workspace values. A Rust join lends its existing workspace to partial
+comparisons, binding generators and final filters. Each evaluation returns an
+owned value and clears its prefix before the next borrow. Preserving expression
+order, complete-filter error precedence, copy charges and cleanup is a concrete
+caller obligation; the reset law does not justify skipping later expressions
+after an earlier filter rejects a binding.
+
 [`ProjectedConditionals`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ProjectedConditionals.lean)
 separates anonymous witness disjunctions, signed source alternatives and
 universal condition rows. The Rust
@@ -149,10 +157,15 @@ The tight device checker packs producer support into 32-bit words.
 `TightEvaluation.head_support_append` proves that splitting the producer list
 joins each head's support with Boolean OR; `head_support_true` connects that
 support to an enabled original producer. The shader represents this OR by
-atomic updates to head bits. Word addressing, atomic execution, barriers and
+atomic updates to head bits by default. The grouped support primitive gives each
+word one owner that reduces its complete producer group.
+`TightEvaluation.head_support_group` proves that exact group membership preserves
+support for every atom owned by the group. This is a Boolean witness law;
+preserving original occurrence counts and charged work requires a separate
+argument. Rust grouping, word addressing, atomic execution, barriers and
 readback remain unproved implementation correspondences. The packed membership
 refinement below concerns a different, 64-bit Rust representation and does not
-certify this shader.
+certify either shader schedule.
 
 For a frozen mask, correctness means agreement with the fixed candidate's
 classical truth, not merely matching dimensions. For lazy inference, final
