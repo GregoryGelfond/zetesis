@@ -295,6 +295,8 @@ import Zetesis
 #print axioms Zetesis.EvaluationPrefix.write_prefix
 #print axioms Zetesis.EvaluationPrefix.storage_preservation
 #print axioms Zetesis.EvaluationPrefix.reset_preservation
+#print axioms Zetesis.EvaluationPrefix.evaluate_append
+#print axioms Zetesis.EvaluationPrefix.root_preservation
 #print axioms Zetesis.insertAtom_grows
 #print axioms Zetesis.insertAtom_contains
 #print axioms Zetesis.insertAtom_duplicate
@@ -876,6 +878,8 @@ import Zetesis
 #print axioms Zetesis.StructuredWitnesses.refused_witness_preserves_condition
 #print axioms Zetesis.StructuredWitnesses.active_condition_requires_witness
 #print axioms Zetesis.StructuredWitnesses.complete_row_collection_keeps_stability
+#print axioms Zetesis.TernaryWatch.remaining_unique
+#print axioms Zetesis.TernaryWatch.replacement_exact
 #print axioms Zetesis.Thresholds.threshold_query_exact
 #print axioms Zetesis.Thresholds.threshold_bound_antitone
 #print axioms Zetesis.Thresholds.threshold_sum_monotone

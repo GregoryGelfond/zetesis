@@ -1462,18 +1462,28 @@
     },
     {
       "file": "Zetesis/EvaluationPrefix.lean",
-      "line": 29,
+      "line": 31,
       "name": "Zetesis.EvaluationPrefix.write_prefix"
     },
     {
       "file": "Zetesis/EvaluationPrefix.lean",
-      "line": 55,
+      "line": 57,
       "name": "Zetesis.EvaluationPrefix.storage_preservation"
     },
     {
       "file": "Zetesis/EvaluationPrefix.lean",
-      "line": 77,
+      "line": 79,
       "name": "Zetesis.EvaluationPrefix.reset_preservation"
+    },
+    {
+      "file": "Zetesis/EvaluationPrefix.lean",
+      "line": 88,
+      "name": "Zetesis.EvaluationPrefix.evaluate_append"
+    },
+    {
+      "file": "Zetesis/EvaluationPrefix.lean",
+      "line": 113,
+      "name": "Zetesis.EvaluationPrefix.root_preservation"
     },
     {
       "file": "Zetesis/Events.lean",
@@ -4381,6 +4391,16 @@
       "name": "Zetesis.StructuredWitnesses.complete_row_collection_keeps_stability"
     },
     {
+      "file": "Zetesis/TernaryWatch.lean",
+      "line": 37,
+      "name": "Zetesis.TernaryWatch.remaining_unique"
+    },
+    {
+      "file": "Zetesis/TernaryWatch.lean",
+      "line": 77,
+      "name": "Zetesis.TernaryWatch.replacement_exact"
+    },
+    {
       "file": "Zetesis/Thresholds.lean",
       "line": 37,
       "name": "Zetesis.Thresholds.threshold_query_exact"
@@ -5049,6 +5069,7 @@
     "Zetesis/StrongNegation.lean",
     "Zetesis/StructuralBindings.lean",
     "Zetesis/StructuredWitnesses.lean",
+    "Zetesis/TernaryWatch.lean",
     "Zetesis/Thresholds.lean",
     "Zetesis/TightEvaluation.lean",
     "Zetesis/TightPlans.lean",
@@ -5061,8 +5082,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "93a0032225c900152eecaf17d4052376d69fb3284920ab8e0d138e9b68bee957",
-    "Zetesis.lean": "282748a9f921d50f3323abe6a5adaae34232039bdcb8533496a9879c0a650997",
+    "Audit.lean": "6b61b99f7426e5e1bc3ea2a4df2ef0895b2c50e25cc6ffe7517546171bf49ef9",
+    "Zetesis.lean": "277eadea90820ea938bb1af701f620ed26eb32c51987fff7ec4c96de4b8380d1",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
     "Zetesis/AggregateConsumers.lean": "41aded89dbfaa79833ed3b336030ef4b08afa5be8e7029060416c2f8de59ef97",
@@ -5089,7 +5110,7 @@
     "Zetesis/CountHeads.lean": "0596a0b812f26450121781a1faecaddd86f815f56f7c7909d6399551a752f5db",
     "Zetesis/DagSharing.lean": "d5ecf64f20cf5092c68141c9a7a7c2ed5bcf7c26874e0fa32652aa2f77f92466",
     "Zetesis/EvaluatedWitnesses.lean": "4bde5b8cec56a3229d091a3010bfead386bdcb310beb061aa1bceaa9db78125b",
-    "Zetesis/EvaluationPrefix.lean": "1bad40d784974885dea178ed22edf54a6e5d97453356be0f86302ccade69f275",
+    "Zetesis/EvaluationPrefix.lean": "f82517010fed810cc995747c02275d66be4c8b464301bf8a9e8e5de9fcdadbba",
     "Zetesis/Events.lean": "ca19932a7b9465055c0b660606bad522c02c2438a384e6d6762a852418c26ee6",
     "Zetesis/Examples.lean": "858524400af04e29312fdcfcc5127d38dd28ebf68f54d119cd6acafe7b4923dd",
     "Zetesis/Examples/Choices.lean": "4f71f191b451a8bbc3f5420df49b664dfaf01ccb183fb05ef2f4edf81f3712b9",
@@ -5145,6 +5166,7 @@
     "Zetesis/StrongNegation.lean": "4f99901e0dfc2e777d12110aca36c2c3be4964f5cbcf88d0a3d87b355a5730c6",
     "Zetesis/StructuralBindings.lean": "8606044bbfeab1c9238e9c2311206d0dd894bb6482463c02613e759a44f06894",
     "Zetesis/StructuredWitnesses.lean": "035fda4f2857801d516f26c1dca179233a561581beffbfbc69c1897e8926be8c",
+    "Zetesis/TernaryWatch.lean": "ff2f1d1a4a02522b2646b0a54fff3e7c08e64bbd5661cf4c3631518aa41ba57e",
     "Zetesis/Thresholds.lean": "271ba89d3885ecf242dca61cc0ce8998f7b0f36db6a4df907ed1d4f7bd075a85",
     "Zetesis/TightEvaluation.lean": "293010a62f7303a215a0c797b42df9ad8221728be1ef4806f40c92233a2c27a4",
     "Zetesis/TightPlans.lean": "6324a09643454c507c4daf1a287ec082545b621e52bea3196026043ea99bac98",

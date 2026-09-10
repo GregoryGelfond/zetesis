@@ -67,6 +67,7 @@ import Zetesis.OuterNegativeConsumers
 import Zetesis.OuterRanges
 import Zetesis.AggregateDependencies
 import Zetesis.BinaryWatch
+import Zetesis.TernaryWatch
 import Zetesis.TightEvaluation
 import Zetesis.ConditionalConsumers
 import Zetesis.HeadMeasures

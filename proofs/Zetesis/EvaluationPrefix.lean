@@ -7,6 +7,8 @@ prefix by exactly one; an error stops the plan before any later operation.
 The central preservation law compares an explicit initialized-length workspace
 with evaluation over a list containing only live values. Resetting the length
 to zero therefore removes every previous evaluation from the logical input.
+The final operation may return its value directly: no later operation needs it
+in the live prefix. The root law preserves both that value and the first error.
 
 The finite list of operations is the decreasing measure. Operations are pure
 partial functions supplied by the caller: source-plan validity, operand indices,
@@ -80,5 +82,46 @@ theorem reset_preservation (plan : List (List Value → Except Fault Value))
   have empty_covered : 0 ≤ storage.length := Nat.zero_le _
   have empty_agrees := storage_preservation plan storage 0 empty_covered
   simpa using empty_agrees
+
+/-- Consecutive plan segments compose through the completed live prefix.
+An error in the first segment prevents every operation in the second. -/
+theorem evaluate_append (first second : List (List Value → Except Fault Value))
+    (live : List Value) :
+    evaluate (first ++ second) live =
+      (evaluate first live).bind (evaluate second) := by
+  induction first generalizing live with
+  | nil => rfl
+  | cons operation rest induction =>
+    simp only [List.cons_append, evaluate]
+    cases result : operation live with
+    | error fault => rfl
+    | ok value => exact induction (live ++ [value])
+
+/-- Evaluate the proper prefix, then return the final operation's own result.
+Only intermediate values are retained for later operand lookup. -/
+def evaluateRoot (properPrefix : List (List Value → Except Fault Value))
+    (root : List Value → Except Fault Value) (live : List Value) : Except Fault Value :=
+  (evaluate properPrefix live).bind root
+
+/-- Returning the root directly preserves the reference plan's final value or
+first error. The reference appends that value and observes its last entry.
+
+First compose the proper prefix with the singleton root plan. Prefix failure
+ends both evaluations. Otherwise both call the same root on the same prefix;
+root failure agrees, and success makes the appended root the last value.
+This law does not establish Rust allocation or cleanup behavior. -/
+theorem root_preservation (properPrefix : List (List Value → Except Fault Value))
+    (root : List Value → Except Fault Value) (live : List Value) :
+    (evaluate (properPrefix ++ [root]) live).map List.getLast? =
+      (evaluateRoot properPrefix root live).map some := by
+  rw [evaluate_append]
+  unfold evaluateRoot
+  cases prefixResult : evaluate properPrefix live with
+  | error fault => rfl
+  | ok values =>
+    simp only [Except.bind, evaluate]
+    cases rootResult : root values with
+    | error fault => rfl
+    | ok value => simp [Except.map]
 
 end Zetesis.EvaluationPrefix

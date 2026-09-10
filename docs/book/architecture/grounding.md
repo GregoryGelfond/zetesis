@@ -76,7 +76,7 @@ The useful lower-level operations have logical contracts:
 | Gate | Test frozen positive/negative candidate conditions | Use the candidate, not the growing consequence set |
 | Project | Construct a head or constraint instance | Preserve the complete atom and its source instance |
 
-The formula path evaluates scalar expressions as finite plans. Each operation
+The formula path evaluates terms as finite expression plans. Each operation
 reads the completed prefix of earlier results. The final operation uses the same
 checked evaluator and returns its value directly; only intermediate results
 occupy scratch storage. Work, operand-copy charges and first-error order remain

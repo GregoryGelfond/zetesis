@@ -1462,17 +1462,27 @@
   {
     "name": "Zetesis.EvaluationPrefix.write_prefix",
     "file": "Zetesis/EvaluationPrefix.lean",
-    "line": 29
+    "line": 31
   },
   {
     "name": "Zetesis.EvaluationPrefix.storage_preservation",
     "file": "Zetesis/EvaluationPrefix.lean",
-    "line": 55
+    "line": 57
   },
   {
     "name": "Zetesis.EvaluationPrefix.reset_preservation",
     "file": "Zetesis/EvaluationPrefix.lean",
-    "line": 77
+    "line": 79
+  },
+  {
+    "name": "Zetesis.EvaluationPrefix.evaluate_append",
+    "file": "Zetesis/EvaluationPrefix.lean",
+    "line": 88
+  },
+  {
+    "name": "Zetesis.EvaluationPrefix.root_preservation",
+    "file": "Zetesis/EvaluationPrefix.lean",
+    "line": 113
   },
   {
     "name": "Zetesis.insertAtom_grows",
@@ -4378,6 +4388,16 @@
     "name": "Zetesis.StructuredWitnesses.complete_row_collection_keeps_stability",
     "file": "Zetesis/StructuredWitnesses.lean",
     "line": 113
+  },
+  {
+    "name": "Zetesis.TernaryWatch.remaining_unique",
+    "file": "Zetesis/TernaryWatch.lean",
+    "line": 37
+  },
+  {
+    "name": "Zetesis.TernaryWatch.replacement_exact",
+    "file": "Zetesis/TernaryWatch.lean",
+    "line": 77
   },
   {
     "name": "Zetesis.Thresholds.threshold_query_exact",
