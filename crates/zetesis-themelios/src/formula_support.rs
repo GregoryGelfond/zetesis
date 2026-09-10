@@ -2,6 +2,8 @@
 
 mod evaluation;
 #[cfg(test)]
+mod columnar;
+#[cfg(test)]
 mod postings;
 
 use std::collections::{BTreeMap, BTreeSet};

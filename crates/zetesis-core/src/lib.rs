@@ -28,6 +28,7 @@ mod program;
 mod candidate;
 mod carrier;
 mod ground;
+pub mod relation;
 
 pub use candidate::{Interpretation, Model, Seed, SeedError};
 pub use carrier::{AtomIter, CarrierError};
