@@ -75,6 +75,9 @@ reconstructs checked local row positions for one query at a time. Complete
 pattern matching remains a separate operation. Preparation and each filter have
 explicit resource limits; zero rows or zero queries require no compute dispatch.
 This is a bounded device primitive, not ordinary source grounding on the GPU.
+The [relation measurement profile](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-experiments/README.md#retained-relation-selection)
+uses these library operations with matched typed inputs, packed outputs and
+shared reconstruction across scalar CPU, Rayon and physical GPU execution.
 
 `PreparedInput::ground` borrows an `Arc<GroundProgram>` that retains its original
 program identity. It reuses the supplied graph; an explicit request for lazy

@@ -1,7 +1,7 @@
 # zetesis-wgpu
 
-Bounded GPU operations for answer-set checking. CPU and GPU operations share the
-same reduct obligations; device scheduling does not establish a different
+Bounded GPU primitives for grounding and answer-set checking. CPU and GPU
+operations share the same reduct obligations; device scheduling does not establish a different
 semantics. The [execution chapter](../../docs/book/architecture/execution.md)
 explains their place in ordinary solving, and the
 [parallel library guide](../../docs/book/rust/parallel.md) describes composition.
@@ -15,8 +15,10 @@ explains their place in ordinary solving, and the
 | `GpuFormulaOracle` | Original formula DAG and ordered candidate interpretations; rejection, completed refutation or a residual query | Exact completion of every residual before answer-set acceptance |
 | `GpuTightOracle` | A checked `TightPlan` and interpretations; original satisfaction and ranked support | Plan applicability, candidate enumeration and complete result accounting |
 | `GpuAggregateOracle` | An `AggregateGpuPlan` and Group-bound eligibility occurrences; count, sum, sum-plus, minimum and maximum | Source completeness, head permission and reduct minimality |
+| `GpuRelationExecutor` | One immutable typed relation and equality queries; ordered row masks | Complete pattern matching, source coverage and answer-set checking |
 
-The tight and native aggregate operations are explicit library experiments;
+The tight, native aggregate and relation operations are explicit library
+experiments;
 ordinary solver dispatch does not currently select them. A successful primitive
 benchmark is not a complete source-language solve.
 
@@ -59,6 +61,22 @@ intermediate. Integer execution uses neither floating point nor optional subgrou
 operations. Actual packing, synchronization and readback remain executable
 refinement obligations; the Lean arithmetic laws alone do not verify WGSL.
 
+## Immutable relation selection
+
+`GpuRelationExecutor::prepare` uploads the equality-ID columns of a borrowed
+`zetesis_core::relation::Relation`. Its prepared view exclusively borrows the
+executor and retains the exact relation owner. A filter accepts queries from
+that owner and produces one packed row mask per query occurrence. Empty
+conjunctions retain every row; missing dictionary values retain none.
+
+The kernel evaluates 64 consecutive row positions per workgroup. Unique writers
+pack the flags into ordered mask words; reconstruction preserves local row
+identity and the relation's original catalog mapping. Equality IDs provide no
+numeric or ASP term ordering. The complete tuple matcher remains responsible for
+patterns and binding. Preparation, filtering and reconstruction each have
+explicit limits; the enclosing caller accounts for simultaneously retained views.
+These operations do not replace ordinary source grounding.
+
 ## Validate a physical backend
 
 Portable checks exercise planning and host failure boundaries. Physical Metal
@@ -68,11 +86,12 @@ qualification is selected explicitly:
 cargo test --locked -p zetesis-wgpu --all-features --test hardware_formula -- --ignored --nocapture
 cargo test --locked -p zetesis-wgpu --all-features --test hardware_aggregate metal -- --ignored --nocapture
 cargo test --locked -p zetesis-wgpu --all-features --lib metal_aggregate -- --ignored --nocapture
+cargo test --locked -p zetesis-wgpu --all-features --test hardware_relation -- --ignored --nocapture --test-threads=1 --exact metal_relation_masks_match_typed_rows metal_relation_refusals_preserve_prepared_view
 ```
 
-The [test sources](tests) contain the separate static, lazy, tight, formula and
-aggregate controls. Vulkan tests use their explicit Vulkan filters; a Metal pass
-does not qualify Vulkan. The repository's `scripts/check.sh coverage --metal`
+The [test sources](tests) contain the separate static, lazy, tight, formula,
+aggregate and relation controls. Vulkan tests use their explicit Vulkan filters;
+a Metal pass does not qualify Vulkan. The repository's `scripts/check.sh coverage --metal`
 checks the selected physical groups with the matching instrumented binaries and
 keeps CPU-only CLI coverage separate. See [Contributing](../../CONTRIBUTING.md)
 for the complete gate discipline.

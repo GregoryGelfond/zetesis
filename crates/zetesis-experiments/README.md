@@ -21,6 +21,7 @@ these operations fit into the solver. Public interfaces start in
 | `aggregate` | Numeric reductions over matched original/frozen eligibility | `aggregate_measurement` |
 | `tight` | Complete-theory tight certificates with exact completion | `tight_measurement` |
 | `lazy` | Matched relational source rounds and closures | `lazy_measurement` |
+| `relation` | Equality masks over one retained typed column view | `relation_measurement` |
 | `grounding` | Fresh original-source formula admission | `grounding::profile`, `write_report` |
 
 Device profiles accept physical Metal or Vulkan. CPU mode explicitly omits the
@@ -40,6 +41,8 @@ zetesis-bench tight --backend metal --atoms 4,64,256 \
   --batches 1,32,128 --families normal,choices --workers 4
 zetesis-bench lazy --backend metal --widths 4,8 \
   --batches 1,32,128 --families sparse,dense --workers 4
+zetesis-bench relation --backend metal --family independent --payload tuple \
+  --rows 4096 --queries 32 --workers 4 --warmups 2 --repetitions 6
 zetesis-bench grounding examples/kr-domains/standalone/send-money/send-money.lp \
   --repetitions 3
 ```
@@ -139,6 +142,39 @@ external parsing nor an ordinary outer candidate search.
 See [lazy API](src/lazy_measurement.rs) and
 [regressions](tests/lazy_measurement.rs).
 
+### Retained relation selection
+
+The relation profile constructs one bounded typed source, its equality dictionary
+and aligned columns. Scalar CPU, Rayon and the requested physical GPU receive the
+same ordered queries and produce identical packed row masks. An independent
+comparison against the original typed rows checks each complete output. All
+routes then reconstruct selections through the same core operation and traverse
+every selected argument cell.
+
+Source construction, dictionary construction, query resolution, input selection,
+Rayon pool creation, device setup and column upload are reported separately.
+Repeated batches reuse the immutable relation and uploaded columns. Scalar and
+Rayon selection includes mask packing; GPU selection includes transfer, readback
+and the copy into the common mask representation. Reference checks, source
+hashing and report publication lie outside operation clocks. Routes run in fixed
+scalar/Rayon/GPU order; order and thermal effects remain uncontrolled.
+Validation traverses the rows before timed reconstruction, so that interval is
+not a cold-cache observation. In physical mode, uploaded columns remain resident
+during CPU samples as well.
+
+The authored storage bound includes shared views, packed outputs and concurrent
+temporary selections. It is neither process RSS nor total device memory. Report
+events retain the full typed subject, its hash, complete masks and actual device
+work. Complete evidence requires both the final event and successful execution
+and publication. A writer failure can leave bytes from an incomplete event;
+the caller remains responsible for flushing its output.
+
+This profile measures equality selection and typed row access. It does not
+measure full tuple matching, source grounding or answer-set solving. See the
+[library contract](src/relation_measurement.rs),
+[shared fixtures](src/relation_fixtures.rs) and
+[regressions](tests/relation_measurement.rs).
+
 ### Original-source grounding
 
 The grounding profile loads the original include graph and performs unmeasured
@@ -185,6 +221,7 @@ failure. Physical tests deliberately remain opt-in:
 ```sh
 cargo test --locked -p zetesis-wgpu --test hardware_aggregate metal -- --ignored --nocapture
 cargo test --locked -p zetesis-experiments --test aggregate_measurement metal -- --ignored --nocapture
+cargo test --locked -p zetesis-experiments --test relation_measurement metal -- --ignored --nocapture
 ```
 
 Use `vulkan` in place of `metal` for these controls on a suitable host.

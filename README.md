@@ -126,6 +126,11 @@ semantic guarantees, scheduling and the work that remains on the host.
 The tight GPU library offers atomic-OR and grouped-word support construction;
 both have physical Metal checks. Atomic remains its default. These are reusable
 membership primitives, and ordinary solving does not automatically select them.
+An experimental typed column view also provides shared CPU/Rayon/GPU equality
+selection with checked row reconstruction. It preserves logical values and row
+identity; ordinary source grounding still uses its existing relation store.
+The [primitive measurements](crates/zetesis-experiments/README.md) describe the
+operation boundaries and reproducible commands.
 
 ## Libraries and assurance
 
