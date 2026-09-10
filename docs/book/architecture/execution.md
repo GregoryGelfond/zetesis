@@ -32,6 +32,18 @@ tight-program specialization. A failed certificate requests exact residual
 checking; it is not automatically a rejection. These are different procedures
 for the same reduct-based membership contract.
 
+The device [ranked-support checker](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/tight/check.wgsl)
+stores support as one bit per semantic atom in each candidate's row. It clears
+the row, then each enabled original producer atomically sets its head bit.
+After the storage barrier, a bit is set exactly when that head has an enabled
+producer. Atomic OR preserves updates from different heads sharing a word and
+from repeated producers. The final atom scan retains the least unsupported
+atom as its witness. This representation reduces the support buffer to
+`4 * max(worlds * ceil(atoms / 32), 1)` bytes; it does not describe total device
+memory or establish a speedup. Shared-word contention remains a measurement
+question. This checker is a reusable device primitive; its availability does
+not imply that ordinary solves select it.
+
 ## CPU and GPU responsibilities
 
 | Capability | Execution boundary |

@@ -62,10 +62,10 @@ fn certificate_packing_retains_original_formula_structure() {
     );
     assert_eq!(packed.roots, [8, 5, 7, 1]);
     assert_eq!(packed.producers, [1, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-    assert_eq!(graph.work, 22);
+    assert_eq!(graph.work, 20);
     assert_eq!(
         plan(&graph, 2, true).params(&graph),
-        [3, 9, 4, 3, 1, 2, 22, 7]
+        [3, 9, 4, 3, 1, 2, 20, 7]
     );
 }
 
@@ -189,12 +189,55 @@ fn candidate_word_tails_never_introduce_atoms() {
 }
 
 #[test]
+fn support_storage_uses_packed_world_rows() {
+    for (atoms, width) in [
+        (0, 0),
+        (1, 1),
+        (31, 1),
+        (32, 1),
+        (33, 2),
+        (63, 2),
+        (64, 2),
+        (65, 3),
+    ] {
+        let theory = Theory::new(atoms, vec![], vec![], AdmissionLimits::default()).unwrap();
+        let certificate =
+            TightPlan::compile(&theory, TightPlanLimits::default(), &Control::default()).unwrap();
+        let graph = Graph::new(&certificate, &wgpu::Limits::default()).unwrap();
+        for worlds in [1, 3, 65] {
+            let expected = u64::try_from((width * worlds).max(1)).unwrap() * 4;
+            assert_eq!(plan(&graph, worlds, false).support, expected);
+        }
+    }
+}
+
+#[test]
+fn support_work_charges_word_initialization() {
+    for (atoms, expected) in [
+        (0, 0),
+        (1, 2),
+        (31, 32),
+        (32, 33),
+        (33, 35),
+        (63, 65),
+        (64, 66),
+        (65, 68),
+    ] {
+        let theory = Theory::new(atoms, vec![], vec![], AdmissionLimits::default()).unwrap();
+        let certificate =
+            TightPlan::compile(&theory, TightPlanLimits::default(), &Control::default()).unwrap();
+        let graph = Graph::new(&certificate, &wgpu::Limits::default()).unwrap();
+        assert_eq!(graph.work, expected);
+    }
+}
+
+#[test]
 fn cold_bytes_include_simultaneous_host_graph_packing() {
     let graph = graph();
     let cold = plan(&graph, 2, true);
     let hot = plan(&graph, 2, false);
     assert_eq!(graph.bytes, 9 * 16 + 4 * 4 + 3 * 16);
-    assert_eq!(hot.transport, 32 + 8 + 72 + 24 + 48 + 48);
+    assert_eq!(hot.transport, 32 + 8 + 72 + 8 + 48 + 48);
     assert_eq!(cold.accounted - hot.accounted, graph.bytes);
     assert_eq!(
         hot.accounted,
@@ -227,7 +270,7 @@ fn byte_ceiling_includes_its_exact_boundary() {
 #[test]
 fn full_scan_work_is_required_before_dispatch() {
     let graph = graph();
-    for (max_work_per_candidate, success) in [(22, true), (21, false)] {
+    for (max_work_per_candidate, success) in [(20, true), (19, false)] {
         assert_eq!(
             Plan::new(
                 &graph,
@@ -353,11 +396,11 @@ fn zero_epoch_cannot_alias_cleared_result_storage() {
 fn false_root_witnesses_use_assertion_order() {
     let graph = graph();
     let plan = plan(&graph, 2, false);
-    let records = [7, 0, 1, 0, 22, RESULT_MAGIC, 7, 1, 1, 3, 22, RESULT_MAGIC];
+    let records = [7, 0, 1, 0, 20, RESULT_MAGIC, 7, 1, 1, 3, 20, RESULT_MAGIC];
     let result = decode_present(&records, &graph, &plan, &Control::default()).unwrap();
     assert_eq!(result[0].verdict(), TightVerdict::NotModel { root: 8 });
     assert_eq!(result[1].verdict(), TightVerdict::NotModel { root: 1 });
-    assert_eq!(result[0].work(), 22);
+    assert_eq!(result[0].work(), 20);
 }
 
 #[test]
@@ -369,19 +412,19 @@ fn all_verdict_kinds_decode_without_losing_witnesses() {
         0,
         0,
         0,
-        22,
+        20,
         RESULT_MAGIC,
         7,
         1,
         2,
         2,
-        22,
+        20,
         RESULT_MAGIC,
         7,
         2,
         1,
         1,
-        22,
+        20,
         RESULT_MAGIC,
     ];
     let result = decode_present(&records, &graph, &plan, &Control::default()).unwrap();
@@ -404,8 +447,8 @@ fn all_verdict_kinds_decode_without_losing_witnesses() {
 fn corrupt_records_never_produce_a_partial_batch() {
     let graph = graph();
     let plan = plan(&graph, 2, false);
-    let valid = [7, 0, 0, 0, 22, RESULT_MAGIC, 7, 1, 2, 2, 22, RESULT_MAGIC];
-    for (index, value) in [(6, 0), (7, 0), (8, 3), (9, 3), (10, 21), (11, 0), (8, 0)] {
+    let valid = [7, 0, 0, 0, 20, RESULT_MAGIC, 7, 1, 2, 2, 20, RESULT_MAGIC];
+    for (index, value) in [(6, 0), (7, 0), (8, 3), (9, 3), (10, 19), (11, 0), (8, 0)] {
         let mut corrupt = valid;
         corrupt[index] = value;
         assert_eq!(
@@ -429,7 +472,7 @@ fn out_of_range_root_ordinals_are_readback_failures() {
     let plan = plan(&graph, 1, false);
     assert_eq!(
         decode_present(
-            &[7, 0, 1, 4, 22, RESULT_MAGIC],
+            &[7, 0, 1, 4, 20, RESULT_MAGIC],
             &graph,
             &plan,
             &Control::default()
@@ -451,7 +494,7 @@ fn cancellation_prevents_completed_results() {
     for error in [
         graph.pack(&certificate, &control).err().unwrap(),
         plan.pack(&graph, &input, &control).unwrap_err(),
-        decode_present(&[7, 0, 0, 0, 22, RESULT_MAGIC], &graph, &plan, &control).unwrap_err(),
+        decode_present(&[7, 0, 0, 0, 20, RESULT_MAGIC], &graph, &plan, &control).unwrap_err(),
     ] {
         assert_eq!(error.interruption, Some(zetesis_cpu::Stop::Cancelled));
     }
@@ -461,7 +504,7 @@ fn cancellation_prevents_completed_results() {
 fn absent_residual_witnesses_are_readback_failures() {
     let graph = graph();
     let plan = plan(&graph, 2, false);
-    let records = [7, 0, 2, 2, 22, RESULT_MAGIC, 7, 1, 2, 2, 22, RESULT_MAGIC];
+    let records = [7, 0, 2, 2, 20, RESULT_MAGIC, 7, 1, 2, 2, 20, RESULT_MAGIC];
     let error = super::decode(&records, &graph, &plan, &[7, 3], &Control::default()).unwrap_err();
     assert_eq!(error.kind(), GpuErrorKind::Readback);
     assert!(super::decode(&records, &graph, &plan, &[7, 4], &Control::default()).is_ok());
@@ -473,7 +516,7 @@ fn malformed_candidate_storage_cannot_validate_receipts() {
     let plan = plan(&graph, 1, false);
     assert_eq!(
         super::decode(
-            &[7, 0, 0, 0, 22, RESULT_MAGIC],
+            &[7, 0, 0, 0, 20, RESULT_MAGIC],
             &graph,
             &plan,
             &[],

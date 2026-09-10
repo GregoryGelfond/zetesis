@@ -22,7 +22,8 @@ pub struct TightGpuLimits {
     /// Shared caller-owned theory/certificate/candidates, allocator overhead,
     /// driver-private allocations and deferred retirement are excluded. Not RSS.
     pub max_batch_bytes: u64,
-    /// Each candidate reserves `nodes + roots + producers + 2*atoms` operations.
+    /// Each candidate reserves `nodes + roots + producers + atoms + words`
+    /// operations, where `words = ceil(atoms / 32)` initializes packed support.
     /// Every scan completes, including initialization and scans after an original
     /// failure; this differs from scalar early-exit work. Insufficient work is
     /// refused before dispatch, never converted into a logical result.

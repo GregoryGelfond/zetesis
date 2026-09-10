@@ -21,9 +21,11 @@ use zetesis_ferraris::{Interpretation, TightPlan};
 ///
 /// Work is linear in candidates times nodes, roots, producers and atoms. Each
 /// workgroup evaluates its DAG sequentially, then shares root/support scans
-/// across 64 invocations. Candidate truth/support storage is linear in candidates
-/// times nodes/atoms; shared graph and packed seed storage have explicit byte
-/// bounds. The oracle retains one shared theory handle and one exact transport
+/// across 64 invocations. Truth uses one word per node; candidate membership and
+/// producer support use one bit per atom, in separate world-major arrays. Heads
+/// sharing a support word use atomic OR; their contention can affect throughput.
+/// Shared graph and transport storage have explicit byte bounds. The oracle
+/// retains one shared theory handle and one exact transport
 /// shape, without cloning the caller's certificate or storing its ranks.
 pub struct GpuTightOracle {
     runtime: Runtime,

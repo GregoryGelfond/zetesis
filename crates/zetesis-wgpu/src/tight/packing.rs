@@ -82,8 +82,9 @@ impl Graph {
         {
             return Err(capacity("tight strided loop increment exceeds u32"));
         }
+        let words = atoms.div_ceil(32);
         let work = atoms
-            .checked_mul(2)
+            .checked_add(words)
             .and_then(|n| n.checked_add(nodes))
             .and_then(|n| n.checked_add(roots))
             .and_then(|n| n.checked_add(producers))
@@ -100,7 +101,7 @@ impl Graph {
             nodes,
             roots,
             producers,
-            words: atoms.div_ceil(32),
+            words,
             node_bytes,
             root_bytes,
             producer_bytes,
@@ -198,7 +199,7 @@ impl Plan {
         };
         let seeds = array(graph.words)?;
         let truth = array(graph.nodes)?;
-        let support = array(graph.atoms)?;
+        let support = array(graph.words)?;
         let results = array(address(RESULT_WORDS)?)?;
         for bytes in [seeds, truth, support, results] {
             buffer(bytes, device)?;

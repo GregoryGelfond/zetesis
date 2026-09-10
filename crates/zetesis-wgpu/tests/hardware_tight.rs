@@ -42,6 +42,54 @@ fn inputs(theory: &Theory) -> Vec<Interpretation> {
     candidates
 }
 
+// All producer heads except the gate have an optional head guarded by atom 0.
+// Each word keeps an unsupported neighbor at bit 2. Repeated roots produce
+// duplicate writes, while different enabled heads contend for the same word.
+fn conditional_support(atoms: usize) -> TightPlan {
+    let mut nodes = vec![
+        Node::False,
+        Node::Atom(0),
+        Node::Implies(1, 0),
+        Node::Or(1, 2),
+    ];
+    let mut roots = vec![3];
+    for head in (1..atoms).filter(|head| head % 32 != 2) {
+        let atom = nodes.len();
+        nodes.extend([
+            Node::Atom(head),
+            Node::Implies(atom, 0),
+            Node::Or(atom, atom + 1),
+            Node::Implies(1, atom + 2),
+        ]);
+        roots.push(atom + 3);
+        if head % 3 == 0 {
+            roots.push(atom + 3);
+        }
+    }
+    certificate(atoms, nodes, roots)
+}
+
+#[test]
+fn conditional_support_matches_exhaustive_reducts() {
+    let certificate = conditional_support(4);
+    for candidate in inputs(certificate.theory()) {
+        let scalar = certificate
+            .check(&candidate, TightCheckLimits::default(), &Control::default())
+            .unwrap();
+        let exact = check(
+            certificate.theory(),
+            &candidate,
+            Limits::default(),
+            &Control::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            matches!(scalar.verdict, TightVerdict::Stable),
+            exact.accepted()
+        );
+    }
+}
+
 fn compare(oracle: &mut GpuTightOracle, certificate: &TightPlan) -> usize {
     let theory = certificate.theory();
     let mut candidates = inputs(theory);
@@ -214,6 +262,9 @@ fn vulkan_support_preserves_batch_isolation() {
 
 fn qualify_support_preserves_batch_isolation(backend: physical::Backend) {
     let mut oracle = oracle(backend);
+    for atoms in [4, 33, 65, 129] {
+        compare_conditional_support(&mut oracle, atoms);
+    }
     for atoms in [1, 31, 32, 33, 63, 64, 65, 4097] {
         let certificate = certificate(atoms, vec![Node::Atom(atoms - 1)], vec![0]);
         let theory = certificate.theory();
@@ -247,6 +298,47 @@ fn qualify_support_preserves_batch_isolation(backend: physical::Backend) {
             let stats = oracle.last_batch_stats().unwrap();
             assert_eq!(stats.theory_uploaded, worlds == 1);
             assert!(stats.transport_allocated);
+        }
+    }
+}
+
+fn compare_conditional_support(oracle: &mut GpuTightOracle, atoms: usize) {
+    let certificate = conditional_support(atoms);
+    let theory = certificate.theory();
+    let supported = (0..atoms).filter(|atom| atom % 32 != 2);
+    let patterns = [
+        Interpretation::new(theory, []).unwrap(),
+        Interpretation::new(theory, supported.clone()).unwrap(),
+        Interpretation::new(theory, supported.clone().chain([2])).unwrap(),
+        Interpretation::new(theory, supported.filter(|atom| *atom != 0)).unwrap(),
+        Interpretation::new(theory, [0]).unwrap(),
+    ];
+    for worlds in [5, 33] {
+        let mut candidates: Vec<_> = (0..worlds)
+            .map(|world| patterns[world % patterns.len()].clone())
+            .collect();
+        for repeat in 0..3 {
+            let results = oracle
+                .check_batch(
+                    &certificate,
+                    &candidates,
+                    TightGpuLimits::default(),
+                    &Control::default(),
+                )
+                .unwrap();
+            assert_eq!(results.len(), worlds);
+            for (candidate, result) in candidates.iter().zip(results) {
+                let expected = certificate
+                    .check(candidate, TightCheckLimits::default(), &Control::default())
+                    .unwrap();
+                assert_eq!(result.verdict(), expected.verdict);
+            }
+            let stats = oracle.last_batch_stats().unwrap();
+            assert_eq!(stats.dispatches, 1);
+            assert_eq!(stats.candidates, u64::try_from(worlds).unwrap());
+            assert_eq!(stats.theory_uploaded, worlds == 5 && repeat == 0);
+            assert_eq!(stats.transport_allocated, repeat == 0);
+            candidates.rotate_left(1);
         }
     }
 }

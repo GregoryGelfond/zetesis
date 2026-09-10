@@ -126,6 +126,15 @@ completed carrier.
 
 ## Read hypotheses as caller obligations
 
+The tight device checker packs producer support into 32-bit words.
+`TightEvaluation.head_support_append` proves that splitting the producer list
+joins each head's support with Boolean OR; `head_support_true` connects that
+support to an enabled original producer. The shader represents this OR by
+atomic updates to head bits. Word addressing, atomic execution, barriers and
+readback remain unproved implementation correspondences. The packed membership
+refinement below concerns a different, 64-bit Rust representation and does not
+certify this shader.
+
 For a frozen mask, correctness means agreement with the fixed candidate's
 classical truth, not merely matching dimensions. For lazy inference, final
 source coverage means coverage at the final positive snapshot, not a successful

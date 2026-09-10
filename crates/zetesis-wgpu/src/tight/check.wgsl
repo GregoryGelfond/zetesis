@@ -1,6 +1,7 @@
 // Complete original truth plus ranked producer support, one candidate/workgroup.
 // The host accepts only an opaque, checked TightPlan for the complete theory.
 // Wire constants mirror tight/packing.rs. Zero remains ordinary Boolean false.
+// Support bit a denotes an enabled producer for a in this candidate's row.
 const WORKGROUP_SIZE: u32 = 64u;
 const NODE_FALSE: u32 = 0u;
 const NODE_ATOM: u32 = 1u;
@@ -42,7 +43,7 @@ fn operation(tag: u32, left: bool, right: bool) -> bool {
 fn check(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lane: u32) {
     let world = group.x;
     let values = world * params.nodes;
-    let supported = world * params.atoms;
+    let supported = world * params.words;
     if (lane == 0u) {
         atomicStore(&first_root, params.roots);
         atomicStore(&first_atom, params.atoms);
@@ -58,8 +59,8 @@ fn check(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_inde
             truth[values + index] = select(0u, 1u, value);
         }
     }
-    for (var atom = lane; atom < params.atoms; atom += WORKGROUP_SIZE) {
-        atomicStore(&support[supported + atom], 0u);
+    for (var word = lane; word < params.words; word += WORKGROUP_SIZE) {
+        atomicStore(&support[supported + word], 0u);
     }
     storageBarrier();
     workgroupBarrier();
@@ -72,12 +73,17 @@ fn check(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_inde
         let producer = producers[index];
         var enabled = true;
         if (producer.has_body != 0u) { enabled = truth[values + producer.body] != 0u; }
-        if (enabled) { atomicOr(&support[supported + producer.head], 1u); }
+        // Distinct heads may share a word. Atomic OR preserves every enabled
+        // producer's bit, including duplicate producers for the same head.
+        if (enabled) {
+            atomicOr(&support[supported + producer.head / 32u], 1u << (producer.head % 32u));
+        }
     }
     storageBarrier();
     workgroupBarrier();
     for (var atom = lane; atom < params.atoms; atom += WORKGROUP_SIZE) {
-        if (contains(world, atom) && atomicLoad(&support[supported + atom]) == 0u) {
+        if (contains(world, atom) &&
+            (atomicLoad(&support[supported + atom / 32u]) & (1u << (atom % 32u))) == 0u) {
             atomicMin(&first_atom, atom);
         }
     }
