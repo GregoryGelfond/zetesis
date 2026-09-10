@@ -1,4 +1,4 @@
-//! Positive local witnesses check evaluated positions against complete rows.
+//! Local witness rows distinguish captured inputs from closed evaluated values.
 #[path = "support/finite_bindings.rs"]
 mod reference;
 
@@ -123,6 +123,28 @@ const CASES: &[(&str, &str)] = &[
     ("{p(1,2);p(2,4)}.q:-p(X,X+1):#false.", "{p(1,2);p(2,4)}.q."),
 ];
 
+// The expression 1+1 needs no witness binding. Projection selects only atoms
+// whose evaluated position equals 2; its complete truth is then negated.
+const CLOSED_NEGATIVE_CASES: &[(&str, &[&str])] = &[
+    ("p(1,2).q:-not p(_,1+1):#true.", &["p(1,2)"]),
+    ("p(1,2).q:-not not p(_,1+1):#true.", &["p(1,2)", "q"]),
+    ("p(1,3).q:-not p(_,1+1):#true.", &["p(1,3)", "q"]),
+    ("p(1,3).q:-not not p(_,1+1):#true.", &["p(1,3)"]),
+    ("p(f(1,2)).q:-not p(f(_,1+1)):#true.", &["p(f(1,2))"]),
+    (
+        "p(f(1,2)).q:-not not p(f(_,1+1)):#true.",
+        &["p(f(1,2))", "q"],
+    ),
+];
+
+#[test]
+fn closed_arithmetic_preserves_negative_projection() {
+    for &(source, atoms) in CLOSED_NEGATIVE_CASES {
+        let expected = Models::from([atoms.iter().map(|&atom| atom.to_owned()).collect()]);
+        assert_eq!(native(&input(source)), expected, "{source}");
+    }
+}
+
 #[test]
 fn models_match_finite_substitution() {
     for &(source, expanded) in CASES {
@@ -185,7 +207,11 @@ fn frozen_truth_matches_finite_substitution() {
 #[ignore = "requires an independently installed clingo"]
 fn original_sources_match_clingo_full_models() {
     let mut total = 0;
-    for &(source, _) in CASES {
+    for source in CASES
+        .iter()
+        .map(|&(source, _)| source)
+        .chain(CLOSED_NEGATIVE_CASES.iter().map(|&(source, _)| source))
+    {
         let result = external(source, true);
         assert_eq!(result["Models"]["More"], "no");
         let mut expected = Models::new();
@@ -211,7 +237,10 @@ fn original_sources_match_clingo_full_models() {
         assert_eq!(native(&input(source)), expected, "{source}");
         total += count;
     }
-    println!("complete_sources={} full_models={total}", CASES.len());
+    println!(
+        "complete_sources={} full_models={total}",
+        CASES.len() + CLOSED_NEGATIVE_CASES.len()
+    );
 }
 
 #[test]
@@ -302,7 +331,7 @@ fn preparation_requires_independently_bound_inputs() {
 #[test]
 fn negative_witnesses_cannot_supply_inputs() {
     for sign in ["not", "not not"] {
-        for term in ["X,X+1", "_,1+1", "f(X,X+1)"] {
+        for term in ["X,X+1", "f(X,X+1)"] {
             let source = format!("p(1,2).q:-{sign} p({term}):#true.");
             assert!(
                 matches!(

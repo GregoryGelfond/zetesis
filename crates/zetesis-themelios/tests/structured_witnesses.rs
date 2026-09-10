@@ -1,4 +1,4 @@
-//! Positive local witnesses retain complete atoms under structural selection.
+//! Local witnesses retain complete atoms under structural selection.
 #[path = "support/finite_bindings.rs"]
 mod reference;
 use reference::{Models, atom_text, exhaustive, external, holds, native, values};
@@ -135,6 +135,23 @@ const CASES: &[(&str, &str)] = &[
     ),
 ];
 
+// Anonymous structure introduces no enclosing name. The matching f witness
+// makes its completed projection true before either default-negation sign.
+const NEGATIVE_ANONYMOUS_CASES: &[(&str, &[&str])] = &[
+    ("p(f(1)).q:-not p(f(_)):#true.", &["p(f(1))"]),
+    ("p(f(1)).q:-not not p(f(_)):#true.", &["p(f(1))", "q"]),
+    ("p(g(1)).q:-not p(f(_)):#true.", &["p(g(1))", "q"]),
+    ("p(g(1)).q:-not not p(f(_)):#true.", &["p(g(1))"]),
+];
+
+#[test]
+fn anonymous_structure_preserves_negative_projection() {
+    for &(source, atoms) in NEGATIVE_ANONYMOUS_CASES {
+        let expected = Models::from([atoms.iter().map(|&atom| atom.to_owned()).collect()]);
+        assert_eq!(native(&input(source)), expected, "{source}");
+    }
+}
+
 #[test]
 fn models_match_finite_substitution() {
     for &(source, expanded) in CASES {
@@ -261,7 +278,11 @@ fn conditional_truth_matches_quantified_witnesses() {
 #[ignore = "requires an independently installed clingo"]
 fn original_sources_match_clingo_full_models() {
     let mut total = 0;
-    for &(source, _) in CASES {
+    for source in CASES
+        .iter()
+        .map(|&(source, _)| source)
+        .chain(NEGATIVE_ANONYMOUS_CASES.iter().map(|&(source, _)| source))
+    {
         let result = external(source, true);
         assert_eq!(result["Models"]["More"], "no");
         let mut expected = Models::new();
@@ -287,7 +308,10 @@ fn original_sources_match_clingo_full_models() {
         assert_eq!(native(&input(source)), expected, "{source}");
         total += count;
     }
-    println!("complete_sources={} full_models={total}", CASES.len());
+    println!(
+        "complete_sources={} full_models={total}",
+        CASES.len() + NEGATIVE_ANONYMOUS_CASES.len()
+    );
 }
 
 #[test]
@@ -335,20 +359,18 @@ fn local_witness_names_do_not_escape() {
 #[test]
 fn negative_witnesses_cannot_supply_names() {
     for sign in ["not", "not not"] {
-        for term in ["f(X)", "f(_)"] {
-            let source = format!("p(f(1)).q:-{sign} p({term}):#true.");
-            assert!(
-                matches!(
-                    limited(
-                        &source,
-                        ExpansionLimits::default(),
-                        &FormulaLimits::default()
-                    ),
-                    Err(FormulaFailure::UnsafeVariable { .. })
+        let source = format!("p(f(1)).q:-{sign} p(f(X)):#true.");
+        assert!(
+            matches!(
+                limited(
+                    &source,
+                    ExpansionLimits::default(),
+                    &FormulaLimits::default()
                 ),
-                "{source}"
-            );
-        }
+                Err(FormulaFailure::UnsafeVariable { .. })
+            ),
+            "{source}"
+        );
     }
 }
 
