@@ -91,6 +91,22 @@ predecessor-indexed value families. `ObjectiveTransport` and `ExtremumPresence`
 retain the distinction between possible carriers, realized values and objective
 presence.
 
+[`OrderedBounds`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/OrderedBounds.lean)
+connects numeric measures to logical bounds. `separated_comparison` requires the
+bound to have the same ordering against every integer. `constant_aggregate`
+then proves original and frozen equivalence for the complete canonical aggregate;
+`replacement_in_context` permits that replacement under arbitrary connectives.
+`measured_head_in_context` retains the head's separate positive permissions.
+These are all-mask laws, not simplification by a single candidate's truth.
+
+[`ObjectivePriorities`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ObjectivePriorities.lean)
+retains the correlation between fields of an eligible objective row.
+`completed_presence` requires numeric weight and priority at the same completed
+binding; `independent_fields_invent_priority` gives a counterexample to separate
+field projection. `partition_vector` and `partition_optima` preserve costs and
+optimal ties when complete rows are partitioned by their fixed priority. The
+priority layout remains shared across candidates, including zero-valued slots.
+
 These are useful mathematical components. Their coverage or arithmetic premises
 do not prove that a particular Rust source cursor enumerates the required
 bindings, that whole tuples are coalesced correctly, or that the machine obeys

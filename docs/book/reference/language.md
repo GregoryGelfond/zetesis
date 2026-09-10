@@ -81,12 +81,40 @@ and the finite-carrier laws in
 
 ## Choices and aggregates
 
-Unbounded and integer-bounded choices support scoped variables, duplicate
-eligibility, recursive conditions, evaluated arguments and admitted top-level
-numeric intervals. Complete outer scalar or acyclic aggregate-assignment values
-can supply bounds; their original equalities and whole-group activation remain
-in the resulting formulas. Symbolic bounds and unsupported local generators
-remain implementation gaps.
+Choices admit complete logical bounds, including symbols, strings, signed
+constructors, tuples, `#inf` and `#sup`, as well as integers. Scoped variables,
+duplicate eligibility, recursive conditions, evaluated arguments and admitted
+top-level numeric intervals retain their existing meanings. Complete outer scalar
+or acyclic aggregate-assignment values can supply bounds; their original
+equalities and whole-group activation remain in the resulting formulas.
+Unsupported local generators remain restricted.
+
+For example:
+
+```asp
+{{#include ../../../crates/zetesis-cli/tests/fixtures/bounds-priorities/upper.lp}}
+```
+
+Its answer sets are `{}`, `{a}`, `{b}` and `{a,b}`. The upper bound `word` is
+greater than every integer count. Using it as a lower bound instead gives no
+answer set; `#inf {a;b} #sup.` admits all four. This is logical term ordering,
+not conversion of a symbol to a numeric threshold.
+
+The same comparison contract applies to all six relations in admitted body and
+head `#count`, `#sum` and `#sum+` contexts. Every finite numeric measure is above
+`#inf` and below every other nonnumeric logical value. Its comparison with such
+a bound therefore has one truth value across every tuple selection, including
+the empty selection. The canonical aggregate can be replaced by that constant
+in both the original formula and every frozen reduct. Head permissions and signed
+activity remain separate: a true bound cannot supply support for an atom.
+Source bindings, eligibility, measured values and reached arithmetic still undergo
+their required validation before a comparison is folded. Logical bounds do not
+admit missing or unsupported head measures.
+
+The [logical-bound contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/logical_bounds.rs)
+cover declared answer families, all comparison relations, arbitrary frozen
+`M/J` queries, source comparisons and resource boundaries. Their preservation
+law is described under [implementation correspondence](../lean/correspondence.md).
 
 Signed `#true` and `#false` may occupy ordinary choice elements and elements
 of `#count`, `#sum`, `#sum+`, `#min` and `#max` heads. A Boolean operand affects
@@ -118,9 +146,9 @@ separated in the [Lean proof boundary](../lean/correspondence.md).
 
 | Aggregate form | Implemented scope | Remaining boundary |
 | --- | --- | --- |
-| Body `#count`, `#sum`, `#sum+` | Finite comparisons, recursive eligibility, complete-tuple coalescing and acyclic fresh-target assignments | Cyclic/self-dependent assignment generators, unsupported local generators and objective dependencies |
+| Body `#count`, `#sum`, `#sum+` | Finite comparisons against complete logical bounds, recursive eligibility, complete-tuple coalescing and acyclic fresh-target assignments | Cyclic/self-dependent assignment generators, unsupported local generators and objective dependencies |
 | Body `#min`, `#max` | Comparisons over complete logical values; empty extrema; admitted acyclic assignments | Numeric endpoint guard below and unsupported consumer/observer combinations |
-| Assignment consumers | Dependency-ordered scalar/tuple filters and equalities, evaluated positive arguments/heads, admitted outer negative atoms, finite outer ranges, integer choice bounds, nonbinding aggregate guards and universal conditionals | Broader local scopes, objective-relevant new consumers and objective-relevant multiple assignments |
+| Assignment consumers | Dependency-ordered scalar/tuple filters and equalities, evaluated positive arguments/heads, admitted outer negative atoms, finite outer ranges, logical choice bounds, nonbinding aggregate guards and universal conditionals | Broader local scopes, objective-relevant new consumers and objective-relevant multiple assignments |
 | `#count` heads | Positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions and Boolean operands | Unsupported eligibility/observer contexts and objective-relevant heads remain refused |
 | `#sum`, `#sum+` heads | Signed numeric `#sum` and nonnegative numeric `#sum+`; positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions and Boolean operands; zero-weight positive atomic heads retain permission | Missing/nonnumeric measured values, negative `#sum+` weights, unsupported eligibility contexts and objective-relevant heads remain refused |
 | `#min`, `#max` heads | Complete logical first tuple values in ASP term order; positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions and Boolean operands | Missing measured values, the numeric endpoint guard, unsupported eligibility contexts and objective-relevant heads remain refused |
@@ -145,9 +173,10 @@ complete tuples. An extremum bound supplies no support for an otherwise
 unsupported atom. The optional count specialization still requires its stronger
 tuple/atom bijection certificate; admitting aliases does not grant that certificate.
 Default-negated or Boolean operands also prevent a group from supplying that
-atom-only certificate. Other independently qualified groups remain eligible for the
-specialization. A false operand or body does not bypass validation of a closed
-measured value: `0#sum{word:#false}0:-#false.` remains refused.
+atom-only certificate. Any nonnumeric logical bound excludes its whole group
+from this numeric certificate, even when another bound is numeric. Other independently
+qualified numeric groups remain eligible for the specialization. A false operand
+or body does not bypass validation of a closed measured value: `0#sum{word:#false}0:-#false.` remains refused.
 
 An extremum measure retains the complete first value of its tuple. For example:
 
@@ -185,17 +214,45 @@ analysis results; other admitted constructs can also require a projection.
 
 ## Objectives and observations
 
-`#minimize`, `#maximize` and weak constraints use complete tuple identity and
-priorities. Search preserves all optimal ties within its resource and delivery
-limits. Positive lifted objectives and supported total aggregate observers can
-pass through unique acyclic relation renamings or argument permutations.
-Resolved nonnumeric literal weights contribute neither cost nor priority only
-after the element's remaining structure is validated. Flat unary mixed-extrema
+`#minimize`, `#maximize` and weak constraints admit finite safely bound priority
+expressions; an omitted priority is zero. Priority inputs come from the element's
+admitted positive ordinary conditions. Weight, priority and tuple values must
+belong to the same completed binding. Grounding retains the model-relative
+conditions in fixed-priority objective templates; it does not add producer support
+or change the original answer-set theory.
+
+```asp
+{{#include ../../../crates/zetesis-cli/tests/fixtures/bounds-priorities/correlated.lp}}
+```
+
+Both answer sets contain the two `row` facts. The answer containing `a` and
+`selected(1)` has costs `[0,2]` at priorities `[2,1]`; the answer containing `b`
+and `selected(2)` has costs `[1,0]`. The first is optimal because the higher
+priority is compared first, even though its total numeric cost is larger.
+Evaluating weight and priority from independent row projections would lose
+this correlation.
+
+A resolved nonnumeric weight or priority contributes neither cost nor a priority
+slot after required structure and evaluation checks. Undefined priority arithmetic
+is a located error, including when the weight is nonnumeric. For numeric weight
+and priority pairs, contributions coalesce globally by normalized weight,
+priority and the complete explicit tuple. Maximization negates weights before
+this coalescing; checked overflow remains an error. A numeric zero weight retains
+its numeric priority, as does a numeric contribution whose condition is false in
+a particular answer. A completed empty binding family contributes no priority.
+
+Search preserves all optimal ties within its resource and delivery limits.
+Positive lifted objectives and supported total aggregate observers can pass
+through unique acyclic relation renamings or argument permutations. Dynamic
+priorities from aggregate-generated values require their own complete
+eligibility and presence evidence; accepting an ordinary bound input does not
+grant that certificate. L13 therefore remains open. Flat unary mixed-extrema
 observers have a separate presence certificate; arbitrary filtered, multiple,
 negative, disjunctive or conditional producer patterns do not inherit it.
-Dynamic priorities, additional objective conditions and broader mixed-extrema
-profiles remain restricted. In particular, accepting an extremal term as atom
-data does not imply accepting it in every objective field.
+Additional objective conditions and broader mixed-extrema profiles remain
+restricted. The [priority contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_priorities.rs)
+check complete scored answers, same-binding numeric presence, empty and zero
+cases, evaluation failures and inclusive specialization limits.
 
 Ordinary choices containing only default-negated operands supply no competing
 positive producer. They can compose with certified forwarding or assignment

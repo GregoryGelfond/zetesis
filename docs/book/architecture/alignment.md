@@ -53,7 +53,8 @@ different types of value.
 | Test formula satisfaction | Evaluate an acyclic Boolean graph; require every asserted root | [`models`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/oracle.rs) |
 | Construct and reuse a formula reduct | Freeze candidate truth at every graph node; mask candidate-false nodes during later queries | [`FrozenReduct`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/reduct.rs) |
 | Establish subset minimality | Search for a proper-subset reduct model; propagate Boolean domains and exactly complete unresolved queries | [`zetesis-sat`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/README.md); [`GpuFormulaOracle`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md) |
-| Evaluate an aggregate | Coalesce complete tuple identities, combine eligibility, then reduce count/sum/extrema | [Native aggregate operations](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md#native-numeric-aggregates) |
+| Evaluate an aggregate | Coalesce complete tuple identities, combine eligibility, then reduce count/sum/extrema and compare the bound | [Source formula lowering](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground.rs); [native aggregate operations](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md#native-numeric-aggregates) |
+| Score an answer | Resolve correlated objective fields, retain model-relative eligibility, coalesce complete contribution keys, then sum by priority | [Objective specialization](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/objectives.rs); [cost evaluation](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-objective/src/evaluate.rs) |
 | Check several proposals | Share program data while keeping each interpretation, reduct and verdict separate | [`BatchOracle`](../rust/parallel.md); [commit boundaries](execution.md#immutable-rounds-and-commit-boundaries) |
 
 These are capability mappings. Ordinary relational solving supports lazy source
@@ -206,6 +207,52 @@ The opportunities for parallelism have different dependencies: candidates and
 frozen-subset queries are independent, while nodes depend on their children and
 closure rounds depend on earlier consequences. Parallel evaluation must respect
 those dependencies. Reusing a frozen mask is useful even on one CPU thread.
+
+## Ordered comparisons and objective reductions
+
+Aggregate activity, its measured value and a head's positive permission are
+separate operations. Complete tuple keys coalesce eligible occurrences before
+a count, sum or extremum is taken. A bound tests that result; it does not supply
+support for a head atom. Signed and Boolean operands keep their own activity
+contract throughout this composition.
+
+For a count or sum, every possible measure is numeric. Against a nonnumeric
+logical bound, its order is the same for every complete tuple selection.
+[`numeric_comparison`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground.rs)
+uses that separation to produce a constant comparison instead of a numeric
+threshold. This requires agreement across all tuple masks, including frozen
+queries; classical truth in one candidate would not suffice. Input validation
+and finite binding work still occur. The affected group does not supply a
+numeric count-plan certificate.
+
+Objective evaluation is a different reduction. For a nonconstant admitted priority
+expression, grounding resolves the weight, priority, explicit tuple and positive
+condition from one binding. It retains complete rows with fixed integer
+priorities and leaves the answer-set theory unchanged. At each checked answer,
+the semantic composition is:
+
+```text
+ActiveRows(M) = Filter(row => ConditionTrue(row, M), PreparedObjectiveRows)
+Keys(M)       = Distinct { (Normalize(row.weight), row.priority, row.tuple)
+                          | row in ActiveRows(M) }
+Cost(M, p)    = Sum { key.weight | key in Keys(M), key.priority = p }
+Score(M)      = [ Cost(M, p) | p in the fixed descending priority layout ]
+```
+
+The layout comes from complete admitted binding evidence, not from the rows
+active in one answer: a priority with zero cost stays present. Weight and priority
+must both evaluate to numbers before the row contributes a key. Priority and weight
+cannot be projected independently and recombined. The
+[worked source example](../reference/language.md#objectives-and-observations)
+shows why a smaller sum across all priorities need not be a better score.
+
+The current source specialization and score evaluator run on the host with
+explicit work, allocation and arithmetic bounds. Their composition describes
+exact logical reductions; it does not claim GPU objective execution or admission
+of every aggregate-generated priority. The corresponding
+[`OrderedBounds`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/OrderedBounds.lean)
+and [`ObjectivePriorities`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ObjectivePriorities.lean)
+laws state the complete-mask and complete-row hypotheses separately.
 
 ## Batch the question, preserve every obligation
 

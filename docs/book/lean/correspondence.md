@@ -49,6 +49,31 @@ the existing value-extremum lowering. The laws require complete-key coverage,
 comparison properties and a logical empty value. They do not prove that the
 Rust comparator, source join or charged value copy realizes those premises.
 
+[`OrderedBounds`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/OrderedBounds.lean)
+separates a numeric measure from a logical bound whose order against every
+integer is the same. `constant_aggregate` requires a complete tuple-mask carrier
+and constant comparison on every mask; it then preserves both original truth
+and arbitrary frozen `M/J` queries. `measured_head_in_context` preserves the
+separate positive permissions when the bound is replaced. In Rust,
+[`numeric_comparison`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground.rs)
+uses the existing logical comparator after source and tuple validation. The
+concrete comparator, binding coverage and resource accounting remain executable
+correspondence obligations. Excluding nonnumeric bounds from the numeric count-plan
+certificate is a separate runtime admission rule, not a consequence granted by
+the theorem.
+
+[`ObjectivePriorities`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ObjectivePriorities.lean)
+keeps weight, priority, tuple and eligibility in one resolved row.
+`completed_presence` assumes exact eligible binding coverage; `partition_vector`
+and `partition_optima` preserve the cost vector and all optimal ties under a fixed
+priority layout. The Rust
+[`Activation::specialize`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/objectives.rs)
+resolves each template from the same binding while retaining its positive
+conditions. These laws do not prove that possible aggregate support establishes
+priority presence, that the source join is complete, or that checked arithmetic
+and bounded execution implement mathematical evaluation. Objective laws also do
+not establish search completion or alter answer-set acceptance.
+
 [`ProjectedConditionals`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ProjectedConditionals.lean)
 separates anonymous witness disjunctions, signed source alternatives and
 universal condition rows. The Rust

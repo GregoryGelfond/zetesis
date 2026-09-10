@@ -31,6 +31,8 @@ fn input(source: &str) -> AdmittedFormula {
 // Ground references are authored independently of the runtime schedule. The
 // correlated two-assignment case includes the unrealizable proposal rows.
 const CASES: &[(&str, &str)] = &[
+    ("N{p}:-N=#min{}.", "#sup{p}:-#sup=#min{}."),
+    ("N{p}:-N=#max{}.", "#inf{p}:-#inf=#max{}."),
     ("p(2).q(N):-N=#count{},p(N+1).", "p(2)."),
     (
         "M{p}:-N=#count{},M=#count{}.",
@@ -372,26 +374,16 @@ fn objective_consumers_keep_their_observer_refusal() {
 }
 
 #[test]
-fn nonnumeric_choice_proposals_remain_refused() {
-    for source in ["N{p}:-N=#min{}.", "N{p}:-N=#max{}."] {
-        let error = admit_formula(
-            source.into(),
-            options(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_err();
-        assert!(
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                    feature: ProfileFeature::Aggregate,
-                    ..
-                }))
-            ),
-            "{source}: {error}"
-        );
-    }
+fn empty_minimum_exceeds_every_finite_choice_count() {
+    assert!(native(&input("N{p}:-N=#min{}.")).is_empty());
+}
+
+#[test]
+fn empty_maximum_allows_every_finite_choice_count() {
+    assert_eq!(
+        native(&input("N{p}:-N=#max{}.")),
+        Models::from([BTreeSet::new(), BTreeSet::from(["p".into()])])
+    );
 }
 
 #[test]
