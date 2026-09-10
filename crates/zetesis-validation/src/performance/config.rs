@@ -262,7 +262,7 @@ impl Schedule {
             Some(self.suite)
         }
     }
-    /// Number of solve observations, excluding the three executable metadata calls.
+    /// Number of solve observations, excluding executable metadata calls.
     #[must_use]
     pub fn expected_samples(&self) -> usize {
         self.cases().len() * (2 * (1 + self.warmups + self.repetitions + self.memory_runs()) + 1)
