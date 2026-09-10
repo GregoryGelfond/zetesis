@@ -13,6 +13,19 @@ use zetesis_ferraris::TightVerdict;
 
 const SHADER: &str = include_str!("check.wgsl");
 
+/// Physical construction of the same complete producer-support relation.
+/// This selects a library primitive; it does not change answer-set semantics or
+/// ordinary solver dispatch policy.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TightSupport {
+    /// Producers independently set enabled head bits through atomic OR.
+    #[default]
+    Atomic,
+    /// One invocation reduces every producer belonging to a support word.
+    /// This avoids contended ORs but can serialize large or uneven groups.
+    Grouped,
+}
+
 /// Bounds for one complete support-checking batch, independent of search.
 #[derive(Clone, Copy, Debug)]
 pub struct TightGpuLimits {
@@ -23,7 +36,8 @@ pub struct TightGpuLimits {
     /// driver-private allocations and deferred retirement are excluded. Not RSS.
     pub max_batch_bytes: u64,
     /// Each candidate reserves `nodes + roots + producers + atoms + words`
-    /// operations, where `words = ceil(atoms / 32)` initializes packed support.
+    /// operations, where `words = ceil(atoms / 32)` initializes or constructs
+    /// packed support, according to the selected [`TightSupport`] policy.
     /// Every scan completes, including initialization and scans after an original
     /// failure; this differs from scalar early-exit work. Insufficient work is
     /// refused before dispatch, never converted into a logical result.

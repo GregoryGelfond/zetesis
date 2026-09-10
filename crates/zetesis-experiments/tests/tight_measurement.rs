@@ -22,6 +22,7 @@ fn configuration(family: Family) -> Configuration {
             reference: Reference::ExhaustiveReduct,
         }],
         backend: Backend::Cpu,
+        support: zetesis_experiments::tight_measurement::Support::Atomic,
         warmups: 0,
         repetitions: nonzero(1),
         workers: nonzero(2),
@@ -332,6 +333,55 @@ fn command_defaults_select_declared_physical_cases() {
 #[test]
 fn command_refuses_a_zero_candidate_population() {
     assert!(CommandOptions::try_parse_from(["zetesis-bench", "tight", "--batches", "0"]).is_err());
+}
+
+#[test]
+fn command_records_the_selected_support_construction() {
+    for (name, policy) in [
+        ("atomic", measurement::Support::Atomic),
+        ("grouped", measurement::Support::Grouped),
+    ] {
+        let command =
+            CommandOptions::try_parse_from(["zetesis-bench", "tight", "--support", name]).unwrap();
+        let Experiment::Tight(options) = command.command.unwrap() else {
+            panic!("wrong experiment")
+        };
+        let configuration = options.configuration().unwrap();
+        assert_eq!(configuration.support, policy);
+        assert_eq!(
+            serde_json::to_value(configuration).unwrap()["support"],
+            name
+        );
+    }
+}
+
+#[test]
+fn wide_dimensions_require_an_explicit_support_family() {
+    for family in ["normal", "choices", "support-uniform", "support-skewed"] {
+        let options = |atoms, batches| {
+            let command = CommandOptions::try_parse_from([
+                "zetesis-bench",
+                "tight",
+                "--families",
+                family,
+                "--atoms",
+                atoms,
+                "--batches",
+                batches,
+            ])
+            .unwrap();
+            let Experiment::Tight(options) = command.command.unwrap() else {
+                panic!("wrong experiment")
+            };
+            options.configuration()
+        };
+        assert_eq!(
+            options("4096", "1024").is_ok(),
+            family.starts_with("support-")
+        );
+        assert!(options("4097", "1024").is_err());
+        assert!(options("4096", "1025").is_err());
+    }
 }
 
 #[test]

@@ -9,6 +9,9 @@ use crate::Backend;
 const MAX_CASES: usize = 24;
 const MAX_ATOMS: usize = 256;
 const MAX_OCCURRENCES: usize = 256;
+const MAX_SUPPORT_ATOMS: usize = 4096;
+const MAX_SUPPORT_OCCURRENCES: usize = 1024;
+pub(super) const SUPPORT_MULTIPLICITY: usize = 16;
 const EXHAUSTIVE_ATOMS: usize = 8;
 const MAX_WARMUPS: usize = 6;
 const MAX_REPETITIONS: usize = 60;
@@ -22,6 +25,30 @@ pub enum Family {
     Normal,
     /// Atomic choices, with the final producer guarded by its predecessor when one exists.
     Choices,
+    /// Choice producers duplicated uniformly, sixteen occurrences per head.
+    SupportUniform,
+    /// The same total producer count, with duplicates concentrated on one head.
+    SupportSkewed,
+}
+
+/// Command and report view of physical producer-support construction.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, ValueEnum)]
+#[serde(rename_all = "snake_case")]
+pub enum Support {
+    /// Independent atomic ORs, the ordinary library default.
+    #[default]
+    Atomic,
+    /// One complete local reduction per support word.
+    Grouped,
+}
+
+impl From<Support> for zetesis_wgpu::TightSupport {
+    fn from(support: Support) -> Self {
+        match support {
+            Support::Atomic => Self::Atomic,
+            Support::Grouped => Self::Grouped,
+        }
+    }
 }
 
 /// Independent complete reference instrument, selected before any measurement.
@@ -39,9 +66,11 @@ pub enum Reference {
 pub struct Case {
     /// Complete producer family.
     pub family: Family,
-    /// Total semantic atoms, including one unsupported atom; two through 256.
+    /// Semantic atoms, including an unsupported atom: at most 256 for the two
+    /// original families, or 4096 for the explicit support-distribution families.
     pub atoms: NonZeroUsize,
-    /// Candidate occurrences, one through 256; repetitions retain their identity.
+    /// Candidate occurrences: at most 256 for the original families, or 1024
+    /// for support distributions. Repetitions retain their identity.
     pub candidates: NonZeroUsize,
     /// Complete reference used outside sample timers.
     pub reference: Reference,
@@ -54,6 +83,8 @@ pub struct Configuration {
     pub cases: Vec<Case>,
     /// Require physical Metal/Vulkan or explicitly select only the two CPU routes.
     pub backend: Backend,
+    /// Physical producer-support construction; CPU references stay identical.
+    pub support: Support,
     /// Preparation iterations per route, zero through six.
     pub warmups: usize,
     /// Timed iterations per route, one through sixty.
@@ -78,11 +109,17 @@ impl Configuration {
             return Err(Error::Configuration("require one through 24 cases"));
         }
         for case in &self.cases {
-            if !(2..=MAX_ATOMS).contains(&case.atoms.get())
-                || case.candidates.get() > MAX_OCCURRENCES
+            let (max_atoms, max_occurrences) = match case.family {
+                Family::Normal | Family::Choices => (MAX_ATOMS, MAX_OCCURRENCES),
+                Family::SupportUniform | Family::SupportSkewed => {
+                    (MAX_SUPPORT_ATOMS, MAX_SUPPORT_OCCURRENCES)
+                }
+            };
+            if !(2..=max_atoms).contains(&case.atoms.get())
+                || case.candidates.get() > max_occurrences
             {
                 return Err(Error::Configuration(
-                    "require two through 256 atoms and at most 256 occurrences",
+                    "require 2..256 atoms and at most 256 occurrences; support families permit 2..4096 atoms and at most 1024 occurrences",
                 ));
             }
             if case.reference == Reference::ExhaustiveReduct && case.atoms.get() > EXHAUSTIVE_ATOMS
@@ -110,6 +147,9 @@ pub struct Options {
     /// Require Metal/Vulkan or explicitly select scalar/Rayon checking only.
     #[arg(long, value_enum, default_value_t)]
     pub backend: Backend,
+    /// Physical support construction; applies only to this primitive experiment.
+    #[arg(long, value_enum, default_value_t)]
+    pub support: Support,
     /// Total atoms; widths above eight use general exact reduct references.
     #[arg(long, value_delimiter = ',', default_value = "4,64,256")]
     pub atoms: Vec<NonZeroUsize>,
@@ -172,6 +212,7 @@ impl Options {
         let configuration = Configuration {
             cases,
             backend: self.backend,
+            support: self.support,
             warmups: self.warmups,
             repetitions: self.repetitions,
             workers: self.workers,

@@ -1,6 +1,13 @@
 use super::*;
 use zetesis_ferraris::{AdmissionLimits, Node, Theory, TightPlanLimits};
 
+fn atomic(device: &wgpu::Limits) -> Packing<'_> {
+    Packing {
+        device,
+        support: super::super::TightSupport::Atomic,
+    }
+}
+
 fn certificate() -> TightPlan {
     let theory = Theory::new(1, vec![Node::Atom(0)], vec![0], AdmissionLimits::default()).unwrap();
     TightPlan::compile(&theory, TightPlanLimits::default(), &Control::default()).unwrap()
@@ -14,7 +21,7 @@ fn cold_admission_accounts_graph_upload() {
         &certificate,
         &input,
         TightGpuLimits::default(),
-        &wgpu::Limits::default(),
+        atomic(&wgpu::Limits::default()),
         None,
         0,
         &Control::default(),
@@ -34,13 +41,13 @@ fn cold_admission_accounts_graph_upload() {
 #[test]
 fn matching_identity_reuses_immutable_upload() {
     let certificate = certificate();
-    let graph = Graph::new(&certificate, &wgpu::Limits::default()).unwrap();
+    let graph = Graph::new(&certificate, atomic(&wgpu::Limits::default())).unwrap();
     let input = [Interpretation::new(certificate.theory(), [0]).unwrap()];
     let admission = Admission::new(
         &certificate,
         &input,
         TightGpuLimits::default(),
-        &wgpu::Limits::default(),
+        atomic(&wgpu::Limits::default()),
         Some((&graph, true)),
         4,
         &Control::default(),
@@ -56,13 +63,13 @@ fn matching_identity_reuses_immutable_upload() {
 #[test]
 fn changed_batch_shape_replaces_only_transport() {
     let certificate = certificate();
-    let graph = Graph::new(&certificate, &wgpu::Limits::default()).unwrap();
+    let graph = Graph::new(&certificate, atomic(&wgpu::Limits::default())).unwrap();
     let input = [Interpretation::new(certificate.theory(), [0]).unwrap()];
     let admission = Admission::new(
         &certificate,
         &input,
         TightGpuLimits::default(),
-        &wgpu::Limits::default(),
+        atomic(&wgpu::Limits::default()),
         Some((&graph, false)),
         0,
         &Control::default(),
@@ -77,13 +84,13 @@ fn changed_batch_shape_replaces_only_transport() {
 fn independent_equal_theories_replace_the_graph() {
     let old = certificate();
     let new = certificate();
-    let graph = Graph::new(&old, &wgpu::Limits::default()).unwrap();
+    let graph = Graph::new(&old, atomic(&wgpu::Limits::default())).unwrap();
     let input = [Interpretation::new(new.theory(), [0]).unwrap()];
     let admission = Admission::new(
         &new,
         &input,
         TightGpuLimits::default(),
-        &wgpu::Limits::default(),
+        atomic(&wgpu::Limits::default()),
         Some((&graph, true)),
         1,
         &Control::default(),
@@ -98,13 +105,13 @@ fn independent_equal_theories_replace_the_graph() {
 fn foreign_candidates_refuse_cache_replacement() {
     let old = certificate();
     let new = certificate();
-    let graph = Graph::new(&old, &wgpu::Limits::default()).unwrap();
+    let graph = Graph::new(&old, atomic(&wgpu::Limits::default())).unwrap();
     let input = [Interpretation::new(old.theory(), [0]).unwrap()];
     let error = Admission::new(
         &new,
         &input,
         TightGpuLimits::default(),
-        &wgpu::Limits::default(),
+        atomic(&wgpu::Limits::default()),
         Some((&graph, true)),
         1,
         &Control::default(),
@@ -121,7 +128,7 @@ fn exhausted_epochs_never_wrap_to_old_receipts() {
         &certificate(),
         &[],
         TightGpuLimits::default(),
-        &wgpu::Limits::default(),
+        atomic(&wgpu::Limits::default()),
         None,
         u32::MAX,
         &Control::default(),
@@ -141,7 +148,7 @@ fn cancelled_admission_never_creates_a_plan() {
             &certificate(),
             &[],
             TightGpuLimits::default(),
-            &wgpu::Limits::default(),
+            atomic(&wgpu::Limits::default()),
             None,
             0,
             &control

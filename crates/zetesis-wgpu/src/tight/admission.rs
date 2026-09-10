@@ -1,6 +1,6 @@
 //! Decide identity, complete-scan bounds and cache replacement before effects.
 
-use super::packing::{Graph, PARAM_BYTES, Plan};
+use super::packing::{Graph, PARAM_BYTES, Packing, Plan};
 use super::{TightGpuBatchStats, TightGpuLimits, poll};
 use crate::{GpuError, GpuErrorKind};
 use zetesis_cpu::Control;
@@ -19,7 +19,7 @@ impl Admission {
         certificate: &TightPlan,
         candidates: &[Interpretation],
         limits: TightGpuLimits,
-        device: &wgpu::Limits,
+        packing: Packing<'_>,
         cached: Option<(&Graph, bool)>,
         prior_epoch: u32,
         control: &Control,
@@ -32,7 +32,7 @@ impl Admission {
             if cached.is_some_and(|(graph, _)| graph.theory.same_instance(certificate.theory())) {
                 None
             } else {
-                Some(Graph::new(certificate, device)?)
+                Some(Graph::new(certificate, packing)?)
             };
         let graph = fresh
             .as_ref()
@@ -42,7 +42,7 @@ impl Admission {
             graph,
             candidates.len(),
             limits,
-            device,
+            packing.device,
             fresh.is_some(),
             epoch,
         )?;

@@ -1,6 +1,6 @@
 //! Pure bounded layout, canonical certificate packing and ordered result decoding.
 
-use super::{TightGpuCheck, TightGpuLimits, poll};
+use super::{TightGpuCheck, TightGpuLimits, TightSupport, poll};
 use crate::{GpuError, GpuErrorKind};
 use zetesis_cpu::Control;
 use zetesis_ferraris::{Interpretation, Node, Theory, TightPlan, TightVerdict};
@@ -8,6 +8,7 @@ use zetesis_ferraris::{Interpretation, Node, Theory, TightPlan, TightVerdict};
 pub(super) const PARAM_BYTES: u64 = 32;
 pub(super) const RESULT_WORDS: usize = 6;
 pub(super) const RESULT_MAGIC: u32 = 0x5453_5031;
+pub(super) const RESULT_GROUPED_MAGIC: u32 = 0x5453_4731;
 
 // Wire tags mirror check.wgsl. Producer presence has its own explicit field;
 // an absent body never borrows a node identifier as a sentinel.
@@ -50,10 +51,31 @@ fn words(bytes: u64) -> Result<Vec<u32>, GpuError> {
     vector(usize::try_from(bytes / 4).map_err(|_| capacity("tight buffer exceeds host"))?)
 }
 
+fn producer_storage(producers: u32, words: u32, support: TightSupport) -> Result<u64, GpuError> {
+    let producer_words = u64::from(producers) * 4
+        + if support == TightSupport::Grouped {
+            u64::from(words) + 1
+        } else {
+            0
+        };
+    // The shader addresses records and appended offsets with u32 indices,
+    // independently of a device's hypothetical byte capacity.
+    if producer_words > u64::from(u32::MAX) {
+        return Err(capacity("tight producer indexing exceeds u32"));
+    }
+    Ok(producer_words.max(4) * 4)
+}
+
 pub(super) struct Packed {
     pub(super) nodes: Vec<u32>,
     pub(super) roots: Vec<u32>,
     pub(super) producers: Vec<u32>,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct Packing<'a> {
+    pub(super) device: &'a wgpu::Limits,
+    pub(super) support: TightSupport,
 }
 
 pub(super) struct Graph {
@@ -67,10 +89,20 @@ pub(super) struct Graph {
     pub(super) root_bytes: u64,
     pub(super) producer_bytes: u64,
     pub(super) bytes: u64,
+    /// Simultaneous host packing, including temporary grouped-write cursors.
+    pub(super) packing_bytes: u64,
     pub(super) work: u32,
+    support: TightSupport,
 }
 impl Graph {
-    pub(super) fn new(certificate: &TightPlan, device: &wgpu::Limits) -> Result<Self, GpuError> {
+    const fn result_marker(&self) -> u32 {
+        match self.support {
+            TightSupport::Atomic => RESULT_MAGIC,
+            TightSupport::Grouped => RESULT_GROUPED_MAGIC,
+        }
+    }
+
+    pub(super) fn new(certificate: &TightPlan, packing: Packing<'_>) -> Result<Self, GpuError> {
         let theory = certificate.theory();
         let atoms = address(theory.atom_count())?;
         let nodes = address(theory.nodes().len())?;
@@ -91,10 +123,13 @@ impl Graph {
             .ok_or_else(|| capacity("tight complete-scan work exceeds u32"))?;
         let node_bytes = u64::from(nodes.max(1)) * 16;
         let root_bytes = u64::from(roots.max(1)) * 4;
-        let producer_bytes = u64::from(producers.max(1)) * 16;
+        let grouped = packing.support == TightSupport::Grouped;
+        let producer_bytes = producer_storage(producers, words, packing.support)?;
         for bytes in [node_bytes, root_bytes, producer_bytes] {
-            buffer(bytes, device)?;
+            buffer(bytes, packing.device)?;
         }
+        let bytes = sum(&[node_bytes, root_bytes, producer_bytes])?;
+        let packing_bytes = sum(&[bytes, if grouped { u64::from(words) * 4 } else { 0 }])?;
         Ok(Self {
             theory: theory.clone(),
             atoms,
@@ -105,8 +140,10 @@ impl Graph {
             node_bytes,
             root_bytes,
             producer_bytes,
-            bytes: sum(&[node_bytes, root_bytes, producer_bytes])?,
+            bytes,
+            packing_bytes,
             work,
+            support: packing.support,
         })
     }
 
@@ -143,24 +180,66 @@ impl Graph {
         if roots.is_empty() {
             roots.push(0);
         }
-        let mut producers = words(self.producer_bytes)?;
-        for producer in certificate.producers() {
-            poll(control)?;
-            let (body, present) = match producer.body() {
-                Some(body) => (address(body)?, 1),
-                None => (0, 0),
-            };
-            producers.extend([address(producer.head())?, body, present, 0]);
-        }
-        if producers.is_empty() {
-            producers.extend([0; 4]);
-        }
+        let producers = self.pack_producers(certificate, control)?;
         Ok(Packed {
             nodes,
             roots,
             producers,
         })
     }
+
+    fn pack_producers(
+        &self,
+        certificate: &TightPlan,
+        control: &Control,
+    ) -> Result<Vec<u32>, GpuError> {
+        let mut output = words(self.producer_bytes)?;
+        if self.support == TightSupport::Atomic {
+            for producer in certificate.producers() {
+                poll(control)?;
+                output.extend(producer_record(producer)?);
+            }
+            if output.is_empty() {
+                output.extend([0; 4]);
+            }
+            return Ok(output);
+        }
+        let length = usize::try_from(self.producer_bytes / 4)
+            .map_err(|_| capacity("tight producers exceed host"))?;
+        output.resize(length, 0);
+        let offsets = self.producers as usize * 4;
+        // Counts occupy the next group's slot. Prefix summation produces W+1
+        // half-open offsets, including zero-length groups and the final bound P.
+        for producer in certificate.producers() {
+            poll(control)?;
+            output[offsets + producer.head() / 32 + 1] += 1;
+        }
+        for word in 0..self.words as usize {
+            poll(control)?;
+            let prefix = output[offsets + word];
+            output[offsets + word + 1] += prefix;
+        }
+        let mut cursors = vector(self.words as usize)?;
+        cursors.extend_from_slice(&output[offsets..offsets + self.words as usize]);
+        // Each canonical occurrence advances precisely its word's cursor once.
+        // Thus all occurrences are retained, in original order within a group.
+        for producer in certificate.producers() {
+            poll(control)?;
+            let cursor = &mut cursors[producer.head() / 32];
+            let start = *cursor as usize * 4;
+            output[start..start + 4].copy_from_slice(&producer_record(producer)?);
+            *cursor += 1;
+        }
+        Ok(output)
+    }
+}
+
+fn producer_record(producer: &zetesis_ferraris::TightProducer) -> Result<[u32; 4], GpuError> {
+    let (body, present) = match producer.body() {
+        Some(body) => (address(body)?, 1),
+        None => (0, 0),
+    };
+    Ok([address(producer.head())?, body, present, 0])
 }
 
 pub(super) struct Plan {
@@ -219,7 +298,7 @@ impl Plan {
             PARAM_BYTES,
             seeds,
             host_results,
-            if fresh { graph.bytes } else { 0 },
+            if fresh { graph.packing_bytes } else { 0 },
         ])?;
         if worlds != 0 && accounted > limits.max_batch_bytes {
             return Err(capacity("tight batch exceeds authored byte ceiling"));
@@ -303,7 +382,7 @@ pub(super) fn decode(
         if row[0] != plan.epoch
             || row[1] as usize != world
             || row[4] != plan.work
-            || row[5] != RESULT_MAGIC
+            || row[5] != graph.result_marker()
         {
             return Err(fail());
         }
@@ -335,3 +414,7 @@ pub(super) fn decode(
 #[cfg(test)]
 #[path = "../../tests/tight/packing.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "../../tests/tight/grouping.rs"]
+mod grouping_tests;

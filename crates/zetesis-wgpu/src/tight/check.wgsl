@@ -13,6 +13,7 @@ const STATUS_NOT_MODEL: u32 = 1u;
 const STATUS_RESIDUAL: u32 = 2u;
 const RESULT_WORDS: u32 = 6u;
 const RESULT_MAGIC: u32 = 0x54535031u;
+const RESULT_GROUPED_MAGIC: u32 = 0x54534731u;
 struct Params {
     atoms: u32, nodes: u32, roots: u32, producers: u32,
     words: u32, worlds: u32, work: u32, epoch: u32,
@@ -22,7 +23,9 @@ struct Producer { head: u32, body: u32, has_body: u32, padding: u32 }
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var<storage, read> nodes: array<Node>;
 @group(0) @binding(2) var<storage, read> roots: array<u32>;
-@group(0) @binding(3) var<storage, read> producers: array<Producer>;
+// Atomic construction stores canonical records. Grouped construction stores
+// word-grouped records followed by W+1 half-open producer offsets.
+@group(0) @binding(3) var<storage, read> producers: array<u32>;
 @group(0) @binding(4) var<storage, read> candidates: array<u32>;
 @group(0) @binding(5) var<storage, read_write> truth: array<u32>;
 @group(0) @binding(6) var<storage, read_write> support: array<atomic<u32>>;
@@ -39,9 +42,18 @@ fn operation(tag: u32, left: bool, right: bool) -> bool {
     return !left || right;
 }
 
-@compute @workgroup_size(WORKGROUP_SIZE)
-fn check(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lane: u32) {
-    let world = group.x;
+fn producer_at(index: u32) -> Producer {
+    let base = index * 4u;
+    return Producer(producers[base], producers[base + 1u],
+        producers[base + 2u], producers[base + 3u]);
+}
+
+fn enabled(producer: Producer, values: u32) -> bool {
+    if (producer.has_body != 0u) { return truth[values + producer.body] != 0u; }
+    return true;
+}
+
+fn check_support(world: u32, lane: u32, grouped: bool) {
     let values = world * params.nodes;
     let supported = world * params.words;
     if (lane == 0u) {
@@ -59,8 +71,10 @@ fn check(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_inde
             truth[values + index] = select(0u, 1u, value);
         }
     }
-    for (var word = lane; word < params.words; word += WORKGROUP_SIZE) {
-        atomicStore(&support[supported + word], 0u);
+    if (!grouped) {
+        for (var word = lane; word < params.words; word += WORKGROUP_SIZE) {
+            atomicStore(&support[supported + word], 0u);
+        }
     }
     storageBarrier();
     workgroupBarrier();
@@ -69,14 +83,27 @@ fn check(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_inde
             atomicMin(&first_root, ordinal);
         }
     }
-    for (var index = lane; index < params.producers; index += WORKGROUP_SIZE) {
-        let producer = producers[index];
-        var enabled = true;
-        if (producer.has_body != 0u) { enabled = truth[values + producer.body] != 0u; }
-        // Distinct heads may share a word. Atomic OR preserves every enabled
-        // producer's bit, including duplicate producers for the same head.
-        if (enabled) {
-            atomicOr(&support[supported + producer.head / 32u], 1u << (producer.head % 32u));
+    if (grouped) {
+        let offsets = params.producers * 4u;
+        for (var word = lane; word < params.words; word += WORKGROUP_SIZE) {
+            var mask = 0u;
+            let end = producers[offsets + word + 1u];
+            for (var index = producers[offsets + word]; index < end; index += 1u) {
+                let producer = producer_at(index);
+                if (enabled(producer, values)) { mask |= 1u << (producer.head % 32u); }
+            }
+            // Exactly one invocation owns this word. Empty groups overwrite
+            // earlier batches with zero; valid heads never set padding bits.
+            atomicStore(&support[supported + word], mask);
+        }
+    } else {
+        for (var index = lane; index < params.producers; index += WORKGROUP_SIZE) {
+            let producer = producer_at(index);
+            // Distinct heads may share a word. Atomic OR preserves every enabled
+            // producer's bit, including duplicate producers for the same head.
+            if (enabled(producer, values)) {
+                atomicOr(&support[supported + producer.head / 32u], 1u << (producer.head % 32u));
+            }
         }
     }
     storageBarrier();
@@ -101,6 +128,18 @@ fn check(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_inde
         results[base + 2u] = status;
         results[base + 3u] = witness;
         results[base + 4u] = params.work;
-        results[base + 5u] = RESULT_MAGIC;
+        // The same branch selector determines support construction and its
+        // receipt. The host refuses a record from the other physical policy.
+        results[base + 5u] = select(RESULT_MAGIC, RESULT_GROUPED_MAGIC, grouped);
     }
+}
+
+@compute @workgroup_size(WORKGROUP_SIZE)
+fn check(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lane: u32) {
+    check_support(group.x, lane, false);
+}
+
+@compute @workgroup_size(WORKGROUP_SIZE)
+fn check_grouped(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lane: u32) {
+    check_support(group.x, lane, true);
 }

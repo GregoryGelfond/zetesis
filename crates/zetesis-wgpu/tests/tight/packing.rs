@@ -1,6 +1,13 @@
 use super::*;
 use zetesis_ferraris::{AdmissionLimits, TightPlanLimits};
 
+fn atomic(device: &wgpu::Limits) -> Packing<'_> {
+    Packing {
+        device,
+        support: TightSupport::Atomic,
+    }
+}
+
 fn certificate() -> TightPlan {
     let theory = Theory::new(
         3,
@@ -22,7 +29,7 @@ fn certificate() -> TightPlan {
     TightPlan::compile(&theory, TightPlanLimits::default(), &Control::default()).unwrap()
 }
 fn graph() -> Graph {
-    Graph::new(&certificate(), &wgpu::Limits::default()).unwrap()
+    Graph::new(&certificate(), atomic(&wgpu::Limits::default())).unwrap()
 }
 fn plan(graph: &Graph, count: usize, fresh: bool) -> Plan {
     Plan::new(
@@ -51,7 +58,7 @@ fn decode_present(
 #[test]
 fn certificate_packing_retains_original_formula_structure() {
     let certificate = certificate();
-    let graph = Graph::new(&certificate, &wgpu::Limits::default()).unwrap();
+    let graph = Graph::new(&certificate, atomic(&wgpu::Limits::default())).unwrap();
     let packed = graph.pack(&certificate, &Control::default()).unwrap();
     assert_eq!(
         packed.nodes,
@@ -80,12 +87,21 @@ fn valid_rank_choices_do_not_change_cached_producers() {
     )
     .unwrap();
     assert_ne!(original.ranks(), alternate.ranks());
-    let graph = Graph::new(&original, &wgpu::Limits::default()).unwrap();
-    let first = graph.pack(&original, &Control::default()).unwrap();
-    let second = graph.pack(&alternate, &Control::default()).unwrap();
-    assert_eq!(first.producers, second.producers);
-    assert_eq!(first.nodes, second.nodes);
-    assert_eq!(first.roots, second.roots);
+    for support in [TightSupport::Atomic, TightSupport::Grouped] {
+        let graph = Graph::new(
+            &original,
+            Packing {
+                device: &wgpu::Limits::default(),
+                support,
+            },
+        )
+        .unwrap();
+        let first = graph.pack(&original, &Control::default()).unwrap();
+        let second = graph.pack(&alternate, &Control::default()).unwrap();
+        assert_eq!(first.producers, second.producers);
+        assert_eq!(first.nodes, second.nodes);
+        assert_eq!(first.roots, second.roots);
+    }
 }
 
 #[test]
@@ -147,7 +163,7 @@ fn empty_carriers_keep_only_required_buffer_padding() {
     let theory = Theory::new(0, vec![], vec![], AdmissionLimits::default()).unwrap();
     let certificate =
         TightPlan::compile(&theory, TightPlanLimits::default(), &Control::default()).unwrap();
-    let graph = Graph::new(&certificate, &wgpu::Limits::default()).unwrap();
+    let graph = Graph::new(&certificate, atomic(&wgpu::Limits::default())).unwrap();
     let packed = graph.pack(&certificate, &Control::default()).unwrap();
     assert_eq!(packed.nodes, [0; 4]);
     assert_eq!(packed.roots, [0]);
@@ -172,7 +188,7 @@ fn candidate_word_tails_never_introduce_atoms() {
         let theory = Theory::new(count, vec![], vec![], AdmissionLimits::default()).unwrap();
         let certificate =
             TightPlan::compile(&theory, TightPlanLimits::default(), &Control::default()).unwrap();
-        let graph = Graph::new(&certificate, &wgpu::Limits::default()).unwrap();
+        let graph = Graph::new(&certificate, atomic(&wgpu::Limits::default())).unwrap();
         let input = [
             Interpretation::new(&theory, 0..count).unwrap(),
             Interpretation::new(&theory, [count - 1]).unwrap(),
@@ -203,7 +219,7 @@ fn support_storage_uses_packed_world_rows() {
         let theory = Theory::new(atoms, vec![], vec![], AdmissionLimits::default()).unwrap();
         let certificate =
             TightPlan::compile(&theory, TightPlanLimits::default(), &Control::default()).unwrap();
-        let graph = Graph::new(&certificate, &wgpu::Limits::default()).unwrap();
+        let graph = Graph::new(&certificate, atomic(&wgpu::Limits::default())).unwrap();
         for worlds in [1, 3, 65] {
             let expected = u64::try_from((width * worlds).max(1)).unwrap() * 4;
             assert_eq!(plan(&graph, worlds, false).support, expected);
@@ -226,7 +242,7 @@ fn support_work_charges_word_initialization() {
         let theory = Theory::new(atoms, vec![], vec![], AdmissionLimits::default()).unwrap();
         let certificate =
             TightPlan::compile(&theory, TightPlanLimits::default(), &Control::default()).unwrap();
-        let graph = Graph::new(&certificate, &wgpu::Limits::default()).unwrap();
+        let graph = Graph::new(&certificate, atomic(&wgpu::Limits::default())).unwrap();
         assert_eq!(graph.work, expected);
     }
 }
@@ -330,7 +346,10 @@ fn device_storage_limits_apply_before_host_packing() {
         ..Default::default()
     };
     assert_eq!(
-        Graph::new(&certificate, &tiny).err().unwrap().kind(),
+        Graph::new(&certificate, atomic(&tiny))
+            .err()
+            .unwrap()
+            .kind(),
         GpuErrorKind::Capacity
     );
 }
@@ -486,7 +505,7 @@ fn out_of_range_root_ordinals_are_readback_failures() {
 #[test]
 fn cancellation_prevents_completed_results() {
     let certificate = certificate();
-    let graph = Graph::new(&certificate, &wgpu::Limits::default()).unwrap();
+    let graph = Graph::new(&certificate, atomic(&wgpu::Limits::default())).unwrap();
     let plan = plan(&graph, 1, true);
     let control = Control::default();
     control.cancel();
@@ -532,7 +551,7 @@ fn empty_graph() -> Graph {
     let theory = Theory::new(0, vec![], vec![], AdmissionLimits::default()).unwrap();
     let certificate =
         TightPlan::compile(&theory, TightPlanLimits::default(), &Control::default()).unwrap();
-    Graph::new(&certificate, &wgpu::Limits::default()).unwrap()
+    Graph::new(&certificate, atomic(&wgpu::Limits::default())).unwrap()
 }
 
 #[test]
@@ -565,7 +584,7 @@ fn empty_storage_padding_never_becomes_a_witness() {
     // Zero is a valid ordinal when an actual asserted root occupies it.
     let theory = Theory::new(0, vec![Node::False], vec![0], AdmissionLimits::default()).unwrap();
     let certificate = TightPlan::compile(&theory, TightPlanLimits::default(), &control).unwrap();
-    let graph = Graph::new(&certificate, &wgpu::Limits::default()).unwrap();
+    let graph = Graph::new(&certificate, atomic(&wgpu::Limits::default())).unwrap();
     let asserted = plan(&graph, 1, false);
     let result = super::decode(
         &[7, 0, STATUS_NOT_MODEL, 0, 2, RESULT_MAGIC],

@@ -43,7 +43,7 @@ checking; it is not automatically a rejection. These are different procedures
 for the same reduct-based membership contract.
 
 The device [ranked-support checker](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/tight/check.wgsl)
-stores support as one bit per semantic atom in each candidate's row. It clears
+stores support as one bit per semantic atom in each candidate's row. By default it clears
 the row, then each enabled original producer atomically sets its head bit.
 After the storage barrier, a bit is set exactly when that head has an enabled
 producer. Atomic OR preserves updates from different heads sharing a word and
@@ -54,9 +54,25 @@ memory or establish a speedup. Shared-word contention remains a measurement
 question. This checker is a reusable device primitive; its availability does
 not imply that ordinary solves select it.
 
-For 256 atoms and 128 candidates, the support buffer occupies 4,096 bytes
-instead of 131,072 bytes. This saves 126,976 bytes of logical device buffer
-storage. Uploaded and downloaded payloads are unchanged.
+The library also exposes `TightSupport::Grouped` through
+`GpuTightOracle::new_with_support`. Packing places each original producer in the
+group for its head's support word, retaining duplicate occurrences. One
+invocation reduces that complete group into a local bit mask and overwrites the
+word once. Empty groups write zero. This replaces contended producer ORs with
+word ownership; original truth, root precedence, barriers and the least-atom
+witness scan retain the same contract. The graph adds `ceil(atoms / 32) + 1`
+32-bit offsets; fresh packing also needs one temporary 32-bit cursor per word.
+Both payloads are charged before allocation. Few or uneven groups can limit
+parallelism, so grouped construction is an explicit alternative, not the default.
+The result marker identifies the branch that constructed support. A mismatched
+policy marker is a readback failure even if the reported verdict agrees; this
+validates the protocol, without proving the shader or device implementation.
+
+For 256 atoms and 128 candidates, the packed support buffer occupies 4,096 bytes
+instead of the earlier per-atom buffer's 131,072 bytes. This saves 126,976 bytes
+of logical device buffer storage. Bit packing alone leaves uploaded and
+downloaded payloads unchanged; grouped construction additionally uploads its
+immutable offsets on a fresh theory.
 
 ## CPU and GPU responsibilities
 

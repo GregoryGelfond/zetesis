@@ -110,6 +110,21 @@ GPU work counts complete node, root, producer and atom scans plus initialization
 of `ceil(atoms / 32)` support words per candidate. Scalar early-exit work uses
 different charges. Reported transport bytes include the packed support buffer;
 they are logical requested payload, not process RSS or total device memory.
+`--support atomic` keeps independent atomic producer writes; `--support grouped`
+selects one complete reduction per support word. The configuration records this
+selection. Both preserve the same complete producer occurrences and independently
+checked witnesses. Grouped construction adds word offsets and temporary packing
+cursors, with exact admission accounting; a smaller number of atomic updates
+does not establish faster execution. This option belongs to the primitive
+benchmark, not the ordinary solver command.
+The explicit `support-uniform` and `support-skewed` families keep the same choice
+DAG and candidate sequence. Both retain sixteen producer occurrences per
+supported atom in total. Uniform distributes repetitions evenly; skewed retains
+each original once and concentrates the remaining occurrences on one head.
+Their separate limits are 4096 atoms, 1024 candidates and 65,520 producers.
+Normal and choices retain their original 256-atom and 256-candidate limits.
+Prepared events retain the complete occurrence sequences; timings from these
+larger families require separate resource and measurement qualification.
 See [tight API](src/tight_measurement.rs) and
 [checking tests](tests/tight/checking.rs).
 

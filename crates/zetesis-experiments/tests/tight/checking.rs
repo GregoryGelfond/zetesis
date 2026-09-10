@@ -12,6 +12,7 @@ fn configuration(family: Family) -> Configuration {
             reference: Reference::ExhaustiveReduct,
         }],
         backend: crate::Backend::Cpu,
+        support: crate::tight_measurement::Support::Atomic,
         warmups: 0,
         repetitions: NonZeroUsize::new(1).unwrap(),
         workers: NonZeroUsize::new(2).unwrap(),
@@ -26,7 +27,12 @@ fn configuration(family: Family) -> Configuration {
 #[test]
 fn tiny_certificates_agree_with_every_reduct_subset() {
     let control = Control::default();
-    for family in [Family::Normal, Family::Choices] {
+    for family in [
+        Family::Normal,
+        Family::Choices,
+        Family::SupportUniform,
+        Family::SupportSkewed,
+    ] {
         let configuration = configuration(family);
         let prepared = prepare(configuration.cases[0], &configuration, &control).unwrap();
         let theory = &prepared.fixture.theory;

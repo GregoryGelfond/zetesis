@@ -47,7 +47,7 @@ pub use lazy::{
 };
 pub use tight::{
     GpuTightOracle, TightGpuActivity, TightGpuBatchStats, TightGpuCheck, TightGpuError,
-    TightGpuLimits,
+    TightGpuLimits, TightSupport,
 };
 
 pub use selection::{

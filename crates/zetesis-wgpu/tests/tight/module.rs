@@ -10,9 +10,11 @@ fn support_shader_validates_without_optional_features() {
     )
     .validate(&module)
     .expect("topology and cooperative barriers validate");
-    assert_eq!(module.entry_points.len(), 1);
-    assert_eq!(module.entry_points[0].name, "check");
-    assert_eq!(module.entry_points[0].workgroup_size, [64, 1, 1]);
+    assert_eq!(module.entry_points.len(), 2);
+    for (entry, name) in module.entry_points.iter().zip(["check", "check_grouped"]) {
+        assert_eq!(entry.name, name);
+        assert_eq!(entry.workgroup_size, [64, 1, 1]);
+    }
 }
 
 #[test]
@@ -30,6 +32,7 @@ fn shader_constants_preserve_the_wire_contract() {
         ("STATUS_RESIDUAL", 2),
         ("RESULT_WORDS", 6),
         ("RESULT_MAGIC", 0x5453_5031),
+        ("RESULT_GROUPED_MAGIC", 0x5453_4731),
     ] {
         let (_, constant) = module
             .constants

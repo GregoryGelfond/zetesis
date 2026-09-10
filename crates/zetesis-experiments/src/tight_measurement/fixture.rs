@@ -1,6 +1,6 @@
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
 
-use super::{Case, Error, Family, reserve};
+use super::{Case, Error, Family, config::SUPPORT_MULTIPLICITY, reserve};
 
 const PATTERN_BITS: usize = 8;
 const PATTERNS: usize = 1 << PATTERN_BITS;
@@ -18,12 +18,16 @@ pub(super) fn build(case: Case) -> Result<Fixture, Error> {
     for atom in 0..atoms {
         nodes.push(Node::Atom(atom));
     }
-    let mut roots = reserve(atoms - 1)?;
+    let multiplicity = match case.family {
+        Family::Normal | Family::Choices => 1,
+        Family::SupportUniform | Family::SupportSkewed => SUPPORT_MULTIPLICITY,
+    };
+    let mut roots = reserve((atoms - 1) * multiplicity)?;
     for atom in 0..atoms - 1 {
         let head = atom + 1;
         let consequent = match case.family {
             Family::Normal => head,
-            Family::Choices => {
+            Family::Choices | Family::SupportUniform | Family::SupportSkewed => {
                 nodes.push(Node::Implies(head, 0));
                 nodes.push(Node::Or(head, nodes.len() - 1));
                 nodes.len() - 1
@@ -40,6 +44,20 @@ pub(super) fn build(case: Case) -> Result<Fixture, Error> {
     }
     // Root order is part of the witness contract; it need not be node-ID order.
     roots.reverse();
+    let original = roots.len();
+    match case.family {
+        Family::Normal | Family::Choices => {}
+        Family::SupportUniform => {
+            for _ in 1..multiplicity {
+                roots.extend_from_within(..original);
+            }
+        }
+        Family::SupportSkewed => {
+            // Keep every original root once. Repetitions all use the last
+            // supported head, while total roots/producers match Uniform.
+            roots.resize(original * multiplicity, roots[0]);
+        }
+    }
     let theory =
         Theory::new(atoms, nodes, roots, AdmissionLimits::default()).map_err(Error::Admission)?;
     let mut candidates = reserve(case.candidates.get())?;
@@ -54,3 +72,7 @@ pub(super) fn build(case: Case) -> Result<Fixture, Error> {
     }
     Ok(Fixture { theory, candidates })
 }
+
+#[cfg(test)]
+#[path = "../../tests/tight/fixtures.rs"]
+mod tests;

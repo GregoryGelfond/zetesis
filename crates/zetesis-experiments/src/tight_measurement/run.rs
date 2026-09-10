@@ -5,7 +5,7 @@ use zetesis_ferraris::TightVerdict;
 use zetesis_wgpu::{GpuOptions, GpuSelection, GpuTightOracle};
 
 use super::{
-    Activity, Configuration, DeviceWork, Error, Event, Observation, Phase, Route, Sample,
+    Activity, Configuration, DeviceWork, Error, Event, Observation, Phase, Route, Sample, Support,
     checking::{self, Prepared},
     reserve,
     view::{Formula, Producer, Residency},
@@ -64,8 +64,14 @@ impl Resources {
         };
         if let Some((fresh_route, resident_route)) = physical_routes {
             let selection = configuration.backend.selection().ok_or(Error::DeviceWork)?;
-            let fresh = device(fresh_route, selection, control, emit)?;
-            let resident = device(resident_route, selection, control, emit)?;
+            let fresh = device(fresh_route, selection, configuration.support, control, emit)?;
+            let resident = device(
+                resident_route,
+                selection,
+                configuration.support,
+                control,
+                emit,
+            )?;
             if fresh.info().metadata() != resident.info().metadata() {
                 return Err(Error::DeviceWork);
             }
@@ -79,13 +85,17 @@ impl Resources {
 fn device(
     route: Route,
     selection: GpuSelection,
+    support: Support,
     control: &Control,
     emit: &mut impl FnMut(&Event<'_>) -> io::Result<()>,
 ) -> Result<GpuTightOracle, Error> {
     control.poll().map_err(Error::Cpu)?;
     let start = Instant::now();
-    let oracle =
-        GpuTightOracle::new_selected(GpuOptions::default(), selection).map_err(Error::Device)?;
+    let oracle = GpuTightOracle::new_with_support(GpuOptions::default(), selection, support.into())
+        .map_err(Error::Device)?;
+    if oracle.support() != support.into() {
+        return Err(Error::DeviceWork);
+    }
     publish(
         emit,
         &Event::Setup {

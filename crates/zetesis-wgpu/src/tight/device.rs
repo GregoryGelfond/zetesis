@@ -1,10 +1,11 @@
 //! Device ownership for a separately checked complete-theory certificate.
 
 use super::admission::Admission;
+use super::packing::Packing;
 use super::transport::{Execution, Resident};
 use super::{
     SHADER, TightGpuActivity, TightGpuBatchStats, TightGpuCheck, TightGpuError, TightGpuLimits,
-    poll,
+    TightSupport, poll,
 };
 use crate::runtime::{DeviceProfile, ErrorScopes, Runtime};
 use crate::{GpuBackendPreference, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
@@ -23,12 +24,15 @@ use zetesis_ferraris::{Interpretation, TightPlan};
 /// workgroup evaluates its DAG sequentially, then shares root/support scans
 /// across 64 invocations. Truth uses one word per node; candidate membership and
 /// producer support use one bit per atom, in separate world-major arrays. Heads
-/// sharing a support word use atomic OR; their contention can affect throughput.
+/// sharing a support word use atomic OR by default. Grouped support instead
+/// visits each word's producers sequentially in one invocation; this trades
+/// contention for an index and potentially uneven parallel work.
 /// Shared graph and transport storage have explicit byte bounds. The oracle
 /// retains one shared theory handle and one exact transport
 /// shape, without cloning the caller's certificate or storing its ranks.
 pub struct GpuTightOracle {
     runtime: Runtime,
+    support: TightSupport,
     resident: Option<Resident>,
     epoch: u32,
     last: Option<TightGpuBatchStats>,
@@ -55,6 +59,24 @@ impl GpuTightOracle {
     /// # Errors
     /// Returns typed adapter, capability, allocation, validation or device errors.
     pub fn new_selected(options: GpuOptions, selection: GpuSelection) -> Result<Self, GpuError> {
+        Self::new_with_support(options, selection, TightSupport::Atomic)
+    }
+
+    /// Create a device with an explicit producer-support construction policy.
+    /// The policy remains fixed for the oracle's lifetime. Grouped construction
+    /// retains one offset per support word plus an end offset; its temporary
+    /// packing cursors are included in fresh-batch byte admission.
+    /// Each complete device record identifies the construction branch. The
+    /// decoder refuses a marker for the other policy, even if its verdict agrees.
+    /// This is protocol validation, not a proof of shader or hardware correctness.
+    ///
+    /// # Errors
+    /// Returns the same typed construction failures as [`Self::new_selected`].
+    pub fn new_with_support(
+        options: GpuOptions,
+        selection: GpuSelection,
+        support: TightSupport,
+    ) -> Result<Self, GpuError> {
         let runtime = pollster::block_on(Runtime::new(
             options,
             selection,
@@ -63,17 +85,26 @@ impl GpuTightOracle {
                 shader_label: "ranked producer support",
                 pipeline_label: "complete original support",
                 shader: SHADER.into(),
-                entry_point: "check",
+                entry_point: match support {
+                    TightSupport::Atomic => "check",
+                    TightSupport::Grouped => "check_grouped",
+                },
                 validate_limits: check_limits,
             },
         ))?;
         Ok(Self {
             runtime,
+            support,
             resident: None,
             epoch: 0,
             last: None,
             activity: TightGpuActivity::default(),
         })
+    }
+    /// Fixed physical support-construction policy; no device operation.
+    #[must_use]
+    pub const fn support(&self) -> TightSupport {
+        self.support
     }
     /// Actual selected native adapter identity; no device operation.
     #[must_use]
@@ -146,7 +177,10 @@ impl GpuTightOracle {
             certificate,
             candidates,
             limits,
-            &self.runtime.limits,
+            Packing {
+                device: &self.runtime.limits,
+                support: self.support,
+            },
             self.resident
                 .as_ref()
                 .map(|resident| (&resident.graph, resident.matches_count(candidates.len()))),

@@ -348,6 +348,7 @@ pub enum Event<'a> {
 struct ConfigurationView<'a> {
     cases: &'a [Case],
     backend: &'static str,
+    support: super::Support,
     warmups: usize,
     repetitions: usize,
     workers: usize,
@@ -430,6 +431,7 @@ impl Serialize for Configuration {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         ConfigurationView {
             cases: &self.cases, backend: self.backend.label(),
+            support: self.support,
             warmups: self.warmups, repetitions: self.repetitions.get(), workers: self.workers.get(),
             residual_policy: "serial occurrence-ordered native general reduct queries on every route",
             plan_limits: &self.plan_limits, certificate_limits: &self.certificate_limits,
