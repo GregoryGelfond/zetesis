@@ -106,7 +106,7 @@ fn bundled_llvm_versions_preserve_schedule() {
 }
 #[test]
 fn omitted_physical_group_prevents_instrumentation() {
-    for group in ["lazy", "relation"] {
+    for group in ["lazy", "relation", "relation-measurement"] {
         let f = Fixture::new();
         let row = groups()
             .into_iter()
@@ -160,7 +160,12 @@ fn altered_physical_records_prevent_completion() {
 }
 #[test]
 fn failed_physical_execution_preserves_its_exit_code() {
-    for group in ["wgpu-lib", "aggregate-measurement", "relation"] {
+    for group in [
+        "wgpu-lib",
+        "aggregate-measurement",
+        "relation",
+        "relation-measurement",
+    ] {
         let f = Fixture::new();
         let result = f.coverage(
             "gate",
