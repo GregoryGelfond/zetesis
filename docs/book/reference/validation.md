@@ -129,6 +129,25 @@ reported child peak RSS excludes the measuring helper and is neither simultaneou
 process-tree memory nor GPU memory. These selected/resource campaigns use their
 own versioned report view.
 
+For example, compare three different encodings with complete CPU/eager solves:
+
+```sh
+zetesis-perf examples/kr-domains \
+  --case standalone/n-queens/variant-02.lp \
+  --case standalone/send-money/send-money.lp \
+  --case scenarios/task-allocation/variant-04/05-larger-mix.lp \
+  --zetesis /path/to/zetesis --clingo /path/to/clingo \
+  --warmups 2 --repetitions 9 --memory-runs 0 \
+  --timeout-seconds 10 --campaign-seconds 120 \
+  --report target/cpu-eager.json
+```
+
+Replace the executable paths and choose an unused report path. This example
+uses one native closure worker, one native completion worker and one clingo
+worker. Each case has qualification, two warmup pairs, nine timed pairs and a
+separate native statistics observation. The report retains those populations
+independently. These three cases are a selection, not the complete corpus.
+
 Stop competing builds, tests and measurements before a timing campaign. A small
 fixture can establish semantic agreement while being too small to demonstrate
 useful parallel speedup. Conversely, a shorter run is not an improvement if it

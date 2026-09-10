@@ -70,8 +70,9 @@ A failed pattern cannot leak partial bindings into another row.
 Dependency-ordered scalar equalities, finite interval cursors and admitted
 closed integer comparison bounds can generate values. Source order does not
 establish safety. Already-bound equalities remain filters. Arithmetic inversion,
-unanchored cycles, chains with several unresolved integer variables and pools or
-intervals nested under constructors remain outside this profile.
+unanchored cycles and chains with several unresolved integer variables remain
+outside this profile. Nested pools and broader constructor/interval contexts
+remain restricted; admitted consequent alternatives are described below.
 
 Arithmetic uses checked `i32` operations. Undefined or overflowing evaluation
 refuses admission instead of silently dropping a substitution. Descending or

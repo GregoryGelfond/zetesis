@@ -153,7 +153,9 @@ precise boundaries, including shared atoms and tuples in aggregate heads and
 complete logical values in extrema heads.
 Choice and aggregate-head elements preserve `not` and `not not` explicitly.
 Default-negated operands contribute activity without positive producer support;
-Boolean operands carry truth without creating atoms. The
+Boolean operands carry truth without creating atoms. Universal body conditionals
+apply default and double negation after complete finite anonymous witness
+projection. The
 [language coverage checklist](docs/book/reference/language-coverage.md) identifies
 remaining obligations and unclassified scopes.
 
