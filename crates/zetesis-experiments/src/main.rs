@@ -6,6 +6,10 @@ fn main() -> std::process::ExitCode {
     let options = zetesis_experiments::CommandOptions::parse();
     let mut output = std::io::stdout().lock();
     let outcome = match options.command {
+        Some(zetesis_experiments::Experiment::Relation(options)) => {
+            zetesis_experiments::relation_measurement::run(&options, &mut output)
+                .map_err(|error| error.to_string())
+        }
         Some(zetesis_experiments::Experiment::Aggregate(options)) => {
             zetesis_experiments::aggregate_measurement::run(&options, &mut output)
                 .map_err(|error| error.to_string())

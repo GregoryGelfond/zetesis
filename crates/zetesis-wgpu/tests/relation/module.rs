@@ -276,10 +276,9 @@ fn reconstruction_budgets_include_live_row_capacity() {
     let max_bytes = relation.storage().retained_bytes
         + size_of::<RelationGpuMasks<'_, '_>>()
         + masks.words.capacity() * size_of::<u32>()
-        + size_of::<Vec<usize>>()
         + size_of::<Selection<'_, '_>>()
-        + 2 * selected * size_of::<usize>();
-    let max_work = 2 * 2 + 3 * selected as u64;
+        + selected * size_of::<usize>();
+    let max_work = 2 * 2 + 2 * selected as u64;
     let limits = relation::Limits {
         max_bytes,
         max_work,
@@ -287,7 +286,7 @@ fn reconstruction_budgets_include_live_row_capacity() {
     };
     let result = masks.selection(0, limits).unwrap();
     assert_eq!(result.positions(), [0, 2, 32]);
-    assert_eq!(result.work(), 2 * selected as u128);
+    assert_eq!(result.work(), u128::from(max_work));
     assert!(
         masks
             .selection(

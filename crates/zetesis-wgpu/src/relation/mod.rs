@@ -3,7 +3,11 @@
 mod device;
 mod packing;
 
-use std::{fmt, mem::size_of, time::Duration};
+use std::{
+    fmt,
+    mem::{size_of, size_of_val},
+    time::Duration,
+};
 use zetesis_core::relation::{self, Relation, Selection};
 use zetesis_cpu::{Control, Stop};
 
@@ -122,11 +126,11 @@ impl<'owner, 'source> RelationGpuMasks<'owner, 'source> {
 
     /// Reconstruct one checked ordered row selection without retaining all
     /// query selections simultaneously. The caller still performs the complete
-    /// term-pattern match. The limit includes masks, relation and both temporary
-    /// and returned row-position capacity; other live selections remain caller
-    /// owned and must be charged separately. Work charges two scans of the mask
-    /// words and three operations per selected row (decode, validate and copy).
-    /// The returned Selection's work counter covers only its validation/copy.
+    /// term-pattern match. The limit includes this mask object, its full retained
+    /// capacity, the relation and one returned position vector. Other live
+    /// selections remain caller owned. Shared core reconstruction charges two
+    /// scans of the mask words and two operations per selected row; the returned
+    /// Selection's work counter covers that complete reconstruction.
     ///
     /// # Errors
     /// Refuses an absent query, exceeded limits or allocation failure. Structural
@@ -140,55 +144,19 @@ impl<'owner, 'source> RelationGpuMasks<'owner, 'source> {
         let words = self
             .words(query)
             .ok_or_else(|| capacity("relation query is out of range"))?;
-        let scans = 2 * words.len() as u128;
-        if scans > u128::from(limits.max_work) {
-            return Err(capacity("relation mask scan exceeds work ceiling").into());
-        }
-        let count = words
-            .iter()
-            .map(|word| word.count_ones() as usize)
-            .sum::<usize>();
-        let total_work = scans + 3 * count as u128;
-        if total_work > u128::from(limits.max_work) {
-            return Err(capacity("relation mask reconstruction exceeds work ceiling").into());
-        }
         let mask_bytes = size_of::<Self>() + self.words.capacity() * size_of::<u32>();
-        let temporary_bytes =
-            size_of::<Vec<usize>>() as u128 + count as u128 * size_of::<usize>() as u128;
-        let retained = self.relation.storage().retained_bytes;
-        let required = retained as u128
-            + mask_bytes as u128
-            + temporary_bytes
-            + size_of::<Selection<'_, '_>>() as u128
-            + count as u128 * size_of::<usize>() as u128;
-        if required > limits.max_bytes as u128 {
-            return Err(capacity("relation mask reconstruction exceeds byte ceiling").into());
-        }
-        let temporary_bytes = usize::try_from(temporary_bytes)
-            .map_err(|_| capacity("relation reconstruction exceeds host addressing"))?;
-        let mut rows = packing::vector(count)?;
-        for (word_index, &word) in words.iter().enumerate() {
-            let mut remaining = word;
-            while remaining != 0 {
-                rows.push(
-                    word_index * BITS_PER_WORD as usize + remaining.trailing_zeros() as usize,
-                );
-                remaining &= remaining - 1;
-            }
-        }
+        // Core charges this borrowed query slice. This wrapper charges the
+        // remaining batch capacity and object, keeping the relation counted once.
+        let external = mask_bytes - size_of_val(words);
         let available = limits
             .max_bytes
-            .checked_sub(mask_bytes)
-            .and_then(|bytes| bytes.checked_sub(temporary_bytes))
+            .checked_sub(external)
             .ok_or_else(|| capacity("relation masks exceed selection byte ceiling"))?;
-        let used_work = u64::try_from(scans + count as u128)
-            .map_err(|_| capacity("relation reconstruction work exceeds u64"))?;
         self.relation
-            .selection(
-                &rows,
+            .selection_from_mask(
+                words,
                 relation::Limits {
                     max_bytes: available,
-                    max_work: limits.max_work - used_work,
                     ..limits
                 },
             )

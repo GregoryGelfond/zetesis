@@ -11,6 +11,7 @@ fn backend(options: &CommandOptions) -> Backend {
         Some(Experiment::Tight(value)) => value.backend,
         Some(Experiment::Aggregate(value)) => value.backend,
         Some(Experiment::Grounding(_)) => panic!("grounding measurements are CPU only"),
+        Some(Experiment::Relation(value)) => value.backend,
     }
 }
 
@@ -23,6 +24,7 @@ fn vulkan_is_accepted_by_every_device_experiment() {
         Some("lazy"),
         Some("tight"),
         Some("aggregate"),
+        Some("relation"),
     ] {
         let mut arguments = vec!["zetesis-bench"];
         arguments.extend(command);

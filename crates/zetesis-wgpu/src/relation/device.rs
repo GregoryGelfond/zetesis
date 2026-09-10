@@ -104,6 +104,12 @@ pub struct PreparedGpuRelation<'device, 'owner, 'source> {
 }
 
 impl<'owner, 'source> PreparedGpuRelation<'_, 'owner, 'source> {
+    /// Identity of the real adapter owning this prepared column buffer.
+    #[must_use]
+    pub fn info(&self) -> &GpuInfo {
+        self.executor.info()
+    }
+
     /// Original immutable relation, including typed rows and catalog mapping.
     #[must_use]
     pub const fn relation(&self) -> &'owner Relation<'source> {
