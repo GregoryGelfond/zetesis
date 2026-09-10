@@ -1,0 +1,249 @@
+//! Resolve complete eligible objective rows into fixed-priority templates.
+//!
+//! Conditions remain positive model queries after specialization: a possible
+//! binding never establishes an active contribution. Priority, weight and tuple
+//! always come from one binding. Fixed priorities retain the lifted evaluator;
+//! resolved priorities retain at most one bounded template per eligible row.
+
+use themelios_base::span::Location;
+use zetesis_core::{AtomPattern, Term, Value};
+use zetesis_objective::{AdmissionError, ObjectiveProgram, ObjectiveTemplate, WeightPolarity};
+
+use crate::expansion::Budget;
+use crate::formula::ceiling;
+use crate::formula_ir::{ObjectiveIr, Operation, Prepared};
+use crate::formula_support::{self, Counters, Join, Support};
+use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
+
+pub(super) fn activate(
+    prepared: &Prepared,
+    support: &Support,
+    limits: &FormulaLimits,
+    budget: &mut Budget,
+    counters: &mut Counters,
+    location: Location,
+) -> Result<(ObjectiveProgram, Vec<Vec<Location>>), FormulaFailure> {
+    let presence = crate::formula_objective_dependencies::check_presence(
+        prepared, support, limits, budget, counters,
+    )?;
+    let mut activation = Activation {
+        limits,
+        budget,
+        counters,
+        templates: Vec::new(),
+        origins: Vec::new(),
+    };
+    for objective in &prepared.objectives {
+        let numeric = presence.may_have_numeric_weight(objective, limits, activation.counters)?;
+        activation.objective(objective, support, numeric)?;
+    }
+    let program = if activation.templates.is_empty() {
+        ObjectiveProgram::none()
+    } else {
+        ObjectiveProgram::new(activation.templates, limits.objective)
+            .map_err(|error| FormulaFailure::Objective { error, location })?
+    };
+    Ok((program, activation.origins))
+}
+
+struct Activation<'a> {
+    limits: &'a FormulaLimits,
+    budget: &'a mut Budget,
+    counters: &'a mut Counters,
+    templates: Vec<ObjectiveTemplate>,
+    origins: Vec<Vec<Location>>,
+}
+
+impl Activation<'_> {
+    fn objective(
+        &mut self,
+        objective: &ObjectiveIr,
+        support: &Support,
+        numeric: bool,
+    ) -> Result<(), FormulaFailure> {
+        if let [Operation::Constant(Value::Number(priority))] = objective.priority.nodes.as_slice()
+        {
+            if numeric && self.active(objective, support)? {
+                self.retain(objective, objective.template(*priority))?;
+            }
+            return Ok(());
+        }
+        let mut bindings = Join::new(
+            &objective.condition,
+            &[],
+            objective.variables,
+            support,
+            self.budget,
+            objective.location,
+        )?;
+        while let Some(binding) =
+            bindings.next(self.limits, self.budget, self.counters, objective.location)?
+        {
+            let priority = formula_support::expression(
+                &objective.priority,
+                &binding,
+                self.limits,
+                self.budget,
+                self.counters,
+                objective.location,
+            )?;
+            let weight = self.weight(objective, &binding)?;
+            if let (Some(weight), Value::Number(priority)) = (weight, priority)
+                && numeric
+            {
+                self.capacity(objective.location)?;
+                let template = self.specialize(objective, &binding, weight, priority)?;
+                self.retain(objective, template)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn active(
+        &mut self,
+        objective: &ObjectiveIr,
+        support: &Support,
+    ) -> Result<bool, FormulaFailure> {
+        let mut bindings = Join::new(
+            &objective.condition,
+            &[],
+            objective.variables,
+            support,
+            self.budget,
+            objective.location,
+        )?;
+        let mut numeric = false;
+        while let Some(binding) =
+            bindings.next(self.limits, self.budget, self.counters, objective.location)?
+        {
+            if self.weight(objective, &binding)?.is_some() {
+                numeric = true;
+                // Maximization inspects every eligible row: a later MIN weight
+                // must not be hidden by an earlier representable contribution.
+                if objective.polarity == WeightPolarity::AsWritten {
+                    break;
+                }
+            }
+        }
+        Ok(numeric)
+    }
+
+    fn weight(
+        &mut self,
+        objective: &ObjectiveIr,
+        binding: &[Value],
+    ) -> Result<Option<i32>, FormulaFailure> {
+        self.counters.work(self.limits, objective.location)?;
+        let Value::Number(weight) = objective
+            .weight
+            .resolve(binding)
+            .expect("safe objective weight")
+        else {
+            return Ok(None);
+        };
+        objective.polarity.normalize(*weight).ok_or_else(|| {
+            crate::diagnostic::unsupported(
+                crate::ProfileFeature::NumericOverflow,
+                objective.location,
+            )
+        })?;
+        Ok(Some(*weight))
+    }
+
+    fn specialize(
+        &mut self,
+        objective: &ObjectiveIr,
+        binding: &[Value],
+        weight: i32,
+        priority: i32,
+    ) -> Result<ObjectiveTemplate, FormulaFailure> {
+        let tuple = self.terms(&objective.tuple, binding, objective.location)?;
+        let mut positive = reserved(objective.positive.len(), objective.location)?;
+        for atom in &objective.positive {
+            self.counters.work(self.limits, objective.location)?;
+            let terms = self.terms(atom.terms(), binding, objective.location)?;
+            self.budget.charge(
+                ExpansionResource::ScalarBytes,
+                atom.predicate().name().len() as u128,
+                objective.location,
+            )?;
+            positive.push(
+                AtomPattern::new(atom.predicate().clone(), terms).expect("same source arity"),
+            );
+        }
+        Ok(ObjectiveTemplate::new(
+            Term::Constant(Value::Number(weight)),
+            priority,
+            tuple,
+            positive,
+            Vec::new(),
+        )
+        .with_weight_polarity(objective.polarity))
+    }
+
+    fn terms(
+        &mut self,
+        source: &[Term],
+        binding: &[Value],
+        location: Location,
+    ) -> Result<Vec<Term>, FormulaFailure> {
+        let mut result = reserved(source.len(), location)?;
+        for term in source {
+            self.counters.work(self.limits, location)?;
+            result.push(Term::Constant(formula_support::copy(
+                term.resolve(binding).expect("safe objective field"),
+                self.budget,
+                location,
+            )?));
+        }
+        Ok(result)
+    }
+
+    fn capacity(&self, location: Location) -> Result<(), FormulaFailure> {
+        ceiling(
+            FormulaResource::ObjectiveElements,
+            self.templates.len() as u128 + 1,
+            self.limits.objective.max_templates as u128,
+            location,
+        )
+    }
+
+    fn retain(
+        &mut self,
+        objective: &ObjectiveIr,
+        template: ObjectiveTemplate,
+    ) -> Result<(), FormulaFailure> {
+        self.capacity(objective.location)?;
+        self.budget.charge(
+            ExpansionResource::Origins,
+            objective.origins.len() as u128,
+            objective.location,
+        )?;
+        self.templates
+            .try_reserve(1)
+            .map_err(|_| allocation(objective.location))?;
+        self.origins
+            .try_reserve(1)
+            .map_err(|_| allocation(objective.location))?;
+        let mut origins = reserved(objective.origins.len(), objective.location)?;
+        origins.extend_from_slice(&objective.origins);
+        self.templates.push(template);
+        self.origins.push(origins);
+        Ok(())
+    }
+}
+
+fn reserved<T>(count: usize, location: Location) -> Result<Vec<T>, FormulaFailure> {
+    let mut result = Vec::new();
+    result
+        .try_reserve_exact(count)
+        .map_err(|_| allocation(location))?;
+    Ok(result)
+}
+
+fn allocation(location: Location) -> FormulaFailure {
+    FormulaFailure::Objective {
+        error: AdmissionError::Allocation,
+        location,
+    }
+}

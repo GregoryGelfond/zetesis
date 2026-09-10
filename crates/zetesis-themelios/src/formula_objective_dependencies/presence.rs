@@ -45,10 +45,10 @@ impl Presence<'_> {
             return Ok(true);
         }
         counters.work(limits, objective.location)?;
-        let Term::Variable(weight) = objective.template.weight() else {
+        let Term::Variable(weight) = &objective.weight else {
             return Ok(true);
         };
-        for atom in objective.template.positive() {
+        for atom in &objective.positive {
             counters.work(limits, objective.location)?;
             if self.nonnumeric.contains(atom.predicate())
                 && atom.terms() == [Term::Variable(*weight)]
@@ -71,10 +71,10 @@ pub(super) fn required(
 ) -> BTreeSet<usize> {
     let mut observed = BTreeSet::new();
     for objective in objectives {
-        let Term::Variable(weight) = objective.template.weight() else {
+        let Term::Variable(weight) = &objective.weight else {
             continue;
         };
-        for atom in objective.template.positive() {
+        for atom in &objective.positive {
             let predicate = signature(atom.predicate());
             if generated.get(&predicate).is_some_and(|positions| {
                 positions

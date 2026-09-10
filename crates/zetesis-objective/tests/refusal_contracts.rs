@@ -38,6 +38,43 @@ fn model() -> Model {
 }
 
 #[test]
+fn unresolved_priority_fields_keep_variable_safety() {
+    let weight = Term::Variable(1);
+    let positive = [pattern(0)];
+    assert_eq!(
+        ObjectiveTemplate::validate_fields(
+            &weight,
+            &[],
+            &positive,
+            &[],
+            AdmissionLimits::default(),
+            7,
+        ),
+        Err(AdmissionError::UnsafeVariable {
+            template: 7,
+            variable: 1
+        }),
+    );
+}
+
+#[test]
+fn unresolved_priority_fields_report_bound_variables() {
+    let weight = Term::Constant(Value::Number(1));
+    let positive = [pattern(0)];
+    assert_eq!(
+        ObjectiveTemplate::validate_fields(
+            &weight,
+            &[],
+            &positive,
+            &[],
+            AdmissionLimits::default(),
+            7,
+        ),
+        Ok(1),
+    );
+}
+
+#[test]
 fn every_admission_dimension_reports_template_scope_before_a_successful_retry() {
     let valid = template(0);
     for (limits, dimension, template_index) in [

@@ -203,14 +203,15 @@ fn refused_endpoint(source: &str, expected: ProfileFeature) {
 }
 
 #[test]
-fn endpoint_priorities_remain_refused() {
+fn endpoint_priorities_supply_no_contribution() {
     for endpoint in ["#inf", "#sup"] {
         for source in [
             format!("#minimize{{foo@{endpoint}}}."),
             format!("#maximize{{foo@{endpoint}}}."),
             format!(":~.[foo@{endpoint}]"),
         ] {
-            refused_endpoint(&source, ProfileFeature::Objective);
+            let input = admit(&source, &FormulaLimits::default()).unwrap();
+            assert_eq!(exhaustive(&input), Records::from([(BTreeSet::new(), None)]));
         }
     }
 }

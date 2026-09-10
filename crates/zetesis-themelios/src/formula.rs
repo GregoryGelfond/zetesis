@@ -589,10 +589,14 @@ pub(crate) struct Compiled {
 ///
 /// The objective profile retains lifted `#minimize`/`#maximize` elements and positive
 /// weak constraints normalized into the same path: scalar
-/// constant/variable weights and tuples, ground integer priorities (default zero),
+/// constant/variable weights and tuples, finite safely bound priority expressions
+/// (default zero),
 /// positive ordinary conditions, and scalar equality/disequality filters. Source
 /// weights normalize before global tuple deduplication; eligible maximize
-/// `i32::MIN` weights receive a located overflow refusal. Source
+/// `i32::MIN` weights receive a located overflow refusal. Nonnumeric priorities
+/// contribute no key; undefined priority arithmetic remains a located error.
+/// Dynamic priorities currently read ordinary bound positions, with generated
+/// aggregate priority values requiring a separate eligibility certificate. Source
 /// priorities survive zero weights and inactive models; templates with no possible
 /// positive/filter binding are omitted. Objective-enabled programs currently
 /// refuse default-negated producer bodies/choice conditions and general aggregate

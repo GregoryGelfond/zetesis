@@ -19,7 +19,7 @@ use themelios_syntax::ast;
 use themelios_syntax::parse::Parse;
 use themelios_syntax::tree::{AstNode, SyntaxKind};
 use zetesis_core::{AtomPattern, Filter, Predicate, Term as CoreTerm, Value};
-use zetesis_objective::{ObjectiveProgram, ObjectiveTemplate, WeightPolarity};
+use zetesis_objective::{ObjectiveTemplate, WeightPolarity};
 
 use crate::diagnostic::unsupported;
 use crate::expansion::Budget;
@@ -41,11 +41,29 @@ pub(crate) struct Prepared {
     pub objective_extrema: BTreeSet<usize>,
 }
 pub(crate) struct ObjectiveIr {
-    pub template: ObjectiveTemplate,
+    pub weight: CoreTerm,
+    pub priority: Expression,
+    pub tuple: Vec<CoreTerm>,
+    pub positive: Vec<AtomPattern>,
+    pub filters: Vec<Filter>,
+    pub polarity: WeightPolarity,
     pub condition: Vec<LiteralIr>,
     pub variables: usize,
     pub origins: Vec<Location>,
     pub location: Location,
+}
+impl ObjectiveIr {
+    /// Preserve the lifted positive conditions once the priority is fixed.
+    pub(super) fn template(&self, priority: i32) -> ObjectiveTemplate {
+        ObjectiveTemplate::new(
+            self.weight.clone(),
+            priority,
+            self.tuple.clone(),
+            self.positive.clone(),
+            self.filters.clone(),
+        )
+        .with_weight_polarity(self.polarity)
+    }
 }
 pub(crate) struct RuleIr {
     pub head: HeadIr,
@@ -313,7 +331,7 @@ pub(crate) fn prepare(
         &analyzed,
         fallback,
     )?;
-    validate_objectives(&objectives, limits, fallback)?;
+    validate_objectives(&objectives, limits)?;
     let analysis_basis = if compiler.dependency_projection {
         crate::AnalysisBasis::DependencyProjection
     } else {
@@ -333,22 +351,21 @@ pub(crate) fn prepare(
 fn validate_objectives(
     objectives: &[ObjectiveIr],
     limits: &FormulaLimits,
-    fallback: Location,
 ) -> Result<(), FormulaFailure> {
-    ObjectiveProgram::new(
-        objectives
-            .iter()
-            .map(|objective| objective.template.clone())
-            .collect(),
-        limits.objective,
-    )
-    .map_err(|error| FormulaFailure::Objective {
-        location: error
-            .template_index()
-            .and_then(|index| objectives.get(index))
-            .map_or(fallback, |objective| objective.location),
-        error,
-    })?;
+    for (index, objective) in objectives.iter().enumerate() {
+        ObjectiveTemplate::validate_fields(
+            &objective.weight,
+            &objective.tuple,
+            &objective.positive,
+            &objective.filters,
+            limits.objective,
+            index,
+        )
+        .map_err(|error| FormulaFailure::Objective {
+            error,
+            location: objective.location,
+        })?;
+    }
     Ok(())
 }
 
@@ -571,9 +588,17 @@ impl Compiler<'_> {
         // Still admit the whole element, including priority, tuple and safety,
         // before completed grounding determines objective presence.
         let priority = match element.weight().priority() {
-            None => 0,
-            Some(Term::Symbolic(Symbol::Number(priority))) => *priority,
-            _ => return Err(unsupported(ProfileFeature::Objective, self.location).into()),
+            None => scalar_expression(&CoreTerm::Constant(Value::Number(0))),
+            Some(Term::Symbolic(Symbol::Number(priority))) => {
+                scalar_expression(&CoreTerm::Constant(Value::Number(*priority)))
+            }
+            Some(Term::Symbolic(Symbol::Infimum)) => {
+                scalar_expression(&CoreTerm::Constant(Value::Infimum))
+            }
+            Some(Term::Symbolic(Symbol::Supremum)) => {
+                scalar_expression(&CoreTerm::Constant(Value::Supremum))
+            }
+            Some(term) => self.expression(term, &mut variables)?,
         };
         let tuple = element
             .terms()
@@ -581,10 +606,13 @@ impl Compiler<'_> {
             .collect::<Result<Vec<_>, _>>()?;
         variables.safety(self.location)?;
         let count = variables.count;
-        let template = ObjectiveTemplate::new(weight, priority, tuple, positive, filters)
-            .with_weight_polarity(polarity);
         Ok(ObjectiveIr {
-            template,
+            weight,
+            priority,
+            tuple,
+            positive,
+            filters,
+            polarity,
             condition,
             variables: count,
             origins,

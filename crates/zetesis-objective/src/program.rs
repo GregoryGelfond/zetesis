@@ -94,15 +94,44 @@ impl ObjectiveTemplate {
     pub fn filters(&self) -> &[Filter] {
         &self.filters
     }
-    fn terms(&self) -> impl Iterator<Item = &Term> {
-        std::iter::once(&self.weight)
-            .chain(&self.tuple)
-            .chain(self.positive.iter().flat_map(AtomPattern::terms))
-            .chain(self.filters.iter().flat_map(|filter| {
-                let (left, right) = filter.terms();
-                [left, right]
-            }))
+    /// Validate scoped data fields before a source priority has been resolved.
+    /// Returns the number of densely numbered, positively bound variables.
+    /// Numeric priority values do not affect these shape and safety obligations.
+    /// `index` identifies the caller's original element in every returned error.
+    ///
+    /// A source frontend may call this before evaluating its priority expression.
+    /// That frontend owns expression safety, numeric evaluation and the complete
+    /// priority carrier; every expression input must have an independent binder.
+    /// The fields are borrowed and remain caller-owned. After resolving a numeric
+    /// priority, construct a template and admit it through [`ObjectiveProgram::new`].
+    ///
+    /// # Errors
+    /// Refuses shape limits, unsafe or sparse variable IDs, overflow or allocation.
+    pub fn validate_fields(
+        weight: &Term,
+        tuple: &[Term],
+        positive: &[AtomPattern],
+        filters: &[Filter],
+        limits: AdmissionLimits,
+        index: usize,
+    ) -> Result<usize, AdmissionError> {
+        admit_fields(weight, tuple, positive, filters, limits, index)
     }
+}
+
+fn terms<'a>(
+    weight: &'a Term,
+    tuple: &'a [Term],
+    positive: &'a [AtomPattern],
+    filters: &'a [Filter],
+) -> impl Iterator<Item = &'a Term> {
+    std::iter::once(weight)
+        .chain(tuple)
+        .chain(positive.iter().flat_map(AtomPattern::terms))
+        .chain(filters.iter().flat_map(|filter| {
+            let (left, right) = filter.terms();
+            [left, right]
+        }))
 }
 
 /// Admission ceilings. Zero is a real ceiling, never an unlimited sentinel.
@@ -357,26 +386,44 @@ fn admit_template(
     limits: AdmissionLimits,
     index: usize,
 ) -> Result<usize, AdmissionError> {
+    ObjectiveTemplate::validate_fields(
+        &template.weight,
+        &template.tuple,
+        &template.positive,
+        &template.filters,
+        limits,
+        index,
+    )
+}
+
+fn admit_fields(
+    weight: &Term,
+    tuple: &[Term],
+    positive: &[AtomPattern],
+    filters: &[Filter],
+    limits: AdmissionLimits,
+    index: usize,
+) -> Result<usize, AdmissionError> {
     for (resource, actual, limit) in [
         (
             AdmissionResource::TupleWidth,
-            template.tuple.len(),
+            tuple.len(),
             limits.max_tuple_width,
         ),
         (
             AdmissionResource::PositiveBody,
-            template.positive.len(),
+            positive.len(),
             limits.max_positive_body,
         ),
         (
             AdmissionResource::Filters,
-            template.filters.len(),
+            filters.len(),
             limits.max_filters,
         ),
     ] {
         check_bound(resource, actual, limit, Some(index))?;
     }
-    for pattern in &template.positive {
+    for pattern in positive {
         check_bound(
             AdmissionResource::PredicateArity,
             pattern.terms().len(),
@@ -385,7 +432,7 @@ fn admit_template(
         )?;
     }
     let mut count = 0;
-    for term in template.terms() {
+    for term in terms(weight, tuple, positive, filters) {
         if let Term::Variable(variable) = term {
             let proposed = variable.checked_add(1).ok_or(AdmissionError::Overflow {
                 template: Some(index),
@@ -403,12 +450,12 @@ fn admit_template(
     used.resize(count, false);
     let mut bound = reserved(count)?;
     bound.resize(count, false);
-    for term in template.terms() {
+    for term in terms(weight, tuple, positive, filters) {
         if let Term::Variable(variable) = term {
             used[*variable] = true;
         }
     }
-    for term in template.positive.iter().flat_map(AtomPattern::terms) {
+    for term in positive.iter().flat_map(AtomPattern::terms) {
         if let Term::Variable(variable) = term {
             bound[*variable] = true;
         }

@@ -1,5 +1,7 @@
 //! Finite substitutions and support-preserving conditional-choice formulas.
 
+mod objectives;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -16,7 +18,7 @@ use crate::expansion::Budget;
 use crate::formula::{Compiled, ceiling};
 use crate::formula_ir::{
     AggregateGuard, AggregateIr, AggregateKey, ChoiceIr, HeadElementKey, HeadIr, HeadLiteral,
-    HeadMeasure, HeadOperand, LiteralIr, ObjectiveIr, Prepared, Projection, RuleIr, value_bytes,
+    HeadMeasure, HeadOperand, LiteralIr, Prepared, Projection, RuleIr, value_bytes,
 };
 use crate::formula_support::{self, Counters, Join, Support};
 use crate::grounding_observer::Event;
@@ -39,7 +41,7 @@ pub(crate) fn ground(
     })?;
     let (objectives, objective_origins) =
         profile.phase(GroundingPhase::ObjectiveActivation, None, || {
-            activate_objectives(&prepared, &support, limits, budget, &mut counters, location)
+            objectives::activate(&prepared, &support, limits, budget, &mut counters, location)
         })?;
     let mut builder = profile.phase(GroundingPhase::FormulaInitialization, None, || {
         let mut builder = Builder {
@@ -114,82 +116,6 @@ pub(crate) fn ground(
         objective_origins,
         objective_declarations: prepared.objective_declarations.clone(),
     })
-}
-
-fn activate_objectives(
-    prepared: &Prepared,
-    support: &Support,
-    limits: &FormulaLimits,
-    budget: &mut Budget,
-    counters: &mut Counters,
-    location: Location,
-) -> Result<(zetesis_objective::ObjectiveProgram, Vec<Vec<Location>>), FormulaFailure> {
-    let presence = crate::formula_objective_dependencies::check_presence(
-        prepared, support, limits, budget, counters,
-    )?;
-    let mut active = Vec::new();
-    let mut objective_origins = Vec::new();
-    for objective in &prepared.objectives {
-        if presence.may_have_numeric_weight(objective, limits, counters)?
-            && objective_active(objective, support, limits, budget, counters)?
-        {
-            budget.charge(
-                ExpansionResource::Origins,
-                objective.origins.len() as u128,
-                objective.location,
-            )?;
-            active.push(objective.template.clone());
-            objective_origins.push(objective.origins.clone());
-        }
-    }
-    let objectives = if active.is_empty() {
-        zetesis_objective::ObjectiveProgram::none()
-    } else {
-        zetesis_objective::ObjectiveProgram::new(active, limits.objective)
-            .map_err(|error| FormulaFailure::Objective { error, location })?
-    };
-    Ok::<_, FormulaFailure>((objectives, objective_origins))
-}
-
-fn objective_active(
-    objective: &ObjectiveIr,
-    support: &Support,
-    limits: &FormulaLimits,
-    budget: &mut Budget,
-    counters: &mut Counters,
-) -> Result<bool, FormulaFailure> {
-    let mut bindings = Join::new(
-        &objective.condition,
-        &[],
-        objective.variables,
-        support,
-        budget,
-        objective.location,
-    )?;
-    let mut numeric = false;
-    while let Some(binding) = bindings.next(limits, budget, counters, objective.location)? {
-        counters.work(limits, objective.location)?;
-        if let Ok(Value::Number(weight)) = objective.template.weight().resolve(&binding) {
-            objective
-                .template
-                .weight_polarity()
-                .normalize(*weight)
-                .ok_or_else(|| {
-                    crate::diagnostic::unsupported(
-                        crate::ProfileFeature::NumericOverflow,
-                        objective.location,
-                    )
-                })?;
-            numeric = true;
-            // Maximizing templates must check every eligible numeric row:
-            // a later MIN value cannot be hidden by an earlier valid weight.
-            if objective.template.weight_polarity() == zetesis_objective::WeightPolarity::AsWritten
-            {
-                break;
-            }
-        }
-    }
-    Ok(numeric)
 }
 
 pub(super) struct Builder<'a> {

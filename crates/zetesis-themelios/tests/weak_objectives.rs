@@ -168,7 +168,6 @@ fn safety_and_outside_positive_profile_remain_typed_refusals() {
         "{a}. :~a:a.[1]",
         "{p(1)}. :~p(X),X>0.[X]",
         "{p(1)}. :~p(X).[X+1]",
-        "{p(1)}. :~p(X).[1@X]",
     ] {
         assert!(
             matches!(

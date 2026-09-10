@@ -35,7 +35,7 @@ pub(crate) fn check(
         graph,
         objectives
             .iter()
-            .flat_map(|objective| objective.template.positive())
+            .flat_map(|objective| &objective.positive)
             .map(|atom| signature(atom.predicate())),
     );
     let mut generated = BTreeMap::<Signature, BTreeSet<usize>>::new();
@@ -279,14 +279,14 @@ fn observer(
     generated: &BTreeMap<Signature, BTreeSet<usize>>,
 ) -> Result<(), FormulaFailure> {
     let mut occurrences = BTreeMap::<usize, usize>::new();
-    for atom in objective.template.positive() {
+    for atom in &objective.positive {
         for term in atom.terms() {
             if let Term::Variable(variable) = term {
                 *occurrences.entry(*variable).or_default() += 1;
             }
         }
     }
-    for atom in objective.template.positive() {
+    for atom in &objective.positive {
         let Some(positions) = generated.get(&signature(atom.predicate())) else {
             continue;
         };
@@ -295,13 +295,19 @@ fn observer(
                 return Err(refusal(objective.location));
             };
             if occurrences.get(&variable) != Some(&1)
-                || objective.template.filters().iter().any(|filter| {
+                || objective.filters.iter().any(|filter| {
                     let (left, right) = match filter {
                         Filter::Eq(left, right) | Filter::Neq(left, right) => (left, right),
                     };
                     *left == Term::Variable(variable) || *right == Term::Variable(variable)
                 })
             {
+                return Err(refusal(objective.location));
+            }
+            // Proposal values in generated positions are not an exact priority
+            // carrier. Until a correlated eligibility certificate is available,
+            // a priority may only read the independently bound input columns.
+            if objective.priority.inputs().any(|input| input == variable) {
                 return Err(refusal(objective.location));
             }
         }

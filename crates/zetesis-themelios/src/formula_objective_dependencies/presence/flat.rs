@@ -228,7 +228,7 @@ fn cone<'a>(
     let mut relevant = BTreeSet::new();
     for objective in &prepared.objectives {
         context.inspect()?;
-        for atom in objective.template.positive() {
+        for atom in &objective.positive {
             context.inspect()?;
             for predicate in graph.predicates() {
                 if context.matches(atom.predicate(), predicate)? {
