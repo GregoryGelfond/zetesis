@@ -153,6 +153,33 @@ fixture can establish semantic agreement while being too small to demonstrate
 useful parallel speedup. Conversely, a shorter run is not an improvement if it
 searched fewer candidates, omitted optimum ties or stopped early.
 
+### Performance evidence
+
+Packed support reduces logical storage and scheduled work; a general latency
+improvement has not been established. The comparison between
+[`3f8591e`](https://github.com/GregoryGelfond/zetesis/tree/3f8591e22d8de002aca0711f0427521b4cae37a5)
+and [`f1c6365a`](https://github.com/GregoryGelfond/zetesis/tree/f1c6365af66a56902d985fb3f61f584c860527de)
+on Apple M4 Pro Metal used normal and choice fixtures with 4, 32, 33 and 256
+atoms, in batches of 3 or 128 candidates. Scalar and Rayon classification were
+faster than the Metal primitive for these small fixtures. Repeated measurements
+varied substantially, including between runs of the same executable.
+
+The [tight-oracle benchmark](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-experiments/README.md)
+compares identical candidates through scalar, Rayon, fresh-device and
+resident-device routes. Classification includes transfer and result decoding;
+whole-query time also includes exact CPU completion of residuals. Source
+grounding and outer candidate search are outside this experiment. The
+[execution chapter](../architecture/execution.md) states the support-buffer
+size independently of elapsed time and total device memory.
+
+Matched CPU/eager comparisons on 13 kr-domains inputs also contain possible
+regressions. These remain unresolved; fewer charged operations and successful
+semantic checks do not establish improved execution time. Retain complete
+distributions, changes between unchanged-baseline runs and separate memory
+observations with every comparison. Neither these selected CPU runs nor the
+device primitive establish performance across the full corpus or every
+grounder/backend combination.
+
 ## Run the independent checks
 
 The [contributing guide](https://github.com/GregoryGelfond/zetesis/blob/main/CONTRIBUTING.md#verification-and-review) defines
@@ -184,11 +211,11 @@ status. A newer source remains unqualified until its own checks complete.
 
 | Population | Covered / instrumented lines | Coverage |
 | --- | ---: | ---: |
-| Workspace, all features, portable tests plus 27 physical Metal tests | 43,805 / 46,813 | 93.57% |
-| CPU-only CLI, separate instrumentation | 4,308 / 4,622 | 93.21% |
+| Workspace, all features, portable tests plus 27 physical Metal tests | 43,838 / 46,847 | 93.58% |
+| CPU-only CLI, separate instrumentation | 4,312 / 4,626 | 93.21% |
 
 This snapshot was qualified on 10 September 2026 for
-[`3f8591e`](https://github.com/GregoryGelfond/zetesis/tree/3f8591e22d8de002aca0711f0427521b4cae37a5),
+[`f1c6365a`](https://github.com/GregoryGelfond/zetesis/tree/f1c6365af66a56902d985fb3f61f584c860527de),
 using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS with Apple M4 Pro
 Metal. Both populations passed their independent 91% floor. The workspace
 combines its portable and physical profiles; the CPU-only population remains

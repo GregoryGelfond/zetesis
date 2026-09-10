@@ -54,6 +54,10 @@ memory or establish a speedup. Shared-word contention remains a measurement
 question. This checker is a reusable device primitive; its availability does
 not imply that ordinary solves select it.
 
+For 256 atoms and 128 candidates, the support buffer occupies 4,096 bytes
+instead of 131,072 bytes. This saves 126,976 bytes of logical device buffer
+storage. Uploaded and downloaded payloads are unchanged.
+
 ## CPU and GPU responsibilities
 
 | Capability | Execution boundary |
