@@ -20,6 +20,7 @@ mod adapter;
 mod lazy;
 mod tight;
 mod aggregate;
+mod relation;
 
 use std::fmt;
 use std::time::Duration;
@@ -44,6 +45,10 @@ pub use aggregate::{
 pub use lazy::{
     GpuLazyOracle, LazyBufferUsage, LazyGpuStatistics, LazyTransportReplacements,
     LazyTransportUsage,
+};
+pub use relation::{
+    GpuRelationExecutor, PreparedGpuRelation, RelationGpuActivity, RelationGpuError,
+    RelationGpuLimits, RelationGpuMasks, RelationGpuStats,
 };
 pub use tight::{
     GpuTightOracle, TightGpuActivity, TightGpuBatchStats, TightGpuCheck, TightGpuError,

@@ -82,7 +82,7 @@ impl Resident {
                 pass_label: "original truth and producer support",
                 pipeline,
                 group: &transport.group,
-                worlds: plan.worlds,
+                workgroups: [plan.worlds, 1, 1],
                 result: &transport.results,
                 readback: &transport.readback,
                 result_bytes: plan.results,

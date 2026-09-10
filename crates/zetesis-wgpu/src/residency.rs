@@ -75,7 +75,7 @@ impl ResidentGraph {
                 pass_label: "independent candidate worlds",
                 pipeline,
                 group: &transport.group,
-                worlds: plan.world_count,
+                workgroups: [plan.world_count, 1, 1],
                 result: &transport.result,
                 readback: &transport.readback,
                 result_bytes: plan.result_bytes,

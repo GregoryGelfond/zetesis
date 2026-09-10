@@ -92,7 +92,7 @@ impl Resident {
                 pass_label: "original and frozen reductions",
                 pipeline: &runtime.pipeline,
                 group: &transport.group,
-                worlds: plan.worlds,
+                workgroups: [plan.worlds, 1, 1],
                 result: &transport.output,
                 readback: &transport.readback,
                 result_bytes: plan.results,

@@ -56,7 +56,7 @@ impl Resident {
                 pass_label: "candidate-local formula sweeps",
                 pipeline,
                 group: &transport.group,
-                worlds: plan.worlds,
+                workgroups: [plan.worlds, 1, 1],
                 result: &transport.results,
                 readback: &transport.readback,
                 result_bytes: plan.results,

@@ -145,7 +145,7 @@ pub(crate) struct Dispatch<'a> {
     pub(crate) pass_label: &'static str,
     pub(crate) pipeline: &'a wgpu::ComputePipeline,
     pub(crate) group: &'a wgpu::BindGroup,
-    pub(crate) worlds: u32,
+    pub(crate) workgroups: [u32; 3],
     pub(crate) result: &'a wgpu::Buffer,
     pub(crate) readback: &'a wgpu::Buffer,
     pub(crate) result_bytes: u64,
@@ -166,7 +166,8 @@ pub(crate) fn submit(
         });
         pass.set_pipeline(dispatch.pipeline);
         pass.set_bind_group(0, dispatch.group, &[]);
-        pass.dispatch_workgroups(dispatch.worlds, 1, 1);
+        let [x, y, z] = dispatch.workgroups;
+        pass.dispatch_workgroups(x, y, z);
     }
     encoder.copy_buffer_to_buffer(
         dispatch.result,
