@@ -191,7 +191,7 @@ fn false_boolean_heads_cannot_hide_weight_refusals() {
     for source in [
         "0#sum{word:#false}0:-#false.",
         "0#sum+{-1:#false}0:-#false.",
-        "0#min{word:#false}0:-#false.",
+        "0#min{: #false}0:-#false.",
         "0#max{: #false}0:-#false.",
     ] {
         refused(source, ProfileFeature::HeadAggregateWeight);

@@ -43,4 +43,8 @@ pub const CASES: &[(&str, &[&[&str]])] = &[
     ("{a}.#false|b:-not a.", &[&["b"], &["a"]]),
     ("#true|a.a:-a.", &[&[]]),
     ("#false|a.a:-a.", &[&["a"]]),
+    ("0#min{word:#false}0:-#false.", &[&[]]),
+    ("0#max{word:#false}0:-#false.", &[&[]]),
+    ("0#min{word:#false}0.", &[]),
+    ("0#max{word:#false}0.", &[]),
 ];
