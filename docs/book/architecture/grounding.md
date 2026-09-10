@@ -89,8 +89,8 @@ schedule has a separate [preservation law](../lean/correspondence.md).
 Each formula join owns one reusable expression workspace. Prefix checks, binding
 generators and final filters borrow it in sequence; pending generators do not
 retain another workspace. Reuse changes storage ownership, not evaluation order.
-In particular, a false filter does not hide an arithmetic error in a later
-filter. The [caller regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation/tests/callers.rs)
+In particular, a false final filter does not hide an arithmetic error in a later
+final filter. The [caller regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation/tests/callers.rs)
 check these actual consumers as well as their values and failure boundaries.
 
 An atom in a **possible support relation** is a witness available to source
@@ -106,7 +106,8 @@ A relation row is one complete typed tuple. Formula support assigns append-only,
 predicate-local row identities and indexes each argument column. For a positive
 witness, the current selector chooses the shortest posting list supplied by known
 whole-column equalities. The matcher then checks the complete tuple, including
-repeated variables and structured terms:
+repeated variables and structured terms. No known equality selects all relation
+rows; a missing bound key selects none:
 
 ```text
 rows = ShortestPosting(relation, KnownEqualities(pattern, binding))
