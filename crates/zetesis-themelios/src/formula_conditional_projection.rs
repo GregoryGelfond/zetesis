@@ -139,11 +139,13 @@ impl Compiler<'_> {
         let mut projection = Projection {
             body: Some(Body::new(elements)),
         };
-        Ok(rewrite(Program::of([statement.clone()]), &mut projection)
-            .statements()
-            .next()
-            .expect("projection retains rule")
-            .clone())
+        Ok(
+            rewrite(Program::of_nodes([statement.clone()]), &mut projection)
+                .statements()
+                .next()
+                .expect("projection retains rule")
+                .clone(),
+        )
     }
 }
 

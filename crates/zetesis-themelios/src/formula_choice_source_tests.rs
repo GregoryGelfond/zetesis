@@ -203,7 +203,7 @@ fn equal_rules_in_separate_sources_keep_source_identity() {
         catalog.include(source, &parsed, &mut budget).unwrap();
         statements.extend(raise(&parsed).program().statements().cloned());
     }
-    let program = Program::of(statements);
+    let program = Program::of_nodes(statements);
     assert_eq!(program.statements().count(), 1);
     let identities: BTreeSet<_> = catalog
         .statements(&program, fallback(&first))
@@ -266,7 +266,7 @@ fn a_partial_catalog_refuses_merged_rule_origins() {
     let second = source(10, "1{#true;#true}1.");
     let (catalog, first_program) = catalog(&first);
     let second_program = raise(&parse(&second, Dialect::Clingo)).into_program();
-    let merged = Program::of(
+    let merged = Program::of_nodes(
         first_program
             .statements()
             .chain(second_program.statements())
@@ -285,7 +285,7 @@ fn a_partial_catalog_refuses_merged_rule_origins() {
 fn constructed_rule_origins_cannot_replace_a_catalog() {
     let source = source(9, "1{#true}1.");
     let (catalog, program) = catalog(&source);
-    let constructed = Program::of(
+    let constructed = Program::of_nodes(
         program
             .statements()
             .map(|carrier| WithProvenance::constructed(carrier.get().clone())),

@@ -6,15 +6,14 @@
 //! finite grounding, or precise correlations between predicate arguments.
 //!
 //! ```
-//! use themelios_program::program::{Atom, Program, Rule, Statement};
-//! use themelios_program::provenance::WithProvenance;
+//! use themelios_program::program::{Atom, Program, Rule};
 //! use themelios_program::symbol::{Name, Sign, Signature, Symbol};
 //! use themelios_program::term::Term;
 //! use zetesis_domain::{Limits, Status, analyze};
 //!
 //! let name = Name::new("p").expect("valid constant predicate name");
 //! let fact = Rule::fact(Atom::new(name.clone(), [Term::from(Symbol::Number(7))]));
-//! let program = Program::of([WithProvenance::constructed(Statement::Rule(fact))]);
+//! let program = Program::of([fact]);
 //! let signature = Signature { sign: Sign::Positive, name, arity: 1 };
 //! let analysis = analyze(&program, Limits::default());
 //! assert_eq!(analysis.status(), Status::FixedPoint);

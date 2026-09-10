@@ -863,7 +863,7 @@ fn prepare_bundle(
         ..AdmissionOptions::default()
     };
     let preparation = prepare(
-        &SourceProgram::of(statements),
+        &SourceProgram::of_nodes(statements),
         &choices,
         local,
         budget,

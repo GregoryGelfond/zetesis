@@ -328,7 +328,7 @@ fn compile_bundle(
         source: entry.id(),
         span: entry.source().span(),
     };
-    let source = SourceProgram::of(statements);
+    let source = SourceProgram::of_nodes(statements);
     let (program, origins) =
         extended::compile_owned(&source, options.core_limits, limits, location)?;
     Ok((program, origins, source_metadata.finish()))

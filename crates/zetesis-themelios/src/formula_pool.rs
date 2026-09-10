@@ -181,7 +181,7 @@ impl<'a> Cursor<'a> {
             positions: self.positions.iter(),
         };
         let expanded = rewrite(
-            Program::of([self.source.clone()]),
+            Program::of_nodes([self.source.clone()]),
             &mut Expand {
                 selector: &mut selector,
             },

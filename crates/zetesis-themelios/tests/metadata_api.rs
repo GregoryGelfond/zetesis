@@ -216,7 +216,7 @@ fn parsed_metadata_retains_duplicate_origins() {
 
 #[test]
 fn constructed_metadata_invents_no_parsed_origin() {
-    let shared = Program::of([
+    let shared = Program::of_nodes([
         WithProvenance::constructed(Statement::Show(Show::Signature(Signature {
             name: Name::new("p").unwrap(),
             arity: 1,
@@ -273,7 +273,7 @@ fn native_constants_refuse_duplicate_origins() {
 
 #[test]
 fn native_constants_refuse_unground_values() {
-    let shared = Program::of([WithProvenance::constructed(Statement::Const(Const {
+    let shared = Program::of_nodes([WithProvenance::constructed(Statement::Const(Const {
         name: Name::new("a").unwrap(),
         value: Term::Variable(Variable::Anonymous),
         policy: None,
@@ -389,7 +389,7 @@ fn native_depth_cap_precedes_recursive_compilation() {
     for _ in 0..2_000 {
         symbol = Symbol::Tuple(vec![symbol]);
     }
-    let shared = Program::of([WithProvenance::constructed(Statement::Show(Show::Term(
+    let shared = Program::of_nodes([WithProvenance::constructed(Statement::Show(Show::Term(
         symbol.into(),
     )))]);
     assert!(matches!(

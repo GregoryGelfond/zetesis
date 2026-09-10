@@ -329,6 +329,19 @@ mod tests {
     }
 
     #[test]
+    fn inverse_body_growth_remains_unknown() {
+        let text = "p(0). p(X) :- p(X+1).";
+        let (program, _) = input(text);
+        let analysis = run(text, &FormulaLimits::default(), ExpansionLimits::default())
+            .expect("bounded analysis of inverse arithmetic recursion");
+        assert_eq!(analysis, Analysis::of(&program));
+        assert!(matches!(
+            analysis.safety().finiteness(),
+            Verdict::Unknown { .. }
+        ));
+    }
+
+    #[test]
     fn unknown_finiteness_is_retained_without_disabling_limits() {
         let text = "p(0). p(X+1) :- p(X).";
         let (program, _) = input(text);

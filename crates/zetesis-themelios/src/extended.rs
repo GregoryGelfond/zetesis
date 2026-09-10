@@ -277,7 +277,7 @@ fn compile_extended(
             location,
             failure: None,
         };
-        let rewritten = rewrite(SourceProgram::of([carrier.clone()]), &mut normalizer);
+        let rewritten = rewrite(SourceProgram::of_nodes([carrier.clone()]), &mut normalizer);
         if let Some(failure) = normalizer.failure {
             return Err(failure);
         }

@@ -288,7 +288,7 @@ fn finite_width_and_deep_symbols_widen_only_affected_arguments() {
     for _ in 0..1_000 {
         deep = Symbol::Tuple(vec![deep]);
     }
-    let program = Program::of([fact("deep", deep)]);
+    let program = Program::of_nodes([fact("deep", deep)]);
     let result = analyze(&program, Limits::default());
     assert_eq!(result.status(), Status::FixedPoint);
     assert_eq!(
@@ -376,7 +376,7 @@ proptest! {
             }
             if concrete == previous { break; }
         }
-        let program = Program::of(statements);
+        let program = Program::of_nodes(statements);
         let result = analyze(&program, Limits { max_values_per_argument: width, ..Limits::default() });
         prop_assert_eq!(result.status(), Status::FixedPoint);
         for (predicate, row) in concrete.iter().enumerate() {

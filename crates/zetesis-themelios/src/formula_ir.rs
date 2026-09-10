@@ -280,7 +280,7 @@ pub(crate) fn prepare(
             location: compiler.location,
             failure: None,
         };
-        let rewritten = rewrite(SourceProgram::of([carrier.clone()]), &mut normalizer);
+        let rewritten = rewrite(SourceProgram::of_nodes([carrier.clone()]), &mut normalizer);
         if let Some(error) = normalizer.failure {
             return Err(error.into());
         }
@@ -325,7 +325,7 @@ pub(crate) fn prepare(
             )?;
         }
     }
-    let analyzed = SourceProgram::of(analyzed);
+    let analyzed = SourceProgram::of_nodes(analyzed);
     let analysis = crate::formula_analysis::analyze(&analyzed, limits, compiler.budget, fallback)?;
     let objective_extrema = crate::formula_objective_dependencies::check(
         &rules,
