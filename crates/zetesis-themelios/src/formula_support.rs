@@ -1,6 +1,8 @@
 //! A finite support upper bound and complete iterative relational joins.
 
 mod evaluation;
+#[cfg(test)]
+mod postings;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -158,6 +160,8 @@ impl Support {
                 }
             }
         }
+        #[cfg(test)]
+        postings::observe(relation, pattern, values, selected);
         Ok(selected)
     }
 }
@@ -170,6 +174,8 @@ pub(crate) fn build(
     fallback: Location,
 ) -> Result<Support, FormulaFailure> {
     let mut support = Support::default();
+    #[cfg(test)]
+    postings::begin_support();
     let mut rounds = 0_u64;
     loop {
         ceiling(

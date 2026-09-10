@@ -335,3 +335,34 @@ for portable and external-oracle gates.
 The [Lean correspondence chapter](../../docs/book/lean/correspondence.md)
 separates proved semantic laws from remaining parser, Rust, shader and
 resource-accounting refinement obligations.
+
+## Inspect posting selectivity
+
+A test-only [posting diagnostic](src/formula_support/postings.rs) compares a
+streaming intersection of bound-column row IDs with independent full-row equality.
+It observes the production shortest-posting probe without replacing its result.
+The fixed corpus selection includes all six queens encodings, SEND and selected
+shortest-path/task-allocation sources:
+
+```sh
+cargo test --locked -p zetesis-themelios --lib \
+  formula_support::postings::tests::corpus_postings_preserve_full_row_equalities \
+  -- --ignored --exact --nocapture --test-threads=1
+```
+
+Each JSON record names its source and diagnostic ceilings. `complete` describes
+observation coverage; it does not establish answer-set enumeration. Grounding
+still uses the ordinary finite formula limits. A diagnostic limit stops recording
+without changing admission and makes this test fail after printing the partial
+record. Missing relations are excluded from observed probes and remain included
+in the existing grounding observer's actual probe count.
+
+Shortest-posting and intersection row counts describe eligible lists at each
+probe opening. A join can stop before visiting all of a list, so these counts
+are separate from `actual_join_rows`. Repeated queries are scoped to one support
+build, predicate, append-only relation size and exact bound values. Unbound
+repeated probes do not establish repeated index lookup cost. Stored key bytes
+are requested logical payload, excluding allocator overhead and temporary cursor
+storage; they are not process RSS. These observations measure eager formula
+selectivity, not elapsed time or GPU/lazy performance. Production libraries and
+CLI builds contain neither this instrument nor an additional option.
