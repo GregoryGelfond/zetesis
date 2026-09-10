@@ -19,7 +19,8 @@ namespace Zetesis.TernaryWatch
 
 /-- The third position, computed from the two distinct watched indices.
 Their values lie between zero and two. Distinctness bounds their sum between
-one and three, so both subtraction steps yield a valid remaining index. -/
+one and three. Neither subtraction underflows, and the final index is below
+three. -/
 def remaining (first second : Fin 3) (distinct : first ≠ second) : Fin 3 :=
   ⟨3 - first.val - second.val, by
     have different : first.val ≠ second.val := by
