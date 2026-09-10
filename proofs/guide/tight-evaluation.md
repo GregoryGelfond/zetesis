@@ -46,6 +46,11 @@ rank are separate assumptions of the stability certificate.
    `support_true_iff` uses complete present-atom coverage to turn the finite scan
    into the mathematical `Supported` predicate. The separate append law permits
    producer partitions to combine with OR even when heads or rows repeat.
+   `head_support_group` restricts the scan to one complete head-owner group:
+   every grouped supporting row is original, and every original supporting row
+   belongs to the queried atom's group. Group order and duplicate multiplicity
+   do not affect Boolean support; preserving occurrence counts and charged work
+   remains a separate implementation obligation.
 5. `computed_verdict_sound` supplies these derived root/support facts to the
    existing ranked-support theorem. `completed_computation_exact` then applies
    the existing exact residual-completion law to the original theory.

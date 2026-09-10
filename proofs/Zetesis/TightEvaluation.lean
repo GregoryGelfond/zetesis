@@ -171,6 +171,33 @@ theorem head_support_append [DecidableEq α] (truth : List Bool)
       (headSupported truth left atom || headSupported truth right atom) := by
   simp [headSupported]
 
+/-- A complete group computes the same support for each atom it owns as the
+whole producer family. Group membership must be exactly original membership
+restricted by the head's owner.
+
+A supporting row in the group is an original supporting row. Conversely, an
+original supporting row has the queried head, hence the same owner, so coverage
+places it in the group. Both evaluations inspect the same body's truth.
+This Boolean law permits repeated rows and different row orders; preserving
+occurrence counts and charged work is a separate implementation obligation. -/
+theorem head_support_group [DecidableEq α] {Group : Type _} (truth : List Bool)
+    (rows groupRows : List (IndexedProducer α)) (owner : α → Group)
+    (group : Group) (atom : α) (owned : owner atom = group)
+    (coverage : ∀ row, row ∈ groupRows ↔ row ∈ rows ∧ owner row.head = group) :
+    headSupported truth groupRows atom = headSupported truth rows atom := by
+  apply Bool.eq_iff_iff.mpr
+  simp only [headSupported, List.any_eq_true, Bool.and_eq_true, decide_eq_true_eq]
+  constructor
+  · rintro ⟨row, grouped, sameHead, enabled⟩
+    have original : row ∈ rows := ((coverage row).mp grouped).1
+    exact ⟨row, original, sameHead, enabled⟩
+  · rintro ⟨row, original, sameHead, enabled⟩
+    have sameOwner : owner row.head = group := by
+      rw [sameHead]
+      exact owned
+    have grouped : row ∈ groupRows := (coverage row).mpr ⟨original, sameOwner⟩
+    exact ⟨row, grouped, sameHead, enabled⟩
+
 /-- The computed head reduction has exactly the original true-body witnesses. -/
 theorem head_support_true [DecidableEq α] (candidate : α → Bool)
     (table : List (DagSharing.Node α)) (rows : List (IndexedProducer α))
