@@ -43,7 +43,9 @@ whole comparison. Intervals cover possible substitutions; they do not discard
 the correlation between `X` and `Y`.
 
 The fallback analysis accepts integer-affine addition, subtraction, negation
-and multiplication by a closed integer. An endpoint can be inferred only when
+and multiplication by a closed integer. Closed means syntactically free of
+variables after normalization; an already bound variable is still a variable
+for this analysis. An endpoint can be inferred only when
 the required endpoints of every other term are available. This covers directed
 chains, shared variables and finite local scopes. Single default negation does
 not supply a generator; double negation retains the comparison's binding
