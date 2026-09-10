@@ -41,8 +41,8 @@ const CASES: &str = r#"{"name":"mandatory_count","source":"a.n(N):-N=#count{1:a}
 "#;
 
 // Symbols precede strings, and constructor arity precedes name in ASP order.
-// These answer families change the aggregate value and cannot supply a fixed
-// carrier, even though their nonnumeric objective priorities contribute no cost.
+// These answer families change the aggregate value. Their completed source
+// carriers still contain only nonnumeric priorities and contribute no cost.
 const CHANGING_ORDER: &str = r#"{"name":"changing_symbol_minimum","source":"a.{b}.n(N):-N=#min{\"s\":a;z:b}.#minimize{1@N:n(N)}.","records":[[["a","n(\"s\")"],null],[["a","b","n(z)"],null]]}
 {"name":"changing_string_maximum","source":"a.{b}.n(N):-N=#max{z:a;\"s\":b}.#minimize{1@N:n(N)}.","records":[[["a","n(z)"],null],[["a","b","n(\"s\")"],null]]}
 {"name":"changing_arity_minimum","source":"a.{b}.n(N):-N=#min{f(1,2):a;g(1):b}.#minimize{1@N:n(N)}.","records":[[["a","n(f(1,2))"],null],[["a","b","n(g(1))"],null]]}
@@ -50,23 +50,11 @@ const CHANGING_ORDER: &str = r#"{"name":"changing_symbol_minimum","source":"a.{b
 "#;
 
 #[test]
-fn changing_logical_extrema_cannot_certify_priorities() {
+fn changing_logical_extrema_preserve_scored_answers() {
     for case in source_cases::cases(CHANGING_ORDER.trim()) {
-        let Err(error) = admit(&case.source, &FormulaLimits::default()) else {
-            panic!("{}: changing value was certified invariant", case.name);
-        };
-        assert!(
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                    feature: ProfileFeature::ObjectiveAggregateDependency,
-                    ..
-                }))
-            ),
-            "{}: {error}",
-            case.name
-        );
-        assert!(!error.diagnostics().is_empty());
+        let input = admit(&case.source, &FormulaLimits::default()).unwrap();
+        assert!(input.objectives().priorities().is_empty());
+        assert_eq!(exhaustive(&input), case.records, "{}", case.name);
     }
 }
 
@@ -90,12 +78,8 @@ fn invariant_priorities_preserve_scored_answers() {
 }
 
 #[test]
-fn changing_carriers_require_further_evidence() {
+fn competing_producers_require_further_evidence() {
     for source in [
-        "{a}.n(N):-N=#count{1:a}.#minimize{1@N:n(N)}.",
-        "a.{b}.n(N):-N=#sum{2:a;3:b}.#minimize{1@N:n(N)}.",
-        "a.{b}.n(N):-N=#min{2:a;1:b}.#minimize{1@N:n(N)}.",
-        "a.{b}.n(N):-N=#max{2:a;3:b}.#minimize{1@N:n(N)}.",
         "a.n(N):-N=#count{1:a}.n(7).#minimize{1@N:n(N)}.",
         "a.n(N):-N=#count{1:a}.copied(X):-n(X).{copied(7)}.#minimize{1@X:copied(X)}.",
     ] {
@@ -116,8 +100,9 @@ fn changing_carriers_require_further_evidence() {
 
 #[test]
 fn certificate_storage_has_an_inclusive_limit() {
-    // One request, two tuple sets, two cone predicates and one transported name.
-    const CERTIFICATE_ENTRIES: usize = 6;
+    // One request, two tuple sets, two cone predicates, one transported name
+    // and one completed carrier value coexist during certification.
+    const CERTIFICATE_ENTRIES: usize = 7;
     let source = "a.n(N):-N=#count{1:a}.#minimize{1@N:n(N)}.";
     let mut limits = FormulaLimits {
         max_objective_presence_entries: CERTIFICATE_ENTRIES - 1,

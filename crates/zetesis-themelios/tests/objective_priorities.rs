@@ -149,8 +149,8 @@ fn specialization_limits_are_inclusive() {
 #[test]
 fn generated_priorities_require_eligibility_evidence() {
     for source in [
-        "{a}.n(N):-N=#count{1:a}.#minimize{1@N:n(N)}.",
-        "{a;b}.n(N):-N=#max{2:a;foo:b}.#minimize{1@N:n(N)}.",
+        "{a}.n(N):-N=#count{1:a}.n(7).#minimize{1@N:n(N)}.",
+        "1{a;b}1.n(N):-N=#max{2:a;foo:b}.#minimize{1@N:n(N)}.",
     ] {
         let error = admit(source, &FormulaLimits::default()).unwrap_err();
         assert!(!error.diagnostics().is_empty());

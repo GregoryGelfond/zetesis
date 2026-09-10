@@ -1,12 +1,13 @@
-//! Source certificates for numeric presence and invariant generated priorities.
+//! Source certificates for numeric presence and generated priority carriers.
 //!
 //! An extrema proposal can be numeric although a mandatory symbolic tuple
 //! prevents every realized extremum from being numeric. Possible support alone
 //! then cannot certify that a numeric objective priority survives grounding.
 //! A flat fact/choice certificate excludes that numeric witness without pruning
-//! proposals. A separate certificate fixes a count, sum or extremum when required
-//! full keys determine its value and all optional-only keys leave it unchanged.
-//! Objective preparation filters certified priority rows against that value;
+//! proposals. A separate certificate completes the count, sum or extremum values
+//! of every key set between the required and possible complete keys. Shared
+//! optional conditions do not erase values from this source abstraction.
+//! Objective preparation filters priority rows against the completed carrier;
 //! the original equalities and model-relative conditions remain authoritative.
 //! Other carriers retain an explicit refusal. The implicit empty endpoint is
 //! not a contributing tuple.
@@ -30,19 +31,21 @@ use super::{
 
 mod flat;
 
-/// Completed exclusion and fixed-value certificates over borrowed predicates.
-/// Fixed logical values are owned; their payload and retained slots are bounded.
+/// Completed exclusions and source carriers over borrowed predicates.
+/// Carrier values are owned once per producer/forwarding family. Membership
+/// searches these bounded families; it never tests answer-set realizability.
 /// Nonnumeric exclusions apply only to the same unary generated weight. Neither
 /// certificate replaces original equalities or asserts candidate activity.
 #[derive(Default)]
 pub(crate) struct Presence<'a> {
     nonnumeric: BTreeSet<&'a Predicate>,
-    fixed: BTreeMap<&'a Predicate, Value>,
+    carriers: Vec<flat::Carrier<'a>>,
+    carrier_entries: usize,
 }
 
 impl Presence<'_> {
     /// A completed proposal row is eligible only when every certified observer
-    /// in it carries its proved fixed value. The original equalities remain in
+    /// in it carries a value in its completed source carrier. Equalities remain in
     /// the theory; this filter affects objective specialization only.
     pub(crate) fn eligible(
         &self,
@@ -56,12 +59,18 @@ impl Presence<'_> {
         }
         for atom in &objective.positive {
             counters.work(limits, objective.location)?;
-            if let Some(value) = self.fixed.get(atom.predicate()) {
-                let [term] = atom.terms() else {
-                    unreachable!("fixed certificates are unary")
-                };
-                if term.resolve(binding).expect("safe objective row") != value {
-                    return Ok(false);
+            for carrier in &self.carriers {
+                counters.work(limits, objective.location)?;
+                if carrier.predicates.contains(atom.predicate()) {
+                    let [term] = atom.terms() else {
+                        unreachable!("carrier certificates are unary")
+                    };
+                    if !carrier
+                        .values
+                        .contains(term.resolve(binding).expect("safe objective row"))
+                    {
+                        return Ok(false);
+                    }
                 }
             }
         }
@@ -172,7 +181,7 @@ pub(crate) fn check<'a>(
                         prepared,
                         rule,
                         aggregate,
-                        presence.nonnumeric.len() + presence.fixed.len(),
+                        presence.nonnumeric.len() + presence.carrier_entries,
                         limits,
                         counters,
                     )?
@@ -193,7 +202,7 @@ pub(crate) fn check<'a>(
 }
 
 /// Source dependency analysis names every generated priority input. Only a
-/// complete fixed-value certificate can discharge that obligation here.
+/// completed source-carrier certificate can discharge that obligation here.
 fn certify_priorities<'a>(
     prepared: &'a Prepared,
     presence: &mut Presence<'a>,
@@ -222,14 +231,11 @@ fn certify_priorities<'a>(
     }
     for rule in &prepared.rules {
         counters.work(limits, rule.location)?;
-        let [LiteralIr::Aggregate(aggregate)] = rule.body.as_slice() else {
-            continue;
-        };
-        let Some(fixed) = flat::fixed(
+        let Some(carrier) = flat::carrier(
             prepared,
             rule,
-            aggregate,
-            requested.len() + presence.fixed.len(),
+            &requested,
+            requested.len() + presence.carrier_entries,
             limits,
             budget,
             counters,
@@ -237,23 +243,36 @@ fn certify_priorities<'a>(
         else {
             continue;
         };
-        for predicate in fixed.predicates {
-            counters.work(limits, rule.location)?;
-            if requested.contains(predicate) {
-                let value = crate::formula_support::copy(&fixed.value, budget, rule.location)?;
-                // The returned borrowed predicate slot is transferred into the
-                // retained certificate. Its value payload is charged separately.
-                presence.fixed.insert(predicate, value);
-            }
-        }
+        // Tuple/cone temporaries have been released. Transfer the completed
+        // predicate/value slots without duplicating carrier values for aliases.
+        let entries = carrier.predicates.len() + carrier.values.len() + 1;
+        ceiling(
+            FormulaResource::ObjectivePresenceEntries,
+            requested.len() as u128 + presence.carrier_entries as u128 + entries as u128,
+            limits.max_objective_presence_entries as u128,
+            rule.location,
+        )?;
+        presence
+            .carriers
+            .try_reserve(1)
+            .map_err(|_| FormulaFailure::Objective {
+                error: zetesis_objective::AdmissionError::Allocation,
+                location: rule.location,
+            })?;
+        presence.carrier_entries += entries;
+        presence.carriers.push(carrier);
     }
     for objective in &prepared.objectives {
         for &index in &objective.priority_sources {
             counters.work(limits, objective.location)?;
-            if !presence
-                .fixed
-                .contains_key(objective.positive[index].predicate())
-            {
+            let mut qualified = false;
+            for carrier in &presence.carriers {
+                counters.work(limits, objective.location)?;
+                qualified |= carrier
+                    .predicates
+                    .contains(objective.positive[index].predicate());
+            }
+            if !qualified {
                 return Err(refusal(objective.location));
             }
         }

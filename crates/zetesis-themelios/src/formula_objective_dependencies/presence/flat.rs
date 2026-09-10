@@ -1,13 +1,13 @@
 //! Completed presence from facts and optional closed choices.
 //!
 //! Shared optional conditions and constraints never erase possible witnesses.
-//! A required value dominating all numbers excludes numeric presence. The fixed
-//! value certificate additionally requires every optional-only complete key to
-//! leave the required count, sum or extremum unchanged.
+//! A required value dominating all numbers excludes numeric presence. The source
+//! measure carrier ranges over all complete key sets between the required and
+//! possible keys. It does not assert independent eligibility in actual models.
 
-mod fixed;
+mod carrier;
 
-pub(super) use fixed::certify as fixed;
+pub(super) use carrier::{Carrier, certify as carrier};
 
 use std::collections::BTreeSet;
 
@@ -29,9 +29,10 @@ enum Activity {
     Required,
 }
 
-/// These sets share one lifetime with no intermediate reclamation. Entries
-/// count simultaneous borrowed slots, including caller-held exclusions. No
-/// names or values are cloned. Every insertion is checked before allocation.
+/// Conservatively reserve planning slots through one certificate, including
+/// caller-held exclusions. A helper's released temporaries need not reclaim its
+/// reservation. Every insertion is checked before allocation. Scalar payload
+/// and transient numeric subsets have separate bounds.
 struct Context<'a> {
     limits: &'a FormulaLimits,
     counters: &'a mut Counters,
@@ -47,13 +48,17 @@ impl Context<'_> {
         if set.contains(&value) {
             return Ok(());
         }
+        self.reserve_entry()?;
+        set.insert(value);
+        Ok(())
+    }
+    fn reserve_entry(&mut self) -> Result<(), FormulaFailure> {
         ceiling(
             FormulaResource::ObjectivePresenceEntries,
             self.entries as u128 + 1,
             self.limits.max_objective_presence_entries as u128,
             self.location,
         )?;
-        set.insert(value);
         self.entries += 1;
         Ok(())
     }

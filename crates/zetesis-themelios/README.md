@@ -222,16 +222,22 @@ a unique unary positive renaming. Exact signed facts are mandatory; optional
 choices remain possible even when constraints correlate them. Outer joins,
 filtered/alternative producers and nested reductions do not gain this certificate.
 Preparation can succeed before materialization detects the unsupported case.
-Generated priority inputs additionally require an exact invariant-value
-certificate. The same flat unary profile is admitted when required full tuple
-keys determine one value and every optional-only key leaves it unchanged:
-zero or ignored sum contributions, aliases of required keys, and absorbed extrema.
-Unique unary renamings preserve the certificate. Completed objective rows must
-match that value before weight and priority resolution; original aggregate
-equalities remain in the reduct theory. Non-singleton generated priority
-carriers and other producer shapes remain outside this certificate.
-`FormulaLimits::max_objective_presence_entries` separately bounds simultaneously
-retained logical presence-planning slots, rather than allocator bytes.
+Generated priority inputs additionally require a completed source measure
+carrier. In the same flat unary profile, its values are the measures of all
+complete key sets `S` with `R ⊆ S ⊆ P`, where `R` is required and `P` is possible.
+Required/optional aliases coalesce by the full tuple. Unique unary renamings
+share the certificate. Completed objective rows must belong to their source
+carrier before priority evaluation; all fields resolve from the same binding.
+Original aggregate equalities remain in the reduct theory and decide which
+values realize in each answer. Shared optional conditions can leave source
+values unrealized; their numeric priority slots still remain, with zero cost.
+Undefined source priority arithmetic remains a located error even for such a
+row. Invariant carriers are the singleton case. Broader producer shapes remain
+outside this certificate.
+`FormulaLimits::max_objective_presence_entries` conservatively bounds
+logical presence-planning slots, including completed carrier values,
+rather than allocator bytes. Transient numeric subset construction separately
+uses `max_assignment_values` and the grounding work bound; it can be exponential.
 See [dependency checks](src/formula_objective_dependencies.rs) and
 [presence classification](src/formula_objective_dependencies/presence.rs).
 

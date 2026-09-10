@@ -29,8 +29,9 @@ const DEFAULT_OBJECTIVE_PRESENCE_ENTRIES: usize = 16_384;
 /// means unlimited. Source parsing and scalar expansion retain their own limits.
 #[derive(Clone, Copy, Debug)]
 pub struct FormulaLimits {
-    /// Simultaneously retained borrowed entries in mixed objective-presence plans;
-    /// allocator overhead and internal collection capacity are not byte-accounted.
+    /// Conservative predicate, tuple, weight and completed carrier/value entry
+    /// ceiling in objective-presence plans. Transient numeric subsets have the
+    /// assignment value ceiling; allocator overhead and capacity are excluded.
     pub max_objective_presence_entries: usize,
     /// Distinct scalar values in the logical source, independent of join work.
     pub max_domain_values: usize,
@@ -601,9 +602,11 @@ pub(crate) struct Compiled {
 /// `i32::MIN` weights receive a located overflow refusal. Nonnumeric priorities
 /// contribute no key; undefined priority arithmetic remains a located error.
 /// Dynamic priorities read ordinary bound positions or generated values with a
-/// completed invariant-carrier certificate: closed unary assignment tuples whose
-/// required measure cannot change under optional choices, with unique unary
-/// renamings. Other generated priority carriers retain explicit refusals. Source
+/// completed source-carrier certificate: closed unary assignment tuples, flat
+/// fact/closed unbounded-choice eligibility and unique unary renamings. Its
+/// values are measures of key sets between the required and possible complete
+/// keys; they need not all realize in an answer. Other generated producer shapes
+/// retain explicit refusals. Source
 /// priorities survive zero weights and inactive models; templates with no possible
 /// positive/filter binding are omitted. Objective-enabled programs currently
 /// refuse default-negated producer bodies/choice conditions and general aggregate
