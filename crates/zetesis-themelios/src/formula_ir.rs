@@ -941,6 +941,10 @@ impl Compiler<'_> {
             .into()
         })
     }
+    /// Compile a source term after `prepare`'s bottom-up normalization: closed
+    /// arithmetic has already become a value or produced a located failure.
+    /// Admitted pool selections preserve this invariant. Bound source slots
+    /// remain variable nodes; interval lowering supplies separate variable plans.
     pub(super) fn expression(
         &mut self,
         term: &Term,

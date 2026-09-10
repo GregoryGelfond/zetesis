@@ -1,8 +1,12 @@
-//! Bounded integer-affine interpretation of the existing expression plan.
+//! Bounded integer-affine interpretation of normalized source expression plans.
 //!
-//! Coefficients describe mathematical integer expressions. They do not replace
-//! the original checked scalar evaluator. Unsupported operations yield no
-//! binding evidence; finite-width exhaustion has its own located limit.
+//! Source normalization evaluates closed arithmetic before plan construction.
+//! Admitted pool selections preserve that property; consequent intervals become
+//! variable slots. Remaining arithmetic operators therefore contain variables,
+//! which this reader treats symbolically even when another instruction binds them.
+//! Coefficients describe mathematical integers, while the retained whole guard
+//! still uses checked source arithmetic. Unsupported operations yield no binding
+//! evidence; finite-width exhaustion has its own located limit.
 
 use themelios_base::span::Location;
 use themelios_program::term::{BinaryOp, UnaryOp};
@@ -10,12 +14,13 @@ use zetesis_core::Value;
 
 use crate::expansion::Budget;
 use crate::formula_ir::{Expression, Operation};
-use crate::{ExpansionFailure, ExpansionResource, FormulaFailure, FormulaResource};
+use crate::{ExpansionResource, FormulaFailure, FormulaResource};
 
 pub(super) struct Affine {
     pub coefficients: Vec<i64>,
     pub constant: i64,
-    ground: bool,
+    /// Syntactic absence of variable inputs, never inferred from cancellation.
+    closed: bool,
 }
 
 pub(super) struct Reader<'a> {
@@ -35,7 +40,7 @@ impl Reader<'_> {
         self.work(1 + self.variables as u128)?;
         let mut form = self.number(0);
         form.coefficients[target] = 1;
-        form.ground = false;
+        form.closed = false;
         Ok(form)
     }
 
@@ -53,44 +58,20 @@ impl Reader<'_> {
         )?;
         let mut forms: Vec<Option<Affine>> = Vec::with_capacity(expression.nodes.len());
         for node in &expression.nodes {
-            // Constant detection and one coefficient-producing operation each
-            // traverse at most this many entries of the dense scoped frame.
+            // Preserve the conservative dense-frame allowance for each node's
+            // coefficient construction and arithmetic.
             self.work(1 + 6 * self.variables as u128)?;
             let form = match *node {
                 Operation::Constant(Value::Number(number)) => Some(self.number(number)),
                 Operation::Variable(variable) => {
                     let mut form = self.number(0);
                     form.coefficients[variable] = 1;
-                    form.ground = false;
+                    form.closed = false;
                     Some(form)
                 }
-                Operation::Unary(operator, index) => match &forms[index] {
-                    Some(form) if form.ground => {
-                        let value = crate::scalar_arithmetic::unary(
-                            operator,
-                            i32::try_from(form.constant).expect("ground arithmetic retains i32"),
-                        )
-                        .map_err(|error| ExpansionFailure::Evaluation {
-                            error,
-                            location: self.location,
-                        })?;
-                        Some(self.number(value))
-                    }
-                    Some(form) if operator == UnaryOp::Negate => Some(self.scale(form, -1)?),
-                    _ => None,
-                },
-                Operation::Absolute(index) => match &forms[index] {
-                    Some(form) if form.ground => {
-                        let value = crate::scalar_arithmetic::absolute(
-                            i32::try_from(form.constant).expect("ground arithmetic retains i32"),
-                        )
-                        .map_err(|error| ExpansionFailure::Evaluation {
-                            error,
-                            location: self.location,
-                        })?;
-                        Some(self.number(value))
-                    }
-                    _ => None,
+                Operation::Unary(UnaryOp::Negate, index) => match &forms[index] {
+                    Some(form) => Some(self.scale(form, -1)?),
+                    None => None,
                 },
                 Operation::Binary(operator, left, right) => match (&forms[left], &forms[right]) {
                     (Some(left), Some(right)) => self.binary(operator, left, right)?,
@@ -107,7 +88,7 @@ impl Reader<'_> {
         Affine {
             coefficients: vec![0; self.variables],
             constant: i64::from(number),
-            ground: true,
+            closed: true,
         }
     }
 
@@ -117,23 +98,11 @@ impl Reader<'_> {
         left: &Affine,
         right: &Affine,
     ) -> Result<Option<Affine>, FormulaFailure> {
-        if left.ground && right.ground {
-            let result = crate::scalar_arithmetic::binary(
-                operator,
-                i32::try_from(left.constant).expect("ground arithmetic retains i32"),
-                i32::try_from(right.constant).expect("ground arithmetic retains i32"),
-            )
-            .map_err(|error| ExpansionFailure::Evaluation {
-                error,
-                location: self.location,
-            })?;
-            return Ok(Some(self.number(result)));
-        }
         let result = match operator {
             BinaryOp::Add => self.combine(left, right, 1)?,
             BinaryOp::Sub => self.combine(left, right, -1)?,
-            BinaryOp::Mul if left.ground => self.scale(right, left.constant)?,
-            BinaryOp::Mul if right.ground => self.scale(left, right.constant)?,
+            BinaryOp::Mul if left.closed => self.scale(right, left.constant)?,
+            BinaryOp::Mul if right.closed => self.scale(left, right.constant)?,
             _ => return Ok(None),
         };
         Ok(Some(result))
@@ -159,7 +128,7 @@ impl Reader<'_> {
                 .map(|(&left, &right)| combine(left, right))
                 .collect::<Result<_, _>>()?,
             constant: combine(left.constant, right.constant)?,
-            ground: left.ground && right.ground,
+            closed: left.closed && right.closed,
         })
     }
 
@@ -174,7 +143,7 @@ impl Reader<'_> {
                 i128::from(form.constant) * i128::from(factor),
                 self.location,
             )?,
-            ground: form.ground,
+            closed: form.closed,
         })
     }
 
