@@ -1015,6 +1015,61 @@
     "line": 127
   },
   {
+    "name": "Zetesis.ColumnRelations.encoding_exact",
+    "file": "Zetesis/ColumnRelations.lean",
+    "line": 45
+  },
+  {
+    "name": "Zetesis.ColumnRelations.identifier_equality",
+    "file": "Zetesis/ColumnRelations.lean",
+    "line": 56
+  },
+  {
+    "name": "Zetesis.ColumnRelations.reconstruction_exact",
+    "file": "Zetesis/ColumnRelations.lean",
+    "line": 84
+  },
+  {
+    "name": "Zetesis.ColumnRelations.accepts_exact",
+    "file": "Zetesis/ColumnRelations.lean",
+    "line": 111
+  },
+  {
+    "name": "Zetesis.ColumnRelations.selection_exact",
+    "file": "Zetesis/ColumnRelations.lean",
+    "line": 128
+  },
+  {
+    "name": "Zetesis.ColumnRelations.selection_subsequence",
+    "file": "Zetesis/ColumnRelations.lean",
+    "line": 137
+  },
+  {
+    "name": "Zetesis.ColumnRelations.selection_increasing",
+    "file": "Zetesis/ColumnRelations.lean",
+    "line": 144
+  },
+  {
+    "name": "Zetesis.ColumnRelations.no_equalities_preserve_input",
+    "file": "Zetesis/ColumnRelations.lean",
+    "line": 153
+  },
+  {
+    "name": "Zetesis.ColumnRelations.absent_value_selects_nothing",
+    "file": "Zetesis/ColumnRelations.lean",
+    "line": 160
+  },
+  {
+    "name": "Zetesis.ColumnRelations.full_matches_preserved",
+    "file": "Zetesis/ColumnRelations.lean",
+    "line": 178
+  },
+  {
+    "name": "Zetesis.ColumnRelations.applicability_exact",
+    "file": "Zetesis/ColumnRelations.lean",
+    "line": 208
+  },
+  {
     "name": "Zetesis.ConditionalConsumers.original_body",
     "file": "Zetesis/ConditionalConsumers.lean",
     "line": 28
@@ -1413,6 +1468,41 @@
     "name": "Zetesis.DagSharing.exact_choice_graph_sharing",
     "file": "Zetesis/DagSharing.lean",
     "line": 398
+  },
+  {
+    "name": "Zetesis.DomainContraction.singleton_filter_preserves",
+    "file": "Zetesis/DomainContraction.lean",
+    "line": 97
+  },
+  {
+    "name": "Zetesis.DomainContraction.remainder_lower_bound",
+    "file": "Zetesis/DomainContraction.lean",
+    "line": 147
+  },
+  {
+    "name": "Zetesis.DomainContraction.affine_filter_preserves",
+    "file": "Zetesis/DomainContraction.lean",
+    "line": 174
+  },
+  {
+    "name": "Zetesis.DomainContraction.contraction_decreases",
+    "file": "Zetesis/DomainContraction.lean",
+    "line": 189
+  },
+  {
+    "name": "Zetesis.DomainContraction.compatible_contraction",
+    "file": "Zetesis/DomainContraction.lean",
+    "line": 199
+  },
+  {
+    "name": "Zetesis.DomainContraction.bounded_filters_preserve_completions",
+    "file": "Zetesis/DomainContraction.lean",
+    "line": 226
+  },
+  {
+    "name": "Zetesis.DomainContraction.empty_domain_excludes_completions",
+    "file": "Zetesis/DomainContraction.lean",
+    "line": 259
   },
   {
     "name": "Zetesis.EvaluatedWitnesses.successful_selection",

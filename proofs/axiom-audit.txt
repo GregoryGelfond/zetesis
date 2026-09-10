@@ -211,6 +211,17 @@
 'Zetesis.ClauseValidation.validate_accepts_iff' depends on axioms: [propext, Quot.sound]
 'Zetesis.ClauseValidation.validate_work_bound' depends on axioms: [propext, Quot.sound]
 'Zetesis.ClauseValidation.empty_clause_rejects' depends on axioms: [propext, Quot.sound]
+'Zetesis.ColumnRelations.encoding_exact' does not depend on any axioms
+'Zetesis.ColumnRelations.identifier_equality' does not depend on any axioms
+'Zetesis.ColumnRelations.reconstruction_exact' depends on axioms: [Quot.sound]
+'Zetesis.ColumnRelations.accepts_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.ColumnRelations.selection_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.ColumnRelations.selection_subsequence' depends on axioms: [propext]
+'Zetesis.ColumnRelations.selection_increasing' depends on axioms: [propext]
+'Zetesis.ColumnRelations.no_equalities_preserve_input' depends on axioms: [propext, Quot.sound]
+'Zetesis.ColumnRelations.absent_value_selects_nothing' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ColumnRelations.full_matches_preserved' depends on axioms: [propext, Quot.sound]
+'Zetesis.ColumnRelations.applicability_exact' depends on axioms: [propext, Quot.sound]
 'Zetesis.ConditionalConsumers.original_body' depends on axioms: [propext, Quot.sound]
 'Zetesis.ConditionalConsumers.frozen_body' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ConditionalConsumers.empty_body_equivalent' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -293,6 +304,15 @@
 'Zetesis.DagSharing.findNode_complete' depends on axioms: [propext]
 'Zetesis.DagSharing.intern_existing_reuses' depends on axioms: [propext]
 'Zetesis.DagSharing.exact_choice_graph_sharing' depends on axioms: [propext]
+'Zetesis.DomainContraction.singleton_filter_preserves' depends on axioms: [propext, Quot.sound]
+'Zetesis.DomainContraction.remainder_lower_bound' depends on axioms: [propext, Quot.sound]
+'Zetesis.DomainContraction.affine_filter_preserves' depends on axioms: [propext, Quot.sound]
+'Zetesis.DomainContraction.contraction_decreases' depends on axioms: [propext]
+'Zetesis.DomainContraction.compatible_contraction' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.DomainContraction.bounded_filters_preserve_completions' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'Zetesis.DomainContraction.empty_domain_excludes_completions' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.EvaluatedWitnesses.successful_selection' depends on axioms: [propext]
 'Zetesis.EvaluatedWitnesses.completed_condition_preserved' depends on axioms: [propext, Quot.sound]
 'Zetesis.EvaluatedWitnesses.undefined_selection' depends on axioms: [propext]
