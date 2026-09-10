@@ -113,7 +113,7 @@ fn exhaustive_reduct_checks_preserve_answer_families() {
 
 #[test]
 fn sessions_preserve_complete_scored_answers() {
-    let mut parallel_queries = false;
+    let mut multiple_workers = false;
     for (source, expected) in sources::SOURCES.into_iter().zip(expectations()) {
         let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
         assert_eq!(input.objectives().priorities(), expected.priorities);
@@ -153,6 +153,7 @@ fn sessions_preserve_complete_scored_answers() {
             assert_eq!(records, expected.all, "{source}; workers={workers}");
             let outcome = session.outcome().unwrap();
             assert_eq!(outcome.completion(), Some(Completion::Exhausted));
+            assert!(!outcome.optimum_proved());
             assert_eq!(outcome.unsatisfiable(), expected.all.is_empty());
             assert_eq!(outcome.formula_execution().is_some(), workers > 1);
             if let Some(execution) = outcome.formula_execution() {
@@ -163,14 +164,60 @@ fn sessions_preserve_complete_scored_answers() {
                 assert_eq!(execution.queued_models, 0);
                 assert!(!completion.overflowed);
                 if completion.entered > 0 {
-                    parallel_queries = true;
+                    multiple_workers |= completion.effective_workers > 1;
                     assert_eq!(completion.requested_workers, workers);
                     assert!(completion.effective_workers <= workers.min(batch));
                 }
             }
         }
     }
-    assert!(parallel_queries);
+    assert!(multiple_workers);
+}
+
+#[test]
+fn json_preserves_hidden_optimum_identity() {
+    let options =
+        Options::try_parse_from(["zetesis", "--backend", "cpu", "--models", "0", "--json"])
+            .unwrap();
+    let mut output = Vec::new();
+    let report = run_with_diagnostics(
+        sources::PROJECTED.into(),
+        &options,
+        &mut output,
+        &mut Vec::new(),
+        &Control::default(),
+    )
+    .unwrap();
+    assert_eq!(report.completion, Completion::Exhausted);
+    let answers = zetesis_validation::answers::native_json::parse(
+        &output,
+        zetesis_validation::answers::native_json::Limits::default(),
+    )
+    .unwrap();
+    let records: Records = answers
+        .records()
+        .iter()
+        .map(|answer| {
+            let shown: Vec<_> = answer
+                .shown_atom_indices()
+                .iter()
+                .map(|&index| source_records::canonical(&answer.full_model()[index]))
+                .collect();
+            assert_eq!(shown, ["b"]);
+            assert!(answer.shown_terms().is_empty());
+            assert_eq!(answer.costs(), Some([(2, 0), (1, 0)].as_slice()));
+            (
+                answer
+                    .full_model()
+                    .iter()
+                    .map(source_records::canonical)
+                    .collect(),
+                Some(vec![0, 0]),
+            )
+        })
+        .collect();
+    assert_eq!(answers.records().len(), 2);
+    assert_eq!(records, objective_records(&[(&["b"], 0)]));
 }
 
 #[test]

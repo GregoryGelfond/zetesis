@@ -1,5 +1,7 @@
 //! Original sources shared by semantic sessions and physical formula checks.
 
+pub const PROJECTED: &str = include_str!("../fixtures/bounds-priorities/projected.lp");
+
 pub const SOURCES: [&str; 10] = [
     include_str!("../fixtures/bounds-priorities/upper.lp"),
     include_str!("../fixtures/bounds-priorities/lower.lp"),

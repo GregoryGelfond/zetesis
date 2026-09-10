@@ -332,6 +332,7 @@ mod physical {
         .chain(super::logical_extremum_sources::SOURCES)
         .chain(super::contribution_sources::SOURCES)
         .chain(super::bound_priority_sources::SOURCES)
+        .chain([super::bound_priority_sources::PROJECTED])
         {
             for json in [false, true] {
                 qualify_formula_output(source, backend, json);
