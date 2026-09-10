@@ -112,6 +112,16 @@ still checks the original expression's scalar arithmetic. Coefficient and bound
 capacity refusals remain distinct from source arithmetic errors; neither is an
 arithmetic value or evidence of completed enumeration.
 
+[`EvaluationPrefix.root_preservation`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/EvaluationPrefix.lean)
+equates returning a final operation's result with appending it to the completed
+prefix and observing the last value. Both schedules preserve the first error.
+The Rust [expression evaluator](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation.rs)
+uses one checked operation for intermediate nodes and the root. The law assumes
+pure partial operations; source-plan validity, operand indices, checked scalar
+arithmetic, resource charges, allocation and cleanup remain implementation
+correspondences. A smaller scratch prefix does not establish a timing or
+process-memory result.
+
 [`ProjectedConditionals`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ProjectedConditionals.lean)
 separates anonymous witness disjunctions, signed source alternatives and
 universal condition rows. The Rust
@@ -123,6 +133,15 @@ excludes later outer bindings. This implements the intended quantifier order;
 source support completeness, frame construction and matcher correspondence
 remain separate proof obligations. A resource stop cannot establish an empty
 completed carrier.
+
+[`TernaryWatch.remaining_unique`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/TernaryWatch.lean)
+identifies the one position outside two distinct watches in a three-position
+clause. `replacement_exact` equates a covering generic scan with one availability
+test at that position. The Rust [replacement operation](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/search.rs)
+uses this index calculation. Its watch registry must establish valid distinct
+positions and keep the assignment fixed during inspection. Registry updates,
+candidate ordering, charged work, cancellation and CNF-to-reduct correspondence
+remain separate executable obligations.
 
 ## Read hypotheses as caller obligations
 

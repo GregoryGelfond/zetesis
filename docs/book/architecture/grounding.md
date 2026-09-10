@@ -76,6 +76,16 @@ The useful lower-level operations have logical contracts:
 | Gate | Test frozen positive/negative candidate conditions | Use the candidate, not the growing consequence set |
 | Project | Construct a head or constraint instance | Preserve the complete atom and its source instance |
 
+The formula path evaluates scalar expressions as finite plans. Each operation
+reads the completed prefix of earlier results. The final operation uses the same
+checked evaluator and returns its value directly; only intermediate results
+occupy scratch storage. Work, operand-copy charges and first-error order remain
+the same. The [evaluator](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation.rs)
+clears that prefix on success, failure and unwind, retaining at most 32 empty
+cells between evaluations. A one-node expression needs no scratch cells;
+constructing or copying its returned value can still allocate. This storage
+schedule has a separate [preservation law](../lean/correspondence.md).
+
 An atom in a **possible support relation** is a witness available to source
 enumeration. It is not thereby true in a candidate, and an aggregate's proposed
 result is not thereby its evaluated result. The emitted formula must retain the

@@ -84,7 +84,9 @@ signed lowering, source coverage and finite-width arithmetic remain separate
 implementation obligations.
 
 [EvaluationPrefix](../Zetesis/EvaluationPrefix.lean) specifies the live-prefix
-invariant beneath reusable expression storage. [LazyRounds](../Zetesis/LazyRounds.lean)
+invariant beneath reusable expression storage. Its `root_preservation` law
+permits returning the final operation directly, preserving the reference plan's
+last value or first error. [LazyRounds](../Zetesis/LazyRounds.lean)
 specifies fresh source coverage and separate world truth beneath shared device
 batches. Both are finite execution foundations. Their Rust memory, cursor and
 shader correspondences remain explicit work; neither supplies a device certificate.
@@ -138,3 +140,9 @@ Source scheduling and concrete carrier completeness remain unproved bridges.
 two distinct positions exhaust a binary clause, leaving no replacement to find.
 The mathematical result requires valid distinct watches; the Rust registry,
 propagation order, charged work and reduct encoding remain separate obligations.
+
+[TernaryWatch](../Zetesis/TernaryWatch.lean) identifies the sole remaining position
+of a three-position clause. `replacement_exact` proves that any covering scan
+and one availability test there return the same replacement. Valid distinct
+watches and a fixed availability predicate are explicit premises; concrete
+registry, accounting and cancellation behavior remain implementation obligations.

@@ -26,6 +26,16 @@ Its Boolean search representation does not redefine ASP as classical
 satisfiability: auxiliary encoding variables do not participate in answer-set
 identity or minimality.
 
+Local search operations can specialize while preserving the candidate sequence
+of completed search. In a three-literal clause, two distinct watched positions
+leave one possible replacement position: `3 - first - second`, with indices from zero to
+two. The [replacement operation](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/search.rs)
+tests that occurrence once, after polling control and charging work. It returns
+the same replacement as the general scan. Omitting watched positions can reduce
+charged work, so a fixed work limit can permit more progress. The
+[ternary law](../lean/correspondence.md) states the position invariant; original
+satisfaction and reduct membership retain their existing obligations.
+
 A sufficient class certificate can avoid a full countermodel query. For example,
 ranked support under a complete original-producer representation justifies a
 tight-program specialization. A failed certificate requests exact residual

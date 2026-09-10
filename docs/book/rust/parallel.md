@@ -18,6 +18,12 @@ into rejected candidates. There is no unbounded waiting queue: a busy pool
 refuses another simultaneous batch. The static variant accepts an already
 compiled graph and does not compile one implicitly.
 
+Calling `Check::into_stable_interpretation` on an accepted native check transfers
+its closure into an instance-bound receipt without copying atoms. Rejection
+returns the original check intact. The receipt's `into_interpretation` explicitly discards its program
+association. Ordinary CPU session execution uses these consuming operations to
+deliver the owned closure after acceptance.
+
 Ordinary formula sessions have a separate bounded exact-completion executor.
 Its worker setting is distinct from the relational closure pool. Scalar outer
 candidate search does not become parallel simply because residual membership
@@ -48,6 +54,14 @@ cause and accumulated progress. No completed checks are published from a batch
 whose required scan or evaluation is incomplete. `Progress::mask_words` is part
 of source work, not extra work to add again. Optional masks may reduce offered
 instances while adding mask work and storage; no universal speedup follows.
+
+Completed lazy checks expose `closure()` for borrowing and `into_closure()` for
+ownership transfer. The latter also works on rejected checks: it discards the
+program association and verdict, returning a raw interpretation. Leastness and
+membership still depend on the injected evaluator's exactness contract. Shared
+CPU and lazy GPU session adapters test acceptance before transferring the closure,
+preserving input occurrence order and leaving incomplete results on their typed
+error paths. Consuming a closure creates no stronger membership evidence.
 
 `zetesis_wgpu::GpuLazyOracle` supplies a device-backed evaluator using the same
 protocol. The required adapter and resource validation remain runtime concerns.
