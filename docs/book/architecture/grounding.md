@@ -125,12 +125,34 @@ selectivity; integer comparisons and complete tuple probes have different costs.
 
 Row identity connects relational semantics to masks, intersections and gathers.
 Combining two column masks means intersecting positions in the same relation
-snapshot; it must not combine values from different tuples. The current indexes
-still gather values from complete atoms, rather than contiguous column buffers.
-An alternate column view would have to preserve that row-to-value correspondence.
-Canonical value IDs could implement equality, but arbitrary ID order could not
-implement numeric comparison, term order or arithmetic. These distinctions let
-physical vector operations vary without changing the logical relation.
+snapshot; it must not combine values from different tuples. Ordinary source
+indexes still gather values from complete atoms. The separate bounded
+[`relation` library](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/relation.rs)
+provides an immutable column view for primitive experiments. It borrows the
+original atoms and encodes complete typed values through one equality dictionary.
+It preserves row occurrences and their order, including duplicate tuples, and
+keeps original catalog indices distinct from local positions. Explicit predicate
+arity and row count distinguish an empty relation from a nullary tuple.
+
+Queries and selections borrow their exact relation owner. A selection validates
+ordered positions; it does not establish complete grounding or answer-set
+membership. Equality filtering is complete relative to its supplied input rows:
+
+```text
+query = ResolveEqualities(relation, known_values)
+selected = Filter(AllEqualitiesHold(query), supplied_rows)
+bindings = FilterMap(MatchWholeTuple(pattern, binding), selected)
+```
+
+An empty conjunction retains every supplied row; a missing dictionary value
+retains none. Numeric ID order does not implement numeric comparison, ASP term
+order or arithmetic. The existing matcher remains responsible for structural
+terms, repeated variables and checked binding generation. The
+[column laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/column-relations.md)
+state the reconstruction and ordered-selection arguments and their limits.
+This library view does not replace ordinary source storage. Production adoption
+requires a coherent tuple owner and removal of redundant stores; an experimental
+copy alone establishes neither a smaller memory footprint nor faster grounding.
 
 The formula binding planner also derives finite integer envelopes from directed
 affine comparisons when ordinary binding steps cannot advance. For an inequality

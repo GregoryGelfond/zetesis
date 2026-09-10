@@ -13,6 +13,8 @@ The maintained full index is
 | Why may only gate atoms be guessed? | `Semantics.accept_sound`, `stable_complete`, `stable_iff_exists_seed` | The supplied carrier covers every frozen gate |
 | Can a stored mask evaluate a reduct? | `Ferraris.masked_eval_iff_reduct` in `FerrarisMask` | Mask agrees with original truth at every formula; arbitrary tested interpretation |
 | Can joins be decomposed? | `Lifted.composition_exact` | Binding, filtering, gates and projection denote the supplied template |
+| When may equality columns prefilter full matches? | `ColumnRelations.full_matches_preserved` | Exact dictionary/columns, supplied rows and a total matcher entailing the equalities |
+| When may candidate domains be narrowed? | `DomainContraction.compatible_contraction` | Unchanged theory, fixed assignment interpretation and activation, recognized constraints and a sound filter |
 | When is a lazy closure complete? | `LiftedBridge.completed_lazy_stage_exact` | Sound stages, conceptual grounding, final enabled-instance coverage and closure |
 | Can a union scan serve independent worlds? | `LazyRounds.world_consequences_exact`, `world_constraints_exact` | Individual-world gates and positive truth are still checked |
 | Can empty world masks prune joins? | `WorldMasks.masked_scan_covers_world` | Membership belongs to the current immutable snapshots; no future-carrier conclusion |

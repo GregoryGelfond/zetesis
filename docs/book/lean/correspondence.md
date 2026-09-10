@@ -13,6 +13,29 @@ silently stand for all of them.
 | Machine execution | Checked Rust behavior and qualified WGSL paths | Establish executable refinement, arithmetic and device semantics |
 | Observation | Semantic coverage and delivery laws | Connect actual output writes and counters to the retained semantic evidence |
 
+[`ColumnRelations`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ColumnRelations.lean)
+relates complete typed tuples to aligned equality-ID columns. Dictionary round
+trips and exact cell encoding imply reconstruction; equality selection returns
+exactly the satisfying subsequence in original order. `full_matches_preserved` assumes a total Boolean
+matcher and that every complete match satisfies the prefilter. The Rust
+[`relation` module](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/relation.rs)
+provides checked owner-bound views. Construction, catalog mapping, resource
+accounting, fallible matching and any device masks still need executable
+correspondence arguments. The [proof guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/column-relations.md)
+explains the hypotheses with a correlated-tuple example.
+
+[`DomainContraction`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DomainContraction.lean)
+proves concrete singleton-distinctness and affine filters preserve compatible
+assignments under fixed constraints. Finite compositions preserve that family;
+an empty mandatory domain excludes the certified branch. Relating these
+assignments to answer sets requires a fixed assignment interpretation and sound
+recognition of the active constraints. The laws do not
+implement constraint recognition or establish source admission, support,
+minimality or existence. In particular, applying a filter before source
+evaluation requires a separate argument that required arithmetic errors remain
+observable. The [domain guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/domain-contraction.md)
+distinguishes these prospective filters from the existing source-domain analysis.
+
 The normal-rule and Ferraris foundations retain independent definitions.
 The [NormalFerraris bridge](normal-rules.md) proves their equivalence under the
 specified normalized-rule translation, including its filtered/direct-map

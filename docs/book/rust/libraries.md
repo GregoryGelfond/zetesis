@@ -14,12 +14,14 @@ construction and standalone analysis APIs belong to its own manual.
 | Ordinary solve over an admitted owner | `zetesis_cli::{PreparedInput, Session, SolveConfig}` |
 | All original answers, streamed or completely collected | `Session::enumerate`, `WorldView::collect`, checked `AnswerSet` |
 | Finite relational templates and atoms | `zetesis_core::{Program, Template, Atom, Seed}` |
+| Bounded typed column views and ordered equality selection | `zetesis_core::relation::{Relation, Query, Selection}` |
 | Explicit complete relational graph | `zetesis_core::GroundProgram::compile` |
 | Normal reduct membership | `zetesis_cpu::{check, check_static, BatchOracle}` |
 | Finite formula construction and reference membership | `zetesis_ferraris::{Theory, Node, Interpretation, check}` |
 | Repeated queries against one candidate's reduct | `zetesis_ferraris::FrozenReduct` |
 | Native formula candidate/countermodel search | `zetesis_sat` |
 | Bounded device execution | `zetesis_wgpu` |
+| Device equality masks over one relation | `zetesis_wgpu::GpuRelationExecutor` |
 | Model-relative objective evaluation | `zetesis_objective` |
 | Source-domain analysis | `zetesis_domain` |
 | Reproducible comparisons and measurements | `zetesis_validation`, `zetesis_experiments` |
@@ -58,6 +60,21 @@ borrows an `AdmittedFormula`. Bundle variants retain multi-file provenance.
 The formula owner keeps the theory, atom indexing, objective program and
 observations together. Do not build a session by independently pairing a theory
 with an atom table from another admission.
+
+`relation::Relation` borrows one immutable atom source and owns a dictionary and
+aligned equality-ID columns. A `Query` or `Selection` borrows that exact owner;
+equal contents in another relation do not make the objects interchangeable.
+`Row::source_index` preserves the original catalog position, while selection
+positions are local to the relation. The view currently serves bounded primitive
+experiments. It is not an alternative source parser or a complete grounder.
+
+`GpuRelationExecutor::prepare` borrows that relation and the executor, uploading
+its equality-ID columns. The resulting prepared view accepts queries from the
+same owner and returns query-ordered masks. `RelationGpuMasks::selection`
+reconstructs checked local row positions for one query at a time. Complete
+pattern matching remains a separate operation. Preparation and each filter have
+explicit resource limits; zero rows or zero queries require no compute dispatch.
+This is a bounded device primitive, not ordinary source grounding on the GPU.
 
 `PreparedInput::ground` borrows an `Arc<GroundProgram>` that retains its original
 program identity. It reuses the supplied graph; an explicit request for lazy
