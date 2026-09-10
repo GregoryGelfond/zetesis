@@ -86,12 +86,47 @@ cells between evaluations. A one-node expression needs no scratch cells;
 constructing or copying its returned value can still allocate. This storage
 schedule has a separate [preservation law](../lean/correspondence.md).
 
+Each formula join owns one reusable expression workspace. Prefix checks, binding
+generators and final filters borrow it in sequence; pending generators do not
+retain another workspace. Reuse changes storage ownership, not evaluation order.
+In particular, a false filter does not hide an arithmetic error in a later
+filter. The [caller regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation/tests/callers.rs)
+check these actual consumers as well as their values and failure boundaries.
+
 An atom in a **possible support relation** is a witness available to source
 enumeration. It is not thereby true in a candidate, and an aggregate's proposed
 result is not thereby its evaluated result. The emitted formula must retain the
 original activation and equality conditions. Structured positive witnesses can
 bind local variables before dependent arithmetic is checked. Positive-witness
 matching does not invert arithmetic or introduce a global guessed value universe.
+
+### Relation rows and vector operations
+
+A relation row is one complete typed tuple. Formula support assigns append-only,
+predicate-local row identities and indexes each argument column. For a positive
+witness, the current selector chooses the shortest posting list supplied by known
+whole-column equalities. The matcher then checks the complete tuple, including
+repeated variables and structured terms:
+
+```text
+rows = ShortestPosting(relation, KnownEqualities(pattern, binding))
+bindings = FilterMap(MatchWholeTuple(pattern, binding), rows)
+```
+
+This describes witness selection, not complete grounding. Scope, generators,
+scalar guards and candidate gates retain their separate contracts. The
+[bounded posting diagnostic](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/README.md#inspect-posting-selectivity)
+compares intersections with an independent full-row scan. Its counters measure
+selectivity; integer comparisons and complete tuple probes have different costs.
+
+Row identity connects relational semantics to masks, intersections and gathers.
+Combining two column masks means intersecting positions in the same relation
+snapshot; it must not combine values from different tuples. The current indexes
+still gather values from complete atoms, rather than contiguous column buffers.
+An alternate column view would have to preserve that row-to-value correspondence.
+Canonical value IDs could implement equality, but arbitrary ID order could not
+implement numeric comparison, term order or arithmetic. These distinctions let
+physical vector operations vary without changing the logical relation.
 
 The formula binding planner also derives finite integer envelopes from directed
 affine comparisons when ordinary binding steps cannot advance. For an inequality
