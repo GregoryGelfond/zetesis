@@ -86,6 +86,15 @@ classification, carrier reduction, checked arithmetic and unary transport remain
 implementation obligations. The mathematical list enumerator is a reference
 definition; it does not verify the Rust subset-sum or extremum operations.
 
+[`IntegerEnvelopes`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/IntegerEnvelopes.lean)
+proves directed bound coverage and integer floor/ceiling laws.
+`filtered_bindings_exact` states that a covering envelope followed by the original
+guard recovers exactly the satisfying bindings. The Rust
+[envelope analysis](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_binding_guard/envelope.rs)
+uses these mathematical obligations. Normalizing expressions, scheduling
+endpoint inference, checking finite-width arithmetic and enumerating the
+resulting intervals remain concrete refinement obligations.
+
 [`ProjectedConditionals`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ProjectedConditionals.lean)
 separates anonymous witness disjunctions, signed source alternatives and
 universal condition rows. The Rust

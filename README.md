@@ -156,6 +156,8 @@ inputs; weight, priority and tuple stay correlated within each binding. Finite
 source carriers also admit changing priorities from flat unary aggregate
 observers over closed facts and choices. Broader producer profiles remain
 restricted.
+Directed finite affine comparison chains can bind several variables while
+retaining the original correlations and checked source arithmetic.
 Choice and aggregate-head elements preserve `not` and `not not` explicitly.
 Default-negated operands contribute activity without positive producer support;
 Boolean operands carry truth without creating atoms. Universal body conditionals

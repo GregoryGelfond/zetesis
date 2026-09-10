@@ -80,8 +80,42 @@ An atom in a **possible support relation** is a witness available to source
 enumeration. It is not thereby true in a candidate, and an aggregate's proposed
 result is not thereby its evaluated result. The emitted formula must retain the
 original activation and equality conditions. Structured positive witnesses can
-bind local variables before dependent arithmetic is checked; this does not
-permit arithmetic inversion or a global guessed value universe.
+bind local variables before dependent arithmetic is checked. Positive-witness
+matching does not invert arithmetic or introduce a global guessed value universe.
+
+The formula binding planner also derives finite integer envelopes from directed
+affine comparisons when ordinary binding steps cannot advance. For an inequality
+`a₁X₁ + … + aₙXₙ ≤ b`, it derives an endpoint for one variable from known
+endpoints of the other terms. Each round reads the previous intervals, combines
+simultaneous proposals by minimum or maximum, and installs only missing
+endpoints. At most two endpoints per variable can be installed. This bounds the
+analysis independently of numeric tightening or contradictory cycles.
+
+```text
+intervals = EmptyEndpoints(variables)
+repeat at most 2 × Count(variables):
+    proposals = ReduceBounds(Map(DeriveFrom(intervals), inequalities))
+    additions = MissingEndpoints(intervals, proposals)
+    if Empty(additions): stop
+    intervals = Install(intervals, additions)
+range = FirstFiniteUnboundRange(intervals, boundVariables)
+return range
+```
+
+This is the finite-envelope fallback, not the complete source planner. Existing
+joins and generators remain responsible for their own scopes and dependencies.
+The scheduler consumes the returned range and resumes binding. Its cursor
+enumerates the resulting plan and retains every original condition.
+The [implementation](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_binding_guard/envelope.rs)
+uses checked coefficients and bounds, charges analysis work and storage, and
+retains the original scalar conditions. A conservative interval may propose
+extra rows; it may not omit a satisfying substitution.
+
+For `V` scoped variables, `C` inequalities and at most `E` expression nodes,
+one fallback uses `O(EV + CV + V)` logical storage and at most `O(CV³)` endpoint
+work. Existing binding steps run first, so already resolved scopes avoid this
+analysis. These bounds describe the dense implementation, not the size of its
+subsequent substitution family.
 
 The distinctions matter to parallelism. A union of several worlds' relations
 can offer shared source instances, but a join can combine atoms that coexist in

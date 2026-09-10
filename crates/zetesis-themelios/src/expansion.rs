@@ -15,7 +15,7 @@ pub struct ExpansionLimits {
     /// Maximum distinct, unannotated constant definitions.
     pub max_constants: usize,
     /// Maximum dependency/pool scans, bounded source copies and bottom-up term
-    /// evaluation steps combined.
+    /// evaluation steps, affine normalization and endpoint scans combined.
     pub max_term_work: usize,
     /// Maximum output templates, also capped by core admission's template limit.
     pub max_templates: usize,
@@ -37,6 +37,8 @@ pub struct ExpansionLimits {
     /// carriers. Aggregate consumer plans reserve instruction cells, required
     /// outer slots, readiness/producers and temporary scheduling cells.
     /// Ordinary Boolean choice keys additionally reserve their scalar identity payload.
+    /// Finite affine binding analysis reserves expression/coefficient frames,
+    /// inequalities and endpoint arrays before allocation.
     /// Ordinary aggregate, choice and conditional scope clones remain
     /// excluded, as do other AST carriers, provenance and allocator overhead.
     /// Original source storage remains bounded by admission options.
