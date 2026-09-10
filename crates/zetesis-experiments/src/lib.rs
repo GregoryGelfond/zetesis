@@ -15,6 +15,7 @@ mod formula_fixtures;
 mod formula_measurement;
 mod formula_parallel;
 mod measurement;
+pub mod relation_fixtures;
 pub mod grounding;
 pub mod lazy_measurement;
 pub mod tight_measurement;
