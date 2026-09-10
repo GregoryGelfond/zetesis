@@ -1,6 +1,6 @@
 {
   "schema": "zetesis.refinement.membership.v1",
-  "sourceRevision": "b633f44720a1ce6fae5d0dc6136803fb58e2d8a0",
+  "sourceRevision": "0798e1a6e770d88610104dab4d7ed44cae1c86a8",
   "sourceInventory": "source-inputs.sha256",
   "artifactInventory": "artifacts.sha256",
   "extractor": {
