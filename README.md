@@ -152,8 +152,10 @@ The [admitted-language reference](docs/book/reference/language.md) records the
 precise boundaries, including shared atoms and tuples in aggregate heads,
 complete logical values in extrema heads, and logical bounds on choices and
 numeric aggregates. Objective priority expressions can use safely bound ordinary
-inputs; weight, priority and tuple stay correlated within each binding. Broader
-aggregate-generated priority profiles remain restricted.
+inputs; weight, priority and tuple stay correlated within each binding. Finite
+source carriers also admit changing priorities from flat unary aggregate
+observers over closed facts and choices. Broader producer profiles remain
+restricted.
 Choice and aggregate-head elements preserve `not` and `not not` explicitly.
 Default-negated operands contribute activity without positive producer support;
 Boolean operands carry truth without creating atoms. Universal body conditionals

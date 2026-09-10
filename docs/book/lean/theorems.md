@@ -115,6 +115,19 @@ its order and empty-endpoint assumptions explicitly. Optional keys may be
 correlated. `fixed_priority_presence` connects a fixed resolved value with
 complete eligible rows and a numeric weight from the same binding.
 
+[`SourceMeasures`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/SourceMeasures.lean)
+defines the finite measures of key selections between required and possible
+keys. `carrier_membership` characterizes that enumeration;
+`actual_value_covered` includes every actual active selection.
+`invariant_carrier` gives the singleton case. `source_priority_presence`
+retains complete binding and numeric-field requirements.
+
+[`IntegerEnvelopes`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/IntegerEnvelopes.lean)
+proves bounds along directed comparisons and through affine expressions.
+Endpoint rounding is mathematical integer division. `filtered_bindings_exact`
+states that complete envelope enumeration followed by the original guard gives
+exact bindings. Source recognition and machine arithmetic remain separate.
+
 These are useful mathematical components. Their coverage or arithmetic premises
 do not prove that a particular Rust source cursor enumerates the required
 bindings, that whole tuples are coalesced correctly, or that the machine obeys

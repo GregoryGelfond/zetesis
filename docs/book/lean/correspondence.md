@@ -76,14 +76,15 @@ not establish search completion or alter answer-set acceptance.
 
 [`AggregateInvariants`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AggregateInvariants.lean)
 states when optional tuple keys cannot change a required sum or extremum.
-The source [fixed-value certificate](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_objective_dependencies/presence/flat/fixed.rs)
-coalesces complete keys, classifies required and possible activity, and checks
-that optional-only contributions leave the required measure unchanged.
-`fixed_priority_presence` then retains the same-row numeric-weight requirement.
-The laws need no independence assumption between optional keys. Establishing
-the source activity bounds, ASP comparator correspondence, checked integer folds
-and unique unary transport remains an implementation obligation; mathematical
-invariance alone does not prove complete source eligibility.
+The source [measure carrier](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_objective_dependencies/presence/flat/carrier.rs)
+coalesces complete keys and classifies required and possible activity.
+An invariant result is the singleton case.
+[`SourceMeasures`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/SourceMeasures.lean)
+proves finite carrier membership and coverage of actual active selections.
+Optional keys need not be independent in an answer. The concrete source
+classification, carrier reduction, checked arithmetic and unary transport remain
+implementation obligations. The mathematical list enumerator is a reference
+definition; it does not verify the Rust subset-sum or extremum operations.
 
 [`ProjectedConditionals`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ProjectedConditionals.lean)
 separates anonymous witness disjunctions, signed source alternatives and

@@ -246,18 +246,33 @@ Positive lifted objectives and supported total aggregate observers can pass
 through unique acyclic relation renamings or argument permutations. Dynamic
 priorities from aggregate-generated values require their own complete
 eligibility and presence evidence; accepting an ordinary bound input does not
-grant that certificate. A flat unary aggregate observer can supply an invariant
-value when required complete tuple keys determine its result and every optional
-key leaves that result unchanged. Examples include repeated required keys in a
-count, zero or ignored sum contributions, and optional values dominated by the
-required extremum under ASP term ordering. Unique unary renamings preserve this
-certificate. Original aggregate equalities remain in the theory; only certified
-objective proposal rows are filtered before evaluating their priority.
+grant that certificate. A flat unary observer over closed facts and unbounded
+choices can supply a finite source measure carrier. Let R be its required
+complete tuple keys and P its possible keys. The carrier is
+{measure(S) | R ⊆ S ⊆ P}. It includes invariant results as singleton carriers.
+Unique unary renamings preserve the carrier. Original aggregate equalities
+remain in the theory; carrier membership filters objective proposal rows before
+priority evaluation.
+
+```asp
+{{#include ../../../crates/zetesis-cli/tests/fixtures/finite-carriers/count.lp}}
+```
+
+Both count keys depend on `a`, so the answer sets contain either `n(0)` or
+`a,n(2)`. The source carrier is {0,1,2}; priority 1 remains as a zero slot.
+The respective cost vectors at priorities [2,1,0] are [0,0,1] and [1,0,0].
+A source carrier describes possible key selections, not realizable answers.
+Several admitted observers use the existing complete binding join; their
+original equalities retain correlations in each answer.
 
 The [invariant-priority tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_priority_certificates.rs)
 include empty endpoints, complete tuple identities and correlated weight/priority
-inputs. Non-singleton generated carriers and broader producer shapes remain
-restricted, so L13 stays open. Flat unary mixed-extrema
+inputs. The [source-carrier tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cli/tests/finite_carrier_sessions.rs)
+check changing counts, sums, extrema and forwarding through complete scored
+answers. Carrier construction has explicit value, work and retained-entry
+limits; numeric subset construction may require exponential work and space.
+Local tuple generators and broader producer shapes remain restricted, so L13
+stays open. Flat unary mixed-extrema
 observers have a separate presence certificate; arbitrary filtered, multiple,
 negative, disjunctive or conditional producer patterns do not inherit it.
 Additional objective conditions and broader mixed-extrema profiles remain

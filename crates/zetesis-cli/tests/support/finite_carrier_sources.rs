@@ -1,6 +1,6 @@
 //! Original sources shared by semantic sessions and physical formula checks.
 
-pub const SOURCES: [&str; 12] = [
+pub const SOURCES: [&str; 14] = [
     include_str!("../fixtures/finite-carriers/independent.lp"),
     include_str!("../fixtures/finite-carriers/coupled.lp"),
     include_str!("../fixtures/finite-carriers/conditional.lp"),
@@ -13,4 +13,6 @@ pub const SOURCES: [&str; 12] = [
     include_str!("../fixtures/finite-carriers/minimum.lp"),
     include_str!("../fixtures/finite-carriers/forwarding.lp"),
     include_str!("../fixtures/finite-carriers/composed.lp"),
+    include_str!("../fixtures/finite-carriers/product.lp"),
+    include_str!("../fixtures/finite-carriers/product-numeric.lp"),
 ];
