@@ -23,7 +23,8 @@ lazy|hardware_lazy|4|metal_lazy_worlds_match_exact_frozen_cpu_closures metal_laz
 cli-lazy|lazy_gpu|4|physical::ordinary_lazy_metal_preserves_complete_cpu_models physical::requested_model_limit_retains_completed_lazy_candidates physical::lazy_source_stop_preserves_unfinished_candidate_counts physical::lazy_writer_failure_preserves_completed_device_work
 cli-formula|formula_gpu|2|physical::ordinary_metal_formula_batches_match_complete_cpu_models_costs_and_displays physical::ordinary_metal_formula_limits_preserve_partial_coverage_and_writer_errors
 world-views|world_views_gpu|2|metal_world_view_preserves_nonoptimal_answers metal_collection_limit_retains_checked_accounting
-aggregate-measurement|aggregate_measurement|1|metal_aggregate_measurements_require_actual_submissions'
+aggregate-measurement|aggregate_measurement|1|metal_aggregate_measurements_require_actual_submissions
+relation|hardware_relation|2|metal_relation_masks_match_typed_rows metal_relation_refusals_preserve_prepared_view'
 
 repo_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 cd -- "$repo_dir"

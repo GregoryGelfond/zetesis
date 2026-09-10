@@ -104,6 +104,24 @@ fn physical_selection_is_a_fixed_contract() {
         assert!(coverage::selection(&table).is_err());
     }
 }
+#[test]
+fn metal_selection_refuses_vulkan_substitution() {
+    for (metal, vulkan) in [
+        (
+            "metal_relation_masks_match_typed_rows",
+            "vulkan_relation_masks_match_typed_rows",
+        ),
+        (
+            "metal_relation_refusals_preserve_prepared_view",
+            "vulkan_relation_refusals_preserve_prepared_view",
+        ),
+    ] {
+        let changed = TABLE.replacen(metal, vulkan, 1);
+        assert_ne!(changed, TABLE);
+        assert!(coverage::selection(&changed).is_err());
+    }
+}
+
 fn metadata(
     version: &str,
     physical: bool,
@@ -150,8 +168,8 @@ fn physical_metadata_keeps_floor_populations_separate() {
         record["floor_profiles"],
         serde_json::json!(["workspace", "cli-cpu"])
     );
-    assert_eq!(record["expected_physical_tests"], 27);
-    assert_eq!(record["physical_test_groups"].as_array().unwrap().len(), 9);
+    assert_eq!(record["expected_physical_tests"], 29);
+    assert_eq!(record["physical_test_groups"].as_array().unwrap().len(), 10);
     assert_eq!(
         record["project_added_filename_filters"],
         serde_json::json!([])

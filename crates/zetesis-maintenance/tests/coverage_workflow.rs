@@ -106,16 +106,22 @@ fn bundled_llvm_versions_preserve_schedule() {
 }
 #[test]
 fn omitted_physical_group_prevents_instrumentation() {
-    let f = Fixture::new();
-    let script = f
-        .read("scripts/coverage.sh")
-        .lines()
-        .filter(|line| !line.starts_with("lazy|"))
-        .collect::<Vec<_>>()
-        .join("\n");
-    f.write("scripts/coverage.sh", script.as_bytes());
-    let result = f.coverage("gate", true, &[]);
-    f.assert_preflight_failure(&result);
+    for group in ["lazy", "relation"] {
+        let f = Fixture::new();
+        let row = groups()
+            .into_iter()
+            .find(|fields| fields[0] == group)
+            .unwrap()
+            .join("|");
+        // Remove the record while preserving the shell literal's closing quote,
+        // including when the omitted group is the final table row.
+        let original = f.read("scripts/coverage.sh");
+        let script = original.replacen(&format!("\n{row}"), "", 1);
+        assert_ne!(script, original);
+        f.write("scripts/coverage.sh", script.as_bytes());
+        let result = f.coverage("gate", true, &[]);
+        f.assert_preflight_failure(&result);
+    }
 }
 #[test]
 fn every_physical_group_rejects_zero_matches() {
@@ -154,7 +160,7 @@ fn altered_physical_records_prevent_completion() {
 }
 #[test]
 fn failed_physical_execution_preserves_its_exit_code() {
-    for group in ["wgpu-lib", "aggregate-measurement"] {
+    for group in ["wgpu-lib", "aggregate-measurement", "relation"] {
         let f = Fixture::new();
         let result = f.coverage(
             "gate",
