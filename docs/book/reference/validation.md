@@ -175,3 +175,28 @@ and CPU-only populations and does not replace assertion review.
 Keep durable fixtures, source attribution and runnable checks in the repository.
 The manual describes current contracts. Private development history and
 temporary campaign records are not prerequisites for reproducing a public claim.
+
+## Coverage
+
+The README badge reports workspace line coverage from the most recently
+qualified source below. It is a recorded local measurement, not a live hosted-CI
+status. A newer source remains unqualified until its own checks complete.
+
+| Population | Covered / instrumented lines | Coverage |
+| --- | ---: | ---: |
+| Workspace, all features, portable tests plus 27 physical Metal tests | 43,805 / 46,813 | 93.57% |
+| CPU-only CLI, separate instrumentation | 4,308 / 4,622 | 93.21% |
+
+This snapshot was qualified on 10 September 2026 for
+[`3f8591e`](https://github.com/GregoryGelfond/zetesis/tree/3f8591e22d8de002aca0711f0427521b4cae37a5),
+using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS with Apple M4 Pro
+Metal. Both populations passed their independent 91% floor. The workspace
+combines its portable and physical profiles; the CPU-only population remains
+separate. Vulkan and other untested devices are outside this measurement.
+
+Reproduce the populations with `scripts/check.sh coverage --metal` using the
+[verification tools](#prepare-verification-tools). Retain the generated JSON and
+HTML reports under `target/coverage/workspace` and `target/coverage/cli-cpu`.
+Update the badge and this table together only after qualification completes.
+Line coverage identifies executed Rust lines; it does not establish assertion
+strength, WGSL instruction coverage or formal correctness.
