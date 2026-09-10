@@ -1,5 +1,7 @@
 //! Storage lifetime is tested independently of scalar-operation correctness.
 
+mod callers;
+
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use themelios_base::source::SourceId;

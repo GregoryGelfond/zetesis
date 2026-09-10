@@ -15,7 +15,7 @@ use crate::formula_ir::{Expression, HeadIr, LiteralIr, Operation, Prepared, valu
 use crate::grounding_observer::{Event, Work};
 use crate::{ExpansionFailure, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
 
-use evaluation::Evaluation;
+pub(crate) use evaluation::Evaluation;
 
 #[derive(Default)]
 pub(crate) struct Counters {
@@ -473,8 +473,7 @@ impl<'a> Join<'a> {
             while let Some(binding) =
                 self.next_base(projected, limits, budget, counters, location)?
             {
-                if filters(
-                    self.literals,
+                if self.filters(
                     &binding,
                     self.comparisons,
                     limits,
@@ -488,19 +487,21 @@ impl<'a> Join<'a> {
             return Ok(None);
         }
         loop {
-            if let Some(pending) = &mut self.pending {
-                while let Some(binding) = pending.next(limits, budget, counters, location)? {
-                    if filters(
-                        self.literals,
-                        &binding,
-                        Comparisons::Deferred,
-                        limits,
-                        budget,
-                        counters,
-                        location,
-                    )? {
-                        return Ok(Some(binding));
-                    }
+            while let Some(pending) = &mut self.pending {
+                let Some(binding) =
+                    pending.next(&mut self.evaluation, limits, budget, counters, location)?
+                else {
+                    break;
+                };
+                if self.filters(
+                    &binding,
+                    Comparisons::Deferred,
+                    limits,
+                    budget,
+                    counters,
+                    location,
+                )? {
+                    return Ok(Some(binding));
                 }
             }
             let Some(binding) = self.next_base(projected, limits, budget, counters, location)?
@@ -858,50 +859,94 @@ fn bound(
     Ok(true)
 }
 
-fn filters(
-    literals: &[LiteralIr],
-    assignment: &[Value],
-    comparisons: Comparisons,
-    limits: &FormulaLimits,
-    budget: &mut Budget,
-    counters: &mut Counters,
-    location: Location,
-) -> Result<bool, FormulaFailure> {
-    let mut passes = true;
-    for literal in literals {
-        if let Some((left, relation, right)) = comparison(literal)
-            && comparisons != Comparisons::Verified
-        {
-            let left = expression(left, assignment, limits, budget, counters, location)?;
-            let right = expression(right, assignment, limits, budget, counters, location)?;
-            passes &= compare(&left, relation, &right);
-        } else if let LiteralIr::TupleCompare(left, relation, right) = literal {
-            let mut equal = left.len() == right.len();
-            for (left, right) in left.iter().zip(right) {
-                let left = expression(left, assignment, limits, budget, counters, location)?;
-                let right = expression(right, assignment, limits, budget, counters, location)?;
-                equal &= left == right;
+impl Join<'_> {
+    fn filters(
+        &mut self,
+        assignment: &[Value],
+        comparisons: Comparisons,
+        limits: &FormulaLimits,
+        budget: &mut Budget,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<bool, FormulaFailure> {
+        let mut passes = true;
+        for literal in self.literals {
+            if let Some((left, relation, right)) = comparison(literal)
+                && comparisons != Comparisons::Verified
+            {
+                let left = self.evaluation.expression(
+                    left,
+                    |variable| &assignment[variable],
+                    limits,
+                    budget,
+                    counters,
+                    location,
+                )?;
+                let right = self.evaluation.expression(
+                    right,
+                    |variable| &assignment[variable],
+                    limits,
+                    budget,
+                    counters,
+                    location,
+                )?;
+                passes &= compare(&left, relation, &right);
+            } else if let LiteralIr::TupleCompare(left, relation, right) = literal {
+                let mut equal = left.len() == right.len();
+                for (left, right) in left.iter().zip(right) {
+                    let left = self.evaluation.expression(
+                        left,
+                        |variable| &assignment[variable],
+                        limits,
+                        budget,
+                        counters,
+                        location,
+                    )?;
+                    let right = self.evaluation.expression(
+                        right,
+                        |variable| &assignment[variable],
+                        limits,
+                        budget,
+                        counters,
+                        location,
+                    )?;
+                    equal &= left == right;
+                }
+                passes &= equal == (*relation == Relation::Eq);
+            } else if let LiteralIr::Guard(guard) = literal {
+                passes &= guard.evaluate(assignment, limits, budget, counters, location)?;
+            } else if let LiteralIr::Range {
+                target,
+                lower,
+                upper,
+                binder: false,
+            } = literal
+            {
+                let lower = self.evaluation.expression(
+                    lower,
+                    |variable| &assignment[variable],
+                    limits,
+                    budget,
+                    counters,
+                    location,
+                )?;
+                let upper = self.evaluation.expression(
+                    upper,
+                    |variable| &assignment[variable],
+                    limits,
+                    budget,
+                    counters,
+                    location,
+                )?;
+                let (Value::Number(lower), Value::Number(upper)) = (lower, upper) else {
+                    passes = false;
+                    continue;
+                };
+                passes &= matches!(&assignment[*target], Value::Number(value) if *value >= lower && *value <= upper);
             }
-            passes &= equal == (*relation == Relation::Eq);
-        } else if let LiteralIr::Guard(guard) = literal {
-            passes &= guard.evaluate(assignment, limits, budget, counters, location)?;
-        } else if let LiteralIr::Range {
-            target,
-            lower,
-            upper,
-            binder: false,
-        } = literal
-        {
-            let lower = expression(lower, assignment, limits, budget, counters, location)?;
-            let upper = expression(upper, assignment, limits, budget, counters, location)?;
-            let (Value::Number(lower), Value::Number(upper)) = (lower, upper) else {
-                passes = false;
-                continue;
-            };
-            passes &= matches!(&assignment[*target], Value::Number(value) if *value >= lower && *value <= upper);
         }
+        Ok(passes)
     }
-    Ok(passes)
 }
 pub(crate) fn expression(
     expression: &Expression,

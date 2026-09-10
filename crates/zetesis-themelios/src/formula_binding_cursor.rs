@@ -6,7 +6,7 @@ use zetesis_core::Value;
 use crate::expansion::Budget;
 use crate::formula::ceiling;
 use crate::formula_ir::LiteralIr;
-use crate::formula_support::{Counters, Support, copy, expression};
+use crate::formula_support::{Counters, Evaluation, Support, copy};
 use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 
 enum State {
@@ -82,6 +82,7 @@ impl<'a> Cursor<'a> {
     /// scopes retain their existing scalar dependency order.
     pub fn next(
         &mut self,
+        evaluation: &mut Evaluation,
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
@@ -104,7 +105,8 @@ impl<'a> Cursor<'a> {
                     .map(Some);
             }
             if matches!(self.states[self.depth], State::Fresh) {
-                self.states[self.depth] = self.initialize(limits, budget, counters, location)?;
+                self.states[self.depth] =
+                    self.initialize(evaluation, limits, budget, counters, location)?;
             }
             let value = match &mut self.states[self.depth] {
                 State::Fresh => unreachable!("cursor initialized"),
@@ -143,23 +145,38 @@ impl<'a> Cursor<'a> {
 
     fn initialize(
         &mut self,
+        evaluation: &mut Evaluation,
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
     ) -> Result<State, FormulaFailure> {
         match self.generators[self.depth] {
-            LiteralIr::Bind { value, .. } => Ok(State::Scalar(Some(expression(
+            LiteralIr::Bind { value, .. } => Ok(State::Scalar(Some(evaluation.expression(
                 value,
-                &self.values,
+                |variable| &self.values[variable],
                 limits,
                 budget,
                 counters,
                 location,
             )?))),
             LiteralIr::Range { lower, upper, .. } => {
-                let lower = expression(lower, &self.values, limits, budget, counters, location)?;
-                let upper = expression(upper, &self.values, limits, budget, counters, location)?;
+                let lower = evaluation.expression(
+                    lower,
+                    |variable| &self.values[variable],
+                    limits,
+                    budget,
+                    counters,
+                    location,
+                )?;
+                let upper = evaluation.expression(
+                    upper,
+                    |variable| &self.values[variable],
+                    limits,
+                    budget,
+                    counters,
+                    location,
+                )?;
                 let (Value::Number(lower), Value::Number(upper)) = (lower, upper) else {
                     return Ok(State::Range { next: 1, end: 0 });
                 };
