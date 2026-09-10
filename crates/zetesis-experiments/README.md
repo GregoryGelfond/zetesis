@@ -106,6 +106,10 @@ are outside sample clocks. Exact CPU completion of every residual is inside.
 Small references use exhaustive finite membership; larger cases use general
 checking without the tested certificate. Fresh and resident device routes keep
 their separate allocation contracts.
+GPU work counts complete node, root, producer and atom scans plus initialization
+of `ceil(atoms / 32)` support words per candidate. Scalar early-exit work uses
+different charges. Reported transport bytes include the packed support buffer;
+they are logical requested payload, not process RSS or total device memory.
 See [tight API](src/tight_measurement.rs) and
 [checking tests](tests/tight/checking.rs).
 

@@ -1,4 +1,54 @@
 use super::*;
+use crate::tight_measurement::{Case, Family, Reference, fixture};
+use std::num::NonZeroUsize;
+
+#[test]
+fn fixture_work_counts_packed_support_initialization() {
+    for (atoms, normal, choices) in [
+        (4, 18, 23),
+        (31, 153, 185),
+        (32, 158, 191),
+        (33, 164, 198),
+        (63, 314, 378),
+        (64, 319, 384),
+        (65, 325, 391),
+        (256, 1285, 1542),
+    ] {
+        for (family, expected) in [(Family::Normal, normal), (Family::Choices, choices)] {
+            let fixture = fixture::build(Case {
+                family,
+                atoms: NonZeroUsize::new(atoms).unwrap(),
+                candidates: NonZeroUsize::new(3).unwrap(),
+                reference: Reference::GeneralReduct,
+            })
+            .unwrap();
+            let plan = zetesis_ferraris::TightPlan::compile(
+                &fixture.theory,
+                zetesis_ferraris::TightPlanLimits::default(),
+                &Control::default(),
+            )
+            .unwrap();
+            assert_eq!(
+                scan_work(
+                    fixture.theory.nodes().len(),
+                    fixture.theory.roots().len(),
+                    plan.producers().len(),
+                    fixture.theory.atom_count(),
+                )
+                .unwrap(),
+                expected
+            );
+        }
+    }
+}
+
+#[test]
+fn scan_work_overflow_is_a_device_contract_failure() {
+    assert!(matches!(
+        scan_work(usize::MAX, 1, 0, 0),
+        Err(Error::DeviceWork)
+    ));
+}
 
 fn observation() -> Observation {
     Observation {

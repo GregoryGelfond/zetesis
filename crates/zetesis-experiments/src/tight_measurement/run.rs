@@ -290,10 +290,12 @@ fn observe(
     observation.elapsed_ns = start.elapsed().as_nanos();
     let validated = completed.and_then(|(verdicts, checks)| {
         checking::validate(prepared, &verdicts, &checks, configuration, control)?;
-        let per_candidate = prepared.fixture.theory.nodes().len()
-            + prepared.fixture.theory.roots().len()
-            + prepared.plan.producers().len()
-            + 2 * prepared.fixture.theory.atom_count();
+        let per_candidate = scan_work(
+            prepared.fixture.theory.nodes().len(),
+            prepared.fixture.theory.roots().len(),
+            prepared.plan.producers().len(),
+            prepared.fixture.theory.atom_count(),
+        )?;
         validate_device(
             &observation,
             prepared.fixture.candidates.len(),
@@ -390,6 +392,16 @@ fn device_work(oracle: &GpuTightOracle) -> DeviceWork {
             work: stats.work,
         }),
     }
+}
+
+/// Complete scans of original truth, roots, producers and candidate atoms,
+/// plus one initialization per packed support word. This independently checks
+/// the shader's reported allowance; scalar early exits charge different work.
+fn scan_work(nodes: usize, roots: usize, producers: usize, atoms: usize) -> Result<usize, Error> {
+    [nodes, roots, producers, atoms, atoms.div_ceil(32)]
+        .into_iter()
+        .try_fold(0_usize, usize::checked_add)
+        .ok_or(Error::DeviceWork)
 }
 
 fn validate_device(
