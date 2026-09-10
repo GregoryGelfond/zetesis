@@ -21,6 +21,8 @@ is a total Boolean predicate here; source errors and resource-limited prefixes
 require separate preservation. Snapshot
 identifiers denote fixed relations in this model, not reusable memory addresses.
 Possible-support relations and current-world relations remain different subjects.
+External catalog IDs and initial increasing row order need separate correspondence;
+local finite row positions do not establish either.
 -/
 
 namespace Zetesis.ColumnRelations
@@ -167,8 +169,9 @@ theorem absent_value_selects_nothing (dictionary : Dictionary Value) {rows arity
   simp [absent] at value_present
 
 /-- Prefiltering preserves the complete ordered sequence of full matches when
-matching entails every prefilter equality. Other matcher conditions remain with
-the original matcher; equality consistency does not prove a full match.
+matching entails every prefilter equality. The matcher is a total pure Boolean
+predicate here. Runtime errors, binding rollback, cancellation and resource-limited
+prefixes require separate preservation; equality consistency proves no full match.
 
 The filter composition conjoins both predicates. On a matching row the equality
 premise makes that conjunction true; on every other row both paths reject. -/
