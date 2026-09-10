@@ -1,0 +1,109 @@
+{
+  "schema": "zetesis.refinement.membership.v1",
+  "sourceRevision": "b633f44720a1ce6fae5d0dc6136803fb58e2d8a0",
+  "sourceInventory": "source-inputs.sha256",
+  "artifactInventory": "artifacts.sha256",
+  "extractor": {
+    "aeneas": {
+      "repository": "https://github.com/AeneasVerif/aeneas",
+      "revision": "505b6ca35217e7be5c96c3e2f8045edfbdf47291",
+      "version": "nightly-2026.09.09-505b6ca",
+      "executableSha256": "e8690e9b5c2798b11c0d9baece6f610794353cb189d84b3f560e93b3589a41a4"
+    },
+    "charon": {
+      "repository": "https://github.com/AeneasVerif/charon",
+      "revision": "b104e24fea7d721b71e6c39fd70f26ff20bc0980",
+      "version": "0.1.254",
+      "executableSha256": "0ffca3f346ea1572afc21f16b98e3b3953e301180c5e1e9898ce9ddef79d32ec",
+      "driverSha256": "dd9683888200014b93c9dd8cbd4b3641a1c093c8e05d7aa5a8a1b9698751643c"
+    },
+    "archive": {
+      "url": "https://github.com/AeneasVerif/aeneas/releases/download/nightly-2026.09.09-505b6ca/aeneas-macos-aarch64.tar.gz",
+      "bytes": 129426974,
+      "sha256": "45b049359c76dc7b818836391ca9e53c0a0355d3aac35ffeea4170f158ce471b"
+    },
+    "rust": {
+      "toolchain": "nightly-2026-08-18",
+      "release": "1.100.0-nightly",
+      "revisionPrefix": "8fa1c96cf",
+      "host": "aarch64-apple-darwin",
+      "components": [
+        "rustc-dev",
+        "rust-src"
+      ]
+    }
+  },
+  "lean": {
+    "toolchain": "leanprover/lean4:v4.31.0",
+    "dependencyLock": "lake-manifest.json",
+    "allowedLogicalAxioms": [
+      "propext",
+      "Classical.choice",
+      "Quot.sound"
+    ]
+  },
+  "translation": {
+    "harness": "rust/src/lib.rs",
+    "charonArguments": [
+      "cargo",
+      "--preset=aeneas",
+      "--sysroot",
+      "default",
+      "--start-from",
+      "zetesis_refinement_harness::membership",
+      "--include",
+      "zetesis_ferraris",
+      "--dest-file",
+      "../target/replay/harness.llbc",
+      "--",
+      "--lib",
+      "--locked"
+    ],
+    "aeneasArguments": [
+      "-backend",
+      "lean",
+      "-dest",
+      "<output-directory>",
+      "-split-files",
+      "-namespace",
+      "ZetesisExtract",
+      "-all-computable",
+      "-no-progress-bar",
+      "-sequential",
+      "-warnings-as-errors",
+      "-abort-on-error",
+      "harness.llbc"
+    ],
+    "pathRemapping": "--remap-path-prefix=<absolute-repository-root>=zetesis",
+    "postprocessing": "none",
+    "generatedFiles": [
+      "Harness/Types.lean",
+      "Harness/Funs.lean"
+    ],
+    "sourceMethods": [
+      {
+        "path": "crates/zetesis-ferraris/src/theory.rs",
+        "name": "Theory::atom_count",
+        "startLine": 124,
+        "endLine": 124
+      },
+      {
+        "path": "crates/zetesis-ferraris/src/theory.rs",
+        "name": "Interpretation::contains",
+        "startLine": 194,
+        "endLine": 194
+      }
+    ]
+  },
+  "theorems": [
+    "Membership.mask_bit",
+    "Membership.outside",
+    "Membership.contains_refines"
+  ],
+  "unprovedBoundaries": [
+    "Rust compiler and Charon/Aeneas translation correctness",
+    "Rust Arc/Vec/scalar implementations correspond to the concrete Lean models",
+    "Rust constructors and mutations preserve the representation invariant",
+    "Whole reduct checker, grounding, enumeration and WGSL refinement"
+  ]
+}

@@ -1,0 +1,21 @@
+[package]
+name = "zetesis-refinement-harness"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+zetesis-ferraris = { path = "../../../crates/zetesis-ferraris" }
+
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "deny"
+unused = { level = "deny", priority = -1 }
+unused_must_use = "deny"
+dead_code = "deny"
+
+[lints.clippy]
+pedantic = { level = "deny", priority = -1 }
+
+[workspace]

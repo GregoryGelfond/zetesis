@@ -1,0 +1,16 @@
+name = "zetesis_membership_refinement"
+version = "0.0.0"
+defaultTargets = ["Membership"]
+
+[[require]]
+name = "aeneas"
+path = ".lake/aeneas/backends/lean"
+
+[[lean_lib]]
+name = "Harness"
+
+[[lean_lib]]
+name = "Mask"
+
+[[lean_lib]]
+name = "Membership"
