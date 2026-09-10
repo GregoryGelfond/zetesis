@@ -91,6 +91,6 @@ fn automatic_and_explicit_reduct_routes_preserve_complete_comparison_models() {
         admitted += 1;
         reference_models += expected.len();
     }
-    assert_eq!(admitted, 119);
-    assert_eq!(reference_models, 138);
+    assert_eq!(admitted, 120);
+    assert_eq!(reference_models, 139);
 }
