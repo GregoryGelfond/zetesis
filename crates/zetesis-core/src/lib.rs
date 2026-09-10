@@ -3,7 +3,9 @@
 //! Programs are immutable admitted templates. A [`Seed`] is an exact sparse true
 //! set bound to one program instance; absent tuples are its false complement.
 //! [`GroundProgram::compile`] is explicitly eager. Admission, seed construction,
-//! and carrier-iterator creation never invoke it. See `docs/core-api.md`.
+//! and carrier-iterator creation never invoke it. See the
+//! [library map](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/rust/libraries.md)
+//! and [grounding architecture](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/architecture/grounding.md).
 //!
 //! ```
 //! use zetesis_core::{AdmissionLimits, Atom, AtomPattern, GroundProgram,

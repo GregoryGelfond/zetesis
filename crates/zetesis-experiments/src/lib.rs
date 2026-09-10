@@ -49,7 +49,7 @@ pub struct CommandOptions {
     pub static_options: Options,
 }
 
-/// Independently qualified execution profiles.
+/// Execution profiles with independent validation contracts.
 #[derive(Debug, clap::Subcommand)]
 pub enum Experiment {
     /// Compare packed relation equality masks on the same typed rows and keys.
