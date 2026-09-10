@@ -91,3 +91,5 @@ import Zetesis.ObjectivePriorities
 import Zetesis.AggregateInvariants
 import Zetesis.IntegerEnvelopes
 import Zetesis.SourceMeasures
+import Zetesis.ColumnRelations
+import Zetesis.DomainContraction
