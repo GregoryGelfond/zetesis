@@ -260,6 +260,58 @@ across the complete corpus, general lazy grounding or every backend. Keep
 complete distributions, unchanged-baseline drift and separate memory
 observations with every comparison.
 
+#### Typed relation selection
+
+The shared relation primitive at
+[`d871e91b`](https://github.com/GregoryGelfond/zetesis/tree/d871e91b56406c20b312e63f9d3437e6352803e2)
+was measured separately on Apple M4 Pro using an uninstrumented Rust 1.97.1
+release build on 10 September 2026. Each case used four Rayon workers, one
+warmup and three timed repetitions. These operation medians include equality
+selection and typed row reconstruction; source/view preparation is separate.
+
+The table compares routes within each physical Metal invocation. CPU routes
+retain the uploaded columns, and all routes use the same typed input and masks.
+
+| Relation case | Rows / queries | Scalar (µs) | Rayon (µs) | Metal (µs) |
+| --- | ---: | ---: | ---: | ---: |
+| Independent, numeric values | 256 / 8 | 4.667 | 18.999 | 235.833 |
+| Correlated, tuple values | 256 / 8 | 4.959 | 21.167 | 477.375 |
+| Independent, numeric values | 4,096 / 32 | 206.375 | 139.376 | 732.584 |
+| Skewed, tuple values | 4,096 / 32 | 252.457 | 152.166 | 663.666 |
+
+All routes produced the same complete masks and reconstructed typed rows. Across
+the four cases, 20 Metal batches completed all 400 queries. Rayon reduced the
+operation median in the two larger cases; Metal did not beat the CPU routes in
+this pilot. The fixed scalar/Rayon/Metal order and three repetitions make these
+descriptive observations, not confidence estimates or evidence of faster program
+grounding. The numeric 4,096-row Metal case includes a retained 2.806-ms sample;
+the 256-row tuple Metal samples range from 0.222 to 0.521 ms.
+
+Device and pipeline preparation took 9.549–44.942 ms, column upload
+17.875–58.958 µs, and initial GPU operations 3.014–3.361 ms. Repeated operations
+reused the immutable columns. In the two 4,096-row cases, common typed
+reconstruction remained about 76–85 µs. These costs identify further work on
+batching, transport and materialization; they do not establish a GPU speedup.
+Separate CPU-only invocations are a distinct population and are not pooled into
+this table.
+
+Reproduce a row with the corresponding family, payload, row and query counts:
+
+```sh
+zetesis-bench relation --backend metal --family independent --payload numeric \
+  --rows 4096 --queries 32 --workers 4 --warmups 1 --repetitions 3
+```
+
+Use `--family correlated --payload tuple --rows 256 --queries 8` or
+`--family skewed --payload tuple --rows 4096 --queries 32` for the tuple rows.
+The small numeric case uses `--family independent --payload numeric --rows 256
+--queries 8` with the same worker and repetition settings. Use `--backend cpu`
+for a separate scalar/Rayon invocation. The
+[measurement contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-experiments/README.md#retained-relation-selection)
+defines the preparation, transfer, reconstruction and authored-storage fields.
+This column view is an experimental library primitive; ordinary source grounding
+still uses its existing relation store.
+
 ## Run the independent checks
 
 The [contributing guide](https://github.com/GregoryGelfond/zetesis/blob/main/CONTRIBUTING.md#verification-and-review) defines
@@ -291,17 +343,18 @@ status. A newer source remains unqualified until its own checks complete.
 
 | Population | Covered / instrumented lines | Coverage |
 | --- | ---: | ---: |
-| Workspace, all features, portable tests plus 27 physical Metal tests | 44,182 / 47,218 | 93.57% |
+| Workspace, all features, portable tests plus 30 physical Metal tests | 46,198 / 49,420 | 93.48% |
 | CPU-only CLI, separate instrumentation | 4,312 / 4,626 | 93.21% |
 
 This snapshot was qualified on 10 September 2026 for
-[`e7e5e410`](https://github.com/GregoryGelfond/zetesis/tree/e7e5e410d4072457eee4a469b600981d713f5d15),
+[`d871e91b`](https://github.com/GregoryGelfond/zetesis/tree/d871e91b56406c20b312e63f9d3437e6352803e2),
 using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS with Apple M4 Pro
 Metal. Both populations passed their independent 91% floor. The workspace
 combines its portable and physical profiles; the CPU-only population remains
 separate. Each of the four tight-oracle physical tests exercises both Atomic
-and Grouped support construction. Vulkan and other untested devices are outside
-this measurement.
+and Grouped support construction. The relation tests cover typed equality masks,
+prepared-view refusals and matched scalar/Rayon/Metal measurement results.
+Vulkan and other untested devices are outside this measurement.
 
 Reproduce the populations with `scripts/check.sh coverage --metal` using the
 [verification tools](#prepare-verification-tools). Retain the generated JSON and
