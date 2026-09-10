@@ -22,6 +22,14 @@ probing. Its complete traversal consumes 2,294 work units and nine decisions.
 `decision-short.txt` lower the corresponding ceiling by one. A stopped trace
 retains its candidate prefix and complete charged accounting.
 
+The current replacement operation omits binary scans and inspects only the
+unwatched occurrence of a ternary clause. The trace observer independently
+replays the original position scan and restores its omitted work charges for
+comparison with these unchanged records. Actual solver statistics retain only
+performed work. Bounded reruns subtract those observed omissions from the
+reference ceiling; full candidate identities and terminal outcomes still have
+to match.
+
 The records intentionally capture implementation order and work, in addition to
 semantic identities. A later justified search or encoding change may require
 new expectations; updating them requires independent evidence and review, not

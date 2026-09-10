@@ -20,6 +20,16 @@ const QUEENS: [&str; 6] = [
 
 const CHOICES: &str = "1 { p(1..4) } 2.";
 
+fn choice_work() -> u64 {
+    // The frozen generic trace takes 2294 operations. Compare that entire
+    // trace before subtracting the independently replayed elided positions.
+    assert_eq!(
+        trace(CHOICES, true, SearchLimits::default()),
+        include_str!("../fixtures/watch-traces/exact.txt")
+    );
+    2294 - reference_statistics(SearchStatistics::default()).work
+}
+
 #[test]
 #[ignore = "bounded storage report; no clock, RSS or solver-performance measurement"]
 fn report_queens_watch_storage() {
@@ -65,13 +75,15 @@ fn report_queens_watch_storage() {
     }
 }
 
-// Historical fixtures charge both watched positions in every binary
-// replacement attempt. The new path inspects neither. Restore exactly these
-// omitted charges for comparison; actual solver statistics remain untouched.
+// Historical fixtures scan both watched positions in every binary replacement
+// attempt, and a prefix of the three positions in every ternary attempt.
+// Restore omitted positions under that cost map; solver statistics stay intact.
 fn reference_statistics(mut actual: SearchStatistics) -> SearchStatistics {
-    let omitted = super::propagation_profile::snapshot()
+    let profile = super::propagation_profile::snapshot();
+    let omitted = profile
         .binary_attempts
         .checked_mul(2)
+        .and_then(|binary| binary.checked_add(profile.ternary_elided_positions))
         .unwrap();
     actual.work = actual.work.checked_add(omitted).unwrap();
     actual
@@ -154,13 +166,13 @@ fn trace(source: &str, refined: bool, limits: SearchLimits) -> String {
 fn profile_refined_choice_trace() {
     let record = trace(CHOICES, true, SearchLimits::default());
     println!(
-        "REFERENCE_COST_TRACE (omitted binary positions restored)\n{record}PROFILE {:?}",
+        "REFERENCE_COST_TRACE (omitted watched positions restored)\n{record}PROFILE {:?}",
         super::propagation_profile::snapshot()
     );
 }
 
 #[test]
-fn binary_elision_preserves_queens_reference_traces() {
+fn replacement_elision_preserves_queens_reference_traces() {
     let expected = [
         include_str!("../fixtures/watch-traces/queens-01.txt"),
         include_str!("../fixtures/watch-traces/queens-02.txt"),
@@ -175,7 +187,7 @@ fn binary_elision_preserves_queens_reference_traces() {
 }
 
 #[test]
-fn binary_elision_preserves_the_refined_reference_trace() {
+fn replacement_elision_preserves_the_refined_reference_trace() {
     assert_eq!(
         trace(CHOICES, true, SearchLimits::default()),
         include_str!("../fixtures/watch-traces/refined.txt")
@@ -184,10 +196,8 @@ fn binary_elision_preserves_the_refined_reference_trace() {
 
 #[test]
 fn reduced_work_ceiling_permits_the_complete_trace() {
-    // Frozen baseline: 2294 charges, including two no-op positions in each
-    // of 36 binary replacement attempts. The exact new ceiling is 2222.
     let limits = SearchLimits {
-        max_work: 2222,
+        max_work: choice_work(),
         max_decisions: 9,
     };
     assert_eq!(
@@ -199,7 +209,7 @@ fn reduced_work_ceiling_permits_the_complete_trace() {
 #[test]
 fn reduced_work_ceiling_stops_one_tick_short() {
     let limits = SearchLimits {
-        max_work: 2221,
+        max_work: choice_work() - 1,
         max_decisions: 9,
     };
     assert_eq!(
@@ -209,9 +219,9 @@ fn reduced_work_ceiling_stops_one_tick_short() {
 }
 
 #[test]
-fn binary_elision_preserves_the_decision_stop() {
+fn replacement_elision_preserves_the_decision_stop() {
     let limits = SearchLimits {
-        max_work: 2222,
+        max_work: choice_work(),
         max_decisions: 8,
     };
     assert_eq!(

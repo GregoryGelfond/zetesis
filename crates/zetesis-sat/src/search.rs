@@ -29,6 +29,10 @@ mod propagation_profile;
 #[path = "../tests/support/binary_watch_contracts.rs"]
 mod binary_watch_tests;
 
+#[cfg(test)]
+#[path = "../tests/support/ternary_watch_contracts.rs"]
+mod ternary_watch_tests;
+
 pub(crate) use cursor::Cursor;
 
 use crate::{Assignment, Cnf, Control, Incomplete, Literal};
@@ -40,6 +44,7 @@ pub struct SearchLimits {
     /// Stable-model enumeration also charges optional certificate work here.
     /// Binary clauses have no replacement candidates, so propagation charges
     /// their watch visit without a replacement-position scan.
+    /// Ternary clauses inspect their sole unwatched position once.
     pub max_work: u64,
     /// Maximum fresh decision frames; flipping an existing frame is backtracking.
     pub max_decisions: u64,
@@ -312,6 +317,22 @@ impl State {
         // there is no replacement position to examine or watch to relocate.
         if cnf.clauses()[clause].len() == 2 {
             return Ok(None);
+        }
+        if cnf.clauses()[clause].len() == 3 {
+            const POSITION_SUM: usize = 3;
+            budget.tick()?;
+            // Valid, distinct watches occupy two of positions 0, 1 and 2.
+            // Subtracting them from their sum gives the sole remaining index.
+            // The generic scan can return only this position, or no position.
+            let [first, second] = self.positions[clause];
+            let position = POSITION_SUM - first - second;
+            #[cfg(test)]
+            propagation_profile::ternary_inspection([first, second], |position| {
+                self.value(cnf.clauses()[clause][position]) != Some(false)
+            });
+            return Ok(
+                (self.value(cnf.clauses()[clause][position]) != Some(false)).then_some(position)
+            );
         }
         for position in 0..cnf.clauses()[clause].len() {
             budget.tick()?;
