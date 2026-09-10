@@ -95,6 +95,23 @@ uses these mathematical obligations. Normalizing expressions, scheduling
 endpoint inference, checking finite-width arithmetic and enumerating the
 resulting intervals remain concrete refinement obligations.
 
+The [affine reader](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_binding_guard/envelope/affine.rs)
+requires source-normalized expression plans.
+[`prepare`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ir.rs)
+applies checked bottom-up normalization before compiling those plans: closed
+arithmetic subtrees have become constants. Supported pool selection and interval
+lowering preserve this property; intervals become variable slots. The reader
+does not substitute a binding's values. An expression such as `X-X` therefore
+remains syntactically open even when its affine coefficients cancel, and cannot
+supply a closed multiplication factor. This compiler invariant is a premise of
+the implementation review, not a theorem of `IntegerEnvelopes`.
+
+Affine coefficients describe mathematical integers. The retained
+[guard evaluator](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation.rs)
+still checks the original expression's scalar arithmetic. Coefficient and bound
+capacity refusals remain distinct from source arithmetic errors; neither is an
+arithmetic value or evidence of completed enumeration.
+
 [`ProjectedConditionals`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ProjectedConditionals.lean)
 separates anonymous witness disjunctions, signed source alternatives and
 universal condition rows. The Rust
