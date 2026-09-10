@@ -14,6 +14,12 @@ assertions, explicit assumption scope and a final justification of the stated
 goal. Details sit under the claim they justify, so the main argument stays visible.
 This is an existing proof-writing method; adopting it here is not a novelty claim.
 
+Knuth's [literate programming](https://cs.stanford.edu/~knuth/lp.html) addresses
+the human reader. Dijkstra's
+[constructive approach to program correctness](https://www.cs.utexas.edu/~EWD/transcriptions/EWD02xx/EWD209.html)
+develops the proof with the program. State invariants and termination arguments
+while designing the operation they justify.
+
 Our implementation uses ordinary Lean declarations and local proof blocks.
 Lean's [structured tactic proofs](https://lean-lang.org/theorem_proving_in_lean4/Tactics/#structuring-tactic-proofs)
 provide named intermediate facts and scoped goals; `calc` supports chains of
@@ -28,6 +34,16 @@ assumptions, conclusion, scope and why the result matters. Use the same meanings
 as the semantic API. Distinguish interpretations from answer sets, original truth
 from frozen-reduct truth, membership from enumeration coverage, and a candidate
 restriction from a rewrite of the original theory.
+
+State each theorem in plain English. For substantial results, give a proof
+outline whose steps match the Lean argument. Keep it beside the declaration,
+or link a longer argument from the docstring. A direct consequence can cite
+the earlier law. State only what the reader needs to check the claim.
+
+This follows Lean's [theorem documentation guidance](https://github.com/leanprover/lean4/blob/master/doc/style.md)
+and mathlib's [documentation practice](https://leanprover-community.github.io/contribute/doc.html);
+proof outlines also serve readers unfamiliar with Lean. Check the prose against
+the quantified statement and hypotheses; the kernel does not check English.
 
 The proof's outer blocks give the **argument**. Name intermediate propositions by
 their meaning, give each an explicit type, and prove it in its own `by` block.
@@ -68,6 +84,10 @@ A scoped local fact inherits Lean's available context. Explicit naming improves
 reviewability; it is not a mechanically enforced minimal-dependency discipline.
 The current axiom audit checks transitive axioms, not human explanation quality
 or exact lists of theorem-to-theorem dependencies.
+
+Review the English claim for the intended reduct, justified completeness
+premises and the distinction between membership, enumeration and bounded
+attempts. Then check that the formal statement expresses that claim.
 
 ## Library organization
 

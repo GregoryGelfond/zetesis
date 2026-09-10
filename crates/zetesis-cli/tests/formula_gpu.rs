@@ -25,6 +25,10 @@ mod contribution_sources;
 mod bound_priority_sources;
 
 #[cfg(feature = "gpu")]
+#[path = "support/finite_carrier_sources.rs"]
+mod finite_carrier_sources;
+
+#[cfg(feature = "gpu")]
 #[path = "support/bounded_writer.rs"]
 mod bounded_writer;
 
@@ -334,6 +338,7 @@ mod physical {
         .chain(super::contribution_sources::SOURCES)
         .chain(super::bound_priority_sources::SOURCES)
         .chain([super::bound_priority_sources::PROJECTED])
+        .chain(super::finite_carrier_sources::SOURCES)
         {
             for json in [false, true] {
                 qualify_formula_output(source, backend, json);

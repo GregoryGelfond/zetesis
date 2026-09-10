@@ -8,6 +8,13 @@ approach described by Leslie Lamport in
 [How to Write a 21st Century Proof](https://lamport.azurewebsites.net/pubs/proof.pdf).
 There is no custom proof language layered over Lean.
 
+Knuth's [literate programming](https://cs.stanford.edu/~knuth/lp.html) addresses
+the human reader; Dijkstra's
+[constructive approach to correctness](https://www.cs.utexas.edu/~EWD/transcriptions/EWD02xx/EWD209.html)
+develops the proof with the program. Here, English statements and proof outlines
+let an ASP specialist inspect the claim and assumptions. Lean checks the formal
+argument. Review must also establish that the prose and formal statement agree.
+
 Consider `CertifiedExecution.completed_membership_exact`. It connects a sound
 optional certificate with exact completion of any residual membership work.
 Fix the original theory `T` and candidate `M` throughout the argument.
@@ -63,4 +70,3 @@ arguments and refinements should preserve named hypotheses and readable proof
 structure while keeping definitions and theorem statements stable when only the
 proof body changes. Kernel checking and human comprehensibility answer different
 questions.
-
