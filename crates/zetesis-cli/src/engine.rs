@@ -446,7 +446,12 @@ impl Executor {
                 .check_batch(program, seeds, limits, control)
                 .map_err(RunError::Batch)?
                 .into_iter()
-                .map(|result| result.map(|check| check.accepted().then(|| check.closure().clone())))
+                .map(|result| {
+                    result.map(|check| match check.into_stable_interpretation() {
+                        Ok(accepted) => Some(accepted.into_interpretation()),
+                        Err(_) => None,
+                    })
+                })
                 .collect()),
             Self::StaticCpu { oracle, ground } => oracle
                 .check_static_batch(ground, seeds, limits, control)

@@ -175,6 +175,14 @@ impl Check {
     pub const fn closure(&self) -> &Model {
         &self.closure
     }
+    /// Consume the check and transfer its closure without copying atoms or
+    /// their owned payload. The program association and verdict are discarded.
+    /// Rejected checks also have a closure; this raw interpretation alone makes
+    /// no membership claim. Its leastness still requires the evaluator contract.
+    #[must_use]
+    pub fn into_closure(self) -> Model {
+        self.closure
+    }
     /// Whether an enabled constraint holds in the completed closure.
     #[must_use]
     pub const fn constraint_violated(&self) -> bool {

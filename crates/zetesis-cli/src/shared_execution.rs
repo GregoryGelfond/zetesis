@@ -137,7 +137,7 @@ pub(crate) fn batch_results(
             Ok(batch
                 .checks
                 .into_iter()
-                .map(|check| Ok(check.accepted().then(|| check.closure().clone())))
+                .map(|check| Ok(check.accepted().then(|| check.into_closure())))
                 .collect())
         }
         Err(zetesis_cpu::lazy::shared::Error::Admission(error)) => {

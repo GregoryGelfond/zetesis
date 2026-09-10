@@ -202,7 +202,7 @@ pub(crate) fn batch_results(
         Ok(batch) => Ok(batch
             .checks
             .into_iter()
-            .map(|check| Ok(check.accepted().then(|| check.closure().clone())))
+            .map(|check| Ok(check.accepted().then(|| check.into_closure())))
             .collect()),
         Err(failure) => match failure.cause {
             zetesis_cpu::lazy::Cause::Source(stop) => Ok(vec![Err(stop)]),
