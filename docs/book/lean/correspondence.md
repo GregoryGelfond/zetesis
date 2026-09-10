@@ -128,7 +128,7 @@ comparisons, binding generators and final filters. Each evaluation returns an
 owned value and clears its prefix before the next borrow. Preserving expression
 order, complete-filter error precedence, copy charges and cleanup is a concrete
 caller obligation; the reset law does not justify skipping later expressions
-after an earlier filter rejects a binding.
+after an earlier final filter rejects a binding.
 
 [`ProjectedConditionals`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ProjectedConditionals.lean)
 separates anonymous witness disjunctions, signed source alternatives and

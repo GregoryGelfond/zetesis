@@ -102,12 +102,14 @@ matching does not invert arithmetic or introduce a global guessed value universe
 
 ### Relation rows and vector operations
 
-A relation row is one complete typed tuple. Formula support assigns append-only,
-predicate-local row identities and indexes each argument column. For a positive
-witness, the current selector chooses the shortest posting list supplied by known
-whole-column equalities. The matcher then checks the complete tuple, including
-repeated variables and structured terms. No known equality selects all relation
-rows; a missing bound key selects none:
+A relation row is one complete typed tuple. Formula support's
+[`RelationRows`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support.rs)
+assigns append-only, predicate-local row identities. Each argument column has a
+`BTreeMap<Value, Vec<usize>>` from typed values to those row identities. For a
+positive witness, the selector chooses the shortest posting list supplied by
+known whole-column equalities. The matcher then checks the complete tuple,
+including repeated variables and structured terms. Without a known equality,
+the selector offers all relation rows; a missing bound key selects none:
 
 ```text
 rows = ShortestPosting(relation, KnownEqualities(pattern, binding))
@@ -117,7 +119,8 @@ bindings = FilterMap(MatchWholeTuple(pattern, binding), rows)
 This describes witness selection, not complete grounding. Scope, generators,
 scalar guards and candidate gates retain their separate contracts. The
 [bounded posting diagnostic](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/README.md#inspect-posting-selectivity)
-compares intersections with an independent full-row scan. Its counters measure
+compares intersections with an independent full-row scan. It is compiled only
+for tests and does not replace production selection. Its counters measure
 selectivity; integer comparisons and complete tuple probes have different costs.
 
 Row identity connects relational semantics to masks, intersections and gathers.

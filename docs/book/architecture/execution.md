@@ -68,6 +68,14 @@ The result marker identifies the branch that constructed support. A mismatched
 policy marker is a readback failure even if the reported verdict agrees; this
 validates the protocol, without proving the shader or device implementation.
 
+The four physical
+[tight-oracle tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/hardware_tight.rs)
+exercise both policies on Apple M4 Pro Metal. They cover original-root precedence,
+least unsupported atoms, duplicate and skewed producers, packed-word boundaries,
+batch isolation, resource refusals and retained-theory identity. The
+[performance evidence](../reference/validation.md#performance-evidence) separates
+these correctness checks from latency and occupancy measurements.
+
 For 256 atoms and 128 candidates, the packed support buffer occupies 4,096 bytes
 instead of the earlier per-atom buffer's 131,072 bytes. This saves 126,976 bytes
 of logical device buffer storage. Bit packing alone leaves uploaded and

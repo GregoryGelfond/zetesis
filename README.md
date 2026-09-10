@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 ![Rust 1.97+](https://img.shields.io/badge/rust-1.97%2B-orange?style=flat-square)
-[![Line coverage: 93.58% (CPU + Metal)](https://img.shields.io/badge/coverage-93.58%25%20%28CPU%20%2B%20Metal%29-brightgreen?style=flat-square)](docs/book/reference/validation.md#coverage)
+[![Line coverage: 93.57% (CPU + Metal)](https://img.shields.io/badge/coverage-93.57%25%20%28CPU%20%2B%20Metal%29-brightgreen?style=flat-square)](docs/book/reference/validation.md#coverage)
 
 ζήτησις, *inquiry/search* — candidate-directed answer-set solving through the reduct.
 
@@ -123,6 +123,9 @@ but needs physical qualification on each claimed platform. Full GPU residency,
 general lazy formula construction and broad hardware qualification remain open.
 The [execution chapter](docs/book/architecture/execution.md) distinguishes
 semantic guarantees, scheduling and the work that remains on the host.
+The tight GPU library offers atomic-OR and grouped-word support construction;
+both have physical Metal checks. Atomic remains its default. These are reusable
+membership primitives, and ordinary solving does not automatically select them.
 
 ## Libraries and assurance
 
@@ -183,7 +186,9 @@ end-to-end solves from kernel measurements when comparing performance.
 The [validation chapter](docs/book/reference/validation.md) explains which
 claims the corpus, proof and physical execution checks can establish.
 Its [performance evidence](docs/book/reference/validation.md#performance-evidence)
-distinguishes measured storage benefits from unresolved timing differences.
+records CPU/eager solve measurements and separate GPU primitive measurements,
+including unchanged-binary drift. Reusable expression workspaces and packed
+support have explicit storage contracts; neither establishes a general speedup.
 
 See [Contributing](CONTRIBUTING.md) for development and verification requirements,
 and [build the book](docs/book/building.md) to read the complete manual locally.

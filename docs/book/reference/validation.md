@@ -155,14 +155,59 @@ searched fewer candidates, omitted optimum ties or stopped early.
 
 ### Performance evidence
 
-Packed support reduces logical storage and scheduled work; a general latency
-improvement has not been established. The comparison between
-[`3f8591e`](https://github.com/GregoryGelfond/zetesis/tree/3f8591e22d8de002aca0711f0427521b4cae37a5)
-and [`f1c6365a`](https://github.com/GregoryGelfond/zetesis/tree/f1c6365af66a56902d985fb3f61f584c860527de)
-on Apple M4 Pro Metal used normal and choice fixtures with 4, 32, 33 and 256
-atoms, in batches of 3 or 128 candidates. Scalar and Rayon classification were
-faster than the Metal primitive for these small fixtures. Repeated measurements
-varied substantially, including between runs of the same executable.
+Storage contracts and elapsed time are separate results. Formula joins reuse
+one cleared expression workspace across prefix checks, generators and final
+filters. Packed GPU support reduces the support buffer to one bit per atom.
+Neither change establishes a general latency improvement or lower process RSS.
+
+The following measurements compare
+[`f1c6365a`](https://github.com/GregoryGelfond/zetesis/tree/f1c6365af66a56902d985fb3f61f584c860527de)
+with [`e7e5e410`](https://github.com/GregoryGelfond/zetesis/tree/e7e5e410d4072457eee4a469b600981d713f5d15),
+using uninstrumented Rust 1.97.1 release builds on Apple M4 Pro on 10 September
+2026. Both sources already use packed Atomic support. The order is
+before/current/current/before; unchanged-executable drift remains part of the
+result. These are descriptive screens, not statistical confidence estimates.
+
+#### Ordinary CPU/eager solving
+
+The 13 selected kr-domains cases include all six queens encodings, SEND and
+shortest-path/task-allocation cases. Each block uses one closure worker, one
+completion worker, `--oracle auto` and `--models 0`. Each case has one
+qualification pair, one warmup pair, five timed native/clingo pairs and a
+separate native statistics observation. Completed displayed results, costs and
+optimum ties agree with clingo 5.8.2. This comparison does not reconstruct hidden
+atoms from displayed output.
+
+The table reports the median of ten whole-process native observations per
+executable and case. Before drift is the last before-block median relative to
+the first. Positive change means more elapsed time.
+
+| Case | Before, ms | Current, ms | Change | Before drift |
+| --- | ---: | ---: | ---: | ---: |
+| [Queens 1](../../../examples/kr-domains/standalone/n-queens/variant-01.lp) | 9.194 | 9.321 | +1.38% | −0.15% |
+| [Queens 2](../../../examples/kr-domains/standalone/n-queens/variant-02.lp) | 91.299 | 91.346 | +0.05% | +3.03% |
+| [Queens 3](../../../examples/kr-domains/standalone/n-queens/variant-03.lp) | 9.144 | 9.120 | −0.26% | −0.48% |
+| [Queens 4](../../../examples/kr-domains/standalone/n-queens/variant-04.lp) | 7.866 | 7.840 | −0.33% | −0.08% |
+| [Queens 5](../../../examples/kr-domains/standalone/n-queens/variant-05.lp) | 11.592 | 11.612 | +0.17% | −0.35% |
+| [Queens 6](../../../examples/kr-domains/standalone/n-queens/variant-06.lp) | 11.630 | 11.601 | −0.25% | +0.11% |
+| [SEND + MORE = MONEY](../../../examples/kr-domains/standalone/send-money/send-money.lp) | 38.584 | 39.255 | +1.74% | +3.76% |
+| [Shortest path: cycles](../../../examples/kr-domains/scenarios/shortest-path/variant-01/07-cycles.lp) | 5.366 | 5.364 | −0.03% | −0.19% |
+| [Shortest path: ordering and cap](../../../examples/kr-domains/scenarios/shortest-path/variant-04/06-layered-dag-ordering-cap.lp) | 9.081 | 9.043 | −0.42% | +13.49% |
+| [Shortest path: unsatisfiable budget](../../../examples/kr-domains/scenarios/shortest-path/variant-03/05-budget-unsat.lp) | 5.358 | 5.379 | +0.41% | +1.73% |
+| [Task allocation: larger mix](../../../examples/kr-domains/scenarios/task-allocation/variant-01/05-larger-mix.lp) | 5.311 | 5.314 | +0.07% | −0.26% |
+| [Task allocation: makespan tie](../../../examples/kr-domains/scenarios/task-allocation/variant-02/02-makespan-tiebreak.lp) | 5.323 | 5.322 | −0.02% | −1.08% |
+| [Task allocation: scheduling](../../../examples/kr-domains/scenarios/task-allocation/variant-04/05-larger-mix.lp) | 127.127 | 127.651 | +0.41% | +2.66% |
+
+Per-case changes range from −0.42% to +1.74%, with larger unchanged-baseline
+drift in several cases. The measurements do not isolate a timing benefit from
+workspace reuse. Reproduce the selected population with `zetesis-perf`, passing
+the linked case paths relative to `examples/kr-domains` with `--case`,
+`--warmups 1`, `--repetitions 5`,
+`--memory-runs 0`, `--timeout-seconds 10` and `--campaign-seconds 120`.
+Run the two frozen executables in the stated four-block order and retain each
+report separately. Statistics observations are outside the timed population.
+
+#### Tight GPU membership
 
 The [tight-oracle benchmark](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-experiments/README.md)
 compares identical candidates through scalar, Rayon, fresh-device and
@@ -172,13 +217,48 @@ grounding and outer candidate search are outside this experiment. The
 [execution chapter](../architecture/execution.md) states the support-buffer
 size independently of elapsed time and total device memory.
 
-Matched CPU/eager comparisons on 13 kr-domains inputs also contain possible
-regressions. These remain unresolved; fewer charged operations and successful
-semantic checks do not establish improved execution time. Retain complete
-distributions, changes between unchanged-baseline runs and separate memory
-observations with every comparison. Neither these selected CPU runs nor the
-device primitive establish performance across the full corpus or every
-grounder/backend combination.
+The Atomic comparison uses the same normal/choice fixtures, with 4, 32, 33 and
+256 atoms and batches of 3 or 128 candidates:
+
+```sh
+zetesis-bench tight --backend metal --atoms 4,32,33,256 --batches 3,128 \
+  --families normal,choices --workers 4 --warmups 2 --repetitions 8 \
+  --max-work 100000000
+```
+
+Each of the four blocks retains 704 observations, including 512 timed
+observations. Complete ordered subjects, certificate witnesses, final decisions
+and device work/storage accounting agree across blocks. All 1,408 GPU batches
+complete, accounting for 92,224 candidate occurrences. Exact residual checking
+remains on the CPU.
+
+For each case, compare the average of the two current block medians with the
+average of the two before block medians. The table summarizes those 16 ratios
+with a geometric mean; values below one mean less elapsed time.
+
+| GPU route | Classification ratio | Whole-call ratio | Whole-call case range | Before final/initial drift range |
+| --- | ---: | ---: | --- | --- |
+| Fresh resources | 1.008 | 1.007 | 0.811–1.528 | 0.514–1.443 |
+| Resident resources | 1.011 | 1.002 | 0.821–1.313 | 0.490–1.381 |
+
+Substantial same-executable drift prevents a firm speedup or regression
+conclusion from this short screen. These intervals include host/device transfer
+and waiting; they are not shader-only timings or ordinary solve times.
+
+A separate 33-atom, three-candidate check uses
+`--families support-uniform,support-skewed`, four workers, one warmup and four
+repetitions with each of `--support atomic` and `--support grouped`. Both
+policies complete 48 observations and agree with the full CPU reference,
+including exact residual completion. Each theory retains 512 producer
+occurrences. Grouped storage adds 12 graph bytes and eight temporary cursor
+bytes, with unchanged transport and readback payloads. All producers occupy one
+support word, so this check establishes neither useful occupancy nor a timing
+advantage. Atomic remains the tight library default.
+
+Neither the selected CPU cases nor these device primitives establish performance
+across the complete corpus, general lazy grounding or every backend. Keep
+complete distributions, unchanged-baseline drift and separate memory
+observations with every comparison.
 
 ## Run the independent checks
 
@@ -211,15 +291,17 @@ status. A newer source remains unqualified until its own checks complete.
 
 | Population | Covered / instrumented lines | Coverage |
 | --- | ---: | ---: |
-| Workspace, all features, portable tests plus 27 physical Metal tests | 43,838 / 46,847 | 93.58% |
+| Workspace, all features, portable tests plus 27 physical Metal tests | 44,182 / 47,218 | 93.57% |
 | CPU-only CLI, separate instrumentation | 4,312 / 4,626 | 93.21% |
 
 This snapshot was qualified on 10 September 2026 for
-[`f1c6365a`](https://github.com/GregoryGelfond/zetesis/tree/f1c6365af66a56902d985fb3f61f584c860527de),
+[`e7e5e410`](https://github.com/GregoryGelfond/zetesis/tree/e7e5e410d4072457eee4a469b600981d713f5d15),
 using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS with Apple M4 Pro
 Metal. Both populations passed their independent 91% floor. The workspace
 combines its portable and physical profiles; the CPU-only population remains
-separate. Vulkan and other untested devices are outside this measurement.
+separate. Each of the four tight-oracle physical tests exercises both Atomic
+and Grouped support construction. Vulkan and other untested devices are outside
+this measurement.
 
 Reproduce the populations with `scripts/check.sh coverage --metal` using the
 [verification tools](#prepare-verification-tools). Retain the generated JSON and
