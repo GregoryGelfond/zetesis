@@ -88,7 +88,8 @@ theorem replacement_exact (first second : Fin 3) (distinct : first ≠ second)
     by_cases selected : position = remaining first second distinct
     · have unwatched : position ≠ first ∧ position ≠ second :=
         (remaining_unique first second distinct position).mpr selected
-      simp [unwatched, selected]
+      rw [decide_eq_true unwatched, Bool.true_and]
+      simp [selected]
     · have watched : ¬ (position ≠ first ∧ position ≠ second) := by
         intro unwatched
         exact selected ((remaining_unique first second distinct position).mp unwatched)
@@ -122,7 +123,7 @@ theorem replacement_exact (first second : Fin 3) (distinct : first ≠ second)
             simpa only [List.mem_cons, Ne.symm selected, false_or] using covered
           unfold replacement
           rw [List.find?_cons, predicateExact]
-          simpa only [selected, decide_false, Bool.false_and] using
+          simpa only [replacement, selected, decide_false, Bool.false_and] using
             inductionHypothesis inTail
     simpa only [availability, ↓reduceIte] using found
 
