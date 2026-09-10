@@ -185,6 +185,21 @@
     "line": 114
   },
   {
+    "name": "Zetesis.AggregateInvariants.sum_invariant",
+    "file": "Zetesis/AggregateInvariants.lean",
+    "line": 37
+  },
+  {
+    "name": "Zetesis.AggregateInvariants.extremum_invariant",
+    "file": "Zetesis/AggregateInvariants.lean",
+    "line": 59
+  },
+  {
+    "name": "Zetesis.AggregateInvariants.fixed_priority_presence",
+    "file": "Zetesis/AggregateInvariants.lean",
+    "line": 119
+  },
+  {
     "name": "Zetesis.AggregateRanges.sublist_envelope",
     "file": "Zetesis/AggregateRanges.lean",
     "line": 45

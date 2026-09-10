@@ -37,6 +37,9 @@ import Zetesis
 #print axioms Zetesis.AggregateDependencies.appended_predecessors
 #print axioms Zetesis.AggregateDependencies.original_rows
 #print axioms Zetesis.AggregateDependencies.frozen_rows
+#print axioms Zetesis.AggregateInvariants.sum_invariant
+#print axioms Zetesis.AggregateInvariants.extremum_invariant
+#print axioms Zetesis.AggregateInvariants.fixed_priority_presence
 #print axioms Zetesis.AggregateRanges.sublist_envelope
 #print axioms Zetesis.AggregateRanges.permutation_sum
 #print axioms Zetesis.AggregateRanges.subcollection_range

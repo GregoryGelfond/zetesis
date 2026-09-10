@@ -87,3 +87,4 @@ import Zetesis.ExtremumPresence
 import Zetesis.NormalFerraris
 import Zetesis.OrderedBounds
 import Zetesis.ObjectivePriorities
+import Zetesis.AggregateInvariants
