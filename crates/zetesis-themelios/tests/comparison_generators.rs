@@ -301,7 +301,7 @@ fn exact_sources_have_complete_models_or_distinct_reviewed_refusals() {
     }
     assert_eq!(
         (admitted, models, valid_refused, unsafe_sources),
-        (119, 138, 5, 13)
+        (120, 139, 4, 13)
     );
 }
 

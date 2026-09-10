@@ -101,6 +101,12 @@ impl Default for FormulaLimits {
 /// Resources counted by the separate formula admission boundary.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FormulaResource {
+    /// Signed coefficient width required by finite integer binding analysis.
+    /// The implementation capacity is fixed at 64 bits.
+    BindingCoefficientBits,
+    /// Signed accumulation width required by finite integer binding analysis.
+    /// The implementation capacity is fixed at 128 bits.
+    BindingBoundBits,
     /// Simultaneously retained entries in completed objective-presence planning.
     ObjectivePresenceEntries,
     /// Distinct finite scalar values.
@@ -174,7 +180,7 @@ pub enum FormulaFailure {
     Limit {
         /// Counted resource.
         resource: FormulaResource,
-        /// Inclusive configured ceiling.
+        /// Inclusive applicable ceiling, configured or fixed by the representation.
         limit: u128,
         /// Count required by the next operation.
         observed: u128,
@@ -545,6 +551,11 @@ pub(crate) struct Compiled {
 /// complete logical bounds; each aggregate retains its separate value/endpoint profile.
 /// Positive ordinary atoms bind variables in global or element-local scopes;
 /// acyclic positive aggregate equalities may additionally bind named values.
+/// Positive and double-negated integer-affine comparisons can generate finite
+/// domains through directed closed endpoints, including coupled variables.
+/// The complete correlated guard remains. Nonlinear expressions and relational
+/// endpoints alone supply no new domain. Binding analysis has explicit signed
+/// coefficient/accumulation capacity limits, separate from checked source arithmetic.
 /// Completed aggregate/scalar proposals may feed ordinary evaluated arguments,
 /// signed negative gates, finite ranges, logical choice bounds, nonbinding
 /// aggregate guards and admitted universal body conditionals. Aggregate guard

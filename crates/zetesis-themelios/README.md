@@ -69,10 +69,25 @@ A failed pattern cannot leak partial bindings into another row.
 
 Dependency-ordered scalar equalities, finite interval cursors and admitted
 closed integer comparison bounds can generate values. Source order does not
-establish safety. Already-bound equalities remain filters. Arithmetic inversion,
-unanchored cycles and chains with several unresolved integer variables remain
-outside this profile. Nested pools and broader constructor/interval contexts
-remain restricted; admitted consequent alternatives are described below.
+establish safety. Already-bound equalities remain filters. Positive and
+double-negated affine chains can bind several variables through directed finite
+endpoints, including `0<X<Y<3`, `0<X=Y<3`, `0<2*X<3*Y<7`, and
+`0<X+Y<3,0<Y<3`. They use integer addition/subtraction and multiplication by
+closed integer expressions. The complete original guard filters each proposed
+binding, so a finite envelope never grants independence to correlated variables.
+
+This analysis runs only after established generators stall and reuses their
+scoped range cursor. Single negation, unanchored systems and nonlinear or
+division expressions supply no new domains; independently bound expressions
+keep their existing scalar checks. Positive relational bindings alone do not
+make comparison endpoints closed. Normalized coefficients and constants must
+fit a signed 64-bit integer; endpoint accumulation must fit a signed 128-bit
+integer. Exceeding either fixed
+analysis capacity is a located `FormulaFailure::Limit`, distinct from source
+arithmetic failure. The [finite-chain contracts](tests/finite_chains.rs) check
+correlation, local scopes, source order, frozen reducts and resource boundaries.
+Nested pools and broader constructor/interval contexts remain restricted;
+admitted consequent alternatives are described below.
 
 Arithmetic uses checked `i32` operations. Undefined or overflowing evaluation
 refuses admission instead of silently dropping a substitution. Descending or

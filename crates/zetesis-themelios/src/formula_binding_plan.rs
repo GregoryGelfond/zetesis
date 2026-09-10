@@ -89,8 +89,13 @@ impl Compiler<'_> {
                 if variables.safe.len() == variables.count {
                     break;
                 }
-                let Some((target, instruction)) = self.conjunction_binding(&pending, variables)?
-                else {
+                let binding = self.conjunction_binding(&pending, variables)?;
+                let binding = if binding.is_some() {
+                    binding
+                } else {
+                    self.chain_binding(&pending, &generated, variables)?
+                };
+                let Some((target, instruction)) = binding else {
                     break;
                 };
                 variables.safe.insert(target);

@@ -2,8 +2,12 @@
 //!
 //! Scalar equality may supply a value once all its dependencies are safe. Integer
 //! chains require closed numeric endpoints: relationally bound endpoints are not
-//! sufficient for clingo's comparison-domain safety. Single default negation supplies no
-//! generator. Every extracted candidate still passes the unchanged complete guard.
+//! sufficient for the source comparison-domain safety contract. Single default
+//! negation supplies no generator. Directed integer-affine envelopes can cover
+//! several unresolved variables after established generators stall. Every
+//! extracted candidate still passes the unchanged complete guard.
+
+mod envelope;
 
 use themelios_program::program::{DefaultNegation, Relation};
 use zetesis_core::Value;
@@ -15,6 +19,34 @@ use crate::formula_support::copy;
 use crate::{ExpansionResource, FormulaFailure};
 
 impl Compiler<'_> {
+    /// Recover a finite affine envelope only after established generators stall.
+    /// The caller retains every original guard and all earlier binding evidence.
+    pub(super) fn chain_binding(
+        &mut self,
+        pending: &[Option<LiteralIr>],
+        generated: &[LiteralIr],
+        variables: &Variables,
+    ) -> Result<Option<(usize, LiteralIr)>, FormulaFailure> {
+        let range = envelope::binding(
+            pending.iter().flatten().chain(generated),
+            variables.count,
+            &variables.safe,
+            self.budget,
+            self.location,
+        )?;
+        Ok(range.map(|(target, lower, upper)| {
+            (
+                target,
+                LiteralIr::Range {
+                    target,
+                    lower: constant(lower),
+                    upper: constant(upper),
+                    binder: true,
+                },
+            )
+        }))
+    }
+
     pub(super) fn guard_binding(
         &mut self,
         guard: &Guard,
