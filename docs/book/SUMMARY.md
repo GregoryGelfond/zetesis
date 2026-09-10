@@ -27,6 +27,7 @@
 - [A map of the central theorems](lean/theorems.md)
 - [Reading a structured proof](lean/reading.md)
 - [Connecting proofs to implementations](lean/correspondence.md)
+- [Refining packed membership](lean/membership.md)
 
 # Appendices
 

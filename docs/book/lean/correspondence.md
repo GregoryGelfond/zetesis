@@ -141,6 +141,11 @@ exceed the established correspondence. Progress consists of closing particular
 arrows in this table while preserving explicit limits, not of replacing those
 limits with a proof count.
 
+The optional [packed-membership refinement](membership.md) checks the extracted
+Rust `Interpretation::contains` body against packed-bit membership under a
+storage invariant. It has a separate toolchain and explicit translation and
+library-model assumptions; it does not close the whole evaluation layer above.
+
 The [neuromorphic appendix](../appendices/neuromorphic.md) applies the same
 discipline to proposed event backends: it separates existing mask and inference
 laws from the unproved transport, epoch and completion correspondences.

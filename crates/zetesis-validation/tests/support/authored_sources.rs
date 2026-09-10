@@ -11,7 +11,7 @@ const MAX_SOURCE_FILES: usize = 4_096;
 const MAX_DIRECTORY_ENTRIES: usize = 32_768;
 const MAX_DIRECTORY_DEPTH: usize = 64;
 
-/// Workspace packages follow the repository's crates/* membership. The two
+/// Workspace packages follow the repository's crates/* membership. The three
 /// maintained standalone packages are explicit. Each package contributes only
 /// src, tests, benches, examples and its optional build.rs. Shared manual examples
 /// are maintained source too, even though they live outside package directories.
@@ -30,6 +30,7 @@ pub(super) fn inventory(root: &Path) -> io::Result<Vec<PathBuf>> {
     packages.extend([
         root.join("validation/reference"),
         root.join("experiments/gate-transfer"),
+        root.join("refinement/membership/rust"),
     ]);
     packages.sort();
     for package in packages {

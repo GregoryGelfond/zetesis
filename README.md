@@ -142,6 +142,9 @@ normal least closure and their preservation laws. Its normalized-rule translatio
 is proved equivalent to Ferraris answer-set semantics. These mathematical laws
 are not yet an end-to-end verification of Rust, source lowering or WGSL. The
 [correspondence chapter](docs/book/lean/correspondence.md) states that boundary.
+An optional [executable refinement](refinement/membership/README.md) proves
+packed membership for an extracted Rust method under an explicit storage
+invariant and translation/library-model assumptions.
 
 The implementation remains experimental. Full intended language coverage and
 mission-critical deployment assurance are goals, not present certifications.

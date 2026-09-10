@@ -22,7 +22,7 @@ if [ "$mode" = portable ] || [ "$mode" = full ]; then
     RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --all-features --no-deps
     # These maintained semantic experiments are independent Cargo workspaces.
     # Main-workspace checks cannot select them implicitly.
-    for standalone_manifest in validation/reference/Cargo.toml experiments/gate-transfer/Cargo.toml; do
+    for standalone_manifest in validation/reference/Cargo.toml experiments/gate-transfer/Cargo.toml refinement/membership/rust/Cargo.toml; do
         cargo fmt --manifest-path "$standalone_manifest" --all -- --check
         cargo test --manifest-path "$standalone_manifest" --locked --all-targets --all-features
         cargo test --manifest-path "$standalone_manifest" --locked --doc --all-features
