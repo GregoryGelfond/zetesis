@@ -2266,6 +2266,61 @@
       "name": "Zetesis.IndexedCandidates.frozen_countermodel_probe_exact"
     },
     {
+      "file": "Zetesis/IntegerEnvelopes.lean",
+      "line": 45,
+      "name": "Zetesis.IntegerEnvelopes.path_bound"
+    },
+    {
+      "file": "Zetesis/IntegerEnvelopes.lean",
+      "line": 56,
+      "name": "Zetesis.IntegerEnvelopes.anchored_envelope"
+    },
+    {
+      "file": "Zetesis/IntegerEnvelopes.lean",
+      "line": 67,
+      "name": "Zetesis.IntegerEnvelopes.addition_envelope"
+    },
+    {
+      "file": "Zetesis/IntegerEnvelopes.lean",
+      "line": 73,
+      "name": "Zetesis.IntegerEnvelopes.negation_envelope"
+    },
+    {
+      "file": "Zetesis/IntegerEnvelopes.lean",
+      "line": 79,
+      "name": "Zetesis.IntegerEnvelopes.product_lower_bound"
+    },
+    {
+      "file": "Zetesis/IntegerEnvelopes.lean",
+      "line": 90,
+      "name": "Zetesis.IntegerEnvelopes.sum_lower_bound"
+    },
+    {
+      "file": "Zetesis/IntegerEnvelopes.lean",
+      "line": 103,
+      "name": "Zetesis.IntegerEnvelopes.positive_endpoint"
+    },
+    {
+      "file": "Zetesis/IntegerEnvelopes.lean",
+      "line": 114,
+      "name": "Zetesis.IntegerEnvelopes.negative_endpoint"
+    },
+    {
+      "file": "Zetesis/IntegerEnvelopes.lean",
+      "line": 126,
+      "name": "Zetesis.IntegerEnvelopes.affine_envelope"
+    },
+    {
+      "file": "Zetesis/IntegerEnvelopes.lean",
+      "line": 147,
+      "name": "Zetesis.IntegerEnvelopes.integer_membership"
+    },
+    {
+      "file": "Zetesis/IntegerEnvelopes.lean",
+      "line": 158,
+      "name": "Zetesis.IntegerEnvelopes.filtered_bindings_exact"
+    },
+    {
       "file": "Zetesis/Iteration.lean",
       "line": 26,
       "name": "Zetesis.finiteIter_stage_mono"
@@ -3986,6 +4041,36 @@
       "name": "Zetesis.SingletonHeads.double_negative_singleton_has_no_producer"
     },
     {
+      "file": "Zetesis/SourceMeasures.lean",
+      "line": 42,
+      "name": "Zetesis.SourceMeasures.selection_iff_sublist"
+    },
+    {
+      "file": "Zetesis/SourceMeasures.lean",
+      "line": 70,
+      "name": "Zetesis.SourceMeasures.carrier_membership"
+    },
+    {
+      "file": "Zetesis/SourceMeasures.lean",
+      "line": 78,
+      "name": "Zetesis.SourceMeasures.actual_value_covered"
+    },
+    {
+      "file": "Zetesis/SourceMeasures.lean",
+      "line": 89,
+      "name": "Zetesis.SourceMeasures.invariant_carrier"
+    },
+    {
+      "file": "Zetesis/SourceMeasures.lean",
+      "line": 103,
+      "name": "Zetesis.SourceMeasures.possible_extension"
+    },
+    {
+      "file": "Zetesis/SourceMeasures.lean",
+      "line": 115,
+      "name": "Zetesis.SourceMeasures.source_priority_presence"
+    },
+    {
       "file": "Zetesis/StrongNegation.lean",
       "line": 44,
       "name": "Zetesis.StrongNegation.satisfies_rename"
@@ -4926,6 +5011,7 @@
     "Zetesis/GroundGuards.lean",
     "Zetesis/HeadMeasures.lean",
     "Zetesis/IndexedCandidates.lean",
+    "Zetesis/IntegerEnvelopes.lean",
     "Zetesis/Iteration.lean",
     "Zetesis/JoinFrames.lean",
     "Zetesis/LazyRounds.lean",
@@ -4959,6 +5045,7 @@
     "Zetesis/SignedHeadElements.lean",
     "Zetesis/SignedObjectiveBounds.lean",
     "Zetesis/SingletonHeads.lean",
+    "Zetesis/SourceMeasures.lean",
     "Zetesis/StrongNegation.lean",
     "Zetesis/StructuralBindings.lean",
     "Zetesis/StructuredWitnesses.lean",
@@ -4974,8 +5061,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "ce189cfb83a4e5c9df6d1d383c560b7d175cb12da6fa2f683558e43818ada685",
-    "Zetesis.lean": "b320b8ddeb78717ae0a41a5a7ee44fa58aab69c6f9fe865e81aa0ab0fe8c67bb",
+    "Audit.lean": "93a0032225c900152eecaf17d4052376d69fb3284920ab8e0d138e9b68bee957",
+    "Zetesis.lean": "282748a9f921d50f3323abe6a5adaae34232039bdcb8533496a9879c0a650997",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
     "Zetesis/AggregateConsumers.lean": "41aded89dbfaa79833ed3b336030ef4b08afa5be8e7029060416c2f8de59ef97",
@@ -5020,6 +5107,7 @@
     "Zetesis/GroundGuards.lean": "797748cdfd8a64f446e0574359a0903908215116ee24f233c9a7696261e63811",
     "Zetesis/HeadMeasures.lean": "d682f0436d88dd536e8799c6896da0e0f3550357639b500551880a0fd9a80d89",
     "Zetesis/IndexedCandidates.lean": "8740ce6aa95c6bae37c42e0074eb15fd9c7f8edb70e9bdcb5306dfcb2b5738f9",
+    "Zetesis/IntegerEnvelopes.lean": "2f5ee0dc5abb7c0b7551988ebe353bc5e2909d9f0a73184e17819c02ebc41b9e",
     "Zetesis/Iteration.lean": "e5aac9eba61b8150296cc53c381e8f50bd6943c3fbcd6a4c84a6933d3855db16",
     "Zetesis/JoinFrames.lean": "b4af5ba25e37e6305f9121791519aa20ee7a4977c6bc61f3e18608a38fdd95c0",
     "Zetesis/LazyRounds.lean": "c356b730916c3add85d422183146eab7150281d375b5b54eff775a6157a76e86",
@@ -5053,6 +5141,7 @@
     "Zetesis/SignedHeadElements.lean": "a4ef203522d79935f0696bf93bd04efa477a17fde6858c3ebf63ba7d216bb3e8",
     "Zetesis/SignedObjectiveBounds.lean": "9a196ef4647a4999a96373134d80c92ecd940d4c3ee7dc7c173545a2a4816045",
     "Zetesis/SingletonHeads.lean": "a07c6c50041c0771175b98fa6d9d2d56ecb4c9c29ad09205acf44f44fcabe147",
+    "Zetesis/SourceMeasures.lean": "87fb4bc2f98c01f2ae73a468554f751a9e2c3ab915b2eb62563e096e887fa154",
     "Zetesis/StrongNegation.lean": "4f99901e0dfc2e777d12110aca36c2c3be4964f5cbcf88d0a3d87b355a5730c6",
     "Zetesis/StructuralBindings.lean": "8606044bbfeab1c9238e9c2311206d0dd894bb6482463c02613e759a44f06894",
     "Zetesis/StructuredWitnesses.lean": "035fda4f2857801d516f26c1dca179233a561581beffbfbc69c1897e8926be8c",
