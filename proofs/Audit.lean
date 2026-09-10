@@ -558,6 +558,14 @@ import Zetesis
 #print axioms Zetesis.ObjectiveDirections.opposite_directions_coalesce
 #print axioms Zetesis.ObjectiveDirections.same_weight_directions_distinct
 #print axioms Zetesis.ObjectiveDirections.collision_and_cancellation_examples
+#print axioms Zetesis.ObjectivePriorities.selected_presence
+#print axioms Zetesis.ObjectivePriorities.completed_presence
+#print axioms Zetesis.ObjectivePriorities.ignored_priority_preserves_vector
+#print axioms Zetesis.ObjectivePriorities.independent_fields_invent_priority
+#print axioms Zetesis.ObjectivePriorities.raw_partition_cost
+#print axioms Zetesis.ObjectivePriorities.partition_cost
+#print axioms Zetesis.ObjectivePriorities.partition_vector
+#print axioms Zetesis.ObjectivePriorities.partition_optima
 #print axioms Zetesis.ObjectiveTransport.present_transport
 #print axioms Zetesis.ObjectiveTransport.transport_key
 #print axioms Zetesis.ObjectiveTransport.transport_composes
@@ -585,6 +593,11 @@ import Zetesis
 #print axioms Zetesis.OptionalIndex.optional_round_trip
 #print axioms Zetesis.OptionalIndex.absence_exact
 #print axioms Zetesis.OptionalIndex.replacement_commutes
+#print axioms Zetesis.OrderedBounds.separated_comparison
+#print axioms Zetesis.OrderedBounds.constant_aggregate
+#print axioms Zetesis.OrderedBounds.separated_aggregate
+#print axioms Zetesis.OrderedBounds.replacement_in_context
+#print axioms Zetesis.OrderedBounds.measured_head_in_context
 #print axioms Zetesis.OrderedHeadActivity.mem_values
 #print axioms Zetesis.OrderedHeadActivity.frozen_selection
 #print axioms Zetesis.OrderedHeadActivity.selected_values

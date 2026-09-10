@@ -2790,6 +2790,46 @@
     "line": 288
   },
   {
+    "name": "Zetesis.ObjectivePriorities.selected_presence",
+    "file": "Zetesis/ObjectivePriorities.lean",
+    "line": 43
+  },
+  {
+    "name": "Zetesis.ObjectivePriorities.completed_presence",
+    "file": "Zetesis/ObjectivePriorities.lean",
+    "line": 62
+  },
+  {
+    "name": "Zetesis.ObjectivePriorities.ignored_priority_preserves_vector",
+    "file": "Zetesis/ObjectivePriorities.lean",
+    "line": 77
+  },
+  {
+    "name": "Zetesis.ObjectivePriorities.independent_fields_invent_priority",
+    "file": "Zetesis/ObjectivePriorities.lean",
+    "line": 87
+  },
+  {
+    "name": "Zetesis.ObjectivePriorities.raw_partition_cost",
+    "file": "Zetesis/ObjectivePriorities.lean",
+    "line": 101
+  },
+  {
+    "name": "Zetesis.ObjectivePriorities.partition_cost",
+    "file": "Zetesis/ObjectivePriorities.lean",
+    "line": 133
+  },
+  {
+    "name": "Zetesis.ObjectivePriorities.partition_vector",
+    "file": "Zetesis/ObjectivePriorities.lean",
+    "line": 145
+  },
+  {
+    "name": "Zetesis.ObjectivePriorities.partition_optima",
+    "file": "Zetesis/ObjectivePriorities.lean",
+    "line": 153
+  },
+  {
     "name": "Zetesis.ObjectiveTransport.present_transport",
     "file": "Zetesis/ObjectiveTransport.lean",
     "line": 37
@@ -2822,37 +2862,37 @@
   {
     "name": "Zetesis.ObjectiveValues.ignored_entry_has_no_numeric_key",
     "file": "Zetesis/ObjectiveValues.lean",
-    "line": 45
+    "line": 46
   },
   {
     "name": "Zetesis.ObjectiveValues.numeric_entries_ignore",
     "file": "Zetesis/ObjectiveValues.lean",
-    "line": 51
+    "line": 52
   },
   {
     "name": "Zetesis.ObjectiveValues.ignored_entry_preserves_presence",
     "file": "Zetesis/ObjectiveValues.lean",
-    "line": 56
+    "line": 57
   },
   {
     "name": "Zetesis.ObjectiveValues.zero_entry_retains_presence",
     "file": "Zetesis/ObjectiveValues.lean",
-    "line": 71
+    "line": 72
   },
   {
     "name": "Zetesis.ObjectiveValues.selected_entry_preserves_key",
     "file": "Zetesis/ObjectiveValues.lean",
-    "line": 79
+    "line": 80
   },
   {
     "name": "Zetesis.ObjectiveValues.ignored_entry_preserves_cost",
     "file": "Zetesis/ObjectiveValues.lean",
-    "line": 86
+    "line": 87
   },
   {
     "name": "Zetesis.ObjectiveValues.ignored_entry_preserves_optima",
     "file": "Zetesis/ObjectiveValues.lean",
-    "line": 95
+    "line": 96
   },
   {
     "name": "Zetesis.Optimization.best_none_iff",
@@ -2923,6 +2963,31 @@
     "name": "Zetesis.OptionalIndex.replacement_commutes",
     "file": "Zetesis/OptionalIndex.lean",
     "line": 78
+  },
+  {
+    "name": "Zetesis.OrderedBounds.separated_comparison",
+    "file": "Zetesis/OrderedBounds.lean",
+    "line": 55
+  },
+  {
+    "name": "Zetesis.OrderedBounds.constant_aggregate",
+    "file": "Zetesis/OrderedBounds.lean",
+    "line": 63
+  },
+  {
+    "name": "Zetesis.OrderedBounds.separated_aggregate",
+    "file": "Zetesis/OrderedBounds.lean",
+    "line": 78
+  },
+  {
+    "name": "Zetesis.OrderedBounds.replacement_in_context",
+    "file": "Zetesis/OrderedBounds.lean",
+    "line": 89
+  },
+  {
+    "name": "Zetesis.OrderedBounds.measured_head_in_context",
+    "file": "Zetesis/OrderedBounds.lean",
+    "line": 110
   },
   {
     "name": "Zetesis.OrderedHeadActivity.mem_values",

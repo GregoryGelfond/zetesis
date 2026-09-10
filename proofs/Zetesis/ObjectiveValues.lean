@@ -22,11 +22,12 @@ universe u v w
 variable {σ : Type u} {χ : Type v} {α : Type w}
 
 /-- Numeric projection preserves absence rather than converting ignored logical
-    weights to a zero contribution. Other entry fields retain their identities. -/
-structure ResolvedEntry (σ : Type u) (χ : Type v) where
+    weights to a zero contribution. The default priority is an integer; a prior
+    selection stage may retain a different resolved priority representation. -/
+structure ResolvedEntry (σ : Type u) (χ : Type v) (π : Type := Int) where
   direction : Direction
   weight : Option Int
-  priority : Int
+  priority : π
   tuple : List σ
   condition : χ
 
