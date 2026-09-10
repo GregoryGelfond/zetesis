@@ -80,6 +80,8 @@ pub enum Failure {
     Column,
     /// Selection positions are not increasing, unique and in range.
     Selection,
+    /// A packed selection has the wrong word count or nonzero unused tail bits.
+    Mask,
     /// The supplied query or selection belongs to a different relation object.
     Owner,
     /// A validated source value was unexpectedly absent from its dictionary.
@@ -108,6 +110,7 @@ impl fmt::Display for Failure {
             Self::Selection => {
                 f.write_str("relation selection is not ordered, unique and in range")
             }
+            Self::Mask => f.write_str("relation mask has the wrong shape or nonzero tail bits"),
             Self::Owner => f.write_str("relation query or selection has a foreign owner"),
             Self::Dictionary => f.write_str("relation dictionary does not contain a source value"),
             Self::Overflow => f.write_str("relation shape or capacity is not representable"),

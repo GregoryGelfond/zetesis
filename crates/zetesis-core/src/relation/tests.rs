@@ -1,5 +1,7 @@
 use super::*;
 
+mod masks;
+
 fn predicate(arity: usize) -> Predicate {
     Predicate::new("relation", arity).unwrap()
 }

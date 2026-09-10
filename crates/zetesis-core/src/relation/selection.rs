@@ -197,6 +197,69 @@ impl<'source> Relation<'source> {
         })
     }
 
+    /// Decode one packed row mask into an increasing structural selection.
+    ///
+    /// Bit zero of the first word denotes original row position zero. The
+    /// mask has exactly `row_count().div_ceil(32)` words, with unused high bits
+    /// zero. Ordered bit traversal supplies unique in-range positions directly;
+    /// no temporary row vector or second copy is retained.
+    ///
+    /// Limits include this relation, the borrowed mask's slice bytes and the
+    /// returned selection. Allocation capacity outside that slice, an enclosing
+    /// batch object and other live selections remain caller-accounted. Work
+    /// charges two word scans and two operations per selected row (decode and
+    /// copy). The returned work counter covers that complete reconstruction.
+    ///
+    /// Raw mask bits carry no owner or semantic certificate. The caller chooses
+    /// this owner; shape validity does not prove query satisfaction, complete
+    /// filtering, pattern matching or answer-set membership.
+    ///
+    /// # Errors
+    /// Refuses wrong word count, nonzero unused tail bits, resource excess and
+    /// allocation failure without publishing a partial selection.
+    pub fn selection_from_mask(
+        &self,
+        words: &[u32],
+        limits: Limits,
+    ) -> Result<Selection<'_, 'source>, Failure> {
+        let bits = u32::BITS as usize;
+        if words.len() != self.row_count().div_ceil(bits) {
+            return Err(Failure::Mask);
+        }
+        let mask_bytes = std::mem::size_of_val(words);
+        let extra = mask_bytes
+            .checked_add(size_of::<Selection<'_, '_>>())
+            .ok_or(Failure::Overflow)?;
+        let mut work = self.work(limits, extra)?;
+        let tail = self.row_count() % bits;
+        let mut count = 0_usize;
+        for (index, &word) in words.iter().enumerate() {
+            work.tick(1)?;
+            if index + 1 == words.len() && tail != 0 && word >> tail != 0 {
+                return Err(Failure::Mask);
+            }
+            count = count
+                .checked_add(word.count_ones() as usize)
+                .ok_or(Failure::Overflow)?;
+        }
+        let mut positions = work.reserve(count)?;
+        for (index, &word) in words.iter().enumerate() {
+            work.tick(1)?;
+            let mut remaining = word;
+            while remaining != 0 {
+                work.tick(2)?;
+                positions.push(index * bits + remaining.trailing_zeros() as usize);
+                remaining &= remaining - 1;
+            }
+        }
+        Ok(Selection {
+            relation: self,
+            positions,
+            bytes: work.live - self.storage.retained_bytes - mask_bytes,
+            work: work.used,
+        })
+    }
+
     /// Construct the complete input row sequence in original occurrence order.
     ///
     /// This asserts only structural row coverage, not satisfaction or membership.
