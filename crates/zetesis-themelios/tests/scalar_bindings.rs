@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use zetesis_core::Atom;
+use zetesis_core::{Atom, Predicate, Value};
 use zetesis_cpu::Control;
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{
@@ -35,7 +35,7 @@ fn models(source: &str) -> BTreeSet<BTreeSet<Atom>> {
 }
 
 #[test]
-fn scalar_dependencies_are_ordered_without_inverting_arithmetic() {
+fn scalar_dependencies_preserve_reordered_bindings() {
     for source in [
         "p(X,Y,Z):-X=2,Y=X+1,Z=Y*2.",
         "p(X,Y,Z):-Z=Y*2,Y=X+1,X=2.",
@@ -43,9 +43,30 @@ fn scalar_dependencies_are_ordered_without_inverting_arithmetic() {
     ] {
         assert_eq!(models(source), models("p(2,3,6)."));
     }
+}
+
+#[test]
+fn bound_scalar_equalities_filter_existing_values() {
     assert_eq!(models("p(X):-X=1,X=2."), models(""));
     assert_eq!(models("p(X):-X=1,1=X."), models("p(1)."));
-    for source in ["p(X):-X+1=2.", "p(X):-X=Y,Y=X.", "p(X):-X=1..X."] {
+}
+
+#[test]
+fn affine_equalities_generate_exact_integer_bindings() {
+    for (source, number) in [
+        ("p(X):-X+1=2.", 1),
+        ("p(X):-2=X+1.", 1),
+        ("p(X):-X+1=3.", 2),
+    ] {
+        let atom = Atom::new(Predicate::new("p", 1).unwrap(), vec![Value::Number(number)]).unwrap();
+        let expected = BTreeSet::from([BTreeSet::from([atom])]);
+        assert_eq!(models(source), expected, "{source}");
+    }
+}
+
+#[test]
+fn unanchored_scalar_dependencies_remain_unsafe() {
+    for source in ["p(X):-X=Y,Y=X.", "p(X):-X=1..X."] {
         assert!(
             matches!(
                 admit_formula(
