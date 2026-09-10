@@ -600,8 +600,10 @@ pub(crate) struct Compiled {
 /// weights normalize before global tuple deduplication; eligible maximize
 /// `i32::MIN` weights receive a located overflow refusal. Nonnumeric priorities
 /// contribute no key; undefined priority arithmetic remains a located error.
-/// Dynamic priorities currently read ordinary bound positions, with generated
-/// aggregate priority values requiring a separate eligibility certificate. Source
+/// Dynamic priorities read ordinary bound positions or generated values with a
+/// completed invariant-carrier certificate: closed unary assignment tuples whose
+/// required measure cannot change under optional choices, with unique unary
+/// renamings. Other generated priority carriers retain explicit refusals. Source
 /// priorities survive zero weights and inactive models; templates with no possible
 /// positive/filter binding are omitted. Objective-enabled programs currently
 /// refuse default-negated producer bodies/choice conditions and general aggregate

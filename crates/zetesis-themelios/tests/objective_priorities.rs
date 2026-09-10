@@ -8,7 +8,10 @@ mod source_cases;
 mod source_oracle;
 
 use source_records::{admit, exhaustive};
-use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
+use zetesis_themelios::{
+    AdmissionFailure, ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource,
+    ProfileFeature,
+};
 
 const CASES: &str = r##"
 {"name":"priority_only_variable","source":"{p(1);p(2)}.#minimize{1@X:p(X)}.","priorities":[2,1],"records":[[[],[0,0]],[["p(1)"],[0,1]],[["p(2)"],[1,0]],[["p(1)","p(2)"],[1,1]]]}
@@ -25,6 +28,10 @@ const CASES: &str = r##"
 {"name":"literal_priority","source":"{a}.#minimize{1@foo:a;1@#inf:a;1@#sup:a}.","priorities":[],"records":[[[],null],[["a"],null]]}
 {"name":"correlated_numeric_presence","source":"p(foo,7;2,foo).#minimize{W@P:p(W,P)}.","priorities":[],"records":[[["p(foo,7)","p(2,foo)"],null]]}
 {"name":"filtered_priority","source":"p(1;2).#minimize{1@X:p(X),X!=1}.","priorities":[2],"records":[[["p(1)","p(2)"],[1]]]}
+{"name":"excluded_maximize_normalization","source":"#maximize{(-2147483647-1)@word}.","priorities":[],"records":[[[],null]]}
+{"name":"excluded_bound_normalization","source":"p(-2147483647-1,word;1,2).#maximize{W@P:p(W,P)}.","priorities":[2],"records":[[["p(-2147483648,word)","p(1,2)"],[-1]]]}
+{"name":"constructed_priority","source":"p(1).#minimize{1@f(X):p(X);1@(X,2):p(X)}.","priorities":[],"records":[[["p(1)"],null]]}
+{"name":"negative_priority_order","source":"p(-1;2).#minimize{1@X:p(X)}.","priorities":[2,-1],"records":[[["p(-1)","p(2)"],[1,1]]]}
 "##;
 
 #[test]
@@ -64,8 +71,27 @@ fn undefined_priorities_remain_errors() {
         "p(0).#minimize{foo@(1/X):p(X)}.",
         "p(2147483647).#minimize{1@(X+1):p(X)}.",
     ] {
-        assert!(admit(source, &FormulaLimits::default()).is_err());
+        assert!(matches!(
+            admit(source, &FormulaLimits::default()),
+            Err(FormulaFailure::Expansion(
+                ExpansionFailure::Evaluation { .. }
+            ))
+        ));
     }
+}
+
+#[test]
+fn numeric_priorities_retain_normalization_errors() {
+    let source = "p(-2147483647-1,word;-2147483647-1,2).#maximize{W@P:p(W,P)}.";
+    assert!(matches!(
+        admit(source, &FormulaLimits::default()),
+        Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
+            AdmissionFailure::Profile {
+                feature: ProfileFeature::NumericOverflow,
+                ..
+            }
+        )))
+    ));
 }
 
 #[test]
@@ -123,8 +149,8 @@ fn specialization_limits_are_inclusive() {
 #[test]
 fn generated_priorities_require_eligibility_evidence() {
     for source in [
-        "a.n(N):-N=#count{1:a}.#minimize{1@N:n(N)}.",
-        "b.{a}.n(N):-N=#max{2:a;foo:b}.#minimize{1@N:n(N)}.",
+        "{a}.n(N):-N=#count{1:a}.#minimize{1@N:n(N)}.",
+        "{a;b}.n(N):-N=#max{2:a;foo:b}.#minimize{1@N:n(N)}.",
     ] {
         let error = admit(source, &FormulaLimits::default()).unwrap_err();
         assert!(!error.diagnostics().is_empty());

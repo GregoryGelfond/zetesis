@@ -97,7 +97,7 @@ impl ObjectiveTemplate {
     /// Validate scoped data fields before a source priority has been resolved.
     /// Returns the number of densely numbered, positively bound variables.
     /// Numeric priority values do not affect these shape and safety obligations.
-    /// `index` identifies the caller's original element in every returned error.
+    /// `index` identifies the caller's original element in indexed errors.
     ///
     /// A source frontend may call this before evaluating its priority expression.
     /// That frontend owns expression safety, numeric evaluation and the complete

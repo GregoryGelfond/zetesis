@@ -41,7 +41,7 @@ pub(crate) fn ground(
     })?;
     let (objectives, objective_origins) =
         profile.phase(GroundingPhase::ObjectiveActivation, None, || {
-            objectives::activate(&prepared, &support, limits, budget, &mut counters, location)
+            objectives::prepare(&prepared, &support, limits, budget, &mut counters, location)
         })?;
     let mut builder = profile.phase(GroundingPhase::FormulaInitialization, None, || {
         let mut builder = Builder {
@@ -1122,9 +1122,9 @@ impl Builder<'_> {
                         formula_support::copy(value, self.budget, location)?
                     }
                     GroundKey::Tuple(tuple) => {
-                        let Some(weight) = crate::formula_assignment::tuple_weight(
+                        let Some(weight) = crate::formula_assignment::contribution(
                             aggregate.function,
-                            tuple,
+                            tuple.first(),
                             location,
                         )?
                         else {

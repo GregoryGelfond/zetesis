@@ -47,6 +47,9 @@ pub(crate) struct ObjectiveIr {
     pub positive: Vec<AtomPattern>,
     pub filters: Vec<Filter>,
     pub polarity: WeightPolarity,
+    /// Indices of positive conditions supplying generated priority inputs.
+    /// Grounding must certify their exact values before publishing priorities.
+    pub priority_sources: BTreeSet<usize>,
     pub condition: Vec<LiteralIr>,
     pub variables: usize,
     pub origins: Vec<Location>,
@@ -326,7 +329,7 @@ pub(crate) fn prepare(
     let analysis = crate::formula_analysis::analyze(&analyzed, limits, compiler.budget, fallback)?;
     let objective_extrema = crate::formula_objective_dependencies::check(
         &rules,
-        &objectives,
+        &mut objectives,
         &analysis,
         &analyzed,
         fallback,
@@ -613,6 +616,7 @@ impl Compiler<'_> {
             positive,
             filters,
             polarity,
+            priority_sources: BTreeSet::new(),
             condition,
             variables: count,
             origins,

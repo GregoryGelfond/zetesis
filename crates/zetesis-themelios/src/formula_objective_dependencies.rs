@@ -3,7 +3,7 @@
 mod forwarding;
 mod presence;
 
-pub(crate) use presence::check as check_presence;
+pub(crate) use presence::{Presence, check as check_presence};
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -22,7 +22,7 @@ use crate::{FormulaFailure, ProfileFeature, extended};
 
 pub(crate) fn check(
     rules: &[RuleIr],
-    objectives: &[ObjectiveIr],
+    objectives: &mut [ObjectiveIr],
     analysis: &Analysis,
     source: &Program,
     fallback: Location,
@@ -119,8 +119,8 @@ pub(crate) fn check(
             }
         }
     }
-    for objective in objectives {
-        observer(objective, &generated)?;
+    for objective in objectives.iter_mut() {
+        objective.priority_sources = observer(objective, &generated)?;
     }
     Ok(presence::required(rules, objectives, graph, &generated))
 }
@@ -277,7 +277,8 @@ fn total_dependency(
 fn observer(
     objective: &ObjectiveIr,
     generated: &BTreeMap<Signature, BTreeSet<usize>>,
-) -> Result<(), FormulaFailure> {
+) -> Result<BTreeSet<usize>, FormulaFailure> {
+    let mut priorities = BTreeSet::new();
     let mut occurrences = BTreeMap::<usize, usize>::new();
     for atom in &objective.positive {
         for term in atom.terms() {
@@ -286,7 +287,7 @@ fn observer(
             }
         }
     }
-    for atom in &objective.positive {
+    for (index, atom) in objective.positive.iter().enumerate() {
         let Some(positions) = generated.get(&signature(atom.predicate())) else {
             continue;
         };
@@ -304,15 +305,14 @@ fn observer(
             {
                 return Err(refusal(objective.location));
             }
-            // Proposal values in generated positions are not an exact priority
-            // carrier. Until a correlated eligibility certificate is available,
-            // a priority may only read the independently bound input columns.
+            // Generated proposals are not exact priority carriers. Record the
+            // producer so grounding must establish its eligibility certificate.
             if objective.priority.inputs().any(|input| input == variable) {
-                return Err(refusal(objective.location));
+                priorities.insert(index);
             }
         }
     }
-    Ok(())
+    Ok(priorities)
 }
 fn signature(predicate: &Predicate) -> Signature {
     Signature {

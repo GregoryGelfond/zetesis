@@ -3,6 +3,10 @@
 //! Shared optional conditions and constraints never erase possible witnesses.
 //! Only a required value dominating all numbers excludes numeric presence.
 
+mod fixed;
+
+pub(super) use fixed::certify as fixed;
+
 use std::collections::BTreeSet;
 
 use themelios_analysis::depend::DependencyGraph;
@@ -103,17 +107,9 @@ pub(super) fn certify<'a>(
         entries: retained,
     };
     context.inspect()?;
-    let (HeadIr::Normal(Some(head)), [LiteralIr::Aggregate(only)]) =
-        (&rule.head, rule.body.as_slice())
-    else {
+    let Some(head) = assignment(rule, aggregate) else {
         return Ok(None);
     };
-    let Some(target) = aggregate.binding else {
-        return Ok(None);
-    };
-    if only.id != aggregate.id || head.terms() != [Term::Variable(target)] {
-        return Ok(None);
-    }
     let mut blocked = false;
     for element in &aggregate.elements {
         context.inspect()?;
@@ -142,6 +138,17 @@ pub(super) fn certify<'a>(
     } else {
         BTreeSet::new()
     }))
+}
+
+/// A total unary observer contains exactly its original aggregate equality.
+fn assignment<'a>(rule: &'a RuleIr, aggregate: &AggregateIr) -> Option<&'a AtomPattern> {
+    let (HeadIr::Normal(Some(head)), [LiteralIr::Aggregate(only)]) =
+        (&rule.head, rule.body.as_slice())
+    else {
+        return None;
+    };
+    let target = aggregate.binding?;
+    (only.id == aggregate.id && head.terms() == [Term::Variable(target)]).then_some(head)
 }
 
 fn dominates_numbers(function: AggregateFunction, value: &Value) -> bool {

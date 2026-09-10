@@ -75,7 +75,7 @@ pub(crate) fn values(
     }
     let mut weights = Vec::new();
     for tuple in tuples {
-        if let Some(weight) = tuple_weight(aggregate.function, &tuple, location)? {
+        if let Some(weight) = contribution(aggregate.function, tuple.first(), location)? {
             weights.push(weight);
         }
     }
@@ -131,12 +131,12 @@ pub(crate) fn extrema_candidates<'a>(
 
 /// Select the numeric contribution before eligibility lowering. Whole tuples
 /// still identify distinct elements; ignored sums never become zero-weight keys.
-pub(crate) fn tuple_weight(
+pub(crate) fn contribution(
     function: AggregateFunction,
-    tuple: &[Value],
+    first: Option<&Value>,
     location: Location,
 ) -> Result<Option<i32>, FormulaFailure> {
-    match (function, tuple.first()) {
+    match (function, first) {
         (AggregateFunction::Count, _) => Ok(Some(1)),
         (AggregateFunction::SumPlus, Some(Value::Number(weight))) if *weight > 0 => {
             Ok(Some(*weight))

@@ -186,17 +186,20 @@ from the logical theory. `zetesis-objective` scores supplied verified models;
 objectives do not derive atoms or replace reduct acceptance.
 
 The source profile admits `#minimize`, `#maximize` and positive weak constraints
-with scalar literal or positively bound variable weights, constant integer
-priorities, closed/whole-variable tuples, positive ordinary conditions and scalar
+with scalar literal or positively bound variable weights, finite safely bound
+priority expressions, closed/whole-variable tuples, positive ordinary conditions and scalar
 equality/disequality filters. Maximize weights undergo checked negation before
 global `(priority, normalized weight, full tuple)` deduplication. Costs use the
-normalized minimization sign.
+normalized minimization sign. Weight, priority and tuple are resolved from the
+same eligible binding; specialization retains the original positive model query.
+Runtime objective templates always have fixed integer priorities.
 
-Resolved nonnumeric literal weights, including weight-position `#inf`/`#sup`,
+Resolved nonnumeric weights or priorities, including `#inf`/`#sup`,
 contribute neither cost nor priority. Their tuple, priority, binding, filter and
 resource checks still run. A numeric zero retains a priority; an omitted weight
-does not. Eligible unrepresentable maximize negation is a located failure.
-Dynamic priorities, variable weight arithmetic, negative objective conditions
+does not. Eligible unrepresentable maximize negation is a located failure;
+an excluded nonnumeric priority needs no weight normalization. Undefined priority
+arithmetic remains a located source-evaluation failure. Variable weight arithmetic, negative objective conditions
 and richer weak bodies remain unsupported.
 
 Objective dependencies have additional boundaries because a possible-support
@@ -219,6 +222,14 @@ a unique unary positive renaming. Exact signed facts are mandatory; optional
 choices remain possible even when constraints correlate them. Outer joins,
 filtered/alternative producers and nested reductions do not gain this certificate.
 Preparation can succeed before materialization detects the unsupported case.
+Generated priority inputs additionally require an exact invariant-value
+certificate. The same flat unary profile is admitted when required full tuple
+keys determine one value and every optional-only key leaves it unchanged:
+zero or ignored sum contributions, aliases of required keys, and absorbed extrema.
+Unique unary renamings preserve the certificate. Completed objective rows must
+match that value before weight and priority resolution; original aggregate
+equalities remain in the reduct theory. Non-singleton generated priority
+carriers and other producer shapes remain outside this certificate.
 `FormulaLimits::max_objective_presence_entries` separately bounds simultaneously
 retained logical presence-planning slots, rather than allocator bytes.
 See [dependency checks](src/formula_objective_dependencies.rs) and

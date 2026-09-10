@@ -15,9 +15,10 @@ use themelios_program::symbol::Signature;
 use zetesis_core::{Predicate, Term, Value};
 
 use crate::expansion::Budget;
+use crate::formula::ceiling;
 use crate::formula_ir::{AggregateIr, AggregateKey, Prepared};
 use crate::formula_support::{Counters, Join, Support};
-use crate::{FormulaFailure, FormulaLimits};
+use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 
 use super::{
     LiteralIr, ObjectiveIr, RuleIr, dependency_closure, refusal, relevant_head, signature,
@@ -25,15 +26,43 @@ use super::{
 
 mod flat;
 
-/// A borrowed certificate excluding numeric witnesses only for the same unary
-/// generated value used as the weight. It never erases constant-weight observers
-/// or unrelated numeric bindings from other objective body atoms.
+/// Completed exclusion and fixed-value certificates over borrowed predicates.
+/// Fixed logical values are owned; their payload and retained slots are bounded.
+/// Nonnumeric exclusions apply only to the same unary generated weight. Neither
+/// certificate replaces original equalities or asserts candidate activity.
 #[derive(Default)]
 pub(crate) struct Presence<'a> {
     nonnumeric: BTreeSet<&'a Predicate>,
+    fixed: BTreeMap<&'a Predicate, Value>,
 }
 
 impl Presence<'_> {
+    /// A completed proposal row is eligible only when every certified observer
+    /// in it carries its proved fixed value. The original equalities remain in
+    /// the theory; this filter affects objective specialization only.
+    pub(crate) fn eligible(
+        &self,
+        objective: &ObjectiveIr,
+        binding: &[Value],
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+    ) -> Result<bool, FormulaFailure> {
+        if objective.priority_sources.is_empty() {
+            return Ok(true);
+        }
+        for atom in &objective.positive {
+            counters.work(limits, objective.location)?;
+            if let Some(value) = self.fixed.get(atom.predicate()) {
+                let [term] = atom.terms() else {
+                    unreachable!("fixed certificates are unary")
+                };
+                if term.resolve(binding).expect("safe objective row") != value {
+                    return Ok(false);
+                }
+            }
+        }
+        Ok(true)
+    }
     /// False proves exclusion; true still requires completed-support activation.
     pub(crate) fn may_have_numeric_weight(
         &self,
@@ -112,6 +141,7 @@ pub(crate) fn check<'a>(
     counters: &mut Counters,
 ) -> Result<Presence<'a>, FormulaFailure> {
     let mut presence = Presence::default();
+    certify_priorities(prepared, &mut presence, limits, budget, counters)?;
     if prepared.objective_extrema.is_empty() {
         return Ok(presence);
     }
@@ -138,7 +168,7 @@ pub(crate) fn check<'a>(
                         prepared,
                         rule,
                         aggregate,
-                        presence.nonnumeric.len(),
+                        presence.nonnumeric.len() + presence.fixed.len(),
                         limits,
                         counters,
                     )?
@@ -156,6 +186,75 @@ pub(crate) fn check<'a>(
         }
     }
     Ok(presence)
+}
+
+/// Source dependency analysis names every generated priority input. Only a
+/// complete fixed-value certificate can discharge that obligation here.
+fn certify_priorities<'a>(
+    prepared: &'a Prepared,
+    presence: &mut Presence<'a>,
+    limits: &FormulaLimits,
+    budget: &mut Budget,
+    counters: &mut Counters,
+) -> Result<(), FormulaFailure> {
+    let mut requested = BTreeSet::new();
+    for objective in &prepared.objectives {
+        for &index in &objective.priority_sources {
+            let predicate = objective.positive[index].predicate();
+            counters.work(limits, objective.location)?;
+            if !requested.contains(predicate) {
+                ceiling(
+                    FormulaResource::ObjectivePresenceEntries,
+                    requested.len() as u128 + 1,
+                    limits.max_objective_presence_entries as u128,
+                    objective.location,
+                )?;
+                requested.insert(predicate);
+            }
+        }
+    }
+    if requested.is_empty() {
+        return Ok(());
+    }
+    for rule in &prepared.rules {
+        counters.work(limits, rule.location)?;
+        let [LiteralIr::Aggregate(aggregate)] = rule.body.as_slice() else {
+            continue;
+        };
+        let Some(fixed) = flat::fixed(
+            prepared,
+            rule,
+            aggregate,
+            requested.len() + presence.fixed.len(),
+            limits,
+            budget,
+            counters,
+        )?
+        else {
+            continue;
+        };
+        for predicate in fixed.predicates {
+            counters.work(limits, rule.location)?;
+            if requested.contains(predicate) {
+                let value = crate::formula_support::copy(&fixed.value, budget, rule.location)?;
+                // The returned borrowed predicate slot is transferred into the
+                // retained certificate. Its value payload is charged separately.
+                presence.fixed.insert(predicate, value);
+            }
+        }
+    }
+    for objective in &prepared.objectives {
+        for &index in &objective.priority_sources {
+            counters.work(limits, objective.location)?;
+            if !presence
+                .fixed
+                .contains_key(objective.positive[index].predicate())
+            {
+                return Err(refusal(objective.location));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Distinct raw alternatives with one full key have the same first-value class,

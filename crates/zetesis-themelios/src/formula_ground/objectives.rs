@@ -12,10 +12,11 @@ use zetesis_objective::{AdmissionError, ObjectiveProgram, ObjectiveTemplate, Wei
 use crate::expansion::Budget;
 use crate::formula::ceiling;
 use crate::formula_ir::{ObjectiveIr, Operation, Prepared};
+use crate::formula_objective_dependencies::Presence;
 use crate::formula_support::{self, Counters, Join, Support};
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
 
-pub(super) fn activate(
+pub(super) fn prepare(
     prepared: &Prepared,
     support: &Support,
     limits: &FormulaLimits,
@@ -26,7 +27,7 @@ pub(super) fn activate(
     let presence = crate::formula_objective_dependencies::check_presence(
         prepared, support, limits, budget, counters,
     )?;
-    let mut activation = Activation {
+    let mut preparation = Preparation {
         limits,
         budget,
         counters,
@@ -34,19 +35,20 @@ pub(super) fn activate(
         origins: Vec::new(),
     };
     for objective in &prepared.objectives {
-        let numeric = presence.may_have_numeric_weight(objective, limits, activation.counters)?;
-        activation.objective(objective, support, numeric)?;
+        let may_have_numeric_weight =
+            presence.may_have_numeric_weight(objective, limits, preparation.counters)?;
+        preparation.objective(objective, support, may_have_numeric_weight, &presence)?;
     }
-    let program = if activation.templates.is_empty() {
+    let program = if preparation.templates.is_empty() {
         ObjectiveProgram::none()
     } else {
-        ObjectiveProgram::new(activation.templates, limits.objective)
+        ObjectiveProgram::new(preparation.templates, limits.objective)
             .map_err(|error| FormulaFailure::Objective { error, location })?
     };
-    Ok((program, activation.origins))
+    Ok((program, preparation.origins))
 }
 
-struct Activation<'a> {
+struct Preparation<'a> {
     limits: &'a FormulaLimits,
     budget: &'a mut Budget,
     counters: &'a mut Counters,
@@ -54,16 +56,17 @@ struct Activation<'a> {
     origins: Vec<Vec<Location>>,
 }
 
-impl Activation<'_> {
+impl Preparation<'_> {
     fn objective(
         &mut self,
         objective: &ObjectiveIr,
         support: &Support,
-        numeric: bool,
+        may_have_numeric_weight: bool,
+        presence: &Presence<'_>,
     ) -> Result<(), FormulaFailure> {
         if let [Operation::Constant(Value::Number(priority))] = objective.priority.nodes.as_slice()
         {
-            if numeric && self.active(objective, support)? {
+            if may_have_numeric_weight && self.has_numeric_row(objective, support)? {
                 self.retain(objective, objective.template(*priority))?;
             }
             return Ok(());
@@ -79,6 +82,9 @@ impl Activation<'_> {
         while let Some(binding) =
             bindings.next(self.limits, self.budget, self.counters, objective.location)?
         {
+            if !presence.eligible(objective, &binding, self.limits, self.counters)? {
+                continue;
+            }
             let priority = formula_support::expression(
                 &objective.priority,
                 &binding,
@@ -87,9 +93,9 @@ impl Activation<'_> {
                 self.counters,
                 objective.location,
             )?;
-            let weight = self.weight(objective, &binding)?;
-            if let (Some(weight), Value::Number(priority)) = (weight, priority)
-                && numeric
+            if let Value::Number(priority) = priority
+                && may_have_numeric_weight
+                && let Some(weight) = self.weight(objective, &binding)?
             {
                 self.capacity(objective.location)?;
                 let template = self.specialize(objective, &binding, weight, priority)?;
@@ -99,7 +105,7 @@ impl Activation<'_> {
         Ok(())
     }
 
-    fn active(
+    fn has_numeric_row(
         &mut self,
         objective: &ObjectiveIr,
         support: &Support,
