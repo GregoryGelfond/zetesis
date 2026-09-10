@@ -60,6 +60,30 @@ fn scored(all: &[(&[&str], i64)], optimal: &[(&[&str], i64)]) -> Expected {
     }
 }
 
+fn correlated() -> Expected {
+    // Choosing a incurs two at priority one; choosing b incurs one at the
+    // higher priority two. Both fields belong to the same row binding.
+    let first = (
+        ["row(1,2)", "row(2,1)", "a", "selected(1)"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+        Some(vec![0, 2]),
+    );
+    let second = (
+        ["row(1,2)", "row(2,1)", "b", "selected(2)"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+        Some(vec![1, 0]),
+    );
+    Expected {
+        all: Records::from([first.clone(), second]),
+        optimal: Records::from([first]),
+        priorities: &[2, 1],
+    }
+}
+
 fn expectations() -> [Expected; sources::SOURCES.len()] {
     [
         unscored(&[&[], &["a"], &["b"], &["a", "b"]]),
@@ -75,6 +99,7 @@ fn expectations() -> [Expected; sources::SOURCES.len()] {
             &[(&["b"], 0)],
         ),
         scored(&[(&["a"], 0), (&["b"], 0)], &[(&["a"], 0), (&["b"], 0)]),
+        correlated(),
     ]
 }
 
@@ -88,6 +113,7 @@ fn exhaustive_reduct_checks_preserve_answer_families() {
 
 #[test]
 fn sessions_preserve_complete_scored_answers() {
+    let mut parallel_queries = false;
     for (source, expected) in sources::SOURCES.into_iter().zip(expectations()) {
         let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
         assert_eq!(input.objectives().priorities(), expected.priorities);
@@ -129,8 +155,22 @@ fn sessions_preserve_complete_scored_answers() {
             assert_eq!(outcome.completion(), Some(Completion::Exhausted));
             assert_eq!(outcome.unsatisfiable(), expected.all.is_empty());
             assert_eq!(outcome.formula_execution().is_some(), workers > 1);
+            if let Some(execution) = outcome.formula_execution() {
+                let completion = execution.completion;
+                assert_eq!(completion.entered, completion.completed);
+                assert_eq!(completion.failed, 0);
+                assert_eq!(execution.pending_candidates, 0);
+                assert_eq!(execution.queued_models, 0);
+                assert!(!completion.overflowed);
+                if completion.entered > 0 {
+                    parallel_queries = true;
+                    assert_eq!(completion.requested_workers, workers);
+                    assert!(completion.effective_workers <= workers.min(batch));
+                }
+            }
         }
     }
+    assert!(parallel_queries);
 }
 
 #[test]
