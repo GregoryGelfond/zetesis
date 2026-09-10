@@ -437,7 +437,7 @@ fn duration_overflow_preserves_the_previous_record() {
 mod classification {
     use std::error::Error;
     use zetesis_core::{
-        AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Seed, Template,
+        AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Seed, Template, Term, Value,
     };
     use zetesis_cpu::{Control, Stop, lazy};
     use zetesis_wgpu::GpuError;
@@ -524,6 +524,43 @@ mod classification {
                 Ok(Some(Model::new([atom("a")])))
             ]
         );
+    }
+
+    fn payload(model: &Model) -> &str {
+        let Value::String(value) = &model.atoms().first().unwrap().values()[0] else {
+            panic!("fixture contains one string argument");
+        };
+        value
+    }
+
+    #[test]
+    fn batch_results_transfer_payload_storage() {
+        let head = AtomPattern::new(
+            Predicate::new("message", 1).unwrap(),
+            vec![Term::Constant(Value::String("retained payload".into()))],
+        )
+        .unwrap();
+        let program = Program::new(
+            vec![Template::new(Some(head), vec![], vec![], vec![], vec![])],
+            AdmissionLimits::default(),
+        )
+        .unwrap();
+        // CPU-authored chunks exercise the session adapter, not device execution.
+        let batch = lazy::check_with(
+            &program,
+            &[Seed::new(&program, []).unwrap()],
+            lazy::Limits::default(),
+            &Control::default(),
+            |chunk| Ok::<_, GpuError>(lazy::evaluate(chunk).unwrap()),
+        )
+        .unwrap();
+        assert!(batch.checks[0].accepted());
+        let original = payload(batch.checks[0].closure()).as_ptr();
+        let mut results = crate::lazy_execution::batch_results(Ok(batch)).unwrap();
+        assert_eq!(results.len(), 1);
+        let model = results.pop().unwrap().unwrap().unwrap();
+        assert_eq!(payload(&model), "retained payload");
+        assert_eq!(payload(&model).as_ptr(), original);
     }
 
     #[test]
