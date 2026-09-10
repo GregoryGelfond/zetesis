@@ -20,6 +20,9 @@ mod logical_extremum_sources;
 #[path = "support/contribution_sources.rs"]
 mod contribution_sources;
 
+#[path = "support/bound_priority_sources.rs"]
+mod bound_priority_sources;
+
 #[cfg(feature = "gpu")]
 #[path = "support/bounded_writer.rs"]
 mod bounded_writer;
@@ -328,6 +331,7 @@ mod physical {
         .chain(super::projected_conditional_sources::SOURCES)
         .chain(super::logical_extremum_sources::SOURCES)
         .chain(super::contribution_sources::SOURCES)
+        .chain(super::bound_priority_sources::SOURCES)
         {
             for json in [false, true] {
                 qualify_formula_output(source, backend, json);
