@@ -5,7 +5,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Location, Span};
 use themelios_program::term::{BinaryOp, EvalError};
-use zetesis_core::Value;
+use zetesis_core::{Sign, Value, ValueLimits, ValueNode};
 
 use super::{Budget, Counters, Evaluation, Expression, Operation, RETAINED_VALUE_CELLS};
 use crate::{ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits};
@@ -55,6 +55,25 @@ fn reuse_starts_from_the_current_binding() {
 }
 
 #[test]
+fn leaf_evaluation_needs_no_scratch_cells() {
+    for value in [Value::Number(7), Value::String("result".into())] {
+        for operation in [Operation::Constant(value.clone()), Operation::Variable(0)] {
+            let mut evaluation = Evaluation::default();
+            assert_eq!(
+                evaluate(
+                    &mut evaluation,
+                    vec![operation],
+                    std::slice::from_ref(&value)
+                )
+                .unwrap(),
+                value
+            );
+            assert_eq!(evaluation.values.capacity(), 0);
+        }
+    }
+}
+
+#[test]
 fn successful_evaluation_retains_only_empty_cells() {
     let mut evaluation = Evaluation::default();
     let result = evaluate(
@@ -68,7 +87,7 @@ fn successful_evaluation_retains_only_empty_cells() {
     .unwrap();
     assert_eq!(result, Value::String("result".into()));
     assert!(evaluation.values.is_empty());
-    assert!((2..=RETAINED_VALUE_CELLS).contains(&evaluation.values.capacity()));
+    assert!((1..=RETAINED_VALUE_CELLS).contains(&evaluation.values.capacity()));
 }
 
 #[test]
@@ -116,7 +135,7 @@ fn large_evaluations_release_their_workspace() {
     let mut evaluation = Evaluation::default();
     let result = evaluate(
         &mut evaluation,
-        (0..=RETAINED_VALUE_CELLS)
+        (0..RETAINED_VALUE_CELLS + 2)
             .map(|_| Operation::Constant(Value::Number(7)))
             .collect(),
         &[],
@@ -125,6 +144,22 @@ fn large_evaluations_release_their_workspace() {
     assert_eq!(result, Value::Number(7));
     assert!(evaluation.values.is_empty());
     assert_eq!(evaluation.values.capacity(), 0);
+}
+
+#[test]
+fn root_does_not_extend_the_retained_prefix() {
+    let mut evaluation = Evaluation::default();
+    let result = evaluate(
+        &mut evaluation,
+        (0..=RETAINED_VALUE_CELLS)
+            .map(|_| Operation::Constant(Value::Number(7)))
+            .collect(),
+        &[],
+    )
+    .unwrap();
+    assert_eq!(result, Value::Number(7));
+    assert!(evaluation.values.is_empty());
+    assert_eq!(evaluation.values.capacity(), RETAINED_VALUE_CELLS);
 }
 
 #[test]
@@ -197,4 +232,97 @@ fn reuse_charges_each_operand_copy() {
         }
     )) if found == location()));
     assert_eq!(counters.work, 3);
+}
+
+#[test]
+fn root_work_refusal_precedes_operand_access() {
+    let mut evaluation = Evaluation::default();
+    let expression = Expression {
+        nodes: vec![
+            Operation::Constant(Value::Number(7)),
+            Operation::Variable(0),
+        ],
+    };
+    let mut counters = Counters::default();
+    let failure = evaluation.expression(
+        &expression,
+        |_| panic!("the work refusal must precede root operand access"),
+        &FormulaLimits {
+            max_work: 1,
+            ..Default::default()
+        },
+        &mut Budget::new(ExpansionLimits::default(), usize::MAX),
+        &mut counters,
+        location(),
+    );
+    assert!(matches!(failure, Err(FormulaFailure::Limit {
+        resource: crate::FormulaResource::Work, observed: 2, limit: 1, location: found
+    }) if found == location()));
+    assert_eq!(counters.work, 1);
+    assert!(evaluation.values.is_empty());
+}
+
+#[test]
+fn root_copy_refusal_clears_the_live_prefix() {
+    let mut evaluation = Evaluation::default();
+    let expression = Expression {
+        nodes: vec![
+            Operation::Constant(Value::String("prefix".into())),
+            Operation::Constant(Value::String("root".into())),
+        ],
+    };
+    let failure = evaluation.expression(
+        &expression,
+        |_| unreachable!("the plan has no variables"),
+        &FormulaLimits::default(),
+        &mut Budget::new(
+            ExpansionLimits {
+                max_scalar_bytes: 6,
+                ..Default::default()
+            },
+            usize::MAX,
+        ),
+        &mut Counters::default(),
+        location(),
+    );
+    assert!(matches!(failure, Err(FormulaFailure::Expansion(
+        ExpansionFailure::Limit {
+            resource: ExpansionResource::ScalarBytes, observed: 10, limit: 6, location: found
+        }
+    )) if found == location()));
+    assert!(evaluation.values.is_empty());
+}
+
+#[test]
+fn constructor_root_reads_its_ordered_prefix() {
+    let mut evaluation = Evaluation::default();
+    let actual = evaluate(
+        &mut evaluation,
+        vec![
+            Operation::Constant(Value::Number(7)),
+            Operation::Variable(0),
+            Operation::Constructor(Box::new(crate::formula_value::Constructor {
+                name: Some("f".into()),
+                sign: Sign::Negative,
+                arguments: vec![1, 0, 1],
+            })),
+        ],
+        &[Value::String("argument".into())],
+    )
+    .unwrap();
+    let expected = Value::from_nodes(
+        vec![
+            ValueNode::Function {
+                name: "f".into(),
+                sign: Sign::Negative,
+                arity: 3,
+            },
+            ValueNode::String("argument".into()),
+            ValueNode::Number(7),
+            ValueNode::String("argument".into()),
+        ],
+        ValueLimits::default(),
+    )
+    .unwrap();
+    assert_eq!(actual, expected);
 }

@@ -1,9 +1,11 @@
 //! Flat plan evaluation with private, bounded reuse of empty value storage.
 //!
 //! Before node `i`, the live prefix holds precisely nodes `0..i` in source-plan
-//! order. Operands refer only to that prefix; a node is appended only after its
-//! work, operand-copy and result checks succeed. Failure never evaluates a later
-//! node. Clearing the prefix preserves capacity, never a previous result.
+//! order. Operands refer only to that prefix; an intermediate result is appended
+//! only after its work, operand-copy and result checks succeed. The root uses the
+//! same checked operation and returns directly because no later node consumes it.
+//! Failure never evaluates a later node. Clearing the prefix preserves capacity,
+//! never a previous result.
 
 use themelios_base::span::Location;
 use zetesis_core::Value;
@@ -22,7 +24,8 @@ const RETAINED_VALUE_CELLS: usize = 32;
 
 /// One cursor's evaluation workspace; never shared across workers or scopes.
 ///
-/// Peak live storage is linear in the current expression's evaluated nodes.
+/// Scratch retains only intermediate results; a one-node plan allocates no
+/// scratch cells. Peak live scratch is linear in the expression's proper prefix.
 /// Between evaluations it contains zero values and at most 32 allocated cells.
 /// A worker with `j` simultaneous join cursors therefore retains at most `32*j`
 /// cells; cursor lifetime follows the existing bounded source-scope traversal.
@@ -43,35 +46,36 @@ impl Evaluation {
         location: Location,
     ) -> Result<Value, FormulaFailure> {
         counters.record(Event::ExpressionEvaluation);
+        let (root, prefix) = expression.nodes.split_last().expect("expression has root");
         let frame = Frame {
             values: &mut self.values,
         };
-        for node in &expression.nodes {
+        let mut evaluate = |node: &Operation, values: &[Value]| -> Result<Value, FormulaFailure> {
             counters.work(limits, location)?;
             counters.record(Event::ExpressionNode);
             let value = match *node {
                 Operation::Constructor(ref constructor) => {
-                    constructor.evaluate(frame.values, limits, budget, counters, location)?
+                    constructor.evaluate(values, limits, budget, counters, location)?
                 }
                 Operation::Constant(ref value) => copy(value, budget, location)?,
                 Operation::Variable(index) => copy(variable(index), budget, location)?,
                 Operation::Unary(operator, argument) => scalar_value(
                     crate::scalar_arithmetic::unary(
                         operator,
-                        numeric(&frame.values[argument], location)?,
+                        numeric(&values[argument], location)?,
                     ),
                     location,
                 )?,
                 Operation::Binary(operator, left, right) => scalar_value(
                     crate::scalar_arithmetic::binary(
                         operator,
-                        numeric(&frame.values[left], location)?,
-                        numeric(&frame.values[right], location)?,
+                        numeric(&values[left], location)?,
+                        numeric(&values[right], location)?,
                     ),
                     location,
                 )?,
                 Operation::Absolute(argument) => scalar_value(
-                    crate::scalar_arithmetic::absolute(numeric(&frame.values[argument], location)?),
+                    crate::scalar_arithmetic::absolute(numeric(&values[argument], location)?),
                     location,
                 )?,
             };
@@ -80,14 +84,18 @@ impl Evaluation {
                     counters.work(limits, location)?;
                 }
             }
+            Ok(value)
+        };
+        for node in prefix {
+            let value = evaluate(node, frame.values)?;
             frame.values.push(value);
         }
-        Ok(frame.values.pop().expect("expression has root"))
+        evaluate(root, frame.values)
     }
 }
 
 /// Drop the live prefix on success, typed failure and unwinding alike. The root
-/// has already moved to the caller on success; no reference into storage escapes.
+/// is returned separately on success; no reference into storage escapes.
 struct Frame<'a> {
     values: &'a mut Vec<Value>,
 }
