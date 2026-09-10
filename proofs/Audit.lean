@@ -890,6 +890,7 @@ import Zetesis
 #print axioms Zetesis.TightEvaluation.roots_true_iff
 #print axioms Zetesis.TightEvaluation.body_value_true
 #print axioms Zetesis.TightEvaluation.head_support_append
+#print axioms Zetesis.TightEvaluation.head_support_group
 #print axioms Zetesis.TightEvaluation.head_support_true
 #print axioms Zetesis.TightEvaluation.support_true_iff
 #print axioms Zetesis.TightEvaluation.computed_verdict_sound

@@ -4452,22 +4452,27 @@
     },
     {
       "file": "Zetesis/TightEvaluation.lean",
-      "line": 175,
+      "line": 183,
+      "name": "Zetesis.TightEvaluation.head_support_group"
+    },
+    {
+      "file": "Zetesis/TightEvaluation.lean",
+      "line": 202,
       "name": "Zetesis.TightEvaluation.head_support_true"
     },
     {
       "file": "Zetesis/TightEvaluation.lean",
-      "line": 197,
+      "line": 224,
       "name": "Zetesis.TightEvaluation.support_true_iff"
     },
     {
       "file": "Zetesis/TightEvaluation.lean",
-      "line": 218,
+      "line": 245,
       "name": "Zetesis.TightEvaluation.computed_verdict_sound"
     },
     {
       "file": "Zetesis/TightEvaluation.lean",
-      "line": 234,
+      "line": 261,
       "name": "Zetesis.TightEvaluation.completed_computation_exact"
     },
     {
@@ -5082,7 +5087,7 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "6b61b99f7426e5e1bc3ea2a4df2ef0895b2c50e25cc6ffe7517546171bf49ef9",
+    "Audit.lean": "859d749d705b0b80fa1172659738ee84a9067a35c0438e52d999caaede277acf",
     "Zetesis.lean": "277eadea90820ea938bb1af701f620ed26eb32c51987fff7ec4c96de4b8380d1",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
@@ -5168,7 +5173,7 @@
     "Zetesis/StructuredWitnesses.lean": "035fda4f2857801d516f26c1dca179233a561581beffbfbc69c1897e8926be8c",
     "Zetesis/TernaryWatch.lean": "ff2f1d1a4a02522b2646b0a54fff3e7c08e64bbd5661cf4c3631518aa41ba57e",
     "Zetesis/Thresholds.lean": "271ba89d3885ecf242dca61cc0ce8998f7b0f36db6a4df907ed1d4f7bd075a85",
-    "Zetesis/TightEvaluation.lean": "293010a62f7303a215a0c797b42df9ad8221728be1ef4806f40c92233a2c27a4",
+    "Zetesis/TightEvaluation.lean": "b6c23ae4aa0608505b07b42a0fc8be58e0bec557aedefa6a8d6cf76ef8b2644e",
     "Zetesis/TightPlans.lean": "6324a09643454c507c4daf1a287ec082545b621e52bea3196026043ea99bac98",
     "Zetesis/Transformers.lean": "e01d5f8de5ca692d1efdc79db7c433d20d832fc551cac37742b33fd2fc148648",
     "Zetesis/TrueHeads.lean": "56df61283a0abbe6ded83b72c89a76b99952b0f5abee72efab9f7acbc1ce4060",

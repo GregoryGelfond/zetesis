@@ -4450,24 +4450,29 @@
     "line": 168
   },
   {
+    "name": "Zetesis.TightEvaluation.head_support_group",
+    "file": "Zetesis/TightEvaluation.lean",
+    "line": 183
+  },
+  {
     "name": "Zetesis.TightEvaluation.head_support_true",
     "file": "Zetesis/TightEvaluation.lean",
-    "line": 175
+    "line": 202
   },
   {
     "name": "Zetesis.TightEvaluation.support_true_iff",
     "file": "Zetesis/TightEvaluation.lean",
-    "line": 197
+    "line": 224
   },
   {
     "name": "Zetesis.TightEvaluation.computed_verdict_sound",
     "file": "Zetesis/TightEvaluation.lean",
-    "line": 218
+    "line": 245
   },
   {
     "name": "Zetesis.TightEvaluation.completed_computation_exact",
     "file": "Zetesis/TightEvaluation.lean",
-    "line": 234
+    "line": 261
   },
   {
     "name": "Zetesis.TightPlans.original_of_reduct",
