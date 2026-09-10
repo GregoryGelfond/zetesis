@@ -35,6 +35,9 @@
 'Zetesis.AggregateDependencies.appended_predecessors' depends on axioms: [propext]
 'Zetesis.AggregateDependencies.original_rows' depends on axioms: [propext, Quot.sound]
 'Zetesis.AggregateDependencies.frozen_rows' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.AggregateInvariants.sum_invariant' depends on axioms: [propext, Quot.sound]
+'Zetesis.AggregateInvariants.extremum_invariant' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.AggregateInvariants.fixed_priority_presence' depends on axioms: [propext, Quot.sound]
 'Zetesis.AggregateRanges.sublist_envelope' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AggregateRanges.permutation_sum' depends on axioms: [propext, Quot.sound]
 'Zetesis.AggregateRanges.subcollection_range' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -586,6 +589,14 @@
 'Zetesis.ObjectiveDirections.opposite_directions_coalesce' does not depend on any axioms
 'Zetesis.ObjectiveDirections.same_weight_directions_distinct' depends on axioms: [propext, Quot.sound]
 'Zetesis.ObjectiveDirections.collision_and_cancellation_examples' depends on axioms: [propext]
+'Zetesis.ObjectivePriorities.selected_presence' depends on axioms: [propext, Quot.sound]
+'Zetesis.ObjectivePriorities.completed_presence' depends on axioms: [propext, Quot.sound]
+'Zetesis.ObjectivePriorities.ignored_priority_preserves_vector' depends on axioms: [propext, Quot.sound]
+'Zetesis.ObjectivePriorities.independent_fields_invent_priority' depends on axioms: [propext, Quot.sound]
+'Zetesis.ObjectivePriorities.raw_partition_cost' depends on axioms: [propext, Quot.sound]
+'Zetesis.ObjectivePriorities.partition_cost' depends on axioms: [propext, Quot.sound]
+'Zetesis.ObjectivePriorities.partition_vector' depends on axioms: [propext, Quot.sound]
+'Zetesis.ObjectivePriorities.partition_optima' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ObjectiveTransport.present_transport' depends on axioms: [propext, Quot.sound]
 'Zetesis.ObjectiveTransport.transport_key' does not depend on any axioms
 'Zetesis.ObjectiveTransport.transport_composes' does not depend on any axioms
@@ -613,6 +624,11 @@
 'Zetesis.OptionalIndex.optional_round_trip' depends on axioms: [propext, Quot.sound]
 'Zetesis.OptionalIndex.absence_exact' depends on axioms: [propext, Quot.sound]
 'Zetesis.OptionalIndex.replacement_commutes' depends on axioms: [propext, Quot.sound]
+'Zetesis.OrderedBounds.separated_comparison' does not depend on any axioms
+'Zetesis.OrderedBounds.constant_aggregate' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.OrderedBounds.separated_aggregate' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.OrderedBounds.replacement_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.OrderedBounds.measured_head_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.OrderedHeadActivity.mem_values' depends on axioms: [propext, Quot.sound]
 'Zetesis.OrderedHeadActivity.frozen_selection' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.OrderedHeadActivity.selected_values' depends on axioms: [propext, Classical.choice, Quot.sound]

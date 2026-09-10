@@ -84,6 +84,31 @@ fn correlated() -> Expected {
     }
 }
 
+fn generated() -> Expected {
+    // Required key 1 already fixes the count, regardless of optional b.
+    // At priority two, choosing x costs zero and choosing y costs one.
+    let mut all = Records::new();
+    let mut optimal = Records::new();
+    for (choice, cost) in [("x", vec![0, 2]), ("y", vec![1, 0])] {
+        for optional in [false, true] {
+            let mut atoms = BTreeSet::from(["a".into(), "n(1)".into(), choice.into()]);
+            if optional {
+                atoms.insert("b".into());
+            }
+            let record = (atoms, Some(cost.clone()));
+            if choice == "x" {
+                assert!(optimal.insert(record.clone()));
+            }
+            assert!(all.insert(record));
+        }
+    }
+    Expected {
+        all,
+        optimal,
+        priorities: &[2, 1],
+    }
+}
+
 fn expectations() -> [Expected; sources::SOURCES.len()] {
     [
         unscored(&[&[], &["a"], &["b"], &["a", "b"]]),
@@ -100,6 +125,9 @@ fn expectations() -> [Expected; sources::SOURCES.len()] {
         ),
         scored(&[(&["a"], 0), (&["b"], 0)], &[(&["a"], 0), (&["b"], 0)]),
         correlated(),
+        generated(),
+        unscored(&[&["b", "n(foo)"], &["a", "b", "n(foo)"]]),
+        unscored(&[&["n(#inf)"]]),
     ]
 }
 

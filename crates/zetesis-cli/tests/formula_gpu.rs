@@ -20,6 +20,7 @@ mod logical_extremum_sources;
 #[path = "support/contribution_sources.rs"]
 mod contribution_sources;
 
+#[cfg(feature = "gpu")]
 #[path = "support/bound_priority_sources.rs"]
 mod bound_priority_sources;
 

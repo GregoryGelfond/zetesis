@@ -113,8 +113,9 @@ fn measure(
             for tuple in required {
                 context.inspect()?;
                 let value = first(tuple).expect("admitted nonempty extremum tuple");
-                if (function == AggregateFunction::Min && value < selected)
-                    || (function == AggregateFunction::Max && value > selected)
+                let order = value.compare_terms(selected);
+                if (function == AggregateFunction::Min && order.is_lt())
+                    || (function == AggregateFunction::Max && order.is_gt())
                 {
                     selected = value;
                 }
@@ -135,8 +136,14 @@ fn unchanged(
             crate::formula_assignment::contribution(function, first, context.location)?
                 .is_none_or(|weight| weight == 0)
         }
-        AggregateFunction::Min => required <= first.expect("admitted nonempty extremum tuple"),
-        AggregateFunction::Max => required >= first.expect("admitted nonempty extremum tuple"),
+        AggregateFunction::Min | AggregateFunction::Max => {
+            let order = required.compare_terms(first.expect("admitted nonempty extremum tuple"));
+            if function == AggregateFunction::Min {
+                order.is_le()
+            } else {
+                order.is_ge()
+            }
+        }
     })
 }
 

@@ -30,7 +30,45 @@ const CASES: &str = r#"{"name":"mandatory_count","source":"a.n(N):-N=#count{1:a}
 {"name":"impossible_expression_input","source":"a.n(N):-N=#count{1:a}.#minimize{1@(1/N):n(N)}.","priorities":[1],"records":[[["a","n(1)"],[1]]]}
 {"name":"absent_tuple","source":"n(N):-N=#count{1:missing}.#minimize{1@N:n(N)}.","priorities":[0],"records":[[["n(0)"],[1]]]}
 {"name":"closed_tuple","source":"n(N):-N=#sum{2}.#minimize{1@N:n(N)}.","priorities":[2],"records":[[["n(2)"],[1]]]}
+{"name":"symbol_minimum","source":"a.{b}.n(N):-N=#min{z:a;\"s\":b}.#minimize{1@N:n(N)}.","priorities":[],"records":[[["a","n(z)"],null],[["a","n(z)","b"],null]]}
+{"name":"string_maximum","source":"a.{b}.n(N):-N=#max{\"s\":a;z:b}.#minimize{1@N:n(N)}.","priorities":[],"records":[[["a","n(\"s\")"],null],[["a","n(\"s\")","b"],null]]}
+{"name":"required_symbol_minimum","source":"a.b.{c}.n(N):-N=#min{\"s\":a;z:b;\"a\":c}.#minimize{1@N:n(N)}.","priorities":[],"records":[[["a","b","n(z)"],null],[["a","b","n(z)","c"],null]]}
+{"name":"required_string_maximum","source":"a.b.{c}.n(N):-N=#max{\"a\":a;z:b;zz:c}.#minimize{1@N:n(N)}.","priorities":[],"records":[[["a","b","n(\"a\")"],null],[["a","b","n(\"a\")","c"],null]]}
+{"name":"arity_minimum","source":"a.{b}.n(N):-N=#min{g(1):a;f(1,2):b}.#minimize{1@N:n(N)}.","priorities":[],"records":[[["a","n(g(1))"],null],[["a","n(g(1))","b"],null]]}
+{"name":"arity_maximum","source":"a.{b}.n(N):-N=#max{f(1,2):a;g(1):b}.#minimize{1@N:n(N)}.","priorities":[],"records":[[["a","n(f(1,2))"],null],[["a","n(f(1,2))","b"],null]]}
+{"name":"required_arity_minimum","source":"a.b.{c}.n(N):-N=#min{f(1,2):a;g(1):b;a(1,2):c}.#minimize{1@N:n(N)}.","priorities":[],"records":[[["a","b","n(g(1))"],null],[["a","b","n(g(1))","c"],null]]}
+{"name":"required_arity_maximum","source":"a.b.{c}.n(N):-N=#max{f(1,2):a;g(1):b;z(1):c}.#minimize{1@N:n(N)}.","priorities":[],"records":[[["a","b","n(f(1,2))"],null],[["a","b","n(f(1,2))","c"],null]]}
 "#;
+
+// Symbols precede strings, and constructor arity precedes name in ASP order.
+// These answer families change the aggregate value and cannot supply a fixed
+// carrier, even though their nonnumeric objective priorities contribute no cost.
+const CHANGING_ORDER: &str = r#"{"name":"changing_symbol_minimum","source":"a.{b}.n(N):-N=#min{\"s\":a;z:b}.#minimize{1@N:n(N)}.","records":[[["a","n(\"s\")"],null],[["a","b","n(z)"],null]]}
+{"name":"changing_string_maximum","source":"a.{b}.n(N):-N=#max{z:a;\"s\":b}.#minimize{1@N:n(N)}.","records":[[["a","n(z)"],null],[["a","b","n(\"s\")"],null]]}
+{"name":"changing_arity_minimum","source":"a.{b}.n(N):-N=#min{f(1,2):a;g(1):b}.#minimize{1@N:n(N)}.","records":[[["a","n(f(1,2))"],null],[["a","b","n(g(1))"],null]]}
+{"name":"changing_arity_maximum","source":"a.{b}.n(N):-N=#max{g(1):a;f(1,2):b}.#minimize{1@N:n(N)}.","records":[[["a","n(g(1))"],null],[["a","b","n(f(1,2))"],null]]}
+"#;
+
+#[test]
+fn changing_logical_extrema_cannot_certify_priorities() {
+    for case in source_cases::cases(CHANGING_ORDER.trim()) {
+        let Err(error) = admit(&case.source, &FormulaLimits::default()) else {
+            panic!("{}: changing value was certified invariant", case.name);
+        };
+        assert!(
+            matches!(
+                error,
+                FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
+                    feature: ProfileFeature::ObjectiveAggregateDependency,
+                    ..
+                }))
+            ),
+            "{}: {error}",
+            case.name
+        );
+        assert!(!error.diagnostics().is_empty());
+    }
+}
 
 #[test]
 fn invariant_priorities_preserve_scored_answers() {
@@ -111,8 +149,11 @@ fn certificates_preserve_original_equalities() {
 
 #[test]
 #[ignore = "requires an independently installed clingo"]
-fn certified_sources_match_complete_clingo_records() {
-    for case in source_cases::cases(CASES.trim()) {
+fn original_sources_match_complete_clingo_records() {
+    for case in source_cases::cases(CASES.trim())
+        .into_iter()
+        .chain(source_cases::cases(CHANGING_ORDER.trim()))
+    {
         assert_eq!(
             source_oracle::records(&case.source),
             case.records,

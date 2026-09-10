@@ -107,6 +107,14 @@ field projection. `partition_vector` and `partition_optima` preserve costs and
 optimal ties when complete rows are partitioned by their fixed priority. The
 priority layout remains shared across candidates, including zero-valued slots.
 
+[`AggregateInvariants`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AggregateInvariants.lean)
+provides `sum_invariant` for optional zero contributions and `extremum_invariant`
+for optional values absorbed by the required extremum. Required keys must survive
+and actual keys must lie within the possible carrier; the extremum law states
+its order and empty-endpoint assumptions explicitly. Optional keys may be
+correlated. `fixed_priority_presence` connects a fixed resolved value with
+complete eligible rows and a numeric weight from the same binding.
+
 These are useful mathematical components. Their coverage or arithmetic premises
 do not prove that a particular Rust source cursor enumerates the required
 bindings, that whole tuples are coalesced correctly, or that the machine obeys

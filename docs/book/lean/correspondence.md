@@ -67,12 +67,23 @@ keeps weight, priority, tuple and eligibility in one resolved row.
 `completed_presence` assumes exact eligible binding coverage; `partition_vector`
 and `partition_optima` preserve the cost vector and all optimal ties under a fixed
 priority layout. The Rust
-[`Activation::specialize`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/objectives.rs)
+[`Preparation::specialize`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/objectives.rs)
 resolves each template from the same binding while retaining its positive
 conditions. These laws do not prove that possible aggregate support establishes
 priority presence, that the source join is complete, or that checked arithmetic
 and bounded execution implement mathematical evaluation. Objective laws also do
 not establish search completion or alter answer-set acceptance.
+
+[`AggregateInvariants`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AggregateInvariants.lean)
+states when optional tuple keys cannot change a required sum or extremum.
+The source [fixed-value certificate](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_objective_dependencies/presence/flat/fixed.rs)
+coalesces complete keys, classifies required and possible activity, and checks
+that optional-only contributions leave the required measure unchanged.
+`fixed_priority_presence` then retains the same-row numeric-weight requirement.
+The laws need no independence assumption between optional keys. Establishing
+the source activity bounds, ASP comparator correspondence, checked integer folds
+and unique unary transport remains an implementation obligation; mathematical
+invariance alone does not prove complete source eligibility.
 
 [`ProjectedConditionals`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ProjectedConditionals.lean)
 separates anonymous witness disjunctions, signed source alternatives and

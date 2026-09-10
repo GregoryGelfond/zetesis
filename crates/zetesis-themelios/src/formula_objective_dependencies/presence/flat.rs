@@ -1,7 +1,9 @@
 //! Completed presence from facts and optional closed choices.
 //!
 //! Shared optional conditions and constraints never erase possible witnesses.
-//! Only a required value dominating all numbers excludes numeric presence.
+//! A required value dominating all numbers excludes numeric presence. The fixed
+//! value certificate additionally requires every optional-only complete key to
+//! leave the required count, sum or extremum unchanged.
 
 mod fixed;
 

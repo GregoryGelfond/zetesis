@@ -1,11 +1,15 @@
-//! Completed numeric priority presence for qualified extrema carriers.
+//! Source certificates for numeric presence and invariant generated priorities.
 //!
 //! An extrema proposal can be numeric although a mandatory symbolic tuple
 //! prevents every realized extremum from being numeric. Possible support alone
 //! then cannot certify that a numeric objective priority survives grounding.
 //! A flat fact/choice certificate excludes that numeric witness without pruning
-//! proposals. Other mixed carriers retain an explicit refusal. The implicit
-//! empty endpoint is not a contributing tuple.
+//! proposals. A separate certificate fixes a count, sum or extremum when required
+//! full keys determine its value and all optional-only keys leave it unchanged.
+//! Objective preparation filters certified priority rows against that value;
+//! the original equalities and model-relative conditions remain authoritative.
+//! Other carriers retain an explicit refusal. The implicit empty endpoint is
+//! not a contributing tuple.
 
 use std::collections::{BTreeMap, BTreeSet};
 

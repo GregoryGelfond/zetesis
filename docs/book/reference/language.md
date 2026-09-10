@@ -246,7 +246,18 @@ Positive lifted objectives and supported total aggregate observers can pass
 through unique acyclic relation renamings or argument permutations. Dynamic
 priorities from aggregate-generated values require their own complete
 eligibility and presence evidence; accepting an ordinary bound input does not
-grant that certificate. L13 therefore remains open. Flat unary mixed-extrema
+grant that certificate. A flat unary aggregate observer can supply an invariant
+value when required complete tuple keys determine its result and every optional
+key leaves that result unchanged. Examples include repeated required keys in a
+count, zero or ignored sum contributions, and optional values dominated by the
+required extremum under ASP term ordering. Unique unary renamings preserve this
+certificate. Original aggregate equalities remain in the theory; only certified
+objective proposal rows are filtered before evaluating their priority.
+
+The [invariant-priority tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_priority_certificates.rs)
+include empty endpoints, complete tuple identities and correlated weight/priority
+inputs. Non-singleton generated carriers and broader producer shapes remain
+restricted, so L13 stays open. Flat unary mixed-extrema
 observers have a separate presence certificate; arbitrary filtered, multiple,
 negative, disjunctive or conditional producer patterns do not inherit it.
 Additional objective conditions and broader mixed-extrema profiles remain
