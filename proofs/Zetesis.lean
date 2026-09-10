@@ -88,3 +88,5 @@ import Zetesis.NormalFerraris
 import Zetesis.OrderedBounds
 import Zetesis.ObjectivePriorities
 import Zetesis.AggregateInvariants
+import Zetesis.IntegerEnvelopes
+import Zetesis.SourceMeasures

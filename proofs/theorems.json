@@ -2265,6 +2265,61 @@
     "line": 134
   },
   {
+    "name": "Zetesis.IntegerEnvelopes.path_bound",
+    "file": "Zetesis/IntegerEnvelopes.lean",
+    "line": 45
+  },
+  {
+    "name": "Zetesis.IntegerEnvelopes.anchored_envelope",
+    "file": "Zetesis/IntegerEnvelopes.lean",
+    "line": 56
+  },
+  {
+    "name": "Zetesis.IntegerEnvelopes.addition_envelope",
+    "file": "Zetesis/IntegerEnvelopes.lean",
+    "line": 67
+  },
+  {
+    "name": "Zetesis.IntegerEnvelopes.negation_envelope",
+    "file": "Zetesis/IntegerEnvelopes.lean",
+    "line": 73
+  },
+  {
+    "name": "Zetesis.IntegerEnvelopes.product_lower_bound",
+    "file": "Zetesis/IntegerEnvelopes.lean",
+    "line": 79
+  },
+  {
+    "name": "Zetesis.IntegerEnvelopes.sum_lower_bound",
+    "file": "Zetesis/IntegerEnvelopes.lean",
+    "line": 90
+  },
+  {
+    "name": "Zetesis.IntegerEnvelopes.positive_endpoint",
+    "file": "Zetesis/IntegerEnvelopes.lean",
+    "line": 103
+  },
+  {
+    "name": "Zetesis.IntegerEnvelopes.negative_endpoint",
+    "file": "Zetesis/IntegerEnvelopes.lean",
+    "line": 114
+  },
+  {
+    "name": "Zetesis.IntegerEnvelopes.affine_envelope",
+    "file": "Zetesis/IntegerEnvelopes.lean",
+    "line": 126
+  },
+  {
+    "name": "Zetesis.IntegerEnvelopes.integer_membership",
+    "file": "Zetesis/IntegerEnvelopes.lean",
+    "line": 147
+  },
+  {
+    "name": "Zetesis.IntegerEnvelopes.filtered_bindings_exact",
+    "file": "Zetesis/IntegerEnvelopes.lean",
+    "line": 158
+  },
+  {
     "name": "Zetesis.finiteIter_stage_mono",
     "file": "Zetesis/Iteration.lean",
     "line": 26
@@ -3983,6 +4038,36 @@
     "name": "Zetesis.SingletonHeads.double_negative_singleton_has_no_producer",
     "file": "Zetesis/SingletonHeads.lean",
     "line": 78
+  },
+  {
+    "name": "Zetesis.SourceMeasures.selection_iff_sublist",
+    "file": "Zetesis/SourceMeasures.lean",
+    "line": 42
+  },
+  {
+    "name": "Zetesis.SourceMeasures.carrier_membership",
+    "file": "Zetesis/SourceMeasures.lean",
+    "line": 70
+  },
+  {
+    "name": "Zetesis.SourceMeasures.actual_value_covered",
+    "file": "Zetesis/SourceMeasures.lean",
+    "line": 78
+  },
+  {
+    "name": "Zetesis.SourceMeasures.invariant_carrier",
+    "file": "Zetesis/SourceMeasures.lean",
+    "line": 89
+  },
+  {
+    "name": "Zetesis.SourceMeasures.possible_extension",
+    "file": "Zetesis/SourceMeasures.lean",
+    "line": 103
+  },
+  {
+    "name": "Zetesis.SourceMeasures.source_priority_presence",
+    "file": "Zetesis/SourceMeasures.lean",
+    "line": 115
   },
   {
     "name": "Zetesis.StrongNegation.satisfies_rename",
