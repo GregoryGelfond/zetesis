@@ -152,8 +152,9 @@ impl std::error::Error for CountPlanFailure {}
 /// lower bound and a disjoint, complete partition of upper-bounded groups imply
 /// stronger local lower bounds. Capacity groups must be unconditional or share
 /// exactly the global activation formula; every consequence keeps that formula.
-/// Disequality supplies no interval premise. Original source guard evaluation
-/// and numeric limits remain unchanged.
+/// Disequality supplies no interval premise. A group with any nonnumeric logical
+/// bound supplies no numeric certificate; independent numeric groups remain
+/// eligible. Original source guard evaluation and numeric limits remain unchanged.
 ///
 /// Discovery greedily visits retained grounded groups without backtracking.
 /// It can miss a valid alternative cover. With G groups, M retained member

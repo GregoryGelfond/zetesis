@@ -125,6 +125,23 @@ eligibility; matching first tuple values alone do not identify a tuple.
 Body sums ignore empty/nonnumeric-weight tuples; `#sum+` also ignores negative
 weights. Source variable safety is still checked.
 
+Ordinary choices and finite count/sum/sum+ comparisons accept complete logical
+bounds from the existing closed-expression or completed outer-binding profile.
+Bounds use ASP term order without coercion: `#inf` is below every integer;
+symbols, strings, constructors, tuples and `#sup` are above every integer.
+Thus `{a}word.` permits both the empty answer and `{a}`, while `word{a}.` has
+no answer set. Each comparison keeps its own default-negation scope. A bound
+cannot provide atom support or remove element validation, including weight,
+safety and resource checks. Existing head-weight refusals remain unchanged.
+
+The logical comparison is constant over every finite active-tuple subset, so
+its canonical aggregate formula has constant original and frozen truth. It
+charges formula work and uses no aggregate state/subset enumeration; ordinary
+numeric thresholds retain their existing translation. Optional count planning
+omits any group with a nonnumeric bound from its numeric premise certificates.
+The [logical-bound contracts](tests/logical_bounds.rs) check these boundaries
+against independently declared answers and canonical frozen formulas.
+
 Acyclic aggregate assignments may supply later scalar/range instructions,
 nonbinding aggregate guards, normal/choice/function-head values and admitted
 body conditionals. Generated proposals retain every original aggregate equality;

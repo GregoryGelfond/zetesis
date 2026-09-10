@@ -541,14 +541,19 @@ pub(crate) struct Compiled {
 
 /// Admit the extended scalar profile, finite conditional choices and body
 /// count/sum/sum+/min/max aggregates into a Ferraris theory. Choices may have
-/// integer bounds; each aggregate retains its separate value/endpoint profile.
+/// complete logical bounds; each aggregate retains its separate value/endpoint profile.
 /// Positive ordinary atoms bind variables in global or element-local scopes;
 /// acyclic positive aggregate equalities may additionally bind named values.
 /// Completed aggregate/scalar proposals may feed ordinary evaluated arguments,
-/// signed negative gates, finite ranges, integer choice bounds, nonbinding
+/// signed negative gates, finite ranges, logical choice bounds, nonbinding
 /// aggregate guards and admitted universal body conditionals. Aggregate guard
 /// comparisons retain their separate default-negation scope and never bind
-/// additional variables. Conditional local joins inherit the complete
+/// additional variables. Finite count/sum/sum+ results compare with complete
+/// bounds in ASP term order, without numeric coercion. A nonnumeric bound has
+/// the same order against every integer; its canonical aggregate comparison
+/// therefore retains constant original and frozen truth. Eligibility and
+/// positive atom permissions are still validated and compiled separately.
+/// Conditional local joins inherit the complete
 /// outer binding; neither local witnesses nor vacuity establishes an aggregate
 /// equality. Every generated rule retains its original equalities.
 /// Default-negated anonymous consequent positions project the complete finite

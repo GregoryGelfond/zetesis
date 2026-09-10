@@ -27,28 +27,37 @@ pub(crate) struct Input<'a> {
 
 /// Stack-only interval consequences of the exact source guard evaluations.
 /// Disequality supplies no interval premise; no guard is reinterpreted as not.
-pub(crate) struct Bounds {
-    lower: i128,
-    upper: i128,
+/// A logical guard excludes the whole group from this numeric certificate.
+pub(crate) enum Bounds {
+    Numeric { lower: i128, upper: i128 },
+    NonNumeric,
 }
 impl Bounds {
     pub(crate) fn new(members: usize) -> Self {
-        Self {
+        Self::Numeric {
             lower: 0,
             upper: members as i128,
         }
     }
+
+    pub(crate) fn exclude_logical_guard(&mut self) {
+        *self = Self::NonNumeric;
+    }
+
     pub(crate) fn guard(&mut self, comparison: AggregateComparison, bound: i32) {
+        let Self::Numeric { lower, upper } = self else {
+            return;
+        };
         let bound = i128::from(bound);
         match comparison {
             AggregateComparison::Eq => {
-                self.lower = self.lower.max(bound);
-                self.upper = self.upper.min(bound);
+                *lower = (*lower).max(bound);
+                *upper = (*upper).min(bound);
             }
-            AggregateComparison::Ge => self.lower = self.lower.max(bound),
-            AggregateComparison::Gt => self.lower = self.lower.max(bound + 1),
-            AggregateComparison::Le => self.upper = self.upper.min(bound),
-            AggregateComparison::Lt => self.upper = self.upper.min(bound - 1),
+            AggregateComparison::Ge => *lower = (*lower).max(bound),
+            AggregateComparison::Gt => *lower = (*lower).max(bound + 1),
+            AggregateComparison::Le => *upper = (*upper).min(bound),
+            AggregateComparison::Lt => *upper = (*upper).min(bound - 1),
             AggregateComparison::Ne => {}
         }
     }
@@ -106,6 +115,9 @@ impl Collector {
         asserted_root: usize,
     ) -> Result<(), Fault> {
         self.work.poll()?;
+        let Bounds::Numeric { lower, upper } = input.bounds else {
+            return Ok(());
+        };
         // Complete eligibility is inspected before allocating optional descriptors
         // or copying origins. Existing validated keys are transferred, never
         // reconstructed. Possible support is not an eligibility truth certificate.
@@ -115,11 +127,11 @@ impl Collector {
                 return Ok(());
             }
         }
-        if input.body == 0 || input.eligible.is_empty() || input.bounds.lower > input.bounds.upper {
+        if input.body == 0 || input.eligible.is_empty() || lower > upper {
             return Ok(());
         }
-        let lower = usize::try_from(input.bounds.lower).map_err(|_| Fault::Overflow)?;
-        let upper = usize::try_from(input.bounds.upper).map_err(|_| Fault::Overflow)?;
+        let lower = usize::try_from(lower).map_err(|_| Fault::Overflow)?;
+        let upper = usize::try_from(upper).map_err(|_| Fault::Overflow)?;
         if lower == 0 && upper == input.eligible.len() {
             return Ok(());
         }

@@ -1295,12 +1295,16 @@ impl Builder<'_> {
             let GroundAggregate::Numeric(elements) = elements else {
                 unreachable!("numeric contribution")
             };
-            let Value::Number(bound) = bound else {
-                return Err(crate::diagnostic::unsupported(
-                    crate::ProfileFeature::Aggregate,
-                    location,
-                )
-                .into());
+            let bound = match numeric_comparison(guard.relation, &bound) {
+                NumericComparison::Threshold(bound) => bound,
+                NumericComparison::Constant(truth) => {
+                    self.work(location)?;
+                    if let Some(capture) = capture.as_deref_mut() {
+                        capture.exclude_logical_guard();
+                    }
+                    result = self.and(result, usize::from(truth), location)?;
+                    continue;
+                }
             };
             if let Some(capture) = capture.as_deref_mut() {
                 capture.guard(aggregate_comparison(guard.relation), bound);
@@ -1324,6 +1328,28 @@ impl Builder<'_> {
         Ok(result)
     }
 }
+
+/// A finite numeric measure either needs a numeric threshold or has the same
+/// comparison truth for every selected tuple subset. This is a canonical
+/// aggregate equivalence, not merely a classical tautology simplification.
+enum NumericComparison {
+    Threshold(i32),
+    Constant(bool),
+}
+
+fn numeric_comparison(
+    relation: themelios_program::program::Relation,
+    bound: &Value,
+) -> NumericComparison {
+    if let Value::Number(bound) = bound {
+        return NumericComparison::Threshold(*bound);
+    }
+    // Every integer has the same order against a nonnumeric logical value.
+    // Zero represents that term class only; it neither replaces the measure
+    // nor encodes an extremal value. This comparison borrows and allocates nothing.
+    NumericComparison::Constant(formula_support::compare(&Value::Number(0), relation, bound))
+}
+
 fn remap(index: usize, first: usize, canonical: &[usize]) -> usize {
     if index < first {
         index

@@ -270,26 +270,9 @@ fn undefined_guard_arithmetic_refuses_unrealized_rows() {
 }
 
 #[test]
-fn nonnumeric_count_bounds_keep_the_numeric_refusal() {
+fn empty_extremum_bounds_keep_their_logical_order() {
     let source = "q:-N=#min{},N<=#count{}.";
-    let error = admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_err();
-    assert!(
-        matches!(
-            error,
-            FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                feature: ProfileFeature::Aggregate,
-                ..
-            }))
-        ),
-        "{error}"
-    );
-    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+    assert_eq!(native(&input(source)), Models::from([BTreeSet::new()]));
 }
 
 #[test]
