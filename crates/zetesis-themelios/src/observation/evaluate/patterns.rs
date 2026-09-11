@@ -76,8 +76,7 @@ fn matches_symbol(
             undo.push(*slot);
             Ok(true)
         }
-        Operand::Any => Ok(true),
-        Operand::Expression(expression) => expression_matches(expression, value, binding, work),
+        Operand::Any | Operand::Expression(_) => Ok(true),
         Operand::Function(_, _, _) | Operand::Tuple(_) => {
             let Some((arguments, values)) = children(pattern, value, work)? else {
                 return Ok(false);
@@ -98,6 +97,21 @@ fn expression_matches(
     binding: &[Option<Bound<'_>>],
     work: &mut Work<'_>,
 ) -> Result<bool, Error> {
+    if expression.multiple() {
+        let mut found = false;
+        super::values::each(expression, binding, work, |expected, metric, work| {
+            let mut actual = Metric::default();
+            work.symbol_check(value, 1, &mut actual)?;
+            work.construction_check(Metric {
+                nodes: metric.nodes + actual.nodes,
+                bytes: metric.bytes + actual.bytes,
+            })?;
+            work.step(metric.payload() + actual.payload())?;
+            found |= expected == *value;
+            Ok(())
+        })?;
+        return Ok(found);
+    }
     let mut metric = Metric::default();
     work.measure(expression, binding, 1, &mut metric)?;
     let mut actual = Metric::default();
@@ -147,7 +161,7 @@ pub(super) fn matches_value(
     bind: bool,
     work: &mut Work<'_>,
 ) -> Result<bool, Error> {
-    if matches!(pattern, Operand::Any) {
+    if matches!(pattern, Operand::Any) || (bind && matches!(pattern, Operand::Expression(_))) {
         return Ok(true);
     }
     let value = symbol(value, work)?;
@@ -173,4 +187,35 @@ pub(super) fn test_value(
     }
     let value = symbol(value, work)?;
     test_symbol(pattern, &value, binding, work)
+}
+
+pub(super) fn atom_value(
+    value: &Symbol,
+    atom: &super::Atom,
+    work: &mut Work<'_>,
+) -> Result<bool, Error> {
+    let Symbol::Function {
+        sign,
+        name,
+        arguments,
+    } = value
+    else {
+        unreachable!("an atom key is a signed function")
+    };
+    work.step(1 + name.as_str().len() as u128 + atom.predicate().name().len() as u128)?;
+    if crate::coherence::core_sign(*sign) != atom.predicate().sign()
+        || name.as_str() != atom.predicate().name()
+        || arguments.len() != atom.values().len()
+    {
+        return Ok(false);
+    }
+    for (expected, actual) in arguments.iter().zip(atom.values()) {
+        if !work
+            .compare_reference(Reference::Symbol(expected), Reference::Value(actual))?
+            .is_eq()
+        {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }

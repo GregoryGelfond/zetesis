@@ -357,3 +357,128 @@ fn independent_directives_release_their_finite_alternatives() {
         .unwrap();
     assert_eq!(result.symbols().len(), 4);
 }
+
+#[test]
+fn pooled_atom_arities_keep_their_own_captures() {
+    assert_eq!(terms("p(1).p(2,3). #show. #show X:p(X;X,3)."), ["1", "2"]);
+}
+#[test]
+fn variables_used_only_in_pool_branches_need_no_common_export() {
+    assert_eq!(terms("p(1).p(2,3). #show. #show x:p(X;Y,Z)."), ["x"]);
+}
+#[test]
+fn a_pool_exports_only_variables_captured_in_every_branch() {
+    for source in [
+        "#show X:p(X;1).",
+        "#show x:p(X;1),not q(X).",
+        "#show x:p(X;1),#count{Y:q(X,Y)}>0.",
+        "#show x:p(X;1),q(X):r.",
+    ] {
+        let result = admit_formula(
+            source.into(),
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        );
+        assert!(
+            matches!(result, Err(zetesis_themelios::FormulaFailure::Observation { error }) if error.kind() == &ErrorKind::Unsupported(zetesis_themelios::observation::Feature::UnsafeVariable)),
+            "{source}"
+        );
+    }
+}
+#[test]
+fn another_positive_binder_can_supply_a_missing_pool_capture() {
+    assert_eq!(terms("p(1).q(2). #show. #show X:p(X;1),q(X)."), ["2"]);
+}
+#[test]
+fn negation_is_applied_to_each_pooled_atom() {
+    assert_eq!(
+        terms("p(1). #show. #show x:not p(1;2). #show y:not not p(1;2)."),
+        ["x", "y"]
+    );
+}
+#[test]
+fn empty_atom_alternatives_do_not_disable_other_pool_branches() {
+    assert_eq!(
+        terms(
+            "p(1). #show. #show x:p((3..2);1). #show y:not p((3..2);2). #show z:not p((3..2);1)."
+        ),
+        ["x", "y"]
+    );
+}
+#[test]
+fn arithmetic_atom_filters_read_completed_structural_captures() {
+    assert_eq!(
+        terms("p(2,1).p(4,2).p(f(3),2). #show. #show X:p(X+1,X). #show Y:p(f(Y+1),Y)."),
+        ["1", "2"]
+    );
+}
+#[test]
+fn pooled_arithmetic_filters_read_their_own_branch_captures() {
+    assert_eq!(
+        terms("p(2,1).p(2,3). #show. #show x:p(X+1,X;Y-1,Y)."),
+        ["x"]
+    );
+}
+#[test]
+fn scalar_argument_ranges_can_depend_on_same_atom_captures() {
+    assert_eq!(terms("p(3,2).p(5,1). #show. #show X:p(X..X+1,X)."), ["2"]);
+}
+
+#[test]
+fn negated_pool_expansions_release_their_owned_alternatives() {
+    let input = admit("p(1). #show. #show x:not p((1;2);3),not p((3;4);5).");
+    let model = Model::new(input.atoms().iter().cloned());
+    let run = |max_local_bytes| {
+        input.metadata().observations().evaluate(
+            &model,
+            Limits {
+                max_local_bytes,
+                ..Limits::default()
+            },
+            &Control::default(),
+        )
+    };
+    assert_eq!(run(48).unwrap().symbols().len(), 1);
+    assert!(matches!(
+        run(47).unwrap_err().kind(),
+        ErrorKind::Limit {
+            resource: Resource::LocalBytes,
+            observed: 48,
+            limit: 47
+        }
+    ));
+}
+#[test]
+fn failed_pool_rows_release_nested_capture_ownership() {
+    let input = admit("p(f(1),0).p(f(2),1). #show. #show X:p(f(X),9;f(X),1).");
+    let model = Model::new(input.atoms().iter().cloned());
+    let full = input
+        .metadata()
+        .observations()
+        .render(
+            &model,
+            input.metadata().output(),
+            Limits {
+                max_local_bytes: 16,
+                ..Limits::default()
+            },
+            &Control::default(),
+        )
+        .unwrap();
+    assert_eq!(full.text(), "2");
+}
+#[test]
+fn an_undefined_pool_branch_refuses_the_complete_observation() {
+    let input = admit("#show. #show (1;1/0).");
+    let failure = input
+        .metadata()
+        .observations()
+        .evaluate(&Model::default(), Limits::default(), &Control::default())
+        .unwrap_err();
+    assert_eq!(
+        failure.kind(),
+        &ErrorKind::Evaluation(EvaluationError::Undefined)
+    );
+    assert!(failure.location().is_some());
+}

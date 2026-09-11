@@ -155,7 +155,7 @@ pub enum Resource {
     OutputBytes,
     /// Conservative per-symbol construction cells, text and conversion stack.
     ConstructionBytes,
-    /// Live owned bindings and local aggregate tuple payload.
+    /// Live generated alternatives, owned bindings and aggregate tuple payload.
     LocalBytes,
 }
 
@@ -168,7 +168,7 @@ pub enum Feature {
     AnonymousOutput,
     /// Theory atoms or a future body form without a pure finite interpretation.
     Body,
-    /// Pooled predicate arguments.
+    /// Set-cardinality elements without an atomic literal.
     Atom,
     /// An extremum element lacks its required first tuple component.
     AggregateMeasure,
@@ -281,10 +281,17 @@ enum Operand {
 struct Pattern {
     predicate: Predicate,
     terms: Vec<Operand>,
+    evaluated: bool,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct AtomTest {
+    pattern: Pattern,
+    expansion: Query,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Condition {
-    Atom(DefaultNegation, Pattern),
+    Atom(DefaultNegation, Vec<AtomTest>),
+    AtomValue(DefaultNegation, usize),
     Compare(DefaultNegation, Template, Vec<(Relation, Template)>),
     Boolean(bool),
     Conditional(Query, Box<Self>),
@@ -307,7 +314,7 @@ struct AggregateQuery {
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Binder {
-    Atom(Pattern),
+    Atom(Vec<Pattern>),
     Assign(usize, Template),
     Aggregate(usize, AggregateQuery),
 }

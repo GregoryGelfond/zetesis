@@ -1,5 +1,8 @@
 //! Finite local query scopes over an already supplied complete model.
 
+#[path = "support/observation_reference.rs"]
+mod observation_reference;
+
 use zetesis_core::Model;
 use zetesis_cpu::{Control, Stop};
 use zetesis_themelios::observation::{ErrorKind, Feature, Limits, Resource};
@@ -203,7 +206,7 @@ fn cancellation_refuses_the_whole_observation() {
 }
 
 #[test]
-fn sums_ignore_defined_nonnumeric_heads() {
+fn sums_ignore_defined_nonnumeric_measures() {
     assert_eq!(rendered("#show. #show x:#sum{a;2}=2,#sum+{a;-2;2}=2."), "x");
 }
 #[test]
@@ -291,53 +294,8 @@ fn clingo_integer_wrapping_is_recorded_as_a_known_reference_difference() {
 #[test]
 #[ignore = "requires an absolute CLINGO executable; bounded fresh complete references"]
 fn unchanged_scoped_sources_match_fresh_clingo_evidence() {
-    use std::ffi::OsString;
-    use zetesis_validation::process::{
-        Invocation, Limits as ProcessLimits, Stop as ProcessStop, invoke,
-    };
-    let executable = std::path::PathBuf::from(
-        std::env::var_os("CLINGO").expect("set absolute CLINGO executable"),
-    );
-    let directory = tempfile::tempdir().unwrap();
     for case in references() {
-        let input = directory.path().join("source.lp");
-        std::fs::write(&input, case["source"].as_str().unwrap()).unwrap();
-        let arguments = [
-            input.into_os_string(),
-            OsString::from("0"),
-            OsString::from("--outf=2"),
-        ];
-        let outcome = invoke(
-            Invocation {
-                executable: &executable,
-                arguments: &arguments,
-                directory: directory.path(),
-            },
-            ProcessLimits::default(),
-        )
-        .unwrap();
-        let (capture, pending) = outcome.into_parts();
-        if let Some(pending) = pending {
-            let cleanup = pending.retry(std::time::Duration::from_secs(1));
-            panic!("clingo cleanup remained pending: {cleanup:?}");
-        }
-        assert_eq!(capture.stop(), ProcessStop::Completed);
-        let actual: serde_json::Value = serde_json::from_slice(capture.stdout()).unwrap();
-        assert_eq!(actual["Models"]["More"], "no");
-        let witnesses: Vec<_> = actual["Call"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .flat_map(|call| call["Witnesses"].as_array().unwrap())
-            .map(|witness| witness["Value"].clone())
-            .collect();
-        let fresh = serde_json::json!({"witnesses":witnesses});
-        assert_eq!(
-            reference_values(&fresh),
-            reference_values(&case),
-            "{}",
-            case["source"]
-        );
+        observation_reference::compare(case["source"].as_str().unwrap(), &case["witnesses"]);
     }
 }
 
@@ -462,4 +420,43 @@ fn aggregate_secondary_guards_can_read_the_assigned_result() {
             "{guard}"
         );
     }
+}
+
+#[test]
+fn aggregate_equalities_can_assign_both_guard_variables() {
+    assert_eq!(
+        rendered("p(1).p(2). #show. #show (N,M):N=#count{X:p(X)}=M."),
+        "(2,2)"
+    );
+}
+#[test]
+fn aggregate_guard_dependencies_can_be_supplied_after_measure_binding() {
+    assert_eq!(
+        rendered("p(1).p(2). #show. #show N:N=#count{X:p(X)}<K,K=N+1."),
+        "2"
+    );
+}
+#[test]
+fn set_cardinality_keys_follow_their_enabled_pool_alternative() {
+    for facts in ["p(1).", "p(2)."] {
+        assert_eq!(
+            rendered(&format!("{facts} #show. #show x:1{{p((1;2))}}1.")),
+            "x"
+        );
+    }
+}
+#[test]
+fn negative_set_keys_follow_their_absent_pool_alternative() {
+    assert_eq!(rendered("p(1). #show. #show x:1{not p((1;2))}1."), "x");
+}
+#[test]
+fn mixed_arity_set_keys_preserve_complete_atom_identity() {
+    assert_eq!(rendered("p(1).p(1,2). #show. #show x:2{p(1;1,2)}2."), "x");
+}
+#[test]
+fn pooled_consequents_are_alternatives_inside_each_local_substitution() {
+    assert_eq!(
+        rendered("p(1).p(2).q(2). #show. #show x:q(X;X+1):p(X)."),
+        "x"
+    );
 }

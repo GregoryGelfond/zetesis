@@ -1,6 +1,7 @@
 //! Directive-local compilation, independent of logical grounding and its carrier.
 
 mod scopes;
+mod patterns;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -10,9 +11,9 @@ use themelios_program::symbol::{Name, Sign, Symbol};
 use themelios_program::term::{Term, UnaryOp, Variable};
 
 use super::{
-    AdmissionLimits, Binder, Condition, DefaultNegation, Directive, Error, ErrorKind, Feature,
-    ObservationProgram, Operand, Pattern, Predicate, Query, Relation, Resource, Statistics,
-    Template,
+    AdmissionLimits, AtomTest, Binder, Condition, DefaultNegation, Directive, Error, ErrorKind,
+    Feature, ObservationProgram, Operand, Pattern, Predicate, Query, Relation, Resource,
+    Statistics, Template,
 };
 use crate::expansion::Budget;
 use crate::{AdmissionOptions, FormulaFailure};
@@ -30,6 +31,7 @@ struct Compiler<'a> {
     generated: Vec<(usize, Template)>,
     used: BTreeSet<usize>,
     scope_outer: usize,
+    pool_binding: bool,
 }
 impl Compiler<'_> {
     fn error(&self, kind: ErrorKind) -> Error {
@@ -82,7 +84,9 @@ impl Compiler<'_> {
             return Err(self.unsupported(Feature::AnonymousOutput));
         };
         if let Some(&slot) = self.variables.get(name.as_str()) {
-            self.used.insert(slot);
+            if !self.pool_binding || slot < self.scope_outer {
+                self.used.insert(slot);
+            }
             return Ok(slot);
         }
         self.check(
@@ -94,7 +98,9 @@ impl Compiler<'_> {
         let slot = self.slots;
         self.slots += 1;
         self.variables.insert(name.as_str().to_owned(), slot);
-        self.used.insert(slot);
+        if !self.pool_binding || slot < self.scope_outer {
+            self.used.insert(slot);
+        }
         Ok(slot)
     }
     // Recursion is capped before descent; source depth is also capped before raising.
@@ -206,85 +212,6 @@ impl Compiler<'_> {
         }
         Ok(Template::Function(sign, name.clone(), terms))
     }
-    fn operand(&mut self, term: &Term, anonymous: bool, depth: usize) -> Result<Operand, Error> {
-        self.node(depth)?;
-        Ok(match term {
-            Term::Variable(Variable::Anonymous) if anonymous => Operand::Any,
-            Term::Variable(Variable::Anonymous) => {
-                return Err(self.unsupported(Feature::UnsafeVariable));
-            }
-            Term::Variable(variable) => Operand::Variable(self.variable(variable)?),
-            Term::Symbolic(symbol) => {
-                let symbol = self.symbol(symbol, depth, true)?;
-                Operand::Value(
-                    crate::structural_value::from_symbol(&symbol)
-                        .map_err(|_| self.unsupported(Feature::Comparison))?,
-                )
-            }
-            Term::Function { name, arguments } => {
-                self.operand_function(name, arguments, anonymous, depth, Sign::Positive)?
-            }
-            Term::UnaryOperation {
-                operator: UnaryOp::Negate,
-                argument,
-            } if matches!(argument.as_ref(), Term::Function { .. }) => {
-                let Term::Function { name, arguments } = argument.as_ref() else {
-                    unreachable!()
-                };
-                self.operand_function(name, arguments, anonymous, depth + 1, Sign::Negative)?
-            }
-            Term::Tuple(arguments) => {
-                self.arity(arguments.len())?;
-                let mut values = Vec::new();
-                for argument in arguments {
-                    values.push(self.operand(argument, anonymous, depth + 1)?);
-                }
-                Operand::Tuple(values)
-            }
-            _ => {
-                let expression = self.template(term, depth)?;
-                Operand::Expression(self.lift(expression)?)
-            }
-        })
-    }
-    fn operand_function(
-        &mut self,
-        name: &Name,
-        arguments: &[Term],
-        anonymous: bool,
-        depth: usize,
-        sign: Sign,
-    ) -> Result<Operand, Error> {
-        self.text(name.as_str())?;
-        self.arity(arguments.len())?;
-        let mut values = Vec::new();
-        for argument in arguments {
-            values.push(self.operand(argument, anonymous, depth + 1)?);
-        }
-        Ok(Operand::Function(sign, name.clone(), values))
-    }
-    fn pattern(
-        &mut self,
-        atom: &themelios_program::program::Atom,
-        positive: bool,
-    ) -> Result<Pattern, Error> {
-        let Arguments::Single(arguments) = &atom.arguments else {
-            return Err(self.unsupported(Feature::Atom));
-        };
-        self.text(atom.name.as_str())?;
-        self.arity(arguments.len())?;
-        let mut terms = Vec::new();
-        for argument in arguments {
-            terms.push(self.operand(argument, positive || atom.sign != Sign::Negative, 1)?);
-        }
-        let predicate = Predicate::with_sign(
-            atom.name.as_str(),
-            terms.len(),
-            crate::coherence::core_sign(atom.sign),
-        )
-        .map_err(|_| self.error(ErrorKind::InvalidSymbol))?;
-        Ok(Pattern { predicate, terms })
-    }
     fn ready(&self, term: &Template) -> bool {
         self.ready_with(term, &BTreeSet::new())
     }
@@ -348,6 +275,9 @@ impl Compiler<'_> {
         if !term.multiple() {
             return Ok(term);
         }
+        Ok(Template::Variable(self.generate(term)?))
+    }
+    fn generate(&mut self, term: Template) -> Result<usize, Error> {
         self.check(
             Resource::Variables,
             self.slots.saturating_add(1),
@@ -357,12 +287,12 @@ impl Compiler<'_> {
         self.slots += 1;
         self.generated.push((slot, term));
         self.used.insert(slot);
-        Ok(Template::Variable(slot))
+        Ok(slot)
     }
     fn test(&mut self, literal: &themelios_program::program::Literal) -> Result<Condition, Error> {
         Ok(match &literal.inner {
             LiteralInner::Atom(atom) => {
-                Condition::Atom(literal.negation, self.pattern(atom.get(), false)?)
+                Condition::Atom(literal.negation, self.atom_tests(atom.get())?)
             }
             LiteralInner::Comparison(comparison) => {
                 let first = self.template(comparison.get().first(), 1)?;
@@ -383,39 +313,17 @@ impl Compiler<'_> {
     fn literal(
         &mut self,
         literal: &themelios_program::program::Literal,
-        positive: &mut Vec<Pattern>,
+        positive: &mut Vec<Vec<Pattern>>,
         conditions: &mut Vec<Condition>,
     ) -> Result<(), Error> {
         if literal.negation == DefaultNegation::None
             && let LiteralInner::Atom(atom) = &literal.inner
         {
-            positive.push(self.pattern(atom.get(), true)?);
+            positive.push(self.patterns(atom.get())?);
         } else {
             conditions.push(self.test(literal)?);
         }
         Ok(())
-    }
-    fn operand_ready(&self, operand: &Operand) -> bool {
-        match operand {
-            Operand::Expression(expression) => self.ready(expression),
-            Operand::Function(_, _, arguments) | Operand::Tuple(arguments) => arguments
-                .iter()
-                .all(|argument| self.operand_ready(argument)),
-            Operand::Value(_) | Operand::Variable(_) | Operand::Any => true,
-        }
-    }
-    fn provided(&mut self, operand: &Operand) {
-        match operand {
-            Operand::Variable(slot) => {
-                self.safe.insert(*slot);
-            }
-            Operand::Function(_, _, arguments) | Operand::Tuple(arguments) => {
-                for argument in arguments {
-                    self.provided(argument);
-                }
-            }
-            _ => {}
-        }
     }
     fn aggregate_assignment(&self, condition: &Condition) -> Option<(usize, usize)> {
         let Condition::Aggregate(DefaultNegation::None, aggregate, guards) = condition else {
@@ -433,12 +341,7 @@ impl Compiler<'_> {
             let Template::Variable(slot) = guard.bound else {
                 return None;
             };
-            (guard.relation == Relation::Eq
-                && !self.safe.contains(&slot)
-                && guards.iter().enumerate().all(|(other, guard)| {
-                    other == index || self.ready_with(&guard.bound, &BTreeSet::from([slot]))
-                }))
-            .then_some((index, slot))
+            (guard.relation == Relation::Eq && !self.safe.contains(&slot)).then_some((index, slot))
         })
     }
     fn bind_aggregate(
@@ -474,7 +377,7 @@ impl Compiler<'_> {
     }
     fn finish(
         &mut self,
-        mut positive: Vec<Pattern>,
+        mut positive: Vec<Vec<Pattern>>,
         mut conditions: Vec<Condition>,
     ) -> Result<Query, Error> {
         let mut binders = Vec::new();
@@ -482,12 +385,10 @@ impl Compiler<'_> {
         loop {
             if let Some(index) = positive
                 .iter()
-                .position(|pattern| pattern.terms.iter().all(|term| self.operand_ready(term)))
+                .position(|patterns| self.patterns_ready(patterns))
             {
                 let pattern = positive.remove(index);
-                for term in &pattern.terms {
-                    self.provided(term);
-                }
+                self.safe.extend(Self::common_captures(&pattern));
                 binders.push(Binder::Atom(pattern));
                 continue;
             }
@@ -583,6 +484,16 @@ impl Compiler<'_> {
                 conditionals.push(conditional);
             }
         }
+        for condition in &conditions {
+            if let Condition::Aggregate(_, aggregate, _) = condition {
+                self.used.extend(
+                    aggregate
+                        .elements
+                        .iter()
+                        .flat_map(|element| &element.query.inputs),
+                );
+            }
+        }
         let mut query = self.finish(positive, conditions)?;
         for conditional in conditionals {
             query.conditions.push(self.conditional(conditional)?);
@@ -636,6 +547,7 @@ pub(crate) fn compile(
         generated: Vec::new(),
         used: BTreeSet::new(),
         scope_outer: 0,
+        pool_binding: false,
     };
     let mut result = ObservationProgram::default();
     for entry in source.statements() {

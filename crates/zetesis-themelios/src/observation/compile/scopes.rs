@@ -60,7 +60,7 @@ impl Compiler<'_> {
     fn literals(
         &mut self,
         source: &themelios_program::program::Condition,
-        positive: &mut Vec<Pattern>,
+        positive: &mut Vec<Vec<Pattern>>,
         conditions: &mut Vec<Condition>,
     ) -> Result<(), Error> {
         for (index, literal) in source.literals().enumerate() {
@@ -75,13 +75,64 @@ impl Compiler<'_> {
         Ok(())
     }
     pub(super) fn conditional(&mut self, source: &ConditionalLiteral) -> Result<Condition, Error> {
-        self.local(|compiler| {
+        let result = self.local(|compiler| {
             let consequent = compiler.test(&source.literal)?;
             let mut positive = Vec::new();
             let mut conditions = Vec::new();
             compiler.literals(&source.condition, &mut positive, &mut conditions)?;
             let query = compiler.finish(positive, conditions)?;
             Ok(Condition::Conditional(query, Box::new(consequent)))
+        })?;
+        let Condition::Conditional(query, _) = &result else {
+            unreachable!()
+        };
+        if query.inputs.iter().any(|slot| !self.safe.contains(slot)) {
+            return Err(self.unsupported(Feature::UnsafeVariable));
+        }
+        Ok(result)
+    }
+    fn set_alternative(
+        &mut self,
+        atom: &themelios_program::program::Atom,
+        arguments: &[themelios_program::term::Term],
+        negation: DefaultNegation,
+        condition: Option<&themelios_program::program::Condition>,
+    ) -> Result<AggregateElement, Error> {
+        self.local(|compiler| {
+            let key = compiler.function(&atom.name, arguments, 1, atom.sign)?;
+            let tag = match negation {
+                DefaultNegation::None => 0,
+                DefaultNegation::Not => 1,
+                DefaultNegation::NotNot => 2,
+            };
+            let mut positive = Vec::new();
+            let mut conditions = Vec::new();
+            if let Some(condition) = condition {
+                compiler.literals(condition, &mut positive, &mut conditions)?;
+            }
+            if negation == DefaultNegation::None {
+                positive.push(vec![compiler.pattern_terms(atom, arguments, true)?]);
+            } else if !key.multiple() {
+                conditions.push(Condition::Atom(
+                    negation,
+                    vec![compiler.atom_test(atom, arguments)?],
+                ));
+            }
+            // A pooled key and its enabling atom must denote the
+            // same alternative. Independent expansions would admit
+            // absent keys merely because another alternative holds.
+            let key = if key.multiple() {
+                let slot = compiler.generate(key)?;
+                conditions.push(Condition::AtomValue(negation, slot));
+                Template::Variable(slot)
+            } else {
+                key
+            };
+            let query = compiler.finish(positive, conditions)?;
+            Ok(AggregateElement {
+                tuple: Template::Tuple(vec![Template::Value(Symbol::Number(tag)), key]),
+                query,
+            })
         })
     }
     pub(super) fn aggregate(&mut self, aggregate: &Aggregate) -> Result<AggregateQuery, Error> {
@@ -133,43 +184,24 @@ impl Compiler<'_> {
                         self.limits.max_body_elements as usize,
                     )?;
                     self.node(1)?;
-                    elements.push(self.local(|compiler| {
-                        let (literal, condition) = match element.get() {
-                            SetElement::Literal(literal) => (literal, None),
-                            SetElement::ConditionalLiteral(value) => {
-                                (&value.literal, Some(&value.condition))
-                            }
-                        };
-                        let LiteralInner::Atom(atom) = &literal.inner else {
-                            return Err(compiler.unsupported(Feature::Atom));
-                        };
-                        let themelios_program::program::Arguments::Single(arguments) =
-                            &atom.get().arguments
-                        else {
-                            return Err(compiler.unsupported(Feature::Atom));
-                        };
-                        let key =
-                            compiler.function(&atom.get().name, arguments, 1, atom.get().sign)?;
-                        let negation = match literal.negation {
-                            DefaultNegation::None => 0,
-                            DefaultNegation::Not => 1,
-                            DefaultNegation::NotNot => 2,
-                        };
-                        let mut positive = Vec::new();
-                        let mut conditions = Vec::new();
-                        if let Some(condition) = condition {
-                            compiler.literals(condition, &mut positive, &mut conditions)?;
+                    let (literal, condition) = match element.get() {
+                        SetElement::Literal(literal) => (literal, None),
+                        SetElement::ConditionalLiteral(value) => {
+                            (&value.literal, Some(&value.condition))
                         }
-                        compiler.literal(literal, &mut positive, &mut conditions)?;
-                        let query = compiler.finish(positive, conditions)?;
-                        Ok(AggregateElement {
-                            tuple: Template::Tuple(vec![
-                                Template::Value(Symbol::Number(negation)),
-                                key,
-                            ]),
-                            query,
-                        })
-                    })?);
+                    };
+                    let LiteralInner::Atom(atom) = &literal.inner else {
+                        return Err(self.unsupported(Feature::Atom));
+                    };
+                    for arguments in atom.get().alternatives() {
+                        self.node(1)?;
+                        elements.push(self.set_alternative(
+                            atom.get(),
+                            arguments,
+                            literal.negation,
+                            condition,
+                        )?);
+                    }
                 }
                 AggregateFunction::Count
             }

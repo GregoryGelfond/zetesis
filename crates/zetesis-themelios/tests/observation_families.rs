@@ -1,5 +1,8 @@
 //! Independent complete model families exercise finite observation consumers.
 
+#[path = "support/observation_reference.rs"]
+mod observation_reference;
+
 use serde_json::Value as Json;
 use zetesis_core::Model;
 use zetesis_cpu::Control;
@@ -11,7 +14,7 @@ use zetesis_themelios::{
 
 const BASE: &str = "p(1).p(2).e(f(1,2)).e(f(2,1)).{q(1);q(2);hidden}.";
 const TERMS: [&str; 6] = ["X", "X+10", "f(X,(1;2))", "(X,1..2)", "p(X)", "-f(X)"];
-const BODIES: [&str; 8] = [
+const BODIES: [&str; 18] = [
     "p(X)",
     "p(X),#count{Y:q(Y)}=1",
     "p(X),#sum{Y,a:q(Y);Y,b:q(Y)}>1",
@@ -20,7 +23,18 @@ const BODIES: [&str; 8] = [
     "p(X),Y=1..2,q(Y),X<=Y",
     "p(X),not #min{Y:q(Y)}<2",
     "p(X),not not q((1;2))",
+    "p(X;X,2)",
+    "p(X;X,X+1)",
+    "p(X),not q((3..2);X)",
+    "p(X),q((1;2);3)",
+    "p(X),q(Y;Y+1):p(Y)",
+    "e(f(X,_);(X,1))",
+    "p(X),1{q((1;2))}1",
+    "p(X),1{not q((1;2))}1",
+    "p(X),N=#count{Y:q(Y)}=M,M>=0",
+    "p(X),e(f(Y,Y+1);f(Z,Z-1))",
 ];
+const CASES: usize = BODIES.len() * TERMS.len() * POLICIES.len();
 const POLICIES: [&str; 3] = ["", "#show.", "#show p/1."];
 fn source(index: usize) -> String {
     let body = BODIES[index / (TERMS.len() * POLICIES.len())];
@@ -90,7 +104,7 @@ fn records(witnesses: &Json) -> Vec<Vec<String>> {
 #[test]
 fn finite_queries_preserve_the_original_formula() {
     let (plain, _) = basis();
-    for index in 0..144 {
+    for index in 0..CASES {
         let input = admit(&source(index));
         assert_eq!(input.atoms(), plain.atoms(), "case {index}");
         assert_eq!(
@@ -143,12 +157,12 @@ fn complete_observation_multisets_preserve_hidden_family_multiplicity() {
         );
         count += actual.len();
     }
-    assert_eq!(count, 1_152);
+    assert_eq!(count, CASES * 8);
 }
 #[test]
 fn complete_family_evaluations_obey_their_exact_work_boundary() {
     let (_, models) = basis();
-    for index in 0..144 {
+    for index in 0..CASES {
         let input = admit(&source(index));
         for model in &models {
             let run = |max_work| {
@@ -181,52 +195,7 @@ fn complete_family_evaluations_obey_their_exact_work_boundary() {
 #[test]
 #[ignore = "requires absolute CLINGO; bounded complete reference family capture"]
 fn unchanged_finite_query_families_match_fresh_clingo() {
-    use std::ffi::OsString;
-    use zetesis_validation::process::{
-        Invocation, Limits as ProcessLimits, Stop as ProcessStop, invoke,
-    };
-    let executable =
-        std::path::PathBuf::from(std::env::var_os("CLINGO").expect("set absolute CLINGO"));
-    let directory = tempfile::tempdir().unwrap();
     for case in cases() {
-        let input = directory.path().join("source.lp");
-        std::fs::write(&input, case["source"].as_str().unwrap()).unwrap();
-        let arguments = [
-            input.into_os_string(),
-            OsString::from("0"),
-            OsString::from("--outf=2"),
-        ];
-        let (capture, pending) = invoke(
-            Invocation {
-                executable: &executable,
-                arguments: &arguments,
-                directory: directory.path(),
-            },
-            ProcessLimits::default(),
-        )
-        .unwrap()
-        .into_parts();
-        if let Some(pending) = pending {
-            panic!(
-                "pending cleanup: {:?}",
-                pending.retry(std::time::Duration::from_secs(1))
-            );
-        }
-        assert_eq!(capture.stop(), ProcessStop::Completed);
-        let actual: Json = serde_json::from_slice(capture.stdout()).unwrap();
-        assert_eq!(actual["Models"]["More"], "no");
-        let witnesses: Vec<_> = actual["Call"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .flat_map(|call| call["Witnesses"].as_array().unwrap())
-            .map(|witness| witness["Value"].clone())
-            .collect();
-        assert_eq!(
-            records(&Json::Array(witnesses)),
-            records(&case["witnesses"]),
-            "{}",
-            case["source"]
-        );
+        observation_reference::compare(case["source"].as_str().unwrap(), &case["witnesses"]);
     }
 }

@@ -499,7 +499,11 @@ fn matches<'a>(
             return Ok(false);
         }
     }
-    Ok(true)
+    if pattern.evaluated {
+        test_pattern(pattern, atom, binding, work)
+    } else {
+        Ok(true)
+    }
 }
 fn relation_holds(relation: Relation, order: Ordering) -> bool {
     match relation {
@@ -537,10 +541,40 @@ fn condition(
 ) -> Result<bool, Error> {
     work.step(1)?;
     match condition {
-        Condition::Atom(negation, pattern) => {
+        Condition::Atom(negation, alternatives) => {
+            for alternative in alternatives {
+                let test = |binding: &[Option<Bound<'_>>], work: &mut Work<'_>| {
+                    for &atom in atoms {
+                        if test_pattern(&alternative.pattern, atom, binding, work)? {
+                            return Ok(*negation != DefaultNegation::Not);
+                        }
+                    }
+                    Ok(*negation == DefaultNegation::Not)
+                };
+                let truth = if alternative.expansion.binders.is_empty() {
+                    test(binding, work)?
+                } else {
+                    !visit(
+                        &alternative.expansion,
+                        atoms,
+                        binding,
+                        work,
+                        &mut |local, work| test(local, work).map(|truth| !truth),
+                    )?
+                };
+                if truth {
+                    return Ok(true);
+                }
+            }
+            Ok(false)
+        }
+        Condition::AtomValue(negation, slot) => {
+            let Some(Reference::Symbol(value)) = binding[*slot].as_ref().map(Bound::borrow) else {
+                unreachable!("a generated atom key is an owned symbol")
+            };
             let mut present = false;
             for &atom in atoms {
-                if test_pattern(pattern, atom, binding, work)? {
+                if patterns::atom_value(value, atom, work)? {
                     present = true;
                     break;
                 }
@@ -663,7 +697,11 @@ fn undo_slots(query: &Query, work: &Work<'_>) -> Result<Vec<Vec<usize>>, Error> 
     let mut undos = work.reserve(query.binders.len())?;
     for binder in &query.binders {
         let count = match binder {
-            Binder::Atom(pattern) => pattern.terms.iter().map(patterns::slots).sum(),
+            Binder::Atom(alternatives) => alternatives
+                .iter()
+                .map(|pattern| pattern.terms.iter().map(patterns::slots).sum())
+                .max()
+                .unwrap_or(0),
             Binder::Assign(_, _) | Binder::Aggregate(_, _) => 1,
         };
         undos.push(work.reserve(count)?);
@@ -719,6 +757,29 @@ fn owned_binding(
     }
 }
 
+fn choice_count(
+    binder: &Binder,
+    atom_count: usize,
+    binding: &[Option<Bound<'_>>],
+    alternatives: &mut Option<values::Values>,
+    work: &mut Work<'_>,
+) -> Result<usize, Error> {
+    Ok(match binder {
+        Binder::Atom(alternatives) => atom_count
+            .checked_mul(alternatives.len())
+            .ok_or_else(|| work.error(ErrorKind::Allocation))?,
+        Binder::Aggregate(_, _) => 1,
+        Binder::Assign(_, expression) => {
+            if expression.multiple() && alternatives.is_none() {
+                *alternatives = Some(values::collect(expression, binding, work)?);
+            }
+            alternatives
+                .as_ref()
+                .map_or(1, |values| values.values.len())
+        }
+    })
+}
+
 fn visit<'a>(
     query: &Query,
     atoms: &[&'a Atom],
@@ -731,6 +792,7 @@ fn visit<'a>(
     binding.extend(
         outer
             .iter()
+            .take(query.variables)
             .map(|value| value.as_ref().map(|value| Bound::Borrowed(value.borrow()))),
     );
     binding.resize_with(query.variables, || None);
@@ -751,18 +813,13 @@ fn visit<'a>(
                     work.local_bytes -= metric.payload();
                 }
             }
-            let count = match &query.binders[depth] {
-                Binder::Atom(_) => atoms.len(),
-                Binder::Aggregate(_, _) => 1,
-                Binder::Assign(_, expression) => {
-                    if expression.multiple() && alternatives[depth].is_none() {
-                        alternatives[depth] = Some(values::collect(expression, &binding, work)?);
-                    }
-                    alternatives[depth]
-                        .as_ref()
-                        .map_or(1, |values| values.values.len())
-                }
-            };
+            let count = choice_count(
+                &query.binders[depth],
+                atoms.len(),
+                &binding,
+                &mut alternatives[depth],
+                work,
+            )?;
             if cursors[depth] == count {
                 cursors[depth] = 0;
                 if let Some(values) = alternatives[depth].take() {
@@ -777,10 +834,10 @@ fn visit<'a>(
             let cursor = cursors[depth];
             cursors[depth] += 1;
             match &query.binders[depth] {
-                Binder::Atom(pattern) => {
+                Binder::Atom(alternatives) => {
                     if !matches(
-                        pattern,
-                        atoms[cursor],
+                        &alternatives[cursor / atoms.len()],
+                        atoms[cursor % atoms.len()],
                         &mut binding,
                         &mut undos[depth],
                         true,
