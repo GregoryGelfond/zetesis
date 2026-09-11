@@ -174,8 +174,7 @@ pub enum Feature {
     AggregateMeasure,
     /// A comparison form without a finite checked interpretation.
     Comparison,
-    /// A named variable lacks an finite established binding, or an anonymous
-    /// variable occurs under default negation of a signed predicate.
+    /// A named variable lacks a finite established binding.
     UnsafeVariable,
 }
 

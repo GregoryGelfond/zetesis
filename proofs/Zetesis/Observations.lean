@@ -69,6 +69,33 @@ theorem same_rows_preserve_terms (first second : List B)
   · rintro ⟨row, present, active, generated⟩
     exact ⟨row, (same row).mpr present, active, generated⟩
 
+/-- Two equality edges share one chosen middle value. Choosing that value from
+    a finite family and retaining the surrounding guard is equivalent to equal
+    endpoints whose common value belongs to that family and satisfies the guard.
+    Independent choices on the two edges would not establish this conclusion.
+    The Rust planner must separately preserve evaluation failure, source safety,
+    and the one-choice correspondence when moving an operand into a data slot. -/
+theorem shared_equality_choice_exact (choices : List V) (left right : V)
+    (guard : V → Prop) :
+    (∃ middle ∈ choices, left = middle ∧ middle = right ∧ guard middle) ↔
+      left ∈ choices ∧ left = right ∧ guard left := by
+  have sound : (∃ middle ∈ choices, left = middle ∧ middle = right ∧ guard middle) →
+      left ∈ choices ∧ left = right ∧ guard left := by
+    rintro ⟨middle, present, from_left, to_right, enabled⟩
+    have same_endpoints : left = right := from_left.trans to_right
+    have chosen_left : left ∈ choices := by
+      rw [from_left]
+      exact present
+    have enabled_left : guard left := by
+      rw [from_left]
+      exact enabled
+    exact ⟨chosen_left, same_endpoints, enabled_left⟩
+  have complete : (left ∈ choices ∧ left = right ∧ guard left) →
+      ∃ middle ∈ choices, left = middle ∧ middle = right ∧ guard middle := by
+    rintro ⟨present, same_endpoints, enabled⟩
+    exact ⟨left, present, rfl, same_endpoints, enabled⟩
+  exact ⟨sound, complete⟩
+
 /-- Distinct complete tuple keys can carry equal measures. Deduplicating those
     measures before reducing the complete key set changes its size. -/
 theorem equal_measures_do_not_identify_tuple_keys :

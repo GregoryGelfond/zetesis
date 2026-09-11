@@ -32,6 +32,20 @@ captured in every branch can be exported to another body element without an
 independent binder. Arithmetic consumes established values; matching does not
 invert an arithmetic expression. Directed scalar and aggregate equalities can
 supply later values, while aggregate element inputs must already be established.
+An equality edge inside a positive comparison chain can establish an unbound
+variable once its other operand is available. The planner moves that operand
+into the binding instruction and retains every original comparison, replacing
+the moved operand with its new value slot. Strict comparisons and default-negated
+chains remain tests. A middle interval or pool has one chosen value shared by
+both adjacent comparisons. `shared_equality_choice_exact` proves the finite
+two-edge law with an arbitrary surrounding guard; it does not prove the concrete
+planner, arithmetic evaluation or resource behavior.
+
+Generation precedes the complete query's condition checks. A reached arithmetic
+failure or exceeded limit therefore fails the observation even if a later guard
+would reject that row. Each assigned value remains owned by its binding depth
+and charged until that depth is left; moving a source operand does not add a
+logical atom or a grounding-domain value.
 
 A conditional quantifies universally over its completed local condition rows.
 Within one row, source alternatives are existential; anonymous matches form
@@ -92,8 +106,11 @@ checks original theory identity, display multiplicities and exact work ceilings
 across hidden model families. The
 [expression and pattern tests](../../crates/zetesis-themelios/tests/observation_expressions.rs)
 include external comparisons for structural pools and explicit valid-source
-refusals. Those refusals keep generative equality chains, constructor equality inversion,
-inverse arithmetic binding, and anonymous negative cardinality keys visibly open. Native anonymous projection treats both strong signs uniformly; the
+refusals. The [binding contracts](../../crates/zetesis-themelios/tests/observation_bindings.rs)
+cover finite equality chains, shared middle alternatives, original family identity,
+resource boundaries and complete external displays. Constructor equality inversion,
+inverse arithmetic binding, and anonymous negative cardinality keys remain visibly open.
+Native anonymous projection treats both strong signs uniformly; the
 [separate diagnostic fixtures](../../crates/zetesis-themelios/tests/fixtures/observation-strong-anonymous.jsonl)
 record that clingo 5.8.2 refuses anonymous strongly signed negative projections.
 That extension is not a parity result or a diagnosis of clingo's implementation.

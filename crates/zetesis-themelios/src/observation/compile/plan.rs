@@ -30,41 +30,55 @@ impl Compiler<'_> {
                 .all(|argument| self.ready_with(argument, available)),
         }
     }
-    fn assignment(&self, condition: &Condition) -> Option<(usize, bool)> {
+    fn assignment(&self, condition: &Condition) -> Option<(usize, usize)> {
         let Condition::Compare(DefaultNegation::None, left, steps) = condition else {
             return None;
         };
-        let [(Relation::Eq, right)] = steps.as_slice() else {
-            return None;
-        };
-        if let Template::Variable(slot) = left
-            && !self.safe.contains(slot)
-            && self.ready(right)
-        {
-            return Some((*slot, true));
-        }
-        if let Template::Variable(slot) = right
-            && !self.safe.contains(slot)
-            && self.ready(left)
-        {
-            return Some((*slot, false));
+        let mut left = left;
+        for (index, (relation, right)) in steps.iter().enumerate() {
+            if *relation == Relation::Eq {
+                if let Template::Variable(slot) = left
+                    && !self.safe.contains(slot)
+                    && self.ready(right)
+                {
+                    return Some((*slot, index + 1));
+                }
+                if let Template::Variable(slot) = right
+                    && !self.safe.contains(slot)
+                    && self.ready(left)
+                {
+                    return Some((*slot, index));
+                }
+            }
+            left = right;
         }
         None
     }
-    fn assignments(&mut self, conditions: &mut Vec<Condition>, binders: &mut Vec<Binder>) {
-        while let Some((index, slot, forward)) =
+    fn assignments(&mut self, conditions: &mut [Condition], binders: &mut Vec<Binder>) {
+        // Each step establishes one previously unavailable slot. Move its
+        // generating operand into the binder and retain the complete guard,
+        // referring to that same value through the new slot. In particular, a
+        // lifted middle pool/interval remains one choice shared by both edges.
+        // The number of unavailable slots strictly decreases; no source term
+        // is cloned and no inequality or negated comparison supplies a binding.
+        while let Some((index, slot, operand)) =
             conditions
                 .iter()
                 .enumerate()
                 .find_map(|(index, condition)| {
                     self.assignment(condition)
-                        .map(|(slot, forward)| (index, slot, forward))
+                        .map(|(slot, operand)| (index, slot, operand))
                 })
         {
-            let Condition::Compare(_, left, mut steps) = conditions.remove(index) else {
+            let Condition::Compare(_, left, steps) = &mut conditions[index] else {
                 unreachable!()
             };
-            let expression = if forward { steps.remove(0).1 } else { left };
+            let source = if operand == 0 {
+                left
+            } else {
+                &mut steps[operand - 1].1
+            };
+            let expression = std::mem::replace(source, Template::Variable(slot));
             binders.push(Binder::Assign(slot, expression));
             self.safe.insert(slot);
         }
