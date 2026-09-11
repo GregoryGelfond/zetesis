@@ -53,7 +53,7 @@ struct DisplayRecord {
     displays: Vec<(Vec<String>, u64)>,
 }
 
-fn cases() -> [Case; 8] {
+fn cases() -> [Case; 10] {
     [
         Case {
             source: include_str!("fixtures/language-consumers/symbolic-weight.lp"),
@@ -125,6 +125,8 @@ fn cases() -> [Case; 8] {
                 .into(),
         },
         independent_objectives(),
+        neutral_minimum(),
+        cyclic_observer(),
         Case {
             source: include_str!("fixtures/language-consumers/scoped-objectives.lp"),
             file: "scoped-objectives.lp",
@@ -152,6 +154,44 @@ fn cases() -> [Case; 8] {
             ]),
         },
     ]
+}
+
+fn neutral_minimum() -> Case {
+    Case {
+        source: include_str!("fixtures/language-consumers/neutral-minimum.lp"),
+        file: "neutral-minimum.lp",
+        answers: BTreeSet::from([
+            record(&["b"], 2, 1, "value(1)"),
+            record(&["a", "b"], 2, 0, "value(1)"),
+        ]),
+        // A missing extremum measure contributes no value but retains its
+        // independent head permission. clingo 5.8.2 drops that permission.
+        reference_difference: Some(DisplayRecord {
+            costs: vec![1],
+            displays: vec![(vec!["value(1)".into()], 1)],
+        }),
+    }
+}
+
+fn cyclic_observer() -> Case {
+    Case {
+        source: include_str!("fixtures/language-consumers/cyclic-observer.lp"),
+        file: "cyclic-observer.lp",
+        reference_difference: None,
+        answers: [(1, "count(1)"), (2, "count(2)")]
+            .map(|(count, display)| {
+                let mut atoms = vec![atom("n", vec![Value::Number(count)]), atom("p", vec![])];
+                if count == 2 {
+                    atoms.insert(0, atom("a", vec![]));
+                }
+                Record {
+                    atoms,
+                    costs: vec![(2, 1), (1, i64::from(count))],
+                    display: display.into(),
+                }
+            })
+            .into(),
+    }
 }
 
 fn independent_objectives() -> Case {
@@ -292,10 +332,14 @@ fn optimum(config: SolveConfig, resources: &ExecutionResources) {
 }
 
 fn device_evidence(outcome: &zetesis_solve::SemanticOutcome, backend: Backend, case: &Case) {
-    // This source necessarily has several complete candidates. Requiring
-    // actual device work prevents a forced-device test from qualifying CPU-only
-    // completion or an empty candidate path.
-    if backend == Backend::Metal && case.file == "shared-tuple.lp" {
+    // These sources have several complete candidates. Requiring actual device
+    // work makes their composed semantic contracts part of device qualification.
+    if backend == Backend::Metal
+        && matches!(
+            case.file,
+            "shared-tuple.lp" | "neutral-minimum.lp" | "cyclic-observer.lp"
+        )
+    {
         let execution = outcome
             .formula_execution()
             .expect("formula device execution");

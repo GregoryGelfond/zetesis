@@ -17,10 +17,7 @@ use std::time::Duration;
 
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
-use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure,
-    FormulaLimits, ProfileFeature, admit_formula,
-};
+use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 use zetesis_validation::process::{Exit, Invocation, Limits, PendingChild, Stop, invoke};
 
 const CASES: &str = include_str!("fixtures/objective-language-boundaries.jsonl");
@@ -42,68 +39,17 @@ fn cases() -> Vec<Json> {
 }
 
 #[test]
-fn residual_sources_have_located_profile_refusals() {
-    let mut refused = 0;
-    for case in cases() {
-        let Some(feature) = case["native_feature"].as_str() else {
-            continue;
-        };
-        if feature == "ObjectiveSourceEligibility" {
-            continue;
-        }
-        let source = case["source"].as_str().unwrap();
-        let expected = match feature {
-            "AnalysisPool" => ProfileFeature::AnalysisPool,
-            feature => panic!("unclassified boundary {feature}"),
-        };
-        let error = admit_formula(
-            source.into(),
-            AdmissionOptions {
-                source_id: SOURCE,
-                ..AdmissionOptions::default()
-            },
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_err();
-        let FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-            feature,
-            location,
-        })) = &error
-        else {
-            panic!("{source}: {error}");
-        };
-        assert_eq!(*feature, expected, "{source}");
-        assert_eq!(location.source, SOURCE, "{source}");
-        assert_eq!(
-            [
-                u64::from(location.span.start().get()),
-                u64::from(location.span.end().get()),
-            ],
-            [
-                case["native_span"][0].as_u64().unwrap(),
-                case["native_span"][1].as_u64().unwrap(),
-            ],
-            "{source}"
-        );
-        let diagnostics = error.diagnostics();
-        assert_eq!(diagnostics.len(), 1, "{source}");
-        assert_eq!(diagnostics[0].primary().location, *location, "{source}");
-        refused += 1;
-    }
-    assert_eq!(refused, 1);
-}
-
-#[test]
 fn missing_extremum_witnesses_have_no_answers() {
     let mut admitted = 0;
     for case in cases() {
-        let Some(records) = case.get("native_records") else {
+        if !matches!(
+            case["name"].as_str().unwrap(),
+            "missing-min" | "missing-max"
+        ) {
             continue;
-        };
+        }
         let source = case["source"].as_str().unwrap();
         assert!(matches!(source, "#min{:a}=0." | "#max{:a}=0."));
-        assert_eq!(records, &serde_json::json!([]));
         let input = admit_formula(
             source.into(),
             AdmissionOptions {
@@ -131,18 +77,20 @@ fn missing_extremum_witnesses_have_no_answers() {
 }
 
 #[test]
-fn cyclic_sources_have_declared_scored_answers() {
+fn boundary_sources_have_declared_scored_answers() {
     let mut migrated = 0;
-    for case in cases()
-        .into_iter()
-        .filter(|case| case["native_feature"] == "ObjectiveSourceEligibility")
-    {
+    for case in cases() {
         let (priorities, records) = match case["name"].as_str().unwrap() {
+            "missing-min" | "missing-max" => (vec![], serde_json::json!([])),
+            "pooled-weak" => (
+                vec![0],
+                serde_json::json!([[["d(1)", "d(2)", "p(1)", "p(3)"], [1]]]),
+            ),
             "cyclic-aggregate" => (vec![0], serde_json::json!([[["p"], [1]]])),
             "cyclic-conditional" => (vec![0], serde_json::json!([[["d"], [0]]])),
             "cyclic-priority" => (vec![1, 0], serde_json::json!([[["n(1)", "p"], [1, 0]]])),
             "cyclic-multiple-observer" => (vec![1], serde_json::json!([[["n(1,2)", "p"], [2]]])),
-            name => panic!("unclassified cyclic source {name}"),
+            name => panic!("unclassified boundary source {name}"),
         };
         let input =
             source_records::admit(case["source"].as_str().unwrap(), &FormulaLimits::default())
@@ -172,7 +120,7 @@ fn cyclic_sources_have_declared_scored_answers() {
         );
         migrated += 1;
     }
-    assert_eq!(migrated, 4);
+    assert_eq!(migrated, 7);
 }
 
 #[test]
@@ -182,7 +130,6 @@ fn cyclic_objectives_preserve_original_answers() {
         let Some(original) = case["original_source"].as_str() else {
             continue;
         };
-        assert_eq!(case["native_feature"], "ObjectiveSourceEligibility");
         assert_eq!(
             case["source"]
                 .as_str()

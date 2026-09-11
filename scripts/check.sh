@@ -45,6 +45,7 @@ if [ "$mode" = book ] || [ "$mode" = full ]; then
     mdbook test --library-path target/book-tests-gpu/debug/deps
 fi
 if [ "$mode" = oracle ] || [ "$mode" = full ]; then
+    cargo test --locked -p zetesis-themelios --test observation_bindings --test objective_rich_cycles --test objective_pools -- --ignored --nocapture
     cargo test --locked -p zetesis-solve --no-default-features --test language_consumers original_sources_retain_declared_reference_results -- --ignored --nocapture
     cargo test --locked -p zetesis-themelios --test objective_boundaries --test objective_dependency_contracts -- --ignored --nocapture
     cargo test --locked -p zetesis-themelios --test objective_scopes --test objective_carrier_composition --test objective_language_boundaries -- --ignored --nocapture

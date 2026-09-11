@@ -482,6 +482,13 @@
 'Zetesis.HeadContributions.unbounded_equivalent' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.HeadContributions.unbounded_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.HeadContributions.neutral_permission_is_not_truth' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.HeadContributions.missing_extremum_is_neutral' depends on axioms: [propext]
+'Zetesis.HeadContributions.complete_extremum_conservative' depends on axioms: [propext, Quot.sound]
+'Zetesis.HeadContributions.only_missing_extremum' depends on axioms: [propext, Quot.sound]
+'Zetesis.HeadContributions.selected_extremum_values' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.HeadContributions.extremum_formula_original' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.HeadContributions.extremum_bound_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.HeadContributions.extremum_head_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.HeadMeasures.bound_original' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.HeadMeasures.bound_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.HeadMeasures.bound_equivalent' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -676,6 +683,7 @@
 'Zetesis.ObjectiveValues.ignored_entry_preserves_optima' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Observations.completed_terms_exact' does not depend on any axioms
 'Zetesis.Observations.same_rows_preserve_terms' does not depend on any axioms
+'Zetesis.Observations.shared_equality_choice_exact' does not depend on any axioms
 'Zetesis.Observations.equal_measures_do_not_identify_tuple_keys' does not depend on any axioms
 'Zetesis.Observations.original_family_projection' depends on axioms: [propext, Quot.sound]
 'Zetesis.Observations.decorated_world_view' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -918,6 +926,10 @@
 'Zetesis.SourceMeasures.invariant_carrier' depends on axioms: [propext, Quot.sound]
 'Zetesis.SourceMeasures.possible_extension' depends on axioms: [propext, Quot.sound]
 'Zetesis.SourceMeasures.source_priority_presence' depends on axioms: [propext, Quot.sound]
+'Zetesis.SourceSupport.unchanged_round_closed' does not depend on any axioms
+'Zetesis.SourceSupport.stages_inside_closed' does not depend on any axioms
+'Zetesis.SourceSupport.stable_inside_closed' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.SourceSupport.completed_activity_covers' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.StrongNegation.satisfies_rename' does not depend on any axioms
 'Zetesis.StrongNegation.reduct_rename' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.StrongNegation.frozen_rename' depends on axioms: [propext, Classical.choice, Quot.sound]

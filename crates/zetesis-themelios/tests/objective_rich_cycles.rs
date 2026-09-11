@@ -19,49 +19,10 @@ fn boundaries() -> Vec<Json> {
     let cases: Vec<Json> = BOUNDARIES
         .lines()
         .map(|line| serde_json::from_str(line).unwrap())
-        .filter(|row: &Json| row["native_feature"] == "ObjectiveSourceEligibility")
+        .filter(|row: &Json| row.get("original_source").is_some())
         .collect();
     assert_eq!(cases.len(), 4);
     cases
-}
-
-#[test]
-fn cyclic_boundaries_retain_complete_scored_answers() {
-    for case in boundaries() {
-        let (priorities, expected) = match case["name"].as_str().unwrap() {
-            "cyclic-aggregate" => (vec![0], serde_json::json!([[["p"], [1]]])),
-            "cyclic-conditional" => (vec![0], serde_json::json!([[["d"], [0]]])),
-            "cyclic-priority" => (vec![1, 0], serde_json::json!([[["n(1)", "p"], [1, 0]]])),
-            "cyclic-multiple-observer" => (vec![1], serde_json::json!([[["n(1,2)", "p"], [2]]])),
-            name => panic!("unclassified cyclic source {name}"),
-        };
-        let input =
-            source_records::admit(case["source"].as_str().unwrap(), &FormulaLimits::default())
-                .unwrap_or_else(|error| panic!("{}: {error}", case["name"]));
-        let records = expected
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|row| {
-                (
-                    source_records::atoms(&row[0]),
-                    source_records::costs(&row[1]),
-                )
-            })
-            .collect();
-        assert_eq!(
-            source_records::exhaustive(&input),
-            records,
-            "{}",
-            case["name"]
-        );
-        assert_eq!(
-            input.objectives().priorities(),
-            priorities,
-            "{}",
-            case["name"]
-        );
-    }
 }
 
 #[test]

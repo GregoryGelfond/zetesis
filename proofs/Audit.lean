@@ -466,6 +466,13 @@ import Zetesis
 #print axioms Zetesis.HeadContributions.unbounded_equivalent
 #print axioms Zetesis.HeadContributions.unbounded_in_context
 #print axioms Zetesis.HeadContributions.neutral_permission_is_not_truth
+#print axioms Zetesis.HeadContributions.missing_extremum_is_neutral
+#print axioms Zetesis.HeadContributions.complete_extremum_conservative
+#print axioms Zetesis.HeadContributions.only_missing_extremum
+#print axioms Zetesis.HeadContributions.selected_extremum_values
+#print axioms Zetesis.HeadContributions.extremum_formula_original
+#print axioms Zetesis.HeadContributions.extremum_bound_frozen
+#print axioms Zetesis.HeadContributions.extremum_head_in_context
 #print axioms Zetesis.HeadMeasures.bound_original
 #print axioms Zetesis.HeadMeasures.bound_frozen
 #print axioms Zetesis.HeadMeasures.bound_equivalent
@@ -646,6 +653,7 @@ import Zetesis
 #print axioms Zetesis.ObjectiveValues.ignored_entry_preserves_optima
 #print axioms Zetesis.Observations.completed_terms_exact
 #print axioms Zetesis.Observations.same_rows_preserve_terms
+#print axioms Zetesis.Observations.shared_equality_choice_exact
 #print axioms Zetesis.Observations.equal_measures_do_not_identify_tuple_keys
 #print axioms Zetesis.Observations.original_family_projection
 #print axioms Zetesis.Observations.decorated_world_view
@@ -872,6 +880,10 @@ import Zetesis
 #print axioms Zetesis.SourceMeasures.invariant_carrier
 #print axioms Zetesis.SourceMeasures.possible_extension
 #print axioms Zetesis.SourceMeasures.source_priority_presence
+#print axioms Zetesis.SourceSupport.unchanged_round_closed
+#print axioms Zetesis.SourceSupport.stages_inside_closed
+#print axioms Zetesis.SourceSupport.stable_inside_closed
+#print axioms Zetesis.SourceSupport.completed_activity_covers
 #print axioms Zetesis.StrongNegation.satisfies_rename
 #print axioms Zetesis.StrongNegation.reduct_rename
 #print axioms Zetesis.StrongNegation.frozen_rename

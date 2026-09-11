@@ -208,8 +208,7 @@ A bounded extremum projects first values of nonempty tuples; if none remain,
 its measure is the ordinary empty extremum. Empty tuples retain their independent
 head permission. This declared extension conserves complete-value extrema and
 differs from clingo on some original sources. Undefined arithmetic remains a
-typed evaluation failure. The now-obsolete `ProfileFeature::HeadAggregateMissingValue`
-and earlier `ProfileFeature::HeadAggregateWeight` refusals are removed.
+typed evaluation failure.
 The [head contribution contract](../../proofs/guide/head-contributions.md) records
 the formal source basis and explicit clingo comparison differences.
 Empty minima and maxima are `#sup` and `#inf`; bounds never create support.

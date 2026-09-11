@@ -2302,32 +2302,67 @@
   {
     "name": "Zetesis.HeadContributions.neutral_values_are_zero",
     "file": "Zetesis/HeadContributions.lean",
-    "line": 33
+    "line": 40
   },
   {
     "name": "Zetesis.HeadContributions.nonpositive_is_neutral",
     "file": "Zetesis/HeadContributions.lean",
-    "line": 48
+    "line": 55
   },
   {
     "name": "Zetesis.HeadContributions.positive_measure",
     "file": "Zetesis/HeadContributions.lean",
-    "line": 57
+    "line": 64
   },
   {
     "name": "Zetesis.HeadContributions.unbounded_equivalent",
     "file": "Zetesis/HeadContributions.lean",
-    "line": 78
+    "line": 85
   },
   {
     "name": "Zetesis.HeadContributions.unbounded_in_context",
     "file": "Zetesis/HeadContributions.lean",
-    "line": 92
+    "line": 99
   },
   {
     "name": "Zetesis.HeadContributions.neutral_permission_is_not_truth",
     "file": "Zetesis/HeadContributions.lean",
-    "line": 104
+    "line": 111
+  },
+  {
+    "name": "Zetesis.HeadContributions.missing_extremum_is_neutral",
+    "file": "Zetesis/HeadContributions.lean",
+    "line": 131
+  },
+  {
+    "name": "Zetesis.HeadContributions.complete_extremum_conservative",
+    "file": "Zetesis/HeadContributions.lean",
+    "line": 139
+  },
+  {
+    "name": "Zetesis.HeadContributions.only_missing_extremum",
+    "file": "Zetesis/HeadContributions.lean",
+    "line": 147
+  },
+  {
+    "name": "Zetesis.HeadContributions.selected_extremum_values",
+    "file": "Zetesis/HeadContributions.lean",
+    "line": 155
+  },
+  {
+    "name": "Zetesis.HeadContributions.extremum_formula_original",
+    "file": "Zetesis/HeadContributions.lean",
+    "line": 193
+  },
+  {
+    "name": "Zetesis.HeadContributions.extremum_bound_frozen",
+    "file": "Zetesis/HeadContributions.lean",
+    "line": 206
+  },
+  {
+    "name": "Zetesis.HeadContributions.extremum_head_in_context",
+    "file": "Zetesis/HeadContributions.lean",
+    "line": 221
   },
   {
     "name": "Zetesis.HeadMeasures.bound_original",
@@ -3230,29 +3265,34 @@
     "line": 62
   },
   {
+    "name": "Zetesis.Observations.shared_equality_choice_exact",
+    "file": "Zetesis/Observations.lean",
+    "line": 78
+  },
+  {
     "name": "Zetesis.Observations.equal_measures_do_not_identify_tuple_keys",
-    "file": "Zetesis/Observations.lean",
-    "line": 74
-  },
-  {
-    "name": "Zetesis.Observations.original_family_projection",
-    "file": "Zetesis/Observations.lean",
-    "line": 85
-  },
-  {
-    "name": "Zetesis.Observations.decorated_world_view",
-    "file": "Zetesis/Observations.lean",
-    "line": 92
-  },
-  {
-    "name": "Zetesis.Observations.different_models_remain_different_records",
     "file": "Zetesis/Observations.lean",
     "line": 101
   },
   {
+    "name": "Zetesis.Observations.original_family_projection",
+    "file": "Zetesis/Observations.lean",
+    "line": 112
+  },
+  {
+    "name": "Zetesis.Observations.decorated_world_view",
+    "file": "Zetesis/Observations.lean",
+    "line": 119
+  },
+  {
+    "name": "Zetesis.Observations.different_models_remain_different_records",
+    "file": "Zetesis/Observations.lean",
+    "line": 128
+  },
+  {
     "name": "Zetesis.Observations.display_deduplication_can_shrink_a_family",
     "file": "Zetesis/Observations.lean",
-    "line": 111
+    "line": 138
   },
   {
     "name": "Zetesis.Optimization.best_none_iff",
@@ -4358,6 +4398,26 @@
     "name": "Zetesis.SourceMeasures.source_priority_presence",
     "file": "Zetesis/SourceMeasures.lean",
     "line": 115
+  },
+  {
+    "name": "Zetesis.SourceSupport.unchanged_round_closed",
+    "file": "Zetesis/SourceSupport.lean",
+    "line": 56
+  },
+  {
+    "name": "Zetesis.SourceSupport.stages_inside_closed",
+    "file": "Zetesis/SourceSupport.lean",
+    "line": 66
+  },
+  {
+    "name": "Zetesis.SourceSupport.stable_inside_closed",
+    "file": "Zetesis/SourceSupport.lean",
+    "line": 99
+  },
+  {
+    "name": "Zetesis.SourceSupport.completed_activity_covers",
+    "file": "Zetesis/SourceSupport.lean",
+    "line": 119
   },
   {
     "name": "Zetesis.StrongNegation.satisfies_rename",
