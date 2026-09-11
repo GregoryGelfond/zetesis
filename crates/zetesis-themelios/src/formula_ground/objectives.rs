@@ -13,7 +13,9 @@ use crate::expansion::Budget;
 use crate::formula::ceiling;
 use crate::formula_ir::{ObjectiveField, ObjectiveIr, Operation, Prepared};
 use crate::formula_objective_dependencies::Presence;
-use crate::formula_objective_dependencies::completion::{Activity, Completion, Context};
+use crate::formula_objective_dependencies::completion::{
+    Activity, Completion, Context, model_condition,
+};
 use crate::formula_support::{self, Counters, Join, Support};
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
 
@@ -121,20 +123,22 @@ impl Preparation<'_> {
                 let completion = self
                     .completion
                     .expect("selected source completion prepared");
-                let completed = completion.condition(
-                    &objective.condition,
-                    &binding,
-                    &mut Context {
-                        limits: self.limits,
-                        budget: self.budget,
-                        counters: self.counters,
-                        location: objective.location,
-                    },
-                )?;
-                if completed.activity == Activity::Absent {
+                let mut context = Context {
+                    limits: self.limits,
+                    budget: self.budget,
+                    counters: self.counters,
+                    location: objective.location,
+                };
+                if completion.activity(&objective.condition, &binding, &mut context)?
+                    == Activity::Absent
+                {
                     continue;
                 }
-                Some(completed.query)
+                Some(model_condition(
+                    &objective.condition,
+                    &binding,
+                    &mut context,
+                )?)
             } else {
                 None
             };

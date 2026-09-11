@@ -153,3 +153,49 @@ fn extended_cycles_keep_a_located_refusal() {
     ));
     assert!(!error.diagnostics().is_empty());
 }
+
+#[test]
+fn producer_activity_does_not_consume_query_capacity() {
+    for source in [
+        "a.b.c.p:-a,b,c.#minimize{1:not not p}.",
+        "a.b.c.{p:a,b,c}.#minimize{1:not not p}.",
+    ] {
+        let mut limits = FormulaLimits::default();
+        limits.objective.max_condition_nodes = 5;
+        let input = source_records::admit(source, &limits).unwrap();
+        assert_eq!(input.objectives().templates().len(), 1);
+        assert_eq!(
+            input.objectives().templates()[0].condition().nodes().len(),
+            5
+        );
+        let expected = source_records::exhaustive(
+            &source_records::admit(source, &FormulaLimits::default()).unwrap(),
+        );
+        assert_eq!(source_records::exhaustive(&input), expected);
+        limits.objective.max_condition_nodes = 4;
+        assert!(matches!(
+            source_records::admit(source, &limits).unwrap_err(),
+            FormulaFailure::Objective {
+                error: zetesis_objective::AdmissionError::Limit {
+                    resource: zetesis_objective::AdmissionResource::ConditionNodes,
+                    actual: 5,
+                    limit: 4,
+                    ..
+                },
+                ..
+            }
+        ));
+    }
+}
+
+#[test]
+fn absent_rows_retain_no_query_capacity() {
+    let mut limits = FormulaLimits::default();
+    limits.objective.max_condition_nodes = 0;
+    let input = source_records::admit("a.b.c.p:-a,b,c.#minimize{1:not p}.", &limits).unwrap();
+    assert!(input.objectives().templates().is_empty());
+    assert!(input.objectives().priorities().is_empty());
+    let records = source_records::exhaustive(&input);
+    assert_eq!(records.len(), 1);
+    assert_eq!(records.iter().next().unwrap().1, None);
+}

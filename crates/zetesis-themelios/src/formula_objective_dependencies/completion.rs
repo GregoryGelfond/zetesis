@@ -13,9 +13,11 @@ use themelios_base::span::Location;
 use themelios_program::program::DefaultNegation;
 use themelios_program::symbol::Signature;
 use zetesis_core::{Atom, AtomPattern, Value};
-use zetesis_objective::{Condition, ConditionNode};
+mod query;
 
-use super::{dependency_closure, signature};
+pub(crate) use query::condition as model_condition;
+
+use super::signature;
 use crate::expansion::Budget;
 use crate::formula::ceiling;
 use crate::formula_ir::{HeadIr, LiteralIr, Prepared, RuleIr};
@@ -49,11 +51,6 @@ impl Activity {
 #[derive(Default)]
 pub(crate) struct Completion {
     atoms: BTreeMap<Atom, Activity>,
-}
-
-pub(crate) struct CompletedCondition {
-    pub activity: Activity,
-    pub query: Condition,
 }
 
 pub(crate) struct Context<'a> {
@@ -98,6 +95,83 @@ impl Context<'_> {
         }
     }
 
+    fn scalar(&mut self, literal: &LiteralIr, binding: &[Value]) -> Result<bool, FormulaFailure> {
+        match literal {
+            LiteralIr::Compare(left, relation, right) => {
+                let left = formula_support::expression(
+                    left,
+                    binding,
+                    self.limits,
+                    self.budget,
+                    self.counters,
+                    self.location,
+                )?;
+                let right = formula_support::expression(
+                    right,
+                    binding,
+                    self.limits,
+                    self.budget,
+                    self.counters,
+                    self.location,
+                )?;
+                Ok(formula_support::compare(&left, *relation, &right))
+            }
+            LiteralIr::Guard(guard) => guard.evaluate(
+                binding,
+                self.limits,
+                self.budget,
+                self.counters,
+                self.location,
+            ),
+            LiteralIr::Bind { .. } | LiteralIr::Range { .. } => Ok(true),
+            _ => Err(refusal(self.location)),
+        }
+    }
+
+    /// Reserve the coexisting closure, pending traversal and remaining set
+    /// before inserting any new predicate. Legacy certificate storage remains
+    /// included throughout this independent certificate's construction.
+    fn closure(
+        &mut self,
+        graph: &themelios_analysis::depend::DependencyGraph,
+        retained: usize,
+        roots: impl IntoIterator<Item = Signature>,
+    ) -> Result<BTreeSet<Signature>, FormulaFailure> {
+        let mut relevant = BTreeSet::new();
+        let mut pending = Vec::new();
+        for root in roots {
+            self.work()?;
+            self.discover(root, retained, &mut relevant, &mut pending)?;
+        }
+        while let Some(predicate) = pending.pop() {
+            self.work()?;
+            for (_, dependency) in graph.edges_from(&predicate) {
+                self.work()?;
+                if !relevant.contains(dependency) {
+                    self.discover(dependency.clone(), retained, &mut relevant, &mut pending)?;
+                }
+            }
+        }
+        Ok(relevant)
+    }
+
+    fn discover(
+        &mut self,
+        predicate: Signature,
+        retained: usize,
+        relevant: &mut BTreeSet<Signature>,
+        pending: &mut Vec<Signature>,
+    ) -> Result<(), FormulaFailure> {
+        if relevant.contains(&predicate) {
+            return Ok(());
+        }
+        self.entries(retained.saturating_add(relevant.len().saturating_add(1).saturating_mul(3)))?;
+        pending.try_reserve(1).map_err(|_| self.allocation())?;
+        relevant.insert(predicate.clone());
+        pending.push(predicate);
+        Ok(())
+    }
+
     fn entries(&self, count: usize) -> Result<(), FormulaFailure> {
         ceiling(
             FormulaResource::ObjectivePresenceEntries,
@@ -116,8 +190,9 @@ impl Completion {
         context: &mut Context<'_>,
     ) -> Result<Self, FormulaFailure> {
         let graph = prepared.analysis.dependencies();
-        let relevant = dependency_closure(
+        let relevant = context.closure(
             graph,
+            retained,
             prepared
                 .objectives
                 .iter()
@@ -131,7 +206,7 @@ impl Completion {
                             _ => None,
                         })
                 }),
-        );
+        )?;
         // The dependency sets coexist with the completed atom table. These
         // logical planning slots are independent of allocator representation.
         let temporary = retained.saturating_add(relevant.len().saturating_mul(3));
@@ -198,7 +273,7 @@ impl Completion {
             context.counters,
             rule.location,
         )? {
-            let body = self.condition(&rule.body, &binding, context)?.activity;
+            let body = self.activity(&rule.body, &binding, context)?;
             match &rule.head {
                 HeadIr::Normal(Some(head)) => {
                     self.retain(head, &binding, body, temporary, context)?;
@@ -244,8 +319,7 @@ impl Completion {
                             context.counters,
                             rule.location,
                         )? {
-                            let eligible =
-                                self.condition(&element.condition, &row, context)?.activity;
+                            let eligible = self.activity(&element.condition, &row, context)?;
                             self.retain(
                                 head,
                                 &row,
@@ -284,130 +358,37 @@ impl Completion {
         Ok(())
     }
 
-    pub(crate) fn condition(
+    /// Source truth coverage is evaluated without constructing or charging a
+    /// retained model query. Every literal is visited even after known absence.
+    pub(crate) fn activity(
         &self,
         literals: &[LiteralIr],
         binding: &[Value],
         context: &mut Context<'_>,
-    ) -> Result<CompletedCondition, FormulaFailure> {
-        let mut query = Query {
-            nodes: Vec::new(),
-            activity: Vec::new(),
-        };
-        let mut root = query.node(ConditionNode::Boolean(true), Activity::Required, context)?;
+    ) -> Result<Activity, FormulaFailure> {
+        let mut result = Activity::Required;
         for literal in literals {
             context.work()?;
-            let node = match literal {
+            let activity = match literal {
                 LiteralIr::Atom(negation, pattern) => {
                     let atom = context.atom(pattern, binding)?;
                     let activity = self.atoms.get(&atom).copied().unwrap_or(Activity::Absent);
-                    let mut node = query.node(ConditionNode::Atom(atom), activity, context)?;
-                    if *negation != DefaultNegation::None {
-                        node = query.negate(node, context)?;
-                        if *negation == DefaultNegation::NotNot {
-                            node = query.negate(node, context)?;
-                        }
+                    if *negation == DefaultNegation::Not {
+                        activity.negate()
+                    } else {
+                        activity
                     }
-                    node
                 }
-                LiteralIr::Compare(left, relation, right) => {
-                    let left = formula_support::expression(
-                        left,
-                        binding,
-                        context.limits,
-                        context.budget,
-                        context.counters,
-                        context.location,
-                    )?;
-                    let right = formula_support::expression(
-                        right,
-                        binding,
-                        context.limits,
-                        context.budget,
-                        context.counters,
-                        context.location,
-                    )?;
-                    query.boolean(formula_support::compare(&left, *relation, &right), context)?
+                _ => {
+                    if context.scalar(literal, binding)? {
+                        Activity::Required
+                    } else {
+                        Activity::Absent
+                    }
                 }
-                LiteralIr::Guard(guard) => {
-                    let value = guard.evaluate(
-                        binding,
-                        context.limits,
-                        context.budget,
-                        context.counters,
-                        context.location,
-                    )?;
-                    query.boolean(value, context)?
-                }
-                LiteralIr::Bind { .. } | LiteralIr::Range { .. } => query.boolean(true, context)?,
-                _ => return Err(refusal(context.location)),
             };
-            root = query.node(
-                ConditionNode::And(root, node),
-                query.activity[root].min(query.activity[node]),
-                context,
-            )?;
+            result = result.min(activity);
         }
-        Ok(CompletedCondition {
-            activity: query.activity[root],
-            query: Condition::new(query.nodes),
-        })
-    }
-}
-
-struct Query {
-    nodes: Vec<ConditionNode>,
-    activity: Vec<Activity>,
-}
-
-impl Query {
-    fn node(
-        &mut self,
-        node: ConditionNode,
-        activity: Activity,
-        context: &mut Context<'_>,
-    ) -> Result<usize, FormulaFailure> {
-        context.work()?;
-        if self.nodes.len() >= context.limits.objective.max_condition_nodes {
-            return Err(FormulaFailure::Objective {
-                error: zetesis_objective::AdmissionError::Limit {
-                    resource: zetesis_objective::AdmissionResource::ConditionNodes,
-                    template: None,
-                    actual: self.nodes.len().saturating_add(1),
-                    limit: context.limits.objective.max_condition_nodes,
-                },
-                location: context.location,
-            });
-        }
-        self.nodes
-            .try_reserve(1)
-            .map_err(|_| context.allocation())?;
-        self.activity
-            .try_reserve(1)
-            .map_err(|_| context.allocation())?;
-        let index = self.nodes.len();
-        self.nodes.push(node);
-        self.activity.push(activity);
-        Ok(index)
-    }
-
-    fn boolean(&mut self, value: bool, context: &mut Context<'_>) -> Result<usize, FormulaFailure> {
-        self.node(
-            ConditionNode::Boolean(value),
-            if value {
-                Activity::Required
-            } else {
-                Activity::Absent
-            },
-            context,
-        )
-    }
-
-    fn negate(&mut self, node: usize, context: &mut Context<'_>) -> Result<usize, FormulaFailure> {
-        self.node(
-            ConditionNode::Not(node),
-            self.activity[node].negate(),
-            context,
-        )
+        Ok(result)
     }
 }

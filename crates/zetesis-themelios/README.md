@@ -257,9 +257,19 @@ satisfiable or realized in an answer. Thus `{a}.#minimize{1:a,not a}.` retains
 its zero-valued priority even though the complete conjunctive model query is
 always false. In contrast, `a.#minimize{1:not a}.` has no retained objective row.
 Choice bounds and constraints never turn optional source atoms into required
-ones. Source completion visits the finite dependency cone in order, charges
+ones. This coverage contract can retain additional always-zero priority slots;
+it does not promise exact reproduction of another grounder's simplification
+metadata. For example, `a.a|b.#minimize{1:b}.` retains priority zero with cost zero,
+where clingo 5.8.2 omits the objective vector. Both return the same sole answer
+`{a}`. Missing slots are zero in cost comparison, so additional identically-zero
+slots preserve every ordering and optimal tie. Derived-fact and repeated-disjunct
+counterparts have separately recorded raw reference outcomes; they are not
+silently normalized in comparisons. Source completion visits the finite dependency cone in order, charges
 all ground joins and bounds retained activity entries independently of model
-evaluation. Each objective selects its own certificate. An independent extended
+evaluation. Producer traversal computes activity directly; only an eligible
+objective row constructs a closed model query and consumes its per-template
+condition-node ceiling. Dependency storage is checked before each new predicate
+is retained, including coexisting legacy certificates. Each objective selects its own certificate. An independent extended
 query does not impose this cone's acyclicity requirement on a previously admitted
 positive objective; completed activity and legacy aggregate carriers share the
 retained-presence ceiling when they coexist. Neither certificate searches for
