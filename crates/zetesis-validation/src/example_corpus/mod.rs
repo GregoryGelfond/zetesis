@@ -2,8 +2,9 @@
 //!
 //! Normal loading needs only the examples directory. An explicit provenance
 //! audit checks the retained originals and removes exactly the recorded comment
-//! lines. The resulting sources preserve ASP tokens and include spellings, but
-//! have distinct byte identities and physical line numbers. Contracts describe
+//! lines, then applies recorded byte replacements. Include spellings remain
+//! unchanged. Curated sources have distinct byte identities and physical line
+//! numbers; provenance is not a semantic equivalence proof. Contracts describe
 //! selected reported displays; they do not implement consequence computation.
 
 mod contract;
@@ -15,12 +16,12 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 pub use contract::{Contract, ContractMismatch, Family, Satisfiability};
-pub use document::{Annotation, Case, Corpus, Include, ReferenceToolchain, Source};
+pub use document::{Annotation, Case, Corpus, Edit, Include, ReferenceToolchain, Source};
 pub use originals::verify_originals;
 
 /// Seal of the complete cleaned-source and typed-contract manifest.
 pub const MANIFEST_SHA256: &str =
-    "87061e3a9599810495d6a90f1447c482612966a2334408ece2534c660f3175e9";
+    "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958";
 /// Pinned upstream revision, shared with the retained historical corpus.
 pub const UPSTREAM_REVISION: &str = "38f0660ded448ed268c5a68759ceb0e2840dd497";
 const ORIGINAL_MANIFEST_SHA256: &str =
@@ -80,6 +81,8 @@ pub enum Resource {
 /// A refusal to establish corpus integrity, never a solver verdict.
 #[derive(Debug)]
 pub enum Error {
+    /// Storage for a bounded source derivation could not be reserved.
+    Allocation(std::collections::TryReserveError),
     /// Filesystem operation failed.
     Io {
         /// Input path.
@@ -117,6 +120,7 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Allocation(error) => write!(f, "examples source allocation: {error}"),
             Self::Io { path, source } => write!(f, "{}: {source}", path.display()),
             Self::Json(error) => write!(f, "examples manifest: {error}"),
             Self::Utf8(error) => write!(f, "examples source: {error}"),
@@ -142,6 +146,7 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::Allocation(error) => Some(error),
             Self::Io { source, .. } => Some(source),
             Self::Json(error) => Some(error),
             Self::Utf8(error) => Some(error),

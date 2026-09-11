@@ -81,7 +81,7 @@ fn clean_loading_needs_no_original_tree() {
 }
 
 #[test]
-fn all_sources_derive_by_recorded_comment_deletion() {
+fn all_sources_follow_the_recorded_derivation() {
     examples::verify_originals(&verified(), &originals(), Limits::default()).unwrap();
 }
 
@@ -418,7 +418,16 @@ fn exposed_coordinates_reconstruct_clean_sources() {
             retained_start = annotation.end_byte();
         }
         cleaned.push_str(&original[retained_start..]);
-        assert_eq!(cleaned, source.source(), "{}", source.path());
+        let mut edited = String::new();
+        retained_start = 0;
+        for edit in source.edits() {
+            assert_eq!(&cleaned[edit.start_byte()..edit.end_byte()], edit.before());
+            edited.push_str(&cleaned[retained_start..edit.start_byte()]);
+            edited.push_str(edit.after());
+            retained_start = edit.end_byte();
+        }
+        edited.push_str(&cleaned[retained_start..]);
+        assert_eq!(edited, source.source(), "{}", source.path());
     }
 }
 

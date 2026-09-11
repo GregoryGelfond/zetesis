@@ -5,9 +5,11 @@
 % 8-queens problem. Uses only portable ASP-Core-2 constructs, so it runs on
 % clingo and I-DLV alike.
 
-% The board is an 8 x 8 grid.
-row(1..8).
-column(1..8).
+% The board is an n x n grid; the default is 8.
+#const n = 8.
+
+row(1..n).
+column(1..n).
 
 % queen_at(R,C): a queen stands on row R, column C.
 % Exactly one queen per row, and exactly one per column.

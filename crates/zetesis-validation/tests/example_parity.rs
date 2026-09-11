@@ -1,4 +1,4 @@
-//! Opt-in bounded clingo comparison of original and comment-cleaned sources.
+//! Opt-in bounded clingo comparison of original and curated sources.
 #![cfg(any(target_os = "linux", target_os = "macos"))]
 
 use std::ffi::OsString;

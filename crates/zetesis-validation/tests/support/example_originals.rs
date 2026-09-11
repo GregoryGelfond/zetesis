@@ -2,6 +2,77 @@
 
 use super::*;
 
+fn edit() -> Edit {
+    Edit {
+        start_byte: 2,
+        end_byte: 3,
+        before: "8".into(),
+        after: "n".into(),
+    }
+}
+
+#[test]
+fn edits_preserve_unselected_bytes() {
+    assert_eq!(apply_edits("p(8).", &[edit()], 5).unwrap(), "p(n).");
+}
+
+#[test]
+fn edits_keep_original_coordinates_after_growth() {
+    let mut first = edit();
+    first.after = "100".into();
+    let second = Edit {
+        start_byte: 4,
+        end_byte: 5,
+        before: "9".into(),
+        after: "1".into(),
+    };
+    assert_eq!(
+        apply_edits("p(8,9).", &[first, second], 9).unwrap(),
+        "p(100,1)."
+    );
+}
+
+#[test]
+fn edits_require_exact_source_spans() {
+    for (start, end, before) in [(2, 2, ""), (0, 1, "8"), (2, 9, "8"), (1, 2, "(")] {
+        let mut record = edit();
+        record.start_byte = start;
+        record.end_byte = end;
+        record.before = before.into();
+        let source = if before == "(" { "é(8)." } else { "p(8)." };
+        assert!(matches!(
+            apply_edits(source, &[record], 20),
+            Err(Error::Contract(_))
+        ));
+    }
+}
+
+#[test]
+fn overlapping_edits_are_refused() {
+    assert!(matches!(
+        apply_edits("p(8).", &[edit(), edit()], 20),
+        Err(Error::Contract(_))
+    ));
+}
+
+#[test]
+fn edited_sources_obey_the_byte_ceiling() {
+    let mut record = edit();
+    record.after = "100".into();
+    assert_eq!(
+        apply_edits("p(8).", &[record.clone()], 7).unwrap(),
+        "p(100)."
+    );
+    assert!(matches!(
+        apply_edits("p(8).", &[record], 6),
+        Err(Error::Limit {
+            resource: Resource::SourceBytes,
+            observed: 7,
+            limit: 6
+        })
+    ));
+}
+
 fn annotation(source: &str) -> Annotation {
     Annotation {
         line: 1,

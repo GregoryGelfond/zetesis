@@ -15,7 +15,7 @@ pub enum Suite {
     Corpus,
     /// Established SEND, queens02 and task-allocation cases.
     Baseline,
-    /// All six original N=8 queens encodings.
+    /// All six curated queens encodings at their default N=8.
     Queens,
 }
 

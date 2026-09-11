@@ -5,6 +5,70 @@ use std::path::Path;
 use std::process::Command;
 
 #[test]
+fn every_queens_variant_accepts_the_same_board_parameter() {
+    use clap::Parser;
+    use zetesis_cli::{Completion, Options, run_with_diagnostics};
+    use zetesis_cpu::Control;
+
+    let options = Options::try_parse_from([
+        "zetesis",
+        "--backend",
+        "cpu",
+        "--grounder",
+        "eager",
+        "--models",
+        "0",
+    ])
+    .unwrap();
+    let root =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/kr-domains/standalone/n-queens");
+    for variant in 1..=6 {
+        let source =
+            std::fs::read_to_string(root.join(format!("variant-{variant:02}.lp"))).unwrap();
+        assert_eq!(source.matches("#const n = 8.").count(), 1);
+        let source = source.replace("#const n = 8.", "#const n = 4.");
+        let mut output = Vec::new();
+        let report = run_with_diagnostics(
+            source,
+            &options,
+            &mut output,
+            &mut Vec::new(),
+            &Control::default(),
+        )
+        .unwrap();
+        assert_eq!(report.completion, Completion::Exhausted);
+        let text = String::from_utf8(output).unwrap();
+        let mut lines = text.lines();
+        let mut boards = BTreeSet::new();
+        while let Some(line) = lines.next() {
+            if line.starts_with("Answer:") {
+                let board: BTreeSet<_> = lines.next().unwrap().split_whitespace().collect();
+                boards.insert(board);
+            }
+        }
+        let expected = [
+            [
+                "queen_at(1,2)",
+                "queen_at(2,4)",
+                "queen_at(3,1)",
+                "queen_at(4,3)",
+            ],
+            [
+                "queen_at(1,3)",
+                "queen_at(2,1)",
+                "queen_at(3,4)",
+                "queen_at(4,2)",
+            ],
+        ]
+        .into_iter()
+        .map(|board| board.into_iter().collect::<BTreeSet<_>>())
+        .collect::<BTreeSet<_>>();
+        assert_eq!(boards, expected, "variant {variant}");
+        assert_eq!(report.models, 2);
+    }
+}
+
+#[test]
 fn unchanged_queens_variant_one_completes_all_92_boards() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../validation/corpus/kr-domains/standalone/n-queens/variant-01.lp");

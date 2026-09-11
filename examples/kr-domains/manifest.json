@@ -2429,7 +2429,7 @@
       "includes": [],
       "original_sha256": "4be4607e99bb7449707f1414bd34b434f30766ee4485f6f9432aea627587451d",
       "path": "standalone/n-queens/variant-01.lp",
-      "source_sha256": "bd46ca80c82c0c46294b5144e1f61ee0bf604e95135f3e540a751bab95b334aa",
+      "source_sha256": "c43d5ddf900ce2fd1d3328f2df337f1c1e8b85b63255473713b16a2dfd0dc1fd",
       "transitive_source_paths": [
         "standalone/n-queens/variant-01.lp"
       ]
@@ -5546,7 +5546,15 @@
           "start_byte": 59
         }
       ],
-      "source_sha256": "bd46ca80c82c0c46294b5144e1f61ee0bf604e95135f3e540a751bab95b334aa"
+      "source_sha256": "c43d5ddf900ce2fd1d3328f2df337f1c1e8b85b63255473713b16a2dfd0dc1fd",
+      "edits": [
+        {
+          "start_byte": 309,
+          "end_byte": 363,
+          "before": "% The board is an 8 x 8 grid.\nrow(1..8).\ncolumn(1..8).",
+          "after": "% The board is an n x n grid; the default is 8.\n#const n = 8.\n\nrow(1..n).\ncolumn(1..n)."
+        }
+      ]
     },
     {
       "includes": [],
@@ -5690,6 +5698,6 @@
     ]
   },
   "revision": "38f0660ded448ed268c5a68759ceb0e2840dd497",
-  "schema_version": 1,
+  "schema_version": 2,
   "upstream": "https://github.com/GregoryGelfond/kr-domains"
 }

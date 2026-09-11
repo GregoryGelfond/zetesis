@@ -68,7 +68,43 @@ impl Include {
     }
 }
 
-/// Sealed cleaned source with its separate original identity and deletion map.
+/// One reviewed replacement after annotation deletion.
+///
+/// Coordinates refer to the annotation-free original, before any replacements.
+/// The provenance audit checks exact bytes and ordering; it does not prove that
+/// a replacement preserves answer sets.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Edit {
+    pub(super) start_byte: usize,
+    pub(super) end_byte: usize,
+    pub(super) before: String,
+    pub(super) after: String,
+}
+impl Edit {
+    /// Inclusive byte offset in the annotation-free original.
+    #[must_use]
+    pub const fn start_byte(&self) -> usize {
+        self.start_byte
+    }
+    /// Exclusive byte offset in the annotation-free original.
+    #[must_use]
+    pub const fn end_byte(&self) -> usize {
+        self.end_byte
+    }
+    /// Exact bytes replaced.
+    #[must_use]
+    pub fn before(&self) -> &str {
+        &self.before
+    }
+    /// Exact replacement bytes.
+    #[must_use]
+    pub fn after(&self) -> &str {
+        &self.after
+    }
+}
+
+/// Sealed curated source with its original identity, deletions and reviewed edits.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Source {
@@ -77,6 +113,8 @@ pub struct Source {
     #[serde(rename = "source_sha256")]
     sha256: String,
     removed_annotations: Vec<Annotation>,
+    #[serde(default)]
+    edits: Vec<Edit>,
     includes: Vec<Include>,
     #[serde(skip)]
     text: String,
@@ -106,6 +144,11 @@ impl Source {
     #[must_use]
     pub fn removed_annotations(&self) -> &[Annotation] {
         &self.removed_annotations
+    }
+    /// Ordered replacements in the annotation-free original.
+    #[must_use]
+    pub fn edits(&self) -> &[Edit] {
+        &self.edits
     }
     /// Original include dependencies and spellings.
     #[must_use]
@@ -303,7 +346,7 @@ pub(super) fn load(root: &Path, limits: Limits) -> Result<Corpus, Error> {
 fn validate_header(document: &Document, limits: Limits) -> Result<(), Error> {
     ceiling(Resource::Files, document.files.len() as u128, limits.files)?;
     ceiling(Resource::Cases, document.cases.len() as u128, limits.cases)?;
-    if document.schema_version != 1
+    if document.schema_version != 2
         || document.upstream != "https://github.com/GregoryGelfond/kr-domains"
         || document.revision != UPSTREAM_REVISION
         || document.license != "MIT"

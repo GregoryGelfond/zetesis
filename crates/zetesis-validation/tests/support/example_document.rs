@@ -165,7 +165,7 @@ fn original_deletion_must_reproduce_retained_text() {
     let mut corpus = provenance_case();
     // Exercise the derivation check independently of the outer manifest seal.
     corpus.files[0].text.push_str("changed.\n");
-    provenance_error(&corpus, "comment deletion differs");
+    provenance_error(&corpus, "recorded source derivation differs");
 }
 
 #[test]

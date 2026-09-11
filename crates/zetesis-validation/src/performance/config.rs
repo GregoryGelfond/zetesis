@@ -67,7 +67,7 @@ pub enum Suite {
     /// Established SEND, queens variant 02 and task-allocation comparison.
     #[default]
     Baseline,
-    /// All six original eight-queens encodings in variant order.
+    /// All six curated eight-queens encodings in variant order.
     Queens,
 }
 impl Suite {

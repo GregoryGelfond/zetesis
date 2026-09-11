@@ -31,20 +31,25 @@ Run the scenario file directly; no external checkout, generated instance,
 elenctic installation or annotation interpreter is required. Keep the directory
 layout when copying scenarios. The `encodings/` files describe input signatures
 and are intended to be paired with instance facts; the `standalone/` programs
-can run by themselves. N-Queens variants 02–06 retain the original `#const n = 8`
-parameter; the recorded contracts apply to the default instance.
+can run by themselves. All six N-Queens variants use `#const n = 8`;
+the recorded contracts apply to the default instance. Change that declaration
+to select a different board size.
 
 ## Sources and test contracts
 
-Only the original leading elenctic annotation comment lines were removed.
-All other bytes—including explanatory comments, ASP rules and include
-spellings—are preserved. The clean files have **different byte identities and
+The original leading elenctic annotation comment lines were removed. The local
+N-Queens variant 01 also replaces its fixed board size with `#const n = 8`,
+matching the other variants. Its default 92-answer contract is unchanged.
+All remaining bytes and include spellings are preserved.
+The curated files have **different byte identities and
 physical line numbers** from annotated originals; they are not presented as
 byte-exact originals.
 
 [manifest.json](manifest.json) records both SHA-256 identities for every source,
 the upstream revision and historical reference toolchain, include dependencies,
-and each deleted comment's original line, byte span and text. Historical
+and each deleted comment's original line, byte span and text. Schema 2 also
+records exact before/after bytes and coordinates for local edits, applied after
+comment deletion. Historical
 annotated originals remain in `validation/corpus/kr-domains` for provenance.
 The historical toolchain records how the contracts were authored; it is not
 an execution receipt for the current solver.
@@ -61,7 +66,9 @@ The solver receives only ASP source. The independent Rust validation library,
 `zetesis_validation::examples`, owns loading, integrity checks and display
 contracts. Its normal loader uses this directory alone. The explicit
 `verify_originals` audit additionally reads retained originals, checks exact
-comment deletion and confirms the typed translation of every original contract.
+comment deletion and local edits, and confirms the typed translation of every
+original contract. This byte-derivation audit does not prove semantic equivalence;
+the external comparison below checks default-instance answer agreement.
 
 ## Reproduce the checks
 
@@ -72,7 +79,7 @@ zetesis-corpus verify-examples examples/kr-domains
 zetesis-corpus verify-examples examples/kr-domains --originals validation/corpus/kr-domains
 ```
 
-The second command also verifies the exact deletion against preserved originals.
+The second command also verifies the recorded derivation from preserved originals.
 Neither integrity command runs a solver. For the full native/clingo comparison:
 
 ```sh

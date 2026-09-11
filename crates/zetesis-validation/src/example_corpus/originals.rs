@@ -3,11 +3,12 @@
 use std::path::Path;
 
 use super::{
-    Annotation, Contract, Corpus, Error, Family, Limits, Resource, Satisfiability, document, files,
+    Annotation, Contract, Corpus, Edit, Error, Family, Limits, Resource, Satisfiability, ceiling,
+    document, files,
 };
 use crate::answers;
 
-/// Check every original hash, exact comment deletion, include coordinate and
+/// Check every original hash, exact comment deletion, recorded edit, include coordinate and
 /// typed-contract translation against the retained cleaned sources.
 /// This reads the preserved original tree only when explicitly requested.
 /// Only `limits.source_bytes` applies: the supplied `Corpus` has already passed
@@ -36,10 +37,11 @@ pub fn verify_originals(
         )?;
         files::digest(source.path(), &bytes, source.original_sha256())?;
         let original = String::from_utf8(bytes).map_err(Error::Utf8)?;
-        let cleaned = remove_annotations(&original, source.removed_annotations())?;
+        let stripped = remove_annotations(&original, source.removed_annotations())?;
+        let cleaned = apply_edits(&stripped, source.edits(), limits.source_bytes)?;
         if cleaned != source.source() {
             return Err(Error::Contract(format!(
-                "comment deletion differs for {}",
+                "recorded source derivation differs for {}",
                 source.path()
             )));
         }
@@ -78,6 +80,39 @@ pub fn verify_originals(
         }
     }
     Ok(())
+}
+
+fn apply_edits(source: &str, edits: &[Edit], limit: usize) -> Result<String, Error> {
+    let mut previous_end = 0;
+    let mut length = source.len() as u128;
+    for edit in edits {
+        if edit.start_byte < previous_end
+            || edit.start_byte >= edit.end_byte
+            || source.get(edit.start_byte..edit.end_byte) != Some(edit.before.as_str())
+        {
+            return Err(invalid(
+                "source edits overlap or differ from the recorded bytes",
+            ));
+        }
+        length = length - edit.before.len() as u128 + edit.after.len() as u128;
+        previous_end = edit.end_byte;
+    }
+    ceiling(Resource::SourceBytes, length, limit)?;
+    let capacity = usize::try_from(length)
+        .map_err(|_| invalid("source derivation exceeds addressable storage"))?;
+    let mut result = String::new();
+    result
+        .try_reserve_exact(capacity)
+        .map_err(Error::Allocation)?;
+    previous_end = 0;
+    for edit in edits {
+        // The validation pass established ordered, disjoint UTF-8 boundaries.
+        result.push_str(&source[previous_end..edit.start_byte]);
+        result.push_str(&edit.after);
+        previous_end = edit.end_byte;
+    }
+    result.push_str(&source[previous_end..]);
+    Ok(result)
 }
 
 pub(super) fn remove_annotations(

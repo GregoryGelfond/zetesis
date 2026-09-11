@@ -54,7 +54,7 @@ struct Options {
     report_bytes: usize,
     /// Self-contained clean examples/kr-domains directory.
     root: PathBuf,
-    /// Established CPU baseline, all six original queens encodings, or instrumented full corpus.
+    /// Established CPU baseline, all six curated queens encodings, or instrumented full corpus.
     #[arg(long, value_enum, default_value = "baseline")]
     suite: SuiteArgument,
     /// Native zetesis executable path.
