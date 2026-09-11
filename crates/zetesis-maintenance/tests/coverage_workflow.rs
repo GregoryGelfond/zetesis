@@ -206,6 +206,35 @@ fn every_instrumentation_failure_keeps_status_incomplete() {
     }
 }
 #[test]
+fn final_output_failure_keeps_coverage_incomplete() {
+    for mode in ["gate", "baseline"] {
+        let f = Fixture::new();
+        let script = f.read("scripts/coverage.sh");
+        let completion =
+            "printf 'Coverage %s completed; reports: %s\\n' \"$mode\" \"$coverage_dir\"";
+        assert_eq!(script.matches(completion).count(), 1);
+        // Earlier tool output succeeds; only the final progress write loses stdout.
+        f.write(
+            "scripts/coverage.sh",
+            script
+                .replacen(completion, &format!("exec 1>&-\n{completion}"), 1)
+                .as_bytes(),
+        );
+        let result = f.coverage(mode, false, &[]);
+        assert!(!result.status.success());
+        f.assert_status("incomplete");
+        for profile in ["workspace", "cli-cpu"] {
+            for report in ["coverage.json", "html/index.html"] {
+                assert!(
+                    f.root()
+                        .join(format!("target/coverage/{profile}/{report}"))
+                        .is_file()
+                );
+            }
+        }
+    }
+}
+#[test]
 fn concurrent_run_preserves_the_existing_owner() {
     let f = Fixture::new();
     fs::create_dir(f.root().join("target/coverage/.lock")).unwrap();

@@ -169,8 +169,9 @@ if [ "$mode" = gate ]; then
     cargo +1.97.1 llvm-cov report --locked --fail-under-lines "$floor"
     export CARGO_LLVM_COV_TARGET_DIR="$coverage_dir/build-cli-cpu"
     cargo +1.97.1 llvm-cov report --package zetesis-cli --locked --fail-under-lines "$floor"
-    printf '%s\n' gate-passed > "$coverage_dir/status.txt"
+    completion_status=gate-passed
 else
-    printf '%s\n' 'baseline-complete (nongating)' > "$coverage_dir/status.txt"
+    completion_status='baseline-complete (nongating)'
 fi
 printf 'Coverage %s completed; reports: %s\n' "$mode" "$coverage_dir"
+printf '%s\n' "$completion_status" > "$coverage_dir/status.txt"
