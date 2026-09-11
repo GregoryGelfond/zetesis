@@ -408,11 +408,11 @@ fn logical_extrema_do_not_certify_atom_counts() {
 }
 
 #[test]
-fn empty_head_tuples_keep_the_value_refusal() {
+fn bounded_empty_head_tuples_have_named_refusals() {
     for function in ["#min", "#max"] {
         profile(
             &format!("{function}{{:a}}<=0."),
-            ProfileFeature::HeadAggregateWeight,
+            ProfileFeature::HeadAggregateMissingValue,
         );
     }
 }

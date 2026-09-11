@@ -9,7 +9,7 @@
 use std::collections::BTreeMap;
 
 use themelios_base::span::Location;
-use themelios_program::program::{AggregateFunction, HeadAggregate};
+use themelios_program::program::{AggregateFunction, HasGuards, HeadAggregate};
 use zetesis_core::{Atom, Term, Value};
 
 use crate::diagnostic::unsupported;
@@ -51,17 +51,19 @@ impl Compiler<'_> {
                 .terms()
                 .map(|term| self.aggregate_term(term, &mut local))
                 .collect::<Result<Vec<_>, _>>()?;
-            // Closed weight syntax has no binding dependency, so a false outer
-            // guard cannot conceal an unsupported declared weight. Variables
-            // are checked by the same selector on complete possible local rows.
-            match tuple.first() {
-                Some(Term::Constant(value)) => {
-                    contribution(measure, Some(value), self.location)?;
+            // A bound needs a defined measure even in a statically false rule.
+            // Without bounds only the head choices remain, but source terms and
+            // binding instructions are still compiled and validated below.
+            if aggregate.left_guard().is_some() || aggregate.right_guard().is_some() {
+                match tuple.first() {
+                    Some(Term::Constant(value)) => {
+                        contribution(measure, Some(value), self.location)?;
+                    }
+                    None => {
+                        contribution(measure, None, self.location)?;
+                    }
+                    Some(Term::Variable(_)) => {}
                 }
-                None => {
-                    contribution(measure, None, self.location)?;
-                }
-                Some(Term::Variable(_)) => {}
             }
             let head = self.head_literal(element.literal(), &mut local, &mut condition)?;
             self.bindings(&mut condition, &mut local)?;
@@ -159,7 +161,9 @@ pub(super) fn validate_group(
                 )?;
                 tuple.push(value.clone());
             }
-            contribution(*measure, tuple.first(), location)?;
+            if !group.guards.is_empty() {
+                contribution(*measure, tuple.first(), location)?;
+            }
             let head = head_identity(&element.head, &binding, budget, location)?;
             if tuples.get(&tuple).is_some_and(|previous| *previous != head)
                 || head
@@ -238,9 +242,10 @@ pub(super) enum Contribution<'a> {
 }
 
 /// Contribution is independent of permission to select the head. Count ignores
-/// tuple values; sums require a numeric first term, and extrema retain its full
-/// logical value. Zero sum+ contributes nothing without removing permission.
-/// Missing measures, nonnumeric sums and negative sum+ retain explicit refusals.
+/// tuple values; missing/nonnumeric sum values have weight zero. Numeric
+/// nonpositive sum+ weights also contribute nothing. All retain permission.
+/// A bounded extremum requires a complete first value in the admitted domain;
+/// an unbounded head never calls this operation because it has no measure bound.
 pub(super) fn contribution(
     measure: HeadMeasure,
     first: Option<&Value>,
@@ -251,17 +256,17 @@ pub(super) fn contribution(
     }
     if matches!(measure, HeadMeasure::Min | HeadMeasure::Max) {
         let value = first.ok_or_else(|| {
-            FormulaFailure::from(unsupported(ProfileFeature::HeadAggregateWeight, location))
+            FormulaFailure::from(unsupported(
+                ProfileFeature::HeadAggregateMissingValue,
+                location,
+            ))
         })?;
         crate::formula_assignment::extremum_value(value, location)?;
         return Ok(Some(Contribution::Extremum(value)));
     }
     let Some(Value::Number(value)) = first else {
-        return Err(unsupported(ProfileFeature::HeadAggregateWeight, location).into());
+        return Ok(None);
     };
-    if measure == HeadMeasure::SumPlus && *value < 0 {
-        return Err(unsupported(ProfileFeature::HeadAggregateWeight, location).into());
-    }
     Ok((measure != HeadMeasure::SumPlus || *value > 0).then_some(Contribution::Numeric(*value)))
 }
 

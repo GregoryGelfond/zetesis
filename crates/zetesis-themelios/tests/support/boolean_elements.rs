@@ -6,9 +6,9 @@ use super::{Models, native};
 use themelios_base::source::SourceId;
 use zetesis_cpu::Control;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, AnalysisBasis, CountPlanLimits,
-    CountPlanStatus, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
-    FormulaResource, ProfileFeature, admit_formula, prepare_formula,
+    AdmissionOptions, AdmittedFormula, AnalysisBasis, CountPlanLimits, CountPlanStatus,
+    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
+    prepare_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(191);
@@ -150,16 +150,6 @@ fn boolean_extrema_retain_atom_permission() {
     assert_eq!(models("2#max{1:#true;2:a}2."), expected(&[&["a"]]));
 }
 
-fn refused(source: &str, expected: ProfileFeature) {
-    let error = limited(source, &FormulaLimits::default()).unwrap_err();
-    assert!(
-        matches!(error, FormulaFailure::Expansion(ExpansionFailure::Admission(
-        AdmissionFailure::Profile { feature, .. })) if feature == expected),
-        "{source}: {error}"
-    );
-    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
-}
-
 #[test]
 fn signed_boolean_elements_have_their_logical_truth() {
     for (literal, active) in [
@@ -187,14 +177,12 @@ fn signed_boolean_elements_have_their_logical_truth() {
 }
 
 #[test]
-fn false_boolean_heads_cannot_hide_weight_refusals() {
+fn false_boolean_heads_preserve_empty_contributions() {
     for source in [
         "0#sum{word:#false}0:-#false.",
         "0#sum+{-1:#false}0:-#false.",
-        "0#min{: #false}0:-#false.",
-        "0#max{: #false}0:-#false.",
     ] {
-        refused(source, ProfileFeature::HeadAggregateWeight);
+        assert_eq!(models(source), expected(&[&[]]), "{source}");
     }
 }
 

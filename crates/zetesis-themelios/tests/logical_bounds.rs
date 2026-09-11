@@ -11,9 +11,9 @@ use cases::{BOUNDS, RELATIONS, expected, sources};
 use reference::{Models, atom_text, exhaustive, external, holds, native, values};
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus,
-    ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
-    FormulaResource, ProfileFeature, admit_formula, prepare_formula,
+    AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus, ExpansionFailure,
+    ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
+    admit_formula, prepare_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(229);
@@ -149,26 +149,13 @@ fn independent_numeric_groups_retain_count_plans() {
 }
 
 #[test]
-fn logical_bounds_cannot_hide_unsupported_measures() {
-    for source in [
-        "#sum{word:#false}<=word.",
-        "#sum+{-1:#false}<=word.",
-        "#sum{:a}<=word.",
-        "#min{:a}<=word.",
-        "#max{:a}<=word.",
+fn logical_bounds_compare_selected_contributions() {
+    for (source, explicit) in [
+        ("#sum{word:#false}<=word.", ""),
+        ("#sum+{-1:#false}<=word.", ""),
+        ("#sum{:a}<=word.", "{a}."),
     ] {
-        let error = limited(source, &FormulaLimits::default()).unwrap_err();
-        assert!(
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                    feature: ProfileFeature::HeadAggregateWeight,
-                    ..
-                }))
-            ),
-            "{source}: {error}"
-        );
-        assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+        assert_eq!(native(&input(source)), native(&input(explicit)), "{source}");
     }
 }
 

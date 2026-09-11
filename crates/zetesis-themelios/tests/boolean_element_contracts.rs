@@ -206,9 +206,9 @@ proptest::proptest! {
 }
 
 #[test]
-fn false_constants_cannot_hide_invalid_weights() {
+fn false_constants_cannot_hide_undefined_weights() {
     for function in ["#sum", "#sum+"] {
-        let source = format!("0{function}{{word:#false}}0:-#false.");
+        let source = format!("0{function}{{1/0:#false}}0:-#false.");
         let error = admit_formula(
             source,
             AdmissionOptions::default(),
@@ -219,10 +219,7 @@ fn false_constants_cannot_hide_invalid_weights() {
         assert!(
             matches!(
                 error,
-                FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                    feature: ProfileFeature::HeadAggregateWeight,
-                    ..
-                }))
+                FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })
             ),
             "{error}"
         );

@@ -190,17 +190,25 @@ several heads may activate one tuple. Local positive binders and admitted
 positive/default/double-negated eligibility retain their own scopes.
 
 Weighted heads use the same separate atom permission and complete-tuple activity.
-`#sum` accepts signed numeric weights; head `#sum+` accepts nonnegative numeric
-weights. A selected complete tuple contributes once, even when several of its
-head operands are true. Distinct tuples sharing a head still contribute
+`#sum` measures signed numeric weights; head `#sum+` measures only strictly
+positive numeric weights while retaining permission for every numeric weight. A
+selected complete tuple contributes once, even when several of its head operands
+are true. Distinct tuples sharing a head still contribute
 separately: `3#sum{1:a;2:a}3.` admits `{a}`. A zero weight still permits an
 unsigned atomic head. Extrema use the same complete-tuple activity and retain
 the first tuple value in full, including symbols, strings, constructors and
 logical extrema. Values are compared in ASP term order. Atoms may occur under
 several tuples and several operands may share one tuple.
 The optional count specialization requires a stronger tuple/atom bijection and
-wholly unsigned atomic groups. Missing measured values, nonnumeric sum-head
-weights and negative head `#sum+` weights remain unsupported.
+wholly unsigned atomic groups. Missing first values and nonnumeric sum weights
+have weight zero while retaining independent head permission. Unbounded heads
+have no measure constraint; their source terms and bindings are still validated.
+A bounded extremum with a missing first value has no established total measure
+and retains the named `ProfileFeature::HeadAggregateMissingValue` refusal.
+Undefined arithmetic remains a typed evaluation failure. The obsolete broader
+`ProfileFeature::HeadAggregateWeight` refusal has been replaced.
+The [head contribution contract](../../proofs/guide/head-contributions.md) records
+the formal source basis and explicit clingo comparison differences.
 Empty minima and maxima are `#sup` and `#inf`; bounds never create support.
 Objective-relevant function-head producers remain refused, including count heads.
 

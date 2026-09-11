@@ -157,13 +157,17 @@ fn neutral_contributions_keep_head_permission() {
 }
 
 #[test]
-fn negative_eligibility_cannot_hide_weight_errors() {
+fn nonnumeric_weights_keep_head_permission() {
     for function in ["#sum", "#sum+"] {
         for weight in ["s", "#inf", "#sup", "f(1)", "(1,2)"] {
-            profile(
-                &format!("d.0{function}{{{weight}:a:not d}}0."),
-                ProfileFeature::HeadAggregateWeight,
-            );
+            for condition in ["d", "not d"] {
+                assert_eq!(
+                    native(&input(&format!(
+                        "d.0{function}{{{weight}:a:{condition}}}0."
+                    ))),
+                    native(&input(&format!("d.{{a:{condition}}}."))),
+                );
+            }
         }
     }
 }
@@ -242,15 +246,18 @@ fn alias_order_preserves_full_models() {
 }
 
 #[test]
-fn aliased_groups_validate_every_weight() {
-    for source in [
-        "0#sum{0:a;0:b;s:c}0.",
-        "d(0;s).0#sum{0:a;0:b;W:c:d(W)}0.",
-        "e.d(0;s).0#sum{0:a;0:b;W:c:d(W),not e}0.",
-        "0#sum+{0:a;0:b;-1:c}0.",
-        "d(0;-1).0#sum+{0:a;0:b;W:c:d(W)}0.",
+fn aliased_groups_select_each_resolved_weight() {
+    for (source, explicit) in [
+        ("0#sum{0:a;0:b;s:c}0.", "{a;b;c}."),
+        ("d(0;s).0#sum{0:a;0:b;W:c:d(W)}0.", "d(0;s).{a;b;c}."),
+        (
+            "e.d(0;s).0#sum{0:a;0:b;W:c:d(W),not e}0.",
+            "e.d(0;s).{a;b}.",
+        ),
+        ("0#sum+{0:a;0:b;-1:c}0.", "{a;b;c}."),
+        ("d(0;-1).0#sum+{0:a;0:b;W:c:d(W)}0.", "d(0;-1).{a;b;c}."),
     ] {
-        profile(source, ProfileFeature::HeadAggregateWeight);
+        assert_eq!(native(&input(source)), native(&input(explicit)), "{source}");
     }
 }
 
@@ -439,22 +446,36 @@ fn numeric_head_truth_matches_independent_formulas() {
 }
 
 #[test]
-fn negative_sumplus_weights_have_located_refusals() {
-    for source in [
-        "0#sum+{-2:a}0.",
-        "2#sum+{-2:a;2:b}2.",
-        "0#sum+{-2:a;2:b}0.",
-        "b.2#sum+{-2:a;2:b}2.",
-        "d(-1).0#sum+{W:a:d(W)}0.",
+fn negative_sumplus_weights_keep_neutral_permission() {
+    for (source, explicit) in [
+        ("0#sum+{-2:a}0.", "{a}."),
+        ("2#sum+{-2:a;2:b}2.", "{a;b}.:-not b."),
+        ("0#sum+{-2:a;2:b}0.", "{a;b}.:-b."),
+        ("b.2#sum+{-2:a;2:b}2.", "b.{a;b}.:-not b."),
+        ("d(-1).0#sum+{W:a:d(W)}0.", "d(-1).{a}."),
     ] {
-        profile(source, ProfileFeature::HeadAggregateWeight);
+        assert_eq!(native(&input(source)), native(&input(explicit)), "{source}");
     }
 }
 
 #[test]
-fn false_outer_guards_cannot_hide_closed_weight_errors() {
-    for source in ["0#sum{s:a}0:-#false.", "0#sum+{-1:a}0:-#false."] {
-        profile(source, ProfileFeature::HeadAggregateWeight);
+fn false_outer_guards_cannot_hide_undefined_weights() {
+    for source in ["0#sum{1/0:a}0:-#false.", "0#sum+{1/0:a}0:-#false."] {
+        let error = admit_formula(
+            source.into(),
+            options(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        )
+        .expect_err("undefined source arithmetic is not a missing value");
+        assert!(
+            matches!(
+                error,
+                FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })
+            ),
+            "{source}: {error}"
+        );
+        assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
     }
 }
 
@@ -491,11 +512,11 @@ proptest::proptest! {
 }
 
 #[test]
-fn variable_weights_are_checked_on_completed_rows() {
+fn variable_weights_select_completed_rows() {
     for function in ["#sum", "#sum+"] {
-        profile(
-            &format!("d(s).0{function}{{W:a:d(W)}}0."),
-            ProfileFeature::HeadAggregateWeight,
+        assert_eq!(
+            native(&input(&format!("d(s).0{function}{{W:a:d(W)}}0."))),
+            native(&input("d(s).{a}.")),
         );
     }
 }

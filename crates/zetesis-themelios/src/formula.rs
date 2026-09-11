@@ -644,11 +644,13 @@ pub(crate) struct Compiled {
 /// retain their frozen reduct truth. Booleans introduce no atom or support.
 /// Atom-only count certificates require wholly unsigned atomic groups with
 /// a tuple/atom bijection. Head bounds are constraints and never invent support.
-/// Numeric measure is separate from permission: zero-weight heads remain
-/// selectable. Missing measures, nonnumeric sum weights and negative sum+ head
-/// weights have an explicit zetesis profile refusal, including closed weights in
-/// statically inactive rules. Positive, default-negated and double-negated
-/// ordinary element conditions retain their original eligibility formulas.
+/// Numeric measure is separate from permission: missing/nonnumeric sum weights
+/// are zero, and sum+ measures only strictly positive numeric weights. Every
+/// positive head retains its independent permission. Unbounded heads need no
+/// measure evaluation but still validate source terms and bindings. A bounded
+/// extremum with a missing first value retains a named profile refusal. Positive,
+/// default-negated and double-negated ordinary element conditions retain their
+/// original eligibility formulas.
 /// Min/max first tuple values and guards use complete finite logical values in
 /// ASP term order, including genuine extrema and structured values. Empty min is
 /// `#sup`; empty max is `#inf`. The integer-endpoint limitation remains separate.
