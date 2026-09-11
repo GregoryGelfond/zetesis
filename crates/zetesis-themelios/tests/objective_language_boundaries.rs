@@ -1,8 +1,8 @@
 //! Exact witnesses for the remaining aggregate-head and objective boundaries.
 //!
 //! The fixture retains complete clingo 5.8.2 byte captures from the unchanged
-//! sources. Its guarded empty-extremum results are reference observations, not
-//! an interpretation adopted by native admission. Cyclic objective refusals
+//! sources. The two missing-extremum heads now admit with complete empty families;
+//! their matching reference results do not determine a general source policy. Cyclic objective refusals
 //! are distinguished from invalid programs by exhaustive original-theory checks.
 
 #[path = "support/source_records.rs"]
@@ -43,10 +43,13 @@ fn cases() -> Vec<Json> {
 
 #[test]
 fn residual_sources_have_located_profile_refusals() {
+    let mut refused = 0;
     for case in cases() {
+        let Some(feature) = case["native_feature"].as_str() else {
+            continue;
+        };
         let source = case["source"].as_str().unwrap();
-        let expected = match case["native_feature"].as_str().unwrap() {
-            "HeadAggregateMissingValue" => ProfileFeature::HeadAggregateMissingValue,
+        let expected = match feature {
             "AnalysisPool" => ProfileFeature::AnalysisPool,
             "ObjectiveSourceEligibility" => ProfileFeature::ObjectiveSourceEligibility,
             feature => panic!("unclassified boundary {feature}"),
@@ -84,7 +87,45 @@ fn residual_sources_have_located_profile_refusals() {
         let diagnostics = error.diagnostics();
         assert_eq!(diagnostics.len(), 1, "{source}");
         assert_eq!(diagnostics[0].primary().location, *location, "{source}");
+        refused += 1;
     }
+    assert_eq!(refused, 5);
+}
+
+#[test]
+fn missing_extremum_witnesses_have_no_answers() {
+    let mut admitted = 0;
+    for case in cases() {
+        let Some(records) = case.get("native_records") else {
+            continue;
+        };
+        let source = case["source"].as_str().unwrap();
+        assert!(matches!(source, "#min{:a}=0." | "#max{:a}=0."));
+        assert_eq!(records, &serde_json::json!([]));
+        let input = admit_formula(
+            source.into(),
+            AdmissionOptions {
+                source_id: SOURCE,
+                ..AdmissionOptions::default()
+            },
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(input.source().id(), SOURCE);
+        assert_eq!(input.source().text(), source);
+        assert!(source_records::exhaustive(&input).is_empty());
+        let mut search = zetesis_sat::StableModels::new(
+            input.theory(),
+            zetesis_sat::Limits::default(),
+            zetesis_cpu::Control::default(),
+        )
+        .unwrap();
+        assert!(search.next().is_none());
+        assert!(search.exhausted());
+        admitted += 1;
+    }
+    assert_eq!(admitted, 2);
 }
 
 #[test]
