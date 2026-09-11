@@ -56,8 +56,20 @@ and releases the index.
 owns a selected device, queue, granted capabilities and shared health. Each
 primitive retains its pipeline and prepared subject. Its `from_context`
 constructor shares these device resources; existing `new_selected`
-constructors create independent contexts. Preparation does not create an
+constructors create independent contexts. `GpuFormulaProfile` explicitly retains
+one compiled formula pipeline, its exact context and gate implementation.
+`GpuFormulaOracle::from_profile` checks Busy, health and granted formula
+capabilities, then starts fresh residency, epoch and batch accounting.
+`GpuFormulaProfile::same_instance` compares the compiled owner; equal shader or
+adapter metadata does not establish that identity. Preparation does not create an
 answer-set claim or change the primitive's input subject.
+
+Compilation reuse changes handle ownership only. Dispatch still uses that
+profile's exact gate implementation, validates each candidate against the
+oracle's original theory and creates its own candidate-local transport. The
+profile retains no mutable truth or epoch that could influence another oracle's
+frozen-reduct query. Reusing it requires fixed-cost checks and an owner clone;
+each live oracle's retained graph and transport remain separate costs.
 
 A primitive operation holds an exclusive context lease through submission,
 readback and error cleanup. Another operation receives `GpuErrorKind::Busy`
@@ -78,8 +90,13 @@ Byte ceilings retain their per-primitive scope. They do not automatically sum al
 prepared objects sharing a context or include device infrastructure. There is no
 global context, pipeline registry or unbounded work queue. Ordinary sessions can
 share an explicitly supplied context through `ExecutionResources` and
-`Session::builder`. They prepare separate executors, pipelines and subjects;
-resource reuse does not resume search or share candidate truth. The
+`Session::builder`. `ExecutionResources::with_formula_profile` additionally
+reuses the supplied compilation across ordinary formula sessions and derives
+its context from that profile, preventing mismatched context/profile pairs.
+Each session still owns its executor, subject residency, search, candidate queue,
+counters and incumbent. Context-only resources compile per session; neither
+form installs a global cache. Hard adapter policy is checked before profile
+reuse; CPU and automatic formula policies retain their existing CPU route. The
 [session example](../rust/sessions.md#reuse-and-identity) shows this composition.
 
 ## Parallelism follows the dependencies

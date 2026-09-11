@@ -15,6 +15,8 @@ pub(crate) struct DeviceProfile {
     pub(crate) validate_limits: fn(&wgpu::Limits) -> Result<(), GpuError>,
 }
 
+// Compiled immutable resources only. Formula profiles share this owner while
+// keeping residency, epochs and result accounting in each fresh oracle.
 pub(crate) struct Runtime {
     pub(crate) context: GpuContext,
     pub(crate) pipeline: wgpu::ComputePipeline,

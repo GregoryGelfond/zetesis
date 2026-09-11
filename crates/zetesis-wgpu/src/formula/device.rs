@@ -2,8 +2,8 @@
 
 use super::packing::{Graph, Plan};
 use super::transport::Resident;
-use super::{FormulaBatchStats, FormulaCheck, FormulaLimits, GateProjection};
-use crate::runtime::{DeviceProfile, ErrorScopes, Runtime};
+use super::{FormulaBatchStats, FormulaCheck, FormulaLimits, GateProjection, GpuFormulaProfile};
+use crate::runtime::ErrorScopes;
 use crate::{GpuBackendPreference, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
 use zetesis_ferraris::{Interpretation, Theory};
 
@@ -12,8 +12,7 @@ use zetesis_ferraris::{Interpretation, Theory};
 /// This is a partial reduct primitive; exact residual search remains necessary. No source grounding, objective
 /// scoring, candidate enumeration or CPU oracle fallback occurs here.
 pub struct GpuFormulaOracle {
-    runtime: Runtime,
-    projection: GateProjection,
+    profile: GpuFormulaProfile,
     resident: Option<Resident>,
     epoch: u32,
     last: Option<FormulaBatchStats>,
@@ -76,9 +75,9 @@ impl GpuFormulaOracle {
         selection: GpuSelection,
         projection: GateProjection,
     ) -> Result<Self, GpuError> {
-        let runtime =
-            pollster::block_on(Runtime::new(options, selection, Self::profile(projection)?))?;
-        Ok(Self::with_runtime(runtime, projection))
+        Ok(Self::with_profile(
+            GpuFormulaProfile::new_selected_with_projection(options, selection, projection)?,
+        ))
     }
 
     /// Compile this primitive on an existing device context.
@@ -102,47 +101,61 @@ impl GpuFormulaOracle {
         context: &crate::GpuContext,
         projection: GateProjection,
     ) -> Result<Self, GpuError> {
-        let runtime =
-            pollster::block_on(Runtime::from_context(context, Self::profile(projection)?))?;
-        Ok(Self::with_runtime(runtime, projection))
+        Ok(Self::with_profile(
+            GpuFormulaProfile::from_context_with_projection(context, projection)?,
+        ))
+    }
+
+    /// Start fresh oracle state using a caller-owned compiled profile.
+    ///
+    /// Acquires the context's nonblocking lease, checks shared health and granted
+    /// formula capabilities, then retains the exact compilation. No shader
+    /// assembly, pipeline compilation, theory upload or dispatch occurs. Fresh
+    /// residency, epoch and batch accounting are independent of every other
+    /// oracle; this operation has fixed cost and retains one shared owner.
+    ///
+    /// # Errors
+    /// Refuses Busy before device health, then unsupported granted capabilities.
+    /// No adapter policy is selected here; callers requiring a policy first use
+    /// [`crate::GpuContext::check_selection`]. A refusal never creates an oracle.
+    pub fn from_profile(profile: &GpuFormulaProfile) -> Result<Self, GpuError> {
+        let context = profile.context();
+        let _lease = context.lease()?;
+        context.check_health()?;
+        super::profile::check_limits(context.limits())?;
+        Ok(Self::with_profile(profile.clone()))
+    }
+
+    /// Exact compiled pipeline owner retained by this oracle.
+    #[must_use]
+    pub const fn compiled_profile(&self) -> &GpuFormulaProfile {
+        &self.profile
     }
 
     /// Exact device context retained by this primitive.
     #[must_use]
     pub fn context(&self) -> &crate::GpuContext {
-        &self.runtime.context
+        self.profile.context()
     }
 
-    fn with_runtime(runtime: Runtime, projection: GateProjection) -> Self {
+    fn with_profile(profile: GpuFormulaProfile) -> Self {
         Self {
-            runtime,
-            projection,
+            profile,
             resident: None,
             epoch: 0,
             last: None,
         }
     }
 
-    fn profile(projection: GateProjection) -> Result<DeviceProfile, GpuError> {
-        Ok(DeviceProfile {
-            device_label: "zetesis frozen formula device",
-            shader_label: "frozen formula propagation",
-            pipeline_label: "cooperative finite-formula query",
-            shader: projection.shader()?,
-            entry_point: "propagate",
-            validate_limits: check_limits,
-        })
-    }
-
     /// Selected gate implementation; constant-time observation without I/O.
     #[must_use]
     pub const fn projection(&self) -> GateProjection {
-        self.projection
+        self.profile.projection()
     }
     /// Identity of the actual selected native adapter.
     #[must_use]
     pub fn info(&self) -> &GpuInfo {
-        self.runtime.context.info()
+        self.profile.runtime.context.info()
     }
     /// Last successful nonempty batch's allocation/reuse accounting. Every new
     /// call clears it, including an empty or refused call.
@@ -174,9 +187,9 @@ impl GpuFormulaOracle {
         limits: FormulaLimits,
     ) -> Result<Vec<FormulaCheck>, GpuError> {
         self.last = None;
-        let context = self.runtime.context.clone();
+        let context = self.profile.runtime.context.clone();
         let _lease = context.lease()?;
-        self.runtime.check_health()?;
+        self.profile.runtime.check_health()?;
         if candidates.is_empty() {
             return Ok(Vec::new());
         }
@@ -190,7 +203,7 @@ impl GpuFormulaOracle {
         {
             None
         } else {
-            Some(Graph::new(theory, self.runtime.limits())?)
+            Some(Graph::new(theory, self.profile.runtime.limits())?)
         };
         let graph = fresh
             .as_ref()
@@ -200,7 +213,7 @@ impl GpuFormulaOracle {
             graph,
             candidates.len(),
             limits,
-            self.runtime.limits(),
+            self.profile.runtime.limits(),
             fresh.is_some(),
             epoch,
         )?;
@@ -237,9 +250,14 @@ impl GpuFormulaOracle {
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing formula packing graph"))?;
         let seeds = plan.pack(graph, candidates)?;
         let packed = fresh.as_ref().map(Graph::pack).transpose()?;
-        let scopes = ErrorScopes::new(self.runtime.device());
+        let scopes = ErrorScopes::new(self.profile.runtime.device());
         if let Some((graph, (nodes, roots))) = fresh.zip(packed) {
-            self.resident = Some(Resident::new(self.runtime.device(), graph, &nodes, &roots));
+            self.resident = Some(Resident::new(
+                self.profile.runtime.device(),
+                graph,
+                &nodes,
+                &roots,
+            ));
         }
         self.epoch = epoch;
         let outcome = self
@@ -247,53 +265,19 @@ impl GpuFormulaOracle {
             .as_mut()
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing resident formula"))?
             .dispatch(
-                self.runtime.device(),
-                self.runtime.queue(),
-                &self.runtime.pipeline,
+                self.profile.runtime.device(),
+                self.profile.runtime.queue(),
+                &self.profile.runtime.pipeline,
                 &seeds,
                 &plan,
                 limits.timeout,
             );
-        let result = self.runtime.complete(scopes, outcome);
+        let result = self.profile.runtime.complete(scopes, outcome);
         if result.is_ok() {
             self.last = Some(stats);
         }
         result
     }
-}
-fn check_limits(limits: &wgpu::Limits) -> Result<(), GpuError> {
-    for (label, required, available) in [
-        (
-            "workgroup invocations",
-            64,
-            limits.max_compute_invocations_per_workgroup,
-        ),
-        ("workgroup width", 64, limits.max_compute_workgroup_size_x),
-        (
-            "workgroup storage",
-            16,
-            limits.max_compute_workgroup_storage_size,
-        ),
-        (
-            "storage bindings",
-            6,
-            limits.max_storage_buffers_per_shader_stage,
-        ),
-        (
-            "uniform bindings",
-            1,
-            limits.max_uniform_buffers_per_shader_stage,
-        ),
-        ("bindings per group", 7, limits.max_bindings_per_bind_group),
-    ] {
-        if available < required {
-            return Err(GpuError::new(
-                GpuErrorKind::Capacity,
-                format!("formula {label}: need {required}, device provides {available}"),
-            ));
-        }
-    }
-    Ok(())
 }
 
 #[cfg(test)]

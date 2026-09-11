@@ -118,9 +118,10 @@ impl Execution {
         observations: &mut impl ExecutionSink,
     ) -> Result<Self, RunError> {
         let context = resources.gpu_for(options.backend).map_err(RunError::Gpu)?;
-        let oracle = match context {
-            Some(context) => zetesis_wgpu::GpuFormulaOracle::from_context(context),
-            None => zetesis_wgpu::GpuFormulaOracle::new_selected(
+        let oracle = match (resources.formula_profile(), context) {
+            (Some(profile), _) => zetesis_wgpu::GpuFormulaOracle::from_profile(profile),
+            (None, Some(context)) => zetesis_wgpu::GpuFormulaOracle::from_context(context),
+            (None, None) => zetesis_wgpu::GpuFormulaOracle::new_selected(
                 zetesis_wgpu::GpuOptions::default(),
                 crate::engine::selection(options.backend),
             ),

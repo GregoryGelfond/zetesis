@@ -42,7 +42,7 @@ pub use context::GpuContext;
 
 pub use formula::{
     FormulaBatchStats, FormulaCheck, FormulaLimits, FormulaStatistics, FormulaVerdict,
-    GateProjection, GpuFormulaOracle, ResidualReason,
+    GateProjection, GpuFormulaOracle, GpuFormulaProfile, ResidualReason,
 };
 
 pub use adapter::{AdapterBackend, AdapterCategory, AdapterMetadata};

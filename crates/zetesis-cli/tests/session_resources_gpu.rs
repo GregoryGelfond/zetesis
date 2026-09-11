@@ -18,8 +18,9 @@ use zetesis_themelios::{
     admit_formula,
 };
 use zetesis_wgpu::{
-    AdapterBackend, AdapterCategory, GpuBackendPreference, GpuContext, GpuError, GpuErrorKind,
-    GpuOptions, GpuRelationExecutor, GpuSelection, RelationGpuLimits,
+    AdapterBackend, AdapterCategory, GateProjection, GpuBackendPreference, GpuContext, GpuError,
+    GpuErrorKind, GpuFormulaProfile, GpuOptions, GpuRelationExecutor, GpuSelection,
+    RelationGpuLimits,
 };
 
 #[derive(Clone, Copy)]
@@ -408,9 +409,60 @@ fn independent_sessions(device: Device) {
     assert_eq!(prepared.activity().completed_queries, 1);
 }
 
-fn policy_refusal(device: Device) {
+fn resource_variants(device: Device) -> [ExecutionResources; 2] {
     let context = device.context();
-    let resources = ExecutionResources::with_gpu(&context);
+    let profile = GpuFormulaProfile::from_context(&context).unwrap();
+    [
+        ExecutionResources::with_gpu(&context),
+        ExecutionResources::with_formula_profile(&profile),
+    ]
+}
+
+fn independent_profile_sessions(device: Device) {
+    let context = device.context();
+    for projection in GateProjection::ALL {
+        let profile =
+            GpuFormulaProfile::from_context_with_projection(&context, projection).unwrap();
+        let resources = ExecutionResources::with_formula_profile(&profile);
+        let retained = resources.clone();
+        assert!(retained.formula_profile().unwrap().same_instance(&profile));
+        assert!(retained.gpu_context().unwrap().same_instance(&context));
+        drop(resources);
+        drop(profile);
+        let owner = formula(FORMULA_FIRST);
+        let mut limited = config(device.backend(), Profile::Formula);
+        limited.max_candidates = 0;
+        let stopped = solve(
+            PreparedInput::formula(&owner),
+            &Subject::Theory(owner.theory().clone()),
+            limited,
+            &retained,
+            AnswerSelection::Optimal,
+        );
+        assert!(stopped.records.is_empty());
+        assert_eq!(stopped.outcome.verified_models(), 0);
+        assert_eq!(stopped.outcome.completion(), Some(Completion::Interrupted));
+        assert_eq!(
+            stopped.outcome.interruption(),
+            Some(Interruption::Countermodel(
+                zetesis_sat::Incomplete::CandidateLimit
+            ))
+        );
+        assert!(!stopped.outcome.optimum_proved());
+        assert!(!stopped.outcome.unsatisfiable());
+        assert!(stopped.outcome.incumbent().is_none());
+        assert_eq!(stopped.outcome.formula_execution().unwrap().gpu_batches, 0);
+        independent_formulas(&retained, device);
+    }
+}
+
+fn policy_refusal(device: Device) {
+    for resources in resource_variants(device) {
+        policy_refusal_with(&resources, device);
+    }
+}
+
+fn policy_refusal_with(resources: &ExecutionResources, device: Device) {
     let owner = normal(NORMAL_NUMBER);
     let formula = formula(FORMULA_FIRST);
     for (profile, input, subject) in [
@@ -436,7 +488,7 @@ fn policy_refusal(device: Device) {
             config(device.other().backend(), profile),
             Control::default(),
         )
-        .resources(&resources)
+        .resources(resources)
         .start_observed(&mut routes)
         .err()
         .expect("a supplied context cannot switch backend");
@@ -452,7 +504,7 @@ fn policy_refusal(device: Device) {
             input,
             &subject,
             config(device.backend(), profile),
-            &resources,
+            resources,
             AnswerSelection::Optimal,
         );
         require_device(&complete, device, profile);
@@ -461,14 +513,19 @@ fn policy_refusal(device: Device) {
 }
 
 fn cpu_policies(device: Device) {
-    let resources = ExecutionResources::with_gpu(&device.context());
+    for resources in resource_variants(device) {
+        cpu_policies_with(&resources);
+    }
+}
+
+fn cpu_policies_with(resources: &ExecutionResources) {
     let owner = normal(NORMAL_NUMBER);
     for profile in [Profile::Eager, Profile::Lazy] {
         let capture = solve(
             PreparedInput::admitted(&owner),
             &Subject::Program(owner.program().clone()),
             config(Backend::Cpu, profile),
-            &resources,
+            resources,
             AnswerSelection::All,
         );
         assert_eq!(capture.routes.cpu_closure, 1);
@@ -488,7 +545,7 @@ fn cpu_policies(device: Device) {
             PreparedInput::formula(&formula),
             &Subject::Theory(formula.theory().clone()),
             config(backend, Profile::Formula),
-            &resources,
+            resources,
             AnswerSelection::Optimal,
         );
         assert_eq!(capture.routes.cpu_formula, 1);
@@ -523,8 +580,13 @@ impl ExecutionObserver for RejectDeviceObservation {
 }
 
 fn observer_failure(device: Device) {
-    let context = device.context();
-    let resources = ExecutionResources::with_gpu(&context);
+    for resources in resource_variants(device) {
+        observer_failure_with(&resources, device);
+    }
+}
+
+fn observer_failure_with(resources: &ExecutionResources, device: Device) {
+    let context = resources.gpu_context().unwrap();
     let owner = normal(NORMAL_NUMBER);
     let formula = formula(FORMULA_FIRST);
     // Reuse a real typed policy refusal as an external callback error. Its type
@@ -555,7 +617,7 @@ fn observer_failure(device: Device) {
         };
         let failure =
             Session::builder(input, config(device.backend(), profile), Control::default())
-                .resources(&resources)
+                .resources(resources)
                 .start_observed(&mut observer)
                 .err()
                 .expect("the preparation observer refuses the session");
@@ -570,7 +632,7 @@ fn observer_failure(device: Device) {
             input,
             &subject,
             config(device.backend(), profile),
-            &resources,
+            resources,
             AnswerSelection::Optimal,
         );
         require_device(&complete, device, profile);
@@ -676,4 +738,16 @@ fn metal_observer_failure_preserves_resource_reuse() {
 #[ignore = "requires actual Vulkan GPU; observation failure does not poison shared resources"]
 fn vulkan_observer_failure_preserves_resource_reuse() {
     observer_failure(Device::Vulkan);
+}
+
+#[test]
+#[ignore = "requires actual Metal; independent formula sessions share one compilation"]
+fn metal_formula_profiles_preserve_independent_sessions() {
+    independent_profile_sessions(Device::Metal);
+}
+
+#[test]
+#[ignore = "requires actual Vulkan; independent formula sessions share one compilation"]
+fn vulkan_formula_profiles_preserve_independent_sessions() {
+    independent_profile_sessions(Device::Vulkan);
 }
