@@ -13,6 +13,7 @@ and theorem hypotheses are authoritative; prose is a reading aid.
 | When do total and group capacities imply stronger local bounds? | [PartitionCapacities](../Zetesis/PartitionCapacities.lean) separates the counting argument from the caller's coverage and theory-entailment premises. |
 | What makes an interpretation an answer set? | [Ferraris](../Zetesis/Ferraris.lean): formula truth, the frozen reduct, minimality and their connection. |
 | Why does least closure suffice for the normal-rule specialization? | The [normalized/Ferraris bridge](normal-ferraris.md) proves that both independent answer-set definitions coincide, then connects Ferraris membership to [Semantics](../Zetesis/Semantics.lean)'s least closure. [Iteration](../Zetesis/Iteration.lean) addresses bounded closure computation. |
+| When does completed possible support cover answer sets? | [The support argument](source-support.md) separates an empty-delta closure result from the source-to-reduct projection premise. Minimality then places every answer-set atom inside the carrier; optional objective activity still does not establish realizability. |
 | When can grounding remain incomplete while work proceeds? | [LiftedBridge](../Zetesis/LiftedBridge.lean): sound intermediate stages and explicit final coverage premises for stable acceptance. |
 | What permits a cheaper exact membership check? | [TightPlans](../Zetesis/TightPlans.lean) and [CertifiedExecution](../Zetesis/CertifiedExecution.lean), with the [worked structured proof](certified-membership.md). |
 | How do Boolean tables and producer reductions implement that certificate? | [TightEvaluation](../Zetesis/TightEvaluation.lean) proves the finite evaluator and support correspondence; [reading the argument](tight-evaluation.md) separates computed truth from unproved device transport. |
@@ -127,8 +128,9 @@ keys from their first logical values. Canonical extrema evaluate the selected
 values in the candidate and again over frozen activity; the surrounding head
 bound is candidate-only. The efficient predicate-witness law assumes the relevant
 ordered-selection equation, so using it with Rust's term comparator requires an
-independent correspondence argument. These laws assign no behavior to omitted
-head values or disputed sum contribution cases.
+independent correspondence argument. These laws operate on complete values. [HeadContributions](../Zetesis/HeadContributions.lean)
+adds the declared neutral-missing-value projection before that reduction, with
+independent permissions and a [documented conservation domain](head-contributions.md).
 
 [JoinFrames](../Zetesis/JoinFrames.lean) follows the world-membership path into a
 finite execution schedule: reset the root, overwrite each child, then use it as

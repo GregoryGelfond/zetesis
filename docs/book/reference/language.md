@@ -117,7 +117,7 @@ Choices admit complete logical bounds, including symbols, strings, signed
 constructors, tuples, `#inf` and `#sup`, as well as integers. Scoped variables,
 duplicate eligibility, recursive conditions, evaluated arguments and admitted
 top-level numeric intervals retain their existing meanings. Complete outer scalar
-or acyclic aggregate-assignment values can supply bounds; their original
+or dependency-ordered aggregate-assignment values can supply bounds; their original
 equalities and whole-group activation remain in the resulting formulas.
 Unsupported local generators remain restricted.
 
@@ -178,9 +178,9 @@ separated in the [Lean proof boundary](../lean/correspondence.md).
 
 | Aggregate form | Implemented scope | Remaining boundary |
 | --- | --- | --- |
-| Body `#count`, `#sum`, `#sum+` | Finite comparisons against complete logical bounds, recursive eligibility, complete-tuple coalescing and acyclic fresh-target assignments | Cyclic/self-dependent assignment generators, unsupported local generators and unresolved cyclic objective producers with aggregate/conditional body operations |
-| Body `#min`, `#max` | Comparisons over complete logical values; empty extrema; admitted acyclic assignments | Numeric endpoint guard below and unsupported consumer/observer combinations |
-| Assignment consumers | Dependency-ordered scalar/tuple filters and equalities, evaluated positive arguments/heads, admitted outer negative atoms, finite outer ranges, logical choice bounds, nonbinding aggregate guards and universal conditionals; acyclic objective dependencies can include several assignments | Broader local scopes and cyclic assignment generators |
+| Body `#count`, `#sum`, `#sum+` | Finite comparisons against complete logical bounds, recursive eligibility, complete-tuple coalescing and fresh-target assignments with completed finite support | Unresolved dependencies within a binding scope and unsupported local generators |
+| Body `#min`, `#max` | Comparisons over complete logical values; empty extrema; dependency-ordered assignments with completed finite support | Missing tuple values, the numeric endpoint guard below and unsupported local consumers |
+| Assignment consumers | Dependency-ordered scalar/tuple filters and equalities, evaluated positive arguments/heads, admitted outer negative atoms, finite outer ranges, logical choice bounds, nonbinding aggregate guards and universal conditionals; objective dependencies can include several assignments and recursive producers with completed finite support | Broader local scopes and unresolved dependencies within a binding scope |
 | `#count` heads | Positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions, Boolean operands and objective dependencies | Unsupported local eligibility scopes |
 | `#sum`, `#sum+` heads | Signed numeric `#sum` and positive-only numeric `#sum+`; missing/nonnumeric measures contribute zero; positive atomic permission is independent of numeric contribution, including nonpositive `#sum+` weights and objective dependencies | Unsupported local eligibility scopes |
 | `#min`, `#max` heads | Complete first values use ASP term order; missing values are neutral under the declared extension; positive atomic permission coalesces by head atom and signed activity by complete tuple, including both alias directions, Boolean operands and objective dependencies | The numeric endpoint guard and unsupported local eligibility scopes |
@@ -231,10 +231,12 @@ tuple whose value is that extremum still retains its own activity and permission
 The [ordered-head laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/OrderedHeadActivity.lean)
 separate these concerns and state the required order and carrier assumptions.
 
-Acyclic aggregate assignments may depend on earlier assignments through scalar
-and range values. A proposed value remains guarded by the original aggregate
-equality. Membership in possible support cannot replace model-relative aggregate
-truth.
+Within each rule, aggregate assignments may depend on earlier assignments
+through scalar and range values. The binding plan needs a finite dependency
+order. Recursive dependencies between producer rules are admitted when their
+possible-support construction completes within its bounds. A proposed value
+remains guarded by the original aggregate equality; support membership cannot
+replace model-relative truth.
 
 For a finite selected tuple set `T`, let `V(T)` contain the first values of its
 nonempty tuples. An extremum head uses the least/greatest value in `V(T)`, or
@@ -316,8 +318,8 @@ Search preserves all optimal ties within its resource and delivery limits.
 Objectives admit signed atomic and Boolean conditions, default and double
 negation, scalar comparisons and checked expressions in their weight, priority
 and complete tuple. Producer dependencies can include disjunctions, aggregate
-heads, finite ordinary cycles, and acyclic aggregate assignments or universal
-conditionals. Weak-constraint bodies can directly use the admitted finite
+heads and recursive aggregate assignments or universal conditionals whose
+possible-support construction completes within its bounds. Weak-constraint bodies can directly use the admitted finite
 aggregate guards, assignments and universal conditionals. Scalar binders,
 intervals and structural positive patterns also supply outer bindings in weak
 constraints and optimization elements where their grammar permits them. A local
@@ -332,8 +334,8 @@ complete tuple and runtime query remain attached to the original weak constraint
 Pools in ordinary weak-body atoms, local conditions and aggregate elements remain
 restricted, as do pooled scalar binders and objective fields; the
 [objective pool contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_pools.rs)
-retain exact witnesses. Cyclic assignment generators and unsupported local scopes
-remain restricted.
+retain exact witnesses. Unresolved dependencies within a binding scope and
+unsupported local generators remain restricted.
 
 For example:
 
@@ -357,13 +359,21 @@ work and value budgets still apply. The [scoped objective contracts](https://git
 check full costs, scope, required errors and independent limits.
 
 Each objective has its own source-eligibility plan. Ordinary activity can prove
-an atom absent or required, or leave it optional. Rich acyclic producer cones
-and finite ordinary cycles use completed possible support where a more precise
-classification is unavailable. This support covers every true atom without
+an atom absent or required, or leave it optional. Rich producer cones and their
+recursive dependencies use completed possible support where a more precise
+classification is unavailable, including aggregate assignments, aggregate guards
+and universal conditionals. The complete finite carrier covers true atoms without
 claiming that every proposed row is realizable. Original-model queries decide
-which retained contributions actually count. Unresolved cyclic producer scopes
-containing aggregate or conditional body operations remain refused. An ordinary
-cycle may depend on an earlier completed acyclic aggregate producer.
+which retained contributions actually count.
+
+A completed support round adds no new positive head atom after all its joins and
+binding proposals finish. Resource exhaustion returns a typed failure, not a
+program with incomplete objective coverage. Recursive value generation need not
+terminate; finite storage in an intermediate round supplies no completion result.
+The [cyclic producer contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_rich_cycles.rs)
+cover complete scored families, source order, independent precision and resource
+exits. Their [coverage argument](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/source-support.md)
+separates observed closure from the source-to-reduct projection premise.
 
 Applicable source-carrier refinements can exclude impossible generated values.
 Their errors remain errors; lack of an applicable refinement does not invalidate
@@ -423,10 +433,23 @@ atoms; arithmetic in a pattern consumes established inputs. Nested structural
 pool alternatives preserve their own captures, and only captures common to
 every alternative can supply another body element without an independent binder.
 
+Positive equality edges can bind from an already finite operand within a whole
+comparison chain. A middle pool or interval chooses one value shared by both
+adjacent comparisons; the original guards remain. Positive constructor and tuple
+equalities can capture ordered components from a finite evaluated operand in
+either direction, preserving sign, constructor identity and repeated-variable
+agreement. Arithmetic positions consume established inputs or structural captures
+from the same pattern; they do not invert arithmetic. Strict comparisons and
+default-negated chains remain consumers.
+
 Local scopes retain their own variables. Aggregate keys remain complete tuples;
 positive cardinality elements use the complete matched atom. Aggregate result
 assignments can supply other guards and later consumers, but element inputs
-must be independently established. A failed query returns a typed error rather
+must be independently established. Constructor-valued `#min` and `#max` equality
+guards use the actual supplied-model measure for the same structural capture and
+retain every original guard. Empty extrema remain `#sup` and `#inf`. Numeric
+aggregate comparisons retain their widened arithmetic; structural capture does
+not narrow a `#count` or `#sum` measure to an ordinary scalar value. A failed query returns a typed error rather
 than partial shown output. These operations neither add values to the grounding
 domain nor create atom support.
 
@@ -438,13 +461,23 @@ extension: clingo 5.8.2 rejects that form as unsafe. Separate
 [diagnostic fixtures](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/fixtures/observation-strong-anonymous.jsonl)
 record the difference; it is not a parity pass or an answer-set semantics change.
 
-Valid finite cases still refused include generative equality chains such as
-`X=Y=1`, constructor equality inversion, inverse arithmetic binding, and anonymous
-arguments in default-negated cardinality elements whose complete key cannot
-currently be constructed. Cyclic aggregate bindings and missing extremum
-measures retain explicit boundaries. The
-[query contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/observation_expressions.rs)
-keep these refusals alongside complete external comparisons; L17 remains open.
+L17 remains open. These valid finite forms still receive located refusals:
+
+| Remaining observation context | Exact source witness |
+| --- | --- |
+| Arithmetic inversion in an atom | `p(2). #show. #show X:p(X+1).` |
+| Arithmetic inversion in an equality | `#show. #show X:X+1=2.` |
+| Pools on the capturing side of an equality | `#show. #show 1:f((X;2))=f(1).` and `#show. #show X:(f(X);g(X))=f(1).` |
+| Repeated unary sign around a capturing constructor | `#show. #show X: -(-f(X))=f(1).` |
+| Anonymous keys under negated cardinality elements | `#show. #show N:N={not p(_)}.` and `p(1). #show. #show N:N={not not p(_)}.` |
+| Structural equality against a numeric aggregate | `#show. #show X:f(X)=#count{}.` and `#show. #show X:f(X)=#sum{2147483647,a;1,b}.` |
+
+The [binding contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/observation_bindings.rs)
+and [expression contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/observation_expressions.rs)
+preserve these original sources and complete external comparisons. The numeric
+aggregate examples need recognition of an impossible structural match; they are
+not undefined arithmetic. Cyclic or unseeded local bindings and missing extremum
+measures retain their separate explicit boundaries.
 Projection through `#project` is not implemented and is not silently treated as
 `#show`.
 

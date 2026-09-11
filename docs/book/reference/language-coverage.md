@@ -5,7 +5,7 @@ This checklist records known language boundaries and their current status. Its e
 have unequal size: a single entry can include several related scopes or
 aggregate functions. The count is not a percentage of language parity.
 
-There are **12 open classified ordinary-language obligations**, **6 separate
+There are **7 open classified ordinary-language obligations**, **6 separate
 state/extension obligations**, and **2 input-boundary obligations**. The
 unclassified scopes below are additional; these totals are not an exhaustive
 inventory of every possible program or a definition of the v1.0 release scope.
@@ -19,9 +19,9 @@ that an open item is already qualified in its entirety.
 
 ## Ordinary language
 
-L01, L03, L06, L07, L11 and L12 are closed within their documented finite profiles. The other
-12 ordinary-language entries remain open. Stable identifiers connect these
-boundaries to their tests and the admitted-language reference.
+L01, L03, L06, L07, L09–L13, L15 and L16 are closed within their documented finite
+profiles. L02, L04, L05, L08, L14, L17 and L18 remain open. Stable identifiers
+connect these boundaries to their tests and the admitted-language reference.
 
 | ID | Contract | Representative tests |
 | --- | --- | --- |
@@ -33,22 +33,33 @@ boundaries to their tests and the admitted-language reference.
 | L06 | **Closed:** directed finite integer-affine comparison chains involving several unresolved variables, preserving whole-guard correlation, local scope and checked source arithmetic; nonlinear inversion and systems without directed finite bounds remain outside this profile | [Finite chains](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/finite_chains.rs) |
 | L07 | **Closed:** complete logical bounds on ordinary choices and admitted numeric count/sum comparisons, preserving logical ordering, signed activity and frozen-reduct truth within existing finite binding and measure profiles | [Logical bounds](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/logical_bounds.rs) |
 | L08 | Aggregate-assignment results consumed in additional local scopes | [Conditional consumers](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/conditional_consumers.rs) |
-| L09 | Objective-relevant assignment consumers and multiple assignments with complete dependency handling | [Multiple assignments](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/aggregate_assignments_multiple.rs) |
-| L10 | **Open:** missing/nonnumeric sum-head measures contribute zero with independent permission; guarded missing extremum measures retain a named refusal and need a total interpretation | [Head contributions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/head_contributions.rs) |
+| L09 | **Closed:** dependency-ordered finite assignment consumers and multiple assignments preserve complete predecessor bindings, original equalities and objective costs; recursive producer dependencies use completed possible support | [Multiple assignments](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/aggregate_assignments_multiple.rs) |
+| L10 | **Closed:** missing/nonnumeric sum-head measures are neutral; missing extremum-head measures use the declared present-first-value projection, retaining independent head permission in guarded and unbounded contexts | [Head contributions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/head_contributions.rs) |
 | L11 | **Closed:** negative numeric `#sum+` head measures contribute zero while retaining independent positive permission in guarded and unbounded admitted contexts; fixed-formula semantics and explicit clingo differences are documented | [Head contributions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/head_contributions.rs) |
-| L12 | **Closed:** complete first tuple values in extremum heads, preserving ordering and empty-extremum semantics within the documented numeric endpoint, producer and eligibility boundaries; missing measures remain L10 | [Extremum heads](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/extrema_heads.rs) |
-| L13 | **Open:** dynamic priorities preserve complete identity and ordering for finite expressions, ordinary cyclic producers and rich acyclic source carriers; richer cyclic producer eligibility remains restricted | [Source measure carriers](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_measure_carriers.rs) |
-| L14 | **Open:** scoped weak aggregate/conditional bodies and finite scalar/structural bindings are admitted; pooled analyzed weak bodies and unsupported local scopes remain restricted | [Scoped objectives](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_scopes.rs) |
-| L15 | **Open:** negative/disjunctive dependencies, ordinary cycles and rich acyclic aggregate/conditional producers are admitted; cyclic aggregate/conditional producer eligibility remains restricted | [Rich producers](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_rich_producers.rs) |
-| L16 | **Open:** filtered/multiple observers and mixed extrema use complete finite source relations and independently applicable carrier refinements; richer cyclic observer dependencies remain restricted | [Aggregate objective observers](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/aggregate_objective_observers.rs) |
-| L17 | **Open:** scoped arithmetic, aggregates, conditionals and structural pools preserve full answer identity; generative equality chains, constructor inversion and other documented binding contexts remain restricted | [Observation scopes](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/observation_scopes.rs) |
+| L12 | **Closed:** complete first tuple values in extremum heads preserve logical ordering and empty-extremum semantics within the documented numeric endpoint, producer and eligibility boundaries; neutral missing values follow L10 | [Extremum heads](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/extrema_heads.rs) |
+| L13 | **Closed:** finite safely bound scalar priorities preserve same-binding weight/tuple identity and objective ordering, including recursive aggregate and conditional producers after support completion | [Source measure carriers](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_measure_carriers.rs), [rich cycles](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_rich_cycles.rs) |
+| L14 | **Open:** scoped weak aggregates, conditionals and finite scalar/structural bindings are admitted, including pooled conditional consequents; pools in ordinary body atoms, local conditions, aggregate elements, scalar binders and objective fields retain exact refusals | [Scoped objectives](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_scopes.rs), [pool boundaries](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_pools.rs) |
+| L15 | **Closed:** signed and disjunctive dependencies, aggregate heads and recursive aggregate/conditional producer cones use completed finite support and original-model objective queries within the admitted source profiles | [Rich producers](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_rich_producers.rs), [rich cycles](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_rich_cycles.rs) |
+| L16 | **Closed:** filtered and multiple observers, mixed extrema and recursive observer dependencies preserve complete finite source rows, independently applicable carrier refinements and original-model costs | [Aggregate objective observers](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/aggregate_objective_observers.rs), [carrier composition](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_carrier_composition.rs) |
+| L17 | **Open:** scoped arithmetic, aggregates, conditionals, structural pools, positive equality chains and finite constructor/tuple capture preserve full answer identity; arithmetic inversion, pooled equality-capture patterns and the other exact observation boundaries remain restricted | [Observation bindings](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/observation_bindings.rs), [expressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/observation_expressions.rs) |
 | L18 | `#project` with explicit projected enumeration and answer-identity contracts | [Metadata admission](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/metadata.rs) |
 
 The [objective boundary witnesses](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_language_boundaries.rs)
-retain exact sources, located refusals and complete independent reference
-results for L10 and L13–16. Four cyclic objective cases also verify the complete
-native answers of the objective-free program: their remaining restriction is
-in objective eligibility, not parsing or that program's answer-set semantics.
+retain all seven original sources, their declared complete native results and
+exact versioned reference captures for L10 and L13–16. Four cyclic objective
+cases also retain the complete native families of their objective-free programs.
+The [neutral-head rationale](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/head-contributions.md)
+identifies the declared extension and answer-family differences. Objective
+zero-slot reporting differences remain separate from answer identity and ranking.
+
+Closure uses the existing finite source profiles: complete typed bindings,
+dependency-ordered local assignments and successful bounded support completion.
+It does not admit every syntactically valid local generator or establish
+termination of arbitrary recursive value generation. L14's
+[pool witnesses](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_pools.rs)
+and L17's [exact observation witnesses](language.md#objectives-and-observations)
+remain ordinary implementation boundaries, including valid finite forms. Their
+continued restrictions are not counted as resource failures or undefined input.
 
 ## State, extensions and input
 
@@ -77,8 +88,8 @@ These refusal and source-handling contracts do not establish an incremental API.
 ## Unclassified scopes and reviews
 
 Broader expression contexts, aggregate eligibility/local generators beyond
-the finite L04–L06 profiles, and potentially admissible finite cyclic or self-dependent assignments
-still need precise classification. Concrete cases can become subcases of an
+the finite L04–L06 profiles, and self-dependent or mutually dependent bindings
+without an established local evaluation order still need precise classification. Concrete cases can become subcases of an
 existing entry or explicitly identified additions. Unsafe scopes and
 ungroundable cycles require a sound finite binding contract before admission.
 

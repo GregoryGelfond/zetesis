@@ -15,6 +15,7 @@ The maintained full index is
 | Can joins be decomposed? | `Lifted.composition_exact` | Binding, filtering, gates and projection denote the supplied template |
 | When may equality columns prefilter full matches? | `ColumnRelations.full_matches_preserved` | Exact dictionary/columns, supplied rows and a total matcher entailing the equalities |
 | When may candidate domains be narrowed? | `DomainContraction.compatible_contraction` | Unchanged theory, fixed assignment interpretation and activation, recognized constraints and a sound filter |
+| When does completed source support cover an answer set? | `SourceSupport.stable_inside_closed`, `completed_activity_covers` | Completed producer closure and an explicit original-model/reduct projection premise; no termination or realizability conclusion |
 | When is a lazy closure complete? | `LiftedBridge.completed_lazy_stage_exact` | Sound stages, conceptual grounding, final enabled-instance coverage and closure |
 | Can a union scan serve independent worlds? | `LazyRounds.world_consequences_exact`, `world_constraints_exact` | Individual-world gates and positive truth are still checked |
 | Can empty world masks prune joins? | `WorldMasks.masked_scan_covers_world` | Membership belongs to the current immutable snapshots; no future-carrier conclusion |
@@ -59,6 +60,16 @@ checking, and `stable_in_context` preserves the complete head group when rows
 are duplicated or reordered without changing their keys. These laws assume
 finite complete tables and mathematical integers; they do not verify source
 enumeration, optimized comparison construction or machine endpoints.
+
+[`HeadContributions`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/HeadContributions.lean)
+keeps neutral contributions separate from head permission. Its declared
+missing-extremum extension projects present first values before ordered reduction.
+`complete_extremum_conservative` preserves the complete-value domain;
+`selected_extremum_values` requires complete tuple-key coverage.
+`extremum_head_in_context` preserves stable membership under the supplied
+original-measure correspondence and unchanged permission formula. The
+[worked head argument](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/head-contributions.md)
+explains the extension, original/reduct example and exact clingo differences.
 
 `BooleanHeadElements` represents an atom or a truth constant explicitly.
 `activity_original` and `activity_frozen` retain the operand and eligibility
@@ -108,6 +119,17 @@ binding; `independent_fields_invent_priority` gives a counterexample to separate
 field projection. `partition_vector` and `partition_optima` preserve costs and
 optimal ties when complete rows are partitioned by their fixed priority. The
 priority layout remains shared across candidates, including zero-valued slots.
+
+[`SourceSupport`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/SourceSupport.lean)
+separates producer closure from semantic coverage. `unchanged_round_closed`
+establishes closure after a complete round; `stages_inside_closed` additionally
+assumes monotone proposals. `stable_inside_closed` uses the explicit
+`ProjectionCompatible` premise: intersecting an original model with a closed
+carrier still models its frozen reduct. Minimality then gives carrier coverage.
+`completed_activity_covers` supplies optional/absent objective activity from
+that coverage. The [proof guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/source-support.md)
+explains why neither an empty delta nor a finite stored prefix proves the source
+projection premise or termination.
 
 [`AggregateInvariants`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AggregateInvariants.lean)
 provides `sum_invariant` for optional zero contributions and `extremum_invariant`

@@ -123,6 +123,38 @@ original activation and equality conditions. Structured positive witnesses can
 bind local variables before dependent arithmetic is checked. Positive-witness
 matching does not invert arithmetic or introduce a global guessed value universe.
 
+### Completed possible support
+
+Formula grounding grows possible support by complete rounds. Each round uses an
+immutable snapshot, exhausts the admitted positive joins and binding proposals,
+and collects new positive head atoms. Aggregate and conditional truth remains in
+the emitted formulas; it does not prune possible producers. A proposed aggregate
+assignment value retains its original equality.
+
+The [support builder](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support.rs)
+returns `CompletedCatalog` only after an entire round adds no atom. Its
+`CompletedSupport` view borrows the same authoritative catalog used by final
+formula grounding. Intermediate snapshots have no completion capability, and a
+round, work, value or storage failure returns an error before objective activation.
+A finite snapshot during growth does not establish that value generation will
+terminate.
+
+Objective eligibility consumes this completed view. Ordinary acyclic producers
+can supply a more precise absent/optional/required classification. Recursive
+aggregate or conditional producers and their unresolved dependants use the
+conservative relation: a covered atom is optional. Actual costs still test the
+original model through the objective query, with weight, priority and complete
+tuple resolved from one binding. No second aggregate evaluator or support loop
+is needed for cyclic objectives.
+
+The semantic bridge requires more than an empty delta. Complete typed rule and
+value generation must ensure that restricting an original model to any closed
+support carrier preserves its frozen reduct. Answer-set minimality then rules
+out atoms outside that carrier. [SourceSupport](../lean/theorems.md) and the
+[proof guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/source-support.md)
+state this premise explicitly; successful Rust completion is not a proof of the
+source-to-reduct correspondence.
+
 ### Relation rows and vector operations
 
 A relation row is one complete typed tuple. Formula support's
@@ -155,8 +187,8 @@ selectivity; integer comparisons and complete tuple probes have different costs.
 
 The catalog cannot grow while its snapshot is borrowed. Once a round finishes,
 the snapshot drops before new atoms are appended; subsequent rounds rebuild
-columns and postings. A final snapshot supplies formula emission. Membership
-insertion shifts sorted row IDs, not atoms. Column construction, typed lookup,
+columns and postings. The completed final snapshot supplies formula emission
+and objective eligibility. Membership insertion shifts sorted row IDs, not atoms. Column construction, typed lookup,
 posting construction and those shifts consume the grounding work budget.
 `FormulaLimits::max_support_bytes` bounds authored snapshot, membership-index and
 query capacity, including construction scratch. Source atoms, allocator/tree

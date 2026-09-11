@@ -1,8 +1,8 @@
 # Aggregate-head contributions
 
-Head permission is independent of a tuple's numeric contribution. This follows
-from the corrected [Abstract Gringo](https://arxiv.org/pdf/1507.06576v2), §2.1 and
-§3, equations (14)–(18): missing or nonnumeric sum tuples have weight zero,
+Head permission is independent of a tuple's measured contribution. The sum
+and permission rules follow [Abstract Gringo](https://arxiv.org/pdf/1507.06576v2),
+§2.1 and §3, equations (14)–(18): missing or nonnumeric sum tuples have weight zero,
 `sum+` adds only positive weights, and positive head choices are generated
 independently. Removing both bounds removes the aggregate constraint, leaving
 those choices. Empty tuples are explicitly permitted by footnote 5.
@@ -46,8 +46,7 @@ the empty aggregate and families whose tuples all have first values. An empty
 aggregate and one containing an empty tuple can have the same measure and
 different permissions. This admission extension applies to heads; missing
 extremum values in body aggregates, assignments and observations remain outside
-their existing profiles. The obsolete `ProfileFeature::HeadAggregateMissingValue`
-variant is removed, as was the earlier `ProfileFeature::HeadAggregateWeight`.
+their existing profiles.
 
 For example, the [checked source](../../crates/zetesis-themelios/tests/fixtures/head-neutral-extrema.lp)
 
@@ -138,5 +137,5 @@ problem without establishing its upstream cause.
 The external comparison test checks complete records and exact versioned
 families for every known difference, failing if any changes. All other admitted
 matrix entries must agree with clingo. Native semantic checks apply to every
-entry, including every formerly refused missing-extremum head. Agreement on the
-two `=0` examples alone does not determine the missing-value convention.
+entry, including missing-extremum heads. Agreement on the two `=0` examples
+alone does not determine the missing-value convention.

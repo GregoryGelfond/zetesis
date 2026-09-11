@@ -177,17 +177,29 @@ remain planned. Unsupported constructs receive explicit refusals.
 The [admitted-language reference](docs/book/reference/language.md) records the
 precise boundaries, including shared atoms and tuples in aggregate heads,
 complete logical values in extrema heads, and logical bounds on choices and
-numeric aggregates. Objective priority expressions can use safely bound ordinary
-inputs; weight, priority and tuple stay correlated within each binding.
-Completed finite source relations also admit changing priorities from filtered
-and multiple acyclic aggregate observers, including mixed extrema. Signed,
-disjunctive and conditional producer dependencies retain their original theory;
-finite ordinary cycles use conservative support coverage. Original-model
+numeric aggregates. Missing extremum-head values are neutral while retaining
+independent head permission; the [formal rule and worked reduct](proofs/guide/head-contributions.md)
+explain this declared extension and its exact clingo differences.
+
+Objective priority expressions can use safely bound values; weight, priority and
+tuple stay correlated within each binding. Completed finite source relations also admit changing priorities from filtered
+and multiple aggregate observers, including mixed extrema and recursive
+aggregate or conditional producers. A complete support round supplies the
+finite carrier; exceeding a resource limit supplies no partial program. The
+[source-coverage argument](proofs/guide/source-support.md) keeps possible support
+separate from model truth and retains the original producer theory. Original-model
 conditions determine costs, independently of answer-set membership. Remaining
 source scopes and explicit clingo reporting differences are documented alongside
-the supported contracts. Finite scoped weak constraints can use aggregate
-assignments and universal conditionals; their costs read the original answer
-without adding rules or support.
+the supported contracts.
+
+Finite scoped weak constraints can use aggregate
+assignments and universal conditionals, including pooled conditional consequents;
+their costs read the original answer without adding rules or support. Broader
+weak-body pools and observation binding contexts remain explicit obligations.
+Observations can bind positive equality chains and capture constructor or tuple
+components from finite values, while preserving each original model beside its
+completed display.
+
 Directed finite affine comparison chains can bind several variables while
 retaining the original correlations and checked source arithmetic.
 Choice and aggregate-head elements preserve `not` and `not not` explicitly.

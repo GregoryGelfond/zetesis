@@ -203,6 +203,25 @@ does not assert that a row can be realized in an answer set. Complete source
 bindings and a sound activity classification are premises, not consequences of
 the truth algebra. The source analysis still needs its own refinement.
 
+[`SourceSupport`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/SourceSupport.lean)
+connects completed producer closure to answer-set coverage under its explicit
+`ProjectionCompatible` premise. Restricting an original model to the closed
+carrier must preserve that model's frozen reduct; minimality then excludes
+atoms outside the carrier. `completed_activity_covers` derives optional/absent
+truth coverage for objective queries. Proposal monotonicity is a separate
+hypothesis of the finite-stage containment law, not a termination theorem.
+
+The Rust [support builder](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support.rs)
+creates `CompletedCatalog` only after a full round adds no atom. Its immutable
+`CompletedSupport` view supplies the same typed rows to objective eligibility
+and final grounding. Intermediate snapshots and resource-stopped rounds cannot
+supply this capability. The types enforce the completion handoff; they do not
+prove that Rust's source generation establishes `ProjectionCompatible`.
+The [support proof guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/source-support.md)
+identifies the remaining binding, key/value coverage, arithmetic and resource
+correspondences. Recursive producer syntax alone neither prevents finite
+completion nor establishes it.
+
 [`ObjectiveConditionTable`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ObjectiveConditionTable.lean)
 connects the finite node-table representation to those unfolded queries. Each
 operand names an earlier node. The invariant equates each stored Boolean with
@@ -240,6 +259,14 @@ and evaluator. Source safety, anonymous projection, checked arithmetic,
 construction, ownership and resource/cancellation completion remain executable
 refinement obligations. The laws apply after completed evaluation, not to an
 error prefix or an unfinished display.
+
+`Observations.shared_equality_choice_exact` states the finite two-edge equality
+law with one middle value and an arbitrary surrounding guard. The Rust planner
+retains each original comparison while sharing that value through a fresh slot.
+Structural capture reads the complete retained value and its typed components;
+aggregate capture reads the actual supplied-model extremum. Source scheduling,
+matching, widened numeric comparisons, copied-value charges and cleanup remain
+concrete correspondence obligations.
 
 [`AggregateInvariants`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AggregateInvariants.lean)
 states when optional tuple keys cannot change a required sum or extremum.
