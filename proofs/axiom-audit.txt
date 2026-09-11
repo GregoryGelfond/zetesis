@@ -221,6 +221,8 @@
 'Zetesis.ColumnRelations.no_equalities_preserve_input' depends on axioms: [propext, Quot.sound]
 'Zetesis.ColumnRelations.absent_value_selects_nothing' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ColumnRelations.full_matches_preserved' depends on axioms: [propext, Quot.sound]
+'Zetesis.ColumnRelations.source_posting_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.ColumnRelations.row_mask_roundtrip' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ColumnRelations.applicability_exact' depends on axioms: [propext, Quot.sound]
 'Zetesis.ConditionalConsumers.original_body' depends on axioms: [propext, Quot.sound]
 'Zetesis.ConditionalConsumers.frozen_body' depends on axioms: [propext, Classical.choice, Quot.sound]

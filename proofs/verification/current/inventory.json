@@ -1017,57 +1017,67 @@
     },
     {
       "file": "Zetesis/ColumnRelations.lean",
-      "line": 45,
+      "line": 47,
       "name": "Zetesis.ColumnRelations.encoding_exact"
     },
     {
       "file": "Zetesis/ColumnRelations.lean",
-      "line": 56,
+      "line": 58,
       "name": "Zetesis.ColumnRelations.identifier_equality"
     },
     {
       "file": "Zetesis/ColumnRelations.lean",
-      "line": 84,
+      "line": 86,
       "name": "Zetesis.ColumnRelations.reconstruction_exact"
     },
     {
       "file": "Zetesis/ColumnRelations.lean",
-      "line": 111,
+      "line": 113,
       "name": "Zetesis.ColumnRelations.accepts_exact"
     },
     {
       "file": "Zetesis/ColumnRelations.lean",
-      "line": 128,
+      "line": 130,
       "name": "Zetesis.ColumnRelations.selection_exact"
     },
     {
       "file": "Zetesis/ColumnRelations.lean",
-      "line": 137,
+      "line": 139,
       "name": "Zetesis.ColumnRelations.selection_subsequence"
     },
     {
       "file": "Zetesis/ColumnRelations.lean",
-      "line": 144,
+      "line": 146,
       "name": "Zetesis.ColumnRelations.selection_increasing"
     },
     {
       "file": "Zetesis/ColumnRelations.lean",
-      "line": 153,
+      "line": 155,
       "name": "Zetesis.ColumnRelations.no_equalities_preserve_input"
     },
     {
       "file": "Zetesis/ColumnRelations.lean",
-      "line": 160,
+      "line": 162,
       "name": "Zetesis.ColumnRelations.absent_value_selects_nothing"
     },
     {
       "file": "Zetesis/ColumnRelations.lean",
-      "line": 178,
+      "line": 180,
       "name": "Zetesis.ColumnRelations.full_matches_preserved"
     },
     {
       "file": "Zetesis/ColumnRelations.lean",
-      "line": 208,
+      "line": 203,
+      "name": "Zetesis.ColumnRelations.source_posting_exact"
+    },
+    {
+      "file": "Zetesis/ColumnRelations.lean",
+      "line": 237,
+      "name": "Zetesis.ColumnRelations.row_mask_roundtrip"
+    },
+    {
+      "file": "Zetesis/ColumnRelations.lean",
+      "line": 272,
       "name": "Zetesis.ColumnRelations.applicability_exact"
     },
     {
@@ -5179,7 +5189,7 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "21a155d8a80981c18d52a086879d9e417d01270ee34aea5f4e4d012e80835c16",
+    "Audit.lean": "bc40a2544620649ebca54d47f839dfb3df252e38b9fcf1de38aab31a14b2b0ce",
     "Zetesis.lean": "125c87d32240fd48b09f9fd43f986417770be3d8be5f45f10ce2e1401dd02145",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
@@ -5198,7 +5208,7 @@
     "Zetesis/ChoiceConsumers.lean": "2505ef92e4694faddfe66bebeb26155b6d820a5493f94fa3653bcfbefc633d5a",
     "Zetesis/ChoiceIntervals.lean": "4b3047699ef976a0e3c1632bcaccd9611c7d26647d08b5766596960e20901b0f",
     "Zetesis/ClauseValidation.lean": "399729eb4722afff90326418ac7b280ad8e5b87bc14fb6650e75c517957736c4",
-    "Zetesis/ColumnRelations.lean": "3c37abc147c716d95af2327edb42034bdd965ba9927d9519d99084456ddb88eb",
+    "Zetesis/ColumnRelations.lean": "d4af6d98f76e143bdef15095a0f2db9afeeed56cbb85585cf097e2767a6ee6c6",
     "Zetesis/ConditionalConsumers.lean": "448c154cb481418551f21c0516fa74e63ccfe16d32e00ff1109d7d68874c5bca",
     "Zetesis/ConsequentAlternatives.lean": "f056a33623c406de8644d47c55912ac300f855a9d9ff0afef23bdbfaff2cc306",
     "Zetesis/ConstructorPatterns.lean": "9760a578639689c713f59d3fc8492e8c5aca2cdfb0c31598eca318e38bbfeeb2",

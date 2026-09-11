@@ -213,6 +213,8 @@ import Zetesis
 #print axioms Zetesis.ColumnRelations.no_equalities_preserve_input
 #print axioms Zetesis.ColumnRelations.absent_value_selects_nothing
 #print axioms Zetesis.ColumnRelations.full_matches_preserved
+#print axioms Zetesis.ColumnRelations.source_posting_exact
+#print axioms Zetesis.ColumnRelations.row_mask_roundtrip
 #print axioms Zetesis.ColumnRelations.applicability_exact
 #print axioms Zetesis.ConditionalConsumers.original_body
 #print axioms Zetesis.ConditionalConsumers.frozen_body
