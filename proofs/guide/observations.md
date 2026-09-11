@@ -59,6 +59,16 @@ or same-pattern structural captures; they do not invert arithmetic. A mismatch
 releases partial captures before trying the next value. Error and visitor-stop
 paths release the same ownership.
 
+An equality guard on `#min` or `#max` can use that same structural capture.
+The aggregate first computes its one actual measure from the supplied model;
+each original guard then reads the retained measure slot. The planner leaves
+the equality in place for structural matching and retains every other guard,
+including guards that depend on the new captures. Aggregate element inputs
+must be available independently of the result. Empty extrema still return
+`#sup` and `#inf`, which do not match a constructor or tuple. Numeric aggregate
+guards keep their widened comparison contract; this structural generation path
+does not convert a `#count` or `#sum` measure into an ordinary scalar value.
+
 A conditional quantifies universally over its completed local condition rows.
 Within one row, source alternatives are existential; anonymous matches form
 another existential projection inside each signed alternative. Default negation
@@ -122,7 +132,12 @@ refusals. The [binding contracts](../../crates/zetesis-themelios/tests/observati
 cover finite equality chains, shared middle alternatives, original family identity,
 resource boundaries and complete external displays. Structural pool alternatives
 on a capturing equality operand, inverse arithmetic binding, and anonymous negative
-cardinality keys remain visibly open.
+cardinality keys remain visibly open. Repeated unary negation around an unbound
+constructor pattern is not yet normalized for capture. Constructor patterns equated to numeric
+aggregate measures are also still refused when the pattern has no other binder:
+these valid comparisons have no matching rows, but their recognition is not part
+of the constructor-valued extremum generation path. The binding contracts retain
+exact sources and complete external references for those remaining refusals.
 Native anonymous projection treats both strong signs uniformly; the
 [separate diagnostic fixtures](../../crates/zetesis-themelios/tests/fixtures/observation-strong-anonymous.jsonl)
 record that clingo 5.8.2 refuses anonymous strongly signed negative projections.

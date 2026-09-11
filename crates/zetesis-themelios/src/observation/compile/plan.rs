@@ -9,6 +9,12 @@ use super::{
     BTreeSet, Binder, Compiler, Condition, DefaultNegation, Error, Feature, Pattern, Query,
     Relation, Template,
 };
+use themelios_program::program::AggregateFunction;
+
+enum AggregateTarget {
+    Variable(usize),
+    Structure,
+}
 
 impl Compiler<'_> {
     fn ready(&self, term: &Template) -> bool {
@@ -84,7 +90,7 @@ impl Compiler<'_> {
         }
         Ok(())
     }
-    fn aggregate_assignment(&self, condition: &Condition) -> Option<(usize, usize)> {
+    fn aggregate_assignment(&self, condition: &Condition) -> Option<(usize, AggregateTarget)> {
         let Condition::Aggregate(DefaultNegation::None, aggregate, guards) = condition else {
             return None;
         };
@@ -97,42 +103,63 @@ impl Compiler<'_> {
             return None;
         }
         guards.iter().enumerate().find_map(|(index, guard)| {
-            let Template::Variable(slot) = guard.bound else {
+            if guard.relation != Relation::Eq {
                 return None;
-            };
-            (guard.relation == Relation::Eq && !self.safe.contains(&slot)).then_some((index, slot))
+            }
+            if let Template::Variable(slot) = guard.bound {
+                return (!self.safe.contains(&slot))
+                    .then_some((index, AggregateTarget::Variable(slot)));
+            }
+            // Only extrema return structural values. Numeric comparisons stay
+            // wide; a constructor pattern must not force them through i32 merely
+            // to discover that an integer cannot match that constructor.
+            (matches!(
+                aggregate.function,
+                AggregateFunction::Min | AggregateFunction::Max
+            ) && self.structural_capture(&guard.bound))
+            .then_some((index, AggregateTarget::Structure))
         })
     }
     fn bind_aggregate(
         &mut self,
         conditions: &mut Vec<Condition>,
         binders: &mut Vec<Binder>,
-    ) -> bool {
-        let Some((index, guard_index, slot)) =
+    ) -> Result<bool, Error> {
+        let Some((index, guard_index, target)) =
             conditions
                 .iter()
                 .enumerate()
                 .find_map(|(index, condition)| {
                     self.aggregate_assignment(condition)
-                        .map(|(guard, slot)| (index, guard, slot))
+                        .map(|(guard, target)| (index, guard, target))
                 })
         else {
-            return false;
+            return Ok(false);
+        };
+        let slot = match target {
+            AggregateTarget::Variable(slot) => slot,
+            AggregateTarget::Structure => self.slot()?,
         };
         let Condition::Aggregate(_, aggregate, mut guards) = conditions.remove(index) else {
             unreachable!()
         };
-        guards.remove(guard_index);
+        if matches!(target, AggregateTarget::Variable(_)) {
+            guards.remove(guard_index);
+        }
         binders.push(Binder::Aggregate(slot, aggregate));
         self.safe.insert(slot);
         for guard in guards {
+            // A retained bound moves into a new scalar condition whose other
+            // operand refers to this same actual measure.
+            self.node(1)?;
+            self.node(1)?;
             conditions.push(Condition::Compare(
                 DefaultNegation::None,
                 Template::Variable(slot),
                 vec![(guard.relation, guard.bound)],
             ));
         }
-        true
+        Ok(true)
     }
     pub(super) fn finish(
         &mut self,
@@ -164,7 +191,7 @@ impl Compiler<'_> {
             self.assignments(&mut conditions, &mut binders)?;
             if before == binders.len()
                 && !self.bind_structure(&mut conditions, &mut binders)?
-                && !self.bind_aggregate(&mut conditions, &mut binders)
+                && !self.bind_aggregate(&mut conditions, &mut binders)?
             {
                 break;
             }

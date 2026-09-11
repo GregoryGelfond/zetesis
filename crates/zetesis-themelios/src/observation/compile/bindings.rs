@@ -31,7 +31,7 @@ fn captures(term: &Template, slots: &mut BTreeSet<usize>) {
     }
 }
 
-pub(super) fn operand(condition: &Condition, index: usize) -> &Template {
+fn operand(condition: &Condition, index: usize) -> &Template {
     let Condition::Compare(_, first, steps) = condition else {
         unreachable!("selected a comparison")
     };
@@ -65,12 +65,15 @@ impl Compiler<'_> {
         }
     }
 
-    fn structural_source(&self, pattern: &Template, value: &Template) -> bool {
+    pub(super) fn structural_capture(&self, pattern: &Template) -> bool {
         let mut provided = BTreeSet::new();
         captures(pattern, &mut provided);
         provided.iter().any(|slot| !self.safe.contains(slot))
-            && self.ready_with(value, &BTreeSet::new())
             && self.structural_inputs(pattern, &provided)
+    }
+
+    fn structural_source(&self, pattern: &Template, value: &Template) -> bool {
+        self.structural_capture(pattern) && self.ready_with(value, &BTreeSet::new())
     }
 
     fn structural_edge(&self, condition: &Condition) -> Option<(usize, usize)> {
