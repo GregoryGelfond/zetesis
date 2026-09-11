@@ -20,6 +20,13 @@ resource ceiling. Splitting the calls does not refresh the source expansion
 budget. Keeping the returned owner is therefore part of the contract, not merely
 a convenience for avoiding another parse.
 
+Configure eager support storage through `FormulaLimits::max_support_bytes`
+before preparation. The default is 128 MiB of authored snapshot, index and
+query capacity, including construction scratch; source atoms, allocator/tree
+overhead and unrelated state have separate bounds. The CLI exposes the same
+allowance as `--max-support-bytes` in `--help-all`. This is an admission limit;
+`SolveConfig` applies after the formula owner has already been constructed.
+
 ## Know which program was analyzed
 
 The analysis accessors are part of the prepared solver input's inspection

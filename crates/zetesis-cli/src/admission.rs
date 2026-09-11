@@ -221,6 +221,7 @@ pub(crate) fn expansion_limits(options: &Options) -> ExpansionLimits {
 
 pub(crate) fn formula_limits(options: &Options) -> zetesis_themelios::FormulaLimits {
     zetesis_themelios::FormulaLimits {
+        max_support_bytes: options.max_support_bytes,
         max_substitutions: u64::try_from(options.max_substitutions).unwrap_or(u64::MAX),
         max_work: u64::try_from(options.max_expansion_work).unwrap_or(u64::MAX),
         theory: zetesis_ferraris::AdmissionLimits {

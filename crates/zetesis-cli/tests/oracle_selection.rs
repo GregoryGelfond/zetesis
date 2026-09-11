@@ -207,6 +207,73 @@ fn undefined_arithmetic_and_expansion_budgets_remain_hard_refusals() {
 }
 
 #[test]
+fn support_byte_default_matches_formula_admission() {
+    assert_eq!(
+        options(&[]).max_support_bytes,
+        zetesis_themelios::FormulaLimits::default().max_support_bytes,
+    );
+}
+
+#[test]
+fn support_byte_limit_is_inclusive() {
+    let source = "1 {a;b} 1.";
+    let attempt = |bytes: usize| {
+        let configured = options(&["--max-support-bytes", &bytes.to_string()]);
+        run(source, &configured)
+    };
+    let (mut low, mut high) = (0_usize, options(&[]).max_support_bytes);
+    assert!(attempt(high).0.is_ok());
+    while low < high {
+        let middle = low + (high - low) / 2;
+        let (result, output, _) = attempt(middle);
+        match result {
+            Ok(report) => {
+                assert_eq!(report.completion, Completion::Exhausted);
+                high = middle;
+            }
+            Err(RunError::FormulaAdmission(FormulaFailure::Limit {
+                resource: FormulaResource::SupportBytes,
+                observed,
+                limit,
+                location,
+            })) => {
+                assert!(output.is_empty());
+                assert_eq!(limit, middle as u128);
+                assert!(observed > limit);
+                assert_eq!(
+                    location.source,
+                    zetesis_themelios::AdmissionOptions::default().source_id
+                );
+                low = middle + 1;
+            }
+            other => panic!("unexpected source result: {other:?}"),
+        }
+    }
+    assert!(low > 0);
+    let (result, output, _) = attempt(low);
+    assert_eq!(result.unwrap().completion, Completion::Exhausted);
+    assert_eq!(
+        answers(&output).into_iter().collect::<BTreeSet<_>>(),
+        BTreeSet::from([BTreeSet::from(["a"]), BTreeSet::from(["b"])]),
+    );
+    let configured = options(&["--max-support-bytes", &(low - 1).to_string()]);
+    assert!(matches!(
+        assert_refused_without_output(source, &configured),
+        RunError::FormulaAdmission(FormulaFailure::Limit {
+            resource: FormulaResource::SupportBytes, observed, limit, ..
+        }) if observed == low as u128 && limit == (low - 1) as u128
+    ));
+}
+
+#[test]
+fn statistics_report_configured_support_bytes() {
+    let configured = options(&["--stats", "--max-support-bytes", "65536"]);
+    let (result, _, diagnostics) = run("1 {a;b} 1.", &configured);
+    assert_eq!(result.unwrap().completion, Completion::Exhausted);
+    assert!(diagnostics.contains("eager support bytes=65536"));
+}
+
+#[test]
 fn incomplete_oracle_limits_do_not_switch_algorithms_or_claim_unsatisfiable() {
     for (arguments, countermodel) in [
         (vec!["--max-work", "0"], false),

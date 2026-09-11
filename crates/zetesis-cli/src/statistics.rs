@@ -111,8 +111,8 @@ fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
     )?;
     writeln!(
         sink,
-        "  expansion limits: work={}; templates={}; values={}",
-        o.max_expansion_work, o.max_expanded_templates, o.max_expansion_values
+        "  expansion limits: work={}; templates={}; values={}; eager support bytes={}",
+        o.max_expansion_work, o.max_expanded_templates, o.max_expansion_values, o.max_support_bytes
     )?;
     writeln!(
         sink,

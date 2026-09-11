@@ -187,9 +187,16 @@ pub struct Options {
     /// Cumulative branch decisions for the countermodel oracle.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_search_decisions, hide_short_help = true)]
     pub max_search_decisions: u64,
-    /// Maximum term-evaluation/dependency steps in source expansion.
+    /// Maximum source-expansion and eager formula-grounding work.
+    ///
+    /// Formula grounding includes typed column construction and lookup.
     #[arg(long, default_value_t = 1_048_576, hide_short_help = true)]
     pub max_expansion_work: usize,
+    /// Maximum authored bytes for eager formula support views, indexes and queries.
+    ///
+    /// Source atoms, allocator/tree overhead and other grounding state are excluded.
+    #[arg(long, default_value_t = zetesis_themelios::FormulaLimits::default().max_support_bytes, hide_short_help = true)]
+    pub max_support_bytes: usize,
     /// Maximum output templates from source expansion.
     #[arg(long, default_value_t = 100_000, hide_short_help = true)]
     pub max_expanded_templates: usize,

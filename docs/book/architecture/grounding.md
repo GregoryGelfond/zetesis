@@ -141,6 +141,12 @@ overhead and unrelated grounding state retain separate bounds; this limit does
 not measure total memory or RSS. Rebuilding is an explicit cost of this ownership
 boundary.
 
+The command-line equivalent is the advanced `--max-support-bytes` option,
+shown by `--help-all` and recorded by `--stats`. It defaults to 128 MiB and
+applies to eager formula admission. Zero is a zero-byte ceiling, not unlimited
+memory. Increasing this allowance does not change source-atom, work or other
+independent limits.
+
 Row identity connects relational semantics to masks, intersections and gathers.
 Combining two column masks means intersecting positions in the same relation
 snapshot; it must not combine values from different tuples. The bounded
