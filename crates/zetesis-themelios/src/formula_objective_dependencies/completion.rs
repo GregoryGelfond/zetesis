@@ -302,9 +302,6 @@ impl Completion {
                         if signature(head.predicate()) != *predicate {
                             continue;
                         }
-                        if element.key.tuple().is_some() {
-                            return Err(refusal(rule.location));
-                        }
                         let mut local = Join::new(
                             &element.condition,
                             &binding,

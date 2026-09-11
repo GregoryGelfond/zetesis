@@ -171,7 +171,15 @@ fn completed_profile(
             .edges_from(predicate)
             .any(|(kind, _)| kind == DependencyKind::Negative)
     }) || rules.iter().any(|rule| {
-        relevant_head(&rule.head, relevant) && matches!(rule.head, HeadIr::Disjunction(_))
+        relevant_head(&rule.head, relevant)
+            && match &rule.head {
+                HeadIr::Disjunction(_) => true,
+                HeadIr::Choice(group) => group
+                    .elements
+                    .iter()
+                    .any(|element| element.key.tuple().is_some()),
+                HeadIr::Normal(_) => false,
+            }
     });
     let ordinary = rules
         .iter()

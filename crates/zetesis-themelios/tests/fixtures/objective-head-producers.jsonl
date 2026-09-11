@@ -1,0 +1,6 @@
+{"name":"missing_sum","source":"0#sum{:a;0:b}0.","records":[[[],null],[["a"],null],[["b"],null],[["a","b"],null]]}
+{"name":"neutral_sum_plus","source":"0#sum+{-2:a;0:b}0.","records":[[[],null],[["a"],null],[["b"],null],[["a","b"],null]]}
+{"name":"nonnumeric_sum","source":"0#sum{word:a;1:b}0.","records":[[[],null],[["a"],null]]}
+{"name":"numeric_sum","source":"1#sum{1:a;1:b}1.","records":[[["a"],null],[["b"],null],[["a","b"],null]]}
+{"name":"unbounded_nonnumeric_sum","source":"#sum{word:a}.","records":[[[],null],[["a"],null]]}
+{"name":"conditional_nonnumeric_sum","source":"b.#sum{word:a:b}.","records":[[["b"],null],[["a","b"],null]]}

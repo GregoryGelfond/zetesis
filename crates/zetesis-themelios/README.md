@@ -242,7 +242,10 @@ Aggregate/conditional weak bodies remain unsupported.
 Objective dependencies have additional boundaries because a possible-support
 upper bound alone cannot determine clingo-compatible priority presence.
 The additional ordinary source-completion profile admits acyclic producer cones
-with normal rules, positive atomic disjunctions and ordinary choices. Bodies may
+with normal rules, positive atomic disjunctions, ordinary choices and admitted
+aggregate heads. Every positive head supplies possible objective eligibility;
+its permission is independent of whether its tuple contributes to the bound.
+Bodies may
 contain positive/default-negated atoms and admitted scalar guards. Objective
 conditions in that profile may use default negation, double negation, Boolean
 truth and bounded scalar comparisons, including arithmetic on independently
