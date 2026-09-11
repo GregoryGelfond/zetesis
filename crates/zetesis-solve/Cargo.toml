@@ -45,6 +45,11 @@ name = "book-observations"
 path = "../../docs/book/examples/observations.rs"
 
 [[example]]
+name = "book-costs-and-output"
+path = "../../docs/book/examples/costs-and-output.rs"
+test = true
+
+[[example]]
 name = "book-resources"
 path = "../../docs/book/examples/resources.rs"
 required-features = ["gpu"]

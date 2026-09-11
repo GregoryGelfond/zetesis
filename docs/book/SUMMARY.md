@@ -17,6 +17,7 @@
 - [Choosing a library boundary](rust/libraries.md)
 - [Preparing source and interpreting analysis](rust/source.md)
 - [Embedding an ordinary solve](rust/sessions.md)
+- [Costs and shown terms](rust/costs-and-output.md)
 - [Observations and host measurements](rust/measurements.md)
 - [Working with finite reducts](rust/reducts.md)
 - [Parallel and lazy checking](rust/parallel.md)
