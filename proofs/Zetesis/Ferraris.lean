@@ -112,6 +112,42 @@ theorem stable_iff_minimal_reduct (M : Atoms α) (T : Theory α) :
     rintro ⟨J, ⟨hsub, hproper⟩, hj⟩
     exact hproper (hminimal J hsub hj)
 
+/-- An answer set remains an answer set after adding formulas it satisfies.
+
+The interpretation models both theories. Any proper-subset model of their
+combined reduct would also model the original reduct, contradicting stability.
+This law assumes one fixed formula translation; a source transformation whose
+meaning changes with its surrounding program needs a separate correspondence.
+-/
+theorem stable_append_of_models (M : Atoms α) (T U : Theory α)
+    (original : Stable M T) (additional : Models M U) :
+    Stable M (T ++ U) := by
+  constructor
+  · intro formula member
+    rcases List.mem_append.mp member with old | added
+    · exact original.1 formula old
+    · exact additional formula added
+  · rintro ⟨J, proper, combined⟩
+    apply original.2
+    refine ⟨J, proper, ?_⟩
+    intro formula member
+    apply combined formula
+    change formula ∈ (T ++ U).map (Reduct M)
+    rw [List.map_append]
+    exact List.mem_append.mpr (Or.inl member)
+
+/-- Adding facts already contained in an answer set preserves that answer set.
+Each added atomic formula is true in the interpretation, so the preceding
+extension law applies. No new atom is assumed true in a smaller interpretation.
+-/
+theorem stable_append_facts (M : Atoms α) (T : Theory α) (facts : List α)
+    (original : Stable M T) (contained : ∀ atom, atom ∈ facts → M atom) :
+    Stable M (T ++ facts.map Formula.atom) := by
+  apply stable_append_of_models M T _ original
+  intro formula member
+  obtain ⟨atom, present, rfl⟩ := List.mem_map.mp member
+  exact contained atom present
+
 theorem atom_reduct (M J : Atoms α) (a : α) :
     Satisfies J (Reduct M (.atom a)) ↔ M a ∧ J a := by
   classical

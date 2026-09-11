@@ -396,6 +396,8 @@ import Zetesis
 #print axioms Zetesis.Ferraris.reduct_self
 #print axioms Zetesis.Ferraris.models_reduct_self
 #print axioms Zetesis.Ferraris.stable_iff_minimal_reduct
+#print axioms Zetesis.Ferraris.stable_append_of_models
+#print axioms Zetesis.Ferraris.stable_append_facts
 #print axioms Zetesis.Ferraris.atom_reduct
 #print axioms Zetesis.Ferraris.neg_atom_reduct
 #print axioms Zetesis.Ferraris.double_neg_atom_reduct

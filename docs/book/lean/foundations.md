@@ -62,6 +62,15 @@ need not be decidable. Rust evaluates finite indexed data instead. The theorem
 does not assert that an arbitrary formula reduct has a least model; the module
 contains explicit disjunctive counterexamples.
 
+`stable_append_of_models` proves a useful source-translation check: an answer
+set remains an answer set after adding formulas that it satisfies. The added
+formulas cannot create a proper-subset model of the original reduct.
+`stable_append_facts` specializes this law to facts already contained in the
+answer set. These laws assume a fixed formula translation. Applying them to
+source syntax also requires the translation to preserve meaning when those
+facts are added; matching one solver's output alone does not establish that
+correspondence.
+
 Lean uses `Stable` to connect with the stable-model literature. The solver-facing
 term **answer set** denotes that same semantic property. Naming an unchecked Rust
 value `AnswerSet` would not establish the property.
