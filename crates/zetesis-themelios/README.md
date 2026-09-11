@@ -247,7 +247,11 @@ always false. In contrast, `a.#minimize{1:not a}.` has no retained objective row
 Choice bounds and constraints never turn optional source atoms into required
 ones. Source completion visits the finite dependency cone in order, charges
 all ground joins and bounds retained activity entries independently of model
-evaluation. It neither searches for answer sets nor replaces original rules.
+evaluation. Each objective selects its own certificate. An independent extended
+query does not impose this cone's acyclicity requirement on a previously admitted
+positive objective; completed activity and legacy aggregate carriers share the
+retained-presence ceiling when they coexist. Neither certificate searches for
+answer sets or replaces original rules.
 
 Aggregate-dependent cones retain additional producer boundaries. A structural
 certificate admits specified total assignments and acyclic

@@ -44,6 +44,12 @@ pub(crate) struct Presence<'a> {
 }
 
 impl Presence<'_> {
+    /// Completed storage that coexists with any independently selected query
+    /// certificate. Planning temporaries have already been released.
+    pub(crate) fn retained_entries(&self) -> usize {
+        self.nonnumeric.len().saturating_add(self.carrier_entries)
+    }
+
     /// A completed proposal row is eligible only when every certified observer
     /// in it carries a value in its completed source carrier. Equalities remain in
     /// the theory; this filter affects objective specialization only.
@@ -83,7 +89,7 @@ impl Presence<'_> {
         limits: &FormulaLimits,
         counters: &mut Counters,
     ) -> Result<bool, FormulaFailure> {
-        if self.nonnumeric.is_empty() {
+        if objective.source_completion || self.nonnumeric.is_empty() {
             return Ok(true);
         }
         counters.work(limits, objective.location)?;

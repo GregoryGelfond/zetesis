@@ -112,24 +112,29 @@ impl Completion {
     pub(crate) fn build(
         prepared: &Prepared,
         support: &Support<'_>,
+        retained: usize,
         context: &mut Context<'_>,
     ) -> Result<Self, FormulaFailure> {
         let graph = prepared.analysis.dependencies();
         let relevant = dependency_closure(
             graph,
-            prepared.objectives.iter().flat_map(|objective| {
-                objective
-                    .condition
-                    .iter()
-                    .filter_map(|literal| match literal {
-                        LiteralIr::Atom(_, atom) => Some(signature(atom.predicate())),
-                        _ => None,
-                    })
-            }),
+            prepared
+                .objectives
+                .iter()
+                .filter(|objective| objective.source_completion)
+                .flat_map(|objective| {
+                    objective
+                        .condition
+                        .iter()
+                        .filter_map(|literal| match literal {
+                            LiteralIr::Atom(_, atom) => Some(signature(atom.predicate())),
+                            _ => None,
+                        })
+                }),
         );
         // The dependency sets coexist with the completed atom table. These
         // logical planning slots are independent of allocator representation.
-        let temporary = relevant.len().saturating_mul(3);
+        let temporary = retained.saturating_add(relevant.len().saturating_mul(3));
         context.entries(temporary)?;
         let mut remaining = relevant.clone();
         let mut completed = BTreeSet::<Signature>::new();

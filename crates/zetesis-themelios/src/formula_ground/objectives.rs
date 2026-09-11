@@ -25,6 +25,9 @@ pub(super) fn prepare(
     counters: &mut Counters,
     location: Location,
 ) -> Result<(ObjectiveProgram, Vec<Vec<Location>>), FormulaFailure> {
+    let presence = crate::formula_objective_dependencies::check_presence(
+        prepared, support, limits, budget, counters,
+    )?;
     let completion = if prepared
         .objectives
         .iter()
@@ -33,6 +36,7 @@ pub(super) fn prepare(
         Some(Completion::build(
             prepared,
             support,
+            presence.retained_entries(),
             &mut Context {
                 limits,
                 budget,
@@ -42,13 +46,6 @@ pub(super) fn prepare(
         )?)
     } else {
         None
-    };
-    let presence = if completion.is_some() {
-        Presence::default()
-    } else {
-        crate::formula_objective_dependencies::check_presence(
-            prepared, support, limits, budget, counters,
-        )?
     };
     let mut preparation = Preparation {
         limits,
@@ -113,7 +110,10 @@ impl Preparation<'_> {
             if !presence.eligible(objective, &binding, self.limits, self.counters)? {
                 continue;
             }
-            let query = if let Some(completion) = self.completion {
+            let query = if objective.source_completion {
+                let completion = self
+                    .completion
+                    .expect("selected source completion prepared");
                 let completed = completion.condition(
                     &objective.condition,
                     &binding,

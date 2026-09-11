@@ -28,30 +28,46 @@ pub(crate) fn check(
     source: &Program,
     fallback: Location,
 ) -> Result<BTreeSet<usize>, FormulaFailure> {
-    if objectives.is_empty() {
-        return Ok(BTreeSet::new());
-    }
-    let graph = analysis.dependencies();
-    let relevant = dependency_closure(
-        graph,
-        objectives
-            .iter()
-            .flat_map(|objective| &objective.condition)
-            .filter_map(|literal| match literal {
-                LiteralIr::Atom(_, atom) => Some(signature(atom.predicate())),
-                _ => None,
-            }),
-    );
-    if completed_profile(rules, objectives, graph, &relevant) {
-        for objective in objectives {
+    let mut extrema = BTreeSet::new();
+    for objective in objectives {
+        let graph = analysis.dependencies();
+        let relevant = dependency_closure(
+            graph,
+            objective
+                .condition
+                .iter()
+                .filter_map(|literal| match literal {
+                    LiteralIr::Atom(_, atom) => Some(signature(atom.predicate())),
+                    _ => None,
+                }),
+        );
+        if completed_profile(rules, std::slice::from_ref(objective), graph, &relevant) {
             objective.source_completion = true;
+        } else {
+            extrema.extend(check_legacy(
+                rules,
+                std::slice::from_mut(objective),
+                graph,
+                &relevant,
+                source,
+                fallback,
+            )?);
         }
-        return Ok(BTreeSet::new());
     }
+    Ok(extrema)
+}
 
+fn check_legacy(
+    rules: &[RuleIr],
+    objectives: &mut [ObjectiveIr],
+    graph: &DependencyGraph,
+    relevant: &BTreeSet<Signature>,
+    source: &Program,
+    fallback: Location,
+) -> Result<BTreeSet<usize>, FormulaFailure> {
     let mut generated = BTreeMap::<Signature, BTreeSet<usize>>::new();
     for rule in rules {
-        if !relevant_head(&rule.head, &relevant) {
+        if !relevant_head(&rule.head, relevant) {
             continue;
         }
         // The existing total-observer certificate assumes no filter or value
@@ -106,7 +122,7 @@ pub(crate) fn check(
             .or_default()
             .extend(positions);
     }
-    let forwarded = forwarding::certify(rules, graph, &relevant, &mut generated);
+    let forwarded = forwarding::certify(rules, graph, relevant, &mut generated);
     for producer in graph.predicates() {
         if !relevant.contains(producer) {
             continue;

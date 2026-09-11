@@ -27,3 +27,10 @@
 {"name":"weak_ordered_filter","source":"{p(1)}.:~p(X),X>0.[X]","priorities":[0],"records":[[[],[0]],[["p(1)"],[1]]]}
 {"name":"negative_maximize","source":"#maximize{1:not a}.","priorities":[0],"records":[[[],[-1]]]}
 {"name":"ordered_fact_filter","source":"d(1).#minimize{1:d(X),X<2}.","priorities":[0],"records":[[["d(1)"],[1]]]}
+{"name":"independent_positive_cycle","source":"{a;b}.p:-q.q:-p.p:-b.#minimize{1@1:p}.","priorities":[1],"records":[[[],[0]],[["a"],[0]],[["a","b","p","q"],[1]],[["b","p","q"],[1]]]}
+{"name":"independent_negative_query","source":"{a;b}.p:-q.q:-p.p:-b.#minimize{1@2:not a}.","priorities":[2],"records":[[[],[1]],[["a"],[0]],[["a","b","p","q"],[0]],[["b","p","q"],[1]]]}
+{"name":"composed_positive_cycle","source":"{a;b}.p:-q.q:-p.p:-b.#minimize{1@1:p;1@2:not a}.","priorities":[2,1],"records":[[[],[1,0]],[["a"],[0,0]],[["a","b","p","q"],[0,1]],[["b","p","q"],[1,1]]]}
+{"name":"composed_numeric_carrier","source":"{a;b}.n(N):-N=#count{1:a;2:b}.#minimize{1@N:n(N);1@3:not a}.","priorities":[3,2,1,0],"records":[[["a","b","n(2)"],[0,1,0,0]],[["a","n(1)"],[0,0,1,0]],[["b","n(1)"],[1,0,1,0]],[["n(0)"],[1,0,0,1]]]}
+{"name":"composed_selected_carrier","source":"{a;b}.n(N):-N=#count{1:a;2:b}.#minimize{1@N:n(N),N=1;1@3:not a}.","priorities":[3,1],"records":[[["a","b","n(2)"],[0,0]],[["a","n(1)"],[0,1]],[["b","n(1)"],[1,1]],[["n(0)"],[1,0]]]}
+{"name":"composed_excluded_extremum","source":"b.{a}.v(V):-V=#max{2:a;s:b}.#minimize{V:v(V);1@3:not a}.","priorities":[3],"records":[[["a","b","v(s)"],[0]],[["b","v(s)"],[1]]]}
+{"name":"composed_duplicate_key","source":"{a}.p:-q.q:-p.p:-a.#minimize{1@0,k:p;1@0,k:not a}.","priorities":[0],"records":[[[],[1]],[["a","p","q"],[1]]]}
