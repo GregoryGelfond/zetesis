@@ -18,6 +18,10 @@ use zetesis_themelios::{
 };
 
 type Record = (Vec<String>, Option<Vec<i64>>);
+const SIGNED_ANONYMOUS_PROJECTIONS: [(&str, &str); 2] = [
+    ("p(1). #show x : not -p(_).", "p(1)"),
+    ("-p(1). #show x : not not -p(_).", "-p(1)"),
+];
 
 fn cases() -> Vec<Json> {
     include_str!("fixtures/strong-negation.jsonl")
@@ -409,6 +413,14 @@ fn signed_atoms_do_not_broaden_unsafe_or_unsupported_value_profiles() {
             objective_boundaries::check(case["source"].as_str().unwrap());
             continue;
         }
+        // These exact legacy sources are the explicit native projection
+        // extension checked below; other unsafe observation forms remain refusals.
+        if SIGNED_ANONYMOUS_PROJECTIONS
+            .iter()
+            .any(|(source, _)| case["source"] == *source)
+        {
+            continue;
+        }
         let error = input(case["source"].as_str().unwrap()).unwrap_err();
         assert!(
             refusal(&error, case["native"].as_str().unwrap()),
@@ -418,10 +430,45 @@ fn signed_atoms_do_not_broaden_unsafe_or_unsupported_value_profiles() {
         assert!(!error.diagnostics().is_empty());
         count += 1;
     }
-    assert_eq!(count, 12);
+    assert_eq!(count, 10);
 }
 #[path = "support/objective_boundaries.rs"]
 mod objective_boundaries;
+
+#[test]
+fn signed_anonymous_projection_has_the_declared_model_view() {
+    for (source, atom) in SIGNED_ANONYMOUS_PROJECTIONS {
+        let case = cases()
+            .into_iter()
+            .find(|case| case["source"] == source)
+            .unwrap();
+        let source = case["source"].as_str().unwrap();
+        let admitted = input(source).unwrap();
+        let original = input(&format!("{atom}.")).unwrap();
+        assert_eq!(admitted.source().text(), source);
+        assert_eq!(admitted.atoms(), original.atoms());
+        assert_eq!(admitted.theory().nodes(), original.theory().nodes());
+        assert_eq!(admitted.theory().roots(), original.theory().roots());
+        assert_eq!(admitted.formula_origins(), original.formula_origins());
+        let views: Vec<_> = stable_models(&admitted)
+            .iter()
+            .map(|model| {
+                (
+                    record(&admitted, model, false),
+                    record(&admitted, model, true),
+                )
+            })
+            .collect();
+        // Keep full identity paired with its display and preserve occurrences.
+        assert_eq!(
+            views,
+            vec![(
+                (vec![atom.into()], None),
+                (vec![atom.into(), "x".into()], None),
+            )]
+        );
+    }
+}
 
 #[test]
 fn coherence_roots_are_bounded_and_keep_both_original_source_locations() {
@@ -586,6 +633,7 @@ fn clingo(source: &str) -> Json {
 fn fresh_clingo_replays_signed_models_objectives_and_unsafe_diagnostics() {
     for case in cases() {
         let fresh = clingo(case["source"].as_str().unwrap());
+        assert_eq!(fresh["Solver"], case["reference"]["Solver"]);
         assert_eq!(
             fresh["Result"], case["reference"]["Result"],
             "{}",
