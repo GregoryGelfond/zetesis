@@ -228,8 +228,9 @@ same eligible binding; specialization retains the original model query.
 Runtime objective templates always have fixed integer priorities.
 
 Resolved nonnumeric weights or priorities, including `#inf`/`#sup`,
-contribute neither cost nor priority. Their tuple, priority, binding, filter and
-resource checks still run. A numeric zero retains a priority; an omitted weight
+contribute neither cost nor priority. Their source syntax, tuple shape, variable scope, filter and resource checks
+still run. Resolved tuple expressions are evaluated for numeric contributing
+rows; source exclusion retains its defined field-evaluation order. A numeric zero retains a priority; an omitted weight
 does not. Eligible unrepresentable maximize negation is a located failure;
 an excluded nonnumeric priority needs no weight normalization. Undefined priority
 arithmetic remains a located source-evaluation failure. Weight and tuple
@@ -237,7 +238,34 @@ expressions reuse that same scalar evaluator and are specialized after source
 eligibility selects a complete binding. Arithmetic, structural constructors and
 logical extrema retain typed value identity. Simple fields retain lifted joins;
 resolved fields feed the same global key, score and candidate-bound operations.
-Aggregate/conditional weak bodies remain unsupported.
+Optimization directives share finite scalar binders and structural patterns
+where their grammar permits them. Weak bodies additionally use the admitted
+finite aggregate and conditional scopes,
+including aggregate equality proposals, independently bound local variables,
+scalar binders and structural positive patterns. Routing selects the required
+scope capability before compilation; an unrelated aggregate does not change
+whether a scalar binder is admitted. The positive relational case retains its
+lifted path. Unsafe outer fields cannot acquire safety from a local condition.
+
+Scoped objectives reuse the rule-body compiler in an isolated value domain and
+the existing aggregate/conditional formula operations over completed support.
+Only original-model truth is translated into the objective query: formula
+implication becomes Boolean disjunction with a negated antecedent. This is not
+a valid general Ferraris reduct rewrite and never changes the original theory.
+Scratch formula IDs map through their own typed atom catalog; objective-only
+atoms and values cannot enter the original universe. Backward references let the
+translator retain only the chosen root's ancestors in topological order.
+
+`max_objective_formula_atoms` and `max_objective_formula_nodes` bound each
+transient body formula independently of final theory storage and retained
+`objective.max_condition_nodes`. Existing per-aggregate operation limits and
+cumulative source work, substitution and scalar allowances also apply; aggregate
+failures retain their typed partial accounting. Required scoped data evaluation
+runs on each completed outer row before activity exclusion and numeric selection, even for ignored rows. Only a retained numeric
+row creates Condition nodes. Source shape checks are shared with objective
+admission; scope and assignment safety remain with the source compiler.
+Pool-containing analyzed weak bodies retain the explicit `AnalysisPool` refusal;
+no unbounded upstream unpooling or synthetic producer is introduced.
 
 Objective conditions admit default negation, double negation, Boolean truth and
 bounded scalar comparisons on independently bound values. They lower into closed
@@ -256,8 +284,8 @@ possible eligibility independently of its measured contribution.
 Finite ordinary cyclic cones and their unresolved dependants use the same
 conservative carrier: covered atoms are optional, and atoms outside the carrier
 are absent. Cyclic aggregate generators and richer cyclic scoped bodies retain a
-located `ObjectiveSourceEligibility` refusal. Aggregate/conditional syntax in a
-weak constraint's own query is a separate boundary from a rich producer's body.
+located `ObjectiveSourceEligibility` refusal. A weak constraint's own query uses original-model formula truth, independently
+of the producer coverage certificate.
 
 The completed activity is a source grounding abstraction: absent, optional or
 required. Optional means retained as a grounding possibility, not simultaneously

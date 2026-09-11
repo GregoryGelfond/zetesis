@@ -136,6 +136,46 @@ impl ObjectiveTemplate {
         admit_fields(weight, tuple, positive, filters, limits, index)
     }
 
+    /// Check tuple width, positive body count, filter count and predicate arity.
+    /// This does not establish variable safety or dense IDs. A source frontend
+    /// with additional binding forms must establish their scope independently;
+    /// resolved templates still require [`ObjectiveProgram::new`].
+    ///
+    /// # Errors
+    /// Refuses a configured shape ceiling before source values are evaluated.
+    pub fn validate_shape(
+        tuple_width: usize,
+        positive: &[AtomPattern],
+        filter_count: usize,
+        limits: AdmissionLimits,
+        index: usize,
+    ) -> Result<(), AdmissionError> {
+        for (resource, actual, limit) in [
+            (
+                AdmissionResource::TupleWidth,
+                tuple_width,
+                limits.max_tuple_width,
+            ),
+            (
+                AdmissionResource::PositiveBody,
+                positive.len(),
+                limits.max_positive_body,
+            ),
+            (AdmissionResource::Filters, filter_count, limits.max_filters),
+        ] {
+            check_bound(resource, actual, limit, Some(index))?;
+        }
+        for pattern in positive {
+            check_bound(
+                AdmissionResource::PredicateArity,
+                pattern.terms().len(),
+                limits.max_predicate_arity,
+                Some(index),
+            )?;
+        }
+        Ok(())
+    }
+
     /// Validate the relational scope and output width before evaluating source
     /// expressions. The source frontend must independently establish that every
     /// expression input has a binder in `positive`; expressions never add binders.
@@ -495,33 +535,7 @@ fn admit_scope<'a>(
     limits: AdmissionLimits,
     index: usize,
 ) -> Result<usize, AdmissionError> {
-    for (resource, actual, limit) in [
-        (
-            AdmissionResource::TupleWidth,
-            tuple_width,
-            limits.max_tuple_width,
-        ),
-        (
-            AdmissionResource::PositiveBody,
-            positive.len(),
-            limits.max_positive_body,
-        ),
-        (
-            AdmissionResource::Filters,
-            filters.len(),
-            limits.max_filters,
-        ),
-    ] {
-        check_bound(resource, actual, limit, Some(index))?;
-    }
-    for pattern in positive {
-        check_bound(
-            AdmissionResource::PredicateArity,
-            pattern.terms().len(),
-            limits.max_predicate_arity,
-            Some(index),
-        )?;
-    }
+    ObjectiveTemplate::validate_shape(tuple_width, positive, filters.len(), limits, index)?;
     let mut count = 0;
     for term in terms.clone() {
         if let Term::Variable(variable) = term {

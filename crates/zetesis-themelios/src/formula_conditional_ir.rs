@@ -1,7 +1,7 @@
 //! Separate outer scopes and independently bound universal-local instances.
 
 use themelios_program::program::{
-    BodyElement, ConditionalLiteral, DefaultNegation, Literal, LiteralInner, Rule,
+    Body, BodyElement, ConditionalLiteral, DefaultNegation, Literal, LiteralInner,
 };
 use themelios_program::term::Term;
 use zetesis_core::AtomPattern;
@@ -89,11 +89,11 @@ impl Compiler<'_> {
 
     pub(super) fn body_conditionals(
         &mut self,
-        rule: &Rule,
+        source: &Body,
         variables: &Variables,
         body: &mut Vec<LiteralIr>,
     ) -> Result<(), FormulaFailure> {
-        for element in rule.body().get().elements() {
+        for element in source.elements() {
             let BodyElement::Conditional(conditional) = element.get() else {
                 continue;
             };

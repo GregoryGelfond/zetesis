@@ -13,7 +13,7 @@ use themelios_base::span::Location;
 use themelios_program::program::DefaultNegation;
 use themelios_program::symbol::Signature;
 use zetesis_core::{Atom, AtomPattern, Value};
-mod query;
+pub(crate) mod query;
 mod cyclic;
 mod possible;
 
@@ -215,9 +215,13 @@ impl Completion {
                 .flat_map(|objective| {
                     objective
                         .condition
+                        .literals()
                         .iter()
                         .filter_map(|literal| match literal {
                             LiteralIr::Atom(_, atom) => Some(signature(atom.predicate())),
+                            LiteralIr::PatternAtom(pattern) => {
+                                Some(signature(pattern.atom.predicate()))
+                            }
                             _ => None,
                         })
                 }),
@@ -436,6 +440,15 @@ impl Completion {
                         activity
                     }
                 }
+                LiteralIr::Aggregate(_)
+                | LiteralIr::Conditional(_)
+                | LiteralIr::ProjectedAtom(..) => Activity::Optional,
+                LiteralIr::PatternAtom(pattern) => {
+                    let atom = context.atom(&pattern.atom, binding)?;
+                    self.atoms.get(&atom).copied().unwrap_or(Activity::Absent)
+                }
+                // The complete Join already checked these ordinary data filters.
+                LiteralIr::ArgumentCheck { .. } | LiteralIr::TupleCompare(..) => Activity::Required,
                 _ => {
                     if context.scalar(literal, binding)? {
                         Activity::Required

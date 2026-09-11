@@ -37,12 +37,12 @@ pub(crate) fn condition(
     Ok(Condition::new(query.nodes))
 }
 
-struct Query {
-    nodes: Vec<ConditionNode>,
+pub(crate) struct Query {
+    pub(crate) nodes: Vec<ConditionNode>,
 }
 
 impl Query {
-    fn node(
+    pub(crate) fn node(
         &mut self,
         node: ConditionNode,
         context: &mut Context<'_>,

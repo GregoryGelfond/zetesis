@@ -1,8 +1,8 @@
 //! Scoped finite aggregate tuples and guards, independent of propositional lowering.
 
 use themelios_program::program::{
-    Aggregate, AggregateFunction, BodyElement, Choice, Condition, DefaultNegation, Guard,
-    HasGuards, Relation, Rule, SetElement,
+    Aggregate, AggregateFunction, Body, BodyElement, Choice, Condition, DefaultNegation, Guard,
+    HasGuards, Relation, SetElement,
 };
 use themelios_program::provenance::WithProvenance;
 use themelios_program::symbol::Symbol;
@@ -127,11 +127,11 @@ impl Compiler<'_> {
     }
     pub(super) fn body_guards(
         &mut self,
-        rule: &Rule,
+        source: &Body,
         variables: &mut Variables,
     ) -> Result<Vec<Vec<AggregateGuard>>, FormulaFailure> {
         let mut result = Vec::new();
-        for element in rule.body().get().elements() {
+        for element in source.elements() {
             if let BodyElement::Aggregate { aggregate, .. } = element.get() {
                 let guarded: &dyn HasGuards = match aggregate {
                     Aggregate::Function(value) => value,
@@ -148,7 +148,7 @@ impl Compiler<'_> {
     }
     pub(super) fn body_aggregates(
         &mut self,
-        rule: &Rule,
+        source: &Body,
         guards: Vec<Vec<AggregateGuard>>,
         assignments: Vec<Option<usize>>,
         variables: &Variables,
@@ -156,7 +156,7 @@ impl Compiler<'_> {
     ) -> Result<(), FormulaFailure> {
         let mut guards = guards.into_iter();
         let mut assignments = assignments.into_iter();
-        for element in rule.body().get().elements() {
+        for element in source.elements() {
             if let BodyElement::Aggregate {
                 negation,
                 aggregate,

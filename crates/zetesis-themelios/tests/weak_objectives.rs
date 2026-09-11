@@ -12,7 +12,7 @@ use zetesis_cpu::Control;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
     ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, InputLimit,
-    ProfileFeature, SourceBundle, admit, admit_bundle_formula, admit_extended, admit_formula,
+    SourceBundle, admit, admit_bundle_formula, admit_extended, admit_formula,
 };
 
 #[path = "support/source_records.rs"]
@@ -147,7 +147,7 @@ fn weak_occurrences_count_before_upstream_statement_deduplication() {
 
 #[test]
 fn unsupported_weak_scopes_remain_typed_refusals() {
-    for source in [":~.[X]", ":~X=1.[X]", "{p(1)}. :~p(_).[_]"] {
+    for source in [":~.[X]", "{p(1)}. :~p(_).[_]"] {
         assert!(
             matches!(
                 admit_formula(
@@ -157,25 +157,6 @@ fn unsupported_weak_scopes_remain_typed_refusals() {
                     FormulaLimits::default()
                 ),
                 Err(FormulaFailure::UnsafeVariable { .. })
-            ),
-            "{source}"
-        );
-    }
-    for source in ["{a}. :~#count{1:a}>0.[1]", "{a}. :~a:a.[1]"] {
-        assert!(
-            matches!(
-                admit_formula(
-                    source.to_owned(),
-                    AdmissionOptions::default(),
-                    ExpansionLimits::default(),
-                    FormulaLimits::default()
-                ),
-                Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
-                    AdmissionFailure::Profile {
-                        feature: ProfileFeature::Objective,
-                        ..
-                    }
-                )))
             ),
             "{source}"
         );

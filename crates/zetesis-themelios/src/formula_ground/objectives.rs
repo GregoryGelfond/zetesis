@@ -9,9 +9,10 @@ use themelios_base::span::Location;
 use zetesis_core::{AtomPattern, Term, Value};
 use zetesis_objective::{AdmissionError, ObjectiveProgram, ObjectiveTemplate, WeightPolarity};
 
+use super::objective_query::{self, ValidatedBody};
 use crate::expansion::Budget;
 use crate::formula::ceiling;
-use crate::formula_ir::{ObjectiveField, ObjectiveIr, Operation, Prepared};
+use crate::formula_ir::{ObjectiveCondition, ObjectiveField, ObjectiveIr, Operation, Prepared};
 use crate::formula_objective_dependencies::Presence;
 use crate::formula_objective_dependencies::completion::{
     Activity, Completion, Context, model_condition,
@@ -105,20 +106,28 @@ impl Preparation<'_> {
             }
             return Ok(());
         }
-        let mut bindings = Join::new(
-            &objective.condition,
-            &[],
-            objective.variables,
-            support,
-            self.budget,
-            objective.location,
-        )?;
+        let mut bindings = Join::objective(objective, support, self.budget)?;
         while let Some(binding) =
             bindings.next(self.limits, self.budget, self.counters, objective.location)?
         {
             if !presence.eligible(objective, &binding, self.limits, self.counters)? {
                 continue;
             }
+            let body = if matches!(objective.condition, ObjectiveCondition::Body { .. }) {
+                Some(objective_query::validate(
+                    objective.condition.literals(),
+                    &binding,
+                    support,
+                    &mut Context {
+                        limits: self.limits,
+                        budget: self.budget,
+                        counters: self.counters,
+                        location: objective.location,
+                    },
+                )?)
+            } else {
+                None
+            };
             if objective.source_completion {
                 let completion = self
                     .completion
@@ -129,7 +138,7 @@ impl Preparation<'_> {
                     counters: self.counters,
                     location: objective.location,
                 };
-                if completion.activity(&objective.condition, &binding, &mut context)?
+                if completion.activity(objective.condition.literals(), &binding, &mut context)?
                     == Activity::Absent
                 {
                     continue;
@@ -148,7 +157,7 @@ impl Preparation<'_> {
                 && let Some(weight) = self.weight(objective, &binding)?
             {
                 self.capacity(objective.location)?;
-                let template = self.specialize(objective, &binding, weight, priority)?;
+                let template = self.specialize(objective, &binding, weight, priority, body)?;
                 self.retain(objective, template)?;
             }
         }
@@ -160,14 +169,7 @@ impl Preparation<'_> {
         objective: &ObjectiveIr,
         support: &Support,
     ) -> Result<bool, FormulaFailure> {
-        let mut bindings = Join::new(
-            &objective.condition,
-            &[],
-            objective.variables,
-            support,
-            self.budget,
-            objective.location,
-        )?;
+        let mut bindings = Join::objective(objective, support, self.budget)?;
         let mut numeric = false;
         while let Some(binding) =
             bindings.next(self.limits, self.budget, self.counters, objective.location)?
@@ -208,6 +210,7 @@ impl Preparation<'_> {
         binding: &[Value],
         weight: i32,
         priority: i32,
+        body: Option<ValidatedBody>,
     ) -> Result<ObjectiveTemplate, FormulaFailure> {
         let mut tuple = reserved(objective.tuple.len(), objective.location)?;
         for field in &objective.tuple {
@@ -218,16 +221,17 @@ impl Preparation<'_> {
             )?));
         }
         if objective.source_completion {
-            let query = model_condition(
-                &objective.condition,
-                binding,
-                &mut Context {
-                    limits: self.limits,
-                    budget: self.budget,
-                    counters: self.counters,
-                    location: objective.location,
-                },
-            )?;
+            let mut context = Context {
+                limits: self.limits,
+                budget: self.budget,
+                counters: self.counters,
+                location: objective.location,
+            };
+            let query = if let Some(body) = body {
+                body.condition(&mut context)?
+            } else {
+                model_condition(objective.condition.literals(), binding, &mut context)?
+            };
             return Ok(ObjectiveTemplate::new(
                 Term::Constant(Value::Number(weight)),
                 priority,

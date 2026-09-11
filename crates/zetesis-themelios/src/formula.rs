@@ -33,6 +33,13 @@ pub struct FormulaLimits {
     /// ceiling in objective-presence plans. Transient numeric subsets have the
     /// assignment value ceiling; allocator overhead and capacity are excluded.
     pub max_objective_presence_entries: usize,
+    /// Typed atoms in one transient scoped objective-body formula. This scratch
+    /// catalog cannot add atoms to the original theory or consume its atom cap.
+    pub max_objective_formula_atoms: usize,
+    /// DAG nodes in one transient scoped objective-body formula, including
+    /// validation of rows later ignored for nonnumeric fields. Retained query
+    /// nodes have the independent `objective.max_condition_nodes` ceiling.
+    pub max_objective_formula_nodes: usize,
     /// Distinct scalar values in the logical source, independent of join work.
     pub max_domain_values: usize,
     /// Distinct values in one generated assignment row and across generated heads.
@@ -82,6 +89,8 @@ impl Default for FormulaLimits {
             // Match the bounded aggregate-plan row scale; this counts borrowed
             // pointer slots, not source bytes or semantic candidate atoms.
             max_objective_presence_entries: DEFAULT_OBJECTIVE_PRESENCE_ENTRIES,
+            max_objective_formula_atoms: 65_536,
+            max_objective_formula_nodes: 1_048_576,
             max_domain_values: 1_024,
             max_assignment_values: 1_024,
             max_disjunction_elements: 1_024,
@@ -148,6 +157,10 @@ pub enum FormulaResource {
     ObjectiveElements,
     /// Complete possible-positive support rounds.
     SupportRounds,
+    /// Typed atoms in one transient objective-body formula.
+    ObjectiveFormulaAtoms,
+    /// Nodes in one transient objective-body formula.
+    ObjectiveFormulaNodes,
     /// Dense semantic atoms.
     Atoms,
     /// Formula DAG nodes.

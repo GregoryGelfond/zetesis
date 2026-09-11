@@ -1,7 +1,7 @@
 //! Explicit scope checks for finite aggregate equality binders and consumers.
 
 use themelios_program::program::{
-    Aggregate, AggregateFunction, BodyElement, DefaultNegation, Relation, Rule,
+    Aggregate, AggregateFunction, Body, BodyElement, DefaultNegation, Relation,
 };
 use zetesis_core::{AtomPattern, Term};
 
@@ -15,14 +15,12 @@ use crate::{ExpansionResource, FormulaFailure, ProfileFeature};
 impl Compiler<'_> {
     pub(super) fn assignment_targets(
         &self,
-        rule: &Rule,
+        source: &Body,
         guards: &[Vec<AggregateGuard>],
         variables: &mut Variables,
     ) -> Result<Vec<Option<usize>>, FormulaFailure> {
         let mut result = Vec::new();
-        for (element, guards) in rule
-            .body()
-            .get()
+        for (element, guards) in source
             .elements()
             .filter(|element| matches!(element.get(), BodyElement::Aggregate { .. }))
             .zip(guards)

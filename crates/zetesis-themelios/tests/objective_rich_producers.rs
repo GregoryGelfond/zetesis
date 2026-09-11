@@ -14,7 +14,7 @@ const CASES: &str = include_str!("fixtures/objective-rich-producers.jsonl");
 
 #[test]
 fn rich_producers_preserve_full_scored_answers() {
-    assert_eq!(CASES.lines().count(), 38);
+    assert_eq!(CASES.lines().count(), 50);
     priority_contracts::check(CASES);
 }
 

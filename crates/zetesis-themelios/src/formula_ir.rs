@@ -4,11 +4,14 @@
 #[path = "formula_assignment_plan_tests.rs"]
 mod assignment_plan_tests;
 
+#[path = "formula_objective_scope.rs"]
+mod objective_scope;
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use themelios_base::span::Location;
 use themelios_program::program::{
-    Arguments, BodyElement, Choice, DefaultNegation, Direction, HasGuards, Head, Literal,
+    Arguments, Body, BodyElement, Choice, DefaultNegation, Direction, HasGuards, Head, Literal,
     LiteralInner, Optimize, OptimizeElement, Program as SourceProgram, Relation, Rule, Statement,
 };
 use themelios_program::provenance::{Origin, TransformTag};
@@ -53,11 +56,30 @@ pub(crate) struct ObjectiveIr {
     pub priority_sources: BTreeSet<usize>,
     /// Use finite source truth coverage and a closed original-model query.
     pub source_completion: bool,
-    pub condition: Vec<LiteralIr>,
+    pub condition: ObjectiveCondition,
     pub variables: usize,
     pub origins: Vec<Location>,
     pub location: Location,
 }
+/// Literal objectives preserve the lifted path; scoped weak bodies own the
+/// existing finite assignment schedule over the same literal sequence.
+pub(crate) enum ObjectiveCondition {
+    Literals(Vec<LiteralIr>),
+    Body {
+        literals: Vec<LiteralIr>,
+        bindings: Option<crate::formula_assignment_plan::Plan>,
+        /// Original scalar conditions; generated data instructions are not filters.
+        filters: usize,
+    },
+}
+impl ObjectiveCondition {
+    pub(crate) fn literals(&self) -> &[LiteralIr] {
+        match self {
+            Self::Literals(literals) | Self::Body { literals, .. } => literals,
+        }
+    }
+}
+
 /// A simple field stays lifted; evaluated fields share the existing scalar
 /// expression semantics and are specialized only after a complete source join.
 pub(crate) enum ObjectiveField {
@@ -314,18 +336,13 @@ pub(crate) fn prepare(
         }
         let statement = rewritten.statements().next().expect("rewrite keeps a rule");
         let origins = extended::parsed_origins(carrier);
-        let weak_objective =
-            crate::formula_weak::normalize(statement, compiler.budget, compiler.location)?;
-        let statement = weak_objective.as_ref().unwrap_or(statement);
-        if let Statement::Optimize(optimize) = statement.get() {
-            analyzed.push(statement.clone());
-            compiler.objectives(
-                optimize,
-                &origins,
-                &extended::parsed_origins(statement),
-                &mut objectives,
-                &mut objective_declarations,
-            )?;
+        if compiler.objective_statement(
+            statement,
+            &origins,
+            &mut objectives,
+            &mut objective_declarations,
+            &mut analyzed,
+        )? {
             continue;
         }
         if let Some(facts) = fact_expansion::facts(statement, compiler.budget, compiler.location)? {
@@ -379,17 +396,41 @@ fn validate_objectives(
     limits: &FormulaLimits,
 ) -> Result<(), FormulaFailure> {
     for (index, objective) in objectives.iter().enumerate() {
-        ObjectiveTemplate::validate_scope(
-            objective.tuple.len(),
-            &objective.positive,
-            &objective.filters,
-            limits.objective,
-            index,
-        )
+        if let ObjectiveCondition::Body { filters, .. } = objective.condition {
+            ObjectiveTemplate::validate_shape(
+                objective.tuple.len(),
+                &objective.positive,
+                filters,
+                limits.objective,
+                index,
+            )
+        } else {
+            ObjectiveTemplate::validate_scope(
+                objective.tuple.len(),
+                &objective.positive,
+                &objective.filters,
+                limits.objective,
+                index,
+            )
+            .map(|_| ())
+        }
         .map_err(|error| FormulaFailure::Objective {
             error,
             location: objective.location,
         })?;
+        if matches!(objective.condition, ObjectiveCondition::Body { .. })
+            && objective.variables > limits.objective.max_variables_per_template
+        {
+            return Err(FormulaFailure::Objective {
+                error: zetesis_objective::AdmissionError::Limit {
+                    resource: zetesis_objective::AdmissionResource::Variables,
+                    template: Some(index),
+                    actual: objective.variables,
+                    limit: limits.objective.max_variables_per_template,
+                },
+                location: objective.location,
+            });
+        }
     }
     Ok(())
 }
@@ -571,6 +612,9 @@ impl Compiler<'_> {
         origins: Vec<Location>,
         polarity: WeightPolarity,
     ) -> Result<ObjectiveIr, FormulaFailure> {
+        if self.element_needs_scope(element)? {
+            return self.scoped_element(element, origins, polarity);
+        }
         let mut variables = Variables::default();
         let mut positive = Vec::new();
         let mut filters = Vec::new();
@@ -631,19 +675,7 @@ impl Compiler<'_> {
         // weights: they supply no contribution or numeric priority witness.
         // Still admit the whole element, including priority, tuple and safety,
         // before completed grounding determines objective presence.
-        let priority = match element.weight().priority() {
-            None => scalar_expression(&CoreTerm::Constant(Value::Number(0))),
-            Some(Term::Symbolic(Symbol::Number(priority))) => {
-                scalar_expression(&CoreTerm::Constant(Value::Number(*priority)))
-            }
-            Some(Term::Symbolic(Symbol::Infimum)) => {
-                scalar_expression(&CoreTerm::Constant(Value::Infimum))
-            }
-            Some(Term::Symbolic(Symbol::Supremum)) => {
-                scalar_expression(&CoreTerm::Constant(Value::Supremum))
-            }
-            Some(term) => self.expression(term, &mut variables)?,
-        };
+        let priority = self.objective_priority(element.weight().priority(), &mut variables)?;
         let tuple = element
             .terms()
             .map(|term| self.objective_field(term, &mut variables))
@@ -659,11 +691,30 @@ impl Compiler<'_> {
             polarity,
             priority_sources: BTreeSet::new(),
             source_completion: false,
-            condition,
+            condition: ObjectiveCondition::Literals(condition),
             variables: count,
             origins,
             location: self.location,
         })
+    }
+    fn objective_priority(
+        &mut self,
+        priority: Option<&Term>,
+        variables: &mut Variables,
+    ) -> Result<Expression, FormulaFailure> {
+        match priority {
+            None => Ok(scalar_expression(&CoreTerm::Constant(Value::Number(0)))),
+            Some(Term::Symbolic(Symbol::Number(priority))) => Ok(scalar_expression(
+                &CoreTerm::Constant(Value::Number(*priority)),
+            )),
+            Some(Term::Symbolic(Symbol::Infimum)) => {
+                Ok(scalar_expression(&CoreTerm::Constant(Value::Infimum)))
+            }
+            Some(Term::Symbolic(Symbol::Supremum)) => {
+                Ok(scalar_expression(&CoreTerm::Constant(Value::Supremum)))
+            }
+            Some(term) => self.expression(term, variables),
+        }
     }
     pub(super) fn objective_term(
         &mut self,
@@ -718,18 +769,7 @@ impl Compiler<'_> {
     ) -> Result<RuleIr, FormulaFailure> {
         let mut variables = Variables::default();
         let mut body = Vec::new();
-        for element in rule.body().get().elements() {
-            match element.get() {
-                BodyElement::Literal(literal) => {
-                    self.literal_into(literal, &mut variables, &mut body)?;
-                }
-                BodyElement::Conditional(conditional) => {
-                    self.conditional_syntax(conditional)?;
-                }
-                BodyElement::Aggregate { .. } => {}
-                _ => return Err(unsupported(ProfileFeature::BodyElement, self.location).into()),
-            }
-        }
+        self.body_literals(rule.body().get(), &mut variables, &mut body)?;
         // Declare every global before element-local scopes are cloned. In particular,
         // a head variable cannot accidentally become safe inside an aggregate.
         let ordinary = match rule.head().get() {
@@ -785,13 +825,20 @@ impl Compiler<'_> {
                 return Err(unsupported(ProfileFeature::Head, self.location).into());
             }
         };
-        let aggregate_guards = self.body_guards(rule, &mut variables)?;
+        let aggregate_guards = self.body_guards(rule.body().get(), &mut variables)?;
         let choice_guards = self.head_guards(rule.head().get(), &mut variables)?;
-        let assignments = self.assignment_targets(rule, &aggregate_guards, &mut variables)?;
+        let assignments =
+            self.assignment_targets(rule.body().get(), &aggregate_guards, &mut variables)?;
         self.bindings(&mut body, &mut variables)?;
         variables.safety(self.location)?;
-        self.body_aggregates(rule, aggregate_guards, assignments, &variables, &mut body)?;
-        self.body_conditionals(rule, &variables, &mut body)?;
+        self.body_aggregates(
+            rule.body().get(),
+            aggregate_guards,
+            assignments,
+            &variables,
+            &mut body,
+        )?;
+        self.body_conditionals(rule.body().get(), &variables, &mut body)?;
         let bindings = self.assignment_plan(&body, variables.count, &choice_guards)?;
         let head = if let Some(head) = ordinary {
             head
@@ -821,6 +868,27 @@ impl Compiler<'_> {
             origins,
             location: self.location,
         })
+    }
+
+    fn body_literals(
+        &mut self,
+        source: &Body,
+        variables: &mut Variables,
+        body: &mut Vec<LiteralIr>,
+    ) -> Result<(), FormulaFailure> {
+        for element in source.elements() {
+            match element.get() {
+                BodyElement::Literal(literal) => {
+                    self.literal_into(literal, variables, body)?;
+                }
+                BodyElement::Conditional(conditional) => {
+                    self.conditional_syntax(conditional)?;
+                }
+                BodyElement::Aggregate { .. } => {}
+                _ => return Err(unsupported(ProfileFeature::BodyElement, self.location).into()),
+            }
+        }
+        Ok(())
     }
 
     fn head_guards(

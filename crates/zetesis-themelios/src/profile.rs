@@ -300,7 +300,12 @@ fn check_weak(
                     location,
                 });
             }
-            if !matches!(element, ast::BodyElement::Literal(_)) {
+            if !matches!(
+                element,
+                ast::BodyElement::Literal(_)
+                    | ast::BodyElement::Aggregate(_)
+                    | ast::BodyElement::ConditionalLiteral(_)
+            ) {
                 return Err(unsupported(ProfileFeature::Objective, location));
             }
         }

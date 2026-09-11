@@ -1,6 +1,7 @@
 //! Finite substitutions and support-preserving conditional-choice formulas.
 
 mod objectives;
+mod objective_query;
 mod atoms;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -108,26 +109,13 @@ fn instantiate<'a>(
             objectives::prepare(&prepared, &support, limits, budget, &mut counters, location)
         })?;
     let mut builder = profile.phase(GroundingPhase::FormulaInitialization, None, || {
-        let mut builder = Builder {
+        let mut builder = Builder::empty(
             limits,
             budget,
-            catalog: atoms::Catalog::default(),
-            producers: Vec::new(),
-            producer_origins: Vec::new(),
-            atom_locations: Vec::new(),
-            nodes: Vec::new(),
-            node_indices: BTreeMap::new(),
-            roots: Vec::new(),
-            origins: Vec::new(),
             counters,
-            origin_count: 0,
-            aggregate_cache: BTreeMap::new(),
-            cached_elements: 0,
-            cached_key_bytes: 0,
-            cached_roots: 0,
-            count_plan: count_plan
-                .map(|request| crate::formula_count_plan::Collector::new(request, location)),
-        };
+            Purpose::Theory,
+            count_plan.map(|request| crate::formula_count_plan::Collector::new(request, location)),
+        );
         builder.node(Node::False, location)?;
         builder.node(Node::Implies(0, 0), location)?;
         Ok::<_, FormulaFailure>(builder)
@@ -172,6 +160,7 @@ struct Emission {
 }
 
 pub(super) struct Builder<'a> {
+    purpose: Purpose,
     pub(super) limits: &'a FormulaLimits,
     pub(super) budget: &'a mut Budget,
     catalog: atoms::Catalog,
@@ -189,6 +178,12 @@ pub(super) struct Builder<'a> {
     cached_key_bytes: u128,
     cached_roots: usize,
     count_plan: Option<crate::formula_count_plan::Collector>,
+}
+
+#[derive(Clone, Copy)]
+enum Purpose {
+    Theory,
+    Objective,
 }
 
 struct CachedAggregate {
@@ -210,6 +205,52 @@ impl GroundAggregate {
     }
 }
 impl Builder<'_> {
+    fn empty<'a>(
+        limits: &'a FormulaLimits,
+        budget: &'a mut Budget,
+        counters: Counters,
+        purpose: Purpose,
+        count_plan: Option<crate::formula_count_plan::Collector>,
+    ) -> Builder<'a> {
+        Builder {
+            limits,
+            budget,
+            catalog: atoms::Catalog::default(),
+            producers: Vec::new(),
+            producer_origins: Vec::new(),
+            atom_locations: Vec::new(),
+            nodes: Vec::new(),
+            node_indices: BTreeMap::new(),
+            roots: Vec::new(),
+            origins: Vec::new(),
+            counters,
+            origin_count: 0,
+            aggregate_cache: BTreeMap::new(),
+            cached_elements: 0,
+            cached_key_bytes: 0,
+            cached_roots: 0,
+            count_plan,
+            purpose,
+        }
+    }
+    fn node_bound(&self) -> (FormulaResource, usize) {
+        match self.purpose {
+            Purpose::Theory => (FormulaResource::Nodes, self.limits.theory.max_nodes),
+            Purpose::Objective => (
+                FormulaResource::ObjectiveFormulaNodes,
+                self.limits.max_objective_formula_nodes,
+            ),
+        }
+    }
+    fn atom_bound(&self) -> (FormulaResource, usize) {
+        match self.purpose {
+            Purpose::Theory => (FormulaResource::Atoms, self.limits.theory.max_atoms),
+            Purpose::Objective => (
+                FormulaResource::ObjectiveFormulaAtoms,
+                self.limits.max_objective_formula_atoms,
+            ),
+        }
+    }
     /// Complete the semantic additions before discarding construction indexes.
     /// Moving the emitted vectors preserves IDs, root order and source origins;
     /// cumulative budgets are never released with the discarded scratch.
@@ -277,9 +318,9 @@ impl Builder<'_> {
             return Ok(*index);
         }
         ceiling(
-            FormulaResource::Nodes,
+            self.node_bound().0,
             self.nodes.len() as u128 + 1,
-            self.limits.theory.max_nodes as u128,
+            self.node_bound().1 as u128,
             location,
         )?;
         let index = self.nodes.len();
@@ -381,23 +422,23 @@ impl Builder<'_> {
             .expect("all scoped variables assigned");
         self.counters.record(Event::AtomLookup);
         let required = self.catalog.len() as u128 + 1;
+        let (atom_resource, atom_limit) = self.atom_bound();
         let index = match self.catalog.entry(atom) {
             atoms::Entry::Occupied(index) => index,
             atoms::Entry::Vacant(entry) => {
-                ceiling(
-                    FormulaResource::Atoms,
-                    required,
-                    self.limits.theory.max_atoms as u128,
-                    location,
-                )?;
-                self.budget
-                    .charge(ExpansionResource::Origins, 1, location)?;
+                ceiling(atom_resource, required, atom_limit as u128, location)?;
+                if matches!(self.purpose, Purpose::Theory) {
+                    self.budget
+                        .charge(ExpansionResource::Origins, 1, location)?;
+                }
                 let index = entry
                     .insert()
                     .map_err(|error| FormulaFailure::AtomAllocation { error, location })?;
-                self.producers.push(Vec::new());
-                self.producer_origins.push(BTreeSet::from([location]));
-                self.atom_locations.push(location);
+                if matches!(self.purpose, Purpose::Theory) {
+                    self.producers.push(Vec::new());
+                    self.producer_origins.push(BTreeSet::from([location]));
+                    self.atom_locations.push(location);
+                }
                 self.counters.record(Event::AtomInserted);
                 index
             }
@@ -1319,7 +1360,7 @@ impl Builder<'_> {
     }
     fn aggregate_limits(&self) -> zetesis_ferraris::AggregateLimits {
         let mut limits = self.limits.aggregate;
-        limits.max_nodes = limits.max_nodes.min(self.limits.theory.max_nodes);
+        limits.max_nodes = limits.max_nodes.min(self.node_bound().1);
         limits.max_work = limits
             .max_work
             .min(self.limits.max_work - self.counters.work);

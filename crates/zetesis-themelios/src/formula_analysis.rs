@@ -84,10 +84,14 @@ pub(crate) fn analyze(
     let mut edges = 0_u128;
     for source in program.statements() {
         let location = extended::origin(source, fallback);
-        // The analyzed projection contains rules and optimization statements.
+        // The analyzed projection contains rules and optimization observations.
+        // Weak constraints have no heads, hence create no dependency edges.
         // A future directive must add its graph/allocation contract explicitly;
         // in particular, upstream #external pseudo-rules also allocate edges.
-        if !matches!(source.get(), Statement::Rule(_) | Statement::Optimize(_)) {
+        if !matches!(
+            source.get(),
+            Statement::Rule(_) | Statement::Optimize(_) | Statement::WeakConstraint(_)
+        ) {
             return Err(unsupported(ProfileFeature::Statement, location).into());
         }
         let mut scan = PoolFree::default();

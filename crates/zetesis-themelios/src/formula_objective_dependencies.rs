@@ -35,9 +35,11 @@ pub(crate) fn check(
             graph,
             objective
                 .condition
+                .literals()
                 .iter()
                 .filter_map(|literal| match literal {
                     LiteralIr::Atom(_, atom) => Some(signature(atom.predicate())),
+                    LiteralIr::PatternAtom(pattern) => Some(signature(pattern.atom.predicate())),
                     _ => None,
                 }),
         );
@@ -152,7 +154,7 @@ fn completed_profile(
     relevant: &BTreeSet<Signature>,
 ) -> bool {
     let queried = objectives.iter().any(|objective| {
-        objective.condition.iter().any(|literal| {
+        objective.condition.literals().iter().any(|literal| {
             !matches!(
                 literal,
                 LiteralIr::Atom(DefaultNegation::None, _) | LiteralIr::Compare(..)

@@ -311,6 +311,25 @@ impl<'a> Join<'a> {
         Ok(join)
     }
 
+    pub(crate) fn objective(
+        objective: &'a crate::formula_ir::ObjectiveIr,
+        support: &'a Support<'a>,
+        budget: &mut Budget,
+    ) -> Result<Self, FormulaFailure> {
+        let mut join = Self::new(
+            objective.condition.literals(),
+            &[],
+            objective.variables,
+            support,
+            budget,
+            objective.location,
+        )?;
+        if let crate::formula_ir::ObjectiveCondition::Body { bindings, .. } = &objective.condition {
+            join.bindings = bindings.as_ref();
+        }
+        Ok(join)
+    }
+
     pub(super) fn component(
         literals: &'a [LiteralIr],
         variables: usize,

@@ -6,7 +6,7 @@
 
 use themelios_base::span::Location;
 use themelios_program::program::{
-    Atom, BodyElement, Condition, Direction, Optimize, OptimizeElement, Statement,
+    Atom, Body, BodyElement, Condition, Direction, Optimize, OptimizeElement, Statement,
 };
 use themelios_program::provenance::{Origin, Provenance, TransformTag, WithProvenance};
 use themelios_program::symbol::Symbol;
@@ -75,6 +75,26 @@ pub(super) fn normalize(
         Statement::Optimize(Optimize::new(Direction::Minimize, [element])),
         provenance,
     )))
+}
+
+/// Clone an optimization condition into the existing scoped body representation.
+/// The enclosing objective retains original origins; this body is constructed.
+pub(super) fn body(
+    condition: &Condition,
+    budget: &mut Budget,
+    location: Location,
+) -> Result<Body, FormulaFailure> {
+    let mut size = CloneSize::default();
+    size.visit_condition(condition);
+    budget.charge(
+        ExpansionResource::TermWork,
+        size.nodes.saturating_add(1),
+        location,
+    )?;
+    budget.charge(ExpansionResource::ScalarBytes, size.bytes, location)?;
+    Ok(Body::new(condition.literals().map(|literal| {
+        BodyElement::Literal(literal.get().clone())
+    })))
 }
 
 #[derive(Default)]

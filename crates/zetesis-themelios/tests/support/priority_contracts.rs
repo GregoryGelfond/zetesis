@@ -22,7 +22,8 @@ pub fn check(fixture: &str) {
     let cases = source_cases::cases(fixture);
     for (case, line) in cases.into_iter().zip(fixture.lines()) {
         let row: Json = serde_json::from_str(line).unwrap();
-        let input = source_records::admit(&case.source, &FormulaLimits::default()).unwrap();
+        let input = source_records::admit(&case.source, &FormulaLimits::default())
+            .unwrap_or_else(|error| panic!("{}: {error}", case.name));
         assert_eq!(
             source_records::exhaustive(&input),
             case.records,
