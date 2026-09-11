@@ -109,7 +109,7 @@ impl Compiler<'_> {
             if let Some(condition) = condition {
                 compiler.literals(condition, &mut positive, &mut conditions)?;
             }
-            let key = if negation == DefaultNegation::None {
+            let slot = if negation == DefaultNegation::None {
                 // The matched original atom supplies complete key identity,
                 // including anonymous arguments and the selected pool branch.
                 let mut patterns = compiler.pattern_variants(atom, arguments)?;
@@ -119,18 +119,29 @@ impl Compiler<'_> {
                     pattern.key = Some(slot);
                 }
                 positive.push(patterns);
-                Template::Variable(slot)
+                slot
             } else {
                 // An absent atom cannot supply a row. Generate its exact source
                 // value and apply default negation to that completed alternative.
+                // function() charges its children; its caller owns the root.
+                compiler.node(1)?;
                 let key = compiler.function(&atom.name, arguments, 1, atom.sign)?;
                 let slot = compiler.generate(key)?;
+                compiler.node(1)?;
                 conditions.push(Condition::AtomValue(negation, slot));
-                Template::Variable(slot)
+                slot
             };
+            compiler.node(1)?;
+            let key = Template::Variable(slot);
             let query = compiler.finish(positive, conditions)?;
+            // The tag has both a template node and a ground-symbol node. The
+            // enclosing source set element was charged separately; each expanded
+            // alternative owns exactly one key tuple root, charged here.
+            compiler.node(1)?;
+            let tag = Template::Value(compiler.symbol(&Symbol::Number(tag), 1, false)?);
+            compiler.node(1)?;
             Ok(AggregateElement {
-                tuple: Template::Tuple(vec![Template::Value(Symbol::Number(tag)), key]),
+                tuple: Template::Tuple(vec![tag, key]),
                 query,
             })
         })
@@ -194,7 +205,6 @@ impl Compiler<'_> {
                         return Err(self.unsupported(Feature::Atom));
                     };
                     for arguments in atom.get().alternatives() {
-                        self.node(1)?;
                         elements.push(self.set_alternative(
                             atom.get(),
                             arguments,

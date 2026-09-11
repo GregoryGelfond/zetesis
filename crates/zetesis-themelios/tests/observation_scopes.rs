@@ -5,7 +5,7 @@ mod observation_reference;
 
 use zetesis_core::Model;
 use zetesis_cpu::{Control, Stop};
-use zetesis_themelios::observation::{ErrorKind, Feature, Limits, Resource};
+use zetesis_themelios::observation::{AdmissionLimits, ErrorKind, Feature, Limits, Resource};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
     admit_formula,
@@ -42,6 +42,73 @@ fn aggregate_count_deduplicates_the_complete_tuple() {
         rendered("p(1).p(2).q(1). #show. #show x:#count{X:p(X);X:q(X)}=2."),
         "x"
     );
+}
+
+#[test]
+fn cardinality_keys_pay_their_complete_admission_cost() {
+    // Each source has three outer nodes: output N, aggregate condition and guard
+    // N. Each source set element costs one more. Every expanded key has one tuple
+    // root, a template + number tag, and its key reference. Positive patterns pay
+    // their existing bounded source/matching walks. Negative keys instead pay
+    // their generated function root/children and the AtomValue condition.
+    for (source, nodes, expected) in [
+        ("#show. #show N:N={}.", 3, "0"),
+        ("#show. #show N:N=#count{1}.", 6, "1"),
+        ("p. #show. #show N:N={p}.", 9, "1"),
+        ("#show. #show N:N={not p}.", 10, "1"),
+        ("p. #show. #show N:N={not not p}.", 10, "1"),
+        ("-p. #show. #show N:N={-p}.", 9, "1"),
+        ("#show. #show N:N={not -p}.", 10, "1"),
+        ("-p. #show. #show N:N={not not -p}.", 10, "1"),
+        ("p(f(1)). #show. #show N:N={p(f(1))}.", 14, "1"),
+        ("#show. #show N:N={not p(f(1))}.", 13, "1"),
+        ("p(1).p(2). #show. #show N:N={p(1;2)}.", 22, "2"),
+        ("#show. #show N:N={not p(1;2)}.", 20, "2"),
+        ("p(1).q(1). #show. #show N:N={p(X):q(X)}.", 18, "1"),
+        ("p.r. #show. #show N:N={p;not q;not not r}.", 23, "3"),
+        ("p. #show. #show N:N={p}. #show f(N):N={p}.", 19, "1 f(1)"),
+    ] {
+        let run = |max_nodes| {
+            admit_formula(
+                source.into(),
+                AdmissionOptions::default(),
+                ExpansionLimits::default(),
+                FormulaLimits {
+                    observation: AdmissionLimits {
+                        max_nodes,
+                        ..AdmissionLimits::default()
+                    },
+                    ..FormulaLimits::default()
+                },
+            )
+        };
+        let input = run(nodes).unwrap_or_else(|error| panic!("{source}: {error}"));
+        let model = Model::new(input.atoms().iter().cloned());
+        let shown = input
+            .metadata()
+            .observations()
+            .render(
+                &model,
+                input.metadata().output(),
+                Limits::default(),
+                &Control::default(),
+            )
+            .unwrap();
+        assert_eq!(shown.text(), expected, "{source}");
+        let Err(FormulaFailure::Observation { error }) = run(nodes - 1) else {
+            panic!("{source}: every cardinality-key node must be charged");
+        };
+        assert_eq!(
+            error.kind(),
+            &ErrorKind::Limit {
+                resource: Resource::Nodes,
+                observed: u128::from(nodes),
+                limit: u128::from(nodes - 1),
+            },
+            "{source}",
+        );
+        assert!(error.location().is_some());
+    }
 }
 #[test]
 fn aggregate_keys_retain_tuple_tail_identity() {

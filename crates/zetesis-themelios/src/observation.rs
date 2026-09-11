@@ -31,7 +31,9 @@ pub(crate) use compile::compile;
 pub struct AdmissionLimits {
     /// Distinct directive templates.
     pub max_directives: u32,
-    /// Cumulative template, condition, and ground-symbol nodes.
+    /// Cumulative template, condition, and ground-symbol nodes, including
+    /// synthesized keys and guard references. Repeated bounded source walks
+    /// also consume this allowance; it is not the final tree's node count.
     pub max_nodes: u32,
     /// Maximum constructor nesting, checked before descending; capped at 64.
     pub max_depth: u32,
