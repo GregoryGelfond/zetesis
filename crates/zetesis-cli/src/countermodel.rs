@@ -224,13 +224,15 @@ fn complete(
     json: bool,
     color: crate::ColorMode,
 ) -> Result<Progress, SolveFailure> {
-    let report = match progress.report() {
-        Ok(report) => report,
-        Err(cause) => return Err(progress.fail(cause)),
-    };
+    if let Err(cause) = progress.completion() {
+        return Err(progress.fail(cause));
+    }
     let _output = phases.start(SolvePhase::ObservationOutput);
     let result = (|| {
-        if let Some(statistics) = report.countermodel_statistics {
+        if let Some(statistics) = progress
+            .semantic()
+            .and_then(crate::SemanticOutcome::countermodel_statistics)
+        {
             writeln!(
                 diagnostics,
                 "Reduct search: {} work, {} decisions, {} classical candidates, {} reduct queries, {} countermodels",
@@ -241,7 +243,7 @@ fn complete(
                 statistics.countermodels
             )?;
         }
-        finish(output, &report, json, color)
+        finish(output, &progress, json, color)
     })();
     match result {
         Ok(()) => {

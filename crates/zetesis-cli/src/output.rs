@@ -146,20 +146,19 @@ fn completion(value: Completion) -> &'static str {
 }
 
 fn summary(result: &Result<Progress, SolveFailure>, maximum: usize) -> Result<Vec<u8>, RunError> {
-    if let Ok(progress) = result {
-        progress.completion()?;
-    }
-    let mut out = Buffer::new(maximum);
-    let view = SummaryView::new(result);
-    let status = if result.is_err() {
-        "failed"
-    } else {
-        match view.completion {
-            Some(Completion::Interrupted) => "incomplete",
-            Some(Completion::Exhausted) if view.published_models == 0 => "unsatisfiable",
-            _ => "satisfiable",
+    let status = match result {
+        Err(_) => "failed",
+        Ok(progress) => {
+            let semantic = progress.semantic().ok_or(RunError::CompletionUnavailable)?;
+            match progress.completion()? {
+                Completion::Interrupted => "incomplete",
+                Completion::Exhausted if semantic.unsatisfiable() => "unsatisfiable",
+                _ => "satisfiable",
+            }
         }
     };
+    let mut out = Buffer::new(maximum);
+    let view = SummaryView::new(result);
     out.text("],\"outcome\":{\"status\":")?;
     out.string(status)?;
     out.text(",\"completion\":")?;

@@ -637,12 +637,8 @@ pub(crate) fn solve_program(
             None => break,
         }
     }
-    let report = match progress.report() {
-        Ok(report) => report,
-        Err(cause) => return Err(progress.fail(cause)),
-    };
     let finished = phases.measure(SolvePhase::ObservationOutput, || {
-        finish(output, &report, options.json, options.color)
+        finish(output, &progress, options.json, options.color)
     });
     match finished {
         Ok(()) => {
@@ -710,19 +706,21 @@ fn write_string(output: &mut impl Write, value: &str) -> io::Result<()> {
 
 pub(crate) fn finish(
     output: &mut impl Write,
-    report: &Report,
+    progress: &Progress,
     json: bool,
     color: crate::ColorMode,
 ) -> Result<(), RunError> {
+    let semantic = progress.semantic().ok_or(RunError::CompletionUnavailable)?;
+    let completion = progress.completion()?;
     // JSON emits one final outcome after statistics and failure accounting.
     if json {
         return Ok(());
     }
-    match report.completion {
+    match completion {
         Completion::Exhausted => {
-            if report.models == 0 {
+            if semantic.unsatisfiable() {
                 color.status(output, "UNSATISFIABLE")?;
-            } else if report.optimization.is_some() {
+            } else if semantic.optimum_proved() {
                 writeln!(output, "OPTIMUM FOUND")?;
             } else {
                 color.status(output, "SATISFIABLE")?;
@@ -737,24 +735,24 @@ pub(crate) fn finish(
             writeln!(
                 output,
                 "INCOMPLETE: {}",
-                report
-                    .interruption
-                    .as_ref()
-                    .expect("interrupted report carries a reason")
+                semantic
+                    .interruption()
+                    .expect("interrupted outcome carries a reason")
             )?;
             writeln!(output, "Coverage: partial")?;
         }
     }
-    if report.countermodel_statistics.is_some()
-        || matches!(report.interruption, Some(Interruption::Countermodel(_)))
+    if semantic.countermodel_statistics().is_some()
+        || matches!(semantic.interruption(), Some(Interruption::Countermodel(_)))
     {
         writeln!(
             output,
             "Models: {}; candidates examined: {}; gate tuples discovered: n/a (formula search)",
-            report.models, report.checked
+            progress.publication.models,
+            semantic.candidate_progress()
         )?;
     } else {
-        let examined = if report.shared_execution.is_some() {
+        let examined = if semantic.shared_execution().is_some() {
             "closure result/control records examined"
         } else {
             "candidates examined"
@@ -762,7 +760,9 @@ pub(crate) fn finish(
         writeln!(
             output,
             "Models: {}; {examined}: {}; gate tuples discovered: {}",
-            report.models, report.checked, report.discovered_gate_atoms
+            progress.publication.models,
+            semantic.candidate_progress(),
+            semantic.discovered_gate_atoms()
         )?;
     }
     Ok(())
