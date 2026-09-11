@@ -91,8 +91,8 @@ blocking. See [semantic foundations](../../docs/book/architecture/semantics.md).
 GPU support is in the default build. Explicit `metal`, `vulkan`, `dx12` or
 `gl` requests require that API. `gpu` accepts a physical adapter through a
 compiled wgpu API; `nvidia` adds a vendor filter, without a CUDA backend.
-Software, virtual and unknown adapter categories are refused. Device discovery
-and initialization happen during invocation; solving needs no qualification
+Software, virtual and unknown adapter categories are refused. The CLI discovers
+and initializes its device during invocation; solving needs no qualification
 script or stored pass marker. `zetesis devices` lists visible capabilities,
 but successful discovery alone does not guarantee shader initialization.
 
@@ -100,8 +100,8 @@ For relational closure:
 
 | Grounder | CPU | Automatic hardware | Explicit GPU |
 |---|---|---|---|
-| `auto` | Lazy source joins | Lazy CPU first; possible later static GPU batches | Static lowering |
-| `lazy` | Candidate-specific source joins | CPU throughout | Host source joins with per-world GPU consequences |
+| `auto` | Lazy source joins | Lazy CPU first; possible later lazy GPU batches | Host source joins with per-world GPU consequences |
+| `lazy` | Candidate-specific source joins | Lazy CPU first; possible later lazy GPU batches | Host source joins with per-world GPU consequences |
 | `eager` | Packed static closure | Static graph retained across GPU attempts and CPU fallback | Static lowering |
 
 The automatic closure policy may attempt a GPU after the first seed when a batch
@@ -157,7 +157,8 @@ A retained incumbent remains unproved when search coverage is incomplete.
 
 ## Compose the library
 
-`PreparedInput` borrows admitted relational, formula, bundle or ground input.
+`PreparedInput` borrows admitted relational, formula, bundle or ground input,
+or a native relational `Program` through `PreparedInput::program`.
 `Session::new` combines it with typed `SolveConfig` and `Control`.
 The iterator yields `Result<AnswerSet, SolveFailure>`; each successful model
 retains its exact subject, full interpretation and optional score.
@@ -170,10 +171,20 @@ answer instead establishes a consistent singleton family.
 An accepted model or scored incumbent is not by itself evidence of exhaustive
 coverage or a proved optimum. Read the terminal `SemanticOutcome` separately.
 
+`Session::builder` composes answer selection, typed observations and optional
+`ExecutionResources` before execution. Shared resources retain the selected
+device; each start has fresh search state, budgets, pipelines and outcomes over
+its original subject. Resource ownership does not select the execution policy.
+See the [session guide](../../docs/book/rust/sessions.md) for defaults, callback
+failures and device reuse.
+
 The `run_detailed` and diagnostic/bundle variants compose human writer views
 and return typed failure evidence. Verification, pending candidates, queued
 models, completed publication and the final summary have separate accounting.
 A semantic exhausted result may coexist with later output failure.
+`SemanticOutcome` is the driver's semantic authority; compatibility reports and
+status output derive from its evidence, while publication acknowledgements
+remain separate. Publishing no answers does not establish inconsistency.
 Generic injected writers use plain `ColorMode::Auto`; callers can request
 explicit styling. Color policy is separate from semantic `SolveConfig`.
 

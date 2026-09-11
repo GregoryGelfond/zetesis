@@ -51,9 +51,11 @@ pub enum ExecutionObservation<'a> {
         /// Logical scratch ceiling, not process RSS.
         max_scratch_bytes: u64,
     },
-    /// Automatic device discovery is deferred until a later batch.
+    /// An automatic device attempt is deferred until a later batch.
+    ///
+    /// The attempt uses a supplied context, or discovers a device when none was supplied.
     DeferredDevice {
-        /// Minimum candidate population for discovery.
+        /// Minimum candidate population for the device attempt.
         minimum_batch: usize,
         /// Effective relational grounding policy.
         grounder: Grounder,

@@ -117,8 +117,8 @@ automatic selection moves later batches from CPU to Metal. Explicit eager
 grounding remains available on either backend.
 General formulas use eager source grounding, with host candidate search,
 optional GPU propagation and exact CPU completion of unresolved reduct queries.
-When GPU execution is selected, adapter discovery and initialization happen
-automatically during the solve, including on the first run after installation.
+For CLI invocations that select GPU execution, adapter discovery and initialization
+happen automatically during the solve, including on the first run after installation.
 `zetesis devices` is an optional inventory.
 Automatic selection may keep small workloads on the CPU; `--backend metal`
 requests Metal explicitly.

@@ -129,6 +129,8 @@ The admitted owner can outlive several sessions. Each session starts fresh
 search budgets, worker pools, pending queues and incumbent storage. Reusing an
 owner does not resume a previous search.
 
+### Share execution resources
+
 With the `gpu` feature, `ExecutionResources::with_gpu(&context)` retains one
 explicit `GpuContext`. It can serve several sessions without selecting another
 device. This example constructs two independent native programs and solves each
@@ -164,6 +166,8 @@ invalidation affects its other clients, while input and observer refusals do
 not invalidate it. Sessions retain separate work budgets and semantic evidence.
 Per-primitive allocation limits do not impose a combined context or process
 memory ceiling. See the [ownership contract](../architecture/ownership.md#device-resource-scope).
+
+### Retain the original subject
 
 `AnswerSet::subject()` retains the checked `Program` or `Theory`.
 `Subject::same_instance` distinguishes shared owners from independently admitted but

@@ -27,6 +27,13 @@ reproducibility requires a particular backend. Selection distinguishes physical
 adapters from fallback/software devices and retains adapter metadata. Consult
 [public API](src/lib.rs) for exact constructors, limits and result types.
 
+`GpuContext` lets distinct primitives retain prepared subjects on one device.
+Existing constructors create independent contexts; `from_context` shares device
+resources and their failure boundary. Overlapping operations return `Busy`
+without waiting. Primitive byte ceilings retain their local scope. See
+[execution ownership](../../docs/book/architecture/ownership.md) and the
+[ordinary session example](../../docs/book/rust/sessions.md#share-execution-resources).
+
 ## Exact completion and failure
 
 A formula propagation fixed point is not itself an answer-set certificate.

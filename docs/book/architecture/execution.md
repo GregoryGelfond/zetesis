@@ -95,7 +95,8 @@ immutable offsets on a fresh theory.
 | Native aggregate reductions | Bounded reusable CPU/device primitive; availability alone does not imply use by every solve |
 
 wgpu supplies portable device access, including Metal on supported macOS
-adapters. Device availability is discovered at runtime. Requesting a backend is
+adapters. With default resources, device availability is discovered at runtime.
+Requesting a backend is
 not evidence that it ran; adapter identity, submitted work, completed work and
 residual work are separate observations. GPU support does not mean the complete
 solver is device-resident.
@@ -106,11 +107,14 @@ rule store. Explicit eager grounding retains its compiled graph, including when
 automatic device execution falls back to CPU. General formulas still require
 eager grounding.
 
-The relational scheduler starts on CPU and may discover a GPU when a later
+The relational scheduler starts on CPU and may attempt GPU execution when a later
 candidate batch contains at least 32 candidates. This is a provisional scheduling
 heuristic, not a measured crossover. Explicit lazy grounding permits the same
-automatic discovery. An explicit GPU backend initializes its requested device
-immediately; explicit shared CPU source batching remains a CPU policy.
+automatic attempt. An explicit GPU backend prepares its executor during session
+setup. Default resources discover a device at the selected attempt boundary;
+caller-supplied [ExecutionResources](../rust/sessions.md#share-execution-resources)
+reuse their exact context after policy and capability checks, without discovering
+a replacement. Explicit shared CPU source batching remains a CPU policy.
 
 If automatic device execution fails before publishing a batch, the engine can
 retry those same seeds on CPU. It retains the failed lazy device attempt's work
