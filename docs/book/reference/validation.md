@@ -565,11 +565,11 @@ status. A newer source remains unqualified until its own checks complete.
 
 | Population | Covered / instrumented lines | Coverage |
 | --- | ---: | ---: |
-| Workspace, all features, portable tests plus 34 physical Metal tests | 47,613 / 50,915 | 93.51% |
-| CPU-only CLI, separate instrumentation | 4,480 / 4,789 | 93.55% |
+| Workspace, all features, portable tests plus 40 physical Metal tests | 48,019 / 51,079 | 94.01% |
+| CPU-only CLI, separate instrumentation | 4,579 / 4,894 | 93.56% |
 
 This snapshot was qualified on 11 September 2026 for
-[`95e64fcb`](https://github.com/GregoryGelfond/zetesis/tree/95e64fcb159b5e584225209efb120729769b9a19),
+[`6df022e3`](https://github.com/GregoryGelfond/zetesis/tree/6df022e38932cc1b1b95600bed8c9d60d38dd79e),
 using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS 26.6.2 with Apple M4 Pro
 Metal. Both populations passed their independent 91% floor. The workspace
 combines its portable and physical profiles; the CPU-only population remains
@@ -578,6 +578,10 @@ and Grouped support construction. The relation tests cover typed equality masks,
 prepared-view refusals and matched scalar/Rayon/Metal measurement results.
 The shared-context tests cover formula execution while relation columns remain
 prepared, non-destructive contention refusal and failure propagation to peers.
+Ordinary-session tests check exact context identity across eager/lazy closure,
+delayed automatic selection and formula setup. Repeated sessions preserve
+independent subjects, budgets, costs and outcomes while sharing the device;
+policy and observer refusals preserve later reuse.
 The automatic-selection regression checks that actual Metal use preserves
 lazy grounding for an admitted relational program.
 Vulkan and other untested devices are outside this measurement.

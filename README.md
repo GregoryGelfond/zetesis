@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 ![Rust 1.97+](https://img.shields.io/badge/rust-1.97%2B-orange?style=flat-square)
-[![Line coverage: 93.51% (CPU + Metal)](https://img.shields.io/badge/coverage-93.51%25%20%28CPU%20%2B%20Metal%29-brightgreen?style=flat-square)](docs/book/reference/validation.md#coverage)
+[![Line coverage: 94.01% (CPU + Metal)](https://img.shields.io/badge/coverage-94.01%25%20%28CPU%20%2B%20Metal%29-brightgreen?style=flat-square)](docs/book/reference/validation.md#coverage)
 
 ζήτησις, *inquiry/search* — candidate-directed answer-set solving through the reduct.
 
