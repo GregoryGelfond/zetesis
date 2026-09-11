@@ -124,9 +124,9 @@ fn cyclic_objective_gaps_preserve_original_answers() {
 }
 
 #[test]
-#[ignore = "requires independent clingo 5.8.2 with absolute CLINGO"]
+#[ignore = "requires independent clingo 5.8.2 on PATH or through CLINGO"]
 fn original_boundary_sources_retain_reference_outcomes() {
-    let executable = PathBuf::from(std::env::var_os("CLINGO").expect("set absolute CLINGO"));
+    let executable = clingo();
     for case in cases() {
         let source = case["source"].as_str().unwrap();
         let directory = tempfile::tempdir().unwrap();
@@ -204,4 +204,17 @@ fn original_boundary_sources_retain_reference_outcomes() {
             "{source}"
         );
     }
+}
+
+fn clingo() -> PathBuf {
+    std::env::var_os("CLINGO")
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::split_paths(&std::env::var_os("PATH")?)
+                .map(|directory| directory.join("clingo"))
+                .find(|path| path.is_file())
+        })
+        .expect("independent clingo on PATH or through CLINGO")
+        .canonicalize()
+        .expect("absolute oracle executable")
 }

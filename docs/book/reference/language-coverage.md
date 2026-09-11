@@ -44,6 +44,12 @@ boundaries to their tests and the admitted-language reference.
 | L17 | **Open:** scoped arithmetic, aggregates, conditionals and structural pools preserve full answer identity; generative equality chains, constructor inversion and other documented binding contexts remain restricted | [Observation scopes](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/observation_scopes.rs) |
 | L18 | `#project` with explicit projected enumeration and answer-identity contracts | [Metadata admission](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/metadata.rs) |
 
+The [objective boundary witnesses](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_language_boundaries.rs)
+retain exact sources, located refusals and complete independent reference
+results for L10 and L13–16. Four cyclic objective cases also verify the complete
+native answers of the objective-free program: their remaining restriction is
+in objective eligibility, not parsing or that program's answer-set semantics.
+
 ## State, extensions and input
 
 These are separate contracts because they involve state ownership, host calls or
