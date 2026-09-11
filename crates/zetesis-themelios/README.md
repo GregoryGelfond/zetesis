@@ -337,13 +337,60 @@ selection hides ordinary atoms. Term-only shows leave default atom output enable
 Parameterless `#program base` delimiters are accepted; this is not multi-shot
 program-part support.
 
-The formula boundary also admits bounded term observations with structural output
-values, positive binders, admitted negative atoms and nongenerative scalar
-comparisons. Evaluation produces a separate term channel over the supplied full
-model; it does not establish stability or add support. Terms deduplicate within
-that channel, while equal atom/term spellings both remain visible. Arithmetic or
-generative displays and broader condition forms remain refused.
-See [observation APIs](src/observation.rs).
+The formula boundary admits finite term observations over a caller-supplied full
+model. Output terms include structural values, checked scalar arithmetic, pools
+and integer intervals. Conditions include Boolean values, signed atoms,
+comparisons, directed scalar equalities, scoped aggregate guards and assignments,
+and universal conditional literals. Positive patterns bind explicit constructor
+or tuple positions, including finite structural pools; arithmetic arguments can
+read captures from the same matched atom. An alternative exports only captures
+available in every branch unless another binder supplies the name.
+
+Observation truth always uses the supplied model. It does not modify the logical
+atom catalog, formula theory, grounding domain, objective priorities or stability
+claim. Local aggregate and conditional names do not escape their scope. Aggregate
+keys retain complete tuple identity; positive cardinality keys come from exact
+matched atoms, including sign and arguments. Sums compare checked widened totals;
+constructing an assigned numeric value still requires the pinned i32 scalar
+range. Empty `#min{}` and `#max{}` return the genuine `#sup` and `#inf` endpoints;
+a nonempty extremum element with no measure is refused.
+
+`evaluate`, `render` and `view` return complete results or a located typed error.
+Undefined/overflowing expressions, missing bindings, exceeded limits and
+cancellation do not return a partial observation. Terms deduplicate only within
+the term channel; an equal selected atom and shown term both remain visible.
+Distinct original answers retain their hidden identity even when displays agree.
+`#project` remains separate from observation. Native observation also permits
+anonymous projection of either strong sign under default negation, such as
+`#show absent:not -p(_).`; clingo 5.8.2 reports these strongly signed anonymous
+forms unsafe. This is an explicit supplied-model observation extension, recorded
+separately from compatible comparisons. Widened aggregate comparisons can also
+differ from clingo's reported integer wrapping. Neither difference changes the
+original theory or claims an upstream implementation defect.
+
+Each completed outer or local substitution is charged before testing its final
+conditions. Relational joins may examine the Cartesian product of their finite
+model relations and source alternatives; generated value products and nested
+queries have independent finite work and storage ceilings. Source structural
+pool products are checked before materialization, and their compiled nodes and
+text remain charged. Runtime generated alternatives, owned bindings and retained
+aggregate keys share `max_local_bytes` (default 8 MiB), measured as 16 bytes per
+semantic node plus UTF-8 text. Borrowed model values, container capacity and
+allocator overhead are excluded. This semantic budget is not RSS; transient
+scope ownership is released separately from retained output payload. See the
+[observation API limits](src/observation.rs) and
+[observation proof guide](../../proofs/guide/observations.md).
+
+L17 remains partly open. Valid source forms still refused include structural
+inversion (`#show X:f(X)=f(1).`), inverse arithmetic binding
+(`p(2). #show X:p(X+1).`), and anonymous negative cardinality keys
+(`#show N:N={not p(_)}.` or `p(1). #show N:N={not not p(_)}.`).
+Bare-variable equalities and evaluated arithmetic with independently established
+inputs are supported. External calls, theory expressions, anonymous constructed
+values, unsafe free variables and circular aggregate result dependencies remain
+outside the admitted profile; checked arithmetic and resource failures are
+separate outcomes. The [open-query regressions](tests/observation_expressions.rs)
+retain located refusals and complete external reference witnesses.
 
 Theory atoms, scripting and Rust `@`-functions are not implemented. `#heuristic`
 and `#edge` are excluded from the intended language. Other unsupported directives
