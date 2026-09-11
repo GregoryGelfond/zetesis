@@ -12,7 +12,7 @@ use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 const CASES: &str = include_str!("fixtures/objective-source-completion.jsonl");
 
 #[test]
-fn source_completion_preserves_full_scored_answers() {
+fn source_eligibility_preserves_full_scored_answers() {
     let cases = source_cases::cases(CASES);
     assert_eq!(cases.len(), 36);
     for (case, row) in cases.into_iter().zip(CASES.lines()) {
@@ -35,7 +35,7 @@ fn source_completion_preserves_full_scored_answers() {
 }
 
 #[test]
-fn source_completion_keeps_the_original_reduct_subject() {
+fn source_eligibility_keeps_the_original_reduct_subject() {
     for case in source_cases::cases(CASES) {
         let program = case
             .source
@@ -73,7 +73,7 @@ fn source_completion_keeps_the_original_reduct_subject() {
 }
 
 #[test]
-fn source_completion_limits_are_inclusive() {
+fn source_eligibility_limits_are_inclusive() {
     for source in [
         "p(1;2).{q(1);q(2)}.#minimize{X@X:p(X),not q(X)}.",
         "{a;b}.n(N):-N=#count{1:a;2:b}.#minimize{1@N:n(N);1@3:not a}.",
@@ -129,8 +129,8 @@ fn source_completion_limits_are_inclusive() {
 }
 
 #[test]
-#[ignore = "requires independent clingo for 36 original completion sources"]
-fn source_completion_matches_fresh_clingo() {
+#[ignore = "requires independent clingo for 36 original source-eligibility cases"]
+fn source_eligibility_matches_fresh_clingo() {
     for case in source_cases::cases(CASES) {
         assert_eq!(
             source_oracle::records(&case.source),

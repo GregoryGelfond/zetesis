@@ -54,8 +54,10 @@ pub(crate) struct ObjectiveIr {
     /// source eligibility through a literal, filter or repeated variable.
     /// Applicable completed refinements may exclude impossible source values.
     pub priority_sources: BTreeSet<usize>,
-    /// Use finite source truth coverage and a closed original-model query.
-    pub source_completion: bool,
+    /// Select finite source truth coverage and a closed original-model query.
+    /// The query decides contribution in the model; it does not establish source
+    /// eligibility or simultaneous realizability of possible source rows.
+    pub needs_eligibility_query: bool,
     pub condition: ObjectiveCondition,
     pub variables: usize,
     pub origins: Vec<Location>,
@@ -690,7 +692,7 @@ impl Compiler<'_> {
             filters,
             polarity,
             priority_sources: BTreeSet::new(),
-            source_completion: false,
+            needs_eligibility_query: false,
             condition: ObjectiveCondition::Literals(condition),
             variables: count,
             origins,

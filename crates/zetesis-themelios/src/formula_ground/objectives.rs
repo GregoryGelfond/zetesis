@@ -14,8 +14,8 @@ use crate::expansion::Budget;
 use crate::formula::ceiling;
 use crate::formula_ir::{ObjectiveCondition, ObjectiveField, ObjectiveIr, Operation, Prepared};
 use crate::formula_objective_dependencies::Presence;
-use crate::formula_objective_dependencies::completion::{
-    Activity, Completion, Context, model_condition,
+use crate::formula_objective_dependencies::eligibility::{
+    Activity, Context, SourceEligibility, model_condition,
 };
 use crate::formula_support::{self, Counters, Join, Support};
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
@@ -31,12 +31,12 @@ pub(super) fn prepare(
     let presence = crate::formula_objective_dependencies::check_presence(
         prepared, support, limits, budget, counters,
     )?;
-    let completion = if prepared
+    let eligibility = if prepared
         .objectives
         .iter()
-        .any(|objective| objective.source_completion)
+        .any(|objective| objective.needs_eligibility_query)
     {
-        Some(Completion::build(
+        Some(SourceEligibility::build(
             prepared,
             support,
             presence.retained_entries(),
@@ -56,7 +56,7 @@ pub(super) fn prepare(
         counters,
         templates: Vec::new(),
         origins: Vec::new(),
-        completion: completion.as_ref(),
+        eligibility: eligibility.as_ref(),
     };
     for objective in &prepared.objectives {
         let may_have_numeric_weight =
@@ -78,7 +78,7 @@ struct Preparation<'a> {
     counters: &'a mut Counters,
     templates: Vec<ObjectiveTemplate>,
     origins: Vec<Vec<Location>>,
-    completion: Option<&'a Completion>,
+    eligibility: Option<&'a SourceEligibility>,
 }
 
 impl Preparation<'_> {
@@ -90,7 +90,7 @@ impl Preparation<'_> {
         presence: &Presence<'_>,
     ) -> Result<(), FormulaFailure> {
         if objective.priority_sources.is_empty()
-            && !objective.source_completion
+            && !objective.needs_eligibility_query
             && let [Operation::Constant(Value::Number(priority))] =
                 objective.priority.nodes.as_slice()
             && objective.weight.term().is_some()
@@ -128,17 +128,17 @@ impl Preparation<'_> {
             } else {
                 None
             };
-            if objective.source_completion {
-                let completion = self
-                    .completion
-                    .expect("selected source completion prepared");
+            if objective.needs_eligibility_query {
+                let eligibility = self
+                    .eligibility
+                    .expect("selected source eligibility prepared");
                 let mut context = Context {
                     limits: self.limits,
                     budget: self.budget,
                     counters: self.counters,
                     location: objective.location,
                 };
-                if completion.activity(objective.condition.literals(), &binding, &mut context)?
+                if eligibility.activity(objective.condition.literals(), &binding, &mut context)?
                     == Activity::Absent
                 {
                     continue;
@@ -220,7 +220,7 @@ impl Preparation<'_> {
                 objective.location,
             )?));
         }
-        if objective.source_completion {
+        if objective.needs_eligibility_query {
             let mut context = Context {
                 limits: self.limits,
                 budget: self.budget,

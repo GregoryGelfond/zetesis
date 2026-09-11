@@ -1,13 +1,13 @@
 //! Select source-eligibility precision without changing the original query.
 //!
 //! A structural positive observer plan enables optional completed carrier
-//! refinements. Nonqualification selects ordinary/possible-support completion;
+//! refinements. Nonqualification selects ordinary/possible-support eligibility;
 //! it is not a failure of an applied certificate. Resource and evaluation errors
 //! arise during materialization and always propagate.
 
 mod forwarding;
 mod presence;
-pub(crate) mod completion;
+pub(crate) mod eligibility;
 
 pub(crate) use presence::{Presence, check as check_presence};
 
@@ -44,7 +44,7 @@ pub(crate) fn check(
                 }),
         );
         let precision =
-            if completed_profile(rules, std::slice::from_ref(objective), graph, &relevant) {
+            if needs_eligibility_query(rules, std::slice::from_ref(objective), graph, &relevant) {
                 None
             } else {
                 positive_precision(rules, std::slice::from_mut(objective), graph, &relevant)
@@ -52,7 +52,7 @@ pub(crate) fn check(
         if let Some(required) = precision {
             extrema.extend(required);
         } else {
-            objective.source_completion = true;
+            objective.needs_eligibility_query = true;
         }
     }
     extrema
@@ -147,7 +147,10 @@ fn positive_precision(
     Some(presence::required(rules, objectives, graph, &generated))
 }
 
-fn completed_profile(
+/// These shapes immediately select source coverage plus an original-model query.
+/// Otherwise a positive precision plan is attempted; its nonapplicability still
+/// selects the same eligibility/query path. This does not evaluate model truth.
+fn needs_eligibility_query(
     rules: &[RuleIr],
     objectives: &[ObjectiveIr],
     graph: &DependencyGraph,

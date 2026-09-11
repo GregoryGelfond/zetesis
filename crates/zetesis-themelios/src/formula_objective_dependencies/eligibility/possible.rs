@@ -1,12 +1,12 @@
 //! One completed possible relation is the authoritative conservative carrier.
 //! Membership covers possible truth and never establishes realizability.
 
-use super::{Activity, Completion, Context};
+use super::{Activity, Context, SourceEligibility};
 use crate::formula_support::{self, Support};
 use crate::{ExpansionResource, FormulaFailure};
 use zetesis_core::Atom;
 
-impl Completion {
+impl SourceEligibility {
     pub(super) fn possible(
         &mut self,
         predicate: &zetesis_core::Predicate,

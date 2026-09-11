@@ -89,7 +89,7 @@ impl Presence<'_> {
         limits: &FormulaLimits,
         counters: &mut Counters,
     ) -> Result<bool, FormulaFailure> {
-        if objective.source_completion || self.nonnumeric.is_empty() {
+        if objective.needs_eligibility_query || self.nonnumeric.is_empty() {
             return Ok(true);
         }
         counters.work(limits, objective.location)?;

@@ -186,7 +186,7 @@ impl Compiler<'_> {
             filters: Vec::new(),
             polarity,
             priority_sources: BTreeSet::new(),
-            source_completion: true,
+            needs_eligibility_query: true,
             condition: ObjectiveCondition::Body {
                 literals: body,
                 bindings,

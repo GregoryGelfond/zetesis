@@ -8,8 +8,8 @@
 
 use super::{Atom, Builder, Node, Purpose, Value};
 use crate::formula_ir::LiteralIr;
-use crate::formula_objective_dependencies::completion::Context;
-use crate::formula_objective_dependencies::completion::query::Query;
+use crate::formula_objective_dependencies::eligibility::Context;
+use crate::formula_objective_dependencies::eligibility::query::Query;
 use crate::formula_support::{self, Support};
 use crate::{ExpansionResource, FormulaFailure};
 use zetesis_objective::{Condition, ConditionNode};

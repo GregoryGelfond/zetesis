@@ -63,8 +63,11 @@ impl Activity {
     }
 }
 
+/// Finite source-atom truth coverage built from completed possible Support.
+/// Optional rows need not be simultaneously realizable. This certificate never
+/// determines answer-set membership or replaces original-model query truth.
 #[derive(Default)]
-pub(crate) struct Completion {
+pub(crate) struct SourceEligibility {
     atoms: BTreeMap<Atom, Activity>,
 }
 
@@ -197,7 +200,7 @@ impl Context<'_> {
     }
 }
 
-impl Completion {
+impl SourceEligibility {
     pub(crate) fn build(
         prepared: &Prepared,
         support: &Support<'_>,
@@ -211,7 +214,7 @@ impl Completion {
             prepared
                 .objectives
                 .iter()
-                .filter(|objective| objective.source_completion)
+                .filter(|objective| objective.needs_eligibility_query)
                 .flat_map(|objective| {
                     objective
                         .condition

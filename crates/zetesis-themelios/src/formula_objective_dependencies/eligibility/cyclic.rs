@@ -7,12 +7,12 @@
 use std::collections::BTreeSet;
 use themelios_program::symbol::Signature;
 
-use super::{Completion, Context, ordinary, refusal, signature};
+use super::{Context, SourceEligibility, ordinary, refusal, signature};
 use crate::FormulaFailure;
 use crate::formula_ir::{HeadIr, Prepared};
 use crate::formula_support::Support;
 
-impl Completion {
+impl SourceEligibility {
     pub(super) fn cyclic(
         &mut self,
         prepared: &Prepared,
