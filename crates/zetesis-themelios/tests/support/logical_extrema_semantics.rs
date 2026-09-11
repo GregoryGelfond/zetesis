@@ -48,10 +48,11 @@ fn eligible(mode: u8, candidate: World, inner: Option<World>) -> bool {
     )
 }
 
-/// Each row declares (term ordinal, full-key suffix, signed operand, condition).
+/// Each row declares (optional term ordinal, suffix, signed operand, condition).
+/// An absent ordinal denotes the one empty tuple: its suffix has no meaning.
 /// The fixed seed rules provide possible support without unconditional choices.
 pub(super) struct Selection {
-    pub rows: Vec<(u8, u8, u8, u8)>,
+    pub rows: Vec<(Option<u8>, u8, u8, u8)>,
     pub bound: u8,
     pub relation: u8,
     pub body: u8,
@@ -68,12 +69,20 @@ impl Selection {
             .rows
             .iter()
             .filter(|row| world.operand(row.2) && eligible(row.3, world, None))
-            .map(|row| (row.0, row.1))
+            .map(|row| row.0.map(|value| (value, row.1)))
             .collect();
         let value = if self.maximum {
-            tuples.iter().map(|row| row.0).max().unwrap_or(0)
+            tuples
+                .iter()
+                .filter_map(|row| row.map(|row| row.0))
+                .max()
+                .unwrap_or(0)
         } else {
-            tuples.iter().map(|row| row.0).min().unwrap_or(8)
+            tuples
+                .iter()
+                .filter_map(|row| row.map(|row| row.0))
+                .min()
+                .unwrap_or(8)
         };
         match self.relation {
             0 => value == self.bound,
@@ -127,7 +136,10 @@ impl Selection {
             if index != 0 {
                 source.push(';');
             }
-            write!(source, "{},{key}:", TERMS[usize::from(value)]).unwrap();
+            if let Some(value) = value {
+                write!(source, "{},{key}", TERMS[usize::from(value)]).unwrap();
+            }
+            source.push(':');
             source.push_str(["", "not ", "not not "][usize::from(head / 4)]);
             source.push_str(["a", "c", "#true", "#false"][usize::from(head % 4)]);
             source.push_str(

@@ -46,9 +46,6 @@ pub enum ProfileFeature {
     ConditionalDisjunction,
     /// A finite function-head group aliases complete tuple and atom identities.
     HeadAggregateAlias,
-    /// A bounded extremum head contains a tuple with no first value.
-    /// No total measure is established for this source construct.
-    HeadAggregateMissingValue,
     /// A choice with a lower or upper bound.
     BoundedChoice,
     /// A choice containing other than one source element.
@@ -108,9 +105,6 @@ impl fmt::Display for ProfileFeature {
             Self::ProgramPart => "program part",
             Self::Head => "head form",
             Self::ConditionalDisjunction => "conditional disjunction element",
-            Self::HeadAggregateMissingValue => {
-                "a bounded extremum head with a missing first tuple value"
-            }
             Self::HeadAggregateAlias => "aliased function aggregate head tuple and atom",
             Self::BoundedChoice => "bounded choice",
             Self::ChoiceCardinality => "choice with other than one element",

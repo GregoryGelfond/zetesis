@@ -661,7 +661,9 @@ pub(crate) struct Compiled {
 /// are zero, and sum+ measures only strictly positive numeric weights. Every
 /// positive head retains its independent permission. Unbounded heads need no
 /// measure evaluation but still validate source terms and bindings. A bounded
-/// extremum with a missing first value retains a named profile refusal. Positive,
+/// extremum projects only present first values, using its ordinary empty value
+/// if none remain. Missing tuples retain their independent permissions under
+/// this declared extension; some original sources differ from clingo. Positive,
 /// default-negated and double-negated ordinary element conditions retain their
 /// original eligibility formulas.
 /// Min/max first tuple values and guards use complete finite logical values in

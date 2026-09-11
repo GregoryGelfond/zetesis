@@ -168,8 +168,13 @@ sum values and nonpositive positive-only weights are neutral contributions;
 the frozen reduct. Removing an absent bound preserves the permission formula in
 arbitrary context. These laws apply after complete active tuple keys have been
 coalesced. The [head contribution contract](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/head-contributions.md)
-separates formal source translation, executable evidence, reference differences
-and the guarded missing-extremum boundary.
+separates formal source translation, executable evidence and reference differences.
+Its declared missing-extremum extension projects present first values before
+the existing ordered reduction. `complete_extremum_conservative` preserves the
+prior complete-value domain; `selected_extremum_values` requires complete key
+coverage. `extremum_head_in_context` lifts an implementation's exact original
+measure truth through the candidate-only bound with unchanged permissions.
+This does not prove source coverage or Rust refinement.
 
 [`ObjectivePriorities`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ObjectivePriorities.lean)
 keeps weight, priority, tuple and eligibility in one resolved row.

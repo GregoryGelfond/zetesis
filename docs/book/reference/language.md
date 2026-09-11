@@ -140,8 +140,8 @@ the empty selection. The canonical aggregate can be replaced by that constant
 in both the original formula and every frozen reduct. Head permissions and signed
 activity remain separate: a true bound cannot supply support for an atom.
 Source bindings, eligibility, measured values and reached arithmetic still undergo
-their required validation before a comparison is folded. Logical bounds do not
-bypass the missing-value boundary for guarded extremum heads.
+their required validation before a comparison is folded. A missing extremum-head
+value is neutral under the explicit rule below; it does not bypass validation.
 
 The [logical-bound contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/logical_bounds.rs)
 cover declared answer families, all comparison relations, arbitrary frozen
@@ -183,7 +183,7 @@ separated in the [Lean proof boundary](../lean/correspondence.md).
 | Assignment consumers | Dependency-ordered scalar/tuple filters and equalities, evaluated positive arguments/heads, admitted outer negative atoms, finite outer ranges, logical choice bounds, nonbinding aggregate guards and universal conditionals; acyclic objective dependencies can include several assignments | Broader local scopes and cyclic assignment generators |
 | `#count` heads | Positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions, Boolean operands and objective dependencies | Unsupported local eligibility scopes |
 | `#sum`, `#sum+` heads | Signed numeric `#sum` and positive-only numeric `#sum+`; missing/nonnumeric measures contribute zero; positive atomic permission is independent of numeric contribution, including nonpositive `#sum+` weights and objective dependencies | Unsupported local eligibility scopes |
-| `#min`, `#max` heads | Complete logical first tuple values in ASP term order; positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions, Boolean operands and objective dependencies | Guarded empty-tuple elements, the numeric endpoint guard and unsupported local eligibility scopes |
+| `#min`, `#max` heads | Complete first values use ASP term order; missing values are neutral under the declared extension; positive atomic permission coalesces by head atom and signed activity by complete tuple, including both alias directions, Boolean operands and objective dependencies | The numeric endpoint guard and unsupported local eligibility scopes |
 
 A tuple becomes active when any occurrence has a true head operand and satisfies
 its own condition. An unsigned atomic operand is true when that atom is selected;
@@ -234,12 +234,36 @@ separate these concerns and state the required order and carrier assumptions.
 Acyclic aggregate assignments may depend on earlier assignments through scalar
 and range values. A proposed value remains guarded by the original aggregate
 equality. Membership in possible support cannot replace model-relative aggregate
-truth. A guarded extremum head requires a first tuple value; an empty tuple is
-distinct from a complete logical value such as `#sup`. An actually empty
-aggregate retains its ordinary empty-extremum value.
+truth.
 
-These head permissions and numeric contributions follow [Abstract Gringo,
-§§2.1 and 3](https://arxiv.org/pdf/1507.06576v2). Some source forms produce
+For a finite selected tuple set `T`, let `V(T)` contain the first values of its
+nonempty tuples. An extremum head uses the least/greatest value in `V(T)`, or
+`#sup`/`#inf` respectively when `V(T)` is empty. Empty tuples have no measure
+contribution and retain their independent head permission. A first value that
+is itself `()` is present, as are symbols, strings and both infinite values.
+This conserves ordinary extrema on empty aggregates and complete nonempty
+tuples. It is a declared extension at the all-missing boundary, not a rule
+uniquely determined by the published nonempty-set definition.
+
+For example:
+
+```asp
+{{#include ../../../crates/zetesis-themelios/tests/fixtures/head-neutral-extrema.lp}}
+```
+
+This checked source has answer sets `{b}` and `{a,b}`. Its head
+translation is `(a ∨ ¬a) ∧ (b ∨ ¬b) ∧ ¬¬b`: the bound checks the candidate,
+while the choices provide permission. At those two candidates, the reducts
+reduce to `b` and `a ∧ b`. Erasing the neutral `a` permission would change the
+second reduct and lose `{a,b}`. clingo 5.8.2 returns only `{b}` for this exact
+source. The [full rationale](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/head-contributions.md#missing-extrema-the-declared-extension)
+states the finite rule, conservation domain and source correspondence boundary.
+The extension applies to heads; body, assignment and observation extrema keep
+their existing nonempty-tuple admission profile.
+
+The head permissions and sum contributions follow [Abstract Gringo,
+§§2.1 and 3](https://arxiv.org/pdf/1507.06576v2); missing extrema use the declared
+extension above. Some source forms produce
 different answer-set families in clingo 5.8.2. The [contribution contract and
 comparison table](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/head-contributions.md) give the original
 programs, both results and the remaining source-correspondence limits. Those

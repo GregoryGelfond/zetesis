@@ -408,13 +408,9 @@ fn logical_extrema_do_not_certify_atom_counts() {
 }
 
 #[test]
-fn bounded_empty_head_tuples_have_named_refusals() {
-    for function in ["#min", "#max"] {
-        profile(
-            &format!("{function}{{:a}}<=0."),
-            ProfileFeature::HeadAggregateMissingValue,
-        );
-    }
+fn bounded_empty_head_tuples_use_neutral_measures() {
+    assert!(native(&input("#min{:a}<=0.")).is_empty());
+    assert_eq!(native(&input("#max{:a}<=0.")), native(&input("{a}.")));
 }
 
 #[test]
@@ -546,6 +542,16 @@ proptest::proptest! {
         bound in 0_u8..9, relation in 0_u8..6, body in 0_u8..4,
         maximum in proptest::bool::ANY,
     ) {
+        let rows = rows.into_iter().map(|(value, key, head, condition)| (Some(value), key, head, condition)).collect();
+        logical::Selection { rows, bound, relation, body, maximum }.check_frozen();
+    }
+
+    #[test]
+    fn missing_measures_match_independent_frozen_worlds(
+        rows in proptest::collection::vec((proptest::option::of(0_u8..9), 0_u8..3, 0_u8..12, 0_u8..10), 1..7),
+        bound in 0_u8..9, relation in 0_u8..6, body in 0_u8..4,
+        maximum in proptest::bool::ANY,
+    ) {
         logical::Selection { rows, bound, relation, body, maximum }.check_frozen();
     }
 
@@ -555,6 +561,7 @@ proptest::proptest! {
         bound in 0_u8..9, relation in 0_u8..6, body in 0_u8..4,
         maximum in proptest::bool::ANY,
     ) {
+        let rows = rows.into_iter().map(|(value, key, head, condition)| (Some(value), key, head, condition)).collect();
         let mut selection = logical::Selection { rows, bound, relation, body, maximum };
         let expected = native(&input(&selection.source()));
         selection.rows.extend(selection.rows.clone());

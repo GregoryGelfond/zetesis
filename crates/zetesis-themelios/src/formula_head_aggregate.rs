@@ -51,7 +51,7 @@ impl Compiler<'_> {
                 .terms()
                 .map(|term| self.aggregate_term(term, &mut local))
                 .collect::<Result<Vec<_>, _>>()?;
-            // A bound needs a defined measure even in a statically false rule.
+            // A present extremum value is validated even in a statically false rule.
             // Without bounds only the head choices remain, but source terms and
             // binding instructions are still compiled and validated below.
             if aggregate.left_guard().is_some() || aggregate.right_guard().is_some() {
@@ -244,8 +244,9 @@ pub(super) enum Contribution<'a> {
 /// Contribution is independent of permission to select the head. Count ignores
 /// tuple values; missing/nonnumeric sum values have weight zero. Numeric
 /// nonpositive sum+ weights also contribute nothing. All retain permission.
-/// A bounded extremum requires a complete first value in the admitted domain;
-/// an unbounded head never calls this operation because it has no measure bound.
+/// Missing extremum values are neutral; complete values retain their logical
+/// order and admitted domain. An unbounded head never calls this operation
+/// because it has no measure bound.
 pub(super) fn contribution(
     measure: HeadMeasure,
     first: Option<&Value>,
@@ -255,12 +256,9 @@ pub(super) fn contribution(
         return Ok(Some(Contribution::Numeric(1)));
     }
     if matches!(measure, HeadMeasure::Min | HeadMeasure::Max) {
-        let value = first.ok_or_else(|| {
-            FormulaFailure::from(unsupported(
-                ProfileFeature::HeadAggregateMissingValue,
-                location,
-            ))
-        })?;
+        let Some(value) = first else {
+            return Ok(None);
+        };
         crate::formula_assignment::extremum_value(value, location)?;
         return Ok(Some(Contribution::Extremum(value)));
     }

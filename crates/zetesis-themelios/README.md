@@ -203,10 +203,12 @@ The optional count specialization requires a stronger tuple/atom bijection and
 wholly unsigned atomic groups. Missing first values and nonnumeric sum weights
 have weight zero while retaining independent head permission. Unbounded heads
 have no measure constraint; their source terms and bindings are still validated.
-A bounded extremum with a missing first value has no established total measure
-and retains the named `ProfileFeature::HeadAggregateMissingValue` refusal.
-Undefined arithmetic remains a typed evaluation failure. The obsolete broader
-`ProfileFeature::HeadAggregateWeight` refusal has been replaced.
+A bounded extremum projects first values of nonempty tuples; if none remain,
+its measure is the ordinary empty extremum. Empty tuples retain their independent
+head permission. This declared extension conserves complete-value extrema and
+differs from clingo on some original sources. Undefined arithmetic remains a
+typed evaluation failure. The now-obsolete `ProfileFeature::HeadAggregateMissingValue`
+and earlier `ProfileFeature::HeadAggregateWeight` refusals are removed.
 The [head contribution contract](../../proofs/guide/head-contributions.md) records
 the formal source basis and explicit clingo comparison differences.
 Empty minima and maxima are `#sup` and `#inf`; bounds never create support.

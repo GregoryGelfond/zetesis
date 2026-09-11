@@ -1,4 +1,5 @@
 import Zetesis.SignedHeadElements
+import Zetesis.OrderedHeadActivity
 
 /-!
 # Neutral aggregate-head contributions
@@ -8,6 +9,13 @@ positive head choices independently of tuple weights. A positive-only sum also
 ignores nonpositive numeric weights without removing their head permissions.
 Unbounded heads consist of those choices without a measure constraint.
 
+For extrema, the declared finite extension projects the present first values
+before ordered reduction. Missing first values contribute no measure, while
+complete values retain the existing comparator and empty endpoint. The laws
+establish conservation on complete-value families, exact selected-value coverage,
+and candidate-only bound preservation with unchanged permissions. This extension
+is not claimed to be uniquely determined by Abstract Gringo's extrema clauses.
+
 The finite numeric laws below concern the already coalesced active tuple family.
 The frozen permission witness distinguishes a neutral contribution from deleting
 its head. An absent bound can be removed in arbitrary original and frozen worlds
@@ -15,9 +23,8 @@ and therefore in every surrounding theory. Existing signed-activity laws retain
 eligibility and its reduct; numeric contribution does not filter their rows.
 
 Source syntax, complete binding and tuple carriers, checked arithmetic, provenance,
-resource accounting and Rust refinement remain separate obligations. A missing
-first value in a bounded extremum has no total measure specified here. Nothing in
-these laws turns failed source evaluation into a neutral contribution.
+resource accounting and Rust refinement remain separate obligations. The optional
+value represents absence of a tuple component, never failed source evaluation.
 -/
 
 namespace Zetesis.HeadContributions
@@ -107,5 +114,134 @@ theorem neutral_permission_is_not_truth :
     Satisfies Empty (Reduct Full (top : Formula Unit)) := by
   simp [SignedHeadElements.permission, SignedHeadElements.operand,
     BooleanHeadElements.operand, top, Ferraris.Neg, Reduct, Satisfies, Empty, Full]
+
+section Extrema
+
+universe v w
+variable {K : Type v} {V : Type w}
+
+/-- Reduce present first components using the existing ordered selector. Absence
+does not insert a numeric proxy or remove the source row's separate permission.
+The empty endpoint is supplied explicitly: supremum for min, infimum for max. -/
+def extremum (before : V → V → Bool) (empty : V) (values : List (Option V)) : V :=
+  ValueExtrema.encode empty (ValueExtrema.extreme before (values.filterMap id))
+
+/-- Adding a missing first component leaves the measure unchanged. The proof
+removes that absent value from the projected list, without changing any row. -/
+theorem missing_extremum_is_neutral (before : V → V → Bool) (empty : V)
+    (values : List (Option V)) :
+    extremum before empty (none :: values) = extremum before empty values := by
+  simp [extremum]
+
+/-- On complete-value families the extension is exactly the prior reduction,
+including its empty-family result. Projecting the present values recovers the
+original list in order; no order-law assumption is needed for this equality. -/
+theorem complete_extremum_conservative (before : V → V → Bool) (empty : V)
+    (values : List V) :
+    extremum before empty (values.map some) =
+      ValueExtrema.encode empty (ValueExtrema.extreme before values) := by
+  simp [extremum]
+
+/-- Any finite all-missing family yields the supplied logical empty endpoint.
+This concerns the measure only, not whether the head has any permissions. -/
+theorem only_missing_extremum (before : V → V → Bool) (empty : V) (count : Nat) :
+    extremum before empty (List.replicate count none) = empty := by
+  simp [extremum, ValueExtrema.extreme, ValueExtrema.encode]
+
+/-- Projected values have exactly the active, eligible source-row witnesses with
+a present first component. Complete key coverage supplies the reverse direction;
+equal values need not identify keys. The proof first witnesses the projection,
+then uses the existing signed whole-key selection correspondence. -/
+theorem selected_extremum_values (M : Atoms A) (rows : List (SignedHeadElements.Row K A))
+    (keys : List K) (value : K → Option V)
+    (coverage : ∀ row ∈ rows, row.key ∈ keys) (result : V) :
+    result ∈ (OrderedHeadActivity.values keys value
+      (OrderedHeadActivity.selected M rows keys)).filterMap id ↔
+      ∃ row ∈ rows, SignedHeadElements.Holds M row.head ∧
+        Satisfies M row.eligible ∧ value row.key = some result := by
+  have selected_values : ∀ optional,
+      optional ∈ OrderedHeadActivity.values keys value
+        (OrderedHeadActivity.selected M rows keys) ↔
+        ∃ row ∈ rows, SignedHeadElements.Holds M row.head ∧
+          Satisfies M row.eligible ∧ value row.key = optional := by
+    intro optional
+    exact OrderedHeadActivity.selected_values M rows keys value coverage optional
+  constructor
+  · intro present
+    obtain ⟨optional, member, same⟩ := List.mem_filterMap.mp present
+    have witness : ∃ row ∈ rows, SignedHeadElements.Holds M row.head ∧
+        Satisfies M row.eligible ∧ value row.key = optional :=
+      (selected_values optional).mp member
+    simpa only [id_eq] using same ▸ witness
+  · rintro ⟨row, member, head, eligible, same⟩
+    have selected : some result ∈ OrderedHeadActivity.values keys value
+        (OrderedHeadActivity.selected M rows keys) :=
+      (selected_values (some result)).mpr ⟨row, member, head, eligible, same⟩
+    exact List.mem_filterMap.mpr ⟨some result, selected, rfl⟩
+
+/-- The canonical finite aggregate formula enumerates the existing complete
+activity masks. Only measure projection omits absent first components; signed
+row activity and the source's independent permissions are unchanged. -/
+noncomputable def extremumFormula (before : V → V → Bool) (empty : V)
+    (rows : List (SignedHeadElements.Row K A)) (keys : List K)
+    (value : K → Option V) (accepts : V → Bool) : Formula A :=
+  SignedHeadElements.formula rows keys (fun mask =>
+    accepts (extremum before empty (OrderedHeadActivity.values keys value mask)))
+
+/-- Original canonical truth is exactly the declared projected-value guard.
+The complete mask enumeration law selects the actual original activity mask. -/
+theorem extremum_formula_original (before : V → V → Bool) (empty : V)
+    (M : Atoms A) (rows : List (SignedHeadElements.Row K A)) (keys : List K)
+    (value : K → Option V) (accepts : V → Bool) :
+    Satisfies M (extremumFormula before empty rows keys value accepts) ↔
+      accepts (extremum before empty (OrderedHeadActivity.values keys value
+        (OrderedHeadActivity.selected M rows keys))) = true := by
+  rw [extremumFormula, SignedHeadElements.formula,
+    AggregateReduct.original _ _ _ _ (AggregateReduct.masks_complete _)]
+  rfl
+
+/-- A head bound checks the projected measure only in the fixed candidate M.
+Its reduct never supplies a new permission to J. Apply the existing bound law
+then the original measure correspondence; no subset assumption on J is needed. -/
+theorem extremum_bound_frozen (before : V → V → Bool) (empty : V)
+    (M J : Atoms A) (rows : List (SignedHeadElements.Row K A)) (keys : List K)
+    (value : K → Option V) (accepts : V → Bool) (body : Formula A) :
+    Satisfies J (Reduct M (HeadMeasures.bound body
+      (extremumFormula before empty rows keys value accepts))) ↔
+      (Satisfies M body → accepts (extremum before empty
+        (OrderedHeadActivity.values keys value
+          (OrderedHeadActivity.selected M rows keys))) = true) := by
+  rw [HeadMeasures.bound_frozen, extremum_formula_original]
+
+/-- An implementation with exact original measure truth preserves the complete
+head group in every surrounding theory when its permission formula is retained.
+The proof lifts original agreement through the candidate-only bound, conjoins
+unchanged permissions, then applies both equivalences to stable membership.
+This law does not justify removing activities from arbitrary body aggregates. -/
+theorem extremum_head_in_context (before : V → V → Bool) (empty : V)
+    (M : Atoms A) (rows : List (SignedHeadElements.Row K A)) (keys : List K)
+    (value : K → Option V) (accepts : V → Bool)
+    (body permissions compiled : Formula A)
+    (implementation : ∀ candidate, Satisfies candidate compiled ↔
+      accepts (extremum before empty (OrderedHeadActivity.values keys value
+        (OrderedHeadActivity.selected candidate rows keys))) = true)
+    (context : Theory A) :
+    Stable M (.conj permissions (HeadMeasures.bound body
+      (extremumFormula before empty rows keys value accepts)) :: context) ↔
+      Stable M (.conj permissions (HeadMeasures.bound body compiled) :: context) := by
+  have original : ∀ candidate,
+      Satisfies candidate (extremumFormula before empty rows keys value accepts) ↔
+        Satisfies candidate compiled := by
+    intro candidate
+    rw [extremum_formula_original, implementation candidate]
+  have group : Equivalent
+      (.conj permissions (HeadMeasures.bound body
+        (extremumFormula before empty rows keys value accepts)))
+      (.conj permissions (HeadMeasures.bound body compiled)) :=
+    equivalent_conj _ _ _ _ (equivalent_refl permissions)
+      (HeadMeasures.bound_equivalent body _ _ original)
+  simp only [Stable, models_cons, ReductTheory, List.map_cons, group.1, group.2]
+
+end Extrema
 
 end Zetesis.HeadContributions

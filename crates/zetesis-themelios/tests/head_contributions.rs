@@ -7,7 +7,7 @@ mod reference;
 
 use std::collections::BTreeSet;
 
-use cases::{CASES, CLINGO_DIFFERENCES, REFUSED};
+use cases::{CASES, CLINGO_DIFFERENCES};
 use reference::{Models, atom_text, exhaustive, external, holds, native, values};
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
@@ -165,6 +165,47 @@ fn neutral_tuples_retain_complete_key_limits() {
 }
 
 #[test]
+fn missing_extrema_retain_complete_key_limits() {
+    for (function, empty) in [("#min", "#sup"), ("#max", "#inf")] {
+        let mut limits = FormulaLimits::default();
+        limits.aggregate.max_elements = 1;
+        let source = format!("{function}{{:a;:b}}={empty}.");
+        let admitted = limited(&source, ExpansionLimits::default(), &limits).unwrap();
+        assert_eq!(native(&admitted), native(&input("{a;b}.")));
+        limits.aggregate.max_elements = 0;
+        let error = limited(&source, ExpansionLimits::default(), &limits).unwrap_err();
+        assert!(matches!(
+            error,
+            FormulaFailure::Limit {
+                resource: FormulaResource::AggregateElements,
+                limit: 0,
+                observed: 1,
+                ..
+            }
+        ));
+        assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+        limits.aggregate.max_elements = 1;
+        let mixed = format!("{function}{{:a;{empty}:b}}={empty}.");
+        let error = limited(&mixed, ExpansionLimits::default(), &limits).unwrap_err();
+        assert!(matches!(
+            error,
+            FormulaFailure::Limit {
+                resource: FormulaResource::AggregateElements,
+                limit: 1,
+                observed: 2,
+                ..
+            }
+        ));
+        assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+        limits.aggregate.max_elements = 2;
+        assert_eq!(
+            native(&limited(&mixed, ExpansionLimits::default(), &limits).unwrap()),
+            native(&input("{a;b}."))
+        );
+    }
+}
+
+#[test]
 fn neutral_rows_cannot_hide_undefined_bindings() {
     for source in [
         "#sum{1/0:a}.",
@@ -172,6 +213,9 @@ fn neutral_rows_cannot_hide_undefined_bindings() {
         "d(0).#sum{word:p(Y):d(X),Y=1/X}=0.",
         "d(0).e.#sum{word:p(Y):d(X),Y=1/X,not e}=0.",
         "d(0).#min{:p(Y):d(X),Y=1/X}.",
+        "d(0).#min{:p(Y):d(X),Y=1/X}=#sup.",
+        "d(0).e.#max{:p(Y):d(X),Y=1/X,not e}=#inf.",
+        "#max{1/0:a}=#inf:-#false.",
         "d(0).#sum+{-1:p(Y):d(X),Y=1/X}=0.",
     ] {
         let error = limited(
@@ -220,31 +264,57 @@ fn unbounded_extrema_need_no_numeric_envelope() {
 }
 
 #[test]
-fn bounded_empty_extrema_have_named_refusals() {
-    for &source in REFUSED {
+fn missing_measures_do_not_hide_invalid_present_values() {
+    for function in ["#min", "#max"] {
+        for value in ["(-2147483647-1)", "2147483647"] {
+            let source = format!("{function}{{:a;{value}:b}}<=0:-#false.");
+            let error = limited(
+                &source,
+                ExpansionLimits::default(),
+                &FormulaLimits::default(),
+            )
+            .expect_err("complete values keep the existing endpoint profile");
+            assert!(matches!(
+                error,
+                FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
+                    feature: ProfileFeature::Aggregate,
+                    ..
+                }))
+            ));
+            assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+        }
+    }
+}
+
+#[test]
+fn missing_body_extrema_keep_their_admission_boundary() {
+    for source in ["a.p:-#min{:a}=#sup.", "a.p:-#max{:a}=#inf."] {
         let error = limited(
             source,
             ExpansionLimits::default(),
             &FormulaLimits::default(),
         )
-        .expect_err("the guarded empty-tuple measure remains undefined");
-        assert!(
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                    feature: ProfileFeature::HeadAggregateMissingValue,
-                    ..
-                }))
-            ),
-            "{source}: {error}"
-        );
+        .expect_err("the head extension does not change body admission");
+        assert!(matches!(
+            error,
+            FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
+                feature: ProfileFeature::Aggregate,
+                ..
+            }))
+        ));
         assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
     }
 }
 
 #[test]
 fn neutral_rows_cannot_repair_unsafe_variables() {
-    for source in ["#sum{word:p(X)}=0.", "#min{:p(X)}.", "#sum+{-1:p(X)}=0."] {
+    for source in [
+        "#sum{word:p(X)}=0.",
+        "#min{:p(X)}.",
+        "#min{:p(X)}=#sup.",
+        "#max{:p(X)}=#inf.",
+        "#sum+{-1:p(X)}=0.",
+    ] {
         let error = limited(
             source,
             ExpansionLimits::default(),
@@ -283,6 +353,8 @@ fn selected_rows_obey_inclusive_work_limits() {
     for source in [
         "d(1..3).#sum{word,X:p(X):d(X)}=0.",
         "d(1..3).#sum+{-1,X:p(X):d(X)}=0.",
+        "d(1..3).#min{:p(X):d(X)}=#sup.",
+        "d(1..3).#max{:p(X):d(X)}=#inf.",
     ] {
         for resource in [FormulaResource::Substitutions, FormulaResource::Work] {
             let attempt = |maximum| {
@@ -308,29 +380,34 @@ fn selected_rows_obey_inclusive_work_limits() {
 
 #[test]
 fn neutral_rows_obey_inclusive_expansion_limits() {
-    let source = "d(1..3).#sum{word,X:p(X):d(X)}=0.";
-    for resource in [ExpansionResource::TermWork, ExpansionResource::ScalarBytes] {
-        let attempt = |maximum| {
-            let mut limits = ExpansionLimits::default();
-            match resource {
-                ExpansionResource::TermWork => {
-                    limits.max_term_work = usize::try_from(maximum).unwrap();
+    for source in [
+        "d(1..3).#sum{word,X:p(X):d(X)}=0.",
+        "d(1..3).#min{:p(X):d(X)}=#sup.",
+        "d(1..3).#max{:p(X):d(X)}=#inf.",
+    ] {
+        for resource in [ExpansionResource::TermWork, ExpansionResource::ScalarBytes] {
+            let attempt = |maximum| {
+                let mut limits = ExpansionLimits::default();
+                match resource {
+                    ExpansionResource::TermWork => {
+                        limits.max_term_work = usize::try_from(maximum).unwrap();
+                    }
+                    ExpansionResource::ScalarBytes => {
+                        limits.max_scalar_bytes = usize::try_from(maximum).unwrap();
+                    }
+                    _ => unreachable!(),
                 }
-                ExpansionResource::ScalarBytes => {
-                    limits.max_scalar_bytes = usize::try_from(maximum).unwrap();
-                }
-                _ => unreachable!(),
-            }
-            limited(source, limits, &FormulaLimits::default())
-        };
-        let exact = first_success(|maximum| attempt(maximum).is_ok());
-        let error = attempt(exact - 1).expect_err("inclusive source boundary");
-        assert!(
-            matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit { resource: actual, limit, observed, .. }) if actual == resource && limit == u128::from(exact - 1) && observed == u128::from(exact)),
-            "{error}"
-        );
-        assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
-        assert_eq!(native(&attempt(exact).unwrap()), native(&input(source)));
+                limited(source, limits, &FormulaLimits::default())
+            };
+            let exact = first_success(|maximum| attempt(maximum).is_ok());
+            let error = attempt(exact - 1).expect_err("inclusive source boundary");
+            assert!(
+                matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit { resource: actual, limit, observed, .. }) if actual == resource && limit == u128::from(exact - 1) && observed == u128::from(exact)),
+                "{error}"
+            );
+            assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+            assert_eq!(native(&attempt(exact).unwrap()), native(&input(source)));
+        }
     }
 }
 
@@ -339,6 +416,7 @@ fn neutral_rows_obey_inclusive_expansion_limits() {
 fn source_comparisons_preserve_complete_records() {
     for &(source, _) in CASES {
         let result = external(source, true);
+        assert_eq!(result["Solver"], "clingo version 5.8.2");
         assert_eq!(result["Models"]["More"], "no");
         let mut expected = Models::new();
         let mut count = 0;
@@ -363,7 +441,6 @@ fn source_comparisons_preserve_complete_records() {
         assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
         let actual = native(&input(source));
         if let Some((_, records)) = CLINGO_DIFFERENCES.iter().find(|(case, _)| *case == source) {
-            assert_eq!(result["Solver"], "clingo version 5.8.2");
             let recorded: Models = records
                 .iter()
                 .map(|model| model.iter().map(|atom| (*atom).to_owned()).collect())

@@ -3,6 +3,7 @@
 //! Abstract Gringo assigns missing/nonnumeric sum tuples weight zero and keeps
 //! every positive head choice. Positive-only sums likewise retain nonpositive
 //! numeric heads. Unbounded heads contain the choices without a measure bound.
+//! The declared missing-extremum extension likewise retains head permission.
 
 pub(super) const CASES: &[(&str, &str)] = &[
     ("#sum{:a}<=0.", "{a}."),
@@ -72,26 +73,47 @@ pub(super) const CASES: &[(&str, &str)] = &[
     ("#sum+{-2:#true}=0.", ""),
     ("#sum+{-2:a}=1:-#false.", ""),
     ("d(0..1).#sum+{-2:p(I)}=0:-d(I).", "d(0..1).{p(0);p(1)}."),
-];
-
-// A bounded extremum of a set containing empty tuples has no established
-// total source interpretation. These original sources retain a named refusal.
-pub(super) const REFUSED: &[&str] = &[
-    "#min{:a}=#sup.",
-    "#max{:a}=#inf.",
-    "#min{:a}<=0.",
-    "#max{:a}>=0.",
-    "#min{:a;0:b}=0.",
-    "#max{:a;0:b}=0.",
-    "#min{:a;#sup:b}=#sup.",
-    "#max{:a;#inf:b}=#inf.",
-    "#min{:#true}=#sup.",
-    "#max{:#false}=#inf.",
-    "#max{:a}<=0.",
-    "0#min{: #false}0:-#false.",
-    "0#max{: #false}0:-#false.",
-    "#min{:a}<=word.",
-    "#max{:a}<=word.",
+    // Preserve all fifteen formerly refused original sources as semantic cases.
+    ("#min{:a}=#sup.", "{a}."),
+    ("#max{:a}=#inf.", "{a}."),
+    ("#min{:a}<=0.", "{a}.:-."),
+    ("#max{:a}>=0.", "{a}.:-."),
+    (
+        include_str!("../fixtures/head-neutral-extrema.lp"),
+        "{a;b}.:-not b.",
+    ),
+    ("#max{:a;0:b}=0.", "{a;b}.:-not b."),
+    ("#min{:a;#sup:b}=#sup.", "{a;b}."),
+    ("#max{:a;#inf:b}=#inf.", "{a;b}."),
+    ("#min{:#true}=#sup.", ""),
+    ("#max{:#false}=#inf.", ""),
+    ("#max{:a}<=0.", "{a}."),
+    ("0#min{: #false}0:-#false.", ""),
+    ("0#max{: #false}0:-#false.", ""),
+    ("#min{:a}<=word.", "{a}.:-."),
+    ("#max{:a}<=word.", "{a}."),
+    ("#min{:a;:b}=#sup.", "{a;b}."),
+    ("#max{:a;:b}=#inf.", "{a;b}."),
+    ("#min{:a;0:a}=0.", "a."),
+    ("#max{:a;0:a}=0.", "a."),
+    ("#min{:a;0,k:b;0,l:b}=0.", "{a;b}.:-not b."),
+    ("#max{:a;0,k:b;0,l:b}=0.", "{a;b}.:-not b."),
+    ("#min{:a;word:b}=word.", "{a;b}.:-not b."),
+    ("#max{:a;word:b}=word.", "{a;b}.:-not b."),
+    ("#min{:a;():b}=().", "{a;b}.:-not b."),
+    ("#max{:a;():b}=().", "{a;b}.:-not b."),
+    ("#min{():a}=().", "a."),
+    ("#max{():a}=().", "a."),
+    ("#sup<=#min{:a}<=#sup.", "{a}."),
+    ("#inf<=#max{:a}<=#inf.", "{a}."),
+    ("{d}.#min{:a:d}=#sup.", "{d}.{a:d}."),
+    ("{d}.#max{:a:not d}=#inf.", "{d}.{a:not d}."),
+    ("#min{:a:a}=#sup.", "{a:a}."),
+    ("#max{:a:a}=#inf.", "{a:a}."),
+    ("{a}.#min{:not a}=#sup.", "{a}."),
+    ("{a}.#max{:not not a}=#inf.", "{a}."),
+    ("#min{: -a}=#sup.", "{-a}."),
+    ("#max{: -a}=#inf.", "{-a}."),
 ];
 
 // Exact complete clingo 5.8.2 records that differ from the formal translation.
@@ -126,4 +148,26 @@ pub(super) const CLINGO_DIFFERENCES: &[(&str, &[&[&str]])] = &[
     ),
     ("#sum{word:a}.", &[&[]]),
     ("#sum+{word:a}.", &[&[]]),
+    ("#min{:a}=#sup.", &[&[]]),
+    ("#max{:a}=#inf.", &[&[]]),
+    ("#min{:a;0:b}=0.", &[&["b"]]),
+    ("#max{:a;0:b}=0.", &[&["b"]]),
+    ("#min{:a;#sup:b}=#sup.", &[&[], &["b"]]),
+    ("#max{:a;#inf:b}=#inf.", &[&[], &["b"]]),
+    ("#max{:a}<=0.", &[&[]]),
+    ("#max{:a}<=word.", &[&[]]),
+    ("#min{:a;:b}=#sup.", &[&[]]),
+    ("#max{:a;:b}=#inf.", &[&[]]),
+    ("#min{:a;0,k:b;0,l:b}=0.", &[&["b"]]),
+    ("#max{:a;0,k:b;0,l:b}=0.", &[&["b"]]),
+    ("#min{:a;word:b}=word.", &[&["b"]]),
+    ("#max{:a;word:b}=word.", &[&["b"]]),
+    ("#min{:a;():b}=().", &[&["b"]]),
+    ("#max{:a;():b}=().", &[&["b"]]),
+    ("#sup<=#min{:a}<=#sup.", &[&[]]),
+    ("#inf<=#max{:a}<=#inf.", &[&[]]),
+    ("{d}.#min{:a:d}=#sup.", &[&[], &["d"]]),
+    ("{d}.#max{:a:not d}=#inf.", &[&[], &["d"]]),
+    ("#min{: -a}=#sup.", &[&[]]),
+    ("#max{: -a}=#inf.", &[&[]]),
 ];
