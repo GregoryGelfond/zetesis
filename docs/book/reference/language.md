@@ -18,13 +18,13 @@ eager. Selecting a GPU does not expand the accepted source language.
 | --- | --- | --- |
 | Normal rules and constraints | Safe finite relational rules, default and double negation, singleton unbounded choices | More general constructs use the formula profile |
 | Strong negation | Signed atom identities and coherence constraints; signed source and observation forms | Remaining constructor and condition profiles still apply |
-| Disjunction | Finite signed/evaluated disjunctive heads, including admitted top-level numeric intervals; direct formula compilation without shifting | Nontrivial conditional disjuncts, unsupported nested pools and objective-dependent producers |
+| Disjunction | Finite signed/evaluated disjunctive heads, including admitted top-level numeric intervals; direct formula compilation without shifting | Nontrivial conditional disjuncts and unsupported nested pools |
 | Boolean literals | Signed `#true`/`#false` in rule bodies and choice/aggregate conditions; Boolean singleton heads and Boolean disjuncts with empty or explicitly true conditions; signed Boolean choice and function-head elements | Separate objective/observation condition profiles |
 | Logical values | Closed signed functions, tuples, strings and extremal terms; complete variable copying, finite construction from bound inputs and structural comparisons | Nested pools/intervals and broader expression contexts remain restricted |
 | Positive witnesses | Constructor/tuple patterns preserve sign, name, arity and complete supporting atoms; evaluated positions consume bound inputs | Arithmetic inversion; a negative atom cannot supply a missing binding |
 | Comparisons | Equality/disequality, structural ordering, admitted flat-tuple equality and complete comparison chains, including default/double negation; directed finite integer-affine chains can bind several unresolved variables | Nonlinear inverse binders and simultaneous systems without directed finite bounds |
 | Finite generators | Scalar equality, admitted flat-tuple equality, closed integer bounds, dependent intervals and finite scoped rule/head pools | Unsupported body/local pool contexts and broader nested interval construction |
-| Universal body conditionals | Complete local implication families with signed consequent alternatives, positive local witnesses and finite anonymous projections under `not` or `not not` | Unsupported local generators, nested pools and objective-dependent conditional producers |
+| Universal body conditionals | Complete local implication families with signed consequent alternatives, positive local witnesses and finite anonymous projections under `not` or `not not` | Unsupported local generators and nested pools |
 
 For example, `q(X) :- d(X), p(X+1).` checks the complete supporting `p` atom
 after `d(X)` binds `X`. By contrast, `q(X) :- p(X+1).` requires arithmetic
@@ -178,12 +178,12 @@ separated in the [Lean proof boundary](../lean/correspondence.md).
 
 | Aggregate form | Implemented scope | Remaining boundary |
 | --- | --- | --- |
-| Body `#count`, `#sum`, `#sum+` | Finite comparisons against complete logical bounds, recursive eligibility, complete-tuple coalescing and acyclic fresh-target assignments | Cyclic/self-dependent assignment generators, unsupported local generators and objective dependencies |
+| Body `#count`, `#sum`, `#sum+` | Finite comparisons against complete logical bounds, recursive eligibility, complete-tuple coalescing and acyclic fresh-target assignments | Cyclic/self-dependent assignment generators, unsupported local generators and cyclic aggregate-dependent objective cones |
 | Body `#min`, `#max` | Comparisons over complete logical values; empty extrema; admitted acyclic assignments | Numeric endpoint guard below and unsupported consumer/observer combinations |
-| Assignment consumers | Dependency-ordered scalar/tuple filters and equalities, evaluated positive arguments/heads, admitted outer negative atoms, finite outer ranges, logical choice bounds, nonbinding aggregate guards and universal conditionals | Broader local scopes, objective-relevant new consumers and objective-relevant multiple assignments |
-| `#count` heads | Positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions and Boolean operands | Unsupported eligibility/observer contexts and objective-relevant heads remain refused |
-| `#sum`, `#sum+` heads | Signed numeric `#sum` and positive-only numeric `#sum+`; missing/nonnumeric measures contribute zero; positive atomic permission is independent of numeric contribution, including nonpositive `#sum+` weights | Unsupported eligibility contexts and objective-relevant heads remain refused |
-| `#min`, `#max` heads | Complete logical first tuple values in ASP term order; positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions and Boolean operands | Guarded empty-tuple elements, the numeric endpoint guard, unsupported eligibility contexts and objective-relevant heads remain refused |
+| Assignment consumers | Dependency-ordered scalar/tuple filters and equalities, evaluated positive arguments/heads, admitted outer negative atoms, finite outer ranges, logical choice bounds, nonbinding aggregate guards and universal conditionals; acyclic objective dependencies can include several assignments | Broader local scopes and cyclic assignment generators |
+| `#count` heads | Positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions, Boolean operands and objective dependencies | Unsupported local eligibility scopes |
+| `#sum`, `#sum+` heads | Signed numeric `#sum` and positive-only numeric `#sum+`; missing/nonnumeric measures contribute zero; positive atomic permission is independent of numeric contribution, including nonpositive `#sum+` weights and objective dependencies | Unsupported local eligibility scopes |
+| `#min`, `#max` heads | Complete logical first tuple values in ASP term order; positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions, Boolean operands and objective dependencies | Guarded empty-tuple elements, the numeric endpoint guard and unsupported local eligibility scopes |
 
 A tuple becomes active when any occurrence has a true head operand and satisfies
 its own condition. An unsigned atomic operand is true when that atom is selected;
@@ -289,12 +289,25 @@ its numeric priority, as does a numeric contribution whose condition is false in
 a particular answer. A completed empty binding family contributes no priority.
 
 Search preserves all optimal ties within its resource and delivery limits.
-Positive lifted objectives and supported total aggregate observers can pass
-through unique acyclic relation renamings or argument permutations. Dynamic
-priorities from aggregate-generated values require their own complete
-eligibility and presence evidence; accepting an ordinary bound input does not
-grant that certificate. A flat unary observer over closed facts and unbounded
-choices can supply a finite source measure carrier. Let R be its required
+Objectives admit signed atomic and Boolean conditions, default and double
+negation, scalar comparisons and checked expressions in their weight, priority
+and complete tuple. Producer dependencies can include disjunctions, aggregate
+heads, finite ordinary cycles, and acyclic aggregate assignments or universal
+conditionals. Direct aggregate or universal-conditional weak-constraint bodies
+remain a separate admission boundary.
+
+Each objective has its own source-eligibility plan. Ordinary activity can prove
+an atom absent or required, or leave it optional. Rich acyclic producer cones
+and finite ordinary cycles use completed possible support where a more precise
+classification is unavailable. This support covers every true atom without
+claiming that every proposed row is realizable. Original-model queries decide
+which retained contributions actually count. Cyclic aggregate-dependent
+objective cones remain refused.
+
+Applicable source-carrier refinements can exclude impossible generated values.
+Their errors remain errors; lack of an applicable refinement does not invalidate
+a complete conservative carrier. A flat unary observer over closed facts and
+unbounded choices supplies one such refinement. Let R be its required
 complete tuple keys and P its possible keys. The carrier is
 {measure(S) | R ⊆ S ⊆ P}. It includes invariant results as singleton carriers.
 Unique unary renamings preserve the carrier. Original aggregate equalities
@@ -318,20 +331,19 @@ inputs. The [source-carrier tests](https://github.com/GregoryGelfond/zetesis/blo
 check changing counts, sums, extrema and forwarding through complete scored
 answers. Carrier construction has explicit value, work and retained-entry
 limits; numeric subset construction may require exponential work and space.
-Local tuple generators and broader producer shapes remain restricted, so L13
-stays open. Flat unary mixed-extrema
-observers have a separate presence certificate; arbitrary filtered, multiple,
-negative, disjunctive or conditional producer patterns do not inherit it.
-Additional objective conditions and broader mixed-extrema profiles remain
-restricted. The [priority contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_priorities.rs)
+Filtered and multiple observers, mixed extrema, negative dependencies and
+conditional producers use their complete finite source relations when the
+flat refinement does not apply. The [producer contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_rich_producers.rs)
+check full scored families and unchanged original formulas. The [priority contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_priorities.rs)
 check complete scored answers, same-binding numeric presence, empty and zero
 cases, evaluation failures and inclusive specialization limits.
 
-Ordinary choices containing only default-negated operands supply no competing
-positive producer. They can compose with certified forwarding or assignment
-dependencies while their bounds still constrain answers. This does not admit
-general negative, disjunctive or conditional objective producers,
-objective-relevant function heads, or additional objective conditions.
+Finite source eligibility does not promise clingo's exact retained priority
+layout. An extra slot may be zero across all answers even when clingo omits it.
+These [versioned reporting cases](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_priority_reporting.rs)
+preserve explicit raw differences while comparing full answer identities,
+costs at named priorities, pairwise ordering and every optimum tie. They are
+distinct from the aggregate-head answer-family differences documented above.
 
 `#defined` and `#show` retain signed signature metadata. Ground and admitted
 conditional term observations operate over full models; they do not change

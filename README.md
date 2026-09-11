@@ -178,10 +178,14 @@ The [admitted-language reference](docs/book/reference/language.md) records the
 precise boundaries, including shared atoms and tuples in aggregate heads,
 complete logical values in extrema heads, and logical bounds on choices and
 numeric aggregates. Objective priority expressions can use safely bound ordinary
-inputs; weight, priority and tuple stay correlated within each binding. Finite
-source carriers also admit changing priorities from flat unary aggregate
-observers over closed facts and choices. Broader producer profiles remain
-restricted.
+inputs; weight, priority and tuple stay correlated within each binding.
+Completed finite source relations also admit changing priorities from filtered
+and multiple acyclic aggregate observers, including mixed extrema. Signed,
+disjunctive and conditional producer dependencies retain their original theory;
+finite ordinary cycles use conservative support coverage. Original-model
+conditions determine costs, independently of answer-set membership. Remaining
+source scopes and explicit clingo reporting differences are documented alongside
+the supported contracts.
 Directed finite affine comparison chains can bind several variables while
 retaining the original correlations and checked source arithmetic.
 Choice and aggregate-head elements preserve `not` and `not not` explicitly.
