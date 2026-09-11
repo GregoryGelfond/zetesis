@@ -6,6 +6,12 @@
 //! A returned rejection is logical; adapter, capacity, timeout, validation and
 //! device errors remain distinct failures.
 //!
+//! [`GpuContext`] allows distinct primitives to retain prepared subjects on one
+//! device. Existing constructors create independent contexts; `from_context`
+//! constructors share one context and its failure boundary. Calls are serialized
+//! without waiting for a competing call: overlap returns [`GpuErrorKind::Busy`].
+//! Each primitive's resource limit keeps its documented local scope.
+//!
 //! The shader implements the monotone event/iteration schedules modeled in the
 //! Lean specification. The Rust-to-WGSL packing and device implementation are
 //! tested refinements, not mechanically verified implementations.
@@ -15,6 +21,7 @@ mod formula;
 mod packing;
 mod residency;
 mod runtime;
+mod context;
 mod selection;
 mod adapter;
 mod lazy;
@@ -30,6 +37,8 @@ use zetesis_core::{GroundProgram, Seed};
 use packing::{BatchPlan, GraphPlan, PackedGraph, PackedSeeds};
 use residency::ResidentGraph;
 use runtime::{DeviceProfile, ErrorScopes, Runtime};
+
+pub use context::GpuContext;
 
 pub use formula::{
     FormulaBatchStats, FormulaCheck, FormulaLimits, FormulaStatistics, FormulaVerdict,
@@ -93,8 +102,8 @@ pub struct GpuLimits {
     /// objects, allocator rounding, and wgpu/driver-private allocations and
     /// deferred resource retirement are outside this sum.
     pub max_batch_bytes: u64,
-    /// Maximum host wait for the submitted GPU work. A timeout invalidates this
-    /// oracle instance and returns an error, never a candidate rejection.
+    /// Maximum host wait for the submitted GPU work. A timeout invalidates the
+    /// shared device context and returns an error, never a candidate rejection.
     pub timeout: Duration,
 }
 
@@ -119,6 +128,9 @@ pub enum GpuErrorKind {
     Capacity,
     /// Host or device memory could not be allocated.
     Allocation,
+    /// Another operation holds this shared context; retry after it completes.
+    /// No work was submitted and context health remains unchanged.
+    Busy,
     /// A candidate does not belong to this compiled program.
     Seed,
     /// Shader or command validation failed.
@@ -229,8 +241,8 @@ pub struct GpuBatchStats {
 
 /// Reusable device and pipeline for the static reduct profile.
 ///
-/// `check_batch` takes an exclusive borrow so one instance has one active
-/// submission/readback lifecycle. Candidate worlds share immutable rule data
+/// `check_batch` takes an exclusive borrow and leases its context through
+/// submission/readback completion. Candidate worlds share immutable rule data
 /// but never share closure latches.
 pub struct GpuOracle {
     runtime: Runtime,
@@ -272,29 +284,52 @@ impl GpuOracle {
     /// Returns typed adapter absence, policy refusal, capability, device,
     /// allocation, or validation errors. CPU reference fallback is a caller policy.
     pub fn new_selected(options: GpuOptions, selection: GpuSelection) -> Result<Self, GpuError> {
-        let runtime = pollster::block_on(Runtime::new(
-            options,
-            selection,
-            DeviceProfile {
-                device_label: "zetesis static reduct oracle",
-                shader_label: "zetesis exact integer reduct",
-                pipeline_label: "zetesis static batch",
-                shader: SHADER.into(),
-                entry_point: "check",
-                validate_limits: check_adapter_limits,
-            },
-        ))?;
-        Ok(Self {
+        let runtime = pollster::block_on(Runtime::new(options, selection, Self::profile()))?;
+        Ok(Self::with_runtime(runtime))
+    }
+
+    /// Compile this primitive on an existing device context.
+    ///
+    /// Prepared subjects belong to this primitive; device health and execution
+    /// serialization are shared with all primitives using the context.
+    ///
+    /// # Errors
+    /// Refuses an active or invalidated context, unsupported granted limits,
+    /// allocation and shader validation failure. No adapter selection occurs.
+    pub fn from_context(context: &crate::GpuContext) -> Result<Self, GpuError> {
+        let runtime = pollster::block_on(Runtime::from_context(context, Self::profile()))?;
+        Ok(Self::with_runtime(runtime))
+    }
+
+    /// Exact device context retained by this primitive.
+    #[must_use]
+    pub fn context(&self) -> &crate::GpuContext {
+        &self.runtime.context
+    }
+
+    fn with_runtime(runtime: Runtime) -> Self {
+        Self {
             runtime,
             resident: None,
             last_batch_stats: None,
-        })
+        }
+    }
+
+    fn profile() -> DeviceProfile {
+        DeviceProfile {
+            device_label: "zetesis static reduct oracle",
+            shader_label: "zetesis exact integer reduct",
+            pipeline_label: "zetesis static batch",
+            shader: SHADER.into(),
+            entry_point: "check",
+            validate_limits: check_adapter_limits,
+        }
     }
 
     /// Identity of the adapter actually selected for this oracle.
     #[must_use]
     pub fn info(&self) -> &GpuInfo {
-        &self.runtime.info
+        self.runtime.context.info()
     }
 
     /// Reuse diagnostics for the last successful nonempty batch. Cleared when
@@ -320,8 +355,8 @@ impl GpuOracle {
     /// # Errors
     /// Reports seed identity, capacity, allocation, device, timeout, validation,
     /// or readback failures. A failing dispatch returns no partial batch.
-    /// Device/readback failures invalidate this instance; create a fresh oracle
-    /// before retrying. Capacity and seed errors leave it reusable.
+    /// Device/readback failures invalidate the entire context; retry requires a
+    /// fresh context. Capacity, seed and Busy refusals leave it reusable.
     pub fn check_batch(
         &mut self,
         program: &GroundProgram,
@@ -329,6 +364,8 @@ impl GpuOracle {
         limits: GpuLimits,
     ) -> Result<Vec<GpuCheck>, GpuError> {
         self.last_batch_stats = None;
+        let context = self.runtime.context.clone();
+        let _lease = context.lease()?;
         self.runtime.check_health()?;
         let fresh_graph = if self
             .resident
@@ -337,7 +374,7 @@ impl GpuOracle {
         {
             None
         } else {
-            Some(GraphPlan::new(program, &self.runtime.limits)?)
+            Some(GraphPlan::new(program, self.runtime.limits())?)
         };
         let graph = fresh_graph
             .as_ref()
@@ -347,7 +384,7 @@ impl GpuOracle {
             graph,
             seeds.len(),
             limits,
-            &self.runtime.limits,
+            self.runtime.limits(),
             fresh_graph.is_some(),
         )?;
         if seeds.is_empty() {
@@ -388,9 +425,9 @@ impl GpuOracle {
             .as_ref()
             .map(|graph| PackedGraph::new(program, graph))
             .transpose()?;
-        let scopes = ErrorScopes::new(&self.runtime.device);
+        let scopes = ErrorScopes::new(self.runtime.device());
         if let Some((graph, packed)) = fresh_graph.zip(packed_graph) {
-            self.resident = Some(ResidentGraph::new(&self.runtime.device, graph, &packed));
+            self.resident = Some(ResidentGraph::new(self.runtime.device(), graph, &packed));
         }
         let outcome = self
             .resident
@@ -398,8 +435,8 @@ impl GpuOracle {
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing resident graph"))
             .and_then(|resident| {
                 resident.dispatch(
-                    &self.runtime.device,
-                    &self.runtime.queue,
+                    self.runtime.device(),
+                    self.runtime.queue(),
                     &self.runtime.pipeline,
                     &packed,
                     &plan,

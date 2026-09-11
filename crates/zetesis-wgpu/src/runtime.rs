@@ -1,8 +1,8 @@
 //! Shared real-device lifecycle for the distinct static and formula profiles.
 //! Profile capability checks, shader identity and result decoding remain explicit.
 
-use crate::{GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection, selection};
-use std::sync::{Arc, mpsc};
+use crate::{GpuContext, GpuError, GpuErrorKind, GpuOptions, GpuSelection};
+use std::sync::mpsc;
 use std::time::Duration;
 use wgpu::util::DeviceExt as _;
 
@@ -16,12 +16,8 @@ pub(crate) struct DeviceProfile {
 }
 
 pub(crate) struct Runtime {
-    pub(crate) device: wgpu::Device,
-    pub(crate) queue: wgpu::Queue,
+    pub(crate) context: GpuContext,
     pub(crate) pipeline: wgpu::ComputePipeline,
-    pub(crate) info: GpuInfo,
-    pub(crate) limits: wgpu::Limits,
-    faults: Faults,
 }
 
 impl Runtime {
@@ -30,23 +26,34 @@ impl Runtime {
         selection: GpuSelection,
         profile: DeviceProfile,
     ) -> Result<Self, GpuError> {
-        let (adapter, info) = selection::select_adapter(options, selection).await?;
-        let limits = adapter.limits();
-        (profile.validate_limits)(&limits)?;
-        let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor {
-                label: Some(profile.device_label),
-                required_limits: limits,
-                ..Default::default()
-            })
-            .await
-            .map_err(|error| GpuError::new(GpuErrorKind::Device, error.to_string()))?;
-        // Unrequested features can reduce granted limits. Both profiles use
-        // these granted limits for their subsequent packing, never advertisements.
-        let limits = device.limits();
-        (profile.validate_limits)(&limits)?;
-        let faults = Faults::register(&device);
-        let scopes = ErrorScopes::new(&device);
+        // Independent constructors retain both early advertised-limit validation
+        // and the granted-limit check before shader construction.
+        let context = GpuContext::create(
+            options,
+            selection,
+            profile.device_label,
+            profile.validate_limits,
+        )
+        .await?;
+        let _lease = context.lease()?;
+        Self::compile(&context, profile).await
+    }
+
+    pub(crate) async fn from_context(
+        context: &GpuContext,
+        profile: DeviceProfile,
+    ) -> Result<Self, GpuError> {
+        let _lease = context.lease()?;
+        context.check_health()?;
+        (profile.validate_limits)(context.limits())?;
+        Self::compile(context, profile).await
+    }
+
+    // Both entry points retain their context lease through all scopes. The
+    // independent path already checked advertised and granted profile limits.
+    async fn compile(context: &GpuContext, profile: DeviceProfile) -> Result<Self, GpuError> {
+        let device = context.device();
+        let scopes = ErrorScopes::new(device);
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(profile.shader_label),
             source: wgpu::ShaderSource::Wgsl(profile.shader),
@@ -59,84 +66,37 @@ impl Runtime {
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             cache: None,
         });
-        scopes.finish().await?;
-        let mut runtime = Self {
-            device,
-            queue,
+        context.complete(scopes.finish().await, Ok(()))?;
+        Ok(Self {
+            context: context.clone(),
             pipeline,
-            info,
-            limits,
-            faults,
-        };
-        runtime.check_health()?;
-        Ok(runtime)
+        })
     }
 
-    pub(crate) fn check_health(&mut self) -> Result<(), GpuError> {
-        self.faults.check()
+    pub(crate) fn device(&self) -> &wgpu::Device {
+        self.context.device()
+    }
+    pub(crate) fn queue(&self) -> &wgpu::Queue {
+        self.context.queue()
+    }
+    pub(crate) fn limits(&self) -> &wgpu::Limits {
+        self.context.limits()
+    }
+    pub(crate) fn check_health(&self) -> Result<(), GpuError> {
+        self.context.check_health()
+    }
+    pub(crate) fn invalidate(&self) {
+        self.context.invalidate();
     }
 
-    pub(crate) fn invalidate(&mut self) {
-        self.faults.invalidated = true;
-    }
-
-    // Drain every scope, then inspect asynchronous health even if execution
-    // already failed. Precedence and permanent invalidation are shared.
+    // The caller retains its context lease through scope and health completion.
     pub(crate) fn complete<T>(
-        &mut self,
+        &self,
         scopes: ErrorScopes,
         outcome: Result<T, GpuError>,
     ) -> Result<T, GpuError> {
-        let validation = pollster::block_on(scopes.finish());
-        self.faults.complete(validation, outcome)
-    }
-}
-
-struct Faults {
-    receiver: mpsc::Receiver<String>,
-    invalidated: bool,
-}
-impl Faults {
-    fn register(device: &wgpu::Device) -> Self {
-        // Only the first fault is needed. A full bounded channel cannot recover
-        // the device; callbacks therefore never block or wait for a shared lock.
-        let (sender, receiver) = mpsc::sync_channel(1);
-        let lost = sender.clone();
-        device.set_device_lost_callback(move |reason, message| {
-            let _ = lost.try_send(format!("device lost ({reason:?}): {message}"));
-        });
-        device.on_uncaptured_error(Arc::new(move |error| {
-            let _ = sender.try_send(format!("uncaptured device error: {error}"));
-        }));
-        Self {
-            receiver,
-            invalidated: false,
-        }
-    }
-    fn check(&mut self) -> Result<(), GpuError> {
-        if self.invalidated {
-            return Err(GpuError::new(
-                GpuErrorKind::Device,
-                "this oracle was invalidated by an earlier execution failure",
-            ));
-        }
-        if let Ok(detail) = self.receiver.try_recv() {
-            self.invalidated = true;
-            return Err(GpuError::new(GpuErrorKind::Device, detail));
-        }
-        Ok(())
-    }
-    fn complete<T>(
-        &mut self,
-        validation: Result<(), GpuError>,
-        outcome: Result<T, GpuError>,
-    ) -> Result<T, GpuError> {
-        let health = self.check();
-        let result = validation.and(health).and(outcome);
-        if result.is_err() {
-            self.invalidated = true;
-        }
-        result
+        self.context
+            .complete(pollster::block_on(scopes.finish()), outcome)
     }
 }
 
@@ -207,7 +167,7 @@ struct WaitPolicy {
     quantum: Duration,
 }
 
-// Poll control between bounded waits. Failure invalidates the owning Runtime,
+// Poll control between bounded waits. Failure invalidates the shared context,
 // and buffers are dropped rather than reused while a submission remains live.
 pub(crate) fn read_polled<T>(
     device: &wgpu::Device,
@@ -352,7 +312,3 @@ impl ErrorScopes {
         failure.map_or(Ok(()), Err)
     }
 }
-
-#[cfg(test)]
-#[path = "../tests/runtime/state.rs"]
-mod tests;

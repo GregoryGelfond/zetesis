@@ -77,29 +77,64 @@ impl GpuTightOracle {
         selection: GpuSelection,
         support: TightSupport,
     ) -> Result<Self, GpuError> {
-        let runtime = pollster::block_on(Runtime::new(
-            options,
-            selection,
-            DeviceProfile {
-                device_label: "zetesis tight support device",
-                shader_label: "ranked producer support",
-                pipeline_label: "complete original support",
-                shader: SHADER.into(),
-                entry_point: match support {
-                    TightSupport::Atomic => "check",
-                    TightSupport::Grouped => "check_grouped",
-                },
-                validate_limits: check_limits,
-            },
-        ))?;
-        Ok(Self {
+        let runtime = pollster::block_on(Runtime::new(options, selection, Self::profile(support)))?;
+        Ok(Self::with_runtime(runtime, support))
+    }
+
+    /// Compile this primitive on an existing device context.
+    ///
+    /// Prepared subjects belong to this primitive; device health and execution
+    /// serialization are shared with all primitives using the context.
+    ///
+    /// # Errors
+    /// Refuses an active or invalidated context, unsupported granted limits,
+    /// allocation and shader validation failure. No adapter selection occurs.
+    pub fn from_context(context: &crate::GpuContext) -> Result<Self, GpuError> {
+        Self::from_context_with_support(context, TightSupport::Atomic)
+    }
+
+    /// Compile the selected implementation on an existing shared context.
+    ///
+    /// # Errors
+    /// Reports the same context, capability and compilation failures as
+    /// [`Self::from_context`].
+    pub fn from_context_with_support(
+        context: &crate::GpuContext,
+        support: TightSupport,
+    ) -> Result<Self, GpuError> {
+        let runtime = pollster::block_on(Runtime::from_context(context, Self::profile(support)))?;
+        Ok(Self::with_runtime(runtime, support))
+    }
+
+    /// Exact device context retained by this primitive.
+    #[must_use]
+    pub fn context(&self) -> &crate::GpuContext {
+        &self.runtime.context
+    }
+
+    fn with_runtime(runtime: Runtime, support: TightSupport) -> Self {
+        Self {
             runtime,
             support,
             resident: None,
             epoch: 0,
             last: None,
             activity: TightGpuActivity::default(),
-        })
+        }
+    }
+
+    fn profile(support: TightSupport) -> DeviceProfile {
+        DeviceProfile {
+            device_label: "zetesis tight support device",
+            shader_label: "ranked producer support",
+            pipeline_label: "complete original support",
+            shader: SHADER.into(),
+            entry_point: match support {
+                TightSupport::Atomic => "check",
+                TightSupport::Grouped => "check_grouped",
+            },
+            validate_limits: check_limits,
+        }
     }
     /// Fixed physical support-construction policy; no device operation.
     #[must_use]
@@ -109,7 +144,7 @@ impl GpuTightOracle {
     /// Actual selected native adapter identity; no device operation.
     #[must_use]
     pub fn info(&self) -> &GpuInfo {
-        &self.runtime.info
+        self.runtime.context.info()
     }
     /// Successful nonempty batch accounting; cleared at every check start.
     #[must_use]
@@ -146,7 +181,8 @@ impl GpuTightOracle {
     /// Returns no partial result vector on foreign identity, capacity, work,
     /// allocation, cancellation, deadline, validation, device or readback failure.
     /// Host preparation refusals leave the oracle reusable. Failures after device
-    /// allocation/submission invalidate it; create a new oracle before retrying.
+    /// allocation/submission invalidate the entire context; a fresh context is
+    /// required before retrying. Busy contention submits no work and permits retry.
     /// Control is polled during packing, waiting, decoding and before returning.
     pub fn check_batch(
         &mut self,
@@ -168,6 +204,8 @@ impl GpuTightOracle {
         limits: TightGpuLimits,
         control: &Control,
     ) -> Result<Vec<TightGpuCheck>, GpuError> {
+        let context = self.runtime.context.clone();
+        let _lease = context.lease()?;
         poll(control)?;
         self.runtime.check_health()?;
         if candidates.is_empty() {
@@ -178,7 +216,7 @@ impl GpuTightOracle {
             candidates,
             limits,
             Packing {
-                device: &self.runtime.limits,
+                device: self.runtime.limits(),
                 support: self.support,
             },
             self.resident
@@ -206,10 +244,10 @@ impl GpuTightOracle {
             .map(|g| g.pack(certificate, control))
             .transpose()?;
         poll(control)?;
-        let scopes = ErrorScopes::new(&self.runtime.device);
+        let scopes = ErrorScopes::new(self.runtime.device());
         if let Some((graph, packed)) = fresh.zip(packed) {
             self.activity.uploaded_bytes = graph.bytes;
-            self.resident = Some(Resident::new(&self.runtime.device, graph, &packed));
+            self.resident = Some(Resident::new(self.runtime.device(), graph, &packed));
         }
         self.epoch = plan.epoch;
         let outcome = self
@@ -219,8 +257,8 @@ impl GpuTightOracle {
             .and_then(|resident| {
                 resident.dispatch(
                     &Execution {
-                        device: &self.runtime.device,
-                        queue: &self.runtime.queue,
+                        device: self.runtime.device(),
+                        queue: self.runtime.queue(),
                         pipeline: &self.runtime.pipeline,
                         timeout: limits.timeout,
                         control,

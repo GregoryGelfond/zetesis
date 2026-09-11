@@ -104,7 +104,7 @@ fn allocate(runtime: &Runtime, capacity: Capacity, slot: Slot) -> wgpu::Buffer {
         ),
     };
     runtime::buffer(
-        &runtime.device,
+        runtime.device(),
         label,
         size,
         usage | wgpu::BufferUsages::COPY_DST,
@@ -125,7 +125,7 @@ impl Transport {
 
     fn from_buffers(runtime: &Runtime, capacity: Capacity, buffers: Buffers<wgpu::Buffer>) -> Self {
         let group = runtime
-            .device
+            .device()
             .create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("lazy round chunk"),
                 layout: &runtime.pipeline.get_bind_group_layout(0),
@@ -179,7 +179,7 @@ impl Transport {
             0,
         ];
         runtime
-            .queue
+            .queue()
             .write_buffer(&self.buffers.uniform, 0, bytemuck::cast_slice(&dimensions));
         for (buffer, words) in self.buffers.inputs.iter().zip([
             chunk.offsets(),
@@ -188,14 +188,15 @@ impl Transport {
             chunk.seeds(),
         ]) {
             runtime
-                .queue
+                .queue()
                 .write_buffer(buffer, 0, bytemuck::cast_slice(words));
         }
-        let mut encoder = runtime
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("lazy source consequence command"),
-            });
+        let mut encoder =
+            runtime
+                .device()
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("lazy source consequence command"),
+                });
         // The shader ORs deltas. No active output word may retain an earlier
         // chunk's consequences, constraint flag, world identity or epoch.
         // Queue writes precede this command; clear precedes compute, then copy.
@@ -216,7 +217,7 @@ impl Transport {
             0,
             plan.result_bytes,
         );
-        runtime.queue.submit(Some(encoder.finish()))
+        runtime.queue().submit(Some(encoder.finish()))
     }
 }
 

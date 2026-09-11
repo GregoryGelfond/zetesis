@@ -132,3 +132,101 @@ fn qualify_failure(backend: GpuBackendPreference) {
         matches!(oracle.check_batch(&plan, &[], AggregateGpuLimits::default(), &Control::default()), Err(AggregateGpuError::Gpu(error)) if error.kind() == GpuErrorKind::Device)
     );
 }
+
+fn invalidates_shared_primitive(backend: GpuBackendPreference) {
+    let mut aggregate = corrupt_identity(GpuSelection {
+        backend,
+        vendor_id: None,
+    });
+    assert!(aggregate.info().is_hardware_gpu());
+    let context = aggregate.context().clone();
+    let mut formula = crate::GpuFormulaOracle::from_context(&context).unwrap();
+    let mut lazy = crate::GpuLazyOracle::from_context(&context).unwrap();
+    assert!(formula.context().same_instance(aggregate.context()));
+    assert!(lazy.context().same_instance(aggregate.context()));
+    let empty =
+        zetesis_core::Program::new(vec![], zetesis_core::AdmissionLimits::default()).unwrap();
+    let empty_batch = lazy
+        .check_batch(
+            &empty,
+            &[],
+            zetesis_cpu::lazy::Limits::default(),
+            crate::GpuLimits::default(),
+            &Control::default(),
+        )
+        .unwrap();
+    assert!(empty_batch.checks.is_empty());
+    let theory = fixtures::theory();
+    let group = fixtures::group(&theory, Function::Sum, 1);
+    let worlds = fixtures::worlds(&theory);
+    let records = fixtures::observations(&group, &worlds, 1);
+    let plan = AggregateGpuPlan::new(
+        &group,
+        AggregateGpuPlanLimits::default(),
+        &Control::default(),
+    )
+    .unwrap();
+    let outcome = aggregate.check_batch(
+        &plan,
+        &records,
+        AggregateGpuLimits::default(),
+        &Control::default(),
+    );
+    assert!(
+        matches!(outcome, Err(AggregateGpuError::Gpu(error)) if error.kind() == GpuErrorKind::Readback)
+    );
+    assert_eq!(aggregate.activity().submissions, 1);
+    assert_eq!(aggregate.activity().completed_occurrences, 0);
+    // An empty peer call must still observe the failed shared device.
+    let failure = formula
+        .propagate_batch(&theory, &[], crate::FormulaLimits::default())
+        .unwrap_err();
+    assert_eq!(failure.kind(), GpuErrorKind::Device);
+    let failure = lazy
+        .check_batch(
+            &empty,
+            &[],
+            zetesis_cpu::lazy::Limits::default(),
+            crate::GpuLimits::default(),
+            &Control::default(),
+        )
+        .unwrap_err();
+    assert!(matches!(failure.cause,
+        zetesis_cpu::lazy::Cause::Execution(error) if error.kind() == GpuErrorKind::Device
+    ));
+    assert_eq!(failure.progress, zetesis_cpu::lazy::Progress::default());
+    assert_eq!(lazy.statistics().dispatches, 0);
+    let cancelled = Control::default();
+    cancelled.cancel();
+    let failure = lazy
+        .check_batch(
+            &empty,
+            &[],
+            zetesis_cpu::lazy::Limits::default(),
+            crate::GpuLimits::default(),
+            &cancelled,
+        )
+        .unwrap_err();
+    assert!(matches!(
+        failure.cause,
+        zetesis_cpu::lazy::Cause::Source(zetesis_cpu::Stop::Cancelled)
+    ));
+    aggregate.clear_residency();
+    formula.clear_residency();
+    assert!(matches!(
+        crate::GpuFormulaOracle::from_context(&context),
+        Err(error) if error.kind() == GpuErrorKind::Device
+    ));
+}
+
+#[test]
+#[ignore = "requires actual Metal; explicit physical qualification"]
+fn metal_readback_failure_invalidates_context_peers() {
+    invalidates_shared_primitive(GpuBackendPreference::Metal);
+}
+
+#[test]
+#[ignore = "requires an actual Vulkan GPU; explicit physical qualification"]
+fn vulkan_readback_failure_invalidates_context_peers() {
+    invalidates_shared_primitive(GpuBackendPreference::Vulkan);
+}

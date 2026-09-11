@@ -76,24 +76,61 @@ impl GpuFormulaOracle {
         selection: GpuSelection,
         projection: GateProjection,
     ) -> Result<Self, GpuError> {
-        let runtime = pollster::block_on(Runtime::new(
-            options,
-            selection,
-            DeviceProfile {
-                device_label: "zetesis frozen formula device",
-                shader_label: "frozen formula propagation",
-                pipeline_label: "cooperative finite-formula query",
-                shader: projection.shader()?,
-                entry_point: "propagate",
-                validate_limits: check_limits,
-            },
-        ))?;
-        Ok(Self {
+        let runtime =
+            pollster::block_on(Runtime::new(options, selection, Self::profile(projection)?))?;
+        Ok(Self::with_runtime(runtime, projection))
+    }
+
+    /// Compile this primitive on an existing device context.
+    ///
+    /// Prepared subjects belong to this primitive; device health and execution
+    /// serialization are shared with all primitives using the context.
+    ///
+    /// # Errors
+    /// Refuses an active or invalidated context, unsupported granted limits,
+    /// allocation and shader validation failure. No adapter selection occurs.
+    pub fn from_context(context: &crate::GpuContext) -> Result<Self, GpuError> {
+        Self::from_context_with_projection(context, GateProjection::default())
+    }
+
+    /// Compile the selected implementation on an existing shared context.
+    ///
+    /// # Errors
+    /// Reports the same context, capability and compilation failures as
+    /// [`Self::from_context`].
+    pub fn from_context_with_projection(
+        context: &crate::GpuContext,
+        projection: GateProjection,
+    ) -> Result<Self, GpuError> {
+        let runtime =
+            pollster::block_on(Runtime::from_context(context, Self::profile(projection)?))?;
+        Ok(Self::with_runtime(runtime, projection))
+    }
+
+    /// Exact device context retained by this primitive.
+    #[must_use]
+    pub fn context(&self) -> &crate::GpuContext {
+        &self.runtime.context
+    }
+
+    fn with_runtime(runtime: Runtime, projection: GateProjection) -> Self {
+        Self {
             runtime,
             projection,
             resident: None,
             epoch: 0,
             last: None,
+        }
+    }
+
+    fn profile(projection: GateProjection) -> Result<DeviceProfile, GpuError> {
+        Ok(DeviceProfile {
+            device_label: "zetesis frozen formula device",
+            shader_label: "frozen formula propagation",
+            pipeline_label: "cooperative finite-formula query",
+            shader: projection.shader()?,
+            entry_point: "propagate",
+            validate_limits: check_limits,
         })
     }
 
@@ -105,7 +142,7 @@ impl GpuFormulaOracle {
     /// Identity of the actual selected native adapter.
     #[must_use]
     pub fn info(&self) -> &GpuInfo {
-        &self.runtime.info
+        self.runtime.context.info()
     }
     /// Last successful nonempty batch's allocation/reuse accounting. Every new
     /// call clears it, including an empty or refused call.
@@ -127,8 +164,8 @@ impl GpuFormulaOracle {
     /// # Errors
     /// Refuses foreign interpretations, insufficient setup/work/storage limits,
     /// u32 address overflow, allocation, device/poll, validation or readback
-    /// failures. Execution/readback failures invalidate this instance. Shape or
-    /// input refusals leave it reusable. A propagation limit is instead an
+    /// failures. Execution/readback failures invalidate the entire context.
+    /// Shape, input and Busy refusals leave it reusable. A propagation limit is an
     /// explicit residual, never a proof of stability.
     pub fn propagate_batch(
         &mut self,
@@ -137,6 +174,8 @@ impl GpuFormulaOracle {
         limits: FormulaLimits,
     ) -> Result<Vec<FormulaCheck>, GpuError> {
         self.last = None;
+        let context = self.runtime.context.clone();
+        let _lease = context.lease()?;
         self.runtime.check_health()?;
         if candidates.is_empty() {
             return Ok(Vec::new());
@@ -151,7 +190,7 @@ impl GpuFormulaOracle {
         {
             None
         } else {
-            Some(Graph::new(theory, &self.runtime.limits)?)
+            Some(Graph::new(theory, self.runtime.limits())?)
         };
         let graph = fresh
             .as_ref()
@@ -161,7 +200,7 @@ impl GpuFormulaOracle {
             graph,
             candidates.len(),
             limits,
-            &self.runtime.limits,
+            self.runtime.limits(),
             fresh.is_some(),
             epoch,
         )?;
@@ -198,9 +237,9 @@ impl GpuFormulaOracle {
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing formula packing graph"))?;
         let seeds = plan.pack(graph, candidates)?;
         let packed = fresh.as_ref().map(Graph::pack).transpose()?;
-        let scopes = ErrorScopes::new(&self.runtime.device);
+        let scopes = ErrorScopes::new(self.runtime.device());
         if let Some((graph, (nodes, roots))) = fresh.zip(packed) {
-            self.resident = Some(Resident::new(&self.runtime.device, graph, &nodes, &roots));
+            self.resident = Some(Resident::new(self.runtime.device(), graph, &nodes, &roots));
         }
         self.epoch = epoch;
         let outcome = self
@@ -208,8 +247,8 @@ impl GpuFormulaOracle {
             .as_mut()
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing resident formula"))?
             .dispatch(
-                &self.runtime.device,
-                &self.runtime.queue,
+                self.runtime.device(),
+                self.runtime.queue(),
                 &self.runtime.pipeline,
                 &seeds,
                 &plan,

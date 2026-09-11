@@ -226,7 +226,7 @@ fn execute_inspected(
     limits: GpuLimits,
     cached: &mut Option<super::Transport>,
 ) -> Result<Vec<u32>, crate::GpuError> {
-    let plan = Plan::new(chunk, limits, &oracle.runtime.limits)?;
+    let plan = Plan::new(chunk, limits, oracle.runtime.limits())?;
     let selected = Selection::new(
         cached.as_ref().map(|value| value.capacity),
         &plan,
@@ -370,7 +370,7 @@ fn qualify_lazy_transport_reuse_preserves_round_truth(backend: GpuBackendPrefere
             selection,
             &Control::default(),
             |chunk| {
-                let plan = Plan::new(chunk, GpuLimits::default(), &oracle.runtime.limits).unwrap();
+                let plan = Plan::new(chunk, GpuLimits::default(), oracle.runtime.limits()).unwrap();
                 let reuses = oracle.statistics.transport_reuses;
                 let result =
                     execute_inspected(&mut oracle, chunk, GpuLimits::default(), &mut cached)?;
@@ -462,7 +462,7 @@ fn qualify_input_slack_preserves_exact_admission(backend: GpuBackendPreference) 
             selection,
             &Control::default(),
             |chunk| {
-                let plan = Plan::new(chunk, GpuLimits::default(), &oracle.runtime.limits).unwrap();
+                let plan = Plan::new(chunk, GpuLimits::default(), oracle.runtime.limits()).unwrap();
                 let maximum = plan.capacity.accounted(&plan).unwrap();
                 execute_inspected(
                     &mut oracle,
@@ -511,7 +511,7 @@ fn qualify_lazy_transport_refusal_preserves_reuse(backend: GpuBackendPreference)
         }
         ran = true;
         let mut cached = None;
-        let plan = Plan::new(chunk, GpuLimits::default(), &oracle.runtime.limits).unwrap();
+        let plan = Plan::new(chunk, GpuLimits::default(), oracle.runtime.limits()).unwrap();
         let exact = plan.capacity.accounted(&plan).unwrap();
         let expected = lazy::evaluate(chunk).unwrap();
         assert_eq!(
@@ -641,7 +641,7 @@ fn qualify_cancelled_replacement(backend: GpuBackendPreference) {
         lazy::SourceSelection::Worlds,
         &Control::default(),
         |chunk| {
-            let plan = Plan::new(chunk, GpuLimits::default(), &oracle.runtime.limits).unwrap();
+            let plan = Plan::new(chunk, GpuLimits::default(), oracle.runtime.limits()).unwrap();
             let selected = Selection::new(
                 cached
                     .as_ref()

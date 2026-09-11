@@ -33,30 +33,53 @@ impl GpuAggregateOracle {
     /// # Errors
     /// Returns typed adapter, capability, allocation, validation or device failure.
     pub fn new_selected(options: GpuOptions, selection: GpuSelection) -> Result<Self, GpuError> {
-        let runtime = pollster::block_on(Runtime::new(
-            options,
-            selection,
-            DeviceProfile {
-                device_label: "zetesis numeric aggregate device",
-                shader_label: "exact integer aggregate reduction",
-                pipeline_label: "original and frozen aggregate guards",
-                shader: SHADER.into(),
-                entry_point: "reduce",
-                validate_limits: check_limits,
-            },
-        ))?;
-        Ok(Self {
+        let runtime = pollster::block_on(Runtime::new(options, selection, Self::profile()))?;
+        Ok(Self::with_runtime(runtime))
+    }
+
+    /// Compile this primitive on an existing device context.
+    ///
+    /// Prepared subjects belong to this primitive; device health and execution
+    /// serialization are shared with all primitives using the context.
+    ///
+    /// # Errors
+    /// Refuses an active or invalidated context, unsupported granted limits,
+    /// allocation and shader validation failure. No adapter selection occurs.
+    pub fn from_context(context: &crate::GpuContext) -> Result<Self, GpuError> {
+        let runtime = pollster::block_on(Runtime::from_context(context, Self::profile()))?;
+        Ok(Self::with_runtime(runtime))
+    }
+
+    /// Exact device context retained by this primitive.
+    #[must_use]
+    pub fn context(&self) -> &crate::GpuContext {
+        &self.runtime.context
+    }
+
+    fn with_runtime(runtime: Runtime) -> Self {
+        Self {
             runtime,
             resident: None,
             epoch: 0,
             last: None,
             activity: AggregateGpuActivity::default(),
-        })
+        }
+    }
+
+    fn profile() -> DeviceProfile {
+        DeviceProfile {
+            device_label: "zetesis numeric aggregate device",
+            shader_label: "exact integer aggregate reduction",
+            pipeline_label: "original and frozen aggregate guards",
+            shader: SHADER.into(),
+            entry_point: "reduce",
+            validate_limits: check_limits,
+        }
     }
     /// Actual selected adapter identity; no device operation.
     #[must_use]
     pub fn info(&self) -> &GpuInfo {
-        &self.runtime.info
+        self.runtime.context.info()
     }
     /// Latest successfully completed nonempty batch; cleared at every attempt.
     #[must_use]
@@ -90,7 +113,8 @@ impl GpuAggregateOracle {
     /// # Errors
     /// Returns no partial truth vector on identity, resource, control, allocation,
     /// validation, device or readback failure. Host preparation failures leave the
-    /// device reusable; execution-stage failures drop residency and poison it.
+    /// device reusable; execution-stage failures drop this residency and invalidate
+    /// the entire shared context. Busy contention is a reusable preflight refusal.
     /// Empty calls still check health/control, then perform no work or allocation.
     pub fn check_batch(
         &mut self,
@@ -112,6 +136,8 @@ impl GpuAggregateOracle {
         limits: AggregateGpuLimits,
         control: &Control,
     ) -> Result<Vec<AggregateGpuReduction>, GpuError> {
+        let context = self.runtime.context.clone();
+        let _lease = context.lease()?;
         poll(control)?;
         self.runtime.check_health()?;
         if records.is_empty() {
@@ -121,7 +147,14 @@ impl GpuAggregateOracle {
             .epoch
             .checked_add(1)
             .ok_or_else(|| capacity("aggregate submission identity exhausted"))?;
-        let plan = Plan::new(group, records, limits, &self.runtime.limits, epoch, control)?;
+        let plan = Plan::new(
+            group,
+            records,
+            limits,
+            self.runtime.limits(),
+            epoch,
+            control,
+        )?;
         let fresh = self
             .resident
             .as_ref()
@@ -155,7 +188,7 @@ impl GpuAggregateOracle {
         }
         let masks = plan.pack(records, control)?;
         poll(control)?;
-        let scopes = ErrorScopes::new(&self.runtime.device);
+        let scopes = ErrorScopes::new(self.runtime.device());
         if fresh {
             self.resident = Some(Resident::new(&self.runtime, Arc::clone(&group.numeric)));
             self.activity.uploaded_bytes = group.numeric.bytes;

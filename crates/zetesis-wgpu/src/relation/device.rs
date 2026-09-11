@@ -25,31 +25,57 @@ impl GpuRelationExecutor {
         options: GpuOptions,
         selection: GpuSelection,
     ) -> Result<Self, RelationGpuError> {
-        let runtime = pollster::block_on(runtime::Runtime::new(
-            options,
-            selection,
-            runtime::DeviceProfile {
-                device_label: "zetesis relation executor",
-                shader_label: "zetesis relation equality masks",
-                pipeline_label: "zetesis relation row tiles",
-                shader: SHADER.into(),
-                entry_point: "select_rows",
-                validate_limits: adapter_limits,
-            },
-        ))?;
-        Ok(Self { runtime, epoch: 0 })
+        let runtime =
+            pollster::block_on(runtime::Runtime::new(options, selection, Self::profile()))?;
+        Ok(Self::with_runtime(runtime))
+    }
+
+    /// Compile this primitive on an existing device context.
+    ///
+    /// Prepared subjects belong to this primitive; device health and execution
+    /// serialization are shared with all primitives using the context.
+    ///
+    /// # Errors
+    /// Refuses an active or invalidated context, unsupported granted limits,
+    /// allocation and shader validation failure. No adapter selection occurs.
+    pub fn from_context(context: &crate::GpuContext) -> Result<Self, RelationGpuError> {
+        let runtime = pollster::block_on(runtime::Runtime::from_context(context, Self::profile()))?;
+        Ok(Self::with_runtime(runtime))
+    }
+
+    /// Exact device context retained by this primitive.
+    #[must_use]
+    pub fn context(&self) -> &crate::GpuContext {
+        &self.runtime.context
+    }
+
+    fn with_runtime(runtime: runtime::Runtime) -> Self {
+        Self { runtime, epoch: 0 }
+    }
+
+    fn profile() -> runtime::DeviceProfile {
+        runtime::DeviceProfile {
+            device_label: "zetesis relation executor",
+            shader_label: "zetesis relation equality masks",
+            pipeline_label: "zetesis relation row tiles",
+            shader: SHADER.into(),
+            entry_point: "select_rows",
+            validate_limits: adapter_limits,
+        }
     }
 
     /// Identity of the actual selected adapter.
     #[must_use]
     pub fn info(&self) -> &GpuInfo {
-        &self.runtime.info
+        self.runtime.context.info()
     }
 
     /// Upload a checked immutable column view without copying logical values.
     ///
     /// Dropping the prepared view releases its authored column-buffer handle and
-    /// makes this executor available for another relation. Driver retirement can
+    /// makes this executor available for another relation. Other primitives sharing
+    /// the context may execute while this prepared view remains live; preparation
+    /// does not retain the context's execution lease. Driver retirement can
     /// occur later. Source dictionary, query resolution and typed rows stay with
     /// the borrowed Relation. The preparation limit charges uploaded columns;
     /// filtering separately charges its complete transport and returned masks.
@@ -63,20 +89,22 @@ impl GpuRelationExecutor {
         limits: RelationGpuLimits,
         control: &Control,
     ) -> Result<PreparedGpuRelation<'device, 'owner, 'source>, RelationGpuError> {
+        let context = self.runtime.context.clone();
+        let _lease = context.lease()?;
         poll(control)?;
         self.runtime.check_health()?;
-        let bytes = packing::column_bytes(relation, &self.runtime.limits)?;
+        let bytes = packing::column_bytes(relation, self.runtime.limits())?;
         if bytes > limits.max_bytes {
             return Err(capacity("relation upload exceeds authored byte ceiling").into());
         }
-        let scopes = runtime::ErrorScopes::new(&self.runtime.device);
+        let scopes = runtime::ErrorScopes::new(self.runtime.device());
         let cells = if relation.columns().is_empty() {
             &[0]
         } else {
             relation.columns()
         };
         let columns = runtime::initialized(
-            &self.runtime.device,
+            self.runtime.device(),
             "zetesis immutable relation columns",
             cells,
             wgpu::BufferUsages::STORAGE,
@@ -149,8 +177,8 @@ impl<'owner, 'source> PreparedGpuRelation<'_, 'owner, 'source> {
     /// # Errors
     /// Refuses foreign query owners, capacity, allocation, cancellation and device
     /// or readback failure. No partial mask batch is returned. Post-submit errors
-    /// invalidate the executor; pre-dispatch ownership/capacity refusals leave it
-    /// reusable. Runtime error-scope and asynchronous device faults take priority.
+    /// invalidate the entire shared context; pre-dispatch ownership/capacity and
+    /// Busy refusals leave it reusable. Error-scope and device faults take priority.
     pub fn filter(
         &mut self,
         queries: &[Query<'_, 'source>],
@@ -159,6 +187,8 @@ impl<'owner, 'source> PreparedGpuRelation<'_, 'owner, 'source> {
     ) -> Result<RelationGpuMasks<'owner, 'source>, RelationGpuError> {
         self.activity = RelationGpuActivity::default();
         self.last = None;
+        let context = self.executor.runtime.context.clone();
+        let _lease = context.lease()?;
         poll(control)?;
         self.executor.runtime.check_health()?;
         if queries.len() > limits.max_queries || u32::try_from(queries.len()).is_err() {
@@ -179,7 +209,7 @@ impl<'owner, 'source> PreparedGpuRelation<'_, 'owner, 'source> {
             self.relation,
             queries,
             limits,
-            &self.executor.runtime.limits,
+            self.executor.runtime.limits(),
             epoch,
         )?;
         let stats = RelationGpuStats {
@@ -203,13 +233,13 @@ impl<'owner, 'source> PreparedGpuRelation<'_, 'owner, 'source> {
         poll(control)?;
         self.executor.epoch = epoch;
         let runtime = &mut self.executor.runtime;
-        let scopes = runtime::ErrorScopes::new(&runtime.device);
+        let scopes = runtime::ErrorScopes::new(runtime.device());
         let transport = Transport::new(runtime, &self.columns, &plan, &packed);
         self.activity.uploaded_bytes = PARAM_BYTES + plan.query_bytes + plan.equality_bytes;
         let outcome = poll(control).and_then(|()| {
             let submission = runtime::submit(
-                &runtime.device,
-                &runtime.queue,
+                runtime.device(),
+                runtime.queue(),
                 &runtime::Dispatch {
                     command_label: "zetesis relation commands",
                     pass_label: "zetesis relation row tiles",
@@ -227,7 +257,7 @@ impl<'owner, 'source> PreparedGpuRelation<'_, 'owner, 'source> {
                 u64::from(plan.workgroups[0]) * u64::from(plan.workgroups[1]);
             self.activity.scheduled_work = plan.work;
             runtime::read_polled(
-                &runtime.device,
+                runtime.device(),
                 &transport.readback,
                 submission,
                 limits.timeout,
@@ -257,7 +287,7 @@ impl Transport {
         plan: &packing::Plan,
         packed: &packing::Packed,
     ) -> Self {
-        let device = &runtime.device;
+        let device = runtime.device();
         let params = runtime::initialized(
             device,
             "zetesis relation dimensions",

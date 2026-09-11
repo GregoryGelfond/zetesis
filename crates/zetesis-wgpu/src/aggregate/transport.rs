@@ -23,13 +23,13 @@ impl Resident {
     pub(super) fn new(runtime: &Runtime, numeric: Arc<Numeric>) -> Self {
         Self {
             tuples: runtime::initialized(
-                &runtime.device,
+                runtime.device(),
                 "aggregate contributions",
                 &numeric.tuples,
                 wgpu::BufferUsages::STORAGE,
             ),
             guards: runtime::initialized(
-                &runtime.device,
+                runtime.device(),
                 "aggregate guards",
                 &numeric.guards,
                 wgpu::BufferUsages::STORAGE,
@@ -75,18 +75,18 @@ impl Resident {
             .as_ref()
             .expect("aggregate transport allocated");
         poll(control)?;
-        runtime.queue.write_buffer(
+        runtime.queue().write_buffer(
             &transport.params,
             0,
             bytemuck::cast_slice(&plan.params(&self.numeric)),
         );
         runtime
-            .queue
+            .queue()
             .write_buffer(&transport.masks, 0, bytemuck::cast_slice(masks));
         activity.uploaded_bytes = uploaded;
         let submission = runtime::submit(
-            &runtime.device,
-            &runtime.queue,
+            runtime.device(),
+            runtime.queue(),
             &runtime::Dispatch {
                 command_label: "aggregate batch",
                 pass_label: "original and frozen reductions",
@@ -102,7 +102,7 @@ impl Resident {
         activity.submitted_occurrences = u64::from(plan.worlds);
         activity.scheduled_work = plan.total_work;
         let result = runtime::read_polled(
-            &runtime.device,
+            runtime.device(),
             &transport.readback,
             submission,
             timeout,
@@ -130,31 +130,31 @@ pub(super) struct Transport {
 impl Transport {
     fn new(runtime: &Runtime, resident: &Resident, plan: &Plan) -> Self {
         let params = runtime::buffer(
-            &runtime.device,
+            runtime.device(),
             "aggregate dimensions",
             PARAM_BYTES,
             wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         );
         let masks = runtime::buffer(
-            &runtime.device,
+            runtime.device(),
             "aggregate eligibility",
             plan.masks,
             wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         );
         let output = runtime::buffer(
-            &runtime.device,
+            runtime.device(),
             "aggregate measures",
             plan.results,
             wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
         );
         let readback = runtime::buffer(
-            &runtime.device,
+            runtime.device(),
             "aggregate readback",
             plan.results,
             wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         );
         let group = runtime
-            .device
+            .device()
             .create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("numeric aggregate batch"),
                 layout: &runtime.pipeline.get_bind_group_layout(0),

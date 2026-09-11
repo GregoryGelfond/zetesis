@@ -74,29 +74,52 @@ impl GpuLazyOracle {
     /// # Errors
     /// Returns adapter, capability, shader, pipeline or device failure.
     pub fn new_selected(options: GpuOptions, selection: GpuSelection) -> Result<Self, GpuError> {
-        let runtime = pollster::block_on(Runtime::new(
-            options,
-            selection,
-            DeviceProfile {
-                device_label: "zetesis lazy reduct device",
-                shader_label: "zetesis lazy consequence shader",
-                pipeline_label: "zetesis lazy consequence pipeline",
-                shader: Cow::Borrowed(SHADER),
-                entry_point: "consequence",
-                validate_limits: crate::check_adapter_limits,
-            },
-        ))?;
-        Ok(Self {
+        let runtime = pollster::block_on(Runtime::new(options, selection, Self::profile()))?;
+        Ok(Self::with_runtime(runtime))
+    }
+
+    /// Compile this primitive on an existing device context.
+    ///
+    /// Prepared subjects belong to this primitive; device health and execution
+    /// serialization are shared with all primitives using the context.
+    ///
+    /// # Errors
+    /// Refuses an active or invalidated context, unsupported granted limits,
+    /// allocation and shader validation failure. No adapter selection occurs.
+    pub fn from_context(context: &crate::GpuContext) -> Result<Self, GpuError> {
+        let runtime = pollster::block_on(Runtime::from_context(context, Self::profile()))?;
+        Ok(Self::with_runtime(runtime))
+    }
+
+    /// Exact device context retained by this primitive.
+    #[must_use]
+    pub fn context(&self) -> &crate::GpuContext {
+        &self.runtime.context
+    }
+
+    fn with_runtime(runtime: Runtime) -> Self {
+        Self {
             runtime,
             statistics: LazyGpuStatistics::default(),
             epoch: 0,
-        })
+        }
+    }
+
+    fn profile() -> DeviceProfile {
+        DeviceProfile {
+            device_label: "zetesis lazy reduct device",
+            shader_label: "zetesis lazy consequence shader",
+            pipeline_label: "zetesis lazy consequence pipeline",
+            shader: Cow::Borrowed(SHADER),
+            entry_point: "consequence",
+            validate_limits: crate::check_adapter_limits,
+        }
     }
 
     /// Selected physical adapter metadata; constant-time borrow.
     #[must_use]
-    pub const fn info(&self) -> &GpuInfo {
-        &self.runtime.info
+    pub fn info(&self) -> &GpuInfo {
+        self.runtime.context.info()
     }
 
     /// Actual work from the latest attempt, including a failed attempt.
@@ -120,6 +143,11 @@ impl GpuLazyOracle {
     /// Returns no completed check on interrupted source coverage, capacity,
     /// device, timeout, readback or malformed-output failure. Charged source
     /// progress is retained in the error, device work in [`Self::statistics`].
+    /// The whole batch leases the shared context, including source validation.
+    /// Busy contention returns before source work; execution-stage failures
+    /// invalidate the context for every primitive sharing it.
+    /// After leasing, cancellation is checked before context health. A known
+    /// invalidated context refuses before source admission, including empty calls.
     pub fn check_batch(
         &mut self,
         program: &Program,
@@ -160,6 +188,19 @@ impl GpuLazyOracle {
         control: &Control,
     ) -> Result<lazy::Batch, lazy::Failure<GpuError>> {
         self.statistics = LazyGpuStatistics::default();
+        let context = self.runtime.context.clone();
+        let _lease = context.lease().map_err(|error| lazy::Failure {
+            cause: lazy::Cause::Execution(error),
+            progress: lazy::Progress::default(),
+        })?;
+        control.poll().map_err(|stop| lazy::Failure {
+            cause: lazy::Cause::Source(stop),
+            progress: lazy::Progress::default(),
+        })?;
+        context.check_health().map_err(|error| lazy::Failure {
+            cause: lazy::Cause::Execution(error),
+            progress: lazy::Progress::default(),
+        })?;
         let mut transport = None;
         let result =
             lazy::check_with_source(program, seeds, source_limits, selection, control, |chunk| {
@@ -184,6 +225,9 @@ impl GpuLazyOracle {
         })
     }
 
+    // The complete public batch retains the context lease, including source
+    // validation after this chunk returns. Direct transport tests own an isolated
+    // executor and exercise this internal step without another context client.
     fn execute(
         &mut self,
         chunk: &lazy::Chunk<'_>,
@@ -192,13 +236,13 @@ impl GpuLazyOracle {
         transport: &mut Option<Transport>,
     ) -> Result<Vec<u32>, GpuError> {
         self.runtime.check_health()?;
-        let mut plan = Plan::new(chunk, limits, &self.runtime.limits)?;
+        let mut plan = Plan::new(chunk, limits, self.runtime.limits())?;
         let epoch = self.epoch.checked_add(1).ok_or_else(|| {
             GpuError::new(GpuErrorKind::Capacity, "lazy submission identity exhausted")
         })?;
         plan.epoch = epoch;
         self.epoch = epoch;
-        let scopes = ErrorScopes::new(&self.runtime.device);
+        let scopes = ErrorScopes::new(self.runtime.device());
         let outcome = self.dispatch(chunk, limits, &plan, control, transport);
         let result = self.runtime.complete(scopes, outcome);
         if result.is_err() {
@@ -217,7 +261,7 @@ impl GpuLazyOracle {
         control: &Control,
         cached: &mut Option<Transport>,
     ) -> Result<Vec<u32>, GpuError> {
-        let device = &self.runtime.device;
+        let device = self.runtime.device();
         let selection = Selection::new(
             cached.as_ref().map(|transport| transport.capacity),
             plan,
