@@ -373,3 +373,75 @@ fn local_ranges_generate_the_aggregate_tuple_family() {
 fn conditional_ranges_quantify_over_each_generated_binding() {
     assert_eq!(rendered("p(1).p(2). #show. #show x:p(X):X=1..2."), "x");
 }
+
+#[test]
+fn aggregate_equalities_bind_the_actual_model_measure() {
+    assert_eq!(rendered("p(1).p(2). #show. #show N:N=#count{X:p(X)}."), "2");
+}
+#[test]
+fn scalar_assignments_can_depend_on_aggregate_results() {
+    assert_eq!(
+        rendered("p(1).p(2). #show. #show K:K=N+10,N=#count{X:p(X)}."),
+        "12"
+    );
+}
+#[test]
+fn aggregate_result_dependencies_are_scheduled_before_their_consumers() {
+    assert_eq!(
+        rendered("p(1).p(2). #show. #show (N,S):S=#sum{X+N:p(X)},N=#count{X:p(X)}."),
+        "(2,7)"
+    );
+}
+#[test]
+fn aggregate_results_can_supply_evaluated_atom_arguments() {
+    assert_eq!(
+        rendered("p(1).p(2).q(3). #show. #show N:q(N+1),N=#count{X:p(X)}."),
+        "2"
+    );
+}
+#[test]
+fn structured_extrema_can_bind_an_observed_value() {
+    assert_eq!(
+        rendered("p(f(1)).p(f(2)). #show. #show X:X=#max{Y:p(Y)}."),
+        "f(2)"
+    );
+}
+#[test]
+fn empty_extrema_bind_genuine_endpoint_symbols() {
+    assert_eq!(
+        rendered("#show. #show (X,Y):X=#min{},Y=#max{}."),
+        "(#sup,#inf)"
+    );
+}
+#[test]
+fn circular_aggregate_result_dependencies_are_refused() {
+    let result = admit_formula(
+        "#show N:N=#count{X:p(X),X<N}.".into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    );
+    assert!(
+        matches!(result, Err(FormulaFailure::Observation { error }) if error.kind() == &ErrorKind::Unsupported(Feature::UnsafeVariable))
+    );
+}
+#[test]
+fn aggregate_bindings_check_the_pinned_scalar_width() {
+    let input = admit("#show. #show N:N=#sum{2147483647,a;2147483647,b}.");
+    let error = input
+        .metadata()
+        .observations()
+        .evaluate(&Model::default(), Limits::default(), &Control::default())
+        .unwrap_err();
+    assert_eq!(
+        error.kind(),
+        &ErrorKind::Evaluation(zetesis_themelios::observation::EvaluationError::Overflow)
+    );
+}
+#[test]
+fn guarded_aggregate_bindings_keep_their_additional_comparisons() {
+    assert_eq!(
+        rendered("p(1).p(2). #show. #show N:N=#count{X:p(X)}<3."),
+        "2"
+    );
+}

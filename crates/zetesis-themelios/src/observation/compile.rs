@@ -28,6 +28,8 @@ struct Compiler<'a> {
     safe: BTreeSet<usize>,
     slots: usize,
     generated: Vec<(usize, Template)>,
+    used: BTreeSet<usize>,
+    scope_outer: usize,
 }
 impl Compiler<'_> {
     fn error(&self, kind: ErrorKind) -> Error {
@@ -80,6 +82,7 @@ impl Compiler<'_> {
             return Err(self.unsupported(Feature::AnonymousOutput));
         };
         if let Some(&slot) = self.variables.get(name.as_str()) {
+            self.used.insert(slot);
             return Ok(slot);
         }
         self.check(
@@ -91,6 +94,7 @@ impl Compiler<'_> {
         let slot = self.slots;
         self.slots += 1;
         self.variables.insert(name.as_str().to_owned(), slot);
+        self.used.insert(slot);
         Ok(slot)
     }
     // Recursion is capped before descent; source depth is also capped before raising.
@@ -345,6 +349,7 @@ impl Compiler<'_> {
         let slot = self.slots;
         self.slots += 1;
         self.generated.push((slot, term));
+        self.used.insert(slot);
         Ok(Template::Variable(slot))
     }
     fn test(&mut self, literal: &themelios_program::program::Literal) -> Result<Condition, Error> {
@@ -405,6 +410,62 @@ impl Compiler<'_> {
             _ => {}
         }
     }
+    fn aggregate_assignment(&self, condition: &Condition) -> Option<(usize, usize)> {
+        let Condition::Aggregate(DefaultNegation::None, aggregate, guards) = condition else {
+            return None;
+        };
+        if aggregate
+            .elements
+            .iter()
+            .flat_map(|element| &element.query.inputs)
+            .any(|slot| !self.safe.contains(slot))
+        {
+            return None;
+        }
+        guards.iter().enumerate().find_map(|(index, guard)| {
+            let Template::Variable(slot) = guard.bound else {
+                return None;
+            };
+            (guard.relation == Relation::Eq
+                && !self.safe.contains(&slot)
+                && guards
+                    .iter()
+                    .enumerate()
+                    .all(|(other, guard)| other == index || self.ready(&guard.bound)))
+            .then_some((index, slot))
+        })
+    }
+    fn bind_aggregate(
+        &mut self,
+        conditions: &mut Vec<Condition>,
+        binders: &mut Vec<Binder>,
+    ) -> bool {
+        let Some((index, guard_index, slot)) =
+            conditions
+                .iter()
+                .enumerate()
+                .find_map(|(index, condition)| {
+                    self.aggregate_assignment(condition)
+                        .map(|(guard, slot)| (index, guard, slot))
+                })
+        else {
+            return false;
+        };
+        let Condition::Aggregate(_, aggregate, mut guards) = conditions.remove(index) else {
+            unreachable!()
+        };
+        guards.remove(guard_index);
+        binders.push(Binder::Aggregate(slot, aggregate));
+        self.safe.insert(slot);
+        for guard in guards {
+            conditions.push(Condition::Compare(
+                DefaultNegation::None,
+                Template::Variable(slot),
+                vec![(guard.relation, guard.bound)],
+            ));
+        }
+        true
+    }
     fn finish(
         &mut self,
         mut positive: Vec<Pattern>,
@@ -435,16 +496,13 @@ impl Compiler<'_> {
             }
             let before = binders.len();
             self.assignments(&mut conditions, &mut binders);
-            if before == binders.len() {
+            if before == binders.len() && !self.bind_aggregate(&mut conditions, &mut binders) {
                 break;
             }
         }
         if !positive.is_empty()
             || !generated.is_empty()
-            || self
-                .variables
-                .values()
-                .any(|slot| !self.safe.contains(slot))
+            || self.used.iter().any(|slot| !self.safe.contains(slot))
         {
             return Err(self.unsupported(Feature::UnsafeVariable));
         }
@@ -452,6 +510,12 @@ impl Compiler<'_> {
             binders,
             conditions,
             variables: self.slots,
+            inputs: self
+                .used
+                .iter()
+                .copied()
+                .filter(|slot| *slot < self.scope_outer)
+                .collect(),
         })
     }
     fn directive(
@@ -464,6 +528,8 @@ impl Compiler<'_> {
         self.safe.clear();
         self.slots = 0;
         self.generated.clear();
+        self.used.clear();
+        self.scope_outer = 0;
         let term = self.template(term, 1)?;
         let mut positive = Vec::new();
         let mut conditions = Vec::new();
@@ -498,18 +564,22 @@ impl Compiler<'_> {
                 }
             }
         }
-        let mut query = self.finish(positive, conditions)?;
+        let mut conditionals = Vec::new();
         for (aggregate, conditional) in pending {
             if let Some((negation, aggregate, guards)) = aggregate {
-                query.conditions.push(Condition::Aggregate(
+                conditions.push(Condition::Aggregate(
                     negation,
                     self.aggregate(aggregate)?,
                     guards,
                 ));
             }
             if let Some(conditional) = conditional {
-                query.conditions.push(self.conditional(conditional)?);
+                conditionals.push(conditional);
             }
+        }
+        let mut query = self.finish(positive, conditions)?;
+        for conditional in conditionals {
+            query.conditions.push(self.conditional(conditional)?);
         }
         Ok(Directive {
             term,
@@ -558,6 +628,8 @@ pub(crate) fn compile(
         safe: BTreeSet::new(),
         slots: 0,
         generated: Vec::new(),
+        used: BTreeSet::new(),
+        scope_outer: 0,
     };
     let mut result = ObservationProgram::default();
     for entry in source.statements() {

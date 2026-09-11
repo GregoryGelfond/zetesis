@@ -664,11 +664,59 @@ fn undo_slots(query: &Query, work: &Work<'_>) -> Result<Vec<Vec<usize>>, Error> 
     for binder in &query.binders {
         let count = match binder {
             Binder::Atom(pattern) => pattern.terms.iter().map(patterns::slots).sum(),
-            Binder::Assign(_, _) => 1,
+            Binder::Assign(_, _) | Binder::Aggregate(_, _) => 1,
         };
         undos.push(work.reserve(count)?);
     }
     Ok(undos)
+}
+
+fn owned_binding(
+    binder: &Binder,
+    alternatives: Option<&values::Values>,
+    cursor: usize,
+    atoms: &[&Atom],
+    binding: &[Option<Bound<'_>>],
+    work: &mut Work<'_>,
+) -> Result<(usize, Symbol, Metric), Error> {
+    match binder {
+        Binder::Assign(slot, expression) => {
+            let (value, metric) = if let Some(values) = alternatives {
+                patterns::own(&values.values[cursor].0, work)?
+            } else {
+                work.own(expression, binding)?
+            };
+            Ok((*slot, value, metric))
+        }
+        Binder::Aggregate(slot, aggregate) => {
+            let (value, metric) = scopes::aggregate(aggregate, atoms, binding, work)?;
+            work.check(
+                Resource::Nodes,
+                metric.nodes as u128,
+                work.limits.max_symbol_nodes as u128,
+            )?;
+            work.check(Resource::Depth, 1, work.limits.max_symbol_depth as u128)?;
+            work.construction_check(metric)?;
+            // Guard measures stay wide. A binding constructs an ordinary logical
+            // value and therefore crosses the pinned scalar-width boundary here.
+            let value = match value {
+                scopes::Value::Integer(value) => {
+                    Symbol::Number(i32::try_from(value).map_err(|_| {
+                        work.error(ErrorKind::Evaluation(EvaluationError::Overflow))
+                    })?)
+                }
+                scopes::Value::Symbol(value) => value,
+            };
+            work.check(
+                Resource::LocalBytes,
+                work.local_bytes + metric.payload(),
+                work.limits.max_local_bytes as u128,
+            )?;
+            work.local_bytes += metric.payload();
+            Ok((*slot, value, metric))
+        }
+        Binder::Atom(_) => unreachable!("relational bindings use borrowed atom matching"),
+    }
 }
 
 fn visit<'a>(
@@ -705,6 +753,7 @@ fn visit<'a>(
             }
             let count = match &query.binders[depth] {
                 Binder::Atom(_) => atoms.len(),
+                Binder::Aggregate(_, _) => 1,
                 Binder::Assign(_, expression) => {
                     if expression.multiple() && alternatives[depth].is_none() {
                         alternatives[depth] = Some(values::collect(expression, &binding, work)?);
@@ -740,14 +789,17 @@ fn visit<'a>(
                         continue;
                     }
                 }
-                Binder::Assign(slot, expression) => {
-                    let (value, metric) = if let Some(values) = &alternatives[depth] {
-                        patterns::own(&values.values[cursor].0, work)?
-                    } else {
-                        work.own(expression, &binding)?
-                    };
-                    binding[*slot] = Some(Bound::Owned(value, metric));
-                    undos[depth].push(*slot);
+                binder @ (Binder::Aggregate(_, _) | Binder::Assign(_, _)) => {
+                    let (slot, value, metric) = owned_binding(
+                        binder,
+                        alternatives[depth].as_ref(),
+                        cursor,
+                        atoms,
+                        &binding,
+                        work,
+                    )?;
+                    binding[slot] = Some(Bound::Owned(value, metric));
+                    undos[depth].push(slot);
                 }
             }
             if depth + 1 == query.binders.len() {

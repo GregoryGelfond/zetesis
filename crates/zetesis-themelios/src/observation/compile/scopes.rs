@@ -44,11 +44,17 @@ impl Compiler<'_> {
         let safe = self.safe.clone();
         let slots = self.slots;
         let generated = std::mem::take(&mut self.generated);
+        let used = std::mem::take(&mut self.used);
+        let scope_outer = self.scope_outer;
+        self.scope_outer = self.slots;
+        self.safe.extend(0..self.scope_outer);
         let result = action(self);
         self.variables = variables;
         self.safe = safe;
         self.slots = slots;
         self.generated = generated;
+        self.used = used;
+        self.scope_outer = scope_outer;
         result
     }
     fn literals(

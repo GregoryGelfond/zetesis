@@ -309,12 +309,14 @@ struct AggregateQuery {
 enum Binder {
     Atom(Pattern),
     Assign(usize, Template),
+    Aggregate(usize, AggregateQuery),
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Query {
     binders: Vec<Binder>,
     conditions: Vec<Condition>,
     variables: usize,
+    inputs: Vec<usize>,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Directive {
