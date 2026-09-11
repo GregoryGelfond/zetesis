@@ -381,8 +381,8 @@ scope ownership is released separately from retained output payload. See the
 [observation API limits](src/observation.rs) and
 [observation proof guide](../../proofs/guide/observations.md).
 
-L17 remains partly open. Valid source forms still refused include structural
-inversion (`#show X:f(X)=f(1).`), inverse arithmetic binding
+L17 remains partly open. Valid source forms still refused include generative
+equality chains (`#show X:X=Y=1.`), structural inversion (`#show X:f(X)=f(1).`), inverse arithmetic binding
 (`p(2). #show X:p(X+1).`), and anonymous negative cardinality keys
 (`#show N:N={not p(_)}.` or `p(1). #show N:N={not not p(_)}.`).
 Bare-variable equalities and evaluated arithmetic with independently established

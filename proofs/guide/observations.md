@@ -92,8 +92,8 @@ checks original theory identity, display multiplicities and exact work ceilings
 across hidden model families. The
 [expression and pattern tests](../../crates/zetesis-themelios/tests/observation_expressions.rs)
 include external comparisons for structural pools and explicit valid-source
-refusals. Those refusals keep constructor equality inversion, inverse arithmetic
-binding, and anonymous negative cardinality keys visibly open. Native anonymous projection treats both strong signs uniformly; the
+refusals. Those refusals keep generative equality chains, constructor equality inversion,
+inverse arithmetic binding, and anonymous negative cardinality keys visibly open. Native anonymous projection treats both strong signs uniformly; the
 [separate diagnostic fixtures](../../crates/zetesis-themelios/tests/fixtures/observation-strong-anonymous.jsonl)
 record that clingo 5.8.2 refuses anonymous strongly signed negative projections.
 That extension is not a parity result or a diagnosis of clingo's implementation.
