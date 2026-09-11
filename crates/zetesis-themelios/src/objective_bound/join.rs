@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use zetesis_core::{Atom, AtomPattern, Filter, Predicate, Term, Value};
 use zetesis_cpu::Control;
 use zetesis_ferraris::{AggregateElement, Node, Theory};
-use zetesis_objective::{ObjectiveProgram, ObjectiveTemplate};
+use zetesis_objective::{Condition, ConditionNode, ObjectiveProgram, ObjectiveTemplate};
 
 use super::{
     ObjectiveBoundError, ObjectiveBoundErrorKind as Kind, ObjectiveBoundResource as Resource,
@@ -126,12 +126,19 @@ impl<'a> Compiler<'a> {
         let mut binding = self.work.reserve(count)?;
         binding.resize(count, None);
         let mut trail = self.work.reserve(count)?;
+        let condition = self.condition(template.condition())?;
         if template.positive().is_empty() {
-            return self.active(template, &binding, &[]);
+            return self.active(template, &binding, condition.as_slice());
         }
         let mut frames = self.work.reserve(template.positive().len())?;
         let mut chosen = self.work.reserve(template.positive().len())?;
         chosen.resize(template.positive().len(), 0);
+        if let Some(condition) = condition {
+            chosen
+                .try_reserve(1)
+                .map_err(|_| self.work.error(Kind::Allocation))?;
+            chosen.push(condition);
+        }
         let relations = &self.relations;
         frames.push(Frame {
             rows: relations
@@ -220,6 +227,45 @@ impl<'a> Compiler<'a> {
             return Err(self.work.limit(Resource::Variables));
         }
         Ok(count)
+    }
+
+    fn condition(&mut self, condition: &Condition) -> Result<Option<usize>, ObjectiveBoundError> {
+        let mut nodes: Vec<usize> = self.work.reserve(condition.nodes().len())?;
+        for operation in condition.nodes() {
+            self.work.tick()?;
+            let node = match operation {
+                ConditionNode::Boolean(true) => self.truth,
+                ConditionNode::Boolean(false) => self.work.node(&mut self.nodes, Node::False)?,
+                ConditionNode::Atom(atom) => self.condition_atom(atom)?,
+                ConditionNode::Not(operand) => {
+                    let falsum = self.work.node(&mut self.nodes, Node::False)?;
+                    self.work
+                        .node(&mut self.nodes, Node::Implies(nodes[*operand], falsum))?
+                }
+                ConditionNode::And(left, right) => self
+                    .work
+                    .node(&mut self.nodes, Node::And(nodes[*left], nodes[*right]))?,
+                ConditionNode::Or(left, right) => self
+                    .work
+                    .node(&mut self.nodes, Node::Or(nodes[*left], nodes[*right]))?,
+            };
+            nodes.push(node);
+        }
+        Ok(nodes.last().copied())
+    }
+
+    fn condition_atom(&mut self, query: &Atom) -> Result<usize, ObjectiveBoundError> {
+        for (index, atom) in self.atoms.iter().enumerate() {
+            self.work.tick()?;
+            catalog_work(&mut self.work, query, 1)?;
+            catalog_work(&mut self.work, atom, 1)?;
+            if atom == query {
+                return Ok(index);
+            }
+        }
+        // Atoms outside the caller's complete catalog are false in every
+        // represented candidate. Querying one must not enlarge that catalog.
+        self.work.node(&mut self.nodes, Node::False)
     }
 }
 

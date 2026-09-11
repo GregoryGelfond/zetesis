@@ -10,7 +10,9 @@ mod program;
 mod score;
 mod error;
 mod evaluate;
+mod condition;
 
+pub use condition::{Condition, ConditionNode};
 pub use error::{Error, ErrorKind, Limits, Statistics, Stop};
 pub use evaluate::evaluate;
 pub use program::{

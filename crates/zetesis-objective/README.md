@@ -14,9 +14,19 @@ without eagerly grounding a bound weight variable. `weight()` retains the origin
 term; `weight_polarity().normalize(i32)` is the single checked numeric operation
 used by evaluation and the frontend's optional candidate-bound compiler. Weights and explicit tuple components use the core scalar `Term`
 type. The priority is a fixed `i32`; a frontend supplies zero for an omitted
-priority. Conditions are ordinary positive `AtomPattern`s and exact `Eq`/`Neq`
-filters. Arithmetic expressions, negative conditions, conditional literals and
-aggregate conditions need separate frontend translation or refusal.
+priority. Lifted binding conditions are ordinary positive `AtomPattern`s and
+exact `Eq`/`Neq` filters. `with_condition(Condition)` additionally accepts a
+closed query over complete typed atoms. `ConditionNode` represents Boolean
+constants, atom membership, negation, conjunction and disjunction; each operand
+index must precede its operation and the final node is the result. An empty
+query is true. Arithmetic, aggregate and conditional source syntax still needs
+an explicit frontend translation with its own completed eligibility evidence.
+
+A closed condition reads the original supplied model. It owns no semantic atom
+universe or theory roots, creates no support, and performs no reduct check.
+This differs from a Ferraris theory even when a frontend derives the query
+from the same source condition. Source-level eligibility and priority presence
+remain separate from the query's truth in an individual model.
 
 `ObjectiveProgram::new(templates, AdmissionLimits)` validates shape limits and
 variable safety. Variable IDs are local to each template, dense from zero, and
@@ -32,8 +42,10 @@ program is immutable and cheaply shared through `Arc`.
 - `statistics()`: charged work, complete bindings, active bindings, duplicate
   keys, retained keys and their canonical payload bytes.
 
-All conditions in a template are joined against the supplied model. A template
-with no positive conditions has one empty binding, subject to its filters.
+The closed query is evaluated once before the template's positive joins. A
+false query skips those joins while preserving the admitted priority slot.
+A template with no positive conditions has one empty binding when its closed
+query is true, subject to its scalar filters.
 After a complete binding passes every filter, a numeric weight contributes its
 normalized tuple key. Checked negation of `i32::MIN` returns a typed
 `WeightNormalizationOverflow` with template/statistics evidence; no partial score
@@ -77,7 +89,7 @@ source priorities a grounder would retain.
 ## Resource contract
 
 Admission bounds templates, tuple width, local variables, positive conditions,
-predicate arity and filters. Evaluation separately bounds charged work, complete
+predicate arity, filters and closed condition nodes. Evaluation separately bounds charged work, complete
 positive bindings before filters, unique keys and retained canonical key bytes.
 Every ceiling is inclusive; zero is a real ceiling. Duplicate keys consume join
 and lookup work but no additional retained-key or key-byte budget.
@@ -95,6 +107,11 @@ work, key searches and key insertion shifts are charged, with shared cancellatio
 and deadline polling at charged operations. Counts and storage reservations are
 checked. Input construction and standard allocator internals are outside this
 logical work budget.
+
+Closed queries use linear temporary Boolean storage and visit operations in
+their admitted order. Atom tests use charged scans of the supplied model;
+worst-case query work is linear in query nodes times model payload. There is no
+recursive evaluation, implicit solver, or condition-specific score path.
 
 Retained keys use a sorted vector with binary-search lookup and charged linear
 insertion shifts. This simple implementation can take quadratic insertion work
@@ -118,6 +135,11 @@ including reversal of template order. Final signed-cost conversion is checked at
 both `i64` boundaries. `tests/polarity.rs` separately checks both normalization
 polarities, dynamic weights, normalized cross-direction key identity, ignored
 nonnumeric rows, wide costs, inclusive work ceilings and typed negation overflow.
+`tests/conditions.rs` checks closed-query truth tables, full typed atom identity,
+zero priority slots, coalescing with lifted rows, malformed references and exact
+work ceilings. `zetesis-themelios/tests/objective_condition_bounds.rs` compares
+every candidate against every retained score to establish that optional bounds
+preserve closed-query costs and ties without changing the original atom catalog.
 
 Run `cargo test -p zetesis-objective` and
 `cargo clippy -p zetesis-objective --all-targets -- -D warnings` from the workspace.

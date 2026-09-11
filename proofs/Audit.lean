@@ -610,6 +610,9 @@ import Zetesis
 #print axioms Zetesis.ObjectiveTransport.active_keys_transport
 #print axioms Zetesis.ObjectiveTransport.mixed_cost_transport
 #print axioms Zetesis.ObjectiveTransport.cost_vector_transport
+#print axioms Zetesis.ObjectiveConditions.original_truth
+#print axioms Zetesis.ObjectiveConditions.model_identity
+#print axioms Zetesis.ObjectiveConditions.condition_vector
 #print axioms Zetesis.ObjectiveValues.ignored_entry_has_no_numeric_key
 #print axioms Zetesis.ObjectiveValues.numeric_entries_ignore
 #print axioms Zetesis.ObjectiveValues.ignored_entry_preserves_presence

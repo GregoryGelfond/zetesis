@@ -3,6 +3,8 @@ use std::sync::Arc;
 
 use zetesis_core::{AtomPattern, Filter, Term};
 
+use crate::Condition;
+
 /// Numeric normalization applied before constructing a global contribution key.
 /// All scores remain minimization costs, including negated maximize weights.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -25,8 +27,9 @@ impl WeightPolarity {
     }
 }
 
-/// A lifted minimization element with positive relational conditions. Variable
-/// IDs are local; comparisons never establish variable safety.
+/// A lifted minimization element with positive relational bindings and an
+/// optional closed model query. Variable IDs are local; comparisons and closed
+/// conditions never establish variable safety.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ObjectiveTemplate {
     weight: Term,
@@ -35,6 +38,7 @@ pub struct ObjectiveTemplate {
     tuple: Vec<Term>,
     positive: Vec<AtomPattern>,
     filters: Vec<Filter>,
+    condition: Condition,
 }
 impl ObjectiveTemplate {
     /// Assemble a template. Program admission checks dimensions and safety.
@@ -54,6 +58,7 @@ impl ObjectiveTemplate {
             tuple,
             positive,
             filters,
+            condition: Condition::default(),
         }
     }
     /// Set the numeric normalization while retaining the lifted source term.
@@ -62,6 +67,19 @@ impl ObjectiveTemplate {
     pub fn with_weight_polarity(mut self, polarity: WeightPolarity) -> Self {
         self.polarity = polarity;
         self
+    }
+    /// Require this closed query in addition to the positive bindings and
+    /// scalar filters. It reads the original supplied model and has no effect
+    /// on this element's admitted priority slot or complete contribution key.
+    #[must_use]
+    pub fn with_condition(mut self, condition: Condition) -> Self {
+        self.condition = condition;
+        self
+    }
+    /// Closed model query; an empty query is true.
+    #[must_use]
+    pub const fn condition(&self) -> &Condition {
+        &self.condition
     }
     /// Numeric normalization applied to the resolved source weight.
     #[must_use]
@@ -149,6 +167,8 @@ pub struct AdmissionLimits {
     pub max_predicate_arity: usize,
     /// Maximum comparisons per element.
     pub max_filters: usize,
+    /// Closed model-query operations per template; zero permits empty queries.
+    pub max_condition_nodes: usize,
 }
 impl Default for AdmissionLimits {
     fn default() -> Self {
@@ -159,6 +179,7 @@ impl Default for AdmissionLimits {
             max_positive_body: 1_024,
             max_predicate_arity: 32,
             max_filters: 1_024,
+            max_condition_nodes: 65_536,
         }
     }
 }
@@ -178,6 +199,8 @@ pub enum AdmissionResource {
     PredicateArity,
     /// Scalar comparisons.
     Filters,
+    /// Closed model-query operations.
+    ConditionNodes,
 }
 
 /// An objective program cannot enter the evaluator unless these checks pass.
@@ -220,6 +243,15 @@ pub enum AdmissionError {
         /// Original input template whose priority could not be resolved.
         template: usize,
     },
+    /// A closed model query references its own or a later operation.
+    ConditionReference {
+        /// Original input template.
+        template: usize,
+        /// Operation containing the invalid reference.
+        node: usize,
+        /// Operand that must precede the operation.
+        operand: usize,
+    },
 }
 impl AdmissionError {
     /// Resolve a refusal into the caller's parallel source-origin catalog.
@@ -229,7 +261,8 @@ impl AdmissionError {
             Self::Limit { template, .. } | Self::Overflow { template } => template,
             Self::UnsafeVariable { template, .. }
             | Self::NonDenseVariable { template, .. }
-            | Self::MissingPriority { template } => Some(template),
+            | Self::MissingPriority { template }
+            | Self::ConditionReference { template, .. } => Some(template),
             Self::Allocation => None,
         }
     }
@@ -262,6 +295,14 @@ impl fmt::Display for AdmissionError {
             Self::MissingPriority { template } => {
                 write!(f, "objective priority registry lacks template {template}")
             }
+            Self::ConditionReference {
+                template,
+                node,
+                operand,
+            } => write!(
+                f,
+                "objective template {template} condition node {node} references nonpreceding operand {operand}"
+            ),
         }
     }
 }
@@ -363,7 +404,7 @@ fn reserved<T>(count: usize) -> Result<Vec<T>, AdmissionError> {
     Ok(result)
 }
 
-fn check_bound(
+pub(crate) fn check_bound(
     resource: AdmissionResource,
     actual: usize,
     limit: usize,
@@ -386,6 +427,7 @@ fn admit_template(
     limits: AdmissionLimits,
     index: usize,
 ) -> Result<usize, AdmissionError> {
+    template.condition.admit(limits, index)?;
     ObjectiveTemplate::validate_fields(
         &template.weight,
         &template.tuple,

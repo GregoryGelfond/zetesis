@@ -77,6 +77,7 @@ import Zetesis.AggregateRanges
 import Zetesis.CountHeadActivity
 import Zetesis.WeightedHeadActivity
 import Zetesis.ObjectiveTransport
+import Zetesis.ObjectiveConditions
 import Zetesis.BooleanHeads
 import Zetesis.BooleanHeadElements
 import Zetesis.SignedHeadElements

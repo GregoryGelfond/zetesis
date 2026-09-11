@@ -5,8 +5,8 @@ use zetesis_core::{Atom, AtomPattern, Filter, Model, Term, Value};
 use zetesis_cpu::Control;
 
 use crate::{
-    Contribution, Error, ErrorKind, Evaluation, Limits, ObjectiveProgram, ObjectiveTemplate, Score,
-    Statistics, Stop,
+    Condition, ConditionNode, Contribution, Error, ErrorKind, Evaluation, Limits, ObjectiveProgram,
+    ObjectiveTemplate, Score, Statistics, Stop,
 };
 
 struct Work<'a> {
@@ -139,6 +139,49 @@ impl Work<'_> {
             }
         }
     }
+
+    fn contains(&mut self, model: &Model, query: &Atom) -> Result<bool, Error> {
+        // A charged scan avoids hiding key comparisons in an opaque set lookup.
+        for atom in model.atoms() {
+            self.tick()?;
+            if query.predicate().sign() != atom.predicate().sign()
+                || query.predicate().arity() != atom.predicate().arity()
+                || self.bytes(
+                    query.predicate().name().as_bytes(),
+                    atom.predicate().name().as_bytes(),
+                )? != Ordering::Equal
+            {
+                continue;
+            }
+            let mut equal = true;
+            for (left, right) in query.values().iter().zip(atom.values()) {
+                if self.compare(left, right)? != Ordering::Equal {
+                    equal = false;
+                    break;
+                }
+            }
+            if equal {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    fn condition(&mut self, condition: &Condition, model: &Model) -> Result<bool, Error> {
+        let mut values: Vec<bool> = self.reserve(condition.nodes().len())?;
+        for node in condition.nodes() {
+            self.tick()?;
+            let value = match node {
+                ConditionNode::Boolean(value) => *value,
+                ConditionNode::Atom(atom) => self.contains(model, atom)?,
+                ConditionNode::Not(operand) => !values[*operand],
+                ConditionNode::And(left, right) => values[*left] && values[*right],
+                ConditionNode::Or(left, right) => values[*left] || values[*right],
+            };
+            values.push(value);
+        }
+        Ok(values.last().copied().unwrap_or(true))
+    }
 }
 
 struct Evaluator<'a> {
@@ -147,7 +190,7 @@ struct Evaluator<'a> {
     totals: Vec<i128>,
 }
 
-/// Evaluate positive objective joins against the supplied exact true-atom set.
+/// Evaluate objective conditions and joins against the supplied exact true-atom set.
 /// The caller alone establishes that this set is a complete stable model.
 /// Numeric costs never contribute to support or acceptance.
 /// Nonnumeric weights contribute no key or cost. Program priority slots stay
@@ -226,6 +269,9 @@ impl Evaluator<'_> {
         slot: usize,
     ) -> Result<(), Error> {
         self.work.tick()?;
+        if !self.work.condition(template.condition(), model)? {
+            return Ok(());
+        }
         let mut binding = self.work.reserve(variables)?;
         for _ in 0..variables {
             self.work.tick()?;

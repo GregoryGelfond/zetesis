@@ -498,6 +498,7 @@ fn admission_enforces_safe_dense_variables_and_each_shape_bound() {
         max_positive_body: 1,
         max_predicate_arity: 1,
         max_filters: 1,
+        max_condition_nodes: 0,
     };
     assert!(ObjectiveProgram::new(vec![valid.clone()], exact).is_ok());
     for limit in [
