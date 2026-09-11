@@ -164,7 +164,7 @@ pub enum Resource {
 pub enum Feature {
     /// External calls cannot be evaluated by a pure observation query.
     Term,
-    /// Anonymous variables cannot occur in the output term.
+    /// Anonymous variables cannot construct output terms or negative atom keys.
     AnonymousOutput,
     /// Theory atoms or a future body form without a pure finite interpretation.
     Body,
@@ -174,7 +174,7 @@ pub enum Feature {
     AggregateMeasure,
     /// A comparison form without a finite checked interpretation.
     Comparison,
-    /// A named variable lacks an ordinary positive binding, or an anonymous
+    /// A named variable lacks an finite established binding, or an anonymous
     /// variable occurs under default negation of a signed predicate.
     UnsafeVariable,
 }
@@ -282,6 +282,7 @@ struct Pattern {
     predicate: Predicate,
     terms: Vec<Operand>,
     evaluated: bool,
+    key: Option<usize>,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct AtomTest {
@@ -367,7 +368,7 @@ impl ObservationProgram {
     /// Evaluate the distinct term channel over a supplied complete model.
     ///
     /// # Errors
-    /// Returns a typed limit/control refusal without a partial term set.
+    /// Returns a located evaluation, support, limit or control error without a partial term set.
     pub fn evaluate(
         &self,
         model: &Model,

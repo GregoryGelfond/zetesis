@@ -4,6 +4,8 @@
 //! Evaluated positive arguments read the row after all structural captures exist;
 //! default-negated tests expand first and negate each complete atom alternative.
 
+mod pools;
+
 use super::{
     Arguments, AtomTest, BTreeSet, Binder, Compiler, Error, ErrorKind, Feature, Name, Operand,
     Pattern, Predicate, Query, Sign, Term, UnaryOp, Variable,
@@ -25,6 +27,7 @@ fn captures(operand: &Operand, slots: &mut BTreeSet<usize>) {
 }
 fn provided(pattern: &Pattern) -> BTreeSet<usize> {
     let mut slots = BTreeSet::new();
+    slots.extend(pattern.key);
     for term in &pattern.terms {
         captures(term, &mut slots);
     }
@@ -40,19 +43,10 @@ fn evaluated(operand: &Operand) -> bool {
     }
 }
 impl Compiler<'_> {
-    fn operand(
-        &mut self,
-        term: &Term,
-        anonymous: bool,
-        bind: bool,
-        depth: usize,
-    ) -> Result<Operand, Error> {
+    fn operand(&mut self, term: &Term, bind: bool, depth: usize) -> Result<Operand, Error> {
         self.node(depth)?;
         Ok(match term {
-            Term::Variable(Variable::Anonymous) if anonymous => Operand::Any,
-            Term::Variable(Variable::Anonymous) => {
-                return Err(self.unsupported(Feature::UnsafeVariable));
-            }
+            Term::Variable(Variable::Anonymous) => Operand::Any,
             Term::Variable(variable) => Operand::Variable(self.variable(variable)?),
             Term::Symbolic(symbol) => {
                 let symbol = self.symbol(symbol, depth, true)?;
@@ -62,7 +56,7 @@ impl Compiler<'_> {
                 )
             }
             Term::Function { name, arguments } => {
-                self.operand_function(name, arguments, anonymous, bind, depth, Sign::Positive)?
+                self.operand_function(name, arguments, bind, depth, Sign::Positive)?
             }
             Term::UnaryOperation {
                 operator: UnaryOp::Negate,
@@ -71,13 +65,13 @@ impl Compiler<'_> {
                 let Term::Function { name, arguments } = argument.as_ref() else {
                     unreachable!()
                 };
-                self.operand_function(name, arguments, anonymous, bind, depth + 1, Sign::Negative)?
+                self.operand_function(name, arguments, bind, depth + 1, Sign::Negative)?
             }
             Term::Tuple(arguments) => {
                 self.arity(arguments.len())?;
                 let mut values = Vec::new();
                 for argument in arguments {
-                    values.push(self.operand(argument, anonymous, bind, depth + 1)?);
+                    values.push(self.operand(argument, bind, depth + 1)?);
                 }
                 Operand::Tuple(values)
             }
@@ -95,7 +89,6 @@ impl Compiler<'_> {
         &mut self,
         name: &Name,
         arguments: &[Term],
-        anonymous: bool,
         bind: bool,
         depth: usize,
         sign: Sign,
@@ -104,7 +97,7 @@ impl Compiler<'_> {
         self.arity(arguments.len())?;
         let mut values = Vec::new();
         for argument in arguments {
-            values.push(self.operand(argument, anonymous, bind, depth + 1)?);
+            values.push(self.operand(argument, bind, depth + 1)?);
         }
         Ok(Operand::Function(sign, name.clone(), values))
     }
@@ -119,7 +112,7 @@ impl Compiler<'_> {
         self.arity(arguments.len())?;
         let mut terms = Vec::new();
         for argument in arguments {
-            terms.push(self.operand(argument, bind || atom.sign != Sign::Negative, bind, 1)?);
+            terms.push(self.operand(argument, bind, 1)?);
         }
         let predicate = Predicate::with_sign(
             atom.name.as_str(),
@@ -131,6 +124,7 @@ impl Compiler<'_> {
             predicate,
             evaluated: terms.iter().any(evaluated),
             terms,
+            key: None,
         })
     }
     pub(super) fn patterns(&mut self, atom: &Atom) -> Result<Vec<Pattern>, Error> {
@@ -140,7 +134,7 @@ impl Compiler<'_> {
             let mut patterns = Vec::new();
             for arguments in atom.alternatives() {
                 self.node(1)?;
-                patterns.push(self.pattern_terms(atom, arguments, true)?);
+                patterns.extend(self.pattern_variants(atom, arguments)?);
             }
             Ok(patterns)
         })();

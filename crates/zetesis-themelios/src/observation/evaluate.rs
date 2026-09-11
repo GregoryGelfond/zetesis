@@ -125,6 +125,11 @@ impl Work<'_> {
         depth: usize,
         metric: &mut Metric,
     ) -> Result<(), Error> {
+        self.check(
+            Resource::Depth,
+            depth as u128,
+            self.limits.max_symbol_depth as u128,
+        )?;
         match value {
             Reference::Symbol(value) => self.symbol_check(value, depth, metric),
             Reference::Value(value) => {
@@ -499,11 +504,15 @@ fn matches<'a>(
             return Ok(false);
         }
     }
-    if pattern.evaluated {
-        test_pattern(pattern, atom, binding, work)
-    } else {
-        Ok(true)
+    if pattern.evaluated && !test_pattern(pattern, atom, binding, work)? {
+        return Ok(false);
     }
+    if let Some(slot) = pattern.key {
+        let (key, metric) = patterns::own_atom(atom, work)?;
+        binding[slot] = Some(Bound::Owned(key, metric));
+        undo.push(slot);
+    }
+    Ok(true)
 }
 fn relation_holds(relation: Relation, order: Ordering) -> bool {
     match relation {
@@ -699,7 +708,10 @@ fn undo_slots(query: &Query, work: &Work<'_>) -> Result<Vec<Vec<usize>>, Error> 
         let count = match binder {
             Binder::Atom(alternatives) => alternatives
                 .iter()
-                .map(|pattern| pattern.terms.iter().map(patterns::slots).sum())
+                .map(|pattern| {
+                    pattern.terms.iter().map(patterns::slots).sum::<usize>()
+                        + usize::from(pattern.key.is_some())
+                })
                 .max()
                 .unwrap_or(0),
             Binder::Assign(_, _) | Binder::Aggregate(_, _) => 1,

@@ -277,7 +277,7 @@ impl Compiler<'_> {
         }
         Ok(Template::Variable(self.generate(term)?))
     }
-    fn generate(&mut self, term: Template) -> Result<usize, Error> {
+    fn slot(&mut self) -> Result<usize, Error> {
         self.check(
             Resource::Variables,
             self.slots.saturating_add(1),
@@ -285,6 +285,10 @@ impl Compiler<'_> {
         )?;
         let slot = self.slots;
         self.slots += 1;
+        Ok(slot)
+    }
+    fn generate(&mut self, term: Template) -> Result<usize, Error> {
+        let slot = self.slot()?;
         self.generated.push((slot, term));
         self.used.insert(slot);
         Ok(slot)

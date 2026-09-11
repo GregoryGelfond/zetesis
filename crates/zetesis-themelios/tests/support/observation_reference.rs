@@ -6,7 +6,7 @@ use std::ffi::OsString;
 use zetesis_validation::answers;
 use zetesis_validation::process::{Exit, Invocation, Limits, Stop, invoke};
 
-pub(super) fn compare(source: &str, witnesses: &serde_json::Value) {
+pub(super) fn capture(source: &str) -> zetesis_validation::process::Capture {
     let executable =
         std::path::PathBuf::from(std::env::var_os("CLINGO").expect("set absolute CLINGO"));
     let directory = tempfile::tempdir().unwrap();
@@ -46,6 +46,11 @@ pub(super) fn compare(source: &str, witnesses: &serde_json::Value) {
     assert_eq!(capture.stop(), Stop::Completed, "{capture:?}");
     assert!(capture.failure().is_none(), "{capture:?}");
     assert!(capture.cleanup_failure().is_none(), "{capture:?}");
+    capture
+}
+
+pub(super) fn compare(source: &str, witnesses: &serde_json::Value) {
+    let capture = capture(source);
     assert!(
         matches!(
             capture.exit(),

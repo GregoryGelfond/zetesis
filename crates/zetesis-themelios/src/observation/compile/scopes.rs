@@ -99,7 +99,6 @@ impl Compiler<'_> {
         condition: Option<&themelios_program::program::Condition>,
     ) -> Result<AggregateElement, Error> {
         self.local(|compiler| {
-            let key = compiler.function(&atom.name, arguments, 1, atom.sign)?;
             let tag = match negation {
                 DefaultNegation::None => 0,
                 DefaultNegation::Not => 1,
@@ -110,23 +109,24 @@ impl Compiler<'_> {
             if let Some(condition) = condition {
                 compiler.literals(condition, &mut positive, &mut conditions)?;
             }
-            if negation == DefaultNegation::None {
-                positive.push(vec![compiler.pattern_terms(atom, arguments, true)?]);
-            } else if !key.multiple() {
-                conditions.push(Condition::Atom(
-                    negation,
-                    vec![compiler.atom_test(atom, arguments)?],
-                ));
-            }
-            // A pooled key and its enabling atom must denote the
-            // same alternative. Independent expansions would admit
-            // absent keys merely because another alternative holds.
-            let key = if key.multiple() {
+            let key = if negation == DefaultNegation::None {
+                // The matched original atom supplies complete key identity,
+                // including anonymous arguments and the selected pool branch.
+                let mut patterns = compiler.pattern_variants(atom, arguments)?;
+                let slot = compiler.slot()?;
+                compiler.used.insert(slot);
+                for pattern in &mut patterns {
+                    pattern.key = Some(slot);
+                }
+                positive.push(patterns);
+                Template::Variable(slot)
+            } else {
+                // An absent atom cannot supply a row. Generate its exact source
+                // value and apply default negation to that completed alternative.
+                let key = compiler.function(&atom.name, arguments, 1, atom.sign)?;
                 let slot = compiler.generate(key)?;
                 conditions.push(Condition::AtomValue(negation, slot));
                 Template::Variable(slot)
-            } else {
-                key
             };
             let query = compiler.finish(positive, conditions)?;
             Ok(AggregateElement {

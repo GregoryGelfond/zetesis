@@ -460,3 +460,66 @@ fn pooled_consequents_are_alternatives_inside_each_local_substitution() {
         "x"
     );
 }
+
+#[test]
+fn matched_atom_keys_share_the_live_scope_ceiling() {
+    for count in 1..=5 {
+        use std::fmt::Write as _;
+        let mut facts = String::new();
+        for value in 1..=count {
+            write!(facts, "p({value}).").unwrap();
+        }
+        let input = admit(&format!("{facts} #show. #show N:N={{p((X;10))}}."));
+        let model = Model::new(input.atoms().iter().cloned());
+        // A live p(number) binding costs 33 bytes. Each retained complete
+        // (default-negation tag, p(number)) tuple costs 65 bytes.
+        let exact = 33 + 65 * count;
+        let run = |max_local_bytes| {
+            input.metadata().observations().evaluate(
+                &model,
+                Limits {
+                    max_local_bytes,
+                    ..Limits::default()
+                },
+                &Control::default(),
+            )
+        };
+        assert_eq!(
+            run(exact).unwrap().symbols(),
+            &[zetesis_themelios::observation::Symbol::Number(
+                i32::try_from(count).unwrap()
+            )]
+        );
+        assert!(matches!(
+            run(exact - 1).unwrap_err().kind(),
+            ErrorKind::Limit {
+                resource: Resource::LocalBytes,
+                ..
+            }
+        ));
+    }
+}
+#[test]
+fn matched_atom_key_construction_checks_child_depth() {
+    let input = admit("p(1). #show N:N={p(_)}.");
+    let failure = input
+        .metadata()
+        .observations()
+        .evaluate(
+            &Model::new(input.atoms().iter().cloned()),
+            Limits {
+                max_symbol_depth: 1,
+                ..Limits::default()
+            },
+            &Control::default(),
+        )
+        .unwrap_err();
+    assert!(matches!(
+        failure.kind(),
+        ErrorKind::Limit {
+            resource: Resource::Depth,
+            observed: 2,
+            limit: 1
+        }
+    ));
+}

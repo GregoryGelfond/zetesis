@@ -219,3 +219,47 @@ pub(super) fn atom_value(
     }
     Ok(true)
 }
+
+/// Copy one matched original atom only after complete payload preflight.
+pub(super) fn own_atom(atom: &super::Atom, work: &mut Work<'_>) -> Result<(Symbol, Metric), Error> {
+    let mut metric = Metric {
+        nodes: 1,
+        bytes: atom.predicate().name().len(),
+    };
+    work.check(Resource::Nodes, 1, work.limits.max_symbol_nodes as u128)?;
+    work.check(Resource::Depth, 1, work.limits.max_symbol_depth as u128)?;
+    work.check(
+        Resource::Bytes,
+        metric.bytes as u128,
+        work.limits.max_symbol_bytes as u128,
+    )?;
+    work.step(metric.payload())?;
+    for value in atom.values() {
+        work.measure_reference(Reference::Value(value), 2, &mut metric)?;
+    }
+    work.construction_check(metric)?;
+    work.check(
+        Resource::LocalBytes,
+        work.local_bytes + metric.payload(),
+        work.limits.max_local_bytes as u128,
+    )?;
+    let mut arguments = work.reserve(atom.values().len())?;
+    for value in atom.values() {
+        arguments.push(work.copy_reference(Reference::Value(value))?);
+    }
+    let name = super::Name::new(atom.predicate().name().to_owned())
+        .map_err(|_| work.error(super::ErrorKind::InvalidSymbol))?;
+    let sign = match atom.predicate().sign() {
+        zetesis_core::Sign::Positive => super::Sign::Positive,
+        zetesis_core::Sign::Negative => super::Sign::Negative,
+    };
+    work.local_bytes += metric.payload();
+    Ok((
+        Symbol::Function {
+            sign,
+            name,
+            arguments,
+        },
+        metric,
+    ))
+}

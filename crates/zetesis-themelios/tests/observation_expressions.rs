@@ -482,3 +482,148 @@ fn an_undefined_pool_branch_refuses_the_complete_observation() {
     );
     assert!(failure.location().is_some());
 }
+
+const ATOM_PATTERN_CASES: &[(&str, &[&str])] = &[
+    ("p(1).#show.#show x:p((X;2)).", &["x"]),
+    (
+        "p(f(1)).p(g(2)).#show.#show x:p(f((X;2));g((Y;1))).",
+        &["x"],
+    ),
+    (
+        "p(f(1),2).p(f(2),1).#show.#show x:p(f((X;2)),(1;Y)).",
+        &["x"],
+    ),
+    ("p(f(1,2)).p(f(3,4)).#show.#show X:p(f(X,(2;9))).", &["1"]),
+    ("p((1,2)).#show.#show x:p(((X;2),(1;Y))).", &["x"]),
+    ("p(-f(1)).#show.#show x:p(-f((X;2))).", &["x"]),
+    ("p(f(2),1).#show.#show X:p(f((X+1;9)),X).", &["1"]),
+    ("p(1).p(2).#show.#show N:N={p((X;2))}.", &["2"]),
+    ("p(f(1)).p(f(2)).#show.#show N:N={p(f((X;2)))}.", &["2"]),
+    ("p(1).p(2).#show.#show N:N={p(_)}.", &["2"]),
+    ("p(f(1)).p(f(2)).#show.#show N:N={p(f(_))}.", &["2"]),
+    ("p(1).p(1,2).#show.#show N:N={p(X;X,Y)}.", &["2"]),
+    (
+        "p(1).#show.#show N:N={p((X;2));not p(2);not not p(1)}.",
+        &["3"],
+    ),
+];
+#[test]
+fn atom_pattern_cases_preserve_complete_displays() {
+    for (source, expected) in ATOM_PATTERN_CASES {
+        assert_eq!(terms(source), *expected, "{source}");
+    }
+}
+#[test]
+fn structural_pool_products_are_charged_before_materialization() {
+    for (arity, pool, minimum) in [(32, "(1;2)", 1u128 << 32), (64, "(1;2;3;4)", u128::MAX)] {
+        let arguments = vec![pool; arity].join(",");
+        let result = admit_formula(
+            format!("#show x:p({arguments})."),
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        );
+        assert!(
+            matches!(result, Err(zetesis_themelios::FormulaFailure::Observation { error }) if matches!(error.kind(), ErrorKind::Limit { resource: Resource::Nodes, observed, .. } if *observed >= minimum))
+        );
+    }
+}
+#[path = "support/observation_reference.rs"]
+mod observation_reference;
+#[test]
+#[ignore = "requires absolute CLINGO; bounded structural-pool reference cases"]
+fn atom_pattern_cases_match_complete_clingo_displays() {
+    for (source, expected) in ATOM_PATTERN_CASES {
+        observation_reference::compare(source, &serde_json::json!([expected]));
+    }
+}
+
+const OPEN_QUERY_SHAPES: &[(&str, zetesis_themelios::observation::Feature)] = &[
+    (
+        "#show. #show X:f(X)=f(1).",
+        zetesis_themelios::observation::Feature::UnsafeVariable,
+    ),
+    (
+        "p(2). #show. #show X:p(X+1).",
+        zetesis_themelios::observation::Feature::UnsafeVariable,
+    ),
+    (
+        "#show. #show N:N={not p(_)}.",
+        zetesis_themelios::observation::Feature::AnonymousOutput,
+    ),
+    (
+        "p(1). #show. #show N:N={not not p(_)}.",
+        zetesis_themelios::observation::Feature::AnonymousOutput,
+    ),
+];
+#[test]
+fn open_query_shapes_have_located_refusals() {
+    for (source, feature) in OPEN_QUERY_SHAPES {
+        let Err(zetesis_themelios::FormulaFailure::Observation { error }) = admit_formula(
+            (*source).into(),
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        ) else {
+            panic!("expected observation refusal: {source}")
+        };
+        assert_eq!(error.kind(), &ErrorKind::Unsupported(*feature), "{source}");
+        assert!(error.location().is_some());
+    }
+}
+#[test]
+#[ignore = "requires absolute CLINGO; records valid source shapes still outside the profile"]
+fn open_query_shapes_are_valid_complete_reference_queries() {
+    for (source, _) in OPEN_QUERY_SHAPES {
+        observation_reference::compare(source, &serde_json::json!([["1"]]));
+    }
+}
+
+fn signed_projection_cases() -> impl Iterator<Item = serde_json::Value> {
+    include_str!("fixtures/observation-strong-anonymous.jsonl")
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+}
+#[test]
+fn anonymous_projection_keeps_strong_sign_separate_from_default_negation() {
+    for case in signed_projection_cases() {
+        let expected: Vec<_> = case["native"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value.as_str().unwrap())
+            .collect();
+        assert_eq!(terms(case["source"].as_str().unwrap()), expected);
+    }
+}
+#[test]
+#[ignore = "requires absolute CLINGO; explicit native extension with retained upstream refusal"]
+fn clingo_refuses_anonymous_strongly_signed_projections() {
+    for case in signed_projection_cases() {
+        let capture = observation_reference::capture(case["source"].as_str().unwrap());
+        assert_eq!(
+            capture.exit(),
+            Some(zetesis_validation::process::Exit {
+                code: Some(65),
+                signal: None
+            })
+        );
+        let report: serde_json::Value = serde_json::from_slice(capture.stdout()).unwrap();
+        assert_eq!(report["Solver"], case["solver"]);
+        assert_eq!(report["Result"], "UNKNOWN");
+        assert_eq!(report["Models"]["More"], "yes");
+        assert_eq!(report["Models"]["Number"], 0);
+        assert!(
+            zetesis_validation::answers::clingo_json(
+                capture.stdout(),
+                zetesis_validation::answers::Limits::default()
+            )
+            .is_err()
+        );
+        let input = report["Input"][0].as_str().unwrap();
+        assert_eq!(
+            capture.stderr_text().unwrap().replace(input, "-"),
+            case["diagnostics"].as_str().unwrap()
+        );
+    }
+}
