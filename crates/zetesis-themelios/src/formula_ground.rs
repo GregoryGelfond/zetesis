@@ -101,12 +101,20 @@ fn instantiate<'a>(
     let catalog = profile.phase(GroundingPhase::SupportCompletion, None, || {
         formula_support::build(&prepared, limits, budget, &mut counters, location)
     })?;
-    let support = profile.phase(GroundingPhase::SupportCompletion, None, || {
+    let completed = profile.phase(GroundingPhase::SupportCompletion, None, || {
         catalog.snapshot(limits, &mut counters, location)
     })?;
+    let support = completed.relations();
     let (objectives, objective_origins) =
         profile.phase(GroundingPhase::ObjectiveActivation, None, || {
-            objectives::prepare(&prepared, &support, limits, budget, &mut counters, location)
+            objectives::prepare(
+                &prepared,
+                &completed,
+                limits,
+                budget,
+                &mut counters,
+                location,
+            )
         })?;
     let mut builder = profile.phase(GroundingPhase::FormulaInitialization, None, || {
         let mut builder = Builder::empty(
@@ -125,14 +133,14 @@ fn instantiate<'a>(
             GroundingPhase::RuleInstantiation,
             Some(rule.location),
             || {
-                if crate::formula_factor::rule(&mut builder, rule, &support)? {
+                if crate::formula_factor::rule(&mut builder, rule, support)? {
                     return Ok(());
                 }
-                let mut outer = Join::rule(rule, &support, builder.budget)?;
+                let mut outer = Join::rule(rule, support, builder.budget)?;
                 while let Some(binding) =
                     outer.next(limits, builder.budget, &mut builder.counters, rule.location)?
                 {
-                    builder.rule(rule, &binding, &support)?;
+                    builder.rule(rule, &binding, support)?;
                 }
                 Ok::<_, FormulaFailure>(())
             },

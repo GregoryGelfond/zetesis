@@ -23,7 +23,7 @@ use super::signature;
 use crate::expansion::Budget;
 use crate::formula::ceiling;
 use crate::formula_ir::{HeadIr, LiteralIr, Prepared, RuleIr};
-use crate::formula_support::{self, Counters, Join, Support};
+use crate::formula_support::{self, CompletedSupport, Counters, Join, Support};
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
 
 fn ordinary(literals: &[LiteralIr]) -> bool {
@@ -203,10 +203,11 @@ impl Context<'_> {
 impl SourceEligibility {
     pub(crate) fn build(
         prepared: &Prepared,
-        support: &Support<'_>,
+        completed_support: &CompletedSupport<'_>,
         retained: usize,
         context: &mut Context<'_>,
     ) -> Result<Self, FormulaFailure> {
+        let support = completed_support.relations();
         let graph = prepared.analysis.dependencies();
         let relevant = context.closure(
             graph,
@@ -251,7 +252,7 @@ impl SourceEligibility {
                 }
             }
             let Some(predicate) = ready else {
-                result.cyclic(prepared, support, &remaining, temporary, context)?;
+                result.cyclic(support, &remaining, temporary, context)?;
                 break;
             };
             result.predicate(prepared, &predicate, support, temporary, context)?;

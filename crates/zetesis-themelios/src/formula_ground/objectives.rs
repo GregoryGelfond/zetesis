@@ -17,17 +17,18 @@ use crate::formula_objective_dependencies::Presence;
 use crate::formula_objective_dependencies::eligibility::{
     Activity, Context, SourceEligibility, model_condition,
 };
-use crate::formula_support::{self, Counters, Join, Support};
+use crate::formula_support::{self, CompletedSupport, Counters, Join, Support};
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
 
 pub(super) fn prepare(
     prepared: &Prepared,
-    support: &Support,
+    completed: &CompletedSupport<'_>,
     limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
     location: Location,
 ) -> Result<(ObjectiveProgram, Vec<Vec<Location>>), FormulaFailure> {
+    let support = completed.relations();
     let presence = crate::formula_objective_dependencies::check_presence(
         prepared, support, limits, budget, counters,
     )?;
@@ -38,7 +39,7 @@ pub(super) fn prepare(
     {
         Some(SourceEligibility::build(
             prepared,
-            support,
+            completed,
             presence.retained_entries(),
             &mut Context {
                 limits,

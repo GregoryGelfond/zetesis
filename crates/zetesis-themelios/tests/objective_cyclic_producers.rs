@@ -86,21 +86,12 @@ fn cyclic_producers_match_fresh_clingo() {
 }
 
 #[test]
-fn cyclic_aggregate_generators_require_a_certificate() {
+fn unproductive_aggregate_cycle_retains_only_the_negative_cost() {
     let source = "n(N):-a,N=#count{1:a}.a:-n(0).#minimize{1:not a}.";
-    let error = source_records::admit(source, &FormulaLimits::default()).unwrap_err();
-    assert!(
-        matches!(
-            error,
-            zetesis_themelios::FormulaFailure::Expansion(
-                zetesis_themelios::ExpansionFailure::Admission(
-                    zetesis_themelios::AdmissionFailure::Profile {
-                        feature: zetesis_themelios::ProfileFeature::ObjectiveSourceEligibility,
-                        ..
-                    }
-                )
-            )
-        ),
-        "{error}"
+    let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
+    assert_eq!(input.objectives().priorities(), [0]);
+    assert_eq!(
+        source_records::exhaustive(&input),
+        [(std::collections::BTreeSet::new(), Some(vec![1]))].into()
     );
 }

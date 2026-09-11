@@ -25,6 +25,41 @@ pub(crate) use evaluation::Evaluation;
 use relations::RelationRows;
 pub(crate) use relations::{Support, SupportCatalog};
 
+/// Possible atoms after a complete support round added no new head.
+///
+/// Construction is private to `build`: reaching a resource ceiling never
+/// produces this owner. Its finite fixed point is an observed result, not a
+/// promise that recursive value generation terminates for every source.
+pub(crate) struct CompletedCatalog {
+    catalog: SupportCatalog,
+}
+
+/// An immutable relation view of one successfully completed support owner.
+/// Intermediate round snapshots deliberately have only the `Support` type.
+pub(crate) struct CompletedSupport<'source> {
+    relations: Support<'source>,
+}
+
+impl CompletedCatalog {
+    pub(crate) fn snapshot(
+        &self,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<CompletedSupport<'_>, FormulaFailure> {
+        self.catalog
+            .snapshot(limits, counters, location)
+            .map(|relations| CompletedSupport { relations })
+    }
+}
+
+impl<'source> CompletedSupport<'source> {
+    /// Borrow the same typed rows used by final grounding and objective joins.
+    pub(crate) fn relations(&self) -> &Support<'source> {
+        &self.relations
+    }
+}
+
 pub(crate) fn row_values<'source>(
     row: zetesis_core::relation::Row<'_, 'source>,
 ) -> impl ExactSizeIterator<Item = &'source Value> {
@@ -110,7 +145,7 @@ pub(crate) fn build(
     budget: &mut Budget,
     counters: &mut Counters,
     fallback: Location,
-) -> Result<SupportCatalog, FormulaFailure> {
+) -> Result<CompletedCatalog, FormulaFailure> {
     let mut catalog = SupportCatalog::default();
     #[cfg(test)]
     postings::begin_support();
@@ -204,7 +239,7 @@ pub(crate) fn build(
         }
         drop(support);
         if delta.is_empty() {
-            return Ok(catalog);
+            return Ok(CompletedCatalog { catalog });
         }
         for atom in delta {
             catalog.insert(atom, limits, counters, fallback)?;

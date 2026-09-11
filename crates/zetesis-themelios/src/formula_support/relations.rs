@@ -145,7 +145,8 @@ impl SupportCatalog {
     }
 }
 
-/// Immutable possible support; it does not establish current-world truth.
+/// Immutable possible support, including snapshots between growth rounds.
+/// This view alone establishes neither completion nor current-world truth.
 #[derive(Default)]
 pub(crate) struct Support<'source> {
     rows: BTreeMap<&'source Predicate, RelationRows<'source>>,
@@ -162,7 +163,7 @@ pub(super) struct RelationRows<'source> {
 }
 
 impl Support<'_> {
-    /// Predicates with a completed possible relation, borrowed from its sole owner.
+    /// Predicates in this snapshot, borrowed from their sole atom owner.
     pub(crate) fn predicates(&self) -> impl Iterator<Item = &Predicate> {
         self.rows.keys().copied()
     }

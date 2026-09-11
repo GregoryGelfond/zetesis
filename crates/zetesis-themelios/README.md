@@ -167,12 +167,13 @@ omits any group with a nonnumeric bound from its numeric premise certificates.
 The [logical-bound contracts](tests/logical_bounds.rs) check these boundaries
 against independently declared answers and canonical frozen formulas.
 
-Acyclic aggregate assignments may supply later scalar/range instructions,
+Aggregate assignments with acyclic dependencies within each rule may supply later scalar/range instructions,
 nonbinding aggregate guards, normal/choice/function-head values and admitted
 body conditionals. Generated proposals retain every original aggregate equality;
 an attainable proposal is not evidence that a particular model realizes it.
-Self-dependent/cyclic generators and unsupported local consumers remain typed
-refusals. Body extrema use ASP term order, including real `#inf`/`#sup` values
+Self-dependent or mutually dependent value slots within a rule and unsupported
+local consumers remain typed refusals. Predicate recursion is admitted when the
+possible-support iteration completes within its resource limits. Body extrema use ASP term order, including real `#inf`/`#sup` values
 and structural terms, subject to the numeric endpoint guard above.
 
 Count heads separate permission to select an unsigned head atom from
@@ -212,7 +213,9 @@ and earlier `ProfileFeature::HeadAggregateWeight` refusals are removed.
 The [head contribution contract](../../proofs/guide/head-contributions.md) records
 the formal source basis and explicit clingo comparison differences.
 Empty minima and maxima are `#sup` and `#inf`; bounds never create support.
-Objective-relevant function-head producers remain refused, including count heads.
+Objective-relevant count, sum, sum+ and extremum heads use their independent
+positive atom permissions as possible producers. Their measure and bound decide
+original-model truth; they do not remove possible support.
 
 ### Objectives
 
@@ -283,11 +286,29 @@ producer formulas determine actual truth. No second source-only aggregate or
 conditional evaluator is introduced. Every positive aggregate head supplies
 possible eligibility independently of its measured contribution.
 
-Finite ordinary cyclic cones and their unresolved dependants use the same
-conservative carrier: covered atoms are optional, and atoms outside the carrier
-are absent. Cyclic aggregate generators and richer cyclic scoped bodies retain a
-located `ObjectiveSourceEligibility` refusal. A weak constraint's own query uses original-model formula truth, independently
+Cyclic producer cones and their unresolved dependants use the same conservative
+carrier, including aggregate assignments, aggregate guards and universal
+conditional bodies: covered atoms are optional, and atoms outside the carrier
+are absent. Eligibility accepts only an immutable view owned by a successfully
+completed support construction. This owner is created after an entire round
+adds no atom, never after a round, work, value or storage limit is reached.
+A source can generate new values indefinitely; exceeding a limit returns a typed
+failure rather than a program with partial objective coverage. For example,
+`n(0).n(N):-N=#count{X:n(X)}.` keeps generating new count values.
+A weak constraint's own query uses original-model formula truth, independently
 of the producer coverage certificate.
+
+The coverage argument depends on complete typed rule generation, not simply on
+observing an empty delta. Positive joins retain full bindings; nonbinding
+aggregate and conditional truth never filters possible producers. Assignment
+proposals include every aggregate value from the complete eligible tuple-key
+carrier, including logical extrema and the empty-set value. Original aggregate
+equalities remain in the theory. Under these source-profile premises,
+intersecting a model with a producer-closed carrier preserves its frozen reduct;
+answer-set minimality therefore excludes atoms outside that carrier.
+[SourceSupport](../../proofs/Zetesis/SourceSupport.lean) makes that projection
+premise explicit and proves the minimality consequence. It does not prove Rust
+binding-plan refinement, resource completion, or termination for every source.
 
 The completed activity is a source grounding abstraction: absent, optional or
 required. Optional means retained as a grounding possibility, not simultaneously
@@ -302,7 +323,7 @@ where clingo 5.8.2 omits the objective vector. Both return the same sole answer
 `{a}`. Missing slots are zero in cost comparison, so additional identically-zero
 slots preserve every ordering and optimal tie. Derived-fact and repeated-disjunct
 counterparts have separately recorded raw reference outcomes; they are not
-silently normalized in comparisons. Source completion visits finite dependency
+silently normalized in comparisons. Source eligibility visits finite dependency
 cones, charges all ground joins and bounds retained activity entries independently of model
 evaluation. Producer traversal computes activity directly; only an eligible
 objective row constructs a closed model query and consumes its per-template
