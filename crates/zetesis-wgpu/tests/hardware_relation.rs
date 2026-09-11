@@ -74,6 +74,7 @@ fn compare_rows(executor: &mut GpuRelationExecutor, rows: usize) {
     let mut prepared = executor
         .prepare(&relation, RelationGpuLimits::default(), &Control::default())
         .unwrap();
+    let input = relation.all(Limits::default()).unwrap();
     for _ in 0..2 {
         let masks = prepared
             .filter(&queries, RelationGpuLimits::default(), &Control::default())
@@ -109,6 +110,10 @@ fn compare_rows(executor: &mut GpuRelationExecutor, rows: usize) {
                 .collect();
             let selected = masks.selection(query, Limits::default()).unwrap();
             assert_eq!(selected.positions(), expected, "rows={rows} query={query}");
+            let host = relation
+                .select_mask(&queries[query], &input, Limits::default())
+                .unwrap();
+            assert_eq!(masks.words(query).unwrap(), host.words());
             for (offset, &position) in expected.iter().enumerate() {
                 assert_eq!(
                     selected.row(offset).unwrap().source_index(),

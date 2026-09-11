@@ -1,6 +1,7 @@
 use super::*;
 
 mod masks;
+mod mask_selection;
 
 fn predicate(arity: usize) -> Predicate {
     Predicate::new("relation", arity).unwrap()
@@ -15,6 +16,17 @@ fn atoms(predicate: &Predicate, values: Vec<Vec<Value>>) -> Vec<Atom> {
 
 fn limit<T>(result: &Result<T, Failure>, resource: Resource) {
     assert!(matches!(result, Err(Failure::Limit { resource: actual, .. }) if *actual == resource));
+}
+
+#[test]
+fn row_values_borrow_the_source_beyond_the_view() {
+    let signature = predicate(1);
+    let source = atoms(&signature, vec![vec![Value::Number(7)]]);
+    let value = {
+        let relation = Relation::from_atoms(&signature, &source, Limits::default()).unwrap();
+        relation.row(0).unwrap().value(0).unwrap()
+    };
+    assert_eq!(value, &Value::Number(7));
 }
 
 #[test]

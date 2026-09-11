@@ -4,7 +4,7 @@ use std::mem::size_of;
 
 use crate::Value;
 
-use super::{Failure, Limits, Relation, Row, storage};
+use super::{Failure, Limits, Relation, Row, Work, storage};
 
 /// A dictionary-resolved equality. Its meaning requires the owning query.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -115,6 +115,45 @@ impl<'owner, 'source> Selection<'owner, 'source> {
     }
 
     /// Charged work for this construction/filter operation, excluding inputs.
+    #[must_use]
+    pub const fn work(&self) -> u128 {
+        self.work
+    }
+}
+
+/// The complete equality-filter result over one supplied ordered selection.
+///
+/// Bits denote original row positions in the exact borrowed owner. Equal typed
+/// tuples at different positions remain distinct occurrences. Unused tail bits
+/// are zero. The result covers the whole relation only when the input did so;
+/// it does not establish full pattern matching or answer-set membership.
+pub struct Mask<'owner, 'source> {
+    relation: &'owner Relation<'source>,
+    words: Vec<u32>,
+    bytes: usize,
+    work: u128,
+}
+
+impl<'owner, 'source> Mask<'owner, 'source> {
+    /// The exact borrowed relation owner.
+    #[must_use]
+    pub const fn relation(&self) -> &'owner Relation<'source> {
+        self.relation
+    }
+
+    /// Low-bit-first original-row membership, including zero tail padding.
+    #[must_use]
+    pub fn words(&self) -> &[u32] {
+        &self.words
+    }
+
+    /// Mask object and word-vector capacity, excluding the borrowed owner.
+    #[must_use]
+    pub const fn retained_bytes(&self) -> usize {
+        self.bytes
+    }
+
+    /// Charged zero writes, row visits, equality comparisons and selected bits.
     #[must_use]
     pub const fn work(&self) -> u128 {
         self.work
@@ -287,7 +326,7 @@ impl<'source> Relation<'source> {
     /// The result preserves the complete input order. It covers the relation
     /// only when the caller supplied all rows. No equality discharges structural
     /// matching, repeated unbound variables, guards, support or minimality.
-    /// Work is O(input rows times equalities), with constant-width ID comparisons.
+    /// Work is O(input rows times (1 + equalities)), with constant-width IDs.
     ///
     /// # Errors
     /// Refuses foreign owners before filtering, resource excess or allocation
@@ -300,13 +339,7 @@ impl<'source> Relation<'source> {
         input: &Selection<'_, 'source>,
         limits: Limits,
     ) -> Result<Selection<'_, 'source>, Failure> {
-        if !self.same_owner(query.relation) || !self.same_owner(input.relation) {
-            return Err(Failure::Owner);
-        }
-        let inputs = query
-            .bytes
-            .checked_add(input.bytes)
-            .ok_or(Failure::Overflow)?;
+        let inputs = self.selection_inputs(query, input)?;
         let extra = inputs
             .checked_add(size_of::<Selection<'_, '_>>())
             .ok_or(Failure::Overflow)?;
@@ -317,29 +350,101 @@ impl<'source> Relation<'source> {
             0
         };
         let mut positions = work.reserve(count)?;
-        if query.possible {
-            for &position in &input.positions {
-                work.tick(1)?;
-                let mut matches = true;
-                for equality in &query.equalities {
-                    work.tick(1)?;
-                    let id = self.columns[equality.column * self.row_count() + position];
-                    if id != equality.value_id {
-                        matches = false;
-                        break;
-                    }
-                }
-                if matches {
-                    work.tick(1)?;
-                    positions.push(position);
-                }
-            }
-        }
+        self.visit_matches(query, input, &mut work, |position| positions.push(position))?;
         Ok(Selection {
             relation: self,
             positions,
             bytes: work.live - self.storage.retained_bytes - inputs,
             work: work.used,
         })
+    }
+
+    /// Return exactly the matching input rows as a packed original-row mask.
+    ///
+    /// Uses the same typed equality predicate and ordered input traversal as
+    /// [`Self::select`], writing bits directly without a position vector. Work
+    /// additionally charges one zero write per mask word. Even an impossible
+    /// query retains `row_count().div_ceil(32)` zero words. This bounded dense
+    /// output can cost more storage than positions for a sparse selection.
+    ///
+    /// # Errors
+    /// Refuses foreign owners before allocation, resource excess or allocation
+    /// failure. No partial mask is returned. Limits include this relation, both
+    /// supplied objects, the mask object and its actual word capacity. Borrowed
+    /// source payload and unrelated live frames remain caller-accounted.
+    pub fn select_mask(
+        &self,
+        query: &Query<'_, 'source>,
+        input: &Selection<'_, 'source>,
+        limits: Limits,
+    ) -> Result<Mask<'_, 'source>, Failure> {
+        let inputs = self.selection_inputs(query, input)?;
+        let extra = inputs
+            .checked_add(size_of::<Mask<'_, '_>>())
+            .ok_or(Failure::Overflow)?;
+        let mut work = self.work(limits, extra)?;
+        let bits = u32::BITS as usize;
+        let count = self.row_count().div_ceil(bits);
+        let mut words = work.reserve(count)?;
+        work.tick(count as u128)?;
+        words.resize(count, 0_u32);
+        self.visit_matches(query, input, &mut work, |position| {
+            words[position / bits] |= 1 << (position % bits);
+        })?;
+        Ok(Mask {
+            relation: self,
+            words,
+            bytes: work.live - self.storage.retained_bytes - inputs,
+            work: work.used,
+        })
+    }
+
+    fn selection_inputs(
+        &self,
+        query: &Query<'_, 'source>,
+        input: &Selection<'_, 'source>,
+    ) -> Result<usize, Failure> {
+        if !self.same_owner(query.relation) || !self.same_owner(input.relation) {
+            return Err(Failure::Owner);
+        }
+        query
+            .bytes
+            .checked_add(input.bytes)
+            .ok_or(Failure::Overflow)
+    }
+
+    fn visit_matches(
+        &self,
+        query: &Query<'_, 'source>,
+        input: &Selection<'_, 'source>,
+        work: &mut Work,
+        mut emit: impl FnMut(usize),
+    ) -> Result<(), Failure> {
+        if query.possible {
+            for &position in &input.positions {
+                work.tick(1)?;
+                if self.matches_row(query, position, work)? {
+                    work.tick(1)?;
+                    emit(position);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn matches_row(
+        &self,
+        query: &Query<'_, 'source>,
+        position: usize,
+        work: &mut Work,
+    ) -> Result<bool, Failure> {
+        for equality in &query.equalities {
+            work.tick(1)?;
+            let id = self.columns[equality.column * self.row_count() + position];
+            if id != equality.value_id {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 }

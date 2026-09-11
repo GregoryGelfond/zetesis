@@ -144,6 +144,14 @@ selected = Filter(AllEqualitiesHold(query), supplied_rows)
 bindings = FilterMap(MatchWholeTuple(pattern, binding), selected)
 ```
 
+The same equality predicate can produce ordered positions or packed row bits.
+[`Relation::select_mask`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/relation/selection.rs)
+writes matching input positions directly into their mask words. This avoids a
+position-vector intermediate when the consumer requires masks. Decoding the
+result over original row order yields the same selected occurrences; distinct
+rows containing equal tuples keep distinct bits. The packed output still spans
+the original relation, so sparse inputs do not imply small mask storage.
+
 An empty conjunction retains every supplied row; a missing dictionary value
 retains none. Numeric ID order does not implement numeric comparison, ASP term
 order or arithmetic. The existing matcher remains responsible for structural

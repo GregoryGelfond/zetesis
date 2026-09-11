@@ -25,7 +25,7 @@ use crate::{Atom, Predicate, Value};
 mod storage;
 mod selection;
 
-pub use selection::{Equality, Query, Selection};
+pub use selection::{Equality, Mask, Query, Selection};
 
 /// Inclusive construction and operation ceilings.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -319,7 +319,7 @@ pub struct Row<'owner, 'source> {
     source_index: usize,
 }
 
-impl Row<'_, '_> {
+impl<'source> Row<'_, 'source> {
     /// The full signed predicate. Constant time.
     #[must_use]
     pub fn predicate(&self) -> &Predicate {
@@ -345,8 +345,9 @@ impl Row<'_, '_> {
     ///
     /// Interning preserves typed value equality, not the address of the original
     /// occurrence's `Value` cell. [`Self::source_index`] retains its catalog identity.
+    /// The value borrows the source and can outlive this row and relation view.
     #[must_use]
-    pub fn value(&self, column: usize) -> Option<&Value> {
+    pub fn value(&self, column: usize) -> Option<&'source Value> {
         let id = *self.relation.column(column)?.get(self.position)?;
         self.relation.dictionary.get(id as usize).copied()
     }

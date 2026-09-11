@@ -62,11 +62,19 @@ observations together. Do not build a session by independently pairing a theory
 with an atom table from another admission.
 
 `relation::Relation` borrows one immutable atom source and owns a dictionary and
-aligned equality-ID columns. A `Query` or `Selection` borrows that exact owner;
+aligned equality-ID columns. A `Query`, `Selection` or `Mask` borrows that exact owner;
 equal contents in another relation do not make the objects interchangeable.
 `Row::source_index` preserves the original catalog position, while selection
 positions are local to the relation. The view currently serves bounded primitive
 experiments. It is not an alternative source parser or a complete grounder.
+
+`Relation::select` returns ordered positions; `Relation::select_mask` applies
+the same equality predicate directly into packed original-row membership.
+Neither needs to convert through the other's representation. Mask production
+charges word initialization even when no row can match. Dense masks can occupy
+more storage than positions for sparse results. `selection_from_mask` checks
+shape and reconstructs ordered positions; arbitrary supplied bits do not carry
+a query-completeness certificate.
 
 `GpuRelationExecutor::prepare` borrows that relation and the executor, uploading
 its equality-ID columns. The resulting prepared view accepts queries from the

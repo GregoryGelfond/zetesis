@@ -1,7 +1,7 @@
 use std::{hint::black_box, io, mem::size_of, time::Instant};
 
 use rayon::prelude::*;
-use zetesis_core::relation::{Limits, Query, Relation, Selection};
+use zetesis_core::relation::{Limits, Mask, Query, Relation, Selection};
 use zetesis_cpu::{Control, Stop};
 use zetesis_wgpu::{
     GpuOptions, GpuRelationExecutor, PreparedGpuRelation, RelationGpuLimits, RelationGpuMasks,
@@ -19,9 +19,9 @@ use crate::{
 /// Measure one retained relation with a common packed-output contract.
 ///
 /// Each route receives every original row and query occurrence. Scalar and
-/// Rayon invoke existing `Relation::select`, pack selected positions, and drop
-/// each temporary Selection. Rayon owns disjoint query masks and has at most its
-/// worker count of selections live. GPU masks are copied to that same layout.
+/// Rayon invoke `Relation::select_mask`, copy its words, and drop each temporary
+/// mask. Rayon owns disjoint query outputs and has at most its worker count of
+/// temporary masks live. GPU masks are copied to that same layout.
 /// Every batch is checked against the independent typed-row reference before
 /// publication, then the same core mask decoder reconstructs its typed rows.
 ///
@@ -46,7 +46,7 @@ pub fn measure(
     let configuration = configuration.validate()?;
     poll(control)?;
     emit(&Event::Start {
-        schema: 1,
+        schema: 2,
         configuration,
     })
     .map_err(Error::Output)?;
@@ -287,12 +287,13 @@ impl Frame<'_, '_> {
     fn capacity(&self, workers: usize) -> Result<usize, Error> {
         let positions =
             size_of::<Selection<'_, '_>>() + self.configuration.rows * size_of::<usize>();
-        // Two position vectors conservatively cover independent reference plus
-        // core reconstruction; concurrent CPU selections are bounded by workers.
+        let mask = size_of::<Mask<'_, '_>>() + self.words() * size_of::<u32>();
+        // CPU workers retain direct masks. Reference validation retains at most
+        // two position vectors later, after those temporary masks are dropped.
         let temporaries = if self.queries.is_empty() {
             0
         } else {
-            workers.max(2) * positions
+            (workers * mask).max(2 * positions)
         };
         let metrics = size_of::<Vec<u128>>() + self.configuration.queries * size_of::<u128>();
         let total =
@@ -353,11 +354,11 @@ fn cpu_batch(
             let maximum = frame.relation.storage().retained_bytes
                 + query.retained_bytes()
                 + frame.input.retained_bytes()
-                + size_of::<Selection<'_, '_>>()
-                + frame.configuration.rows * size_of::<usize>();
+                + size_of::<Mask<'_, '_>>()
+                + frame.words() * size_of::<u32>();
             let selected = frame
                 .relation
-                .select(
+                .select_mask(
                     query,
                     frame.input,
                     Limits {
@@ -367,9 +368,7 @@ fn cpu_batch(
                 )
                 .map_err(Error::Relation)?;
             *work = selected.work();
-            for &row in selected.positions() {
-                words[row / 32] |= 1 << (row % 32);
-            }
+            words.copy_from_slice(selected.words());
             Ok(())
         };
     if route == Route::Rayon {

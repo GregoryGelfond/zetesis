@@ -153,8 +153,9 @@ every selected argument cell.
 
 Source construction, dictionary construction, query resolution, input selection,
 Rayon pool creation, device setup and column upload are reported separately.
-Repeated batches reuse the immutable relation and uploaded columns. Scalar and
-Rayon selection includes mask packing; GPU selection includes transfer, readback
+Repeated batches reuse the immutable relation, resolved queries and uploaded
+columns. Scalar and Rayon construct packed masks directly through the core
+equality predicate, then copy them into the common batch. GPU selection includes transfer, readback
 and the copy into the common mask representation. Reference checks, source
 hashing and report publication lie outside operation clocks. Routes run in fixed
 scalar/Rayon/GPU order; order and thermal effects remain uncontrolled.
@@ -163,11 +164,19 @@ not a cold-cache observation. In physical mode, uploaded columns remain resident
 during CPU samples as well.
 
 The authored storage bound includes shared views, packed outputs and concurrent
-temporary selections. It is neither process RSS nor total device memory. Report
+temporary masks; later reference validation and reconstruction charge their
+position vectors separately. It is neither process RSS nor total device memory. Report
 events retain the full typed subject, its hash, complete masks and actual device
 work. Complete evidence requires both the final event and successful execution
 and publication. A writer failure can leave bytes from an incomplete event;
 the caller remains responsible for flushing its output.
+
+Relation report schema 2 records direct CPU mask production. Its
+`cpu_selection_work` charges mask-word zero writes, visited rows, short-circuit
+equality comparisons and selected-bit writes. Schema 1 counted the position
+producer before a separate packing loop. These counters use different work
+conventions; complete typed subjects and mask membership remain comparable.
+Neither counter includes the common batch's initialization or mask copy.
 
 This profile measures equality selection and typed row access. It does not
 measure full tuple matching, source grounding or answer-set solving. See the

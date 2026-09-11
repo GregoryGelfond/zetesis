@@ -35,6 +35,33 @@ fn records(configuration: Configuration) -> Vec<serde_json::Value> {
 }
 
 #[test]
+fn report_schema_identifies_direct_mask_accounting() {
+    let records = records(configuration());
+    assert_eq!(records[0]["event"], "start");
+    assert_eq!(records[0]["schema"], 2);
+}
+
+#[test]
+fn cpu_work_includes_impossible_query_mask_initialization() {
+    let records = records(Configuration {
+        rows: 33,
+        queries: 2,
+        ..configuration()
+    });
+    // The first query accepts all rows; the second uses an absent value.
+    // Both initialize two mask words, while only the first visits 33 rows.
+    let observations: Vec<_> = records
+        .iter()
+        .filter(|record| record["event"] == "observation")
+        .collect();
+    assert_eq!(observations.len(), 4);
+    for observation in observations {
+        assert_eq!(observation["cpu_selection_work"], 70);
+        assert_eq!(observation["masks"], serde_json::json!([u32::MAX, 1, 0, 0]));
+    }
+}
+
+#[test]
 fn cpu_routes_publish_identical_packed_masks() {
     let records = records(configuration());
     let observations: Vec<_> = records

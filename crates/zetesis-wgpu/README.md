@@ -77,6 +77,11 @@ patterns and binding. Preparation, filtering and reconstruction each have
 explicit limits; the enclosing caller accounts for simultaneously retained views.
 These operations do not replace ordinary source grounding.
 
+The core `Relation::select_mask` producer returns the same low-bit-first row
+layout for CPU consumers, directly from the shared equality predicate. Device
+qualification compares both producers and an independent typed-row reference.
+Layout and owner checks alone do not establish correct device membership.
+
 ## Validate a physical backend
 
 Portable checks exercise planning and host failure boundaries. Physical Metal

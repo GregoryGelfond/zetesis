@@ -20,9 +20,9 @@ const MAX_SUBJECT_BYTES: usize = 64 * 1024 * 1024;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Route {
-    /// Existing scalar relation selection, then ordered mask packing.
+    /// Scalar equality selection directly into a packed original-row mask.
     Scalar,
-    /// The same selection with disjoint query masks in an owned Rayon pool.
+    /// The same mask producer with disjoint outputs in an owned Rayon pool.
     Rayon,
     /// Physical Metal row tiles and complete readback.
     Metal,
@@ -120,13 +120,14 @@ pub struct Observation<'a> {
     pub phase: Phase,
     /// Zero-based position within this phase.
     pub repetition: usize,
-    /// Allocation, equality selection and packing/copy to the common masks.
+    /// Allocation, direct mask selection and copying to the common batch.
     pub selection_ns: u128,
     /// Same core mask reconstruction and typed row traversal for every route.
     pub reconstruction_ns: u128,
     /// Sum of those two directly observed intervals; validation/publication excluded.
     pub operation_ns: u128,
-    /// Charged core selection work on CPU; zero on device routes.
+    /// Charged core mask work on CPU, including zero writes; zero on device routes.
+    /// Excludes the common batch's allocation/initialization and mask copy.
     pub cpu_selection_work: u128,
     /// Complete typed argument cells visited in reconstruction.
     pub reconstructed_cells: usize,
