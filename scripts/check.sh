@@ -46,7 +46,7 @@ if [ "$mode" = book ] || [ "$mode" = full ]; then
 fi
 if [ "$mode" = oracle ] || [ "$mode" = full ]; then
     cargo test --locked -p zetesis-solve --no-default-features --test language_consumers original_sources_retain_declared_reference_results -- --ignored --nocapture
-    cargo test --locked -p zetesis-themelios --test objective_boundaries -- --ignored --nocapture
+    cargo test --locked -p zetesis-themelios --test objective_boundaries --test objective_dependency_contracts -- --ignored --nocapture
     cargo test --locked -p zetesis-themelios --test head_contributions --test objective_source_completion --test objective_field_expressions --test objective_priority_reporting --test objective_cyclic_producers --test objective_rich_producers --test observation_expressions --test observation_scopes --test observation_families -- --ignored --nocapture
     cargo test --locked -p zetesis-themelios --test logical_bounds --test objective_priorities --test objective_priority_certificates --test objective_measure_carriers --test finite_chains --test affine_normalization -- --ignored --nocapture
     cargo test --locked -p zetesis-themelios --test extrema_alias_contracts --test boolean_element_contracts --test signed_element_contracts --test signed_choices -- --ignored --nocapture

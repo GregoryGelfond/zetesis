@@ -220,6 +220,22 @@ ties. They do not establish an identical raw priority layout in clingo. Proving
 an extra slot always zero requires the source-coverage and actual-condition
 arguments above; a zero observed in one answer is insufficient.
 
+[`Observations`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Observations.lean)
+connects complete query bindings to the distinct enabled-value channel, under
+explicit binding and value-expansion coverage. The same row supplies its
+condition truth and constructed values. Its family laws attach a display to
+each original interpretation and recover the exact original list, preserving
+order and multiplicity even when displays coincide. The world-view corollary
+requires an already established `WorldViews.Represents` premise; output does
+not prove membership or enumeration coverage.
+
+The [observation reading](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/observations.md)
+relates these laws to scoped queries, complete tuple keys and the Rust compiler
+and evaluator. Source safety, anonymous projection, checked arithmetic,
+construction, ownership and resource/cancellation completion remain executable
+refinement obligations. The laws apply after completed evaluation, not to an
+error prefix or an unfinished display.
+
 [`AggregateInvariants`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AggregateInvariants.lean)
 states when optional tuple keys cannot change a required sum or extremum.
 The source [measure carrier](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_objective_dependencies/presence/flat/carrier.rs)

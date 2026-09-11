@@ -347,9 +347,38 @@ distinct from the aggregate-head answer-family differences documented above.
 
 `#defined` and `#show` retain signed signature metadata. Ground and admitted
 conditional term observations operate over full models; they do not change
-answer-set identity. Broader observation expressions and conditions remain
-separate admission obligations. Projection through `#project` is not implemented
-and is not silently treated as `#show`.
+answer-set identity. Shown terms can use checked arithmetic, constructors,
+tuples, finite intervals and pools. Conditions admit signed atoms, Boolean
+operands, scalar comparisons and directed equalities, aggregates and universal
+conditionals. Positive patterns bind structural components from actual model
+atoms; arithmetic in a pattern consumes established inputs. Nested structural
+pool alternatives preserve their own captures, and only captures common to
+every alternative can supply another body element without an independent binder.
+
+Local scopes retain their own variables. Aggregate keys remain complete tuples;
+positive cardinality elements use the complete matched atom. Aggregate result
+assignments can supply other guards and later consumers, but element inputs
+must be independently established. A failed query returns a typed error rather
+than partial shown output. These operations neither add values to the grounding
+domain nor create atom support.
+
+Anonymous atom matching projects over the supplied model before applying
+default negation. zetesis applies this rule uniformly to both strong signs.
+For example, `#show seen:not -p(_).` shows `seen` precisely when no strongly
+negative `p/1` atom occurs in that model. This is an explicit observation
+extension: clingo 5.8.2 rejects that form as unsafe. Separate
+[diagnostic fixtures](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/fixtures/observation-strong-anonymous.jsonl)
+record the difference; it is not a parity pass or an answer-set semantics change.
+
+Valid finite cases still refused include generative equality chains such as
+`X=Y=1`, constructor equality inversion, inverse arithmetic binding, and anonymous
+arguments in default-negated cardinality elements whose complete key cannot
+currently be constructed. Cyclic aggregate bindings and missing extremum
+measures retain explicit boundaries. The
+[query contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/observation_expressions.rs)
+keep these refusals alongside complete external comparisons; L17 remains open.
+Projection through `#project` is not implemented and is not silently treated as
+`#show`.
 
 Ordered input bundles support includes and global constants with bounded
 source traversal and retained resolution evidence. Parameter-free `#program base`

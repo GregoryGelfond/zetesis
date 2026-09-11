@@ -1047,3 +1047,10 @@ import Zetesis
 #print axioms Zetesis.ObjectiveConditionTable.model_identity
 #print axioms Zetesis.ObjectiveConditions.formula_query_truth
 #print axioms Zetesis.ObjectiveConditions.formula_query_changes_reduct
+#print axioms Zetesis.Observations.completed_terms_exact
+#print axioms Zetesis.Observations.same_rows_preserve_terms
+#print axioms Zetesis.Observations.equal_measures_do_not_identify_tuple_keys
+#print axioms Zetesis.Observations.original_family_projection
+#print axioms Zetesis.Observations.decorated_world_view
+#print axioms Zetesis.Observations.different_models_remain_different_records
+#print axioms Zetesis.Observations.display_deduplication_can_shrink_a_family

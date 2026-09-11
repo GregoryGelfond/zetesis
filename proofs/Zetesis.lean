@@ -97,3 +97,4 @@ import Zetesis.IntegerEnvelopes
 import Zetesis.SourceMeasures
 import Zetesis.ColumnRelations
 import Zetesis.DomainContraction
+import Zetesis.Observations
