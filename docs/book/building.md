@@ -32,17 +32,17 @@ sibling rustdoc tree. Source links lead to the maintained repository paths.
 
 ## Check the Rust examples
 
-The session, source-preparation, objective-selection, reduct and derived-workload examples are
+The session, resource-sharing, source-preparation, objective-selection, reduct and derived-workload examples are
 included from Rust files under `docs/book/examples`; the code displayed in the
 chapters is the code tested by mdBook. Build their dependencies without requiring
 a physical GPU, then run:
 
 ```sh
-cargo build --locked -p zetesis-cli -p zetesis-validation --lib --no-default-features --target-dir target/book-tests
-mdbook test --library-path target/book-tests/debug/deps
+cargo build --locked -p zetesis-cli -p zetesis-validation --lib --all-features --target-dir target/book-tests-gpu
+mdbook test --library-path target/book-tests-gpu/debug/deps
 ```
 
-Reserve `target/book-tests` for this example configuration. Separate storage
+Reserve `target/book-tests-gpu` for this example configuration. Separate storage
 keeps Cargo check/rustdoc metadata and other feature configurations from making
 mdBook's crate lookup ambiguous. The ordinary application and API documentation
 can continue using `target`.
@@ -52,6 +52,9 @@ support or performance claim follows from these portable example tests.
 The derived-workload acquisition block uses `no_run`: mdBook checks its types
 without launching solvers. Its Cargo example test separately checks N=4 source
 derivation and identity against the admitted corpus, with no child processes.
+The shared-device example also uses `no_run`: its GPU API is compiled, while
+actual device execution requires physical qualification. GPU support is compiled
+for this dependency set; the other examples select CPU execution explicitly.
 The same files are registered as Cargo examples, so workspace formatting and
 all-target Clippy checks apply to them. The authored-lint inventory includes
 `docs/book/examples` as a maintained source root.
@@ -62,6 +65,12 @@ To run one example as an ordinary consumer from the checkout root:
 cargo run --locked -p zetesis-cli --no-default-features --example book-session
 cargo run --locked -p zetesis-cli --no-default-features --example book-source
 cargo run --locked -p zetesis-cli --no-default-features --example book-selection
+```
+
+On a machine with an accessible physical GPU, run the shared-resource example:
+
+```sh
+cargo run --locked -p zetesis-cli --all-features --example book-resources
 ```
 
 The tour's ASP fixture is included directly in the chapter. A Cargo example test

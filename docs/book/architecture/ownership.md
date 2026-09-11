@@ -76,9 +76,11 @@ no device chunks. Failure retains incomplete accounting.
 
 Byte ceilings retain their per-primitive scope. They do not automatically sum all
 prepared objects sharing a context or include device infrastructure. There is no
-global context, pipeline registry or unbounded work queue. Ordinary solves still
-prepare their own executor; sharing resources across repeated library sessions
-requires an explicit orchestration API beyond these primitive constructors.
+global context, pipeline registry or unbounded work queue. Ordinary sessions can
+share an explicitly supplied context through `ExecutionResources` and
+`Session::builder`. They prepare separate executors, pipelines and subjects;
+resource reuse does not resume search or share candidate truth. The
+[session example](../rust/sessions.md#reuse-and-identity) shows this composition.
 
 ## Parallelism follows the dependencies
 

@@ -8,7 +8,7 @@ use zetesis_core::{GroundProgram, Model, Program, Seed, StaticLimits};
 use zetesis_cpu::{BatchOracle, Control, Limits, Stop};
 
 use crate::phase_timing::{Recorder, SolvePhase};
-use crate::{Backend, Grounder, Oracle, RunError, SolveConfig, SourceBatching};
+use crate::{Backend, ExecutionResources, Grounder, Oracle, RunError, SolveConfig, SourceBatching};
 
 /// An initial scheduling heuristic, not a measured performance crossover.
 pub(crate) const AUTO_GPU_MIN_BATCH: usize = 32;
@@ -43,6 +43,8 @@ pub(crate) struct Engine {
     executor: Executor,
     automatic: bool,
     attempted_gpu: bool,
+    // Retain only resources needed by the deferred automatic device attempt.
+    resources: ExecutionResources,
     // Retain attempted device work if automatic execution resumes on CPU.
     retired_lazy_statistics: Option<crate::LazyExecutionStatistics>,
 }
@@ -76,13 +78,21 @@ impl Engine {
         observations: &mut impl ExecutionSink,
         phases: &Recorder,
     ) -> Result<Self, RunError> {
-        Self::with_ground(options, program, None, observations, phases)
+        Self::with_ground(
+            options,
+            program,
+            None,
+            &ExecutionResources::default(),
+            observations,
+            phases,
+        )
     }
 
     pub(crate) fn with_ground(
         options: &SolveConfig,
         program: &Program,
         cached: Option<Arc<GroundProgram>>,
+        resources: &ExecutionResources,
         observations: &mut impl ExecutionSink,
         phases: &Recorder,
     ) -> Result<Self, RunError> {
@@ -104,14 +114,20 @@ impl Engine {
                 }
                 cpu
             }
-            _ => Executor::gpu(options, program, cached, observations, phases)?,
+            _ => Executor::gpu(options, program, cached, resources, observations, phases)?,
         };
+        let automatic = options.backend == Backend::Auto
+            && options.source_batching == SourceBatching::Independent
+            && cfg!(feature = "gpu");
         Ok(Self {
             executor,
-            automatic: options.backend == Backend::Auto
-                && options.source_batching == SourceBatching::Independent
-                && cfg!(feature = "gpu"),
+            automatic,
             attempted_gpu: false,
+            resources: if automatic {
+                resources.clone()
+            } else {
+                ExecutionResources::default()
+            },
             retired_lazy_statistics: None,
         })
     }
@@ -154,11 +170,13 @@ impl Engine {
         }
         if should_probe_gpu(self.automatic, self.attempted_gpu, seeds.len()) {
             self.attempted_gpu = true;
+            let resources = std::mem::take(&mut self.resources);
             let attempt = phases.measure(SolvePhase::ExecutionSetup, || {
                 Executor::gpu(
                     options,
                     program,
                     self.executor.ground(),
+                    &resources,
                     observations,
                     phases,
                 )
@@ -311,6 +329,7 @@ impl Executor {
         _: &SolveConfig,
         _: &Program,
         _: Option<Arc<GroundProgram>>,
+        _: &ExecutionResources,
         _: &mut impl ExecutionSink,
         _: &Recorder,
     ) -> Result<Self, RunError> {
@@ -322,16 +341,21 @@ impl Executor {
         options: &SolveConfig,
         program: &Program,
         cached: Option<Arc<GroundProgram>>,
+        resources: &ExecutionResources,
         observations: &mut impl ExecutionSink,
         phases: &Recorder,
     ) -> Result<Self, RunError> {
         use zetesis_wgpu::{GpuOptions, GpuOracle};
 
+        let context = resources.gpu_for(options.backend).map_err(RunError::Gpu)?;
         if options.grounder != Grounder::Eager {
-            let oracle = zetesis_wgpu::GpuLazyOracle::new_selected(
-                GpuOptions::default(),
-                selection(options.backend),
-            )
+            let oracle = match context {
+                Some(context) => zetesis_wgpu::GpuLazyOracle::from_context(context),
+                None => zetesis_wgpu::GpuLazyOracle::new_selected(
+                    GpuOptions::default(),
+                    selection(options.backend),
+                ),
+            }
             .map_err(RunError::Gpu)?;
             let statistics =
                 crate::LazyExecutionStatistics::new(options.backend, oracle.info().metadata());
@@ -346,10 +370,13 @@ impl Executor {
             return Ok(Self::LazyGpu(Box::new(LazyGpu { oracle, statistics })));
         }
 
-        // Discover hardware before any new static materialization. Eager CPU
-        // attempts already own a graph, shared through Arc without expansion.
-        let oracle = GpuOracle::new_selected(GpuOptions::default(), selection(options.backend))
-            .map_err(RunError::Gpu)?;
+        // Validate or discover hardware before new static materialization.
+        // Eager CPU attempts already own a graph, shared without expansion.
+        let oracle = match context {
+            Some(context) => GpuOracle::from_context(context),
+            None => GpuOracle::new_selected(GpuOptions::default(), selection(options.backend)),
+        }
+        .map_err(RunError::Gpu)?;
         let atom_limit = options.max_atoms.min(zetesis_wgpu::MAX_ATOMS);
         let ground = match cached {
             Some(ground) => {
@@ -553,6 +580,10 @@ pub(crate) fn selection(backend: Backend) -> zetesis_wgpu::GpuSelection {
 #[cfg(test)]
 #[path = "../tests/support/engine_control_contracts.rs"]
 mod control_contract_tests;
+
+#[cfg(all(test, feature = "gpu"))]
+#[path = "../tests/support/engine_resources.rs"]
+mod resource_tests;
 
 #[cfg(test)]
 mod tests {

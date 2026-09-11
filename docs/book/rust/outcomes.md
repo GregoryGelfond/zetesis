@@ -121,6 +121,14 @@ it cannot retract that proof, and it cannot claim a partially written record as
 fully published. `SolveFailure` preserves the original cause and available
 semantic, publication and timing evidence.
 
+The driver retains one semantic snapshot and separate publication and timing
+state. Legacy reports, statistics and JSON are derived views; their fields are
+not copied back into the session's evidence. A successful legacy `Report`
+requires an established completion classification. Requesting it before that
+point is a typed driver protocol failure. Partial views retain absent completion
+without substituting exhaustion or a logical interruption. Mutating a detached
+compatibility report cannot change the retained semantic outcome.
+
 The CLI's `--json` output is a versioned view. Full semantic atoms, shown atom
 indices, shown terms and costs remain separate. Human output and JSON do not
 define different solving modes. Applications should consume typed library

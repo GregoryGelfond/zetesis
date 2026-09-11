@@ -75,7 +75,9 @@ mod finalized;
 pub use finalized::{Publication, SolveFailure, SolveReport};
 
 mod session;
-pub use session::{AnswerSet, PreparedInput, PreparedProfile, Session, SessionModel, Subject};
+pub use session::{
+    AnswerSet, PreparedInput, PreparedProfile, Session, SessionBuilder, SessionModel, Subject,
+};
 
 mod world_view;
 pub use world_view::{WorldView, WorldViewError, WorldViewFailure, WorldViewLimits};

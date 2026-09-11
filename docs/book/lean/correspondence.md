@@ -35,6 +35,13 @@ invalidation prevents a later primitive from reusing failed execution state.
 coverage laws; context leases, scope cleanup and their concrete Rust transitions
 remain executable correspondence obligations.
 
+Ordinary sessions can retain the same device through explicit execution
+resources. Each start creates a fresh candidate stream, budget and outcome over
+its original logical subject. The correspondence must preserve that independence under
+sequential reuse, deferred automatic device selection and shared device failure.
+The builder changes request composition; it does not change candidate coverage,
+the frozen reduct or the point at which a checked result is committed.
+
 Typed execution observations describe attempted setup or execution choices.
 They are not membership or coverage receipts. A failed observer can stop driving
 the session but cannot reinterpret its error as a device failure, request
@@ -42,6 +49,15 @@ fallback or establish a conclusion. The observation boundary must preserve
 already checked evidence and distinguish it from publication, as required by
 `Outcomes`. Tests exercise these failure paths; they do not close the formal
 refinement.
+
+The ordinary driver's semantic snapshot is the authority for membership,
+completion and incumbent evidence. Publication acknowledgements and timings
+remain separate; successful and partial reporting values are derived views.
+The refinement obligation is that every projection retains the snapshot's
+conclusions, including absent completion, and cannot feed fabricated conclusions
+back into it. `Outcomes` already distinguishes established membership, complete
+search and delivery. Removing redundant mutable copies does not strengthen that
+theorem into a proof of the concrete Rust projection or writer behavior.
 
 The [ownership chapter](../architecture/ownership.md) and
 [session example](../rust/sessions.md#reuse-and-identity) connect these obligations

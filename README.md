@@ -152,6 +152,9 @@ the original answer family, including nonoptimal answers with their scores.
 Optional bounded `WorldView` collection requires complete enumeration; a stopped
 prefix and a selected optimum remain distinct results. The
 [session manual](docs/book/rust/sessions.md) explains ownership and completion.
+`Session::builder` composes answer selection, typed observations and reusable
+`ExecutionResources`. Several sessions can use one explicit GPU context while
+keeping their subjects, work budgets and outcomes independent.
 
 The [Lean library](proofs/README.md) develops satisfaction, reducts, minimality,
 normal least closure and their preservation laws. Its normalized-rule translation

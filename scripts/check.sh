@@ -41,8 +41,8 @@ if [ "$mode" = book ] || [ "$mode" = full ]; then
     fi
     mdbook build
     # Keep one dependency configuration here so example crate lookup is unique.
-    cargo build --locked -p zetesis-cli -p zetesis-validation --lib --no-default-features --target-dir target/book-tests
-    mdbook test --library-path target/book-tests/debug/deps
+    cargo build --locked -p zetesis-cli -p zetesis-validation --lib --all-features --target-dir target/book-tests-gpu
+    mdbook test --library-path target/book-tests-gpu/debug/deps
 fi
 if [ "$mode" = oracle ] || [ "$mode" = full ]; then
     cargo test --locked -p zetesis-themelios --test logical_bounds --test objective_priorities --test objective_priority_certificates --test objective_measure_carriers --test finite_chains --test affine_normalization -- --ignored --nocapture

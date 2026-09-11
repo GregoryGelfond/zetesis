@@ -149,8 +149,7 @@ impl Record {
     }
 
     fn from_answer(answer: &AnswerSet) -> Self {
-        let mut atoms = answer.interpretation().atoms().to_vec();
-        atoms.sort();
+        let atoms = answer.interpretation().atoms().iter().cloned().collect();
         Self {
             atoms,
             costs: answer.score().map(|score| {

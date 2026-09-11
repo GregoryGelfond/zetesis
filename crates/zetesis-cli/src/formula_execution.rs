@@ -9,7 +9,7 @@ use zetesis_sat::{Incomplete, StableModels};
 use crate::phase_timing::Recorder;
 #[cfg(feature = "gpu")]
 use crate::phase_timing::SolvePhase;
-use crate::{Backend, RunError, SolveConfig};
+use crate::{Backend, ExecutionResources, RunError, SolveConfig};
 
 pub use crate::completion_accounting::CompletionAccounting;
 
@@ -75,6 +75,14 @@ impl Execution {
         options: &SolveConfig,
         observations: &mut impl ExecutionSink,
     ) -> Result<Self, RunError> {
+        Self::with_resources(options, &ExecutionResources::default(), observations)
+    }
+
+    pub(crate) fn with_resources(
+        options: &SolveConfig,
+        resources: &ExecutionResources,
+        observations: &mut impl ExecutionSink,
+    ) -> Result<Self, RunError> {
         if matches!(options.backend, Backend::Auto | Backend::Cpu) {
             observations.record(Event::CpuFormula {
                 oracle: options.oracle,
@@ -91,20 +99,32 @@ impl Execution {
             }
             return Ok(Self::Cpu);
         }
-        Self::gpu(options, observations)
+        Self::gpu(options, resources, observations)
     }
 
     #[cfg(not(feature = "gpu"))]
-    fn gpu(_: &SolveConfig, _: &mut impl ExecutionSink) -> Result<Self, RunError> {
+    fn gpu(
+        _: &SolveConfig,
+        _: &ExecutionResources,
+        _: &mut impl ExecutionSink,
+    ) -> Result<Self, RunError> {
         Err(RunError::BackendUnavailable)
     }
 
     #[cfg(feature = "gpu")]
-    fn gpu(options: &SolveConfig, observations: &mut impl ExecutionSink) -> Result<Self, RunError> {
-        let oracle = zetesis_wgpu::GpuFormulaOracle::new_selected(
-            zetesis_wgpu::GpuOptions::default(),
-            crate::engine::selection(options.backend),
-        )
+    fn gpu(
+        options: &SolveConfig,
+        resources: &ExecutionResources,
+        observations: &mut impl ExecutionSink,
+    ) -> Result<Self, RunError> {
+        let context = resources.gpu_for(options.backend).map_err(RunError::Gpu)?;
+        let oracle = match context {
+            Some(context) => zetesis_wgpu::GpuFormulaOracle::from_context(context),
+            None => zetesis_wgpu::GpuFormulaOracle::new_selected(
+                zetesis_wgpu::GpuOptions::default(),
+                crate::engine::selection(options.backend),
+            ),
+        }
         .map_err(RunError::Gpu)?;
         let adapter = format!(
             "{}, {}; vendor=0x{:04x}",
@@ -280,3 +300,7 @@ impl<E: MembershipExecution + ?Sized> MembershipExecution for &mut E {
         (**self).statistics(models)
     }
 }
+
+#[cfg(all(test, feature = "gpu"))]
+#[path = "../tests/support/formula_resources.rs"]
+mod resource_tests;

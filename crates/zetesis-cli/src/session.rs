@@ -2,8 +2,9 @@
 //!
 //! These sessions use the same retained engine loops as the command adapter.
 //! They neither parse source nor render model text. A caller owns admission and
-//! can reuse its immutable owner across sessions; each session owns fresh search
-//! budgets, its worker pools, pending results and incumbent storage.
+//! can reuse its immutable owner and explicit device resources across sessions;
+//! each session owns fresh search budgets, worker pools, pending results and
+//! incumbent storage.
 
 use crate::ExecutionObserver;
 use crate::execution_observation::{ExecutionSink, Ignore, Observer};
@@ -22,8 +23,8 @@ use crate::formula_execution::Execution;
 use crate::formula_session::FormulaSession;
 use crate::phase_timing::{Recorder, SolvePhase};
 use crate::{
-    AnswerSelection, Completion, Grounder, Interruption, Oracle, PhaseTimings, RunError,
-    SemanticOutcome, SolveConfig, SolveFailure,
+    AnswerSelection, Completion, ExecutionResources, Grounder, Interruption, Oracle, PhaseTimings,
+    RunError, SemanticOutcome, SolveConfig, SolveFailure,
 };
 
 /// The complete semantic representation supplied to an ordinary session.
@@ -251,6 +252,94 @@ enum State<'a> {
     Stopped(Box<SemanticOutcome>),
 }
 
+/// An ordinary solve request, before validation or execution begins.
+///
+/// The input borrows one coherent semantic owner. Resource handles may be shared;
+/// candidates, budgets, worker pools and outcomes are created by each start.
+/// Modifiers perform no device discovery, grounding, callbacks or control polls.
+/// Dropping an unstarted request performs no solve work.
+pub struct SessionBuilder<'a> {
+    input: PreparedInput<'a>,
+    config: SolveConfig,
+    control: Control,
+    selection: AnswerSelection,
+    resources: ExecutionResources,
+}
+
+impl<'a> SessionBuilder<'a> {
+    /// Choose the answer family. The default is optimal ties when an objective
+    /// is present; inputs without objectives always enumerate their full family.
+    #[must_use]
+    pub const fn selection(mut self, selection: AnswerSelection) -> Self {
+        self.selection = selection;
+        self
+    }
+
+    /// Share the caller's execution resource handles with this request.
+    ///
+    /// Cloning the handles does not copy device allocations or logical state.
+    /// CPU paths ignore them. Automatic execution retains its existing policy;
+    /// supplying a device does not force its use. A forced device request must
+    /// match the supplied context's adapter instead of discovering another one.
+    #[must_use]
+    pub fn resources(mut self, resources: &ExecutionResources) -> Self {
+        self.resources = resources.clone();
+        self
+    }
+
+    /// Validate the request and start a fresh session without observations.
+    ///
+    /// # Errors
+    /// Returns the setup failures of [`Session::new`]. Supplied device resources
+    /// additionally retain their explicit adapter, contention and health errors.
+    pub fn start(self) -> Result<Session<'a>, SolveFailure> {
+        self.start_with(&mut Ignore)
+    }
+
+    /// Start with typed preparation observations, borrowing the observer only
+    /// for this call. Later observations require [`Session::next_observed`].
+    ///
+    /// # Errors
+    /// Preserves [`Session::new_observed`]'s setup and callback failure behavior.
+    pub fn start_observed(
+        self,
+        observer: &mut impl ExecutionObserver,
+    ) -> Result<Session<'a>, SolveFailure> {
+        self.start_with(&mut Observer(observer))
+    }
+
+    fn start_with(
+        self,
+        observations: &mut impl ExecutionSink,
+    ) -> Result<Session<'a>, SolveFailure> {
+        let phases = Recorder::new(self.config.stats);
+        let result = Session::initialize(
+            self.input,
+            self.config,
+            &self.control,
+            &phases,
+            self.input.selection(self.selection),
+            &self.resources,
+            observations,
+        );
+        match result {
+            Ok((state, config)) => Ok(Session {
+                state,
+                config,
+                control: self.control,
+                phases,
+                subject: self.input.subject(),
+            }),
+            Err(error) => {
+                let mut failure = SolveFailure::from(error);
+                failure.subject = Some(self.input.subject());
+                failure.phase_timings = phases.snapshot().map(Box::new);
+                Err(failure)
+            }
+        }
+    }
+}
+
 /// A pull-based ordinary solve, independent of argument parsing and writers.
 /// [`Self::new`] selects objective ties after search; [`Self::enumerate`] streams
 /// the unrestricted original family. `models` limits yielded answers, or
@@ -284,6 +373,25 @@ pub struct Session<'a> {
     subject: Subject,
 }
 impl<'a> Session<'a> {
+    /// Compose answer selection, execution resources and preparation
+    /// observations before starting an ordinary solve. Construction performs no
+    /// validation or execution. Existing convenience constructors use this same
+    /// request with independently owned execution resources.
+    #[must_use]
+    pub fn builder(
+        input: PreparedInput<'a>,
+        config: SolveConfig,
+        control: Control,
+    ) -> SessionBuilder<'a> {
+        SessionBuilder {
+            input,
+            config,
+            control,
+            selection: AnswerSelection::Optimal,
+            resources: ExecutionResources::default(),
+        }
+    }
+
     /// Start a new ordinary solve over a coherent prepared owner.
     ///
     /// # Errors
@@ -298,13 +406,7 @@ impl<'a> Session<'a> {
         config: SolveConfig,
         control: Control,
     ) -> Result<Self, SolveFailure> {
-        Self::with_selection(
-            input,
-            config,
-            control,
-            AnswerSelection::Optimal,
-            &mut Ignore,
-        )
+        Self::builder(input, config, control).start()
     }
     /// Stream the original program's answer sets, including nonoptimal answers.
     ///
@@ -326,7 +428,9 @@ impl<'a> Session<'a> {
         config: SolveConfig,
         control: Control,
     ) -> Result<Self, SolveFailure> {
-        Self::with_selection(input, config, control, AnswerSelection::All, &mut Ignore)
+        Self::builder(input, config, control)
+            .selection(AnswerSelection::All)
+            .start()
     }
     /// Start an ordinary solve with synchronous typed execution observations.
     ///
@@ -347,13 +451,7 @@ impl<'a> Session<'a> {
         control: Control,
         observer: &mut impl ExecutionObserver,
     ) -> Result<Self, SolveFailure> {
-        Self::with_selection(
-            input,
-            config,
-            control,
-            AnswerSelection::Optimal,
-            &mut Observer(observer),
-        )
+        Self::builder(input, config, control).start_observed(observer)
     }
 
     /// Enumerate all answer sets with typed preparation observations.
@@ -369,46 +467,9 @@ impl<'a> Session<'a> {
         control: Control,
         observer: &mut impl ExecutionObserver,
     ) -> Result<Self, SolveFailure> {
-        Self::with_selection(
-            input,
-            config,
-            control,
-            AnswerSelection::All,
-            &mut Observer(observer),
-        )
-    }
-
-    fn with_selection(
-        input: PreparedInput<'a>,
-        config: SolveConfig,
-        control: Control,
-        selection: AnswerSelection,
-        observations: &mut impl ExecutionSink,
-    ) -> Result<Self, SolveFailure> {
-        let phases = Recorder::new(config.stats);
-        let result = Self::initialize(
-            input,
-            config,
-            &control,
-            &phases,
-            input.selection(selection),
-            observations,
-        );
-        match result {
-            Ok((state, config)) => Ok(Self {
-                state,
-                config,
-                control,
-                phases,
-                subject: input.subject(),
-            }),
-            Err(error) => {
-                let mut failure = SolveFailure::from(error);
-                failure.subject = Some(input.subject());
-                failure.phase_timings = phases.snapshot().map(Box::new);
-                Err(failure)
-            }
-        }
+        Self::builder(input, config, control)
+            .selection(AnswerSelection::All)
+            .start_observed(observer)
     }
     fn initialize(
         input: PreparedInput<'a>,
@@ -416,6 +477,7 @@ impl<'a> Session<'a> {
         control: &Control,
         phases: &Recorder,
         selection: AnswerSelection,
+        resources: &ExecutionResources,
         observations: &mut impl ExecutionSink,
     ) -> Result<(State<'a>, SolveConfig), RunError> {
         let config = input.configure(config)?;
@@ -446,25 +508,29 @@ impl<'a> Session<'a> {
             ));
         }
         let state = match input.input {
-            Prepared::Relational(program) => State::Closure(Box::new(ClosureSession::new(
-                program,
-                None,
-                &config,
-                observations,
-                control,
-                phases,
-            )?)),
-            Prepared::Ground(ground) => State::Closure(Box::new(ClosureSession::new(
+            Prepared::Relational(program) => {
+                State::Closure(Box::new(ClosureSession::with_resources(
+                    program,
+                    None,
+                    &config,
+                    resources,
+                    observations,
+                    control,
+                    phases,
+                )?))
+            }
+            Prepared::Ground(ground) => State::Closure(Box::new(ClosureSession::with_resources(
                 ground.program(),
                 Some(Arc::clone(ground)),
                 &config,
+                resources,
                 observations,
                 control,
                 phases,
             )?)),
             Prepared::Formula(input) => {
                 let execution = phases.measure(SolvePhase::ExecutionSetup, || {
-                    Execution::new(&config, observations)
+                    Execution::with_resources(&config, resources, observations)
                 })?;
                 State::Formula(Box::new(FormulaSession::with_selection(
                     input,

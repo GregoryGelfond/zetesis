@@ -86,6 +86,15 @@ or query interfaces requires a separate adapter contract.
 
 ## Reuse and identity
 
+`Session::builder(input, config, control)` composes a request before execution.
+Use `selection(AnswerSelection::All)` for unrestricted enumeration, or retain
+the default objective selection. `resources(&resources)` supplies reusable
+execution infrastructure. `start()` and `start_observed(&mut observer)` use the
+same session initialization; the builder retains no observer. Existing
+constructors are conveniences over this path. Creating or modifying a request
+does no validation, grounding or device discovery. Starting it preserves the
+ordinary strategy checks and control polling order.
+
 `PreparedInput::program` borrows a native `zetesis_core::Program` without source
 metadata. It reaches the same relational session as a source-admitted program,
 including lazy execution; it does not first compile a complete ground graph.
@@ -119,6 +128,42 @@ existed.
 The admitted owner can outlive several sessions. Each session starts fresh
 search budgets, worker pools, pending queues and incumbent storage. Reusing an
 owner does not resume a previous search.
+
+With the `gpu` feature, `ExecutionResources::with_gpu(&context)` retains one
+explicit `GpuContext`. It can serve several sessions without selecting another
+device. This example constructs two independent native programs and solves each
+on the same device. It requires an accessible physical GPU; the manual checks
+its compilation without attempting device discovery.
+
+```rust,no_run
+# extern crate zetesis_cli;
+# extern crate zetesis_core;
+# extern crate zetesis_cpu;
+# extern crate zetesis_wgpu;
+{{#include ../examples/resources.rs:example}}
+```
+
+Resources retain device infrastructure, not programs, candidates, prepared
+formula graphs, worker pools or incumbents. Each started session constructs its
+own primitive pipelines and subject preparation. Sharing therefore avoids
+repeated device creation; it does not yet reuse pipelines or ground graphs
+across independently prepared inputs. The builder clones a shared handle, so
+the original resource variable need not outlive the session. Unused handles are
+released; prepared executors retain the context they require.
+
+Resource ownership does not choose an execution policy. CPU paths ignore a
+supplied context. Automatic formula execution retains its CPU policy; automatic
+relational execution considers the context at its existing delayed attempt and
+can retain or resume CPU execution under the existing fallback policy. A forced
+backend or vendor request checks the supplied adapter and refuses a mismatch;
+it does not discover a replacement device.
+
+Operations sharing a context are serialized through nonblocking leases. A busy
+context refuses the overlapping operation; no hidden queue is created. Device
+invalidation affects its other clients, while input and observer refusals do
+not invalidate it. Sessions retain separate work budgets and semantic evidence.
+Per-primitive allocation limits do not impose a combined context or process
+memory ceiling. See the [ownership contract](../architecture/ownership.md#device-resource-scope).
 
 `AnswerSet::subject()` retains the checked `Program` or `Theory`.
 `Subject::same_instance` distinguishes shared owners from independently admitted but
