@@ -1,4 +1,5 @@
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::builder::{PossibleValue, PossibleValuesParser, TypedValueParser};
+use clap::{Parser, Subcommand};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
@@ -39,24 +40,24 @@ pub struct Options {
     ///
     /// Explicit GPU requests fail if unavailable; auto may
     /// fall back to CPU with a reason on stderr. GPU support is enabled by default.
-    #[arg(long, value_enum, default_value_t)]
+    #[arg(long, value_parser = backend_parser(), default_value = "auto")]
     pub backend: Backend,
     /// Grounding mode, independent of execution backend.
     ///
     /// Lazy uses source joins for the relational profile on CPU or GPU,
     /// including automatic hardware selection. General formulas require eager grounding, bounded by atom,
     /// substitution and ground-rule ceilings.
-    #[arg(long, value_enum, default_value_t)]
+    #[arg(long, value_parser = grounder_parser(), default_value = "auto")]
     pub grounder: Grounder,
     /// Advanced relational CPU source batching. Union/worlds require lazy or
     /// auto grounding and select CPU when backend is auto. A stopped shared
     /// batch publishes no candidate checks; independent remains the default.
-    #[arg(long, value_enum, default_value_t, hide_short_help = true)]
+    #[arg(long, value_parser = source_batching_parser(), default_value = "independent", hide_short_help = true)]
     pub source_batching: SourceBatching,
     /// Advanced oracle selection. Auto preserves stable-model semantics while
     /// selecting an applicable reduct procedure. Explicit hardware and grounder
     /// requests are always honored or refused.
-    #[arg(long, value_enum, default_value_t, hide_short_help = true)]
+    #[arg(long, value_parser = oracle_parser(), default_value = "auto", hide_short_help = true)]
     pub oracle: Oracle,
     /// Print grounding, solving and execution statistics on stderr.
     ///
@@ -237,80 +238,82 @@ impl From<&Options> for crate::SolveConfig {
     }
 }
 
-impl ValueEnum for Backend {
-    fn value_variants<'a>() -> &'a [Self] {
-        &[
-            Self::Auto,
-            Self::Cpu,
-            Self::Gpu,
-            Self::Metal,
-            Self::Vulkan,
-            Self::Dx12,
-            Self::Gl,
-            Self::Nvidia,
-        ]
-    }
-
-    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
-        Some(match self {
-            Self::Auto => clap::builder::PossibleValue::new("auto").help("CPU formula search; closure may use GPU batches of 32 or more after its first seed."),
-            Self::Cpu => clap::builder::PossibleValue::new("cpu").help("Source joins or static closure scans on an owned Rayon pool."),
-            Self::Gpu => clap::builder::PossibleValue::new("gpu").help("Exact integer GPU batches, including explicit lazy relational execution."),
-            Self::Metal => clap::builder::PossibleValue::new("metal").help("Require a physical GPU using Metal."),
-            Self::Vulkan => clap::builder::PossibleValue::new("vulkan").help("Require a physical GPU using Vulkan."),
-            Self::Dx12 => clap::builder::PossibleValue::new("dx12").help("Require a physical GPU using DirectX 12."),
-            Self::Gl => clap::builder::PossibleValue::new("gl").help("Require a physical GPU using OpenGL or OpenGL ES."),
-            Self::Nvidia => clap::builder::PossibleValue::new("nvidia").help("Require an NVIDIA GPU through a compiled graphics API; this is not CUDA."),
-        })
-    }
+// The CLI owns each spelling/help mapping, while the parsed values remain the
+// library's policies. Clap validates against the same table before mapping, so
+// every accepted value has a typed entry. Case-insensitive lookup is safe here:
+// PossibleValuesParser already enforces the argument's case-sensitivity policy.
+fn policy_parser<T: Clone + Send + Sync + 'static, const N: usize>(
+    choices: [(T, PossibleValue); N],
+) -> impl TypedValueParser<Value = T> {
+    PossibleValuesParser::new(choices.iter().map(|(_, value)| value.clone())).map(move |value| {
+        choices
+            .iter()
+            .find(|(_, possible)| possible.matches(&value, true))
+            .expect("clap validated this value against the same choice table")
+            .0
+            .clone()
+    })
 }
 
-impl ValueEnum for Grounder {
-    fn value_variants<'a>() -> &'a [Self] {
-        &[Self::Auto, Self::Lazy, Self::Eager]
-    }
-
-    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
-        Some(match self {
-            Self::Auto => clap::builder::PossibleValue::new("auto").help("Prefer lazy source grounding where admitted, independently of hardware."),
-            Self::Lazy => clap::builder::PossibleValue::new("lazy").help("Require source joins without materializing a complete ground rule store. Explicit GPU requests use immutable relational rounds; Auto may discover a device after the first seed."),
-            Self::Eager => clap::builder::PossibleValue::new("eager").help("Materialize a bounded static program before checking on CPU or GPU."),
-        })
-    }
+fn backend_parser() -> impl TypedValueParser<Value = Backend> {
+    policy_parser([
+        (Backend::Auto, PossibleValue::new("auto").help("CPU formula search; closure may use GPU batches of 32 or more after its first seed.")),
+        (Backend::Cpu, PossibleValue::new("cpu").help("Source joins or static closure scans on an owned Rayon pool.")),
+        (Backend::Gpu, PossibleValue::new("gpu").help("Exact integer GPU batches, including explicit lazy relational execution.")),
+        (Backend::Metal, PossibleValue::new("metal").help("Require a physical GPU using Metal.")),
+        (Backend::Vulkan, PossibleValue::new("vulkan").help("Require a physical GPU using Vulkan.")),
+        (Backend::Dx12, PossibleValue::new("dx12").help("Require a physical GPU using DirectX 12.")),
+        (Backend::Gl, PossibleValue::new("gl").help("Require a physical GPU using OpenGL or OpenGL ES.")),
+        (Backend::Nvidia, PossibleValue::new("nvidia").help("Require an NVIDIA GPU through a compiled graphics API; this is not CUDA.")),
+    ])
 }
 
-impl ValueEnum for SourceBatching {
-    fn value_variants<'a>() -> &'a [Self] {
-        &[Self::Independent, Self::Union, Self::Worlds]
-    }
+fn grounder_parser() -> impl TypedValueParser<Value = Grounder> {
+    policy_parser([
+        (Grounder::Auto, PossibleValue::new("auto").help("Prefer lazy source grounding where admitted, independently of hardware.")),
+        (Grounder::Lazy, PossibleValue::new("lazy").help("Require source joins without materializing a complete ground rule store. Explicit GPU requests use immutable relational rounds; Auto may discover a device after the first seed.")),
+        (Grounder::Eager, PossibleValue::new("eager").help("Materialize a bounded static program before checking on CPU or GPU.")),
+    ])
+}
 
-    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
-        Some(match self {
-            Self::Independent => clap::builder::PossibleValue::new("independent")
+fn source_batching_parser() -> impl TypedValueParser<Value = SourceBatching> {
+    policy_parser([
+        (
+            SourceBatching::Independent,
+            PossibleValue::new("independent")
                 .help("Each candidate owns an independent relational join traversal."),
-            Self::Union => clap::builder::PossibleValue::new("union")
+        ),
+        (
+            SourceBatching::Union,
+            PossibleValue::new("union")
                 .help("Share the union carrier; evaluate each frozen candidate on Rayon."),
-            Self::Worlds => clap::builder::PossibleValue::new("worlds")
+        ),
+        (
+            SourceBatching::Worlds,
+            PossibleValue::new("worlds")
                 .help("Prune source prefixes with per-world membership; evaluate on Rayon."),
-        })
-    }
+        ),
+    ])
 }
 
-impl ValueEnum for Oracle {
-    fn value_variants<'a>() -> &'a [Self] {
-        &[Self::Auto, Self::Closure, Self::Countermodel]
-    }
-
-    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
-        Some(match self {
-            Self::Auto => clap::builder::PossibleValue::new("auto")
+fn oracle_parser() -> impl TypedValueParser<Value = Oracle> {
+    policy_parser([
+        (
+            Oracle::Auto,
+            PossibleValue::new("auto")
                 .help("Select reduct closure, checked tight support, or general reduct checking."),
-            Self::Closure => clap::builder::PossibleValue::new("closure").help(
+        ),
+        (
+            Oracle::Closure,
+            PossibleValue::new("closure").help(
                 "Require reduct closure with sparse gate candidates on CPU or static GPU batches.",
             ),
-            Self::Countermodel => clap::builder::PossibleValue::new("countermodel").help(
+        ),
+        (
+            Oracle::Countermodel,
+            PossibleValue::new("countermodel").help(
                 "Require eager Ferraris search: CPU, or GPU propagation with exact CPU residuals.",
             ),
-        })
-    }
+        ),
+    ])
 }
