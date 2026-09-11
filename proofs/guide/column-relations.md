@@ -44,6 +44,37 @@ upstream posting or grounder supplied every required row.
    in-range row positions. Equal dimensions or equal tuple values do not provide
    the owner premise. Owner tokens denote fixed snapshots throughout the model.
 
+## Preserve a source posting
+
+`source_posting_exact` relates a single equality lookup in the encoded view to
+filtering the original typed rows at the same argument position. Exact cell
+encoding first reconstructs the source table. `accepts_exact` then reduces the
+one-element conjunction to that original argument equality. Both paths filter
+the same row sequence, so their entire posting lists are equal.
+
+This is stronger than retaining every successful full match: it keeps every row
+presented to the matcher, including eventual rejections. Equal posting lists
+also have equal lengths. A fixed shortest-posting chooser therefore receives
+the same alternatives in the same order. Its eligibility, tie handling and
+source-to-local position mapping remain implementation obligations. Replacing
+one posting by an intersection could skip additional matcher visits; this law
+does not authorize that change or establish its error behavior.
+
+## Decode an ordered mask
+
+`RowMask` supplies one Boolean for each finite row position. `decodeRows` scans
+those positions in canonical increasing order and retains the true bits.
+`row_mask_roundtrip` assumes that these bits describe exactly an increasing
+selection. The decoded and original lists have the same members and no repeated
+positions, hence are permutations. Since both increase, they are equal.
+
+The strict-order premise matters. A bit cannot record two copies of one
+position. Equal source tuples at different positions are separate occurrences
+and retain separate bits. Empty relations and empty selections use the same
+law. It proves nothing about full relation coverage unless the selected
+positions already have that coverage. Matching dimensions or valid mask shape
+do not establish the exact-bit or snapshot-owner premise.
+
 The tuples `(a, 1)` and `(b, 2)` illustrate why correlation matters. The query
 requiring first argument `a` and second argument `2` has no row. Separate column
 membership tests would find both values; selection at a shared row finds none.
@@ -58,9 +89,10 @@ or resource-limited prefixes. Those obligations remain with the matcher and
 its execution boundary. In particular, skipping a row cannot silently suppress
 an otherwise required source arithmetic diagnostic.
 
-Dictionary construction, checked integer packing, Rust borrowing, snapshot
-lifetime, GPU masks and ordered mask reconstruction need their own correspondence
-arguments. Local row positions do not establish external atom-catalog IDs;
+Dictionary construction, checked integer packing, Rust borrowing and snapshot
+lifetime need their own correspondence arguments. Machine mask production and
+decoding must establish the abstract row-mask contract, including complete word
+coverage and valid tail bits. Local row positions do not establish external atom-catalog IDs;
 source/catalog mapping and any initial increasing-row invariant are separate
 runtime obligations. Possible-support membership and current-world truth remain
 different subjects. None of these representation laws alone proves complete

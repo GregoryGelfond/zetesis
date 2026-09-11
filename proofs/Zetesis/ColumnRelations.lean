@@ -14,9 +14,11 @@ matcher may impose additional conditions; filtering preserves its complete row
 sequence only when every full match satisfies the selected equalities. A scoped
 selection can be applied only to its own immutable snapshot.
 
-These are representation contracts over finite functions and lists. They do not
-establish Rust dictionary construction, ownership/lifetimes, checked ID packing,
-GPU mask reconstruction, allocation bounds or grounding coverage. The matcher
+The source-posting law preserves one complete equality posting. Abstract row
+masks decode to their exact increasing selection. These are representation
+contracts over finite functions and lists. They do not establish Rust dictionary
+construction, ownership/lifetimes, checked ID packing, GPU word operations,
+allocation bounds or grounding coverage. The matcher
 is a total Boolean predicate here; source errors and resource-limited prefixes
 require separate preservation. Snapshot
 identifiers denote fixed relations in this model, not reusable memory addresses.
@@ -190,6 +192,68 @@ theorem full_matches_preserved (dictionary : Dictionary Value) {rows arity : Nat
     have selected := (accepts_exact dictionary columns equalities row).mpr
       (required row inside accepted)
     simp [selected]
+
+/-- A single column equality returns the same ordered posting as comparison
+against the original typed rows. Exact cell encoding connects the two views;
+the dictionary lookup changes no row occurrence or order.
+
+This is the replacement obligation for an existing posting lookup. Equality of
+each posting preserves its length and any fixed chooser over those postings.
+It does not justify replacing one posting by an intersection of several. -/
+theorem source_posting_exact [DecidableEq Value] (dictionary : Dictionary Value)
+    {rows arity : Nat} (original : Fin rows → Fin arity → Value)
+    (columns : Columns dictionary rows arity)
+    (encoded : ∀ row column,
+      dictionary.encode (original row column) = some (columns column row))
+    (column : Fin arity) (value : Value) (input : List (Fin rows)) :
+    select dictionary columns [(column, value)] input =
+      input.filter (fun row => decide (original row column = value)) := by
+  have reconstructed : reconstruct dictionary columns = original :=
+    reconstruction_exact dictionary original columns encoded
+  apply List.filter_congr
+  intro row _inside
+  apply Bool.eq_iff_iff.mpr
+  rw [accepts_exact]
+  simp only [Holds, List.mem_singleton, forall_eq,
+    decide_eq_true_eq, reconstructed]
+
+/-- One membership bit per original row occurrence, before machine word packing.
+Equal tuples at different row positions still have different bits. -/
+abbrev RowMask (rows : Nat) := Fin rows → Bool
+
+/-- Decode membership in increasing original row order. The finite row domain
+excludes out-of-range positions; machine word count and tail bits are separate
+runtime obligations. -/
+def decodeRows {rows : Nat} (mask : RowMask rows) : List (Fin rows) :=
+  (List.finRange rows).filter mask
+
+/-- A mask with exactly the memberships of an increasing row selection decodes
+to that same selection, including order. Strict order rules out repeated copies
+of one row position; it does not rule out equal tuples at distinct positions.
+
+Both lists have the same members and no duplicate positions, so they are
+permutations. Their increasing order then establishes equality. The exact-bit
+premise is not supplied by mask shape, equal dimensions or a foreign owner. -/
+theorem row_mask_roundtrip {rows : Nat} (positions : List (Fin rows))
+    (ordered : positions.Pairwise (fun left right => left.val < right.val))
+    (mask : RowMask rows)
+    (membership : ∀ row, mask row = true ↔ row ∈ positions) :
+    decodeRows mask = positions := by
+  have decodedOrder : (decodeRows mask).Pairwise
+      (fun left right => left.val < right.val) :=
+    (List.pairwise_lt_finRange rows).filter mask
+  have decodedUnique : (decodeRows mask).Nodup :=
+    decodedOrder.imp (fun less => Fin.ne_of_lt less)
+  have originalUnique : positions.Nodup :=
+    ordered.imp (fun less => Fin.ne_of_lt less)
+  have sameMembers : ∀ row, row ∈ decodeRows mask ↔ row ∈ positions := by
+    intro row
+    simp only [decodeRows, List.mem_filter, List.mem_finRange, true_and, membership]
+  have sameOccurrences : (decodeRows mask).Perm positions :=
+    (List.perm_ext_iff_of_nodup decodedUnique originalUnique).mpr sameMembers
+  exact List.Perm.eq_of_pairwise
+    (fun _ _ _ _ forward backward => False.elim (Nat.lt_asymm forward backward))
+    decodedOrder ordered sameOccurrences
 
 /-- External row positions carry the identity of one immutable relation snapshot.
 The owner is not inferred from arity, row count or lifetime overlap. -/

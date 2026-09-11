@@ -16,7 +16,12 @@ silently stand for all of them.
 [`ColumnRelations`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ColumnRelations.lean)
 relates complete typed tuples to aligned equality-ID columns. Dictionary round
 trips and exact cell encoding imply reconstruction; equality selection returns
-exactly the satisfying subsequence in original order. `full_matches_preserved` assumes a total Boolean
+exactly the satisfying subsequence in original order. `source_posting_exact`
+preserves the complete ordered posting for one source equality, so a fixed
+shortest-posting chooser can retain its original matcher visits.
+`row_mask_roundtrip` decodes exact membership bits to the same increasing row
+selection; it assumes unique positions and the correct row domain.
+`full_matches_preserved` assumes a total Boolean
 matcher and that every complete match satisfies the prefilter. The Rust
 [`relation` module](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/relation.rs)
 provides checked owner-bound views. Construction, catalog mapping, resource
