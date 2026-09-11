@@ -4,12 +4,13 @@ use std::cmp::Ordering;
 
 use themelios_base::span::Location;
 use themelios_program::symbol::{Name, Sign};
+use themelios_program::term::UnaryOp;
 use zetesis_core::Atom;
 
 use super::{
     Condition, ConstructionLimits, Control, DefaultNegation, Directive, Error, ErrorKind,
-    Evaluation, Limits, Model, ObservationProgram, Operand, Pattern, Relation, Resource,
-    Statistics, Symbol, Template, Value,
+    Evaluation, EvaluationError, Limits, Model, ObservationProgram, Operand, Pattern, Relation,
+    Resource, Statistics, Symbol, Template, Value,
 };
 
 pub(super) struct Work<'a> {
@@ -56,6 +57,59 @@ impl Work<'_> {
     fn compare(&mut self, left: &Value, right: &Value) -> Result<Ordering, Error> {
         self.step(value_work(left) + value_work(right))?;
         Ok(left.compare_terms(right))
+    }
+    fn numeric(&mut self, term: &Template, binding: &[Option<&Value>]) -> Result<i32, Error> {
+        self.step(1)?;
+        let result = match term {
+            Template::Value(Symbol::Number(value)) => Ok(*value),
+            Template::Variable(slot) => match binding[*slot] {
+                Some(Value::Number(value)) => Ok(*value),
+                _ => Err(EvaluationError::Undefined),
+            },
+            Template::Unary(operator, argument) => {
+                let value = self.numeric(argument, binding)?;
+                crate::scalar_arithmetic::unary(*operator, value)
+            }
+            Template::Binary(operator, left, right) => {
+                let left = self.numeric(left, binding)?;
+                let right = self.numeric(right, binding)?;
+                crate::scalar_arithmetic::binary(*operator, left, right)
+            }
+            Template::Absolute(argument) => {
+                let value = self.numeric(argument, binding)?;
+                crate::scalar_arithmetic::absolute(value)
+            }
+            _ => Err(EvaluationError::Undefined),
+        };
+        result.map_err(|cause| self.error(ErrorKind::Evaluation(cause)))
+    }
+    fn construction_check(&self, metric: Metric) -> Result<(), Error> {
+        let construction = 2 * metric.nodes as u128 * std::mem::size_of::<Symbol>() as u128
+            + 2 * metric.bytes as u128;
+        self.check(
+            Resource::ConstructionBytes,
+            construction,
+            self.construction.max_bytes as u128,
+        )
+    }
+    fn compare_templates(
+        &mut self,
+        left: &Template,
+        right: &Template,
+        binding: &[Option<&Value>],
+    ) -> Result<Ordering, Error> {
+        let mut left_metric = Metric::default();
+        let mut right_metric = Metric::default();
+        self.measure(left, binding, 1, &mut left_metric)?;
+        self.measure(right, binding, 1, &mut right_metric)?;
+        self.construction_check(Metric {
+            nodes: left_metric.nodes + right_metric.nodes,
+            bytes: left_metric.bytes + right_metric.bytes,
+        })?;
+        let left = self.construct(left, binding)?;
+        let right = self.construct(right, binding)?;
+        self.step(left_metric.payload() + right_metric.payload())?;
+        Ok(left.cmp(&right))
     }
     fn symbol_check(
         &mut self,
@@ -142,6 +196,18 @@ impl Work<'_> {
                 metric.nodes += count;
                 self.payload(scalar_bytes(value), metric)?;
             }
+            Template::Unary(UnaryOp::Negate, argument) => {
+                self.measure(argument, binding, depth, metric)?;
+            }
+            Template::Unary(_, _) | Template::Binary(_, _, _) | Template::Absolute(_) => {
+                self.numeric(term, binding)?;
+                self.check(
+                    Resource::Nodes,
+                    metric.nodes as u128 + 1,
+                    self.limits.max_symbol_nodes as u128,
+                )?;
+                metric.nodes += 1;
+            }
             Template::Function(_, _, arguments) | Template::Tuple(arguments) => {
                 self.check(
                     Resource::Nodes,
@@ -202,6 +268,26 @@ impl Work<'_> {
             Template::Value(symbol) => self.copy_symbol(symbol)?,
             Template::Variable(slot) => scalar(binding[*slot].expect("safe observation variable"))
                 .map_err(|kind| self.error(kind))?,
+            Template::Unary(UnaryOp::Negate, argument) => {
+                let mut value = self.construct(argument, binding)?;
+                match &mut value {
+                    Symbol::Number(number) => {
+                        *number = crate::scalar_arithmetic::unary(UnaryOp::Negate, *number)
+                            .map_err(|cause| self.error(ErrorKind::Evaluation(cause)))?;
+                    }
+                    Symbol::Function { sign, .. } => {
+                        *sign = match sign {
+                            Sign::Positive => Sign::Negative,
+                            Sign::Negative => Sign::Positive,
+                        };
+                    }
+                    _ => return Err(self.error(ErrorKind::Evaluation(EvaluationError::Undefined))),
+                }
+                value
+            }
+            Template::Unary(_, _) | Template::Binary(_, _, _) | Template::Absolute(_) => {
+                Symbol::Number(self.numeric(term, binding)?)
+            }
             Template::Function(_, _, arguments) | Template::Tuple(arguments) => {
                 let mut values = self.reserve(arguments.len())?;
                 for argument in arguments {
@@ -330,23 +416,30 @@ fn conditions<'a>(
                     return Ok(false);
                 }
             }
-            Condition::Compare(left, relation, right) => {
-                let order = work.compare(
-                    resolve(left, binding).expect("safe comparison"),
-                    resolve(right, binding).expect("safe comparison"),
-                )?;
-                let truth = match relation {
-                    Relation::Lt => order.is_lt(),
-                    Relation::Le => !order.is_gt(),
-                    Relation::Gt => order.is_gt(),
-                    Relation::Ge => !order.is_lt(),
-                    Relation::Eq => order.is_eq(),
-                    Relation::Neq => !order.is_eq(),
-                };
-                if !truth {
+            Condition::Compare(negation, first, steps) => {
+                let mut left = first;
+                let mut truth = true;
+                for (relation, right) in steps {
+                    let order = work.compare_templates(left, right, binding)?;
+                    truth = match relation {
+                        Relation::Lt => order.is_lt(),
+                        Relation::Le => !order.is_gt(),
+                        Relation::Gt => order.is_gt(),
+                        Relation::Ge => !order.is_lt(),
+                        Relation::Eq => order.is_eq(),
+                        Relation::Neq => !order.is_eq(),
+                    };
+                    if !truth {
+                        break;
+                    }
+                    left = right;
+                }
+                if truth == (*negation == DefaultNegation::Not) {
                     return Ok(false);
                 }
             }
+            Condition::Boolean(false) => return Ok(false),
+            Condition::Boolean(true) => {}
         }
     }
     Ok(true)
@@ -405,18 +498,7 @@ fn emit<'a>(
     if conditions(directive, atoms, binding, work)? {
         let mut metric = Metric::default();
         work.measure(&directive.term, binding, 1, &mut metric)?;
-        // Symbol reconstruction reserves at most N stack cells while retaining
-        // at most N output cells. This logical storage bound does not charge
-        // unrelated capacity or cached spelling of the borrowed input value.
-        // Canonical Name::new validation temporarily copies name text into a
-        // Source; the second text allowance covers that live validation scratch.
-        let construction = 2 * metric.nodes as u128 * std::mem::size_of::<Symbol>() as u128
-            + 2 * metric.bytes as u128;
-        work.check(
-            Resource::ConstructionBytes,
-            construction,
-            work.construction.max_bytes as u128,
-        )?;
+        work.construction_check(metric)?;
         let term = work.construct(&directive.term, binding)?;
         insert(term, metric, result, bytes, work)?;
     }

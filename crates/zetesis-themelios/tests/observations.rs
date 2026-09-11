@@ -181,7 +181,7 @@ fn admitted_sources_match_complete_recorded_display_and_cost_multisets() {
         records += expected.len();
         admitted += 1;
     }
-    assert_eq!((admitted, records), (43, 59));
+    assert_eq!((admitted, records), (48, 64));
 }
 #[test]
 fn every_outside_profile_source_has_an_explicit_typed_refusal() {
@@ -190,6 +190,22 @@ fn every_outside_profile_source_has_an_explicit_typed_refusal() {
         .into_iter()
         .filter(|case| !case["expected_refusal"].is_null())
     {
+        if case["expected_refusal"] == "Undefined" {
+            let input = admit(case["source"].as_str().unwrap()).unwrap();
+            let model = Model::new(input.atoms().iter().cloned());
+            let error = input
+                .metadata()
+                .observations()
+                .evaluate(&model, Limits::default(), &Control::default())
+                .unwrap_err();
+            assert_eq!(
+                error.kind(),
+                &ErrorKind::Evaluation(zetesis_themelios::observation::EvaluationError::Undefined)
+            );
+            assert!(error.location().is_some());
+            refused += 1;
+            continue;
+        }
         let Err(error) = admit(case["source"].as_str().unwrap()) else {
             panic!("{} unexpectedly admitted", case["name"]);
         };
@@ -227,7 +243,7 @@ fn every_outside_profile_source_has_an_explicit_typed_refusal() {
         }
         refused += 1;
     }
-    assert_eq!(refused, 20);
+    assert_eq!(refused, 15);
 }
 #[test]
 fn metadata_preserves_the_original_formula_and_source_identity() {

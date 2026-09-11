@@ -18,6 +18,9 @@ use themelios_base::span::Location;
 use themelios_program::program::{DefaultNegation, Relation};
 /// Shared logical symbol vocabulary, nameable without another pinned dependency.
 pub use themelios_program::symbol::{Name, Sign as SymbolSign, Symbol};
+/// Checked arithmetic causes from the pinned shared value vocabulary.
+pub use themelios_program::term::EvalError as EvaluationError;
+use themelios_program::term::{BinaryOp, UnaryOp};
 use zetesis_core::{Model, Predicate, Value};
 use zetesis_cpu::{Control, Stop};
 
@@ -91,7 +94,7 @@ impl Default for Limits {
     }
 }
 
-/// Independent storage preflight for constructing one observation symbol.
+/// Independent storage preflight for simultaneously constructing observation symbols.
 /// Existing evaluation/rendering methods use the default; explicit variants allow
 /// callers to set this ceiling independently of logical text/output limits.
 #[derive(Clone, Copy, Debug)]
@@ -102,6 +105,7 @@ pub struct ConstructionLimits {
     /// stack. The extra text allowance covers the canonical name validator's
     /// temporary Source text copy. The same conservative formula applies to all
     /// symbols and is checked before construction, including duplicate terms.
+    /// Comparison operands share this ceiling while both are live.
     /// Borrowed input capacity/cached spelling, allocator overhead, reference-count
     /// headers and join/result-container bookkeeping are excluded. Logical output
     /// and node limits separately bound retained results. This is not an RSS cap.
@@ -149,15 +153,15 @@ pub enum Resource {
 /// A source form outside this observation slice.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Feature {
-    /// General arithmetic, intervals, pools or external calls.
+    /// Intervals, pools or external calls.
     Term,
     /// Anonymous variables cannot occur in the output term.
     AnonymousOutput,
-    /// Aggregate, conditional, or Boolean body literal.
+    /// Aggregate or conditional body literal.
     Body,
     /// Pooled predicate arguments.
     Atom,
-    /// Chained, negated, or non-scalar comparisons.
+    /// A comparison form without a finite checked interpretation.
     Comparison,
     /// A named variable lacks an ordinary positive binding, or an anonymous
     /// variable occurs under default negation of a signed predicate.
@@ -169,6 +173,8 @@ pub enum Feature {
 pub enum ErrorKind {
     /// A source construct is unsupported.
     Unsupported(Feature),
+    /// A ground expression is undefined or exceeds the pinned integer range.
+    Evaluation(EvaluationError),
     /// An inclusive ceiling would be exceeded.
     Limit {
         /// Resource being counted.
@@ -232,6 +238,9 @@ enum Template {
     Variable(usize),
     Function(themelios_program::symbol::Sign, Name, Vec<Self>),
     Tuple(Vec<Self>),
+    Unary(UnaryOp, Box<Self>),
+    Binary(BinaryOp, Box<Self>, Box<Self>),
+    Absolute(Box<Self>),
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Operand {
@@ -247,7 +256,8 @@ struct Pattern {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Condition {
     Atom(DefaultNegation, Pattern),
-    Compare(Operand, Relation, Operand),
+    Compare(DefaultNegation, Template, Vec<(Relation, Template)>),
+    Boolean(bool),
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Directive {

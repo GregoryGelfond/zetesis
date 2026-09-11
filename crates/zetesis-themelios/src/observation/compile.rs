@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use themelios_base::span::Location;
 use themelios_program::program::{Arguments, BodyElement, LiteralInner, Program, Show, Statement};
 use themelios_program::symbol::{Name, Sign, Symbol};
-use themelios_program::term::{Term, UnaryOp, Variable};
+use themelios_program::term::{Term, Variable};
 
 use super::{
     AdmissionLimits, Condition, DefaultNegation, Directive, Error, ErrorKind, Feature,
@@ -144,27 +144,21 @@ impl Compiler<'_> {
             Term::Function { name, arguments } => {
                 self.function(name, arguments, depth, Sign::Positive)?
             }
-            Term::UnaryOperation {
-                operator: UnaryOp::Negate,
-                argument,
-            } => match argument.as_ref() {
-                Term::Function { name, arguments } => {
-                    self.node(depth + 1)?;
-                    self.function(name, arguments, depth + 1, Sign::Negative)?
-                }
-                Term::Symbolic(symbol) => {
-                    let mut value = self.symbol(symbol, depth + 1, true)?;
-                    let Symbol::Function { sign, .. } = &mut value else {
-                        return Err(self.unsupported(Feature::Term));
-                    };
-                    *sign = match sign {
-                        Sign::Positive => Sign::Negative,
-                        Sign::Negative => Sign::Positive,
-                    };
-                    Template::Value(value)
-                }
-                _ => return Err(self.unsupported(Feature::Term)),
-            },
+            Term::UnaryOperation { operator, argument } => {
+                Template::Unary(*operator, Box::new(self.template(argument, depth + 1)?))
+            }
+            Term::BinaryOperation {
+                operator,
+                left,
+                right,
+            } => Template::Binary(
+                *operator,
+                Box::new(self.template(left, depth + 1)?),
+                Box::new(self.template(right, depth + 1)?),
+            ),
+            Term::Absolute(argument) => {
+                Template::Absolute(Box::new(self.template(argument, depth + 1)?))
+            }
             Term::Tuple(arguments) => {
                 self.arity(arguments.len())?;
                 let mut terms = Vec::new();
@@ -271,22 +265,19 @@ impl Compiler<'_> {
                         }
                     }
                     LiteralInner::Comparison(comparison) => {
-                        if literal.negation != DefaultNegation::None {
-                            return Err(self.unsupported(Feature::Comparison));
+                        let first = self.template(comparison.get().first(), 1)?;
+                        let mut steps = Vec::new();
+                        for (relation, right) in comparison.get().steps() {
+                            steps.push((relation, self.template(right, 1)?));
                         }
-                        let mut steps = comparison.get().steps();
-                        let (relation, right) =
-                            steps.next().expect("shared comparison has a guard");
-                        if steps.next().is_some() {
-                            return Err(self.unsupported(Feature::Comparison));
-                        }
-                        conditions.push(Condition::Compare(
-                            self.operand(comparison.get().first(), false)?,
-                            relation,
-                            self.operand(right, false)?,
+                        conditions.push(Condition::Compare(literal.negation, first, steps));
+                    }
+                    LiteralInner::True | LiteralInner::False => {
+                        let truth = matches!(literal.inner, LiteralInner::True);
+                        conditions.push(Condition::Boolean(
+                            truth != (literal.negation == DefaultNegation::Not),
                         ));
                     }
-                    _ => return Err(self.unsupported(Feature::Body)),
                 }
             }
         }
