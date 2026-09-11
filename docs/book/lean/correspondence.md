@@ -262,7 +262,7 @@ error prefix or an unfinished display.
 
 `Observations.shared_equality_choice_exact` states the finite two-edge equality
 law with one middle value and an arbitrary surrounding guard. The Rust planner
-retains each original comparison while sharing that value through a fresh slot.
+retains each original comparison while sharing that value through a bound value slot.
 Structural capture reads the complete retained value and its typed components;
 aggregate capture reads the actual supplied-model extremum. Source scheduling,
 matching, widened numeric comparisons, copied-value charges and cleanup remain
