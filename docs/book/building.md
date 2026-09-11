@@ -32,13 +32,13 @@ sibling rustdoc tree. Source links lead to the maintained repository paths.
 
 ## Check the Rust examples
 
-The session, source-preparation, objective-selection and reduct examples are
+The session, source-preparation, objective-selection, reduct and derived-workload examples are
 included from Rust files under `docs/book/examples`; the code displayed in the
 chapters is the code tested by mdBook. Build their dependencies without requiring
 a physical GPU, then run:
 
 ```sh
-cargo build --locked -p zetesis-cli --lib --no-default-features --target-dir target/book-tests
+cargo build --locked -p zetesis-cli -p zetesis-validation --lib --no-default-features --target-dir target/book-tests
 mdbook test --library-path target/book-tests/debug/deps
 ```
 
@@ -47,8 +47,11 @@ keeps Cargo check/rustdoc metadata and other feature configurations from making
 mdBook's crate lookup ambiguous. The ordinary application and API documentation
 can continue using `target`.
 
-Each example checks a semantic result and propagates typed failures. No GPU
+The examples check their stated contracts and propagate typed failures. No GPU
 support or performance claim follows from these portable example tests.
+The derived-workload acquisition block uses `no_run`: mdBook checks its types
+without launching solvers. Its Cargo example test separately checks N=4 source
+derivation and identity against the admitted corpus, with no child processes.
 The same files are registered as Cargo examples, so workspace formatting and
 all-target Clippy checks apply to them. The authored-lint inventory includes
 `docs/book/examples` as a maintained source root.

@@ -32,3 +32,8 @@ workspace = true
 [[bin]]
 name = "zetesis-validate"
 path = "src/main.rs"
+
+[[example]]
+name = "book-workload"
+path = "../../docs/book/examples/workload.rs"
+test = true

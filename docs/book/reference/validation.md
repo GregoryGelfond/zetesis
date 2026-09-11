@@ -153,6 +153,50 @@ fixture can establish semantic agreement while being too small to demonstrate
 useful parallel speedup. Conversely, a shorter run is not an improvement if it
 searched fewer candidates, omitted optimum ties or stopped early.
 
+### Compare a parameterized workload
+
+Use `performance::matrix::run_workloads` to compare a changed constant without
+editing the curated examples. The following library client derives N=4 from
+the first queens encoding's N=8 declaration. themelios-syntax locates the numeric
+token; the admitted include closure remains fixed. The resulting workload
+retains the original and derived source identities. Its complete clingo result
+is the comparison expectation, rather than the original N=8 model count.
+
+```rust,no_run
+{{#include ../examples/workload.rs:example}}
+```
+
+Build the client from the checkout root, then run it with explicit paths:
+
+```sh
+cargo build --locked -p zetesis-validation --example book-workload
+
+target/debug/examples/book-workload examples/kr-domains \
+  /absolute/path/to/zetesis /absolute/path/to/clingo \
+  target/queens-n4-comparison.json
+```
+
+Choose an unused report path in a directory you control; existing evidence is
+never replaced. The executable paths must be absolute. This example uses one
+native eager CPU profile and one clingo worker, with qualification followed by
+one timed pair and no warmups. Each child has a 30-second deadline and a 4-MiB
+combined output ceiling; the campaign has a 180-second scheduling deadline.
+These bounds may stop a larger workload. The report is saved before the client
+returns failure for any refused, incomplete or disagreeing cell.
+
+The manual only compiles this acquisition block. The registered Cargo example
+test checks N=4 source derivation and identity without launching solvers:
+
+```sh
+cargo test --locked -p zetesis-validation --example book-workload
+```
+
+This instrumented full-enumeration comparison includes JSON/statistics output
+and retains the native model records. It checks selected displays, multiplicities
+and costs against clingo; hidden clingo atoms are unavailable. It adds neither
+time-to-first-answer nor RSS observations. A single pair does not establish a
+performance trend.
+
 ### Performance evidence
 
 Storage contracts and elapsed time are separate results. Formula joins reuse
