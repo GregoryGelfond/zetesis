@@ -190,8 +190,23 @@ separately proves a three-valued truth cover: absent rows cannot contribute,
 required rows are true, and optional rows retain both possibilities. Optional
 does not assert that a row can be realized in an answer set. Complete source
 bindings and a sound activity classification are premises, not consequences of
-the truth algebra. The Rust DAG evaluator and source analysis still need their
-own refinement.
+the truth algebra. The source analysis still needs its own refinement.
+
+[`ObjectiveConditionTable`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ObjectiveConditionTable.lean)
+connects the finite node-table representation to those unfolded queries. Each
+operand names an earlier node. The invariant equates each stored Boolean with
+the original truth of its unfolded query. One node preserves that invariant;
+induction over the remaining nodes gives the complete table. Backward admission
+separately proves that all lookups succeed. The result is the last node, or true
+when the table is empty.
+
+For example, `atom a; neg 0; disj 0 1` shares the first node and computes the
+original truth of `a or not a`. This is a query-evaluation law, not permission to
+replace that formula inside the original program: a program transformation must
+also preserve frozen-reduct truth. The [proof reading](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/objective-condition-table.md)
+gives the named steps and explicit premises. Rust atom conversion, validation,
+indexing, allocation and work/cancellation behavior remain unproved executable
+correspondences.
 
 `ObjectivePriorities.zero_slot_comparison` and `zero_slot_optima` show that an
 always-zero slot at a fixed priority position preserves ordering and all optimum

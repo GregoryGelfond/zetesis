@@ -10,7 +10,8 @@ a frozen reduct to decide an objective contribution. Translating only these
 conditions preserves complete contribution keys, costs and every optimum tie.
 
 The Rust representation stores an acyclic node table rather than this unfolded
-syntax. Backward-reference admission, finite source binding and eligibility,
+syntax. ObjectiveConditionTable proves correspondence for a mathematical table
+with backward references. Rust admission/indexing, finite source binding and eligibility,
 priority presence, checked arithmetic, allocation and work completion remain
 separate implementation obligations. These laws neither erase a condition from
 the original theory nor supply a missing source-presence certificate.

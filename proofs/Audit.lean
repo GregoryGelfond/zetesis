@@ -1037,3 +1037,11 @@ import Zetesis
 #print axioms Zetesis.ObjectivePriorities.zero_slot_comparison
 #print axioms Zetesis.ObjectivePriorities.zero_slot_optima
 #print axioms Zetesis.ObjectiveEligibility.possible_support_covers
+#print axioms Zetesis.ObjectiveConditionTable.node_correspondence
+#print axioms Zetesis.ObjectiveConditionTable.rows_correspondence
+#print axioms Zetesis.ObjectiveConditionTable.backward_node_total
+#print axioms Zetesis.ObjectiveConditionTable.admitted_rows_total
+#print axioms Zetesis.ObjectiveConditionTable.unfolding_correspondence
+#print axioms Zetesis.ObjectiveConditionTable.admitted_correspondence
+#print axioms Zetesis.ObjectiveConditionTable.original_truth
+#print axioms Zetesis.ObjectiveConditionTable.model_identity
