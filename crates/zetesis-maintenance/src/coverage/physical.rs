@@ -28,7 +28,7 @@ pub fn selection(table: &str) -> Result<Vec<Group>, Error> {
         ("formula", "hardware_formula", 2),
         ("aggregate", "hardware_aggregate", 3),
         ("lazy", "hardware_lazy", 4),
-        ("cli-lazy", "lazy_gpu", 4),
+        ("cli-lazy", "lazy_gpu", 5),
         ("cli-formula", "formula_gpu", 2),
         ("world-views", "world_views_gpu", 2),
         ("aggregate-measurement", "aggregate_measurement", 1),
@@ -37,12 +37,12 @@ pub fn selection(table: &str) -> Result<Vec<Group>, Error> {
     ];
     require(
         table.trim() == include_str!("physical-selection.txt").trim(),
-        "physical coverage requires the reviewed 30 exact test identities",
+        "physical coverage requires the reviewed 31 exact test identities",
     )?;
     let rows: Vec<_> = table.lines().collect();
     require(
         rows.len() == EXPECTED.len(),
-        "physical coverage requires all eleven groups and 30 named tests",
+        "physical coverage requires all eleven groups and 31 named tests",
     )?;
     let mut groups = Vec::new();
     let mut all_names = BTreeSet::new();

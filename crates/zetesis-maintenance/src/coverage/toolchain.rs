@@ -107,7 +107,7 @@ pub fn metadata(request: Metadata<'_>) -> Result<Value, Error> {
         "workspace_execution":if physical {"portable+metal"} else {"portable"},
         "workspace_stages":if physical {vec!["portable","metal"]} else {vec!["portable"]},
         "physical_test_groups":groups,"physical_tests":tests,"expected_physical_tests":tests.len(),
-        "physical_scope":if physical {Some("30 exact Metal tests: native aggregate reduction and measurement, lazy transport and source closure, tight and formula oracles, ordinary lazy/formula CLI paths and complete-world-view collection, and bounded relation equality filtering and measurement. Unlisted tests and Vulkan are not selected.")} else {None}
+        "physical_scope":if physical {Some("31 exact Metal tests: native aggregate reduction and measurement, lazy transport and source closure, tight and formula oracles, ordinary lazy/formula CLI paths including automatic hardware selection, complete-world-view collection, and bounded relation equality filtering and measurement. Unlisted tests and Vulkan are not selected.")} else {None}
     }))
 }
 /// Read one executable identity with the maintenance file ceiling.

@@ -172,7 +172,7 @@ fn physical_metadata_keeps_floor_populations_separate() {
         record["floor_profiles"],
         serde_json::json!(["workspace", "cli-cpu"])
     );
-    assert_eq!(record["expected_physical_tests"], 30);
+    assert_eq!(record["expected_physical_tests"], 31);
     assert_eq!(record["physical_test_groups"].as_array().unwrap().len(), 11);
     assert_eq!(
         record["project_added_filename_filters"],
