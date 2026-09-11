@@ -7,7 +7,9 @@ use serde::Serialize;
 use super::super::{Error, Phase};
 use crate::selected::{Grounder, NativeExecution};
 
-/// Unmodified selections from the verified clean corpus.
+pub(super) const MAX_CASES: usize = 94;
+
+/// Base source selections from the verified clean corpus.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Suite {
@@ -70,7 +72,7 @@ impl Plan {
     pub fn profiles(&self) -> &[NativeExecution] {
         &self.profiles
     }
-    /// Selected unchanged corpus family.
+    /// Selected base family; explicit workloads must originate in this family.
     #[must_use]
     pub const fn suite(&self) -> Suite {
         self.suite
@@ -81,7 +83,7 @@ impl Plan {
     /// # Errors
     /// Refuses a case count outside the sealed corpus maximum.
     pub fn slots(&self, cases: usize) -> Result<Vec<Slot>, Error> {
-        if !(1..=94).contains(&cases) {
+        if !(1..=MAX_CASES).contains(&cases) {
             return Err(Error::Configuration("matrix cases must be 1..=94"));
         }
         let width = self.profiles.len() + 1;

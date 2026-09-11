@@ -38,7 +38,7 @@ pub fn verify_originals(
         files::digest(source.path(), &bytes, source.original_sha256())?;
         let original = String::from_utf8(bytes).map_err(Error::Utf8)?;
         let stripped = remove_annotations(&original, source.removed_annotations())?;
-        let cleaned = apply_edits(&stripped, source.edits(), limits.source_bytes)?;
+        let cleaned = derive_source(&stripped, source.edits(), limits.source_bytes)?;
         if cleaned != source.source() {
             return Err(Error::Contract(format!(
                 "recorded source derivation differs for {}",
@@ -82,7 +82,17 @@ pub fn verify_originals(
     Ok(())
 }
 
-fn apply_edits(source: &str, edits: &[Edit], limit: usize) -> Result<String, Error> {
+/// Apply exact ordered replacements without changing unselected source bytes.
+///
+/// Coordinates refer to the supplied UTF-8 source before any replacement.
+/// The caller bounds the supplied source and metadata allocations. The output
+/// content-byte ceiling is checked before reservation; it does not measure RSS.
+/// This operation proves byte derivation only, not semantic equivalence.
+///
+/// # Errors
+/// Refuses invalid, overlapping or mismatched spans, exceeded output bytes and
+/// allocation failure without returning a partial source.
+pub fn derive_source(source: &str, edits: &[Edit], limit: usize) -> Result<String, Error> {
     let mut previous_end = 0;
     let mut length = source.len() as u128;
     for edit in edits {

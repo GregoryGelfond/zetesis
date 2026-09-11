@@ -1,16 +1,21 @@
 //! Bounded sequential effects around fixed cells and pure answer contracts.
 use std::collections::BTreeSet;
 use std::ffi::OsString;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use super::super::{Capture, Error, Fault, Phase, capture};
-use super::{Decision, Plan, Producer, Report, Request, Sample, Slot, Suite, outcome, telemetry};
+use super::{
+    Decision, Plan, Producer, Report, Request, Sample, Slot, Suite, Workload, outcome, telemetry,
+};
 use crate::selected::{identity, publication};
 use crate::{answers, examples, process};
 use serde_json::Value;
 
-pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
+pub(super) fn campaign(
+    request: &Request<'_>,
+    workloads: Option<&[Workload]>,
+) -> Result<Report, Error> {
     if !cfg!(any(target_os = "linux", target_os = "macos")) {
         return Err(Error::Configuration(
             "bounded process capture requires Linux or macOS",
@@ -24,10 +29,15 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
     let started =
         capture::unix_ns().ok_or(Error::Configuration("UTC metadata precedes Unix epoch"))?;
     let corpus = examples::load(request.corpus, request.limits.corpus).map_err(Error::Corpus)?;
-    let cases = cases(&corpus, &request.plan)?;
+    let cases = prepare(&corpus, request, workloads)?;
     let sources: BTreeSet<_> = cases
         .iter()
-        .flat_map(|case| case.transitive_source_paths().iter().map(String::as_str))
+        .flat_map(|case| {
+            case.original
+                .transitive_source_paths()
+                .iter()
+                .map(String::as_str)
+        })
         .collect();
     let before = super::super::run::seals(
         &corpus,
@@ -41,13 +51,21 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
     let directory = tempfile::tempdir()
         .map_err(|e| super::super::io(Path::new("private matrix sources"), e))?;
     let mut report = Report {
-        schema: 1,
-        protocol: "instrumented_explicit_profile_matrix_v1",
+        schema: if workloads.is_some() { 2 } else { 1 },
+        protocol: if workloads.is_some() {
+            "instrumented_derived_workload_matrix_v2"
+        } else {
+            "instrumented_explicit_profile_matrix_v1"
+        },
         manifest_sha256: examples::MANIFEST_SHA256,
         plan: request.plan.clone(),
         limits: request.limits,
         native_normalization_limits: normalization_limits(request),
-        cases: cases.iter().map(|case| case.path().to_owned()).collect(),
+        cases: cases
+            .iter()
+            .map(|case| case.original.path().to_owned())
+            .collect(),
+        workloads: workloads.map(<[Workload]>::to_vec),
         started_unix_ns: started,
         finished_unix_ns: None,
         wall_scope: "fresh_process_spawn_capture_reap; native_json_and_stats_included; reference_json_included; comparison_hashing_excluded; no_cold_cache_claim",
@@ -62,12 +80,7 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
         unresolved_children: Vec::new(),
         destination,
     };
-    match super::super::run::copy_sources(
-        &corpus,
-        &sources,
-        directory.path(),
-        request.limits.corpus.source_bytes,
-    ) {
+    match materialize(&corpus, &sources, &cases, directory.path(), request) {
         Ok(sealed) => {
             report.before.extend(sealed);
             execute(request, &cases, directory.path(), deadline, &mut report)?;
@@ -86,6 +99,110 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
         report.faults.push(Fault::Clock);
     }
     Ok(report)
+}
+
+struct Prepared<'a> {
+    original: &'a examples::Case,
+    workload: Option<&'a Workload>,
+    directory: PathBuf,
+}
+
+fn prepare<'a>(
+    corpus: &'a examples::Corpus,
+    request: &Request<'_>,
+    workloads: Option<&'a [Workload]>,
+) -> Result<Vec<Prepared<'a>>, Error> {
+    let allowed = cases(corpus, &request.plan)?;
+    let Some(workloads) = workloads else {
+        return Ok(allowed
+            .into_iter()
+            .map(|original| Prepared {
+                original,
+                workload: None,
+                directory: PathBuf::new(),
+            })
+            .collect());
+    };
+    if workloads.is_empty()
+        || workloads.len() > request.limits.corpus.cases.min(super::config::MAX_CASES)
+    {
+        return Err(Error::Configuration(
+            "explicit workload population must fit 1..=94",
+        ));
+    }
+    let mut metadata = 0usize;
+    let mut sources = 0usize;
+    for (position, workload) in workloads.iter().enumerate() {
+        if workloads[..position]
+            .iter()
+            .any(|prior| prior.identity() == workload.identity())
+        {
+            return Err(Error::Configuration(
+                "explicit workloads repeat a content identity",
+            ));
+        }
+        workload.validate(corpus, request.limits)?;
+        metadata = metadata
+            .checked_add(workload.metadata_bytes)
+            .ok_or(Error::Configuration("workload metadata sum overflow"))?;
+        sources = sources
+            .checked_add(workload.source_bytes)
+            .ok_or(Error::Configuration("workload source sum overflow"))?;
+    }
+    if metadata > request.limits.corpus.manifest_bytes
+        || sources > request.limits.corpus.total_source_bytes
+    {
+        return Err(Error::Configuration(
+            "combined workloads exceed retained input ceilings",
+        ));
+    }
+    let mut prepared = Vec::new();
+    prepared
+        .try_reserve_exact(workloads.len())
+        .map_err(|_| Error::Configuration("workload population allocation failed"))?;
+    for (position, workload) in workloads.iter().enumerate() {
+        let original = allowed
+            .iter()
+            .find(|case| case.path() == workload.entry())
+            .ok_or(Error::Configuration(
+                "workload is outside the plan's allowed suite",
+            ))?;
+        prepared.push(Prepared {
+            original,
+            workload: Some(workload),
+            directory: format!("workload-{position:02}").into(),
+        });
+    }
+    Ok(prepared)
+}
+
+fn materialize(
+    corpus: &examples::Corpus,
+    sources: &BTreeSet<&str>,
+    cases: &[Prepared<'_>],
+    directory: &Path,
+    request: &Request<'_>,
+) -> Result<Vec<crate::selected::FileSeal>, Error> {
+    if cases.iter().all(|case| case.workload.is_none()) {
+        return super::super::run::copy_sources(
+            corpus,
+            sources,
+            directory,
+            request.limits.corpus.source_bytes,
+        );
+    }
+    let mut sealed = Vec::new();
+    for case in cases {
+        let workload = case
+            .workload
+            .ok_or(Error::Configuration("mixed workload preparation"))?;
+        sealed.extend(workload.materialize(
+            corpus,
+            &directory.join(&case.directory),
+            request.limits.corpus.source_bytes,
+        )?);
+    }
+    Ok(sealed)
 }
 fn cases<'a>(corpus: &'a examples::Corpus, plan: &Plan) -> Result<Vec<&'a examples::Case>, Error> {
     let suite = match plan.suite {
@@ -128,13 +245,12 @@ fn fill_unattempted(report: &mut Report) -> Result<(), Error> {
         .collect();
     Ok(())
 }
-fn execute(
+fn capture_metadata(
     request: &Request<'_>,
-    cases: &[&examples::Case],
     directory: &Path,
     deadline: Instant,
     report: &mut Report,
-) -> Result<(), Error> {
+) -> bool {
     for (executable, argument) in [
         (request.native, "--version"),
         (request.native, "--help-all"),
@@ -147,16 +263,27 @@ fn execute(
             deadline,
             report,
         ) else {
-            fill_unattempted(report)?;
-            return Ok(());
+            return false;
         };
         let completed = observed.complete(false);
         report.metadata.push(observed);
         if !completed {
             report.faults.push(Fault::Metadata);
-            fill_unattempted(report)?;
-            return Ok(());
+            return false;
         }
+    }
+    true
+}
+fn execute(
+    request: &Request<'_>,
+    cases: &[Prepared<'_>],
+    directory: &Path,
+    deadline: Instant,
+    report: &mut Report,
+) -> Result<(), Error> {
+    if !capture_metadata(request, directory, deadline, report) {
+        fill_unattempted(report)?;
+        return Ok(());
     }
     let mut references: Vec<Option<answers::ReportedAnswers>> =
         (0..cases.len()).map(|_| None).collect();
@@ -189,9 +316,15 @@ fn execute(
             ));
             continue;
         }
-        let (executable, arguments) =
-            arguments(request, directory, cases[slot.case].path(), slot.producer);
-        let Some(capture) = invoke(executable, arguments, directory, deadline, report) else {
+        let selected = &cases[slot.case];
+        let case_directory = directory.join(&selected.directory);
+        let (executable, arguments) = arguments(
+            request,
+            &case_directory,
+            selected.original.path(),
+            slot.producer,
+        );
+        let Some(capture) = invoke(executable, arguments, &case_directory, deadline, report) else {
             stopped = true;
             report.samples.push(unattempted(
                 slot,
@@ -212,7 +345,8 @@ fn execute(
         };
         let result = qualify(
             &mut sample,
-            cases[slot.case].contract(),
+            (!selected.workload.is_some_and(Workload::is_amended))
+                .then(|| selected.original.contract()),
             references[slot.case].as_ref(),
             request,
         );
@@ -284,7 +418,7 @@ fn arguments<'a>(
 }
 fn qualify(
     sample: &mut Sample,
-    contract: &examples::Contract,
+    contract: Option<&examples::Contract>,
     reference: Option<&answers::ReportedAnswers>,
     request: &Request<'_>,
 ) -> Result<answers::ReportedAnswers, (Decision, String)> {
@@ -336,9 +470,11 @@ fn qualify(
     };
     sample.selected_models = Some(parsed.model_count());
     sample.cost = parsed.cost().map(<[i64]>::to_vec);
-    contract
-        .check(&parsed)
-        .map_err(|e| (Decision::ParityMismatch, e.to_string()))?;
+    if let Some(contract) = contract {
+        contract
+            .check(&parsed)
+            .map_err(|e| (Decision::ParityMismatch, e.to_string()))?;
+    }
     if let Some(reference) = reference {
         if !answers::same_displays(reference, &parsed) {
             return Err((

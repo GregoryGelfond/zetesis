@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 
 pub use contract::{Contract, ContractMismatch, Family, Satisfiability};
 pub use document::{Annotation, Case, Corpus, Edit, Include, ReferenceToolchain, Source};
-pub use originals::verify_originals;
+pub use originals::{derive_source, verify_originals};
 
 /// Seal of the complete cleaned-source and typed-contract manifest.
 pub const MANIFEST_SHA256: &str =

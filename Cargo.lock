@@ -2078,6 +2078,7 @@ dependencies = [
  "syn 2.0.119",
  "tempfile",
  "themelios-program",
+ "themelios-syntax",
  "zetesis-core",
 ]
 

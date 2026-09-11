@@ -68,11 +68,11 @@ impl Include {
     }
 }
 
-/// One reviewed replacement after annotation deletion.
+/// One exact replacement in an explicitly supplied source.
 ///
-/// Coordinates refer to the annotation-free original, before any replacements.
-/// The provenance audit checks exact bytes and ordering; it does not prove that
-/// a replacement preserves answer sets.
+/// Coordinates refer to the source before any replacements. Corpus provenance
+/// applies these to the annotation-free original. Exact derivation does not
+/// prove that a replacement preserves answer sets.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Edit {
@@ -82,12 +82,38 @@ pub struct Edit {
     pub(super) after: String,
 }
 impl Edit {
-    /// Inclusive byte offset in the annotation-free original.
+    /// Retain caller-owned replacement metadata after checking its span length.
+    ///
+    /// The caller bounds input metadata before allocation. Applying a list
+    /// through `derive_source` checks the actual source, order and output bound.
+    ///
+    /// # Errors
+    /// Refuses an empty, reversed or mismatched byte span.
+    pub fn replacement(
+        start_byte: usize,
+        end_byte: usize,
+        before: String,
+        after: String,
+    ) -> Result<Self, Error> {
+        if start_byte >= end_byte || end_byte - start_byte != before.len() {
+            return Err(Error::Contract(
+                "replacement span differs from its bytes".into(),
+            ));
+        }
+        Ok(Self {
+            start_byte,
+            end_byte,
+            before,
+            after,
+        })
+    }
+
+    /// Inclusive byte offset in the supplied source before any replacements.
     #[must_use]
     pub const fn start_byte(&self) -> usize {
         self.start_byte
     }
-    /// Exclusive byte offset in the annotation-free original.
+    /// Exclusive byte offset in the supplied source before any replacements.
     #[must_use]
     pub const fn end_byte(&self) -> usize {
         self.end_byte

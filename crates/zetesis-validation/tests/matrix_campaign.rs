@@ -108,6 +108,156 @@ fn every_corpus_cell_retains_its_refusal() {
         value["report"]["protocol"],
         "instrumented_explicit_profile_matrix_v1"
     );
+    assert_eq!(value["report"]["schema"], 1);
+    assert!(value["report"].get("workloads").is_none());
+}
+
+fn variant(fixture: &Fixture, size: i32) -> matrix::Workload {
+    let corpus = zetesis_validation::examples::load(
+        &fixture.corpus,
+        zetesis_validation::examples::Limits::default(),
+    )
+    .unwrap();
+    let path = "standalone/n-queens/variant-01.lp";
+    matrix::Workload::amended(
+        &corpus,
+        path,
+        &[matrix::ConstantAmendment {
+            source_path: path,
+            name: "n",
+            expected: 8,
+            replacement: size,
+        }],
+        matrix::WorkloadLimits::default(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn derived_cells_use_their_own_sealed_source_bytes() {
+    let fixture = Fixture::new();
+    let prior = fs::read_to_string(&fixture.native).unwrap();
+    let metadata_end = prior.find('\n').unwrap() + 1;
+    // Preserve the one-argument metadata branch before observing the source argument.
+    let branch_end = prior[metadata_end..].find('\n').unwrap() + metadata_end + 1;
+    fs::write(
+        &fixture.native,
+        format!(
+            "{}for source do :; done\ncat \"$source\" >&2\n{}",
+            &prior[..branch_end],
+            &prior[branch_end..]
+        ),
+    )
+    .unwrap();
+    let workloads = [variant(&fixture, 10), variant(&fixture, 12)];
+    let report = matrix::run_workloads(&fixture.request(Suite::Queens), &workloads).unwrap();
+    assert!(report.accounted());
+    assert_eq!(report.samples().len(), 8);
+    assert!(
+        report
+            .after()
+            .iter()
+            .all(zetesis_validation::selected::Change::unchanged)
+    );
+    for (index, size) in [10, 12].into_iter().enumerate() {
+        let sample = report
+            .samples()
+            .iter()
+            .find(|sample| {
+                sample.slot().case == index
+                    && sample.slot().phase == Phase::Qualification
+                    && matches!(sample.slot().producer, Producer::Native { .. })
+            })
+            .unwrap();
+        assert_eq!(sample.decision(), Decision::Refused);
+        let capture = sample.capture().unwrap();
+        let source = std::str::from_utf8(capture.stderr()).unwrap();
+        assert!(source.contains(&format!("#const n = {size}.")), "{source}");
+        assert!(
+            capture
+                .directory()
+                .ends_with(format!("workload-{index:02}"))
+        );
+    }
+    assert!(
+        report
+            .samples()
+            .iter()
+            .filter(|sample| sample.slot().producer == Producer::Reference)
+            .all(|sample| sample.decision() == Decision::Pass)
+    );
+    report.publish().unwrap();
+    let encoded: serde_json::Value =
+        serde_json::from_slice(&fs::read(&fixture.report).unwrap()).unwrap();
+    assert_eq!(encoded["report"]["schema"], 2);
+    assert_eq!(encoded["report"]["workloads"].as_array().unwrap().len(), 2);
+    assert_ne!(
+        encoded["report"]["workloads"][0]["identity"],
+        encoded["report"]["workloads"][1]["identity"]
+    );
+}
+
+#[test]
+fn original_workloads_keep_the_default_contract() {
+    let fixture = Fixture::new();
+    let corpus = zetesis_validation::examples::load(
+        &fixture.corpus,
+        zetesis_validation::examples::Limits::default(),
+    )
+    .unwrap();
+    let original = matrix::Workload::original(
+        &corpus,
+        "standalone/n-queens/variant-01.lp",
+        matrix::WorkloadLimits::default(),
+    )
+    .unwrap();
+    let report = matrix::run_workloads(&fixture.request(Suite::Queens), &[original]).unwrap();
+    assert!(report.accounted());
+    let reference = report
+        .samples()
+        .iter()
+        .find(|sample| {
+            sample.slot().phase == Phase::Qualification
+                && sample.slot().producer == Producer::Reference
+        })
+        .unwrap();
+    assert_eq!(reference.decision(), Decision::ParityMismatch);
+}
+
+#[test]
+fn explicit_workloads_require_distinct_identities() {
+    let fixture = Fixture::new();
+    let workload = variant(&fixture, 12);
+    assert!(
+        matrix::run_workloads(
+            &fixture.request(Suite::Queens),
+            &[workload.clone(), workload]
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn explicit_workloads_require_a_nonempty_population() {
+    let fixture = Fixture::new();
+    assert!(matrix::run_workloads(&fixture.request(Suite::Queens), &[]).is_err());
+}
+
+#[test]
+fn explicit_workloads_stay_within_the_allowed_suite() {
+    let fixture = Fixture::new();
+    let corpus = zetesis_validation::examples::load(
+        &fixture.corpus,
+        zetesis_validation::examples::Limits::default(),
+    )
+    .unwrap();
+    let workload = matrix::Workload::original(
+        &corpus,
+        "standalone/send-money/send-money.lp",
+        matrix::WorkloadLimits::default(),
+    )
+    .unwrap();
+    assert!(matrix::run_workloads(&fixture.request(Suite::Queens), &[workload]).is_err());
 }
 #[test]
 fn scheduling_deadline_keeps_unlaunched_positions() {

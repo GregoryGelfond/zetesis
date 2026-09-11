@@ -139,7 +139,7 @@ fn selected_sources<'a>(
     Ok(sources)
 }
 
-fn checked_seal(path: &Path, limit: usize, expected: &str) -> Result<FileSeal, Error> {
+pub(super) fn checked_seal(path: &Path, limit: usize, expected: &str) -> Result<FileSeal, Error> {
     let seal = identity::seal(path, limit)?;
     if seal.sha256() != expected {
         return Err(crate::selected::Error::Path {

@@ -2,6 +2,15 @@
 
 use super::*;
 
+#[test]
+fn replacement_metadata_requires_a_nonempty_exact_span() {
+    for (start, end, before) in [(1, 1, ""), (2, 1, "x"), (0, 2, "x")] {
+        assert!(Edit::replacement(start, end, before.into(), "replacement".into()).is_err());
+    }
+    let edit = Edit::replacement(0, 1, "a".into(), "bc".into()).unwrap();
+    assert_eq!(derive_source("a", &[edit], 2).unwrap(), "bc");
+}
+
 fn edit() -> Edit {
     Edit {
         start_byte: 2,
@@ -13,7 +22,7 @@ fn edit() -> Edit {
 
 #[test]
 fn edits_preserve_unselected_bytes() {
-    assert_eq!(apply_edits("p(8).", &[edit()], 5).unwrap(), "p(n).");
+    assert_eq!(derive_source("p(8).", &[edit()], 5).unwrap(), "p(n).");
 }
 
 #[test]
@@ -27,7 +36,7 @@ fn edits_keep_original_coordinates_after_growth() {
         after: "1".into(),
     };
     assert_eq!(
-        apply_edits("p(8,9).", &[first, second], 9).unwrap(),
+        derive_source("p(8,9).", &[first, second], 9).unwrap(),
         "p(100,1)."
     );
 }
@@ -41,7 +50,7 @@ fn edits_require_exact_source_spans() {
         record.before = before.into();
         let source = if before == "(" { "é(8)." } else { "p(8)." };
         assert!(matches!(
-            apply_edits(source, &[record], 20),
+            derive_source(source, &[record], 20),
             Err(Error::Contract(_))
         ));
     }
@@ -50,7 +59,7 @@ fn edits_require_exact_source_spans() {
 #[test]
 fn overlapping_edits_are_refused() {
     assert!(matches!(
-        apply_edits("p(8).", &[edit(), edit()], 20),
+        derive_source("p(8).", &[edit(), edit()], 20),
         Err(Error::Contract(_))
     ));
 }
@@ -60,11 +69,11 @@ fn edited_sources_obey_the_byte_ceiling() {
     let mut record = edit();
     record.after = "100".into();
     assert_eq!(
-        apply_edits("p(8).", &[record.clone()], 7).unwrap(),
+        derive_source("p(8).", &[record.clone()], 7).unwrap(),
         "p(100)."
     );
     assert!(matches!(
-        apply_edits("p(8).", &[record], 6),
+        derive_source("p(8).", &[record], 6),
         Err(Error::Limit {
             resource: Resource::SourceBytes,
             observed: 7,

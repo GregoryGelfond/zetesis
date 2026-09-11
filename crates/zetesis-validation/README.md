@@ -190,6 +190,40 @@ report publication. See [performance](src/performance.rs),
 [matrix accounting](tests/matrix_campaign.rs). The [comparison guide](../../scripts/README-comparison.md)
 documents reproducible commands, limits and protocol boundaries.
 
+### Derive explicit parameter workloads
+
+`performance::matrix::run_workloads(&Request, &[Workload])` uses the same
+full-enumeration schedule, capture and answer checks for explicit instances.
+The plan's suite is the allowed base population. Multiple instances can share
+an entry path; their content identities must be distinct. Use one request per
+native executable when comparing two zetesis revisions with the same clingo
+reference and workload list.
+
+`Workload::original` retains the default corpus contract. `Workload::amended`
+accepts `ConstantAmendment { source_path, name, expected, replacement }` and
+locates the declaration through themelios-syntax. The source must contain exactly
+one unannotated declaration with a nonnegative decimal i32 literal. Expressions,
+signed source literals, radix literals and repeated declarations are refused.
+The replacement may be any i32. Only the numeric token changes; parsed include
+spellings must still match the admitted closure. This is source derivation,
+not a claim that the amendment preserves answer sets.
+
+For example, all six curated queens encodings declare `#const n = 8.`.
+An amendment of `n` from 8 to 10 produces a separate workload without modifying
+the examples tree. Admission records the original contract as provenance,
+base/derived source hashes and exact byte edits. The changed workload requires
+a complete clingo result; the default N=8 model count is not its expectation.
+Only completed selected displays, multiplicities and costs are compared with
+clingo. Complete native records remain available in the captures.
+
+`WorkloadLimits` bounds amendment count, metadata and input/derived content
+before retention. Combined workloads must also fit the request's existing
+source/metadata ceilings. Each launched private source closure is sealed before
+and after execution. Derived-workload reports use matrix schema 2; unchanged
+suite reports retain schema 1. No first-answer or RSS phase is added by this
+entry point. See [workload admission](tests/workload_admission.rs) and
+[matrix acquisition](tests/matrix_campaign.rs) for checked library usage.
+
 ## Compose capture, contracts and publication
 
 | Library capability | Boundary |

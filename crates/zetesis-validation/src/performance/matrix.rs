@@ -1,4 +1,4 @@
-//! Instrumented end-to-end profile comparisons over unchanged clean examples.
+//! Instrumented end-to-end profile comparisons over clean source workloads.
 //!
 //! Every native invocation uses JSON and statistics. Wall time includes their
 //! overhead, setup, grounding, solving and captured output. This is distinct from
@@ -16,9 +16,11 @@ mod record;
 mod run;
 mod serialization;
 mod telemetry;
+mod workload;
 
 pub use config::{Plan, Producer, Request, Slot, Suite};
 pub use record::{Decision, DeviceWork, Execution, Observation, Procedure, Sample};
+pub use workload::{ConstantAmendment, Workload, WorkloadLimits};
 
 use super::{Capture, Error, Fault};
 use crate::selected::{Change, FileSeal, publication};
@@ -34,6 +36,8 @@ pub struct Report {
     limits: super::Limits,
     native_normalization_limits: serde_json::Value,
     cases: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    workloads: Option<Vec<Workload>>,
     started_unix_ns: u128,
     finished_unix_ns: Option<u128>,
     wall_scope: &'static str,
@@ -76,10 +80,15 @@ impl Report {
     pub fn samples(&self) -> &[Sample] {
         &self.samples
     }
-    /// Case entry paths in manifest/suite order.
+    /// Entry paths in schedule order; explicit workloads may repeat a path.
     #[must_use]
     pub fn cases(&self) -> &[String] {
         &self.cases
+    }
+    /// Explicit workload identities in schedule order; absent for default suites.
+    #[must_use]
+    pub fn workloads(&self) -> Option<&[Workload]> {
+        self.workloads.as_deref()
     }
     /// Setup/capture scheduling faults, separate from solver conclusions.
     #[must_use]
@@ -149,7 +158,25 @@ impl Report {
 /// # Errors
 /// Returns configuration/source/identity failures before any solver is launched.
 pub fn run(request: &Request<'_>) -> Result<Report, Error> {
-    run::campaign(request)
+    run::campaign(request, None)
+}
+
+/// Run explicit constant variants drawn from the plan's allowed source suite.
+///
+/// The existing profile schedule, process capture and complete-answer decoder
+/// are shared with `run`. Each instance has a private source closure and a
+/// distinct content identity, even when several instances share an entry path.
+/// Default contracts remain provenance for amended workloads; those workloads
+/// require a complete clingo family instead of the default model count.
+/// Reports use schema 2. No first-answer or memory samples are added.
+///
+/// # Errors
+/// Refuses empty/oversized populations, repeated content identities, foreign
+/// corpus identities, sources outside the allowed suite and resource excess.
+/// Materialization failures are retained in the returned report before any
+/// solver invocation.
+pub fn run_workloads(request: &Request<'_>, workloads: &[Workload]) -> Result<Report, Error> {
+    run::campaign(request, Some(workloads))
 }
 
 #[cfg(test)]

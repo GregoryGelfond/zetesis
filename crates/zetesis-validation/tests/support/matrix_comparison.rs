@@ -75,13 +75,19 @@ fn reference() -> answers::ReportedAnswers {
 #[test]
 fn complete_answers_require_the_actual_requested_route() {
     let mut sample = sample();
-    let answer = qualify(&mut sample, &contract(), Some(&reference()), &request()).unwrap();
+    let answer = qualify(
+        &mut sample,
+        Some(&contract()),
+        Some(&reference()),
+        &request(),
+    )
+    .unwrap();
     assert!(!answer.satisfiable());
     assert!(sample.observation.is_some());
     let mut request = request();
     request.plan.profiles[0].backend = crate::selected::Backend::Metal;
     assert_eq!(
-        qualify(&mut sample, &contract(), Some(&reference()), &request)
+        qualify(&mut sample, Some(&contract()), Some(&reference()), &request)
             .unwrap_err()
             .0,
         Decision::InvalidTelemetry
@@ -90,10 +96,35 @@ fn complete_answers_require_the_actual_requested_route() {
 #[test]
 fn complete_native_answers_cannot_replace_a_failed_reference() {
     assert_eq!(
-        qualify(&mut sample(), &contract(), None, &request())
+        qualify(&mut sample(), Some(&contract()), None, &request())
             .unwrap_err()
             .0,
         Decision::ReferenceUnavailable
+    );
+}
+
+#[test]
+fn derived_answers_require_a_complete_reference() {
+    assert_eq!(
+        qualify(&mut sample(), None, None, &request())
+            .unwrap_err()
+            .0,
+        Decision::ReferenceUnavailable
+    );
+    assert!(qualify(&mut sample(), None, Some(&reference()), &request()).is_ok());
+}
+
+#[test]
+fn derived_answers_must_match_the_complete_reference() {
+    let different = answers::clingo_json(
+        br#"{"Result":"SATISFIABLE","Models":{"More":"no","Number":1},"Call":[{"Witnesses":[{"Value":[]}]}]}"#,
+        answers::Limits::default(),
+    ).unwrap();
+    assert_eq!(
+        qualify(&mut sample(), None, Some(&different), &request())
+            .unwrap_err()
+            .0,
+        Decision::ParityMismatch
     );
 }
 #[test]
@@ -104,9 +135,14 @@ fn complete_capture_with_failed_exit_cannot_pass() {
         signal: None,
     });
     assert_eq!(
-        qualify(&mut sample, &contract(), Some(&reference()), &request())
-            .unwrap_err()
-            .0,
+        qualify(
+            &mut sample,
+            Some(&contract()),
+            Some(&reference()),
+            &request()
+        )
+        .unwrap_err()
+        .0,
         Decision::InvocationFailure
     );
 }
@@ -212,9 +248,14 @@ fn complete_capture_cannot_hide_a_timeout_stop() {
     let mut sample = sample();
     sample.capture.as_mut().unwrap().stop = Some(process::Stop::Deadline);
     assert_eq!(
-        qualify(&mut sample, &contract(), Some(&reference()), &request())
-            .unwrap_err()
-            .0,
+        qualify(
+            &mut sample,
+            Some(&contract()),
+            Some(&reference()),
+            &request()
+        )
+        .unwrap_err()
+        .0,
         Decision::Timeout
     );
 }
@@ -223,9 +264,14 @@ fn complete_capture_cannot_hide_a_capture_stop() {
     let mut sample = sample();
     sample.capture.as_mut().unwrap().stop = Some(process::Stop::OutputLimit);
     assert_eq!(
-        qualify(&mut sample, &contract(), Some(&reference()), &request())
-            .unwrap_err()
-            .0,
+        qualify(
+            &mut sample,
+            Some(&contract()),
+            Some(&reference()),
+            &request()
+        )
+        .unwrap_err()
+        .0,
         Decision::CaptureLimit
     );
 }
