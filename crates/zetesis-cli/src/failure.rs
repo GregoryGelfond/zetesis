@@ -90,99 +90,118 @@ impl From<io::Error> for RunFailure {
     }
 }
 
-/// Live driver evidence. The report's provisional completion is never exported
-/// on failure; only the separately established classification is retained.
+/// Live driver state. Semantic evidence has one authority; acknowledgements and
+/// timing describe independent external effects. Compatibility reports are
+/// derived only when a consumer needs them, never used as live search state.
 pub(crate) struct Progress {
-    pub(crate) report: Report,
-    pub(crate) verified_models: u64,
-    pub(crate) observed_interruption: Option<Interruption>,
-    pub(crate) completion: Option<Completion>,
-    pub(crate) summary_published: bool,
-    pub(crate) semantic: Option<crate::SemanticOutcome>,
+    semantic: Option<crate::SemanticOutcome>,
+    pub(crate) publication: crate::Publication,
+    pub(crate) phase_timings: Option<PhaseTimings>,
 }
 
 impl Progress {
-    pub(crate) fn new(gate_atoms: usize) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
-            report: Report {
-                models: 0,
-                checked: 0,
-                completion: Completion::Exhausted,
-                interruption: None,
-                discovered_gate_atoms: gate_atoms,
-                countermodel_statistics: None,
-                formula_execution: None,
-                lazy_execution: None,
-                shared_execution: None,
-                optimization: None,
-                phase_timings: None,
-            },
-            verified_models: 0,
-            observed_interruption: None,
-            completion: None,
-            summary_published: false,
             semantic: None,
+            publication: crate::Publication {
+                models: 0,
+                summary: false,
+            },
+            phase_timings: None,
         }
     }
 
+    /// Replace the snapshot from the same session after its latest pull. A pull
+    /// can establish membership or coverage even when its external consumer fails.
     pub(crate) fn apply(&mut self, semantic: crate::SemanticOutcome) {
-        self.verified_models = semantic.verified_models();
-        self.completion = semantic.completion();
-        self.observed_interruption = semantic.interruption();
-        self.report.checked = semantic.candidate_progress();
-        if let Some(completion) = semantic.completion() {
-            self.report.completion = completion;
-        }
-        self.report.interruption = semantic.interruption();
-        self.report.discovered_gate_atoms = semantic.discovered_gate_atoms();
-        self.report.countermodel_statistics = semantic.countermodel_statistics().copied();
-        self.report.formula_execution = semantic.formula_execution().cloned();
-        self.report.lazy_execution = semantic.lazy_execution().cloned();
-        self.report.shared_execution = semantic.shared_execution().cloned();
-        self.report.optimization = semantic.incumbent().cloned();
         self.semantic = Some(semantic);
     }
 
-    pub(crate) fn finalize(self) -> crate::SolveReport {
-        crate::SolveReport {
-            publication: crate::Publication {
-                models: self.report.models,
-                summary: self.summary_published,
-            },
-            semantic: self
-                .semantic
-                .expect("entered successful solve has semantic evidence"),
-            report: self.report,
+    pub(crate) fn semantic(&self) -> Option<&crate::SemanticOutcome> {
+        self.semantic.as_ref()
+    }
+
+    pub(crate) fn completion(&self) -> Result<Completion, RunError> {
+        self.semantic()
+            .and_then(crate::SemanticOutcome::completion)
+            .ok_or(RunError::CompletionUnavailable)
+    }
+
+    /// Materialize the legacy successful view only from established completion.
+    /// Missing coverage remains absent in failure evidence; it is never replaced
+    /// with exhaustion or a logical interruption to satisfy the legacy field.
+    pub(crate) fn report(&self) -> Result<Report, RunError> {
+        let semantic = self.semantic().ok_or(RunError::CompletionUnavailable)?;
+        let completion = self.completion()?;
+        Ok(Report {
+            models: self.publication.models,
+            checked: semantic.candidate_progress(),
+            completion,
+            interruption: semantic.interruption(),
+            discovered_gate_atoms: semantic.discovered_gate_atoms(),
+            countermodel_statistics: semantic.countermodel_statistics().copied(),
+            formula_execution: semantic.formula_execution().cloned(),
+            lazy_execution: semantic.lazy_execution().cloned(),
+            shared_execution: semantic.shared_execution().cloned(),
+            optimization: semantic.incumbent().cloned(),
+            phase_timings: self.phase_timings,
+        })
+    }
+
+    pub(crate) fn finalize(self) -> Result<crate::SolveReport, crate::SolveFailure> {
+        let report = match self.report() {
+            Ok(report) => report,
+            Err(cause) => return Err(self.fail(cause)),
+        };
+        match self.semantic {
+            Some(semantic) => Ok(crate::SolveReport {
+                publication: self.publication,
+                semantic,
+                report,
+            }),
+            None => Err(self.fail(RunError::CompletionUnavailable)),
         }
     }
 
     pub(crate) fn fail(self, cause: RunError) -> crate::SolveFailure {
-        let publication = crate::Publication {
-            models: self.report.models,
-            summary: self.summary_published,
+        let semantic = self.semantic();
+        let partial_report = PartialReport {
+            published_models: self.publication.models,
+            verified_models: semantic.map_or(0, crate::SemanticOutcome::verified_models),
+            checked: semantic.map_or(0, crate::SemanticOutcome::candidate_progress),
+            completion: semantic.and_then(crate::SemanticOutcome::completion),
+            interruption: semantic.and_then(crate::SemanticOutcome::interruption),
+            summary_published: self.publication.summary,
+            discovered_gate_atoms: semantic
+                .map_or(0, crate::SemanticOutcome::discovered_gate_atoms),
+            countermodel_statistics: semantic
+                .and_then(crate::SemanticOutcome::countermodel_statistics)
+                .copied(),
+            formula_execution: semantic
+                .and_then(crate::SemanticOutcome::formula_execution)
+                .cloned(),
+            lazy_execution: semantic
+                .and_then(crate::SemanticOutcome::lazy_execution)
+                .cloned(),
+            shared_execution: semantic
+                .and_then(crate::SemanticOutcome::shared_execution)
+                .cloned(),
+            optimization: semantic
+                .and_then(crate::SemanticOutcome::incumbent)
+                .cloned(),
         };
-        let report = self.report;
         let mut failure = crate::SolveFailure::from(RunFailure {
             cause: Box::new(cause),
-            phase_timings: report.phase_timings.map(Box::new),
-            partial_report: Some(Box::new(PartialReport {
-                published_models: report.models,
-                verified_models: self.verified_models,
-                checked: report.checked,
-                completion: self.completion,
-                interruption: report.interruption.or(self.observed_interruption),
-                summary_published: self.summary_published,
-                discovered_gate_atoms: report.discovered_gate_atoms,
-                countermodel_statistics: report.countermodel_statistics,
-                formula_execution: report.formula_execution,
-                lazy_execution: report.lazy_execution,
-                shared_execution: report.shared_execution,
-                optimization: report.optimization,
-            })),
+            phase_timings: self.phase_timings.map(Box::new),
+            partial_report: Some(Box::new(partial_report)),
             secondary_output: None,
         });
         failure.semantic = self.semantic.map(Box::new);
-        failure.publication = Some(publication);
+        failure.publication = Some(self.publication);
         failure
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/support/outcome_authority.rs"]
+mod tests;

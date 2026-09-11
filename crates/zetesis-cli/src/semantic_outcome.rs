@@ -14,6 +14,8 @@ pub enum AnswerSelection {
 }
 
 /// Immutable semantic accounting when a session stops or finishes its search.
+/// The driver retains this evidence as its semantic authority; compatibility
+/// reports derive from it together with separate publication and timing state.
 /// A verified model need not have been scored, retained, yielded or published.
 /// Neither missing coverage nor a zero publication count establishes UNSAT.
 #[derive(Clone, Debug)]

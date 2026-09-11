@@ -80,7 +80,7 @@ impl FormulaRun<'_> {
             self.display.control,
             phases,
         );
-        let mut progress = Progress::new(self.input.gate_atoms);
+        let mut progress = Progress::new();
         loop {
             let next = session.next(&config, &mut observations, self.display.control, phases);
             progress.apply(session.outcome(phases));
@@ -89,7 +89,7 @@ impl FormulaRun<'_> {
                     let result = phases.measure(SolvePhase::ObservationOutput, || {
                         self.display.write(
                             output,
-                            progress.report.models + 1,
+                            progress.publication.models + 1,
                             &model,
                             score.as_ref(),
                         )
@@ -97,14 +97,16 @@ impl FormulaRun<'_> {
                     if let Err(error) = result {
                         return Err(progress.fail(error));
                     }
-                    progress.report.models += 1;
+                    progress.publication.models += 1;
                 }
                 Some(Err(error)) => return Err(progress.fail(error)),
                 None => break,
             }
         }
         if !self.display.options.json
-            && let Some(best) = &progress.report.optimization
+            && let Some(best) = progress
+                .semantic()
+                .and_then(crate::SemanticOutcome::incumbent)
         {
             let result = phases.measure(SolvePhase::ObservationOutput, || {
                 writeln!(
@@ -172,10 +174,7 @@ pub(crate) fn check_control(
     match control.poll() {
         Ok(()) => Ok(None),
         Err(error) => {
-            let mut progress = Progress::new(0);
-            progress.completion = Some(Completion::Interrupted);
-            progress.report.completion = Completion::Interrupted;
-            progress.report.interruption = Some(Interruption::Countermodel(error.into()));
+            let mut progress = Progress::new();
             progress.apply(crate::SemanticOutcome {
                 subject,
                 selection: None,
@@ -183,7 +182,7 @@ pub(crate) fn check_control(
                 scored: 0,
                 retained: 0,
                 completion: Some(Completion::Interrupted),
-                interruption: progress.report.interruption,
+                interruption: Some(Interruption::Countermodel(error.into())),
                 optimization: None,
                 checked: 0,
                 gate_atoms: 0,
@@ -225,9 +224,13 @@ fn complete(
     json: bool,
     color: crate::ColorMode,
 ) -> Result<Progress, SolveFailure> {
+    let report = match progress.report() {
+        Ok(report) => report,
+        Err(cause) => return Err(progress.fail(cause)),
+    };
     let _output = phases.start(SolvePhase::ObservationOutput);
     let result = (|| {
-        if let Some(statistics) = progress.report.countermodel_statistics {
+        if let Some(statistics) = report.countermodel_statistics {
             writeln!(
                 diagnostics,
                 "Reduct search: {} work, {} decisions, {} classical candidates, {} reduct queries, {} countermodels",
@@ -238,11 +241,11 @@ fn complete(
                 statistics.countermodels
             )?;
         }
-        finish(output, &progress.report, json, color)
+        finish(output, &report, json, color)
     })();
     match result {
         Ok(()) => {
-            progress.summary_published = !json;
+            progress.publication.summary = !json;
             Ok(progress)
         }
         Err(error) => Err(progress.fail(error)),

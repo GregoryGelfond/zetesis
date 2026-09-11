@@ -53,20 +53,7 @@ pub(crate) fn write_detailed(
                     partial.completion,
                     partial.summary_published,
                 )?;
-                let report = Report {
-                    models: partial.published_models,
-                    checked: partial.checked,
-                    completion: partial.completion.unwrap_or(Completion::Interrupted),
-                    interruption: partial.interruption,
-                    discovered_gate_atoms: partial.discovered_gate_atoms,
-                    countermodel_statistics: partial.countermodel_statistics,
-                    formula_execution: partial.formula_execution.clone(),
-                    lazy_execution: partial.lazy_execution.clone(),
-                    shared_execution: partial.shared_execution.clone(),
-                    optimization: partial.optimization.clone(),
-                    phase_timings: failure.phase_timings.as_deref().copied(),
-                };
-                details(sink, options, &report)?;
+                details(sink, options, &Details::from(partial.as_ref()))?;
             } else {
                 writeln!(
                     sink,
@@ -145,14 +132,63 @@ fn completed(sink: &mut impl Write, options: &Options, report: &Report) -> io::R
         Completion::Interrupted => "interrupted (partial coverage)",
     };
     writeln!(sink, "  completion: {status}")?;
-    details(sink, options, report)
+    details(sink, options, &Details::from(report))
 }
 
-fn details(sink: &mut impl Write, options: &Options, report: &Report) -> io::Result<()> {
-    if let Some(stats) = &report.shared_execution {
+/// Borrow the shared statistics fields without inventing a successful report.
+/// An absent completion remains absent even when execution has retained work.
+struct Details<'a> {
+    models: usize,
+    checked: u64,
+    completion: Option<Completion>,
+    interruption: Option<crate::Interruption>,
+    discovered_gate_atoms: usize,
+    countermodel_statistics: Option<&'a zetesis_sat::Statistics>,
+    formula_execution: Option<&'a crate::FormulaExecutionStatistics>,
+    lazy_execution: Option<&'a crate::LazyExecutionStatistics>,
+    shared_execution: Option<&'a crate::SharedExecutionStatistics>,
+    optimization: Option<&'a crate::Optimization>,
+}
+
+impl<'a> From<&'a Report> for Details<'a> {
+    fn from(report: &'a Report) -> Self {
+        Self {
+            models: report.models,
+            checked: report.checked,
+            completion: Some(report.completion),
+            interruption: report.interruption,
+            discovered_gate_atoms: report.discovered_gate_atoms,
+            countermodel_statistics: report.countermodel_statistics.as_ref(),
+            formula_execution: report.formula_execution.as_ref(),
+            lazy_execution: report.lazy_execution.as_ref(),
+            shared_execution: report.shared_execution.as_ref(),
+            optimization: report.optimization.as_ref(),
+        }
+    }
+}
+
+impl<'a> From<&'a crate::PartialReport> for Details<'a> {
+    fn from(report: &'a crate::PartialReport) -> Self {
+        Self {
+            models: report.published_models,
+            checked: report.checked,
+            completion: report.completion,
+            interruption: report.interruption,
+            discovered_gate_atoms: report.discovered_gate_atoms,
+            countermodel_statistics: report.countermodel_statistics.as_ref(),
+            formula_execution: report.formula_execution.as_ref(),
+            lazy_execution: report.lazy_execution.as_ref(),
+            shared_execution: report.shared_execution.as_ref(),
+            optimization: report.optimization.as_ref(),
+        }
+    }
+}
+
+fn details(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io::Result<()> {
+    if let Some(stats) = report.shared_execution {
         shared(sink, stats)?;
     }
-    if let Some(stats) = &report.lazy_execution {
+    if let Some(stats) = report.lazy_execution {
         lazy(sink, stats)?;
     }
     let examined = if report.shared_execution.is_some() {
@@ -221,8 +257,8 @@ fn details(sink: &mut impl Write, options: &Options, report: &Report) -> io::Res
             report.discovered_gate_atoms
         )?;
     }
-    if let Some(optimum) = &report.optimization {
-        let qualification = if report.completion == Completion::Exhausted {
+    if let Some(optimum) = report.optimization {
+        let qualification = if report.completion == Some(Completion::Exhausted) {
             "optimal"
         } else {
             "incumbent only"
@@ -353,7 +389,7 @@ fn lazy_buffer_usage(sink: &mut impl Write, usage: crate::LazyTransportUsage) ->
     )
 }
 
-fn formula(sink: &mut impl Write, options: &Options, report: &Report) -> io::Result<()> {
+fn formula(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io::Result<()> {
     let oracle = if report
         .countermodel_statistics
         .and_then(|s| s.certified)
@@ -363,7 +399,7 @@ fn formula(sink: &mut impl Write, options: &Options, report: &Report) -> io::Res
     } else {
         "countermodel"
     };
-    if let Some(execution) = &report.formula_execution {
+    if let Some(execution) = report.formula_execution {
         let backend = if execution.adapter.is_empty() {
             "cpu batched exact completion"
         } else {
@@ -453,7 +489,7 @@ fn formula_gpu(
     )
 }
 
-fn closure(sink: &mut impl Write, options: &Options, report: &Report) -> io::Result<()> {
+fn closure(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io::Result<()> {
     let grounder = if options.grounder == Grounder::Eager {
         "eager"
     } else {

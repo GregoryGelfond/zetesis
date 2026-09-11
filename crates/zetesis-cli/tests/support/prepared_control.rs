@@ -32,7 +32,7 @@ fn stopped_formula_adapter_retains_admitted_subject() {
         &crate::phase_timing::Recorder::new(false),
     )
     .unwrap();
-    let semantic = progress.semantic.unwrap();
+    let semantic = progress.semantic().unwrap();
     let crate::Subject::Theory(theory) = semantic.subject().unwrap() else {
         panic!("original theory")
     };

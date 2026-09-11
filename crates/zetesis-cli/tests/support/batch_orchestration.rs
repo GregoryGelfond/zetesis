@@ -134,7 +134,8 @@ fn run(
         execution,
         &crate::phase_timing::Recorder::new(options.stats),
     )
-    .map(|progress| progress.report)
+    .and_then(crate::failure::Progress::finalize)
+    .map(crate::SolveReport::into_report)
     .map_err(|failure| *failure.cause)
 }
 
@@ -502,7 +503,8 @@ fn original_case(root: &std::path::Path, case: &serde_json::Value) {
             &crate::phase_timing::Recorder::new(options.stats),
         )
         .unwrap()
-        .report;
+        .report()
+        .unwrap();
     assert_eq!(
         report.completion,
         Completion::Exhausted,

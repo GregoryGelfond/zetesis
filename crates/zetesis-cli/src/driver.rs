@@ -172,6 +172,9 @@ pub enum RunError {
     SharedCpu(zetesis_cpu::lazy::shared::Cause),
     /// A static oracle returned an invalid dense closure representation.
     Words(zetesis_core::WordError),
+    /// A driver requested a successful legacy report before search classified its stop.
+    /// This protocol failure establishes neither interruption nor unsatisfiability.
+    CompletionUnavailable,
     /// An injected batch checker violated its ordered result-count contract.
     FormulaBatchShape {
         /// Number of original candidates supplied.
@@ -236,6 +239,7 @@ impl fmt::Display for RunError {
             #[cfg(feature = "gpu")]
             Self::LazyGpu(error) => error.fmt(f),
             Self::LazyStatisticsOverflow => f.write_str("lazy execution statistics overflow"),
+            Self::CompletionUnavailable => f.write_str("driver report requires established search completion"),
             Self::Words(error) => error.fmt(f),
             Self::FormulaBatchShape { expected, actual } => write!(f, "formula checker returned {actual} results for {expected} candidates"),
         }?;
@@ -302,6 +306,7 @@ impl std::error::Error for RunError {
             | Self::UnsupportedOracle { .. }
             | Self::UnsupportedSourceBatching
             | Self::LazyStatisticsOverflow
+            | Self::CompletionUnavailable
             | Self::FormulaBatchShape { .. } => None,
             Self::Formula(error) => Some(error),
             Self::FormulaAdmission(error) => Some(error),
@@ -545,7 +550,8 @@ pub(crate) fn report_statistics(
     phases: &Recorder,
 ) -> Result<Report, RunFailure> {
     report_progress_statistics(result, diagnostics, options, phases)
-        .map(|progress| progress.report)
+        .and_then(Progress::finalize)
+        .map(crate::SolveReport::into_report)
         .map_err(crate::SolveFailure::into_legacy)
 }
 
@@ -557,27 +563,32 @@ fn report_progress_statistics(
 ) -> Result<Progress, crate::SolveFailure> {
     if let Some(timings) = phases.snapshot() {
         match &mut result {
-            Ok(progress) => progress.report.phase_timings = Some(timings),
+            Ok(progress) => progress.phase_timings = Some(timings),
             Err(failure) => failure.phase_timings = Some(Box::new(timings)),
         }
+        let reported = result.and_then(|progress| match progress.report() {
+            Ok(report) => Ok((progress, report)),
+            Err(cause) => Err(progress.fail(cause)),
+        });
         let emitted = crate::statistics::write_detailed(
             diagnostics,
             options,
-            result.as_ref().map(|progress| &progress.report),
+            reported.as_ref().map(|(_, report)| report),
             timings.driver_elapsed,
         )
         .and_then(|()| crate::stage_timing::write(diagnostics, &timings.stages))
         .and_then(|()| crate::phase_timing::write(diagnostics, &timings))
         .and_then(|()| crate::grounding_timing::write(diagnostics, &timings.grounding));
         if let Err(error) = emitted {
-            return Err(match result {
-                Ok(progress) => progress.fail(RunError::Output(error)),
+            return Err(match reported {
+                Ok((progress, _)) => progress.fail(RunError::Output(error)),
                 Err(mut failure) => {
                     failure.record_diagnostics(error);
                     failure
                 }
             });
         }
+        result = reported.map(|(progress, _)| progress);
     }
     result
 }
@@ -601,7 +612,7 @@ pub(crate) fn solve_program(
         control,
         phases,
     )?;
-    let mut progress = Progress::new(0);
+    let mut progress = Progress::new();
     let observations = zetesis_themelios::observation::ObservationProgram::default();
     let display = crate::display::Display {
         selection,
@@ -615,23 +626,27 @@ pub(crate) fn solve_program(
         match next {
             Some(Ok(model)) => {
                 let result = phases.measure(SolvePhase::ObservationOutput, || {
-                    display.write(output, progress.report.models + 1, &model, None)
+                    display.write(output, progress.publication.models + 1, &model, None)
                 });
                 if let Err(error) = result {
                     return Err(progress.fail(error));
                 }
-                progress.report.models += 1;
+                progress.publication.models += 1;
             }
             Some(Err(error)) => return Err(progress.fail(error)),
             None => break,
         }
     }
+    let report = match progress.report() {
+        Ok(report) => report,
+        Err(cause) => return Err(progress.fail(cause)),
+    };
     let finished = phases.measure(SolvePhase::ObservationOutput, || {
-        finish(output, &progress.report, options.json, options.color)
+        finish(output, &report, options.json, options.color)
     });
     match finished {
         Ok(()) => {
-            progress.summary_published = !options.json;
+            progress.publication.summary = !options.json;
             Ok(progress)
         }
         Err(error) => Err(progress.fail(error)),

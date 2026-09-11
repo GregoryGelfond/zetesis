@@ -38,7 +38,7 @@ impl<'a, W: Write> Document<'a, W> {
                 .and_then(|record| self.write_all(&record).map_err(RunError::Output));
             match emitted {
                 Ok(()) => match &mut result {
-                    Ok(progress) => progress.summary_published = true,
+                    Ok(progress) => progress.publication.summary = true,
                     Err(failure) => {
                         failure.acknowledge_summary();
                     }
@@ -59,7 +59,7 @@ impl<'a, W: Write> Document<'a, W> {
                 }
             }
         }
-        result.map(Progress::finalize)
+        result.and_then(Progress::finalize)
     }
 }
 impl<W: Write> Write for Document<'_, W> {
@@ -146,6 +146,9 @@ fn completion(value: Completion) -> &'static str {
 }
 
 fn summary(result: &Result<Progress, SolveFailure>, maximum: usize) -> Result<Vec<u8>, RunError> {
+    if let Ok(progress) = result {
+        progress.completion()?;
+    }
     let mut out = Buffer::new(maximum);
     let view = SummaryView::new(result);
     let status = if result.is_err() {
@@ -285,6 +288,7 @@ fn error_kind(error: &RunError) -> &'static str {
         RunError::BundleAdmission(_) => "bundle_admission",
         RunError::Batch(_) => "batch",
         RunError::CompletionPool(_) => "completion_pool",
+        RunError::CompletionUnavailable => "completion_unavailable",
         RunError::BackendUnavailable => "backend_unavailable",
         RunError::UnsupportedCombination { .. } => "unsupported_combination",
         RunError::UnsupportedOracle { .. } => "unsupported_oracle",
@@ -609,19 +613,19 @@ impl<'a> SummaryView<'a> {
     fn new(result: &'a Result<Progress, SolveFailure>) -> Self {
         match result {
             Ok(progress) => {
-                let report = &progress.report;
+                let semantic = progress.semantic();
                 Self {
-                    completion: Some(report.completion),
-                    published_models: report.models,
-                    verified_models: Some(progress.verified_models),
-                    checked: Some(report.checked),
-                    interruption: report.interruption,
-                    optimization: report.optimization.as_ref(),
-                    search: report.countermodel_statistics.as_ref(),
-                    execution: report.formula_execution.as_ref(),
-                    lazy_execution: report.lazy_execution.as_ref(),
-                    shared_execution: report.shared_execution.as_ref(),
-                    timings: report.phase_timings.as_ref(),
+                    completion: semantic.and_then(crate::SemanticOutcome::completion),
+                    published_models: progress.publication.models,
+                    verified_models: semantic.map(crate::SemanticOutcome::verified_models),
+                    checked: semantic.map(crate::SemanticOutcome::candidate_progress),
+                    interruption: semantic.and_then(crate::SemanticOutcome::interruption),
+                    optimization: semantic.and_then(crate::SemanticOutcome::incumbent),
+                    search: semantic.and_then(crate::SemanticOutcome::countermodel_statistics),
+                    execution: semantic.and_then(crate::SemanticOutcome::formula_execution),
+                    lazy_execution: semantic.and_then(crate::SemanticOutcome::lazy_execution),
+                    shared_execution: semantic.and_then(crate::SemanticOutcome::shared_execution),
+                    timings: progress.phase_timings.as_ref(),
                 }
             }
             Err(failure) => {

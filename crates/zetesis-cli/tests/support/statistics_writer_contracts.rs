@@ -237,3 +237,26 @@ fn hybrid_field_rendering_is_explicitly_a_formatting_fixture_not_device_evidence
         }
     }
 }
+
+#[test]
+fn failed_statistics_preserve_missing_completion() {
+    let options = options(&["--grounder", "lazy"]);
+    let failure = run_finalized_with_diagnostics(
+        "a.".into(),
+        &options,
+        &mut BoundedWriter::new(0),
+        &mut io::sink(),
+        &Control::default(),
+    )
+    .unwrap_err();
+    let partial = failure.partial_report.as_deref().unwrap();
+    assert_eq!(partial.completion, None);
+    assert_eq!(partial.verified_models, 1);
+    let view = super::Details::from(partial);
+    assert_eq!(view.completion, None);
+    assert_eq!(view.interruption, None);
+    let text = every_prefix(&options, &Err(failure));
+    assert!(text.contains("search completion=None"));
+    assert!(!text.contains("  interruption:"));
+    assert!(!text.contains("completion: exhausted"));
+}
