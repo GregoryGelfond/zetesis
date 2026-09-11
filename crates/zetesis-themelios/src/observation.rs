@@ -316,6 +316,11 @@ struct AggregateQuery {
 enum Binder {
     Atom(Vec<Pattern>),
     Assign(usize, Template),
+    Match {
+        pattern: Operand,
+        value: Template,
+        complete: usize,
+    },
     Aggregate(usize, AggregateQuery),
 }
 #[derive(Clone, Debug, PartialEq, Eq)]

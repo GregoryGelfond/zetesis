@@ -540,10 +540,6 @@ fn atom_pattern_cases_match_complete_clingo_displays() {
 
 const OPEN_QUERY_SHAPES: &[(&str, zetesis_themelios::observation::Feature)] = &[
     (
-        "#show. #show X:f(X)=f(1).",
-        zetesis_themelios::observation::Feature::UnsafeVariable,
-    ),
-    (
         "p(2). #show. #show X:p(X+1).",
         zetesis_themelios::observation::Feature::UnsafeVariable,
     ),

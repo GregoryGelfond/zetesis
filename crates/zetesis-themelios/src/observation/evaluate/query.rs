@@ -23,6 +23,7 @@ fn undo_slots(query: &Query, work: &Work<'_>) -> Result<Vec<Vec<usize>>, Error> 
                 .max()
                 .unwrap_or(0),
             Binder::Assign(_, _) | Binder::Aggregate(_, _) => 1,
+            Binder::Match { pattern, .. } => patterns::slots(pattern) + 1,
         };
         undos.push(work.reserve(count)?);
     }
@@ -38,7 +39,12 @@ fn owned_binding(
     work: &mut Work<'_>,
 ) -> Result<(usize, Symbol, Metric), Error> {
     match binder {
-        Binder::Assign(slot, expression) => {
+        Binder::Assign(slot, expression)
+        | Binder::Match {
+            complete: slot,
+            value: expression,
+            ..
+        } => {
             let (value, metric) = if let Some(values) = alternatives {
                 patterns::own(&values.values[cursor].0, work)?
             } else {
@@ -89,7 +95,10 @@ fn choice_count(
             .checked_mul(alternatives.len())
             .ok_or_else(|| work.error(ErrorKind::Allocation))?,
         Binder::Aggregate(_, _) => 1,
-        Binder::Assign(_, expression) => {
+        Binder::Assign(_, expression)
+        | Binder::Match {
+            value: expression, ..
+        } => {
             if expression.multiple() && alternatives.is_none() {
                 *alternatives = Some(values::collect(expression, binding, work)?);
             }
@@ -98,6 +107,26 @@ fn choice_count(
                 .map_or(1, |values| values.values.len())
         }
     })
+}
+
+/// Retain a complete owned value even when matching reports a partial failure.
+/// The common query unwind then owns every whole value and captured subvalue.
+fn retain_binding(
+    binder: &Binder,
+    owned: (usize, Symbol, Metric),
+    binding: &mut [Option<Bound<'_>>],
+    undo: &mut Vec<usize>,
+    work: &mut Work<'_>,
+) -> Result<bool, Error> {
+    let (slot, value, metric) = owned;
+    let matched = if let Binder::Match { pattern, .. } = binder {
+        patterns::bind_symbol(pattern, &value, binding, undo, work)
+    } else {
+        Ok(true)
+    };
+    binding[slot] = Some(Bound::Owned(value, metric));
+    undo.push(slot);
+    matched
 }
 
 pub(super) fn visit<'a>(
@@ -166,8 +195,9 @@ pub(super) fn visit<'a>(
                         continue;
                     }
                 }
-                binder @ (Binder::Aggregate(_, _) | Binder::Assign(_, _)) => {
-                    let (slot, value, metric) = owned_binding(
+                binder
+                @ (Binder::Aggregate(_, _) | Binder::Assign(_, _) | Binder::Match { .. }) => {
+                    let owned = owned_binding(
                         binder,
                         alternatives[depth].as_ref(),
                         cursor,
@@ -175,8 +205,9 @@ pub(super) fn visit<'a>(
                         &binding,
                         work,
                     )?;
-                    binding[slot] = Some(Bound::Owned(value, metric));
-                    undos[depth].push(slot);
+                    if !retain_binding(binder, owned, &mut binding, &mut undos[depth], work)? {
+                        continue;
+                    }
                 }
             }
             if depth + 1 == query.binders.len() {

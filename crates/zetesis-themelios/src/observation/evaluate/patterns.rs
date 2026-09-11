@@ -153,6 +153,22 @@ fn test_symbol(
         Operand::Variable(_) | Operand::Value(_) => unreachable!("safe operand was resolved"),
     }
 }
+
+/// Capture structural positions before testing arithmetic consumers in the row.
+/// The caller owns every newly captured slot and releases it even on mismatch.
+pub(super) fn bind_symbol(
+    pattern: &Operand,
+    value: &Symbol,
+    binding: &mut [Option<Bound<'_>>],
+    undo: &mut Vec<usize>,
+    work: &mut Work<'_>,
+) -> Result<bool, Error> {
+    if !matches_symbol(pattern, value, binding, undo, work)? {
+        return Ok(false);
+    }
+    test_symbol(pattern, value, binding, work)
+}
+
 pub(super) fn matches_value(
     pattern: &Operand,
     value: &Value,

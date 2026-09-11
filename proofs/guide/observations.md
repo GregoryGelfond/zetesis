@@ -47,6 +47,18 @@ would reject that row. Each assigned value remains owned by its binding depth
 and charged until that depth is left; moving a source operand does not add a
 logical atom or a grounding-domain value.
 
+A positive structural equality can capture constructor or tuple components from
+an already finite evaluated operand. The complete chosen value occupies one
+fresh slot, while copied captured subvalues have their own owned-payload charge.
+Keeping that complete value avoids reconstructing an expression or making a new
+pool choice when another chain edge reads it. Matching checks the constructor's
+sign, name and ordered children, as specified abstractly by
+`FiniteValues.constructor_identity` and `FiniteValues.tuple_identity`. Repeated
+variables constrain equal components. Arithmetic positions consume established
+or same-pattern structural captures; they do not invert arithmetic. A mismatch
+releases partial captures before trying the next value. Error and visitor-stop
+paths release the same ownership.
+
 A conditional quantifies universally over its completed local condition rows.
 Within one row, source alternatives are existential; anonymous matches form
 another existential projection inside each signed alternative. Default negation
@@ -108,8 +120,9 @@ across hidden model families. The
 include external comparisons for structural pools and explicit valid-source
 refusals. The [binding contracts](../../crates/zetesis-themelios/tests/observation_bindings.rs)
 cover finite equality chains, shared middle alternatives, original family identity,
-resource boundaries and complete external displays. Constructor equality inversion,
-inverse arithmetic binding, and anonymous negative cardinality keys remain visibly open.
+resource boundaries and complete external displays. Structural pool alternatives
+on a capturing equality operand, inverse arithmetic binding, and anonymous negative
+cardinality keys remain visibly open.
 Native anonymous projection treats both strong signs uniformly; the
 [separate diagnostic fixtures](../../crates/zetesis-themelios/tests/fixtures/observation-strong-anonymous.jsonl)
 record that clingo 5.8.2 refuses anonymous strongly signed negative projections.

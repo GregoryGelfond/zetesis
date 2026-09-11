@@ -4,6 +4,7 @@
 //! aggregate's element inputs must already be available; its remaining guards
 //! return to ordinary comparison scheduling after the actual measure is bound.
 
+use super::bindings::take_operand;
 use super::{
     BTreeSet, Binder, Compiler, Condition, DefaultNegation, Error, Feature, Pattern, Query,
     Relation, Template,
@@ -54,7 +55,11 @@ impl Compiler<'_> {
         }
         None
     }
-    fn assignments(&mut self, conditions: &mut [Condition], binders: &mut Vec<Binder>) {
+    fn assignments(
+        &mut self,
+        conditions: &mut [Condition],
+        binders: &mut Vec<Binder>,
+    ) -> Result<(), Error> {
         // Each step establishes one previously unavailable slot. Move its
         // generating operand into the binder and retain the complete guard,
         // referring to that same value through the new slot. In particular, a
@@ -70,18 +75,14 @@ impl Compiler<'_> {
                         .map(|(slot, operand)| (index, slot, operand))
                 })
         {
-            let Condition::Compare(_, left, steps) = &mut conditions[index] else {
-                unreachable!()
-            };
-            let source = if operand == 0 {
-                left
-            } else {
-                &mut steps[operand - 1].1
-            };
-            let expression = std::mem::replace(source, Template::Variable(slot));
+            // The source template moves into Assign; its guard keeps one new
+            // variable reference in addition to that retained template.
+            self.node(1)?;
+            let expression = take_operand(&mut conditions[index], operand, slot);
             binders.push(Binder::Assign(slot, expression));
             self.safe.insert(slot);
         }
+        Ok(())
     }
     fn aggregate_assignment(&self, condition: &Condition) -> Option<(usize, usize)> {
         let Condition::Aggregate(DefaultNegation::None, aggregate, guards) = condition else {
@@ -160,8 +161,11 @@ impl Compiler<'_> {
                 continue;
             }
             let before = binders.len();
-            self.assignments(&mut conditions, &mut binders);
-            if before == binders.len() && !self.bind_aggregate(&mut conditions, &mut binders) {
+            self.assignments(&mut conditions, &mut binders)?;
+            if before == binders.len()
+                && !self.bind_structure(&mut conditions, &mut binders)?
+                && !self.bind_aggregate(&mut conditions, &mut binders)
+            {
                 break;
             }
         }

@@ -3,6 +3,7 @@
 mod scopes;
 mod patterns;
 mod plan;
+mod bindings;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -217,6 +218,7 @@ impl Compiler<'_> {
         if !term.multiple() {
             return Ok(term);
         }
+        self.node(1)?;
         Ok(Template::Variable(self.generate(term)?))
     }
     fn slot(&mut self) -> Result<usize, Error> {
