@@ -10,7 +10,11 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value as Json;
 
-use super::source_records::{Records, atoms, costs};
+use super::source_records::Records;
+
+#[path = "source_oracle_records.rs"]
+mod report;
+pub(super) use report::model_records;
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
 struct Directory(PathBuf);
@@ -123,30 +127,6 @@ pub(super) fn capture(source: &str) -> Output {
 /// Decode the complete captured standard output without losing the byte capture.
 pub(super) fn output(capture: &Output) -> Json {
     serde_json::from_slice(&capture.stdout).expect("complete oracle output")
-}
-
-/// Require complete enumeration and reconcile every full-model occurrence.
-pub(super) fn model_records(json: &Json) -> Records {
-    assert_eq!(json["Models"]["More"].as_str(), Some("no"));
-    assert!(matches!(
-        json["Result"].as_str(),
-        Some("SATISFIABLE" | "UNSATISFIABLE" | "OPTIMUM FOUND")
-    ));
-    let mut records = Records::new();
-    let mut count = 0;
-    for call in json["Call"].as_array().expect("oracle calls") {
-        if let Some(witnesses) = call["Witnesses"].as_array() {
-            for witness in witnesses {
-                count += 1;
-                assert!(
-                    records.insert((atoms(&witness["Value"]), costs(&witness["Costs"]))),
-                    "duplicate full model"
-                );
-            }
-        }
-    }
-    assert_eq!(json["Models"]["Number"].as_u64(), Some(count));
-    records
 }
 
 /// Capture and reconcile the source when only complete model records are needed.
