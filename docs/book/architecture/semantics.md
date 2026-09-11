@@ -71,6 +71,53 @@ Two full answers can have identical displays. Objectives rank verified answers;
 candidate-only objective restrictions do not replace the original theory used
 for reduct checking.
 
+## Compose consumers without changing membership
+
+Source preparation establishes finite bindings and preserves the original
+conditions. It does not decide which of those bindings hold in an answer set.
+The prepared program has three consumers with different contracts:
+
+```text
+source program
+    │ finite bindings, typed values, scoped conditions
+    ├─ theory ──────── satisfaction + frozen-reduct checking ── AnswerSet M
+    ├─ objectives ──── original-model conditions + keyed sums ── score(M)
+    └─ observations ── original-model queries + value construction ── shown(M)
+```
+
+All three use the same logical atom and value identities. Their owned execution
+representations serve different questions: a theory needs support and reduct
+semantics; a closed objective query needs only truth in the supplied model; an
+observation can bind local variables while reading that model. Sharing scalar
+evaluation or tuple operations does not merge those contracts.
+
+For an objective, **source eligibility** gives a finite set of potential
+contributions. **Condition truth** selects the contributions active in `M`.
+**Contribution identity** coalesces equal complete keys before summation. An
+eligible contribution may be false in every answer; its retained priority can
+therefore be an always-zero slot. Removing a potentially active contribution
+would instead change the optimization problem. The preparation certificate
+must establish coverage, independently of any particular answer.
+
+Eligibility evidence belongs to the objective whose producer dependencies it
+describes. Adding an unrelated objective must not impose a new semantic
+restriction on an existing one. Program-wide storage limits still account for
+their combined retained data. Closed query storage is charged only when the
+numeric contribution is retained; source evaluation and its work limits remain
+separate obligations.
+
+In aggregate heads, positive head permission and aggregate measure also have
+distinct roles. A positive head occurrence can permit an atom even when its
+measure contributes zero. Complete tuple identity determines aggregate
+coalescing; atom identity determines positive permission. Neither may stand in
+for the other. The [language reference](../reference/language.md#choices-and-aggregates)
+states the contribution and empty-measure boundaries.
+
+The [costs and shown terms example](../rust/costs-and-output.md) demonstrates
+these consumers through the library. The [implementation correspondence](../lean/correspondence.md)
+separates the mathematical preservation laws from unproved source, Rust and
+device refinements.
+
 The formal definitions are developed in
 [Part III](../lean/foundations.md). The current Rust names for these objects are
 listed in the [vocabulary](../vocabulary.md).
