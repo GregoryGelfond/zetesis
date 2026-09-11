@@ -1,11 +1,20 @@
 //! Signed atoms survive all native routes; coherence precedes scoring/display.
 
+#[path = "support/clingo_report.rs"]
+mod clingo_report;
+
 use clap::Parser;
 use zetesis_cli::{
     Completion, Interruption, OptimizationStop, Options, Report, RunError, run_with_diagnostics,
 };
+use zetesis_core::{Atom, Predicate, Value};
 use zetesis_cpu::Control;
+use zetesis_solve::AnswerSelection;
 use zetesis_themelios::observation::{ErrorKind, Resource};
+use zetesis_themelios::{AdmissionFailure, ExpansionFailure, ProfileFeature};
+use zetesis_validation::answers;
+
+const NUMERIC_SHOW_NEGATION: &str = "p(1). #show -X:p(X).";
 
 fn solve(source: &str, arguments: &[&str]) -> (Result<Report, RunError>, String, String) {
     let options = Options::try_parse_from(
@@ -161,7 +170,7 @@ fn objective_bounds_match_signed_relations_and_keep_every_optimal_tie() {
 }
 
 #[test]
-fn signed_rendering_keeps_numeric_minus_strings_and_scalar_boundaries() {
+fn signed_values_preserve_their_rendering() {
     let (report, output, _) = solve(
         "-p(-1,\"a b\",\"-p\"). p(1,k,\"q\").",
         &["--backend", "cpu"],
@@ -174,15 +183,67 @@ fn signed_rendering_keeps_numeric_minus_strings_and_scalar_boundaries() {
         assert_eq!(report.unwrap().models, 1);
         assert_eq!(displays(&output), vec![vec![atom]]);
     }
-    {
-        let source = "p(1). #show -X:p(X).";
-        let (result, output, _) = solve(source, &[]);
-        assert!(result.is_err(), "{source}");
-        assert!(
-            output.is_empty(),
-            "refusal emitted no partial answer: {output}"
+}
+
+#[test]
+fn numeric_show_negation_preserves_the_full_answer() {
+    let expected = Atom::new(Predicate::new("p", 1).unwrap(), vec![Value::Number(1)]).unwrap();
+    for oracle in ["auto", "countermodel"] {
+        let (report, output, _) = solve(
+            NUMERIC_SHOW_NEGATION,
+            &["--backend", "cpu", "--oracle", oracle, "--json"],
         );
+        let report = report.unwrap();
+        assert_eq!(report.completion, Completion::Exhausted);
+        assert_eq!(report.models, 1);
+        assert!(report.optimization.is_none());
+        let answers =
+            answers::native_json::parse(output.as_bytes(), answers::native_json::Limits::default())
+                .unwrap();
+        assert_eq!(answers.records().len(), 1);
+        let answer = &answers.records()[0];
+        assert_eq!(answer.full_model(), std::slice::from_ref(&expected));
+        assert_eq!(answer.shown_atom_indices(), &[0]);
+        assert_eq!(answer.shown_terms(), &[Value::Number(-1)]);
+        assert!(answer.costs().is_none());
+
+        let (report, output, _) = solve(
+            NUMERIC_SHOW_NEGATION,
+            &["--backend", "cpu", "--oracle", oracle],
+        );
+        assert_eq!(report.unwrap().completion, Completion::Exhausted);
+        assert_eq!(displays(&output), vec![vec!["-1", "p(1)"]]);
     }
+}
+
+#[test]
+fn closure_preserves_its_term_output_boundary() {
+    let (result, output, _) = solve(
+        NUMERIC_SHOW_NEGATION,
+        &["--backend", "cpu", "--oracle", "closure"],
+    );
+    assert!(matches!(
+        result,
+        Err(RunError::Expansion(ExpansionFailure::Admission(
+            AdmissionFailure::Profile {
+                feature: ProfileFeature::ShowTerm,
+                ..
+            }
+        )))
+    ));
+    assert!(output.is_empty());
+}
+
+#[test]
+#[ignore = "requires independently installed clingo"]
+fn numeric_show_negation_matches_the_original_reference() {
+    // Numeric negation is ordinary clingo-compatible arithmetic. This source
+    // does not use the separate native extension for signed anonymous queries.
+    let report = clingo_report::complete(NUMERIC_SHOW_NEGATION, AnswerSelection::All);
+    assert!(report.satisfiable());
+    assert_eq!(report.model_count(), 1);
+    assert!(report.cost().is_none());
+    assert_eq!(report.displays(), &[(vec!["-1".into(), "p(1)".into()], 1)]);
 }
 
 #[test]

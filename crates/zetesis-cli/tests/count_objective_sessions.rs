@@ -1,7 +1,11 @@
 //! Count-head activity composes with forwarded objectives in prepared sessions.
 
+#[path = "support/clingo_report.rs"]
+mod clingo_report;
 #[path = "support/count_objective_sources.rs"]
 mod count_objective_sources;
+#[path = "support/count_objective_dependencies.rs"]
+mod count_objective_dependencies;
 
 use count_objective_sources::{INCONSISTENT, SATISFIABLE};
 
@@ -12,10 +16,7 @@ use zetesis_cli::{Backend, Completion, Interruption, Oracle, PreparedInput, Sess
 use zetesis_core::{Atom, Predicate, Value};
 use zetesis_cpu::Control;
 use zetesis_sat::Incomplete;
-use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure,
-    FormulaLimits, ProfileFeature, admit_formula,
-};
+use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 type Record = (BTreeSet<Atom>, Option<Vec<(i32, i64)>>);
 
@@ -25,9 +26,9 @@ struct Case {
     costs: Option<&'static [(i32, i64)]>,
 }
 
-// The aliased group and objective producer are independent:
-// an objective-relevant count head retains a separate admission obligation.
-// Expected models include every hidden derived atom.
+// The independent objective producer selects these constant-cost optimum ties.
+// The dependency contracts separately enumerate costs derived from head activity.
+// Both include every hidden derived atom.
 const CASES: &[Case] = &[
     Case {
         source: SATISFIABLE[0],
@@ -73,33 +74,6 @@ const CASES: &[Case] = &[
         costs: Some(&[(7, 0)]),
     },
 ];
-
-#[test]
-fn objective_dependent_count_heads_remain_refused() {
-    for source in [
-        "1#count{1:a;1:b}1.n(N):-N=#count{1:a;2:b}.p(X):-n(X).#minimize{X@7:p(X)}.",
-        "2#count{1:a;2:a}2.n(N):-N=#count{1:a}.p(X):-n(X).#minimize{X@7:p(X)}.",
-        "0#count{1:a;2:a}2.n(N):-N=#count{1:a;2:a}.p(X):-n(X).#maximize{X@7:p(X)}.",
-        "{b}.1#count{1:a;1:c}1:-b.n(N):-N=#count{1:a;2:c}.p(X):-n(X).#minimize{X@7:p(X)}.",
-        "1#count{1:a;2:a}1.n(N):-N=#count{1:a}.p(X):-n(X).#minimize{X@7:p(X)}.",
-    ] {
-        let error = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_err();
-        assert!(!error.diagnostics().is_empty());
-        assert!(matches!(
-            error,
-            FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                feature: ProfileFeature::ObjectiveAggregateDependency,
-                ..
-            }))
-        ));
-    }
-}
 
 fn atom(name: &str, values: Vec<Value>) -> Atom {
     Atom::new(Predicate::new(name, values.len()).unwrap(), values).unwrap()
