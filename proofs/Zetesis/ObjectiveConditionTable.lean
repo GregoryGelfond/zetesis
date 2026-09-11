@@ -123,14 +123,13 @@ theorem rows_correspondence (model : A → Bool) (nodes : List (Node A))
     | some query =>
       simpa using induction (previous ++ [query])
 
-private theorem lookup_exists {V : Type u} (previous : List V) (index : Nat)
-    (inside : index < previous.length) : ∃ value, previous[index]? = some value := by
-  exact ⟨previous[index], (List.getElem?_eq_some_getElem_iff inside).2 trivial⟩
-
 /-- Backward references are sufficient for one unfolding step to succeed. -/
 theorem backward_node_total (previous : List (Query A)) (node : Node A)
     (backward : Backward previous.length node) :
     ∃ query, unfoldNode previous node = some query := by
+  have lookup_exists {V : Type u} (previous : List V) (index : Nat)
+      (inside : index < previous.length) : ∃ value, previous[index]? = some value := by
+    exact ⟨previous[index], (List.getElem?_eq_some_getElem_iff inside).2 trivial⟩
   cases node with
   | boolean value => exact ⟨.boolean value, rfl⟩
   | atom atom => exact ⟨.atom atom, rfl⟩
