@@ -30,7 +30,7 @@ fn reference(row: &Json) -> source_records::Records {
 #[test]
 fn zero_slot_reporting_preserves_full_scored_answers() {
     let cases = source_cases::cases(CASES);
-    assert_eq!(cases.len(), 6);
+    assert_eq!(cases.len(), 7);
     for (case, line) in cases.into_iter().zip(CASES.lines()) {
         let row: Json = serde_json::from_str(line).unwrap();
         let input = source_records::admit(&case.source, &FormulaLimits::default()).unwrap();
@@ -54,16 +54,34 @@ fn zero_slot_reporting_preserves_full_scored_answers() {
             serde_json::from_value(row["priorities"].clone()).unwrap();
         let reference_priorities: Vec<i32> =
             serde_json::from_value(row["reference_priorities"].clone()).unwrap();
+        let priorities: BTreeSet<_> = native_priorities
+            .iter()
+            .chain(&reference_priorities)
+            .copied()
+            .collect();
         for (model, costs) in &native {
+            assert_eq!(costs.as_ref().map_or(0, Vec::len), native_priorities.len());
+            assert!(costs.is_some() || native_priorities.is_empty());
+            let expected_costs = &reference[model];
+            assert_eq!(
+                expected_costs.as_ref().map_or(0, Vec::len),
+                reference_priorities.len()
+            );
+            assert!(expected_costs.is_some() || reference_priorities.is_empty());
+            let actual: BTreeMap<_, _> = native_priorities
+                .iter()
+                .copied()
+                .zip(costs.iter().flatten().copied())
+                .collect();
             let expected: BTreeMap<_, _> = reference_priorities
                 .iter()
                 .copied()
-                .zip(reference[model].iter().flatten().copied())
+                .zip(expected_costs.iter().flatten().copied())
                 .collect();
-            for (&priority, &cost) in native_priorities.iter().zip(costs.iter().flatten()) {
+            for priority in &priorities {
                 assert_eq!(
-                    cost,
-                    expected.get(&priority).copied().unwrap_or(0),
+                    actual.get(priority).copied().unwrap_or(0),
+                    expected.get(priority).copied().unwrap_or(0),
                     "{}: {model:?}",
                     case.name
                 );

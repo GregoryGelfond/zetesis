@@ -250,9 +250,12 @@ contain positive/default-negated atoms and admitted scalar guards. Objective
 conditions in that profile may use default negation, double negation, Boolean
 truth and bounded scalar comparisons, including arithmetic on independently
 bound variables. These conditions lower into closed queries over the original
-complete model; they do not add atoms or theory roots. Extended cyclic cones
-and producer forms outside this certificate have a located
-`ObjectiveSourceEligibility` refusal.
+complete model; they do not add atoms or theory roots. Finite ordinary cyclic
+cones and their unresolved dependants use completed possible support as an
+explicit conservative certificate: every covered atom remains optional, and
+atoms outside that carrier are absent. This does not infer realization or run
+another solver. Cyclic aggregate generators and richer producer forms outside
+these certificates retain a located `ObjectiveSourceEligibility` refusal.
 
 The completed activity is a source grounding abstraction: absent, optional or
 required. Optional means retained as a grounding possibility, not simultaneously

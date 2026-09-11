@@ -1036,3 +1036,4 @@ import Zetesis
 #print axioms Zetesis.HeadContributions.neutral_permission_is_not_truth
 #print axioms Zetesis.ObjectivePriorities.zero_slot_comparison
 #print axioms Zetesis.ObjectivePriorities.zero_slot_optima
+#print axioms Zetesis.ObjectiveEligibility.possible_support_covers

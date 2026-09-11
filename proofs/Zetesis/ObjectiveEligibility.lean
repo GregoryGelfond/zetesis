@@ -10,9 +10,10 @@ under conjunction, disjunction and negation. They do not strengthen that coverag
 into completeness of a source grounder's retained objective rows.
 
 The runtime source profile must establish its atom classifications by completed
-finite producer traversal. Cyclic source dependencies, source simplification,
-aggregate carrier construction and Rust resource completion remain separate
-obligations. In particular, an incomplete traversal supplies no activity result.
+finite producer traversal or a complete possible-support carrier. The latter
+can classify cyclic ordinary producers as optional without solving for truth.
+Concrete support coverage, source simplification, aggregate carrier construction
+and Rust resource completion remain separate obligations. In particular, an incomplete traversal supplies no activity result.
 -/
 
 namespace Zetesis.ObjectiveEligibility
@@ -44,6 +45,19 @@ def disjunction : Activity → Activity → Activity
   | .required, _ | _, .required => .required
   | .absent, .absent => .absent
   | _, _ => .optional
+
+/-- A possible-support carrier supplies no required truth: membership is
+optional, while absence excludes truth only under its coverage premise. -/
+def ofPossible (possible : Bool) : Activity :=
+  if possible then .optional else .absent
+
+/-- A completed upper carrier yields sound activity even for cyclic producers.
+The proof needs only that every true atom belongs to that carrier; it makes no
+acyclicity, realizability or exact source-grounding-retention assumption. -/
+theorem possible_support_covers (possible truth : Bool)
+    (covered : truth = true → possible = true) :
+    Covers (ofPossible possible) truth := by
+  cases possible <;> cases truth <;> simp_all [ofPossible, Covers]
 
 /-- Complementing a source activity covers the complement of every covered
 truth. Optional remains optional; no existence claim is introduced. -/

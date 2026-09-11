@@ -14,6 +14,7 @@ use themelios_program::program::DefaultNegation;
 use themelios_program::symbol::Signature;
 use zetesis_core::{Atom, AtomPattern, Value};
 mod query;
+mod cyclic;
 
 pub(crate) use query::condition as model_condition;
 
@@ -229,7 +230,8 @@ impl Completion {
                 }
             }
             let Some(predicate) = ready else {
-                return Err(refusal(context.location));
+                result.cyclic(prepared, support, &remaining, temporary, context)?;
+                break;
             };
             for rule in &prepared.rules {
                 context.work()?;

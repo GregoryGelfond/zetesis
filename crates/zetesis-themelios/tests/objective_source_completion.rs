@@ -77,6 +77,7 @@ fn source_completion_limits_are_inclusive() {
     for source in [
         "p(1;2).{q(1);q(2)}.#minimize{X@X:p(X),not q(X)}.",
         "{a;b}.n(N):-N=#count{1:a;2:b}.#minimize{1@N:n(N);1@3:not a}.",
+        "a:-not b.b:-not a.#minimize{1:not a}.",
     ] {
         let expected = source_records::exhaustive(
             &source_records::admit(source, &FormulaLimits::default()).unwrap(),
@@ -136,22 +137,6 @@ fn source_completion_matches_fresh_clingo() {
             case.name
         );
     }
-}
-
-#[test]
-fn extended_cycles_keep_a_located_refusal() {
-    let source = "{a}.b:-a.c:-b.b:-c.#minimize{1:not b}.";
-    let error = source_records::admit(source, &FormulaLimits::default()).unwrap_err();
-    assert!(matches!(
-        error,
-        FormulaFailure::Expansion(zetesis_themelios::ExpansionFailure::Admission(
-            zetesis_themelios::AdmissionFailure::Profile {
-                feature: zetesis_themelios::ProfileFeature::ObjectiveSourceEligibility,
-                ..
-            }
-        ))
-    ));
-    assert!(!error.diagnostics().is_empty());
 }
 
 #[test]

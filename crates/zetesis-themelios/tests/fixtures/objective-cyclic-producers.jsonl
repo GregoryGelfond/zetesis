@@ -1,0 +1,15 @@
+{"name":"mutual_default_negation","source":"a:-not b.b:-not a.#minimize{1:not a}.","priorities":[0],"records":[[["a"],[0]],[["b"],[1]]]}
+{"name":"double_negative_cycle","source":"a:-not not b.b:-not not a.#minimize{1:not a}.","priorities":[0],"records":[[[],[1]],[["a","b"],[0]]]}
+{"name":"seeded_positive_cycle","source":"{a}.p:-q.q:-p.p:-a.#minimize{1:not p}.","priorities":[0],"records":[[[],[1]],[["a","p","q"],[0]]]}
+{"name":"empty_positive_cycle","source":"p:-q.q:-p.#minimize{1:not p}.","priorities":[0],"records":[[[],[1]]]}
+{"name":"self_negative_cycle","source":"a:-not a.#minimize{1:not a}.","priorities":[0],"records":[]}
+{"name":"cyclic_alias_observer","source":"a:-not b.b:-not a.c:-a.#minimize{1:not c}.","priorities":[0],"records":[[["a","c"],[0]],[["b"],[1]]]}
+{"name":"cyclic_negative_observer","source":"a:-not b.b:-not a.c:-not a.#minimize{1:c}.","priorities":[0],"records":[[["a"],[0]],[["b","c"],[1]]]}
+{"name":"cyclic_joined_values","source":"d(1;2).p(X):-d(X),not q(X).q(X):-d(X),not p(X).#minimize{X@X:d(X),not p(X)}.","priorities":[2,1],"records":[[["d(1)","d(2)","p(1)","p(2)"],[0,0]],[["d(1)","d(2)","p(1)","q(2)"],[2,0]],[["d(1)","d(2)","p(2)","q(1)"],[0,1]],[["d(1)","d(2)","q(1)","q(2)"],[2,1]]]}
+{"name":"cyclic_weight_expression","source":"d(1;2).p(X):-d(X),not q(X).q(X):-d(X),not p(X).#minimize{X+1,X*2:d(X),not p(X)}.","priorities":[0],"records":[[["d(1)","d(2)","p(1)","p(2)"],[0]],[["d(1)","d(2)","p(1)","q(2)"],[3]],[["d(1)","d(2)","p(2)","q(1)"],[2]],[["d(1)","d(2)","q(1)","q(2)"],[5]]]}
+{"name":"cyclic_weak_condition","source":"a:-not b.b:-not a.:~not a.[1]","priorities":[0],"records":[[["a"],[0]],[["b"],[1]]]}
+{"name":"cyclic_maximize","source":"a:-not b.b:-not a.#maximize{2:not a}.","priorities":[0],"records":[[["a"],[0]],[["b"],[-2]]]}
+{"name":"cyclic_disjunctive_producers","source":"a|b.a:-c.c:-a.#minimize{1:not a}.","priorities":[0],"records":[[["a","c"],[0]],[["b"],[1]]]}
+{"name":"cyclic_choice_producers","source":"{a}.b:-a.a:-b.#minimize{1:not a}.","priorities":[0],"records":[[[],[1]],[["a","b"],[0]]]}
+{"name":"cyclic_tuple_head_producers","source":"#sum{0:a}.b:-a.a:-b.#minimize{1:not a}.","priorities":[0],"records":[[[],[1]],[["a","b"],[0]]]}
+{"name":"cyclic_strong_negation","source":"-a:-not b.b:-not -a.#minimize{1:not -a}.","priorities":[0],"records":[[["-a"],[0]],[["b"],[1]]]}
