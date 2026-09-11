@@ -290,7 +290,7 @@ fn feature(error: &FormulaFailure, predicted: ProfileFeature) -> bool {
     matches!(error, FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile { feature, .. })) if *feature == predicted)
 }
 #[test]
-fn excluded_head_forms_and_objective_dependencies_remain_located_refusals() {
+fn excluded_head_forms_remain_located_refusals() {
     for (source, predicted) in [
         ("d(1).p((X..X+1)+1)|q:-d(X).", ProfileFeature::Term),
         ("p(a..b)|q.", ProfileFeature::Term),
@@ -302,22 +302,25 @@ fn excluded_head_forms_and_objective_dependencies_remain_located_refusals() {
         // Evaluated signed singleton heads have model/reduct tests in negative_heads.rs.
         // Constructor choice heads are covered by finite_values.rs.
         ("{p(a..b)}.", ProfileFeature::Term),
-        (
-            "d(1).a(2).a(X+1)|b:-d(X).#minimize{1@1:b}.",
-            ProfileFeature::ObjectiveDisjunctionDependency,
-        ),
-        (
-            "d(1).a(2).a(X+1)|b:-d(X).c:-b.#minimize{1@1:c}.",
-            ProfileFeature::ObjectiveDisjunctionDependency,
-        ),
-        (
-            "d(1).{a}.{p(X+1):d(X),not a}.#minimize{1:p(2)}.",
-            ProfileFeature::ObjectiveNegativeDependency,
-        ),
     ] {
         let error = input(source).expect_err(source);
         assert!(feature(&error, predicted), "{source}: {error:?}");
         assert!(!error.diagnostics().is_empty());
+    }
+}
+#[path = "support/objective_boundaries.rs"]
+mod objective_boundaries;
+#[path = "support/source_records.rs"]
+mod source_records;
+
+#[test]
+fn evaluated_producers_preserve_scored_answers() {
+    for source in [
+        "d(1).a(2).a(X+1)|b:-d(X).#minimize{1@1:b}.",
+        "d(1).a(2).a(X+1)|b:-d(X).c:-b.#minimize{1@1:c}.",
+        "d(1).{a}.{p(X+1):d(X),not a}.#minimize{1:p(2)}.",
+    ] {
+        objective_boundaries::check(source);
     }
 }
 #[test]

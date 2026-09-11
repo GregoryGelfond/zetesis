@@ -6,8 +6,8 @@ use zetesis_core::{Atom, Model};
 use zetesis_cpu::Control;
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_formula,
+    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, FormulaFailure,
+    FormulaLimits, FormulaResource, admit_formula,
 };
 
 type Models = BTreeSet<BTreeSet<Atom>>;
@@ -196,7 +196,7 @@ fn direct_observers_use_structural_positions_and_score_verified_models() {
 }
 
 #[test]
-fn constants_filters_shared_outputs_and_downstream_producers_are_not_direct_observers() {
+fn assignment_consumers_preserve_scored_answers() {
     for suffix in [
         "#minimize{1@7:n(0)}.",
         "#minimize{N@7:n(N),N!=0}.",
@@ -204,20 +204,13 @@ fn constants_filters_shared_outputs_and_downstream_producers_are_not_direct_obse
         "x:-n(0).#minimize{1@7:x}.",
     ] {
         let source = format!("{{a}}. n(N):-N=#sum{{2:a}}. {suffix}");
-        assert!(
-            matches!(
-                admit(&source),
-                Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
-                    AdmissionFailure::Profile {
-                        feature: ProfileFeature::ObjectiveAggregateDependency,
-                        ..
-                    }
-                )))
-            ),
-            "{source}"
-        );
+        objective_boundaries::check(&source);
     }
 }
+#[path = "support/objective_boundaries.rs"]
+mod objective_boundaries;
+#[path = "support/source_records.rs"]
+mod source_records;
 
 #[test]
 fn generated_positions_union_across_producers_without_changing_full_model_identity() {

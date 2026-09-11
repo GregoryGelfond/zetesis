@@ -429,26 +429,30 @@ fn negative_heads_do_not_bind_variables() {
 }
 
 #[test]
-fn unsupported_head_profiles_remain_explicit() {
-    for (source, predicted) in [
-        ("not a:b|c.", ProfileFeature::ConditionalDisjunction),
-        // Boolean siblings are qualified positively in boolean_heads.rs.
-        (
-            "not a|b.#minimize{1:a}.",
-            ProfileFeature::ObjectiveDisjunctionDependency,
-        ),
-        (
-            "not not a|b.c:-a.#minimize{1:c}.",
-            ProfileFeature::ObjectiveDisjunctionDependency,
-        ),
+fn conditional_negative_disjuncts_remain_explicit_refusals() {
+    let source = "not a:b|c.";
+    let error = input(source).expect_err(source);
+    assert!(matches!(
+        &error,
+        FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
+            feature: ProfileFeature::ConditionalDisjunction,
+            ..
+        }))
+    ));
+    assert!(!error.diagnostics().is_empty());
+}
+#[path = "support/objective_boundaries.rs"]
+mod objective_boundaries;
+#[path = "support/source_records.rs"]
+mod source_records;
+
+#[test]
+fn negative_head_producers_preserve_scored_answers() {
+    for source in [
+        "not a|b.#minimize{1:a}.",
+        "not not a|b.c:-a.#minimize{1:c}.",
     ] {
-        let error = input(source).expect_err(source);
-        assert!(
-            matches!(&error, FormulaFailure::Expansion(ExpansionFailure::Admission(
-            AdmissionFailure::Profile { feature, .. })) if *feature == predicted),
-            "{source}: {error}"
-        );
-        assert!(!error.diagnostics().is_empty());
+        objective_boundaries::check(source);
     }
 }
 

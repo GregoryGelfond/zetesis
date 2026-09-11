@@ -463,16 +463,19 @@ fn numeric_neighbors_remain_distinct_from_empty_values() {
 }
 
 #[test]
-fn extrema_producers_preserve_objective_refusals() {
+fn extrema_producers_preserve_scored_answers() {
     for function in ["#min", "#max"] {
         for value in ["1", "word", "f(1)", "#inf", "#sup"] {
-            profile(
-                &format!("{function}{{{value}:a}}={value}.#minimize{{1:a}}."),
-                ProfileFeature::ObjectiveAggregateDependency,
-            );
+            objective_boundaries::check(&format!(
+                "{function}{{{value}:a}}={value}.#minimize{{1:a}}."
+            ));
         }
     }
 }
+#[path = "support/objective_boundaries.rs"]
+mod objective_boundaries;
+#[path = "support/source_records.rs"]
+mod source_records;
 
 #[test]
 fn signed_extrema_do_not_supply_atom_support() {

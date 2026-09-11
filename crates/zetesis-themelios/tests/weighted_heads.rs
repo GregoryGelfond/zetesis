@@ -14,9 +14,9 @@ use reference::{Models, atom_text, exhaustive, external, holds, native, values};
 use themelios_base::source::SourceId;
 use zetesis_cpu::Control;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus,
-    ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
-    FormulaResource, ProfileFeature, admit_formula, prepare_formula,
+    AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus, ExpansionFailure,
+    ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
+    admit_formula, prepare_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(167);
@@ -129,22 +129,6 @@ fn original_sources_match_clingo_full_models() {
         total += count;
     }
     println!("complete_sources={} full_models={total}", CASES.len());
-}
-
-fn profile(source: &str, expected: ProfileFeature) {
-    let error = prepare_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .and_then(zetesis_themelios::PreparedFormula::ground)
-    .unwrap_err();
-    assert!(
-        matches!(error, FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile { feature, .. })) if feature == expected),
-        "{source}: {error}"
-    );
-    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
 }
 
 #[test]
@@ -262,14 +246,15 @@ fn aliased_groups_select_each_resolved_weight() {
 }
 
 #[test]
-fn weighted_heads_retain_objective_restrictions() {
+fn weighted_head_producers_preserve_scored_answers() {
     for function in ["#sum", "#sum+"] {
-        profile(
-            &format!("1{function}{{1:a}}1.#minimize{{1:a}}."),
-            ProfileFeature::ObjectiveAggregateDependency,
-        );
+        objective_boundaries::check(&format!("1{function}{{1:a}}1.#minimize{{1:a}}."));
     }
 }
+#[path = "support/objective_boundaries.rs"]
+mod objective_boundaries;
+#[path = "support/source_records.rs"]
+mod source_records;
 
 #[test]
 fn signed_neutral_weights_supply_no_support() {

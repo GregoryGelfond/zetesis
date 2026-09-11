@@ -388,8 +388,6 @@ fn refusal(error: &FormulaFailure, expected: &str) -> bool {
         })) => {
             let expected = match expected {
                 "Term" => ProfileFeature::Term,
-                "ObjectiveDisjunctionDependency" => ProfileFeature::ObjectiveDisjunctionDependency,
-                "ObjectiveNegativeDependency" => ProfileFeature::ObjectiveNegativeDependency,
                 _ => return false,
             };
             *feature == expected
@@ -402,6 +400,15 @@ fn refusal(error: &FormulaFailure, expected: &str) -> bool {
 fn signed_atoms_do_not_broaden_unsafe_or_unsupported_value_profiles() {
     let mut count = 0;
     for case in cases().iter().filter(|case| case["native"] != "admit") {
+        // Preserve the original fixture's admission annotation and reference
+        // capture. Current objective contracts check the complete scored family.
+        if matches!(
+            case["native"].as_str(),
+            Some("ObjectiveDisjunctionDependency" | "ObjectiveNegativeDependency")
+        ) {
+            objective_boundaries::check(case["source"].as_str().unwrap());
+            continue;
+        }
         let error = input(case["source"].as_str().unwrap()).unwrap_err();
         assert!(
             refusal(&error, case["native"].as_str().unwrap()),
@@ -411,8 +418,12 @@ fn signed_atoms_do_not_broaden_unsafe_or_unsupported_value_profiles() {
         assert!(!error.diagnostics().is_empty());
         count += 1;
     }
-    assert_eq!(count, 14);
+    assert_eq!(count, 12);
 }
+#[path = "support/objective_boundaries.rs"]
+mod objective_boundaries;
+#[path = "support/source_records.rs"]
+mod source_records;
 
 #[test]
 fn coherence_roots_are_bounded_and_keep_both_original_source_locations() {

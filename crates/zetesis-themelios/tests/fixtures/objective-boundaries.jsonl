@@ -1,0 +1,43 @@
+{"name":"evaluated-disjunction","priorities":[1],"records":[[["a(2)","d(1)"],[0]]],"reference_priorities":[],"reference_records":[[["a(2)","d(1)"],null]],"source":"d(1).a(2).a(X+1)|b:-d(X).#minimize{1@1:b}."}
+{"name":"evaluated-downstream","priorities":[1],"records":[[["a(2)","d(1)"],[0]]],"reference_priorities":[],"reference_records":[[["a(2)","d(1)"],null]],"source":"d(1).a(2).a(X+1)|b:-d(X).c:-b.#minimize{1@1:c}."}
+{"name":"evaluated-negative-choice","priorities":[0],"records":[[["a","d(1)"],[0]],[["d(1)"],[0]],[["d(1)","p(2)"],[1]]],"reference_priorities":[0],"reference_records":[[["a","d(1)"],[0]],[["d(1)"],[0]],[["d(1)","p(2)"],[1]]],"source":"d(1).{a}.{p(X+1):d(X),not a}.#minimize{1:p(2)}."}
+{"name":"negative-maximize","priorities":[0],"records":[[[],[-1]]],"reference_priorities":[0],"reference_records":[[[],[-1]]],"source":"#maximize{1:not a}."}
+{"name":"negative-fact-producer","priorities":[],"records":[[["b"],null]],"reference_priorities":[],"reference_records":[[["b"],null]],"source":"b. a :- not b. #minimize {1@7,k:a}."}
+{"name":"double-negative-absent","priorities":[],"records":[[[],null]],"reference_priorities":[],"reference_records":[[[],null]],"source":"a :- not not b. #minimize {1@7,k:a}."}
+{"name":"double-negative-cycle","priorities":[7],"records":[[[],[0]],[["a"],[1]]],"reference_priorities":[7],"reference_records":[[[],[0]],[["a"],[1]]],"source":"a :- not not a. #minimize {1@7,k:a}."}
+{"name":"contradictory-fact-producer","priorities":[1],"records":[[["a"],[3]]],"reference_priorities":[1],"reference_records":[[["a"],[3]]],"source":"a. b :- a,not a. #minimize {3@1,k:a;7@2,k:b}."}
+{"name":"contradictory-choice-producer","priorities":[2,1],"records":[[[],[0,0]],[["a"],[0,3]]],"reference_priorities":[2,1],"reference_records":[[[],[0,0]],[["a"],[0,3]]],"source":"{a}. b :- a,not a. #minimize {3@1,k:a;7@2,k:b}."}
+{"name":"negative-chain","priorities":[7],"records":[[["a","c"],[1]]],"reference_priorities":[7],"reference_records":[[["a","c"],[1]]],"source":"a :- not b. b :- not c. c. #minimize {1@7,k:a;1@9,k:b}."}
+{"name":"negative-choice-absent","priorities":[],"records":[[["b"],null]],"reference_priorities":[],"reference_records":[[["b"],null]],"source":"b. {a:not b}. #minimize {1@7,k:a}."}
+{"name":"double-negative-choice-absent","priorities":[],"records":[[[],null]],"reference_priorities":[],"reference_records":[[[],null]],"source":"{a:not not b}. #minimize {1@7,k:a}."}
+{"name":"negative-head-disjunction","priorities":[],"records":[[[],null]],"reference_priorities":[],"reference_records":[[[],null]],"source":"not a|b.#minimize{1:a}."}
+{"name":"double-negative-head-disjunction","priorities":[],"records":[[["b"],null]],"reference_priorities":[],"reference_records":[[["b"],null]],"source":"not not a|b.c:-a.#minimize{1:c}."}
+{"name":"unconsumed-count","priorities":[0],"records":[[["q(0)"],[0]]],"reference_priorities":[0],"reference_records":[[["q(0)"],[0]]],"source":"q(N):-N=#count{}.#minimize{N:q(N)}."}
+{"name":"multiple-empty-measures","priorities":[0],"records":[[["q(0)"],[0]]],"reference_priorities":[0],"reference_records":[[["q(0)"],[0]]],"source":"q(N):-N=#count{},N=#sum{}.#minimize{N:q(N)}."}
+{"name":"negated-count-guard","priorities":[0],"records":[[["q(0)"],[0]]],"reference_priorities":[0],"reference_records":[[["q(0)"],[0]]],"source":"q(N):-N=#count{},not N!=#count{}.#minimize{N:q(N)}."}
+{"name":"choice-count-guard","priorities":[0],"records":[[[],[0]],[["q"],[1]]],"reference_priorities":[0],"reference_records":[[[],[0]],[["q"],[1]]],"source":"{q}:-N=#count{},N<=#count{}.#minimize{1:q}."}
+{"name":"negative-count-consumer","priorities":[0],"records":[[["q(0)"],[1]]],"reference_priorities":[0],"reference_records":[[["q(0)"],[1]]],"source":"q(N):-N=#count{},not p(N).#minimize{1,N:q(N)}."}
+{"name":"double-negative-count-consumer","priorities":[0],"records":[[[],[0]]],"reference_priorities":[],"reference_records":[[[],null]],"source":"{q}:-N=#count{},not not p(N).#minimize{1:q}."}
+{"name":"anonymous-count-consumer","priorities":[0],"records":[[[],[0]],[["q"],[1]]],"reference_priorities":[0],"reference_records":[[[],[0]],[["q"],[1]]],"source":"#count{1:q}:-N=#count{},not p(N,_).#minimize{1:q}."}
+{"name":"range-count-consumer","priorities":[0],"records":[[["q(0)","q(1)"],[2]]],"reference_priorities":[0],"reference_records":[[["q(0)","q(1)"],[2]]],"source":"q(K):-N=#count{},K=N..N+1.#minimize{1,K:q(K)}."}
+{"name":"range-choice-consumer","priorities":[0],"records":[[["q"],[1]]],"reference_priorities":[0],"reference_records":[[["q"],[1]]],"source":"K{q}:-N=#count{},K=N..N+1.#minimize{1:q}."}
+{"name":"range-head-consumer","priorities":[0],"records":[[["q"],[1]]],"reference_priorities":[0],"reference_records":[[["q"],[1]]],"source":"K#count{1:q}:-N=#count{},K=N..N+1.#minimize{1:q}."}
+{"name":"strong-disjunction","priorities":[0],"records":[[["-p"],[1]],[["q"],[0]]],"reference_priorities":[0],"reference_records":[[["-p"],[1]],[["q"],[0]]],"source":"-p | q. #minimize{1,k: -p}."}
+{"name":"strong-negative-producer","priorities":[0],"records":[[["-p"],[1]],[["q"],[0]]],"reference_priorities":[0],"reference_records":[[["-p"],[1]],[["q"],[0]]],"source":"{q}. -p :- not q. #minimize{1,k: -p}."}
+{"name":"true-conditional-disjunction","priorities":[0],"records":[[["p"],[0]],[["q"],[1]]],"reference_priorities":[0],"reference_records":[[["p"],[0]],[["q"],[1]]],"source":"p:#true;q:#true.#minimize{1:q}."}
+{"name":"#min-1","priorities":[0],"records":[[["a"],[1]]],"reference_priorities":[0],"reference_records":[[["a"],[1]]],"source":"#min{1:a}=1.#minimize{1:a}."}
+{"name":"#min-word","priorities":[0],"records":[[["a"],[1]]],"reference_priorities":[0],"reference_records":[[["a"],[1]]],"source":"#min{word:a}=word.#minimize{1:a}."}
+{"name":"#min-f(1)","priorities":[0],"records":[[["a"],[1]]],"reference_priorities":[0],"reference_records":[[["a"],[1]]],"source":"#min{f(1):a}=f(1).#minimize{1:a}."}
+{"name":"#min-#inf","priorities":[0],"records":[[["a"],[1]]],"reference_priorities":[0],"reference_records":[[["a"],[1]]],"source":"#min{#inf:a}=#inf.#minimize{1:a}."}
+{"name":"#min-#sup","priorities":[0],"records":[[[],[0]],[["a"],[1]]],"reference_priorities":[0],"reference_records":[[[],[0]],[["a"],[1]]],"source":"#min{#sup:a}=#sup.#minimize{1:a}."}
+{"name":"#max-1","priorities":[0],"records":[[["a"],[1]]],"reference_priorities":[0],"reference_records":[[["a"],[1]]],"source":"#max{1:a}=1.#minimize{1:a}."}
+{"name":"#max-word","priorities":[0],"records":[[["a"],[1]]],"reference_priorities":[0],"reference_records":[[["a"],[1]]],"source":"#max{word:a}=word.#minimize{1:a}."}
+{"name":"#max-f(1)","priorities":[0],"records":[[["a"],[1]]],"reference_priorities":[0],"reference_records":[[["a"],[1]]],"source":"#max{f(1):a}=f(1).#minimize{1:a}."}
+{"name":"#max-#inf","priorities":[0],"records":[[[],[0]],[["a"],[1]]],"reference_priorities":[0],"reference_records":[[[],[0]],[["a"],[1]]],"source":"#max{#inf:a}=#inf.#minimize{1:a}."}
+{"name":"#max-#sup","priorities":[0],"records":[[["a"],[1]]],"reference_priorities":[0],"reference_records":[[["a"],[1]]],"source":"#max{#sup:a}=#sup.#minimize{1:a}."}
+{"name":"#sum","priorities":[0],"records":[[["a"],[1]]],"reference_priorities":[0],"reference_records":[[["a"],[1]]],"source":"1#sum{1:a}1.#minimize{1:a}."}
+{"name":"#sum+","priorities":[0],"records":[[["a"],[1]]],"reference_priorities":[0],"reference_records":[[["a"],[1]]],"source":"1#sum+{1:a}1.#minimize{1:a}."}
+{"name":"filtered-assignment-0","priorities":[7],"records":[[["a","n(2)"],[0]],[["n(0)"],[1]]],"reference_priorities":[7],"reference_records":[[["a","n(2)"],[0]],[["n(0)"],[1]]],"source":"{a}. n(N):-N=#sum{2:a}. #minimize{1@7:n(0)}."}
+{"name":"filtered-assignment-1","priorities":[7],"records":[[["a","n(2)"],[2]],[["n(0)"],[0]]],"reference_priorities":[7],"reference_records":[[["a","n(2)"],[2]],[["n(0)"],[0]]],"source":"{a}. n(N):-N=#sum{2:a}. #minimize{N@7:n(N),N!=0}."}
+{"name":"filtered-assignment-2","priorities":[7],"records":[[["a","d(0)","n(2)"],[0]],[["d(0)","n(0)"],[0]]],"reference_priorities":[7],"reference_records":[[["a","d(0)","n(2)"],[0]],[["d(0)","n(0)"],[0]]],"source":"{a}. n(N):-N=#sum{2:a}. d(0).#minimize{N@7:n(N),d(N)}."}
+{"name":"filtered-assignment-3","priorities":[7],"records":[[["a","n(2)"],[0]],[["n(0)","x"],[1]]],"reference_priorities":[7],"reference_records":[[["a","n(2)"],[0]],[["n(0)","x"],[1]]],"source":"{a}. n(N):-N=#sum{2:a}. x:-n(0).#minimize{1@7:x}."}

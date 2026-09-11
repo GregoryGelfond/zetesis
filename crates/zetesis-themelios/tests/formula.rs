@@ -226,7 +226,7 @@ fn signed_choice_bounds_do_not_create_support() {
 
 #[test]
 fn unimplemented_source_profiles_are_refused() {
-    for source in ["a|b:c.", "#program base(x). a.", "#maximize{1:not a}."] {
+    for source in ["a|b:c.", "#program base(x). a."] {
         assert!(
             admit_formula(
                 source.to_owned(),

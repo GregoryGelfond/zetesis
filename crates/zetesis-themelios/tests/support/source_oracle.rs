@@ -151,5 +151,7 @@ pub(super) fn model_records(json: &Json) -> Records {
 
 /// Capture and reconcile the source when only complete model records are needed.
 pub(super) fn records(source: &str) -> Records {
-    model_records(&output(&capture(source)))
+    let captured = output(&capture(source));
+    assert_eq!(captured["Solver"].as_str(), Some("clingo version 5.8.2"));
+    model_records(&captured)
 }

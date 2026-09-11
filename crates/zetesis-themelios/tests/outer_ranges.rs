@@ -12,9 +12,8 @@ use cases::CASES;
 use reference::{Models, atom_text, exhaustive, external, holds, native, values};
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
-    admit_formula, prepare_formula,
+    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(151);
@@ -247,31 +246,19 @@ fn aggregate_generators_consume_complete_range_outputs() {
 }
 
 #[test]
-fn range_consumers_retain_objective_restrictions() {
+fn range_consumers_preserve_scored_answers() {
     for source in [
         "q(K):-N=#count{},K=N..N+1.#minimize{1,K:q(K)}.",
         "K{q}:-N=#count{},K=N..N+1.#minimize{1:q}.",
         "K#count{1:q}:-N=#count{},K=N..N+1.#minimize{1:q}.",
     ] {
-        let error = prepare_formula(
-            source.into(),
-            options(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_err();
-        assert!(
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                    feature: ProfileFeature::ObjectiveAggregateDependency,
-                    ..
-                }))
-            ),
-            "{source}: {error}"
-        );
+        objective_boundaries::check(source);
     }
 }
+#[path = "support/objective_boundaries.rs"]
+mod objective_boundaries;
+#[path = "support/source_records.rs"]
+mod source_records;
 
 #[test]
 fn false_filters_cannot_hide_undefined_endpoints() {

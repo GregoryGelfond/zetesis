@@ -8,8 +8,8 @@ use zetesis_core::{Atom, Term};
 use zetesis_cpu::Control;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit, admit_formula,
+    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
+    FormulaResource, admit, admit_formula,
 };
 
 type Models = BTreeSet<BTreeSet<Atom>>;
@@ -216,12 +216,7 @@ fn incomplete_support_is_a_located_refusal_not_a_smaller_program() {
 }
 
 #[test]
-fn objective_presence_does_not_claim_exactness_from_negative_producer_overapproximation() {
-    // These sources have positive-only objective conditions. clingo's grounding
-    // nevertheless removes some priorities because of negative producers. A
-    // positive support upper bound cannot reproduce that presentation contract.
-    // Other cases retain their priorities, so the initial profile deliberately
-    // refuses this entire unresolved dependency fragment instead of guessing.
+fn negative_producers_preserve_scored_answers() {
     for source in [
         "b. a :- not b. #minimize {1@7,k:a}.",
         "a :- not not b. #minimize {1@7,k:a}.",
@@ -232,28 +227,13 @@ fn objective_presence_does_not_claim_exactness_from_negative_producer_overapprox
         "b. {a:not b}. #minimize {1@7,k:a}.",
         "{a:not not b}. #minimize {1@7,k:a}.",
     ] {
-        let (program, _) = source.split_once("#minimize").expect("objective fixture");
-        admitted(program);
-        let error = admit_formula(
-            source.to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .expect_err("objective dependency profile must remain explicit");
-        assert!(
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                    feature: ProfileFeature::ObjectiveNegativeDependency,
-                    ..
-                }))
-            ),
-            "{source}: {error}"
-        );
-        assert!(!error.diagnostics().is_empty());
+        objective_boundaries::check(source);
     }
 }
+#[path = "support/objective_boundaries.rs"]
+mod objective_boundaries;
+#[path = "support/source_records.rs"]
+mod source_records;
 
 #[test]
 fn objective_dependency_restrictions_do_not_reject_negative_constraints() {

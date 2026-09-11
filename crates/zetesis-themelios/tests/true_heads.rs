@@ -291,15 +291,14 @@ fn conditional_disjunction_boundaries_remain_located() {
 }
 
 #[test]
-fn true_disjunction_objective_dependencies_are_refused() {
+fn true_disjuncts_preserve_scored_answers() {
     let source = "p:#true;q:#true.#minimize{1:q}.";
-    let error = input(source).expect_err(source);
-    assert!(profile(
-        &error,
-        ProfileFeature::ObjectiveDisjunctionDependency
-    ));
-    assert!(!error.diagnostics().is_empty());
+    objective_boundaries::check(source);
 }
+#[path = "support/objective_boundaries.rs"]
+mod objective_boundaries;
+#[path = "support/source_records.rs"]
+mod source_records;
 
 #[test]
 fn extended_profile_refuses_true_disjunctions() {
