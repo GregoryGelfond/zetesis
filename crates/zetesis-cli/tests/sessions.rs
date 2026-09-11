@@ -714,6 +714,7 @@ struct RejectObservation {
     rejection: Rejection,
     calls: usize,
     failures: usize,
+    incumbent_costs: Option<Vec<(i32, i64)>>,
 }
 impl RejectObservation {
     const fn new(rejection: Rejection) -> Self {
@@ -721,6 +722,7 @@ impl RejectObservation {
             rejection,
             calls: 0,
             failures: 0,
+            incumbent_costs: None,
         }
     }
 }
@@ -734,6 +736,9 @@ impl zetesis_cli::ExecutionObserver for RejectObservation {
     ) -> Result<(), Self::Error> {
         use zetesis_cli::ExecutionObservation as Event;
         self.calls += 1;
+        if let Event::ObjectiveBound { costs, .. } = &observation {
+            self.incumbent_costs = Some(costs.to_vec());
+        }
         if matches!(
             (self.rejection, observation),
             (Rejection::Execution, Event::CpuFormula { .. })
@@ -832,6 +837,16 @@ fn bound_observer_failure_retains_the_verified_incumbent() {
     assert_eq!(outcome.verified_models(), 1);
     assert_eq!(outcome.scored_models(), 1);
     assert_eq!(outcome.retained_models(), 1);
+    assert_eq!(
+        outcome.incumbent().unwrap().score.costs(),
+        observer.incumbent_costs.as_deref().unwrap()
+    );
+    assert!(
+        outcome
+            .subject()
+            .unwrap()
+            .same_instance(&Subject::Theory(admitted.theory().clone()))
+    );
     assert_eq!(outcome.completion(), None);
     assert!(!outcome.optimum_proved());
     assert!(failure.publication().is_none());
