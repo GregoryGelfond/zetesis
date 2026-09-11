@@ -112,6 +112,10 @@ impl Recorder {
         }
     }
 
+    pub(crate) fn enabled(&self) -> bool {
+        self.stages.enabled()
+    }
+
     pub(crate) fn start(&self, phase: SolvePhase) -> Span<'_> {
         Span {
             recorder: self,

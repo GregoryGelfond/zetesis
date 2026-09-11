@@ -28,6 +28,8 @@ mod statistics;
 mod formula_execution;
 mod completion_accounting;
 mod phase_timing;
+mod measurements;
+pub use measurements::{MeasurementSpan, SolveMeasurements};
 mod stage_timing;
 mod formula_queue;
 mod output;
