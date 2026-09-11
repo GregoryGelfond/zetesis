@@ -6,7 +6,7 @@
 
 use themelios_base::span::Location;
 use zetesis_core::{
-    Atom, AtomPattern, ConstructionError, Sign, Term, Value, ValueError, ValueLimits, ValueNode,
+    AtomPattern, ConstructionError, Sign, Term, Value, ValueError, ValueLimits, ValueNode,
 };
 
 use crate::expansion::Budget;
@@ -63,7 +63,7 @@ impl PatternAtom {
     /// No incoming slot changes unless the caller commits the complete delta.
     pub(super) fn matches(
         &self,
-        atom: &Atom,
+        atom: zetesis_core::relation::Row<'_, '_>,
         values: &[Option<Value>],
         context: &mut MatchContext<'_>,
     ) -> Result<Option<Vec<(usize, Value)>>, FormulaFailure> {
@@ -77,7 +77,8 @@ impl PatternAtom {
         let slots = self.slots().count();
         let mut delta = Vec::new();
         reserve(&mut delta, slots, context.budget, context.location)?;
-        for (term, value) in self.atom.terms().iter().zip(atom.values()) {
+        for (column, term) in self.atom.terms().iter().enumerate() {
+            let value = atom.value(column).expect("checked pattern arity");
             context.value_work(value)?;
             let agrees = match term {
                 Term::Constant(expected) => expected == value,
@@ -90,7 +91,10 @@ impl PatternAtom {
             }
         }
         for argument in &self.arguments {
-            let Value::Structured(value) = &atom.values()[argument.position] else {
+            let Value::Structured(value) = atom
+                .value(argument.position)
+                .expect("checked argument position")
+            else {
                 return Ok(None);
             };
             let mut offset = 0;
@@ -334,7 +338,7 @@ mod tests {
     use super::*;
     use crate::{ExpansionFailure, ExpansionLimits, FormulaResource};
     use themelios_base::span::{ByteOffset, Span};
-    use zetesis_core::Predicate;
+    use zetesis_core::{Atom, Predicate};
 
     fn location() -> Location {
         Location {
@@ -402,6 +406,13 @@ mod tests {
         assert_work_boundary(&pattern, &atom, &incoming);
     }
     fn assert_work_boundary(pattern: &PatternAtom, atom: &Atom, incoming: &[Option<Value>]) {
+        let relation = zetesis_core::relation::Relation::from_atoms(
+            atom.predicate(),
+            std::slice::from_ref(atom),
+            zetesis_core::relation::Limits::default(),
+        )
+        .unwrap();
+        let atom = relation.row(0).unwrap();
         let mut budget = Budget::new(ExpansionLimits::default(), 100);
         let mut counters = Counters::default();
         let delta = pattern
@@ -470,6 +481,12 @@ mod tests {
     #[test]
     fn delta_storage_is_admitted_before_a_value_is_copied() {
         let (pattern, atom, incoming) = fixture();
+        let relation = zetesis_core::relation::Relation::from_atoms(
+            atom.predicate(),
+            std::slice::from_ref(&atom),
+            zetesis_core::relation::Limits::default(),
+        )
+        .unwrap();
         let mut budget = Budget::new(
             ExpansionLimits {
                 max_scalar_bytes: 0,
@@ -480,7 +497,7 @@ mod tests {
         let mut counters = Counters::default();
         let error = pattern
             .matches(
-                &atom,
+                relation.row(0).unwrap(),
                 &incoming,
                 &mut MatchContext {
                     limits: &FormulaLimits::default(),

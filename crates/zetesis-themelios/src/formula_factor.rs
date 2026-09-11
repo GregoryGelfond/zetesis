@@ -5,7 +5,7 @@ mod plan;
 use std::collections::BTreeSet;
 
 use themelios_program::program::DefaultNegation;
-use zetesis_core::{Atom, AtomPattern, Term, Value};
+use zetesis_core::{AtomPattern, Term, Value};
 use zetesis_ferraris::Node;
 
 use crate::FormulaFailure;
@@ -50,14 +50,15 @@ fn head_binding(
     builder: &mut Builder<'_>,
     rule: &RuleIr,
     head: &AtomPattern,
-    atom: &Atom,
+    atom: zetesis_core::relation::Row<'_, '_>,
 ) -> Result<Option<Vec<Option<Value>>>, FormulaFailure> {
     let mut fixed = Vec::with_capacity(rule.variables);
     for _ in 0..rule.variables {
         builder.work(rule.location)?;
         fixed.push(None);
     }
-    for (term, value) in head.terms().iter().zip(atom.values()) {
+    for (column, term) in head.terms().iter().enumerate() {
+        let value = atom.value(column).expect("checked head arity");
         builder.work(rule.location)?;
         match term {
             Term::Constant(constant) if constant != value => return Ok(None),

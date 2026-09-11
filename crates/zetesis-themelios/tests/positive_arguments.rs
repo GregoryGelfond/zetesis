@@ -501,7 +501,8 @@ fn work_prefixes_refuse_until_complete_admission() {
                 ..
             }) => {
                 assert_eq!(limit, u128::from(cap));
-                assert_eq!(observed, limit + 1);
+                // Relation construction also charges bounded groups of cells.
+                assert!(observed > limit);
             }
             other => panic!("work cap {cap}: {other:?}"),
         }

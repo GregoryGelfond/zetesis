@@ -12,7 +12,7 @@ use themelios_program::term::BinaryOp;
 use zetesis_core::relation::{Limits, Relation};
 use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value, ValueLimits, ValueNode};
 
-use super::{Budget, Counters, Join, Support};
+use super::{Budget, Counters, Join, SupportCatalog};
 use crate::formula_ir::{Expression, LiteralIr, Operation};
 use crate::formula_pattern::{ArgumentPattern, PatternAtom, PatternNode};
 use crate::{ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource};
@@ -31,17 +31,14 @@ fn location() -> Location {
     }
 }
 
-fn support(rows: Vec<Vec<Value>>) -> Support {
-    let mut support = Support::default();
-    let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
+fn support(rows: Vec<Vec<Value>>) -> SupportCatalog {
+    let mut support = SupportCatalog::default();
     for values in rows {
         let atom = Atom::new(Predicate::new("row", values.len()).unwrap(), values).unwrap();
-        assert!(!support.present.contains(&atom), "set-valued fixture");
         support
             .insert(
                 atom,
                 &FormulaLimits::default(),
-                &mut budget,
                 &mut Counters::default(),
                 location(),
             )
@@ -70,7 +67,7 @@ fn number(value: i32) -> Expression {
 
 fn evaluate(
     route: Route,
-    support: &Support,
+    catalog: &SupportCatalog,
     literals: &[LiteralIr],
     prefix: &[Value],
     variables: usize,
@@ -78,23 +75,33 @@ fn evaluate(
 ) -> Result<Vec<Vec<Value>>, FormulaFailure> {
     let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
     let mut counters = Counters::default();
+    let support = catalog.snapshot(
+        &FormulaLimits::default(),
+        &mut Counters::default(),
+        location(),
+    )?;
     let mut join = Join::new(
         literals,
         prefix,
         variables,
-        support,
+        &support,
         &mut budget,
         location(),
     )?;
     assert_eq!(join.patterns.len(), 1, "fixed single-pattern control");
     let positive = join.patterns[0];
     let atom = positive.atom();
-    let relation = Relation::from_atoms(
-        atom.predicate(),
-        support.rows(atom.predicate()),
-        Limits::default(),
-    )
-    .unwrap();
+    let original: Vec<_> = support
+        .rows(atom.predicate())
+        .map(|row| {
+            Atom::new(
+                row.predicate().clone(),
+                super::row_values(row).cloned().collect(),
+            )
+            .unwrap()
+        })
+        .collect();
+    let relation = Relation::from_atoms(atom.predicate(), &original, Limits::default()).unwrap();
     let all = relation.all(Limits::default()).unwrap();
     let keys: Vec<_> = atom
         .terms()
@@ -137,7 +144,7 @@ fn evaluate(
 }
 
 fn agree(
-    support: &Support,
+    support: &SupportCatalog,
     literals: &[LiteralIr],
     prefix: &[Value],
     variables: usize,

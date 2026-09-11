@@ -547,7 +547,8 @@ fn witness_work_limit_is_inclusive() {
                 },
             )
         },
-        |error| matches!(error, FormulaFailure::Limit { resource: FormulaResource::Work, observed, limit, .. } if *observed == limit + 1),
+        // A relation operation can charge a bounded group of cells at once.
+        |error| matches!(error, FormulaFailure::Limit { resource: FormulaResource::Work, observed, limit, .. } if observed > limit),
     );
     println!("formula_work={cap}");
 }

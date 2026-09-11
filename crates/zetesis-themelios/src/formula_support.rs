@@ -1,17 +1,18 @@
 //! A finite support upper bound and complete iterative relational joins.
 
 mod evaluation;
+mod relations;
 #[cfg(test)]
 mod columnar;
 #[cfg(test)]
 mod postings;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use themelios_base::span::Location;
 use themelios_program::program::{DefaultNegation, Relation};
 use themelios_program::term::EvalError;
-use zetesis_core::{Atom, AtomPattern, Predicate, Value};
+use zetesis_core::{Atom, AtomPattern, Value};
 
 use crate::expansion::Budget;
 use crate::formula::ceiling;
@@ -20,6 +21,15 @@ use crate::grounding_observer::{Event, Work};
 use crate::{ExpansionFailure, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
 
 pub(crate) use evaluation::Evaluation;
+#[cfg(test)]
+use relations::RelationRows;
+pub(crate) use relations::{Support, SupportCatalog};
+
+pub(crate) fn row_values<'source>(
+    row: zetesis_core::relation::Row<'_, 'source>,
+) -> impl ExactSizeIterator<Item = &'source Value> {
+    (0..row.predicate().arity()).map(move |column| row.value(column).expect("checked row arity"))
+}
 
 #[derive(Default)]
 pub(crate) struct Counters {
@@ -43,13 +53,21 @@ impl Counters {
         limits: &FormulaLimits,
         location: Location,
     ) -> Result<(), FormulaFailure> {
+        self.charge_work(1, limits, location)
+    }
+    pub(super) fn charge_work(
+        &mut self,
+        amount: u128,
+        limits: &FormulaLimits,
+        location: Location,
+    ) -> Result<(), FormulaFailure> {
         ceiling(
             FormulaResource::Work,
-            u128::from(self.work) + 1,
+            u128::from(self.work) + amount,
             u128::from(limits.max_work),
             location,
         )?;
-        self.work += 1;
+        self.work += u64::try_from(amount).expect("charged work fits its u64 ceiling");
         Ok(())
     }
     pub(super) fn generated(
@@ -86,96 +104,14 @@ impl Counters {
     }
 }
 
-#[derive(Default)]
-pub(crate) struct Support {
-    present: BTreeSet<Atom>,
-    rows: BTreeMap<Predicate, RelationRows>,
-    indexed_entries: usize,
-}
-#[derive(Default)]
-struct RelationRows {
-    atoms: Vec<Atom>,
-    columns: Vec<BTreeMap<Value, Vec<usize>>>,
-}
-impl Support {
-    pub(super) fn rows(&self, predicate: &Predicate) -> &[Atom] {
-        self.rows
-            .get(predicate)
-            .map_or(&[], |relation| relation.atoms.as_slice())
-    }
-    fn insert(
-        &mut self,
-        atom: Atom,
-        limits: &FormulaLimits,
-        budget: &mut Budget,
-        counters: &mut Counters,
-        location: Location,
-    ) -> Result<(), FormulaFailure> {
-        ceiling(
-            FormulaResource::SupportIndexEntries,
-            self.indexed_entries as u128 + atom.values().len() as u128,
-            limits.max_support_index_entries as u128,
-            location,
-        )?;
-        let relation = self.rows.entry(atom.predicate().clone()).or_default();
-        if relation.columns.is_empty() {
-            relation.columns = (0..atom.values().len()).map(|_| BTreeMap::new()).collect();
-        }
-        let row = relation.atoms.len();
-        for (column, value) in relation.columns.iter_mut().zip(atom.values()) {
-            counters.work(limits, location)?;
-            if !column.contains_key(value) {
-                column.insert(copy(value, budget, location)?, Vec::new());
-            }
-            column.get_mut(value).expect("index key inserted").push(row);
-            counters.record(Event::SupportIndexEntry);
-        }
-        self.indexed_entries += atom.values().len();
-        relation.atoms.push(atom.clone());
-        self.present.insert(atom);
-        counters.record(Event::SupportAtom);
-        Ok(())
-    }
-    fn probe(
-        &self,
-        pattern: &AtomPattern,
-        values: &[Option<Value>],
-        limits: &FormulaLimits,
-        counters: &mut Counters,
-        location: Location,
-    ) -> Result<Option<&[usize]>, FormulaFailure> {
-        counters.record(Event::JoinProbe);
-        let Some(relation) = self.rows.get(pattern.predicate()) else {
-            return Ok(Some(&[]));
-        };
-        let mut selected: Option<&[usize]> = None;
-        for (column, term) in relation.columns.iter().zip(pattern.terms()) {
-            counters.work(limits, location)?;
-            let value = match term {
-                zetesis_core::Term::Constant(value) => Some(value),
-                zetesis_core::Term::Variable(variable) => values[*variable].as_ref(),
-            };
-            if let Some(value) = value {
-                let rows = column.get(value).map_or(&[][..], Vec::as_slice);
-                if selected.is_none_or(|selected| rows.len() < selected.len()) {
-                    selected = Some(rows);
-                }
-            }
-        }
-        #[cfg(test)]
-        postings::observe(relation, pattern, values, selected);
-        Ok(selected)
-    }
-}
-
 pub(crate) fn build(
     prepared: &Prepared,
     limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
     fallback: Location,
-) -> Result<Support, FormulaFailure> {
-    let mut support = Support::default();
+) -> Result<SupportCatalog, FormulaFailure> {
+    let mut catalog = SupportCatalog::default();
     #[cfg(test)]
     postings::begin_support();
     let mut rounds = 0_u64;
@@ -188,6 +124,7 @@ pub(crate) fn build(
         )?;
         rounds += 1;
         counters.record(Event::SupportRound);
+        let support = catalog.snapshot(limits, counters, fallback)?;
         let mut delta = BTreeSet::new();
         for rule in &prepared.rules {
             if matches!(rule.head, HeadIr::Normal(None)) {
@@ -265,11 +202,12 @@ pub(crate) fn build(
                 }
             }
         }
+        drop(support);
         if delta.is_empty() {
-            return Ok(support);
+            return Ok(catalog);
         }
         for atom in delta {
-            support.insert(atom, limits, budget, counters, fallback)?;
+            catalog.insert(atom, limits, counters, fallback)?;
         }
     }
 }
@@ -297,10 +235,10 @@ fn derive(
     let atom = pattern
         .instantiate(binding)
         .expect("safe variable assigned");
-    if !support.present.contains(&atom) && !delta.contains(&atom) {
+    if !support.contains(&atom) && !delta.contains(&atom) {
         ceiling(
             FormulaResource::Atoms,
-            support.present.len() as u128 + delta.len() as u128 + 1,
+            support.len() as u128 + delta.len() as u128 + 1,
             limits.theory.max_atoms as u128,
             location,
         )?;
@@ -344,7 +282,7 @@ pub(crate) struct Join<'a> {
     evaluation: Evaluation,
     pending: Option<crate::formula_binding_cursor::Cursor<'a>>,
     patterns: Vec<PositivePattern<'a>>,
-    support: &'a Support,
+    support: &'a Support<'a>,
     values: Vec<Option<Value>>,
     generated_slots: Vec<bool>,
     positions: Vec<usize>,
@@ -358,7 +296,7 @@ pub(crate) struct Join<'a> {
 impl<'a> Join<'a> {
     pub(super) fn rule(
         rule: &'a crate::formula_ir::RuleIr,
-        support: &'a Support,
+        support: &'a Support<'a>,
         budget: &mut Budget,
     ) -> Result<Self, FormulaFailure> {
         let mut join = Self::new(
@@ -378,7 +316,7 @@ impl<'a> Join<'a> {
         variables: usize,
         used: &BTreeSet<usize>,
         fixed: &[Option<Value>],
-        support: &'a Support,
+        support: &'a Support<'a>,
         budget: &mut Budget,
         location: Location,
     ) -> Result<Self, FormulaFailure> {
@@ -399,7 +337,7 @@ impl<'a> Join<'a> {
         literals: &'a [LiteralIr],
         prefix: &[Value],
         variables: usize,
-        support: &'a Support,
+        support: &'a Support<'a>,
         budget: &mut Budget,
         location: Location,
     ) -> Result<Self, FormulaFailure> {
@@ -414,7 +352,7 @@ impl<'a> Join<'a> {
                 _ => None,
             })
             .collect();
-        patterns.sort_by_key(|pattern| support.rows(pattern.atom().predicate()).len());
+        patterns.sort_by_key(|pattern| support.row_count(pattern.atom().predicate()));
         let count = patterns.len();
         let mut values = vec![None; variables];
         let mut generated_slots = vec![false; variables];
@@ -579,7 +517,7 @@ impl<'a> Join<'a> {
             let position = self.positions[self.depth];
             let row =
                 self.probes[self.depth].map_or(Some(position), |rows| rows.get(position).copied());
-            let atom = row.and_then(|row| self.support.rows(pattern.atom().predicate()).get(row));
+            let atom = row.and_then(|row| self.support.row(pattern.atom().predicate(), row));
             let Some(atom) = atom else {
                 self.positions[self.depth] = 0;
                 self.probed[self.depth] = false;
@@ -605,7 +543,7 @@ impl<'a> Join<'a> {
     fn match_row(
         &mut self,
         pattern: PositivePattern<'_>,
-        atom: &Atom,
+        atom: zetesis_core::relation::Row<'_, '_>,
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
@@ -638,7 +576,8 @@ impl<'a> Join<'a> {
                 matches = false;
             }
         } else {
-            for (term, value) in pattern.atom().terms().iter().zip(atom.values()) {
+            for (column, term) in pattern.atom().terms().iter().enumerate() {
+                let value = atom.value(column).expect("checked pattern arity");
                 counters.work(limits, location)?;
                 if let Value::Structured(value) = value {
                     for _ in 0..value.payload_bytes() {
@@ -746,7 +685,7 @@ impl<'a> Join<'a> {
         }
         let atom = Atom::new(head.predicate().clone(), values).expect("validated head arity");
         counters.work(limits, location)?;
-        Ok(self.support.present.contains(&atom) || delta.contains(&atom))
+        Ok(self.support.contains(&atom) || delta.contains(&atom))
     }
     fn complete(
         &self,

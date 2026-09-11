@@ -64,6 +64,7 @@ pub(super) struct Formula {
     max_assignment_values: usize,
     max_disjunction_elements: usize,
     max_support_index_entries: usize,
+    max_support_bytes: usize,
     max_aggregate_cache_rows: usize,
     max_aggregate_cache_key_bytes: usize,
     max_aggregate_cache_elements: usize,

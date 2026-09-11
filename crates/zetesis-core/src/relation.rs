@@ -1,6 +1,6 @@
 //! Bounded immutable columns over typed relation rows.
 //!
-//! This experimental execution view preserves the source's signed predicate,
+//! This execution view preserves the source's signed predicate,
 //! row order and duplicate row occurrences. It is a finite indexed tuple view:
 //! two equal row occurrences do not denote distinct ASP atoms or additional
 //! truth. Extensional atom uniqueness and source-instance provenance remain
@@ -10,9 +10,11 @@
 //! selection and device views.
 //!
 //! The source remains borrowed. Columns and dictionary references are owned;
-//! no complete atom or logical payload is cloned. An eventual authoritative
-//! column store must replace superseded tuple owners before production adoption.
-//! Current structured-value clones already share their payload through `Arc`.
+//! no complete atom or logical payload is cloned. The caller retains the
+//! authoritative source catalog and must remove superseded tuple owners when
+//! adopting this view. Eager formula support uses columns for typed lookup and
+//! row access; device consumers use the same representation for equality masks.
+//! Structured-value clones already share their payload through `Arc`.
 //!
 //! Limits cover one operation's relation, supplied query/selection and newly
 //! allocated buffers. Other live caller frames and borrowed source allocations

@@ -20,7 +20,7 @@ pub(super) struct Cursor<'a> {
     generators: Vec<&'a LiteralIr>,
     states: Vec<State>,
     values: Vec<Value>,
-    support: &'a Support,
+    support: &'a Support<'a>,
     depth: usize,
     finished: bool,
 }
@@ -42,7 +42,7 @@ impl<'a> Cursor<'a> {
     pub fn new(
         literals: &'a [LiteralIr],
         values: Vec<Value>,
-        support: &'a Support,
+        support: &'a Support<'a>,
         plan: Option<&'a crate::formula_assignment_plan::Plan>,
     ) -> Self {
         let generators = if let Some(plan) = plan {

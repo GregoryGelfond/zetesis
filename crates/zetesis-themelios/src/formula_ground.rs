@@ -36,8 +36,11 @@ pub(crate) fn ground(
 
     let profile = crate::grounding_observer::Profile::new(observer);
     let mut counters = Counters::observed(profile.work());
-    let support = profile.phase(GroundingPhase::SupportCompletion, None, || {
+    let catalog = profile.phase(GroundingPhase::SupportCompletion, None, || {
         formula_support::build(&prepared, limits, budget, &mut counters, location)
+    })?;
+    let support = profile.phase(GroundingPhase::SupportCompletion, None, || {
+        catalog.snapshot(limits, &mut counters, location)
     })?;
     let (objectives, objective_origins) =
         profile.phase(GroundingPhase::ObjectiveActivation, None, || {
@@ -418,7 +421,8 @@ impl Builder<'_> {
         for atom in support.rows(predicate) {
             self.work(location)?;
             let mut matches = true;
-            for (term, value) in terms.iter().zip(atom.values()) {
+            for (column, term) in terms.iter().enumerate() {
+                let value = atom.value(column).expect("checked projection arity");
                 self.work(location)?;
                 if let Some(term) = term {
                     matches &= term
@@ -431,13 +435,14 @@ impl Builder<'_> {
                 self.budget.charge(
                     ExpansionResource::ScalarBytes,
                     atom.predicate().name().len() as u128
-                        + atom.values().iter().map(value_bytes).sum::<u128>(),
+                        + formula_support::row_values(atom)
+                            .map(value_bytes)
+                            .sum::<u128>(),
                     location,
                 )?;
                 let pattern = AtomPattern::new(
                     atom.predicate().clone(),
-                    atom.values()
-                        .iter()
+                    formula_support::row_values(atom)
                         .cloned()
                         .map(zetesis_core::Term::Constant)
                         .collect(),

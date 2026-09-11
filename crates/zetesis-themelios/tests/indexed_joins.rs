@@ -1,32 +1,93 @@
 //! Bound-column probes restrict work without replacing full relational matching.
 
+use std::cell::Cell;
 use std::fmt::Write;
+
+use themelios_base::span::Location;
 
 use zetesis_core::Value;
 use zetesis_cpu::Control;
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
-    admit_formula,
+    GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork, admit_formula,
+    admit_formula_with_grounding_observer,
 };
 
-#[test]
-fn selective_shared_arguments_complete_under_a_fixed_work_ceiling() {
+const JOIN_RULE: &str = "r(X,Z):-p(X,Y),q(Y,Z).";
+
+fn selective_source() -> String {
     let mut source = String::new();
     for value in 0..200 {
         write!(source, "p({value},{value}).q({value},{}).", value + 1).expect("write to String");
     }
-    source.push_str("r(X,Z):-p(X,Y),q(Y,Z).");
-    let input = admit_formula(
-        source,
+    source.push_str(JOIN_RULE);
+    source
+}
+
+#[derive(Default)]
+struct JoinVisits {
+    active: Cell<bool>,
+    support: Cell<u64>,
+    instantiation: Cell<u64>,
+}
+
+impl GroundingObserver for JoinVisits {
+    fn enter(&self) {
+        assert!(!self.active.replace(true));
+    }
+
+    fn exit(&self) {
+        assert!(self.active.replace(false));
+    }
+
+    fn details_enabled(&self) -> bool {
+        assert!(self.active.get());
+        true
+    }
+
+    fn phase_exit(
+        &self,
+        phase: GroundingPhase,
+        _: Option<Location>,
+        outcome: GroundingOutcome,
+        work: GroundingWork,
+    ) {
+        assert_eq!(outcome, GroundingOutcome::Completed);
+        let target = match phase {
+            GroundingPhase::SupportCompletion => &self.support,
+            GroundingPhase::RuleInstantiation => &self.instantiation,
+            _ => return,
+        };
+        target.set(
+            target
+                .get()
+                .checked_add(work.join_rows.expect("finite visits"))
+                .unwrap(),
+        );
+    }
+}
+
+#[test]
+fn shared_arguments_select_only_matching_rows() {
+    let visits = JoinVisits::default();
+    let input = admit_formula_with_grounding_observer(
+        selective_source(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_work: 30_000,
-            ..FormulaLimits::default()
-        },
+        FormulaLimits::default(),
+        Some(&visits),
     )
     .expect("selective lookup avoids unrelated relation pairs");
+    // Whole-grounding work now includes dictionary construction and rebuilds.
+    // The direct visit count detects replacing the index with a 200 × 200 scan.
+    assert_eq!(visits.instantiation.get(), 400);
+    assert!(visits.support.get() < 200 * 200);
+    println!(
+        "support_rows={} instantiation_rows={}",
+        visits.support.get(),
+        visits.instantiation.get()
+    );
     let mut search = StableModels::new(input.theory(), Limits::default(), Control::default())
         .expect("finite theory");
     let model = search.next().expect("one model").expect("verified model");
@@ -44,6 +105,60 @@ fn selective_shared_arguments_complete_under_a_fixed_work_ceiling() {
     }
     assert!(search.next().is_none());
     assert!(search.exhausted());
+}
+
+#[test]
+fn selective_join_work_limit_is_inclusive() {
+    let source = selective_source();
+    let compile = |max_work| {
+        admit_formula(
+            source.clone(),
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits {
+                max_work,
+                ..FormulaLimits::default()
+            },
+        )
+    };
+    let (mut low, mut high) = (0, FormulaLimits::default().max_work);
+    assert!(compile(high).is_ok());
+    while low < high {
+        let middle = low + (high - low) / 2;
+        match compile(middle) {
+            Ok(_) => high = middle,
+            Err(FormulaFailure::Limit {
+                resource: FormulaResource::Work,
+                observed,
+                limit,
+                ..
+            }) => {
+                assert_eq!(limit, u128::from(middle));
+                assert!(observed > limit);
+                low = middle + 1;
+            }
+            other => panic!("unexpected admission: {other:?}"),
+        }
+    }
+    assert!(low > 0);
+    assert!(compile(low).is_ok());
+    let Err(FormulaFailure::Limit {
+        resource: FormulaResource::Work,
+        observed,
+        limit,
+        location,
+    }) = compile(low - 1)
+    else {
+        panic!("the preceding work ceiling must refuse");
+    };
+    assert_eq!(limit, u128::from(low - 1));
+    assert_eq!(observed, u128::from(low));
+    assert_eq!(location.source, AdmissionOptions::default().source_id);
+    assert_eq!(
+        &source[location.span.start().get() as usize..location.span.end().get() as usize],
+        JOIN_RULE,
+    );
+    println!("complete_work={low}");
 }
 
 #[test]

@@ -606,7 +606,8 @@ fn work_prefixes_cannot_publish_partial_theories() {
                 ..
             }) => {
                 assert_eq!(limit, u128::from(cap));
-                assert_eq!(observed, limit + 1);
+                // Relation construction charges bounded groups of copied cells.
+                assert!(observed > limit);
             }
             other => panic!("work cap {cap}: {other:?}"),
         }

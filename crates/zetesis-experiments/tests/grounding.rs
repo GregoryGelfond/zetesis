@@ -393,6 +393,14 @@ fn objective_presence_limit_is_serialized() {
 }
 
 #[test]
+fn support_byte_limit_is_serialized() {
+    let mut config = Configuration::default();
+    config.formula.max_support_bytes = 81_013;
+    let encoded = serde_json::to_value(config).unwrap();
+    assert_eq!(encoded["formula"]["max_support_bytes"], 81_013);
+}
+
+#[test]
 fn native_limits_are_numeric_json_fields() {
     let config = Configuration::default();
     let encoded = serde_json::to_value(config).unwrap();
@@ -400,7 +408,7 @@ fn native_limits_are_numeric_json_fields() {
         ("bundle", 5),
         ("admission", 4),
         ("expansion", 7),
-        ("formula", 19),
+        ("formula", 20),
         ("search", 4),
         ("certificate", 4),
         ("capture", 7),

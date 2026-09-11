@@ -104,7 +104,7 @@ pub struct GroundingWork {
     pub support_rounds: Option<u64>,
     /// New support atoms inserted while publishing a support round.
     pub support_atoms: Option<u64>,
-    /// Column/row associations inserted into the support indices.
+    /// Column/row associations inserted into support indices, including rebuilds.
     pub support_index_entries: Option<u64>,
     /// Bound-column probe attempts, including absent relations or empty matches.
     pub join_probes: Option<u64>,

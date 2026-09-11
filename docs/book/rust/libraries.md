@@ -65,8 +65,10 @@ with an atom table from another admission.
 aligned equality-ID columns. A `Query`, `Selection` or `Mask` borrows that exact owner;
 equal contents in another relation do not make the objects interchangeable.
 `Row::source_index` preserves the original catalog position, while selection
-positions are local to the relation. The view currently serves bounded primitive
-experiments. It is not an alternative source parser or a complete grounder.
+positions are local to the relation. Eager formula support uses this view for
+typed lookup and row access between catalog-growth rounds. Bounded primitive
+experiments use the same representation. It is not an alternative source parser
+or a complete grounder.
 
 `Relation::select` returns ordered positions; `Relation::select_mask` applies
 the same equality predicate directly into packed original-row membership.

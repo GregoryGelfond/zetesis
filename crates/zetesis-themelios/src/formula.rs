@@ -41,6 +41,10 @@ pub struct FormulaLimits {
     pub max_disjunction_elements: usize,
     /// Retained row identifiers across bound-column support indexes.
     pub max_support_index_entries: usize,
+    /// Live authored support snapshot, membership-index and query capacity.
+    /// Source atoms, allocator/tree overhead and other grounding state retain
+    /// separate bounds. This is not a total grounder-memory ceiling.
+    pub max_support_bytes: usize,
     /// Distinct aggregate/outer-binding entries retained during final grounding.
     pub max_aggregate_cache_rows: usize,
     /// Retained key value slots/text payload; allocator overhead is excluded.
@@ -55,7 +59,9 @@ pub struct FormulaLimits {
     pub max_analysis_edges: usize,
     /// Total outer and local substitutions, including ones rejected by filters.
     pub max_substitutions: u64,
-    /// Total grounding expression and formula construction operations.
+    /// Total grounding expression, relation-view and formula construction work.
+    /// A checked bulk charge may exceed the ceiling by more than one; the
+    /// refusal reports the cumulative amount requested before that operation.
     pub max_work: u64,
     /// Complete rounds constructing the possible-positive support relation.
     pub max_support_rounds: u64,
@@ -80,6 +86,7 @@ impl Default for FormulaLimits {
             max_assignment_values: 1_024,
             max_disjunction_elements: 1_024,
             max_support_index_entries: 1_000_000,
+            max_support_bytes: 134_217_728,
             max_aggregate_cache_rows: 16_384,
             max_aggregate_cache_key_bytes: 8_388_608,
             max_aggregate_cache_elements: 65_536,
@@ -115,6 +122,8 @@ pub enum FormulaResource {
     AssignmentValues,
     /// Row identifiers retained in positive-support column indexes.
     SupportIndexEntries,
+    /// Live authored support snapshot, membership-index and query capacity.
+    SupportBytes,
     /// Final-grounding aggregate binding cache entries.
     AggregateCacheRows,
     /// Distinct owned elements in one unconditional disjunctive head.
@@ -161,6 +170,13 @@ impl fmt::Display for FormulaResource {
 /// A located refusal of finite formula source admission; never semantic UNSAT.
 #[derive(Debug)]
 pub enum FormulaFailure {
+    /// A typed relation view refused construction or query resolution.
+    SupportRelation {
+        /// Exact core refusal; never an empty relation or semantic UNSAT.
+        error: zetesis_core::relation::Failure,
+        /// Source location whose support operation was being performed.
+        location: Location,
+    },
     /// Original Boolean choice occurrences could not be preserved through the
     /// checked statement view. This refuses compilation, never answer sets.
     ChoiceSource {
@@ -267,7 +283,8 @@ impl FormulaFailure {
                     )
                 })
                 .collect(),
-            Self::ChoiceSource { location }
+            Self::SupportRelation { location, .. }
+            | Self::ChoiceSource { location }
             | Self::Limit { location, .. }
             | Self::UnsafeVariable { location, .. }
             | Self::UnboundArgumentInput { location, .. }
@@ -286,6 +303,7 @@ impl FormulaFailure {
 impl fmt::Display for FormulaFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::SupportRelation { error, .. } => error.fmt(f),
             Self::ChoiceSource { .. } => {
                 f.write_str("Boolean choice source occurrences could not be preserved")
             }
@@ -322,6 +340,7 @@ impl fmt::Display for FormulaFailure {
 impl std::error::Error for FormulaFailure {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::SupportRelation { error, .. } => Some(error),
             Self::Expansion(error) => Some(error),
             Self::Include(error) => Some(error.as_ref()),
             Self::Theory { error, .. } => Some(error),

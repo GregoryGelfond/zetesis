@@ -103,11 +103,18 @@ matching does not invert arithmetic or introduce a global guessed value universe
 ### Relation rows and vector operations
 
 A relation row is one complete typed tuple. Formula support's
-[`RelationRows`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support.rs)
-assigns append-only, predicate-local row identities. Each argument column has a
-`BTreeMap<Value, Vec<usize>>` from typed values to those row identities. For a
-positive witness, the selector chooses the shortest posting list supplied by
-known whole-column equalities. The matcher then checks the complete tuple,
+[`SupportCatalog`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/relations.rs)
+owns each possible atom once, with append-only, predicate-local row identities.
+A sorted index of those identities supports membership checks without another
+atom collection. Between growth rounds, an immutable snapshot borrows the
+catalog and encodes its argument columns through the core relation's typed
+equality dictionary. Each column has a `BTreeMap<u32, Vec<usize>>` from its
+dictionary IDs to original row positions. IDs have meaning only in that
+snapshot; their numeric order is not ASP term order.
+
+For a positive witness, the selector resolves known whole-column equalities and
+chooses the shortest posting list. Equal-length lists retain the first known
+column's list. The matcher then checks the complete tuple in original row order,
 including repeated variables and structured terms. Without a known equality,
 the selector offers all relation rows; a missing bound key selects none:
 
@@ -123,17 +130,30 @@ compares intersections with an independent full-row scan. It is compiled only
 for tests and does not replace production selection. Its counters measure
 selectivity; integer comparisons and complete tuple probes have different costs.
 
+The catalog cannot grow while its snapshot is borrowed. Once a round finishes,
+the snapshot drops before new atoms are appended; subsequent rounds rebuild
+columns and postings. A final snapshot supplies formula emission. Membership
+insertion shifts sorted row IDs, not atoms. Column construction, typed lookup,
+posting construction and those shifts consume the grounding work budget.
+`FormulaLimits::max_support_bytes` bounds authored snapshot, membership-index and
+query capacity, including construction scratch. Source atoms, allocator/tree
+overhead and unrelated grounding state retain separate bounds; this limit does
+not measure total memory or RSS. Rebuilding is an explicit cost of this ownership
+boundary.
+
 Row identity connects relational semantics to masks, intersections and gathers.
 Combining two column masks means intersecting positions in the same relation
-snapshot; it must not combine values from different tuples. Ordinary source
-indexes still gather values from complete atoms. The separate bounded
+snapshot; it must not combine values from different tuples. The bounded
 [`relation` library](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/relation.rs)
-provides an immutable column view for primitive experiments. It borrows the
+provides the immutable column view used by eager formula support and primitive
+experiments. It borrows the
 original atoms and encodes complete typed values through one equality dictionary.
 It preserves row occurrences and their order, including duplicate tuples, and
 keeps original catalog indices distinct from local positions. Explicit predicate
 arity and row count distinguish an empty relation from a nullary tuple.
 
+The lazy source grounder retains its candidate-specific relation and world-mask
+contracts; this eager support representation does not make a possible atom true.
 Queries and selections borrow their exact relation owner. A selection validates
 ordered positions; it does not establish complete grounding or answer-set
 membership. Equality filtering is complete relative to its supplied input rows:
@@ -143,6 +163,12 @@ query = ResolveEqualities(relation, known_values)
 selected = Filter(AllEqualitiesHold(query), supplied_rows)
 bindings = FilterMap(MatchWholeTuple(pattern, binding), selected)
 ```
+
+This conjunction-filter primitive does not replace the eager grounder's shortest
+posting policy. Additional filtering skips budgeted matcher visits and value
+extraction, which can change their checked-failure boundaries. The production
+change preserves exactly the previous offered rows, preserving that boundary as
+well as successful bindings.
 
 The same equality predicate can produce ordered positions or packed row bits.
 [`Relation::select_mask`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/relation/selection.rs)

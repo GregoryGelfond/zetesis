@@ -9,28 +9,20 @@ use themelios_base::span::{ByteOffset, Location, Span};
 use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value, ValueLimits, ValueNode};
 
 use super::{Limits, Report, Stop, begin_support, record};
-use crate::formula_support::{Budget, Counters, Support};
+use crate::formula_support::{Counters, SupportCatalog};
 use crate::{
     AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionLimits, FormulaLimits,
     GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork, SourceBundle,
     admit_bundle_formula_with_grounding_observer, admit_formula,
 };
 
-fn relation(rows: Vec<Vec<Value>>) -> Support {
-    let mut support = Support::default();
-    let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
+fn relation(rows: Vec<Vec<Value>>) -> SupportCatalog {
+    let mut support = SupportCatalog::default();
     let mut counters = Counters::default();
     for row in rows {
         let atom = Atom::new(Predicate::new("row", row.len()).unwrap(), row).unwrap();
-        assert!(!support.present.contains(&atom), "set-valued fixture");
         support
-            .insert(
-                atom,
-                &FormulaLimits::default(),
-                &mut budget,
-                &mut counters,
-                location(),
-            )
+            .insert(atom, &FormulaLimits::default(), &mut counters, location())
             .unwrap();
     }
     support
@@ -43,7 +35,14 @@ fn location() -> Location {
     }
 }
 
-fn probe(support: &Support, values: &[Option<Value>]) -> (Option<Vec<usize>>, u64) {
+fn probe(catalog: &SupportCatalog, values: &[Option<Value>]) -> (Option<Vec<usize>>, u64) {
+    let support = catalog
+        .snapshot(
+            &FormulaLimits::default(),
+            &mut Counters::default(),
+            location(),
+        )
+        .unwrap();
     let pattern = AtomPattern::new(
         Predicate::new("row", values.len()).unwrap(),
         (0..values.len()).map(Term::Variable).collect(),
@@ -66,7 +65,7 @@ fn numbers(values: &[i32]) -> Vec<Value> {
     values.iter().map(|&value| Value::Number(value)).collect()
 }
 
-fn independent() -> Support {
+fn independent() -> SupportCatalog {
     relation(
         (0..4)
             .flat_map(|left| (0..4).map(move |right| numbers(&[left, right])))

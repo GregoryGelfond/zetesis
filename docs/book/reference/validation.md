@@ -309,8 +309,9 @@ The small numeric case uses `--family independent --payload numeric --rows 256
 for a separate scalar/Rayon invocation. The
 [measurement contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-experiments/README.md#retained-relation-selection)
 defines the preparation, transfer, reconstruction and authored-storage fields.
-This column view is an experimental library primitive; ordinary source grounding
-still uses its existing relation store.
+Eager formula support also uses this column view, with its own unchanged
+shortest-posting selection and complete matcher. These isolated selection
+measurements do not establish ordinary grounding performance or GPU grounding.
 
 ## Run the independent checks
 

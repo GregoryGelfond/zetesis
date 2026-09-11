@@ -52,6 +52,16 @@ eligibility and aggregate equalities remain in the original formulas and reduct.
 This is eager formula grounding. It is distinct from the candidate-specific
 source joins used by relational lazy execution.
 
+Possible atoms have one authoritative catalog. Immutable core relation views
+borrow it between growth rounds, retaining typed column equality and original
+row order. Bound-column postings use the view's equality IDs; the existing
+whole-tuple matcher still checks every offered row. The snapshot drops before
+the catalog grows. `FormulaLimits::max_support_bytes` bounds authored snapshot,
+membership-index and query capacity, including construction scratch. Source
+atoms, allocator/tree overhead and unrelated grounding state have separate
+bounds. Snapshot construction and lookup consume grounding work; this byte
+ceiling is not a process-memory measurement.
+
 ### Values and bindings
 
 Logical values include integers, symbols, strings, closed functions and tuples.

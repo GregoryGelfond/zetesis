@@ -176,7 +176,20 @@ impl Observation {
             };
             if let Some(value) = value {
                 bound.push((position, value));
-                postings.push(column.get(value).map_or(&[][..], Vec::as_slice));
+                // The diagnostic derives the logical key from the original
+                // atoms, independently of production dictionary lookup.
+                let mut id = None;
+                for (row, atom) in relation.atoms.iter().enumerate() {
+                    self.tick()?;
+                    if atom.values()[position] == *value {
+                        id = Some(relation.relation.column(position).expect("source column")[row]);
+                        break;
+                    }
+                }
+                postings.push(
+                    id.and_then(|id| column.get(&id))
+                        .map_or(&[][..], Vec::as_slice),
+                );
             }
         }
         // An unavailable restriction and a known-empty posting have different
