@@ -315,6 +315,94 @@ drift. The source manifest is
 The 4 MiB per-process capture ceiling, 128 MiB cumulative capture allowance and
 512 MiB serialized-report ceiling apply independently.
 
+#### Four-case CPU comparison, 11 September 2026
+
+A separate comparison of four unchanged corpus cases used the previous build
+from [`3afaf719`](https://github.com/GregoryGelfond/zetesis/tree/3afaf719949de0e8c2162e6ff2b107fb26675c24),
+qualified at [`dca674c0`](https://github.com/GregoryGelfond/zetesis/tree/dca674c067e08286d91cd8426bacb5932b42e1ac),
+and the current build from
+[`0d287734`](https://github.com/GregoryGelfond/zetesis/tree/0d2877346b4d5822b74c655a34e3daa3c1938913).
+These are Rust 1.97.1 release builds for macOS arm64, measured on Apple M4 Pro
+running macOS 26.6.2 (build 25G83). One fixed `zetesis-perf` executable served
+both revisions, and clingo 5.8.2 was invoked directly.
+These observations are separate from the September 10 nine-case comparison.
+
+| Executable | SHA-256 |
+| --- | --- |
+| Previous zetesis | `7be291273d37c9814411b3165cfddca0c09967eae8bf9b411d45eba77f03e69b` |
+| Current zetesis | `20406e3936563b17e006d659c29baa1b1c0dd208f5e4afa020add000d368b3f7` |
+| Shared zetesis-perf runner | `2fd427ec77ec91faa038fbeddf10e686f2f539cc6c2222c16635a8084a637469` |
+| Direct clingo 5.8.2 | `31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015` |
+
+Four sequential previous/current/current/previous blocks used eager CPU,
+`--oracle auto`, one search worker, one completion worker and complete
+enumeration. Each case had qualification, two warmup pairs, five timed pairs,
+one separate native statistics observation and three separate memory pairs.
+All 368 solve observations passed: queens-02 retained all 92 displayed models,
+SEND retained its unique model, task allocation retained all 1,176 optimum ties
+at cost `[5]`, and shortest path retained its unique optimum at cost `[4,4]`.
+The comparison preserves displayed-model and symbol multiplicities; clingo's
+hidden interpretations remain unavailable.
+
+Wall-time ranges below span the two block medians for each zetesis revision
+and the four clingo block medians. Each median uses five observations. They
+include startup, grounding, solving, output and capture; native runs use human
+output without statistics, while clingo uses JSON. These descriptive ranges
+are not confidence intervals.
+
+| Case | Previous zetesis, ms | Current zetesis, ms | Direct clingo, ms |
+| --- | ---: | ---: | ---: |
+| [Queens 2, N=8](../../../examples/kr-domains/standalone/n-queens/variant-02.lp) | 93.173–93.467 | 94.042–94.846 | 126.297–127.296 |
+| [SEND + MORE = MONEY](../../../examples/kr-domains/standalone/send-money/send-money.lp) | 40.301–40.653 | 40.719–41.735 | 13.050–14.131 |
+| [Task allocation: scheduling](../../../examples/kr-domains/scenarios/task-allocation/variant-04/05-larger-mix.lp) | 125.165–126.981 | 128.198–129.724 | 184.024–192.129 |
+| [Shortest path: layered DAG](../../../examples/kr-domains/scenarios/shortest-path/variant-01/06-layered-dag.lp) | 7.933–7.936 | 7.939–8.003 | 6.567–6.598 |
+
+Separate child peak-RSS observations use three fresh runs per block, giving
+six observations per native revision/case and twelve for clingo. The ranges
+again span block medians. The `RUSAGE_CHILDREN` scope described above applies:
+these are neither simultaneous process-tree RSS nor GPU memory.
+
+| Case | Previous zetesis, MiB | Current zetesis, MiB | Direct clingo, MiB |
+| --- | ---: | ---: | ---: |
+| Queens 2, N=8 | 12.969–13.031 | 13.266–13.281 | 9.328–10.406 |
+| SEND + MORE = MONEY | 26.031–26.203 | 26.297–26.391 | 8.469–8.734 |
+| Task allocation: scheduling | 40.281–40.359 | 40.484–40.562 | 21.625–22.188 |
+| Shortest path: layered DAG | 12.875 | 13.188–13.203 | 5.641–5.766 |
+
+Current wall and peak-RSS medians are slightly higher in all four cases.
+Task allocation is a possible regression signal, but the unchanged clingo
+executable also took longer in the middle blocks: 189.656–192.129 ms versus
+184.024–184.225 ms at the endpoints. The two current zetesis diagnostic solving
+intervals for task allocation were 107.064 and 113.013 ms, versus 105.010 and
+104.685 ms previously; those separate statistics runs do not provide a
+phase-time distribution for the timed samples. Shared block variation prevents
+attributing the whole difference to code changes. This sample establishes
+neither a broad speedup nor a general absence of regressions, and does not
+measure lazy or GPU solving.
+
+Reproduce each block with the same manifest and a new report path:
+
+```sh
+zetesis-perf examples/kr-domains \
+  --case standalone/n-queens/variant-02.lp \
+  --case standalone/send-money/send-money.lp \
+  --case scenarios/task-allocation/variant-04/05-larger-mix.lp \
+  --case scenarios/shortest-path/variant-01/06-layered-dag.lp \
+  --zetesis /path/to/zetesis --clingo /path/to/direct/clingo \
+  --warmups 2 --repetitions 5 --memory-runs 3 \
+  --timeout-seconds 30 --campaign-seconds 180 \
+  --sample-bytes 4194304 --capture-bytes 134217728 --report-bytes 536870912 \
+  --report target/four-case-cpu.json
+```
+
+Use the same runner and direct clingo executable for all four blocks, in
+previous/current/current/previous order. Finish and check each invocation
+before starting the next, with competing builds and measurements stopped.
+The manifest SHA-256 remains
+`b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958`.
+The following instrumented queens and complete Metal results retain their
+September 10 builds and separate measurement populations.
+
 #### Instrumented queens limits
 
 The same executables were compared on all six queens encodings at N=8 and N=10
@@ -568,11 +656,11 @@ status. A newer source remains unqualified until its own checks complete.
 
 | Population | Covered / instrumented lines | Coverage |
 | --- | ---: | ---: |
-| Workspace, all features, portable tests plus 47 physical Metal tests | 48,222 / 51,318 | 93.97% |
+| Workspace, all features, portable tests plus 49 physical Metal tests | 50,905 / 54,156 | 94.00% |
 | CPU-only solver library and CLI, separate instrumentation | 4,671 / 5,016 | 93.12% |
 
 This snapshot was qualified on 11 September 2026 for
-[`3afaf719`](https://github.com/GregoryGelfond/zetesis/tree/3afaf719949de0e8c2162e6ff2b107fb26675c24),
+[`0d287734`](https://github.com/GregoryGelfond/zetesis/tree/0d2877346b4d5822b74c655a34e3daa3c1938913),
 using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS 26.6.2 with Apple M4 Pro
 Metal. Both populations passed their independent 91% floor. The workspace
 combines its portable and physical profiles; the CPU-only population remains
@@ -592,6 +680,9 @@ without claiming a complete `WorldView`. The independent CPU population covers
 both the composed solver and its CLI consumer after their crate separation.
 The automatic-selection regression checks that actual Metal use preserves
 lazy grounding for an admitted relational program.
+Combined language-consumer tests preserve complete answer-set families, scored
+observations and all optimum ties across aggregate heads, objectives and output
+queries. They require actual GPU work and exact accounting of CPU residuals.
 Vulkan and other untested devices are outside this measurement.
 
 Reproduce the populations with `scripts/check.sh coverage --metal` using the
