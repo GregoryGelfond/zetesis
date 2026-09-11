@@ -1946,6 +1946,7 @@ dependencies = [
  "zetesis-ferraris",
  "zetesis-objective",
  "zetesis-sat",
+ "zetesis-solve",
  "zetesis-telemetry",
  "zetesis-themelios",
  "zetesis-validation",
@@ -2039,6 +2040,22 @@ dependencies = [
  "zetesis-cpu",
  "zetesis-ferraris",
  "zetesis-themelios",
+]
+
+[[package]]
+name = "zetesis-solve"
+version = "0.1.0"
+dependencies = [
+ "rayon",
+ "zetesis-core",
+ "zetesis-cpu",
+ "zetesis-ferraris",
+ "zetesis-objective",
+ "zetesis-sat",
+ "zetesis-telemetry",
+ "zetesis-themelios",
+ "zetesis-validation",
+ "zetesis-wgpu",
 ]
 
 [[package]]

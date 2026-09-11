@@ -9,9 +9,10 @@ use zetesis_themelios::{
     admit_bundle_extended, admit_extended,
 };
 
+use crate::SolvePhase;
 use crate::failure::Progress;
-use crate::phase_timing::{Recorder, SolvePhase};
-use crate::{Options, Oracle, RunError, SolveFailure};
+use crate::phase_timing::Recorder;
+use crate::{Options, Oracle, PublicationFailure, RunError};
 
 pub(crate) fn source(
     source: String,
@@ -20,17 +21,11 @@ pub(crate) fn source(
     diagnostics: &mut Diagnostics<impl Write>,
     control: &Control,
     phases: &Recorder,
-) -> Result<Progress, SolveFailure> {
-    crate::engine::validate_combination(&options.into())?;
+) -> Result<Progress, PublicationFailure> {
+    crate::SolveConfig::from(options).validate()?;
     if options.oracle == Oracle::Countermodel
-        && let Some(report) = crate::countermodel::check_control(
-            output,
-            diagnostics,
-            control,
-            phases,
-            options.json,
-            None,
-        )?
+        && let Some(report) =
+            crate::publication::check_control(output, diagnostics, control, phases, options)?
     {
         return Ok(report);
     }
@@ -49,9 +44,8 @@ pub(crate) fn source(
         }) {
             Ok(admitted) => {
                 diagnostics.metadata(Label::Oracle, format_args!("reduct closure"))?;
-                return crate::driver::solve_program(
-                    admitted.program(),
-                    admitted.metadata().output(),
+                return crate::publication::solve(
+                    crate::PreparedInput::admitted(&admitted),
                     options,
                     output,
                     diagnostics,
@@ -65,15 +59,10 @@ pub(crate) fn source(
             Err(error) => return Err(RunError::Expansion(error).into()),
         }
     };
-    crate::engine::validate_countermodel(&options.into())?;
-    if let Some(report) = crate::countermodel::check_control(
-        output,
-        diagnostics,
-        control,
-        phases,
-        options.json,
-        None,
-    )? {
+    crate::SolveConfig::from(options).validate_formula()?;
+    if let Some(report) =
+        crate::publication::check_control(output, diagnostics, control, phases, options)?
+    {
         return Ok(report);
     }
     let observer = phases.grounding_observer();
@@ -90,15 +79,8 @@ pub(crate) fn source(
             )
         })
         .map_err(RunError::FormulaAdmission)?;
-    crate::countermodel::run_formula(
-        crate::countermodel::Input {
-            theory: admitted.theory(),
-            atoms: admitted.atoms(),
-            gate_atoms: 0,
-            objectives: admitted.objectives(),
-            observations: admitted.metadata().observations(),
-        },
-        admitted.metadata().output(),
+    crate::publication::solve(
+        crate::PreparedInput::formula(&admitted),
         options,
         output,
         diagnostics,
@@ -114,17 +96,11 @@ pub(crate) fn bundle(
     diagnostics: &mut Diagnostics<impl Write>,
     control: &Control,
     phases: &Recorder,
-) -> Result<Progress, SolveFailure> {
-    crate::engine::validate_combination(&options.into())?;
+) -> Result<Progress, PublicationFailure> {
+    crate::SolveConfig::from(options).validate()?;
     if options.oracle == Oracle::Countermodel
-        && let Some(report) = crate::countermodel::check_control(
-            output,
-            diagnostics,
-            control,
-            phases,
-            options.json,
-            None,
-        )?
+        && let Some(report) =
+            crate::publication::check_control(output, diagnostics, control, phases, options)?
     {
         return Ok(report);
     }
@@ -148,9 +124,8 @@ pub(crate) fn bundle(
         }) {
             Ok(admitted) => {
                 diagnostics.metadata(Label::Oracle, format_args!("reduct closure"))?;
-                return crate::driver::solve_program(
-                    admitted.program(),
-                    admitted.metadata().output(),
+                return crate::publication::solve(
+                    crate::PreparedInput::bundle(&admitted),
                     options,
                     output,
                     diagnostics,
@@ -168,15 +143,10 @@ pub(crate) fn bundle(
             Err(error) => return Err(RunError::BundleAdmission(error).into()),
         }
     };
-    crate::engine::validate_countermodel(&options.into())?;
-    if let Some(report) = crate::countermodel::check_control(
-        output,
-        diagnostics,
-        control,
-        phases,
-        options.json,
-        None,
-    )? {
+    crate::SolveConfig::from(options).validate_formula()?;
+    if let Some(report) =
+        crate::publication::check_control(output, diagnostics, control, phases, options)?
+    {
         return Ok(report);
     }
     let observer = phases.grounding_observer();
@@ -193,15 +163,8 @@ pub(crate) fn bundle(
             )
         })
         .map_err(RunError::FormulaBundleAdmission)?;
-    crate::countermodel::run_formula(
-        crate::countermodel::Input {
-            theory: admitted.theory(),
-            atoms: admitted.atoms(),
-            gate_atoms: 0,
-            objectives: admitted.objectives(),
-            observations: admitted.metadata().observations(),
-        },
-        admitted.metadata().output(),
+    crate::publication::solve(
+        crate::PreparedInput::formula_bundle(&admitted),
         options,
         output,
         diagnostics,

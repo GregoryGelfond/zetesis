@@ -54,7 +54,7 @@ enumeration order. It pins CPU execution and one-at-a-time batches to make the
 small failure-accounting example easy to inspect.
 
 ```rust
-# extern crate zetesis_cli;
+# extern crate zetesis_solve;
 # extern crate zetesis_core;
 # extern crate zetesis_cpu;
 # extern crate zetesis_themelios;
@@ -64,7 +64,7 @@ small failure-accounting example easy to inspect.
 Run it from the checkout root with:
 
 ```sh
-cargo run --locked -p zetesis-cli --no-default-features --example book-selection
+cargo run --locked -p zetesis-solve --no-default-features --example book-selection
 ```
 
 The failed collection has checked two models but retained only one. The second
@@ -84,10 +84,10 @@ carrier. Objective selection retains incumbent ties under its separate limits;
 the one optimum in this fixture does not bound the number of ties in general.
 
 See the implementation contracts in
-[`Session`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cli/src/session.rs),
-[`SemanticOutcome`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cli/src/semantic_outcome.rs)
-and [`WorldView::collect`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cli/src/world_view.rs).
-The [world-view regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cli/tests/world_views.rs)
+[`Session`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/session.rs),
+[`SemanticOutcome`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/semantic_outcome.rs)
+and [`WorldView::collect`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/world_view.rs).
+The [world-view regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/tests/world_views.rs)
 cover additional search, scoring and storage failures. The
 [source preparation example](source.md) separately checks empty and inconsistent
 programs; neither an empty display nor a retained prefix decides inconsistency.
@@ -114,12 +114,15 @@ memory bound covers the entire solver.
 ## Views and failures
 
 Use `Session` when the consumer wants semantic values and owns its presentation.
-Use the `run_finalized` family when it wants the ordinary source driver and an
-injected output sink. `SolveReport` separates semantic evidence from
+Use `zetesis_cli::run_finalized` when it wants the ordinary source driver and an
+injected output sink. `PublicationReport` separates semantic evidence from
 `Publication`. A writer failure can coexist with already established exhaustion;
 it cannot retract that proof, and it cannot claim a partially written record as
-fully published. `SolveFailure` preserves the original cause and available
-semantic, publication and timing evidence.
+fully published. `PublicationFailure` preserves the original cause and available
+semantic, publication and timing evidence. The solver library's `SolveFailure`
+retains only execution cause, subject, semantics and timings. Its owned
+decomposition allows a consumer to preserve those values in its own failure
+representation without constructing new semantic evidence.
 
 The driver retains one semantic snapshot and separate publication and timing
 state. Legacy reports, statistics and JSON are derived views; their fields are

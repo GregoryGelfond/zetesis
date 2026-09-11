@@ -3,12 +3,12 @@
 // ANCHOR: example
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
-use zetesis_cli::{
+use zetesis_core::{Atom, Predicate};
+use zetesis_cpu::Control;
+use zetesis_solve::{
     AnswerSelection, Backend, Completion, PreparedInput, Session, SolveConfig, WorldView,
     WorldViewError, WorldViewLimits,
 };
-use zetesis_core::{Atom, Predicate};
-use zetesis_cpu::Control;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 fn check_optimum(

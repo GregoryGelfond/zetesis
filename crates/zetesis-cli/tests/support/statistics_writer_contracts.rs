@@ -7,7 +7,8 @@ use clap::Parser;
 
 use crate::test_writer::BoundedWriter;
 use crate::{
-    Backend, Completion, Options, Report, RunError, SolveFailure, run_finalized_with_diagnostics,
+    Backend, Completion, Options, PublicationFailure, Report, RunError,
+    run_finalized_with_diagnostics,
 };
 use zetesis_cpu::Control;
 
@@ -28,7 +29,11 @@ fn options(arguments: &[&str]) -> Options {
     .unwrap()
 }
 
-fn actual(source: &str, options: &Options, control: &Control) -> Result<Report, SolveFailure> {
+fn actual(
+    source: &str,
+    options: &Options,
+    control: &Control,
+) -> Result<Report, PublicationFailure> {
     assert!(
         !options.stats,
         "obtain the outcome independently of its statistics rendering"
@@ -40,10 +45,10 @@ fn actual(source: &str, options: &Options, control: &Control) -> Result<Report, 
         &mut io::sink(),
         control,
     )
-    .map(crate::SolveReport::into_report)
+    .map(crate::PublicationReport::into_report)
 }
 
-fn every_prefix(options: &Options, outcome: &Result<Report, SolveFailure>) -> String {
+fn every_prefix(options: &Options, outcome: &Result<Report, PublicationFailure>) -> String {
     let elapsed = Duration::from_micros(1_234);
     let mut reference = Vec::new();
     super::write_detailed(&mut reference, options, outcome.as_ref(), elapsed).unwrap();
@@ -107,7 +112,7 @@ fn every_completed_cpu_statistics_prefix_is_fallible_without_losing_bytes() {
 fn lazy_metadata_rendering_preserves_every_writer_failure() {
     let options = options(&["--grounder", "lazy"]);
     let mut report = actual("p.", &options, &Control::default()).unwrap();
-    report.lazy_execution = Some(crate::lazy_execution::tests::fixture());
+    report.lazy_execution = Some(crate::output::fixtures::lazy_statistics());
     let text = every_prefix(&options, &Ok(report));
     assert!(text.contains("requested=metal; observed=Metal"));
     assert!(text.contains("submitted=7; completed=4; stopped=3; queued results=2"));
@@ -123,7 +128,7 @@ fn lazy_gpu_statistics_name_the_observed_grounder() {
     let mut options = options(&["--grounder", "lazy"]);
     let mut report = actual("p.", &options, &Control::default()).unwrap();
     options.backend = Backend::Metal;
-    report.lazy_execution = Some(crate::lazy_execution::tests::fixture());
+    report.lazy_execution = Some(crate::output::fixtures::lazy_statistics());
     let text = every_prefix(&options, &Ok(report));
     assert!(text.contains(
         "effective execution: oracle=closure; backend=requested GPU policy; grounder=lazy; see backend diagnostics for actual adapter"

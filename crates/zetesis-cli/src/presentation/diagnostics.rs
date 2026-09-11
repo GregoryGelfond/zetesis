@@ -69,11 +69,9 @@ impl<W: Write> Write for Diagnostics<W> {
     }
 }
 
-impl<W: Write> crate::execution_observation::ExecutionSink for Diagnostics<W> {
-    fn record(
-        &mut self,
-        observation: crate::ExecutionObservation<'_>,
-    ) -> Result<(), crate::RunError> {
+impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
+    type Error = io::Error;
+    fn observe(&mut self, observation: crate::ExecutionObservation<'_>) -> Result<(), Self::Error> {
         use crate::ExecutionObservation as Event;
         match observation {
             Event::StaticGrounding { requested, atoms, rules, limits } => self.metadata(
@@ -122,6 +120,10 @@ impl<W: Write> crate::execution_observation::ExecutionSink for Diagnostics<W> {
             Event::ObjectiveTheoryMismatch => writeln!(self, "Objective pruning stopped: original theory mismatch; exact search continues"),
             Event::ObjectiveRestrictionStopped(error) => writeln!(self, "Objective pruning stopped: {error}; exact search continues"),
             Event::ObjectiveBound { restrictions, costs, work } => writeln!(self, "Objective pruning: bound {restrictions}; cost <= {costs:?}; construction work {work}"),
-        }.map_err(crate::RunError::Output)
+        }
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/support/objective_writer_contracts.rs"]
+mod objective_diagnostic_tests;

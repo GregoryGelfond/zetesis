@@ -2,11 +2,11 @@
 
 // ANCHOR: example
 use std::collections::BTreeSet;
-use zetesis_cli::{
-    Backend, Completion, PreparedInput, Session, SolveConfig, WorldView, WorldViewLimits,
-};
 use zetesis_core::{Atom, Predicate, Seed};
 use zetesis_cpu::{Control, Limits, check};
+use zetesis_solve::{
+    Backend, Completion, PreparedInput, Session, SolveConfig, WorldView, WorldViewLimits,
+};
 use zetesis_themelios::{AdmissionOptions, admit};
 
 const CHOICES: &str = "a :- not b.\nb :- not a.\n";

@@ -4,15 +4,16 @@ Use the narrowest capability that represents your input and the question you
 need to answer. Parsing command-line arguments is not required to use the solver.
 
 The examples in this part use zetesis's public APIs. `zetesis_themelios` is the
-solver's own source-admission and preparation crate; `zetesis_cli` exposes its
+solver's own source-admission and preparation crate; `zetesis_solve` exposes its
 composed solving sessions. The themelios library's parsing, logical-program
 construction and standalone analysis APIs belong to its own manual.
 
 | Input or task | Library and entry points |
 | --- | --- |
 | Original ASP source | `zetesis_themelios::admit`, `admit_extended`, `prepare_formula`, `admit_formula`, and their bundle APIs |
-| Ordinary solve over an admitted owner | `zetesis_cli::{PreparedInput, Session, SolveConfig}` |
+| Ordinary solve over an admitted owner | `zetesis_solve::{PreparedInput, Session, SolveConfig}` |
 | Compose selection, observations and reusable device resources | `Session::builder`, `SessionBuilder`, `ExecutionResources` |
+| Share optional host instrumentation across admission and solving | `SolveMeasurements` |
 | All original answers, streamed or completely collected | `Session::enumerate`, `WorldView::collect`, checked `AnswerSet` |
 | Finite relational templates and atoms | `zetesis_core::{Program, Template, Atom, Seed}` |
 | Bounded typed column views and equality selection | `zetesis_core::relation::{Relation, Query, Selection, Mask}` |
@@ -23,17 +24,40 @@ construction and standalone analysis APIs belong to its own manual.
 | Native formula candidate/countermodel search | `zetesis_sat` |
 | Bounded device execution | `zetesis_wgpu` |
 | Several device primitives on one selected device | `GpuContext` and each primitive's `from_context` constructor |
+| Reuse a compiled formula primitive across independent sessions | `GpuFormulaProfile`, `ExecutionResources::with_formula_profile` |
 | Device equality masks over one relation | `zetesis_wgpu::GpuRelationExecutor` |
 | Model-relative objective evaluation | `zetesis_objective` |
 | Source-domain analysis | `zetesis_domain` |
 | Reproducible comparisons and measurements | `zetesis_validation`, `zetesis_experiments` |
 | Repository proof records and qualification policy | `zetesis_maintenance` |
 
-Despite its current crate name, `zetesis-cli` exposes a writer-free ordinary
-solver session. It is the appropriate existing entry point when an application
-wants the solver's composed behavior. The lower libraries remain usable
-independently; a caller building a theory need not parse source, and a caller
-preparing a program need not search it.
+`zetesis-solve` composes ordinary solving without argument parsing, source-file
+loading or output writers. `zetesis-cli` maps arguments, admits sources and
+publishes the results of that public session API. Its compatibility exports
+refer to the same solver types. The lower libraries remain usable independently;
+a caller building a theory need not parse source, and a caller preparing a
+program need not search it.
+
+For a native application, depend on `zetesis-solve` and the libraries producing
+its chosen input. A source consumer normally also uses `zetesis-themelios` for
+admission and `zetesis-cpu::Control` for cooperative cancellation. The packages
+are currently consumed from this repository, not a published crates.io release.
+Use a pinned Git revision or paths into a checked-out workspace. With a path
+dependency, for example:
+
+```toml
+[dependencies]
+zetesis-solve = { path = "../zetesis/crates/zetesis-solve" }
+zetesis-themelios = { path = "../zetesis/crates/zetesis-themelios" }
+zetesis-cpu = { path = "../zetesis/crates/zetesis-cpu" }
+```
+
+The `gpu` feature is enabled by default. Set `default-features = false` on
+`zetesis-solve` for a CPU-only consumer; another dependency enabling that feature
+can still activate it through Cargo feature unification. Enabling GPU support
+does not select hardware by itself: `SolveConfig` governs the requested route.
+The [session chapter](sessions.md) supplies a complete checked example, and the
+[measurement chapter](measurements.md) covers injected observations and timing.
 
 Validation and repository maintenance are distinct development capabilities.
 `zetesis_validation` checks captured answer sets and comparison contracts. Its
@@ -107,6 +131,6 @@ ASPIF interchange boundary or a custom theory-propagator interface. Those
 capabilities require additional contracts. The existing admitted-owner and
 session boundaries are useful without pretending those interfaces are present.
 
-Generate the [local Rust API reference](../../doc/zetesis_cli/index.html) as
+Generate the [local Rust API reference](../../doc/zetesis_solve/index.html) as
 described in [Building the documentation](../building.md). Public signatures and
 their per-operation cost and error contracts are authoritative.

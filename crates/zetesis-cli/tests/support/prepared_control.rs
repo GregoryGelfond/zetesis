@@ -16,15 +16,8 @@ fn stopped_formula_adapter_retains_admitted_subject() {
     let control = Control::default();
     control.cancel();
     let options = crate::Options::try_parse_from(["zetesis", "--backend", "cpu"]).unwrap();
-    let progress = super::run_formula(
-        super::Input {
-            theory: admitted.theory(),
-            atoms: admitted.atoms(),
-            objectives: admitted.objectives(),
-            observations: admitted.metadata().observations(),
-            gate_atoms: 0,
-        },
-        admitted.metadata().output(),
+    let progress = super::solve(
+        crate::PreparedInput::formula(&admitted),
         &options,
         &mut std::io::sink(),
         &mut crate::presentation::Diagnostics::new(std::io::sink(), crate::ColorMode::Never),

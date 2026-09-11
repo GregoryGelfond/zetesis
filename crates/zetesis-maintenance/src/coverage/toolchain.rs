@@ -99,7 +99,7 @@ pub fn metadata(request: Metadata<'_>) -> Result<Value, Error> {
     Ok(json!({
         "mode":request.mode.label(),"committed_floor":request.floor,
         "rustc":request.observation.rustc.trim(),"cargo_llvm_cov":"0.8.7","llvm_tools":tools(request.observation)?,
-        "primary":"workspace --all-features","supplemental":"zetesis-cli --no-default-features",
+        "primary":"workspace --all-features","supplemental":"--package zetesis-cli --package zetesis-solve --no-default-features",
         "floor_profiles":["workspace","cli-cpu"],
         "default_filename_filters":"cargo-llvm-cov 0.8.7 src/report.rs::ignore_filename_regex",
         "project_added_filename_filters":[],"profiles_merged":false,
@@ -107,7 +107,7 @@ pub fn metadata(request: Metadata<'_>) -> Result<Value, Error> {
         "workspace_execution":if physical {"portable+metal"} else {"portable"},
         "workspace_stages":if physical {vec!["portable","metal"]} else {vec!["portable"]},
         "physical_test_groups":groups,"physical_tests":tests,"expected_physical_tests":tests.len(),
-        "physical_scope":if physical {Some("40 exact Metal tests: native aggregate reduction and measurement, lazy transport and source closure, tight and formula oracles, ordinary lazy/formula CLI paths including automatic hardware selection, complete-world-view collection, bounded relation equality filtering and measurement, shared-context composition, contention and shared failure handling, and caller-supplied session resources with policy and observer failures. Unlisted tests and Vulkan are not selected.")} else {None}
+        "physical_scope":if physical {Some("47 exact Metal tests: native aggregate reduction and measurement, lazy transport and source closure, tight and formula oracles, ordinary lazy/formula CLI paths including automatic hardware selection, complete-world-view collection, bounded relation equality filtering and measurement, shared-context composition, contention and shared failure handling, caller-supplied session resources with policy and observer failures, observed complete collection on supplied contexts, and explicit compiled formula profiles with independent oracle state and compilation identity. Unlisted tests and Vulkan are not selected.")} else {None}
     }))
 }
 /// Read one executable identity with the maintenance file ceiling.

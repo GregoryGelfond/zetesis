@@ -1,0 +1,59 @@
+[package]
+name = "zetesis-solve"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+zetesis-telemetry.workspace = true
+zetesis-core.workspace = true
+zetesis-themelios.workspace = true
+zetesis-cpu.workspace = true
+zetesis-ferraris.workspace = true
+zetesis-sat.workspace = true
+zetesis-objective.workspace = true
+zetesis-wgpu = { workspace = true, optional = true }
+rayon.workspace = true
+
+[dev-dependencies]
+zetesis-validation = { path = "../zetesis-validation" }
+
+[lints]
+workspace = true
+
+[features]
+default = ["gpu"]
+gpu = ["dep:zetesis-wgpu"]
+
+[[example]]
+name = "book-session"
+path = "../../docs/book/examples/session.rs"
+test = true
+
+[[example]]
+name = "book-source"
+path = "../../docs/book/examples/source.rs"
+
+[[example]]
+name = "book-selection"
+path = "../../docs/book/examples/selection.rs"
+
+[[example]]
+name = "book-observations"
+path = "../../docs/book/examples/observations.rs"
+
+[[example]]
+name = "book-resources"
+path = "../../docs/book/examples/resources.rs"
+required-features = ["gpu"]
+
+[[example]]
+name = "book-profiles"
+path = "../../docs/book/examples/profiles.rs"
+required-features = ["gpu"]
+
+[[example]]
+name = "book-measurements"
+path = "../../docs/book/examples/measurements.rs"

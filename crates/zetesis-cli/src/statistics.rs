@@ -3,7 +3,7 @@
 use std::io::{self, Write};
 use std::time::Duration;
 
-use crate::{Backend, Completion, Grounder, Options, Report, SolveFailure};
+use crate::{Backend, Completion, Grounder, Options, PublicationFailure, Report};
 
 fn header(sink: &mut impl Write, options: &Options, elapsed: Duration) -> io::Result<()> {
     writeln!(
@@ -36,7 +36,7 @@ fn header(sink: &mut impl Write, options: &Options, elapsed: Duration) -> io::Re
 pub(crate) fn write_detailed(
     sink: &mut impl Write,
     options: &Options,
-    result: Result<&Report, &SolveFailure>,
+    result: Result<&Report, &PublicationFailure>,
     elapsed: Duration,
 ) -> io::Result<()> {
     header(sink, options, elapsed)?;

@@ -4,7 +4,8 @@
 //! Measurements include failed attempts and never establish semantic completion.
 //! Disabled recorders perform no clock reads and allocate no storage dynamically.
 
-use std::cell::Cell;
+use std::sync::{Mutex, MutexGuard};
+use std::thread::{self, ThreadId};
 use std::time::{Duration, Instant};
 
 /// Entered coarse host operation; nested stages have exclusive elapsed time.
@@ -154,6 +155,7 @@ struct State {
     active: Option<SolveStage>,
     since: Option<Instant>,
     depth: usize,
+    owner: Option<ThreadId>,
     invalid: bool,
     mode: GroundingMode,
     measurements: [Option<StageMeasurement>; 4],
@@ -173,20 +175,26 @@ impl State {
     }
 }
 
-/// A reusable single-thread host recorder with nested, exclusive RAII stages.
+/// A thread-safe host recorder with nested, exclusive RAII stages.
 ///
-/// Keep guards in stack order. Invalid nesting makes `unattributed` unavailable
-/// rather than affecting application control. This recorder does not spawn work,
-/// impose budgets, inspect candidates, or infer completed grounding or solving.
+/// Enter and drop guards in stack order on the same thread. Concurrent stage
+/// scopes from different threads, transferred live guards, invalid nesting and
+/// poisoned bookkeeping make `unattributed` unavailable rather than affecting
+/// application control.
+/// Sequential use can move between threads. Internal locks protect only fixed
+/// bookkeeping; a guard holds no lock during application work. This recorder
+/// does not spawn work, impose budgets, inspect candidates, or infer completed
+/// grounding or solving.
 ///
-/// Construction, stage entry/exit and snapshots take constant time and space:
-/// four stage slots are copied or visited, and each guard stores one parent.
+/// Construction, stage entry/exit and snapshots use constant space and fixed
+/// work over four stage slots; concurrent bookkeeping can briefly wait for a
+/// lock. Each guard stores one parent.
 /// Nested guards use caller stack space proportional to the live nesting depth.
 /// Enabled operations read the host clock; disabled operations do not. No event
 /// trace is retained, so individual interval history cannot be reconstructed.
 pub struct StageRecorder {
     started: Option<Instant>,
-    state: Cell<State>,
+    state: Mutex<State>,
 }
 impl StageRecorder {
     /// Create an enabled recorder, or a clock-free disabled recorder.
@@ -194,7 +202,7 @@ impl StageRecorder {
     pub fn new(enabled: bool) -> Self {
         Self {
             started: enabled.then(Instant::now),
-            state: Cell::new(State::default()),
+            state: Mutex::new(State::default()),
         }
     }
     /// Whether clock reads and measurements are enabled.
@@ -204,13 +212,39 @@ impl StageRecorder {
     }
 
     /// Enter one exclusive stage; dropping the guard restores its parent.
+    /// Overlap with an active stage on another thread invalidates attribution.
     pub fn enter(&self, stage: SolveStage) -> StageSpan<'_> {
-        self.enter_at(stage, self.started.map(|_| Instant::now()))
+        if !self.enabled() {
+            return StageSpan {
+                recorder: self,
+                previous: None,
+                depth: 0,
+                enabled: false,
+            };
+        }
+        let mut record = self.lock_state();
+        self.enter_record(&mut record, stage, Some(Instant::now()))
     }
+
+    #[cfg(test)]
     fn enter_at(&self, stage: SolveStage, now: Option<Instant>) -> StageSpan<'_> {
-        let mut record = self.state.get();
+        self.enter_record(&mut self.lock_state(), stage, now)
+    }
+
+    fn enter_record(
+        &self,
+        record: &mut State,
+        stage: SolveStage,
+        now: Option<Instant>,
+    ) -> StageSpan<'_> {
         let previous = record.active;
         if let Some(now) = now {
+            let current = thread::current().id();
+            if record.depth == 0 {
+                record.owner = Some(current);
+            } else if record.owner != Some(current) {
+                record.invalid = true;
+            }
             record.finish(now);
             record.active = Some(stage);
             if let Some(depth) = record.depth.checked_add(1) {
@@ -227,7 +261,6 @@ impl StageRecorder {
                     GroundingMode::LazyInterleaved | GroundingMode::Mixed => GroundingMode::Mixed,
                 };
             }
-            self.state.set(record);
         }
         StageSpan {
             recorder: self,
@@ -240,24 +273,31 @@ impl StageRecorder {
     /// This never invents a zero-duration standalone grounding interval.
     pub fn mark_lazy_grounding(&self) {
         if self.enabled() {
-            let mut state = self.state.get();
+            let mut state = self.lock_state();
             state.mode = match state.mode {
                 GroundingMode::Unentered | GroundingMode::LazyInterleaved => {
                     GroundingMode::LazyInterleaved
                 }
                 GroundingMode::Eager | GroundingMode::Mixed => GroundingMode::Mixed,
             };
-            self.state.set(state);
         }
     }
     /// Snapshot attempted durations, including any active exclusive prefix.
+    /// This closes no live guard and retains no lock in the returned value.
     #[must_use]
     pub fn snapshot(&self) -> Option<StageTimings> {
-        self.started
-            .map(|start| self.snapshot_at(start, Instant::now()))
+        self.started.map(|start| {
+            let state = self.lock_state();
+            Self::snapshot_record(*state, start, Instant::now())
+        })
     }
+
+    #[cfg(test)]
     fn snapshot_at(&self, start: Instant, now: Instant) -> StageTimings {
-        let mut state = self.state.get();
+        Self::snapshot_record(*self.lock_state(), start, now)
+    }
+
+    fn snapshot_record(mut state: State, start: Instant, now: Instant) -> StageTimings {
         state.finish(now);
         let elapsed = now.checked_duration_since(start);
         let sum = state
@@ -282,17 +322,29 @@ impl StageRecorder {
             measurements: state.measurements,
         }
     }
+
+    fn lock_state(&self) -> MutexGuard<'_, State> {
+        self.state.lock().unwrap_or_else(|poisoned| {
+            let mut state = poisoned.into_inner();
+            state.invalid = true;
+            state
+        })
+    }
+
     fn restore(&self, previous: Option<SolveStage>, depth: usize, now: Instant) {
-        let mut state = self.state.get();
+        let mut state = self.lock_state();
         state.finish(now);
-        state.invalid |= state.depth != depth;
+        state.invalid |= state.depth != depth || state.owner != Some(thread::current().id());
         state.depth = state.depth.saturating_sub(1);
         state.active = previous;
-        self.state.set(state);
+        if state.depth == 0 {
+            state.owner = None;
+        }
     }
 }
 
-/// Active stage guard; drop in stack order to restore the enclosing stage.
+/// Active stage guard; drop in stack order on its creating thread to restore
+/// the enclosing stage with complete exclusive attribution.
 #[must_use = "retain the guard until the stage ends"]
 pub struct StageSpan<'a> {
     recorder: &'a StageRecorder,

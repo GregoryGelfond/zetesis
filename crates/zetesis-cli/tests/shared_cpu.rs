@@ -343,5 +343,8 @@ fn prepared_formula_cannot_ignore_shared_source_selection() {
     ) else {
         panic!("formula route cannot honor shared relational traversal");
     };
-    assert!(matches!(*error.cause, RunError::UnsupportedSourceBatching));
+    assert!(matches!(
+        *error.cause,
+        zetesis_cli::SolveError::UnsupportedSourceBatching
+    ));
 }

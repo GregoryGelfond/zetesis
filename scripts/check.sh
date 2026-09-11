@@ -16,9 +16,9 @@ cd -- "$repo_dir"
 if [ "$mode" = portable ] || [ "$mode" = full ]; then
     cargo fmt --all -- --check
     cargo test --locked --workspace --all-features
-    cargo test --locked -p zetesis-cli --no-default-features
+    cargo test --locked -p zetesis-cli -p zetesis-solve --no-default-features
     cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
-    cargo clippy --locked -p zetesis-cli --no-default-features --all-targets -- -D warnings
+    cargo clippy --locked -p zetesis-cli -p zetesis-solve --no-default-features --all-targets -- -D warnings
     RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --all-features --no-deps
     # These maintained semantic experiments are independent Cargo workspaces.
     # Main-workspace checks cannot select them implicitly.
@@ -41,7 +41,7 @@ if [ "$mode" = book ] || [ "$mode" = full ]; then
     fi
     mdbook build
     # Keep one dependency configuration here so example crate lookup is unique.
-    cargo build --locked -p zetesis-cli -p zetesis-validation --lib --all-features --target-dir target/book-tests-gpu
+    cargo build --locked -p zetesis-cli -p zetesis-solve -p zetesis-validation --lib --all-features --target-dir target/book-tests-gpu
     mdbook test --library-path target/book-tests-gpu/debug/deps
 fi
 if [ "$mode" = oracle ] || [ "$mode" = full ]; then

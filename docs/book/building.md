@@ -32,13 +32,14 @@ sibling rustdoc tree. Source links lead to the maintained repository paths.
 
 ## Check the Rust examples
 
-The session, resource-sharing, source-preparation, objective-selection, reduct and derived-workload examples are
+The session, resource-sharing, measurement, source-preparation, objective-selection,
+reduct and derived-workload examples are
 included from Rust files under `docs/book/examples`; the code displayed in the
 chapters is the code tested by mdBook. Build their dependencies without requiring
 a physical GPU, then run:
 
 ```sh
-cargo build --locked -p zetesis-cli -p zetesis-validation --lib --all-features --target-dir target/book-tests-gpu
+cargo build --locked -p zetesis-cli -p zetesis-solve -p zetesis-validation --lib --all-features --target-dir target/book-tests-gpu
 mdbook test --library-path target/book-tests-gpu/debug/deps
 ```
 
@@ -63,15 +64,17 @@ all-target Clippy checks apply to them. The authored-lint inventory includes
 To run one example as an ordinary consumer from the checkout root:
 
 ```sh
-cargo run --locked -p zetesis-cli --no-default-features --example book-session
-cargo run --locked -p zetesis-cli --no-default-features --example book-source
-cargo run --locked -p zetesis-cli --no-default-features --example book-selection
+cargo run --locked -p zetesis-solve --no-default-features --example book-session
+cargo run --locked -p zetesis-solve --no-default-features --example book-source
+cargo run --locked -p zetesis-solve --no-default-features --example book-selection
+cargo run --locked -p zetesis-solve --no-default-features --example book-measurements
 ```
 
 On a machine with an accessible physical GPU, run the shared-resource example:
 
 ```sh
-cargo run --locked -p zetesis-cli --all-features --example book-resources
+cargo run --locked -p zetesis-solve --all-features --example book-resources
+cargo run --locked -p zetesis-solve --all-features --example book-profiles
 ```
 
 The tour's ASP fixture is included directly in the chapter. A Cargo example test
@@ -81,7 +84,7 @@ assumption. That example enables its test harness in Cargo, so the ordinary
 workspace test gate runs the correspondence assertion. Run it alone with:
 
 ```sh
-cargo test --locked -p zetesis-cli --no-default-features --example book-session
+cargo test --locked -p zetesis-solve --no-default-features --example book-session
 ```
 
 Lean blocks are excerpts or consumer examples, not Rust doctests. The normal-rule

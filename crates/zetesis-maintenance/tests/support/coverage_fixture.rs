@@ -198,6 +198,8 @@ impl Fixture {
             strings(&[
                 "--package",
                 "zetesis-cli",
+                "--package",
+                "zetesis-solve",
                 "--no-default-features",
                 "--locked",
                 "--no-report",
@@ -215,6 +217,8 @@ impl Fixture {
                     "report",
                     "--package",
                     "zetesis-cli",
+                    "--package",
+                    "zetesis-solve",
                     "--locked",
                     "--fail-under-lines",
                     floor,
@@ -227,6 +231,10 @@ impl Fixture {
         assert_eq!(metadata["mode"], mode);
         assert_eq!(metadata["committed_floor"], floor);
         assert_eq!(metadata["profiles_merged"], false);
+        assert_eq!(
+            metadata["supplemental"],
+            "--package zetesis-cli --package zetesis-solve --no-default-features"
+        );
         assert_eq!(metadata["floor_profiles"], json!(["workspace", "cli-cpu"]));
         assert_eq!(metadata["project_added_filename_filters"], json!([]));
         let expected_groups: Vec<_> = if metal {
@@ -288,7 +296,12 @@ fn directory(root: &Path, profile: &str) -> PathBuf {
 fn report(profile: &str, directory: &Path, html: bool) -> Value {
     let mut args = vec!["report".into()];
     if profile == "cli-cpu" {
-        args.extend(strings(&["--package", "zetesis-cli"]));
+        args.extend(strings(&[
+            "--package",
+            "zetesis-cli",
+            "--package",
+            "zetesis-solve",
+        ]));
     }
     args.extend(strings(&[
         "--locked",

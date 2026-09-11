@@ -27,7 +27,7 @@ full interpretations and `Completion::Exhausted`, then repeats the collection
 through `WorldView`. Run its assertions with:
 
 ```sh
-cargo run --locked -p zetesis-cli --no-default-features --example book-session
+cargo run --locked -p zetesis-solve --no-default-features --example book-session
 ```
 
 ## From source to admitted solver input

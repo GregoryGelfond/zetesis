@@ -1,8 +1,8 @@
 //! Prepare zetesis input, inspect its analysis contract and collect its answers.
 
 // ANCHOR: example
-use zetesis_cli::{Backend, PreparedInput, SolveConfig, WorldView, WorldViewLimits};
 use zetesis_cpu::Control;
+use zetesis_solve::{Backend, PreparedInput, SolveConfig, WorldView, WorldViewLimits};
 use zetesis_themelios::{
     AdmissionOptions, AnalysisBasis, ExpansionLimits, FormulaFailure, FormulaLimits,
     FormulaResource, prepare_formula,

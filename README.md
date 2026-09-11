@@ -141,8 +141,10 @@ operation boundaries and reproducible commands.
 
 ## Libraries and assurance
 
-The libraries expose admitted programs, interpretations, bounded checks, sessions
-and typed outcomes independently of terminal rendering. A reusable
+The [zetesis-solve library](crates/zetesis-solve/README.md) composes admitted
+programs, interpretations, bounded checks, sessions and typed outcomes
+independently of terminal rendering. The CLI consumes its public session API.
+A reusable
 `zetesis_ferraris::FrozenReduct` binds a reduct to the interpretation that defines
 it. Independent satisfaction queries can share that immutable reduct.
 See the [working Rust examples](docs/book/rust/libraries.md).
@@ -152,9 +154,11 @@ the original answer family, including nonoptimal answers with their scores.
 Optional bounded `WorldView` collection requires complete enumeration; a stopped
 prefix and a selected optimum remain distinct results. The
 [session manual](docs/book/rust/sessions.md) explains ownership and completion.
-`Session::builder` composes answer selection, typed observations and reusable
-`ExecutionResources`. Several sessions can use one explicit GPU context while
-keeping their subjects, work budgets and outcomes independent.
+`Session::builder` composes answer selection, typed observations, measurements
+and reusable `ExecutionResources`. Its `collect` operation requires the complete
+original answer family. Sessions supplied the same context share the device;
+formula sessions supplied the same compiled profile also reuse that pipeline.
+Their subjects, work budgets, candidate state and outcomes remain independent.
 
 The [Lean library](proofs/README.md) develops satisfaction, reducts, minimality,
 normal least closure and their preservation laws. Its normalized-rule translation

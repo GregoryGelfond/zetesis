@@ -98,6 +98,7 @@ fn every_physical_target_requires_complete_individual_results() {
 fn physical_selection_is_a_fixed_contract() {
     for table in [
         TABLE.replacen("lazy|hardware_lazy|4|", "altered|hardware_lazy|4|", 1),
+        TABLE.replacen("solve-context|lib|3|", "cli-context|lib|3|", 1),
         TABLE.replace("metal_support_matches_exact_reduct_semantics", "unknown"),
         TABLE.lines().skip(1).collect::<Vec<_>>().join("\n"),
     ] {
@@ -171,6 +172,34 @@ fn metal_selection_refuses_vulkan_substitution() {
             "metal_observer_failure_preserves_resource_reuse",
             "vulkan_observer_failure_preserves_resource_reuse",
         ),
+        (
+            "formula::device::tests::metal_profile_starts_fresh_formula_oracles",
+            "formula::device::tests::vulkan_profile_starts_fresh_formula_oracles",
+        ),
+        (
+            "formula::device::tests::metal_profiles_identify_exact_compilations",
+            "formula::device::tests::vulkan_profiles_identify_exact_compilations",
+        ),
+        (
+            "formula::device::tests::metal_profile_reuse_checks_context_lifecycle",
+            "formula::device::tests::vulkan_profile_reuse_checks_context_lifecycle",
+        ),
+        (
+            "metal_collection_refuses_a_foreign_context",
+            "vulkan_collection_refuses_a_foreign_context",
+        ),
+        (
+            "metal_collection_observer_failure_retains_a_prefix",
+            "vulkan_collection_observer_failure_retains_a_prefix",
+        ),
+        (
+            "formula_execution::resource_tests::metal_formula_sessions_reuse_the_supplied_profile",
+            "formula_execution::resource_tests::vulkan_formula_sessions_reuse_the_supplied_profile",
+        ),
+        (
+            "metal_formula_profiles_preserve_independent_sessions",
+            "vulkan_formula_profiles_preserve_independent_sessions",
+        ),
     ] {
         let changed = TABLE.replacen(metal, vulkan, 1);
         assert_ne!(changed, TABLE);
@@ -221,10 +250,14 @@ fn physical_metadata_keeps_floor_populations_separate() {
     let record = metadata("LLVM version 22.1.6", true).unwrap();
     assert_eq!(record["profiles_merged"], false);
     assert_eq!(
+        record["supplemental"],
+        "--package zetesis-cli --package zetesis-solve --no-default-features"
+    );
+    assert_eq!(
         record["floor_profiles"],
         serde_json::json!(["workspace", "cli-cpu"])
     );
-    assert_eq!(record["expected_physical_tests"], 40);
+    assert_eq!(record["expected_physical_tests"], 47);
     assert_eq!(record["physical_test_groups"].as_array().unwrap().len(), 14);
     assert_eq!(
         record["project_added_filename_filters"],

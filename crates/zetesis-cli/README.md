@@ -1,9 +1,10 @@
 # zetesis-cli
 
 The `zetesis` command composes source admission, reduct-based solving and human
-or machine output. This crate also exposes prepared-input sessions and injected
-writer APIs for library callers. Parsing, files, presentation and process exit
-policy remain separate from semantic results.
+or machine output. It owns argument mapping, source loading, injected writer
+views and process exit policy. Composed solving belongs to
+[`zetesis-solve`](../zetesis-solve/README.md); compatibility exports here refer to
+the same solver types.
 
 See [Install and run](../../README.md#install-and-run) for installation and the
 [session guide](../../docs/book/rust/sessions.md) for Rust composition.
@@ -155,43 +156,33 @@ a smaller admitted program or proved inconsistency. Full models are counted
 before `#show`; observation failure cannot publish a complete Answer record.
 A retained incumbent remains unproved when search coverage is incomplete.
 
-## Compose the library
+## Compose the command adapter
 
-`PreparedInput` borrows admitted relational, formula, bundle or ground input,
-or a native relational `Program` through `PreparedInput::program`.
-`Session::new` combines it with typed `SolveConfig` and `Control`.
-The iterator yields `Result<AnswerSet, SolveFailure>`; each successful model
-retains its exact subject, full interpretation and optional score.
-`SessionModel` remains a compatibility alias. `Session::enumerate` streams the
-original unrestricted family even when objectives are present; `Session::new`
-retains ordinary incumbent selection. `WorldView::collect` explicitly collects
-all original answers within independent retention ceilings and refuses partial
-coverage. An empty complete world view establishes inconsistency; one empty
-answer instead establishes a consistent singleton family.
-An accepted model or scored incumbent is not by itself evidence of exhaustive
-coverage or a proved optimum. Read the terminal `SemanticOutcome` separately.
+Use `zetesis_solve::Session` for typed answer sets without rendering or command
+options. Its builder composes selection, observations, measurements and reusable
+device execution resources. Complete collection returns a `WorldView` only after
+capturing all original answers. See the
+[library manual](../../docs/book/rust/sessions.md) for ownership, resource reuse,
+partial results and failures.
 
-`Session::builder` composes answer selection, typed observations and optional
-`ExecutionResources` before execution. Shared resources retain the selected
-device; each start has fresh search state, budgets, pipelines and outcomes over
-its original subject. Resource ownership does not select the execution policy.
-See the [session guide](../../docs/book/rust/sessions.md) for defaults, callback
-failures and device reuse.
+Use this crate's `run_finalized` and diagnostic/bundle variants when an application
+wants the ordinary source driver with injected output sinks. `PublicationReport`
+separates the library's `SemanticOutcome` from publication acknowledgements.
+`PublicationFailure` retains the original cause and any semantic, publication and
+timing evidence. The solver library's `SolveFailure` has no publication state.
+Legacy `run_detailed` variants derive their report views from the same evidence.
 
-The `run_detailed` and diagnostic/bundle variants compose human writer views
-and return typed failure evidence. Verification, pending candidates, queued
-models, completed publication and the final summary have separate accounting.
-A semantic exhausted result may coexist with later output failure.
-`SemanticOutcome` is the driver's semantic authority; compatibility reports and
-status output derive from its evidence, while publication acknowledgements
-remain separate. Publishing no answers does not establish inconsistency.
+The command adapter pulls the public session API. It acknowledges a published
+record only after the writer accepts the complete record. Verification, pending
+candidates, queued answers, completed publication and the final summary have
+separate accounting. An exhausted semantic result may coexist with later output
+failure; publishing no answers does not establish inconsistency.
 Generic injected writers use plain `ColorMode::Auto`; callers can request
-explicit styling. Color policy is separate from semantic `SolveConfig`.
+explicit styling. Color policy is separate from `SolveConfig`.
 
-See [session types](src/session.rs), [outcomes](src/semantic_outcome.rs),
-[failure types](src/failure.rs) and the
-[outcome guide](../../docs/book/rust/outcomes.md). These APIs require no command
-parsing, global stdout or clingo invocation.
+See [publication](src/publication.rs), [failure adapters](src/failure.rs) and the
+[outcome guide](../../docs/book/rust/outcomes.md). These APIs require no global
+stdout or clingo invocation.
 
 ## Original sources
 

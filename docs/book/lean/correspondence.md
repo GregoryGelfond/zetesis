@@ -42,6 +42,25 @@ sequential reuse, deferred automatic device selection and shared device failure.
 The builder changes request composition; it does not change candidate coverage,
 the frozen reduct or the point at which a checked result is committed.
 
+`SessionBuilder::collect` consumes a fresh request, selects the unrestricted
+original family and retains each checked answer once. `WorldViews` requires
+original-answer coverage, completed accounting and complete capture; its prefix
+law applies to interruptions and retention refusals. A selected optimum or the
+remaining suffix of an already consumed session cannot replace that family.
+
+A shared `GpuFormulaProfile` retains one exact compiled pipeline, context and
+gate projection. Each oracle starts with fresh residency, epochs and execution
+counters. This does not change the masked satisfaction or frozen-reduct laws.
+Pipeline identity, capability checks, initialization and device execution remain
+Rust/WGSL correspondence obligations; existing Lean theorems do not certify
+those handles or shader compilation.
+
+The `zetesis-solve` boundary owns semantic sessions and outcomes. The CLI
+publishes their checked values through the same public API. Its error adapter
+moves the original cause and evidence; a presentation value cannot create a
+solver conclusion. Crate extraction changes neither the mathematical subject
+nor the required preservation laws.
+
 Typed execution observations describe attempted setup or execution choices.
 They are not membership or coverage receipts. A failed observer can stop driving
 the session but cannot reinterpret its error as a device failure, request

@@ -25,12 +25,12 @@ impl Publication {
 
 /// A successful invocation with semantic evidence independent of delivery.
 #[derive(Clone, Debug)]
-pub struct SolveReport {
+pub struct PublicationReport {
     pub(crate) report: Report,
     pub(crate) semantic: SemanticOutcome,
     pub(crate) publication: Publication,
 }
-impl SolveReport {
+impl PublicationReport {
     /// Finalized exact-membership, objective and search evidence.
     #[must_use]
     pub const fn semantic(&self) -> &SemanticOutcome {
@@ -57,7 +57,7 @@ impl SolveReport {
 /// Preparation failures can precede any semantic session. Reporting failures are
 /// bounded to one diagnostics and one summary failure; neither replaces the cause.
 #[derive(Debug)]
-pub struct SolveFailure {
+pub struct PublicationFailure {
     /// Original typed cause, retained independently of later reporting failures.
     pub cause: Box<RunError>,
     /// Original compatibility evidence, when a driver was entered.
@@ -72,7 +72,7 @@ pub struct SolveFailure {
     diagnostics: Option<Arc<io::Error>>,
     summary: Option<Arc<io::Error>>,
 }
-impl SolveFailure {
+impl PublicationFailure {
     /// Known original input, including a prepared session's setup failure.
     /// A subject association does not establish that search started, membership
     /// completed or any coverage was obtained. Failures before source admission
@@ -138,7 +138,7 @@ impl SolveFailure {
         self.summary = Some(error);
     }
 }
-impl From<RunFailure> for SolveFailure {
+impl From<RunFailure> for PublicationFailure {
     fn from(failure: RunFailure) -> Self {
         Self {
             cause: failure.cause,
@@ -153,23 +153,39 @@ impl From<RunFailure> for SolveFailure {
         }
     }
 }
-impl From<RunError> for SolveFailure {
+impl From<RunError> for PublicationFailure {
     fn from(cause: RunError) -> Self {
         RunFailure::from(cause).into()
     }
 }
-impl From<io::Error> for SolveFailure {
+impl From<io::Error> for PublicationFailure {
     fn from(cause: io::Error) -> Self {
         RunError::Output(cause).into()
     }
 }
-impl fmt::Display for SolveFailure {
+impl fmt::Display for PublicationFailure {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.cause.fmt(formatter)
     }
 }
-impl std::error::Error for SolveFailure {
+impl std::error::Error for PublicationFailure {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(self.cause.as_ref())
+    }
+}
+
+impl From<zetesis_solve::SolveFailure> for PublicationFailure {
+    fn from(failure: zetesis_solve::SolveFailure) -> Self {
+        let parts = failure.into_parts();
+        let mut failure = Self::from(RunError::from(*parts.cause));
+        failure.subject = parts.subject;
+        failure.semantic = parts.semantic;
+        failure.phase_timings = parts.phase_timings;
+        failure
+    }
+}
+impl From<zetesis_solve::SolveError> for PublicationFailure {
+    fn from(error: zetesis_solve::SolveError) -> Self {
+        Self::from(RunError::from(error))
     }
 }

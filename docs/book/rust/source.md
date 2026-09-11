@@ -7,7 +7,7 @@ constructing an upstream parser or logical program. The returned
 `PreparedFormula` owns source, metadata, checked intermediate representation and
 the remaining expansion budget. `ground(self)` consumes that preparation and
 produces an `AdmittedFormula`; it computes no answer sets.
-`zetesis_cli::PreparedInput::formula` then borrows that owner for a session.
+`zetesis_solve::PreparedInput::formula` then borrows that owner for a session.
 
 ```text
 source → prepare_formula → PreparedFormula → ground → AdmittedFormula
@@ -57,7 +57,7 @@ last two source cases distinguish an empty program's one empty answer from the
 empty family of an inconsistent program containing the constraint `:-.`.
 
 ```rust
-# extern crate zetesis_cli;
+# extern crate zetesis_solve;
 # extern crate zetesis_cpu;
 # extern crate zetesis_themelios;
 {{#include ../examples/source.rs:example}}
@@ -66,7 +66,7 @@ empty family of an inconsistent program containing the constraint `:-.`.
 Run it from the checkout root with:
 
 ```sh
-cargo run --locked -p zetesis-cli --no-default-features --example book-source
+cargo run --locked -p zetesis-solve --no-default-features --example book-source
 ```
 
 ## Preserve evidence through materialization

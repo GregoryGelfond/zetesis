@@ -1,0 +1,711 @@
+//! Writer-free ordinary solves over coherent, already admitted inputs.
+//!
+//! These sessions use the same retained engine loops as the command adapter.
+//! They neither parse source nor render model text. A caller owns admission and
+//! can reuse its immutable owner and explicit device resources across sessions;
+//! each session owns fresh search budgets, worker pools, pending results and
+//! incumbent storage.
+
+use crate::ExecutionObserver;
+use crate::execution_observation::{ExecutionSink, Ignore, Observer};
+use std::sync::Arc;
+
+use zetesis_core::{GroundProgram, Model, Program};
+use zetesis_cpu::Control;
+use zetesis_ferraris::Theory;
+use zetesis_objective::Score;
+use zetesis_themelios::{
+    Admitted, AdmittedBundle, AdmittedFormula, AdmittedFormulaBundle, SourceMetadata,
+};
+
+use crate::closure_session::ClosureSession;
+use crate::formula_execution::Execution;
+use crate::formula_session::FormulaSession;
+use crate::phase_timing::{Recorder, SolvePhase};
+use crate::{
+    AnswerSelection, Completion, ExecutionResources, Grounder, Interruption, Oracle, PhaseTimings,
+    SemanticOutcome, SolveConfig, SolveError, SolveFailure, WorldView, WorldViewFailure,
+    WorldViewLimits,
+};
+
+/// The complete semantic representation supplied to an ordinary session.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PreparedProfile {
+    /// Finite relational normal program; closure execution chooses lazy or eager.
+    Relational,
+    /// Coherently indexed finite formulas and their objective/observation programs.
+    Formula,
+    /// A complete ground graph retaining its original relational program identity.
+    Ground,
+}
+
+#[derive(Clone, Copy)]
+enum Prepared<'a> {
+    Relational(&'a Program),
+    Formula(crate::countermodel::Input<'a>),
+    Ground(&'a Arc<GroundProgram>),
+}
+
+/// A coherent borrowed owner, never an independently supplied theory/atom table.
+/// Constructors do no admission, grounding, or source replay. Explicit oracle
+/// requests incompatible with this representation are rejected at session setup.
+#[derive(Clone, Copy)]
+pub struct PreparedInput<'a> {
+    input: Prepared<'a>,
+    metadata: Option<&'a SourceMetadata>,
+}
+impl<'a> PreparedInput<'a> {
+    /// Reuse an admitted native relational program without source metadata.
+    /// This borrows the program directly: it performs no parsing, carrier
+    /// expansion or grounding. Lazy and eager execution use the same relational
+    /// session branch as source-admitted programs.
+    #[must_use]
+    pub const fn program(program: &'a Program) -> Self {
+        Self {
+            input: Prepared::Relational(program),
+            metadata: None,
+        }
+    }
+    /// Reuse an admitted normal program and its source metadata.
+    #[must_use]
+    pub fn admitted(owner: &'a Admitted) -> Self {
+        Self {
+            input: Prepared::Relational(owner.program()),
+            metadata: Some(owner.metadata()),
+        }
+    }
+    /// Reuse an admitted original-source bundle without loading its files again.
+    #[must_use]
+    pub fn bundle(owner: &'a AdmittedBundle) -> Self {
+        Self {
+            input: Prepared::Relational(owner.program()),
+            metadata: Some(owner.metadata()),
+        }
+    }
+    /// Reuse a formula owner, preserving its exact atom indexing and objectives.
+    #[must_use]
+    pub fn formula(owner: &'a AdmittedFormula) -> Self {
+        Self {
+            input: Prepared::Formula(crate::countermodel::Input {
+                theory: owner.theory(),
+                atoms: owner.atoms(),
+                objectives: owner.objectives(),
+                gate_atoms: 0,
+            }),
+            metadata: Some(owner.metadata()),
+        }
+    }
+    /// Reuse a formula bundle with its original metadata and objective program.
+    #[must_use]
+    pub fn formula_bundle(owner: &'a AdmittedFormulaBundle) -> Self {
+        Self {
+            input: Prepared::Formula(crate::countermodel::Input {
+                theory: owner.theory(),
+                atoms: owner.atoms(),
+                objectives: owner.objectives(),
+                gate_atoms: 0,
+            }),
+            metadata: Some(owner.metadata()),
+        }
+    }
+    /// Reuse the supplied complete graph. Auto chooses eager execution; explicit
+    /// lazy or countermodel requests are refused. No second graph is compiled.
+    /// Ground-only models have no source-derived observation metadata.
+    #[must_use]
+    pub const fn ground(owner: &'a Arc<GroundProgram>) -> Self {
+        Self {
+            input: Prepared::Ground(owner),
+            metadata: None,
+        }
+    }
+    /// Representation used for strategy compatibility checks.
+    #[must_use]
+    pub const fn profile(self) -> PreparedProfile {
+        match self.input {
+            Prepared::Relational(_) => PreparedProfile::Relational,
+            Prepared::Formula(_) => PreparedProfile::Formula,
+            Prepared::Ground(_) => PreparedProfile::Ground,
+        }
+    }
+    /// Validated source views, when the prepared owner retained them.
+    #[must_use]
+    pub const fn metadata(self) -> Option<&'a SourceMetadata> {
+        self.metadata
+    }
+    pub(crate) fn subject(self) -> Subject {
+        match self.input {
+            Prepared::Relational(program) => Subject::Program(program.clone()),
+            Prepared::Formula(input) => Subject::Theory(input.theory.clone()),
+            Prepared::Ground(ground) => Subject::Program(ground.program().clone()),
+        }
+    }
+    fn selection(self, requested: AnswerSelection) -> AnswerSelection {
+        match self.input {
+            Prepared::Formula(input) if input.objectives.is_present() => requested,
+            _ => AnswerSelection::All,
+        }
+    }
+    fn configure(self, mut config: SolveConfig) -> Result<SolveConfig, SolveError> {
+        if !matches!(self.input, Prepared::Relational(_))
+            && config.source_batching != crate::SourceBatching::Independent
+        {
+            return Err(SolveError::UnsupportedSourceBatching);
+        }
+        let compatible = match self.input {
+            Prepared::Relational(_) => config.oracle != Oracle::Countermodel,
+            Prepared::Formula(_) => {
+                config.oracle != Oracle::Closure && config.grounder != Grounder::Lazy
+            }
+            Prepared::Ground(_) => {
+                config.oracle != Oracle::Countermodel && config.grounder != Grounder::Lazy
+            }
+        };
+        if !compatible {
+            return Err(SolveError::PreparedInput {
+                profile: self.profile(),
+                oracle: config.oracle,
+                grounder: config.grounder,
+            });
+        }
+        if matches!(self.input, Prepared::Ground(_)) {
+            config.grounder = Grounder::Eager;
+        }
+        crate::engine::validate_combination(&config)?;
+        Ok(config)
+    }
+}
+
+/// Immutable identity of the original semantic subject checked by a session.
+/// Handles are cheap shared owners. Equality of printed atoms is not identity;
+/// use the contained program/theory's `same_instance` method.
+#[derive(Clone, Debug)]
+pub enum Subject {
+    /// Original finite relational program, also retained by a ground graph.
+    Program(Program),
+    /// Original indexed finite formula theory, before candidate restrictions.
+    Theory(Theory),
+}
+impl Subject {
+    /// Whether both handles retain the same original immutable semantic instance.
+    /// Structural equality of independently admitted programs is insufficient.
+    #[must_use]
+    pub fn same_instance(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Program(left), Self::Program(right)) => left.same_instance(right),
+            (Self::Theory(left), Self::Theory(right)) => left.same_instance(right),
+            _ => false,
+        }
+    }
+}
+
+/// A full stable interpretation produced by the session's membership engine.
+/// Private construction preserves its subject association after detachment.
+/// This is semantic evidence, independently of display selection or publication.
+/// It records completed native membership, not a Lean proof or enumeration
+/// coverage. Cloning shares the subject and clones the full interpretation.
+///
+/// ```compile_fail
+/// use zetesis_solve::{AnswerSet, Subject};
+/// use zetesis_core::Model;
+/// fn forge(subject: Subject, interpretation: Model) -> AnswerSet {
+///     AnswerSet { subject, interpretation, score: None }
+/// }
+/// ```
+#[derive(Clone, Debug)]
+pub struct AnswerSet {
+    subject: Subject,
+    interpretation: Model,
+    score: Option<Score>,
+}
+impl AnswerSet {
+    /// Original immutable subject used by the membership engine.
+    #[must_use]
+    pub const fn subject(&self) -> &Subject {
+        &self.subject
+    }
+    /// Complete interpretation, including atoms hidden by source observations.
+    #[must_use]
+    pub const fn interpretation(&self) -> &Model {
+        &self.interpretation
+    }
+    /// Completely evaluated cost, if this solve has an objective. Absence is
+    /// distinct from an active objective with zero cost or no priority slots.
+    /// Optimality is determined by the session outcome, never by a score alone.
+    #[must_use]
+    pub const fn score(&self) -> Option<&Score> {
+        self.score.as_ref()
+    }
+    /// Discard the subject association explicitly for raw-model interoperability.
+    #[must_use]
+    pub fn into_interpretation(self) -> Model {
+        self.interpretation
+    }
+}
+
+/// Compatibility name for the checked answer produced by an ordinary session.
+pub type SessionModel = AnswerSet;
+
+enum State<'a> {
+    Closure(Box<ClosureSession<'a>>),
+    Formula(Box<FormulaSession<'a, Execution>>),
+    Stopped(Box<SemanticOutcome>),
+}
+
+/// An ordinary solve request, before validation or execution begins.
+///
+/// The input borrows one coherent semantic owner. Resource handles may be shared;
+/// candidates, budgets, worker pools and outcomes are created by each start.
+/// Modifiers perform no device discovery, grounding, callbacks or control polls.
+/// Dropping an unstarted request performs no solve work.
+pub struct SessionBuilder<'a> {
+    input: PreparedInput<'a>,
+    config: SolveConfig,
+    control: Control,
+    selection: AnswerSelection,
+    resources: ExecutionResources,
+    measurements: Option<crate::SolveMeasurements>,
+}
+
+impl<'a> SessionBuilder<'a> {
+    /// Choose the answer family. The default is optimal ties when an objective
+    /// is present; inputs without objectives always enumerate their full family.
+    #[must_use]
+    pub const fn selection(mut self, selection: AnswerSelection) -> Self {
+        self.selection = selection;
+        self
+    }
+
+    /// Share the caller's execution resource handles with this request.
+    ///
+    /// Cloning the handles does not copy device allocations or logical state.
+    /// CPU paths ignore them. Automatic execution retains its existing policy;
+    /// supplying a device does not force its use. A forced device request must
+    /// match the supplied context's adapter instead of discovering another one.
+    #[must_use]
+    pub fn resources(mut self, resources: &ExecutionResources) -> Self {
+        self.resources = resources.clone();
+        self
+    }
+
+    /// Enumerate and retain the complete original answer-set family using this
+    /// request's input, execution resources, configuration and control.
+    ///
+    /// Collection always uses [`AnswerSelection::All`], overriding any earlier
+    /// [`Self::selection`] choice. Objectives annotate every answer, including
+    /// nonoptimal answers. The request is consumed before any search begins;
+    /// an already started or partially consumed [`Session`] cannot be collected
+    /// through this operation. Use `config.models = 0` to request exhaustion.
+    ///
+    /// Work and retained space follow [`WorldView::collect`]. Members move into
+    /// one bounded collection without repeated membership checks or full-model
+    /// clones. The resource handles do not retain the collected family.
+    ///
+    /// # Errors
+    /// Preserves [`WorldView::collect`]'s typed setup, execution, incomplete
+    /// coverage and storage failures, including the checked prefix and original
+    /// subject. Supplied device failures retain their ordinary session boundary.
+    pub fn collect(self, limits: WorldViewLimits) -> Result<WorldView, WorldViewFailure> {
+        WorldView::collect_request(self, limits, &mut Ignore)
+    }
+
+    /// Collect the complete original family with synchronous observations of
+    /// both session preparation and every subsequent pull.
+    ///
+    /// This has [`Self::collect`]'s unrestricted selection and storage contract.
+    /// The observer is borrowed for the whole operation and no event queue is
+    /// retained. Its effects and storage remain outside solver limits.
+    ///
+    /// # Errors
+    /// Returns [`Self::collect`]'s failures. An observer refusal retains its
+    /// original external cause and the checked prefix, stops subsequent work
+    /// and callbacks, and cannot establish complete coverage or trigger device
+    /// fallback. Formula preparation failures deferred to the first pull retain
+    /// [`Self::start_observed`]'s failure semantics.
+    pub fn collect_observed(
+        self,
+        limits: WorldViewLimits,
+        observer: &mut impl ExecutionObserver,
+    ) -> Result<WorldView, WorldViewFailure> {
+        WorldView::collect_request(self, limits, &mut Observer(observer))
+    }
+
+    /// Share a caller-owned host measurement scope with this solve.
+    ///
+    /// Its enabled setting replaces config.stats. Admission and publication
+    /// can record into the same scope; each session retains its own search state.
+    /// This performs no solve work, device discovery or clock reads.
+    #[must_use]
+    pub fn measurements(mut self, measurements: &crate::SolveMeasurements) -> Self {
+        self.config.stats = measurements.is_enabled();
+        self.measurements = Some(measurements.clone());
+        self
+    }
+
+    /// Validate the request and start a fresh session without observations.
+    ///
+    /// # Errors
+    /// Returns the setup failures of [`Session::new`]. Supplied device resources
+    /// additionally retain their explicit adapter, contention and health errors.
+    pub fn start(self) -> Result<Session<'a>, SolveFailure> {
+        self.start_with(&mut Ignore)
+    }
+
+    /// Start with typed preparation observations, borrowing the observer only
+    /// for this call. Later observations require [`Session::next_observed`].
+    ///
+    /// # Errors
+    /// Preserves [`Session::new_observed`]'s setup and callback failure behavior.
+    pub fn start_observed(
+        self,
+        observer: &mut impl ExecutionObserver,
+    ) -> Result<Session<'a>, SolveFailure> {
+        self.start_with(&mut Observer(observer))
+    }
+
+    pub(crate) fn subject(&self) -> Subject {
+        self.input.subject()
+    }
+
+    pub(crate) fn start_with(
+        self,
+        observations: &mut impl ExecutionSink,
+    ) -> Result<Session<'a>, SolveFailure> {
+        let phases = self
+            .measurements
+            .unwrap_or_else(|| crate::SolveMeasurements::new(self.config.stats));
+        let result = Session::initialize(
+            self.input,
+            self.config,
+            &self.control,
+            phases.recorder(),
+            self.input.selection(self.selection),
+            &self.resources,
+            observations,
+        );
+        match result {
+            Ok((state, config)) => Ok(Session {
+                state,
+                config,
+                control: self.control,
+                phases,
+                subject: self.input.subject(),
+            }),
+            Err(error) => {
+                let mut failure = SolveFailure::from(error);
+                failure.subject = Some(self.input.subject());
+                failure.phase_timings = phases.snapshot().map(Box::new);
+                Err(failure)
+            }
+        }
+    }
+}
+
+/// A pull-based ordinary solve, independent of argument parsing and writers.
+/// [`Self::new`] selects objective ties after search; [`Self::enumerate`] streams
+/// the unrestricted original family. `models` limits yielded answers, or
+/// retained objective ties in a selected solve. Budgets persist across pulls.
+/// Stopping pulls early establishes no additional coverage. The caller decides
+/// how to store or publish each full interpretation; no delivery is inferred.
+///
+/// Enabled elapsed time spans the measurement owner's lifetime through each
+/// snapshot. Time between pulls is unattributed unless the caller records another
+/// stage. A scope injected with [`SessionBuilder::measurements`] includes all work
+/// recorded by its owners, including other sessions. This session's solving spans
+/// cover setup and active pulls. Disabled instrumentation reads no clocks;
+/// deadline control remains independent.
+///
+/// ```
+/// use zetesis_solve::{Backend, PreparedInput, Session, SolveConfig};
+/// use zetesis_cpu::Control;
+/// use zetesis_themelios::{admit, AdmissionOptions};
+///
+/// let admitted = admit("a.".into(), AdmissionOptions::default())?;
+/// let config = SolveConfig { backend: Backend::Cpu, models: 0, ..Default::default() };
+/// let mut session = Session::new(PreparedInput::admitted(&admitted), config, Control::default())?;
+/// let model = session.next().unwrap()?;
+/// assert_eq!(model.interpretation().atoms().len(), 1);
+/// assert!(session.next().is_none());
+/// assert_eq!(session.outcome().unwrap().verified_models(), 1);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub struct Session<'a> {
+    state: State<'a>,
+    config: SolveConfig,
+    control: Control,
+    phases: crate::SolveMeasurements,
+    subject: Subject,
+}
+impl<'a> Session<'a> {
+    /// Compose answer selection, execution resources and preparation
+    /// observations before starting an ordinary solve. Construction performs no
+    /// validation or execution. Existing convenience constructors use this same
+    /// request with independently owned execution resources.
+    #[must_use]
+    pub fn builder(
+        input: PreparedInput<'a>,
+        config: SolveConfig,
+        control: Control,
+    ) -> SessionBuilder<'a> {
+        SessionBuilder {
+            input,
+            config,
+            control,
+            selection: AnswerSelection::Optimal,
+            resources: ExecutionResources::default(),
+            measurements: None,
+        }
+    }
+
+    /// Start a new ordinary solve over a coherent prepared owner.
+    ///
+    /// # Errors
+    /// Returns typed strategy/backend/setup failures with attempted timing.
+    /// Search/control limits remain typed semantic interruptions in the outcome.
+    /// After strategy validation, every prepared profile polls control before
+    /// allocating worker pools or beginning static compilation. Once bounded
+    /// static compilation starts, it is not preemptible; cancellation is observed
+    /// at the next cooperative poll. Prepared graphs avoid compilation.
+    pub fn new(
+        input: PreparedInput<'a>,
+        config: SolveConfig,
+        control: Control,
+    ) -> Result<Self, SolveFailure> {
+        Self::builder(input, config, control).start()
+    }
+    /// Stream the original program's answer sets, including nonoptimal answers.
+    ///
+    /// Objective scores are evaluated but never restrict candidates or select
+    /// incumbents. Every yielded answer carries completed membership and its
+    /// full interpretation. `config.models` remains a yield limit; zero requests
+    /// exhaustive enumeration. Formula search work/decisions and objective work
+    /// are cumulative. Per-model objective binding/key ceilings and per-candidate
+    /// closure work retain [`SolveConfig`]'s resource contracts. Storage is the
+    /// engine's bounded batches and one yielded
+    /// answer, with no incumbent retention. The caller controls any collection.
+    ///
+    /// # Errors
+    /// Returns the setup failures of [`Self::new`]. During iteration, scoring or
+    /// search stops preserve verified accounting without claiming completeness;
+    /// an answer whose scoring stopped is not yielded as a fully scored answer.
+    pub fn enumerate(
+        input: PreparedInput<'a>,
+        config: SolveConfig,
+        control: Control,
+    ) -> Result<Self, SolveFailure> {
+        Self::builder(input, config, control)
+            .selection(AnswerSelection::All)
+            .start()
+    }
+    /// Start an ordinary solve with synchronous typed execution observations.
+    ///
+    /// The observer is borrowed only during preparation. Use
+    /// [`Self::next_observed`] for subsequent pulls; ordinary iteration discards
+    /// later observations. Events belong to this prepared input, not any other
+    /// session the observer may also serve. No event queue is retained.
+    ///
+    /// # Errors
+    /// Execution-setup failures return immediately, retaining the known subject.
+    /// Formula initialization owns its terminal failure: an observer failure at
+    /// formula, certificate or objective setup stops further initialization and
+    /// is returned by the first pull. No later callback runs for that failure.
+    /// Both paths preserve the original cause and establish no coverage.
+    pub fn new_observed(
+        input: PreparedInput<'a>,
+        config: SolveConfig,
+        control: Control,
+        observer: &mut impl ExecutionObserver,
+    ) -> Result<Self, SolveFailure> {
+        Self::builder(input, config, control).start_observed(observer)
+    }
+
+    /// Enumerate all answer sets with typed preparation observations.
+    ///
+    /// This has [`Self::enumerate`]'s selection policy and
+    /// [`Self::new_observed`]'s observation lifetime and failure contract.
+    ///
+    /// # Errors
+    /// Returns the setup and observation failures of [`Self::new_observed`].
+    pub fn enumerate_observed(
+        input: PreparedInput<'a>,
+        config: SolveConfig,
+        control: Control,
+        observer: &mut impl ExecutionObserver,
+    ) -> Result<Self, SolveFailure> {
+        Self::builder(input, config, control)
+            .selection(AnswerSelection::All)
+            .start_observed(observer)
+    }
+    fn initialize(
+        input: PreparedInput<'a>,
+        config: SolveConfig,
+        control: &Control,
+        phases: &Recorder,
+        selection: AnswerSelection,
+        resources: &ExecutionResources,
+        observations: &mut impl ExecutionSink,
+    ) -> Result<(State<'a>, SolveConfig), SolveError> {
+        let config = input.configure(config)?;
+        let _solving = phases.stage(crate::SolveStage::Solving);
+        if let Err(stop) = control.poll() {
+            let interruption = match input.input {
+                Prepared::Formula(_) => Interruption::Countermodel(stop.into()),
+                Prepared::Relational(_) | Prepared::Ground(_) => Interruption::Oracle(stop),
+            };
+            return Ok((
+                State::Stopped(Box::new(SemanticOutcome {
+                    subject: Some(input.subject()),
+                    selection: Some(selection),
+                    verified: 0,
+                    scored: 0,
+                    retained: 0,
+                    completion: Some(Completion::Interrupted),
+                    interruption: Some(interruption),
+                    optimization: None,
+                    checked: 0,
+                    gate_atoms: 0,
+                    countermodel_statistics: None,
+                    formula_execution: None,
+                    lazy_execution: None,
+                    shared_execution: None,
+                })),
+                config,
+            ));
+        }
+        let state = match input.input {
+            Prepared::Relational(program) => {
+                State::Closure(Box::new(ClosureSession::with_resources(
+                    program,
+                    None,
+                    &config,
+                    resources,
+                    observations,
+                    control,
+                    phases,
+                )?))
+            }
+            Prepared::Ground(ground) => State::Closure(Box::new(ClosureSession::with_resources(
+                ground.program(),
+                Some(Arc::clone(ground)),
+                &config,
+                resources,
+                observations,
+                control,
+                phases,
+            )?)),
+            Prepared::Formula(input) => {
+                let execution = phases.measure(SolvePhase::ExecutionSetup, || {
+                    Execution::with_resources(&config, resources, observations)
+                })?;
+                State::Formula(Box::new(FormulaSession::with_selection(
+                    input,
+                    execution,
+                    &config,
+                    observations,
+                    control,
+                    phases,
+                    selection,
+                )))
+            }
+        };
+        Ok((state, config))
+    }
+    /// Final semantic evidence once search finishes, stops, or fails. An
+    /// optimized outcome can be available while retained ties await delivery.
+    #[must_use]
+    pub fn outcome(&self) -> Option<SemanticOutcome> {
+        match &self.state {
+            State::Closure(state) => state.terminal().then(|| state.outcome()),
+            State::Formula(state) => state
+                .finished()
+                .then(|| state.outcome(self.phases.recorder())),
+            State::Stopped(outcome) => Some((**outcome).clone()),
+        }
+    }
+    /// End an unfinished session and retain its current evidence. Coverage stays
+    /// unavailable unless the retained engine already established a terminal state.
+    #[must_use]
+    pub fn stop(self) -> SemanticOutcome {
+        self.progress()
+    }
+    /// Attempted host phases from this session's measurement owner; absence means
+    /// instrumentation was disabled. An injected owner includes all recorded
+    /// caller work and other sessions sharing that scope.
+    #[must_use]
+    pub fn phase_timings(&self) -> Option<PhaseTimings> {
+        self.phases.snapshot()
+    }
+    /// Current checked evidence, including results buffered before delivery.
+    ///
+    /// A snapshot does not stop search. Missing completion remains absent; only
+    /// the recorded coverage determines whether enumeration is complete.
+    #[must_use]
+    pub fn progress(&self) -> SemanticOutcome {
+        match &self.state {
+            State::Closure(state) => state.outcome(),
+            State::Formula(state) => state.outcome(self.phases.recorder()),
+            State::Stopped(outcome) => (**outcome).clone(),
+        }
+    }
+    /// Pull the next answer using synchronous typed execution observations.
+    ///
+    /// The observer is borrowed only for this pull. Events describe this session's
+    /// attempted work and cannot establish answer-set membership or coverage.
+    /// An observer error stops this session: later pulls return None, with its
+    /// checked prefix retained in the failure and [`Self::outcome`]. Successful
+    /// callbacks do not imply that subsequent work or answer publication succeeds.
+    ///
+    /// # Errors
+    /// Returns ordinary solve faults or the observer's external error, wrapped
+    /// separately from device faults so it cannot trigger fallback or retry.
+    pub fn next_observed(
+        &mut self,
+        observer: &mut impl ExecutionObserver,
+    ) -> Option<Result<AnswerSet, SolveFailure>> {
+        self.pull(&mut Observer(observer))
+    }
+
+    pub(crate) fn pull(
+        &mut self,
+        observations: &mut impl ExecutionSink,
+    ) -> Option<Result<AnswerSet, SolveFailure>> {
+        let solving = self.phases.stage(crate::SolveStage::Solving);
+        let next = match &mut self.state {
+            State::Closure(state) => state
+                .next(
+                    &self.config,
+                    observations,
+                    &self.control,
+                    self.phases.recorder(),
+                )
+                .map(|result| result.map(|model| (model, None))),
+            State::Formula(state) => state.next(
+                &self.config,
+                observations,
+                &self.control,
+                self.phases.recorder(),
+            ),
+            State::Stopped(_) => None,
+        };
+        drop(solving);
+        next.map(|result| match result {
+            Ok((interpretation, score)) => Ok(AnswerSet {
+                subject: self.subject.clone(),
+                interpretation,
+                score,
+            }),
+            Err(error) => {
+                let mut failure = SolveFailure::from(error);
+                failure.semantic = Some(Box::new(self.progress()));
+                failure.phase_timings = self.phases.snapshot().map(Box::new);
+                Err(failure)
+            }
+        })
+    }
+}
+impl Iterator for Session<'_> {
+    type Item = Result<AnswerSet, SolveFailure>;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.pull(&mut Ignore)
+    }
+}
+impl std::iter::FusedIterator for Session<'_> {}

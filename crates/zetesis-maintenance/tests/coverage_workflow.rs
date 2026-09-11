@@ -111,7 +111,7 @@ fn omitted_physical_group_prevents_instrumentation() {
         "relation",
         "relation-measurement",
         "context",
-        "cli-context",
+        "solve-context",
         "session-resources",
     ] {
         let f = Fixture::new();
@@ -172,7 +172,7 @@ fn failed_physical_execution_preserves_its_exit_code() {
         "aggregate-measurement",
         "relation",
         "relation-measurement",
-        "cli-context",
+        "solve-context",
         "session-resources",
     ] {
         let f = Fixture::new();

@@ -551,7 +551,10 @@ Physical Metal qualification adds the named device tests with
 `scripts/check.sh coverage --metal` on a machine exposing a Metal adapter.
 Use fresh instrumentation for the source being qualified; matching executable
 filenames do not establish matching builds. Coverage has independent workspace
-and CPU-only populations and does not replace assertion review.
+and CPU-only populations and does not replace assertion review. The CPU-only
+population selects both `zetesis-solve` and `zetesis-cli`, retaining the semantic
+engine and its command adapter across the crate boundary. Its report directory
+keeps the historical name `cli-cpu`; the directory name does not narrow its scope.
 
 Keep durable fixtures, source attribution and runnable checks in the repository.
 The manual describes current contracts. Private development history and

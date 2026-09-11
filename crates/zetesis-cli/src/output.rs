@@ -6,8 +6,8 @@ use zetesis_themelios::observation::ViewError;
 
 use crate::failure::Progress;
 use crate::{
-    Completion, Interruption, Options, PhaseTimings, RunError, RunFailure, SolveFailure,
-    SolvePhase, SolveReport,
+    Completion, Interruption, Options, PhaseTimings, PublicationFailure, PublicationReport,
+    RunError, RunFailure, SolvePhase,
 };
 
 pub(crate) struct Document<'a, W> {
@@ -16,7 +16,7 @@ pub(crate) struct Document<'a, W> {
     failed: bool,
 }
 impl<'a, W: Write> Document<'a, W> {
-    pub(crate) fn new(sink: &'a mut W, json: bool) -> Result<Self, SolveFailure> {
+    pub(crate) fn new(sink: &'a mut W, json: bool) -> Result<Self, PublicationFailure> {
         let mut document = Self {
             sink,
             json,
@@ -30,9 +30,9 @@ impl<'a, W: Write> Document<'a, W> {
 
     pub(crate) fn finish(
         mut self,
-        mut result: Result<Progress, SolveFailure>,
+        mut result: Result<Progress, PublicationFailure>,
         options: &Options,
-    ) -> Result<SolveReport, SolveFailure> {
+    ) -> Result<PublicationReport, PublicationFailure> {
         if self.json && !self.failed {
             let emitted = summary(&result, options.max_json_record_bytes)
                 .and_then(|record| self.write_all(&record).map_err(RunError::Output));
@@ -145,7 +145,10 @@ fn completion(value: Completion) -> &'static str {
     }
 }
 
-fn summary(result: &Result<Progress, SolveFailure>, maximum: usize) -> Result<Vec<u8>, RunError> {
+fn summary(
+    result: &Result<Progress, PublicationFailure>,
+    maximum: usize,
+) -> Result<Vec<u8>, RunError> {
     let status = match result {
         Err(_) => "failed",
         Ok(progress) => {
@@ -609,7 +612,7 @@ struct SummaryView<'a> {
     timings: Option<&'a PhaseTimings>,
 }
 impl<'a> SummaryView<'a> {
-    fn new(result: &'a Result<Progress, SolveFailure>) -> Self {
+    fn new(result: &'a Result<Progress, PublicationFailure>) -> Self {
         match result {
             Ok(progress) => {
                 let semantic = progress.semantic();
@@ -842,12 +845,16 @@ fn lazy_transport_usage(
 }
 
 #[cfg(test)]
+#[path = "../tests/support/lazy_statistics_fixture.rs"]
+pub(crate) mod fixtures;
+
+#[cfg(test)]
 mod lazy_tests {
     use super::{Buffer, lazy_statistics};
 
     #[test]
     fn lazy_json_retains_requested_and_observed_execution() {
-        let fixture = crate::lazy_execution::tests::fixture();
+        let fixture = super::fixtures::lazy_statistics();
         let mut out = Buffer::new(4096);
         lazy_statistics(&mut out, Some(&fixture)).unwrap();
         let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
@@ -893,7 +900,7 @@ mod lazy_tests {
 
     #[test]
     fn lazy_json_obeys_the_record_byte_limit() {
-        let fixture = crate::lazy_execution::tests::fixture();
+        let fixture = super::fixtures::lazy_statistics();
         let mut out = Buffer::new(4096);
         lazy_statistics(&mut out, Some(&fixture)).unwrap();
         for capacity in 0..out.bytes.len() {

@@ -1,86 +1,16 @@
-//! The production queue/common loop tested with actual exact native membership.
-//! No device is constructed, and these tests make no GPU execution/parity claim.
+//! CPU completion batches reach the same publication contracts as scalar sessions.
 
-use std::io::{self, Write};
-use std::num::NonZeroUsize;
-
-use clap::Parser;
-use zetesis_cpu::Control;
-use zetesis_ferraris::Interpretation;
-use zetesis_sat::{BatchStatistics, BatchVerdict, Incomplete, StableModels, Statistics};
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
-
-use crate::formula_execution::{Failure, FormulaExecutionStatistics, MembershipExecution};
-use crate::formula_queue::BatchQueue;
 use crate::test_writer::BoundedWriter;
-use crate::{Completion, Options, Report, RunError, run_with_diagnostics};
-
-#[derive(Default)]
-struct NativeBatch {
-    queue: BatchQueue,
-    snapshots: Vec<(BatchStatistics, Statistics, usize)>,
-    proposed: Vec<Vec<Vec<usize>>>,
-    fail_work: bool,
-    omit_verdict: bool,
-}
-
-impl MembershipExecution for NativeBatch {
-    fn next(
-        &mut self,
-        models: &mut StableModels,
-        options: &crate::SolveConfig,
-        control: &Control,
-        _: &crate::phase_timing::Recorder,
-    ) -> Option<Result<Interpretation, Failure>> {
-        let result = self
-            .queue
-            .next(models, options, control, |theory, candidates| {
-                self.proposed.push(
-                    candidates
-                        .iter()
-                        .map(|candidate| candidate.atoms().collect())
-                        .collect(),
-                );
-                if self.fail_work {
-                    let limits = zetesis_sat::Limits {
-                        search: zetesis_sat::SearchLimits {
-                            max_work: 0,
-                            ..Default::default()
-                        },
-                        ..Default::default()
-                    };
-                    if let zetesis_sat::Check::Inconclusive(error) =
-                        zetesis_sat::check(theory, &candidates[0], limits, control)
-                    {
-                        return Err(Failure::Search(error));
-                    }
-                    panic!("the selected nonempty source needs native encoding work");
-                }
-                // Declining partial propagation sends every original candidate to
-                // the real exact native reduct checker inside StableModels.
-                let mut verdicts = Vec::new();
-                verdicts
-                    .try_reserve_exact(candidates.len())
-                    .map_err(|_| Failure::Search(Incomplete::Allocation))?;
-                verdicts.resize(candidates.len(), BatchVerdict::Residual);
-                if self.omit_verdict {
-                    verdicts.pop();
-                }
-                Ok(verdicts)
-            });
-        self.snapshots.push((
-            models.batch_statistics(),
-            models.statistics(),
-            self.queue.len(),
-        ));
-        result
-    }
-
-    fn statistics(&self, _: &StableModels) -> Option<FormulaExecutionStatistics> {
-        // Actual native batches have no physical adapter, GPU work or upload counters.
-        None
-    }
-}
+use crate::{
+    Completion, FormulaExecutionStatistics, Options, PublicationFailure, PublicationReport,
+    RunError, run_finalized_with_diagnostics,
+};
+use clap::Parser;
+use std::{
+    io::{self, Write},
+    num::NonZeroUsize,
+};
+use zetesis_cpu::Control;
 
 fn options() -> Options {
     let mut options = Options::try_parse_from([
@@ -91,10 +21,12 @@ fn options() -> Options {
         "countermodel",
         "--workers",
         "1",
+        "--models",
+        "0",
     ])
     .unwrap();
-    options.models = 0;
     options.batch_size = NonZeroUsize::new(3).unwrap();
+    options.completion_workers = NonZeroUsize::new(4).unwrap();
     options
 }
 
@@ -104,39 +36,15 @@ fn run(
     control: &Control,
     output: &mut impl Write,
     diagnostics: &mut impl Write,
-    execution: &mut NativeBatch,
-) -> Result<Report, RunError> {
-    let admitted = admit_formula(
-        source.to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
-    super::FormulaRun {
-        input: super::Input {
-            theory: admitted.theory(),
-            atoms: admitted.atoms(),
-            gate_atoms: 0,
-            objectives: admitted.objectives(),
-            observations: admitted.metadata().observations(),
-        },
-        display: crate::display::Display {
-            selection: admitted.metadata().output(),
-            observations: admitted.metadata().observations(),
-            options,
-            control,
-        },
-    }
-    .solve(
-        output,
-        diagnostics,
-        execution,
-        &crate::phase_timing::Recorder::new(options.stats),
-    )
-    .and_then(crate::failure::Progress::finalize)
-    .map(crate::SolveReport::into_report)
-    .map_err(|failure| *failure.cause)
+) -> Result<PublicationReport, PublicationFailure> {
+    run_finalized_with_diagnostics(source.into(), options, output, diagnostics, control)
+}
+
+fn require_cpu_batches(statistics: &FormulaExecutionStatistics) {
+    assert_eq!(statistics.completion.requested_workers, 4);
+    assert_eq!(statistics.gpu_batches, 0);
+    assert_eq!(statistics.gpu_candidates, 0);
+    assert_eq!(statistics.gpu_work, 0);
 }
 
 fn records(output: &[u8]) -> Vec<Vec<String>> {
@@ -156,8 +64,21 @@ fn records(output: &[u8]) -> Vec<Vec<String>> {
     records
 }
 
+fn costs(output: &[u8]) -> Vec<Vec<i64>> {
+    std::str::from_utf8(output)
+        .unwrap()
+        .lines()
+        .filter_map(|line| line.strip_prefix("Optimization:"))
+        .map(|line| {
+            line.split_whitespace()
+                .map(|cost| cost.parse().unwrap())
+                .collect()
+        })
+        .collect()
+}
+
 #[test]
-fn native_batches_share_the_complete_model_and_display_loop() {
+fn cpu_batches_preserve_complete_model_displays() {
     for source in [
         "",
         ":-.",
@@ -167,80 +88,99 @@ fn native_batches_share_the_complete_model_and_display_loop() {
         "{p;-p}. #show x.",
         "{a;b}. #show a:a. #minimize{1,a:a;1,b:b}.",
     ] {
-        let options = options();
+        let mut options = options();
+        options.completion_workers = NonZeroUsize::MIN;
         let mut scalar = Vec::new();
-        let expected = run_with_diagnostics(
-            source.into(),
+        let expected = run(
+            source,
             &options,
+            &Control::default(),
             &mut scalar,
             &mut Vec::new(),
-            &Control::default(),
         )
         .unwrap();
+        assert!(expected.semantic().formula_execution().is_none());
+        options.completion_workers = NonZeroUsize::new(4).unwrap();
         let mut output = Vec::new();
-        let mut execution = NativeBatch::default();
         let actual = run(
             source,
             &options,
             &Control::default(),
             &mut output,
             &mut Vec::new(),
-            &mut execution,
         )
         .unwrap();
-        assert_eq!(actual.completion, Completion::Exhausted);
-        assert_eq!(actual.models, expected.models);
+        assert_eq!(actual.semantic().completion(), Some(Completion::Exhausted));
+        assert_eq!(
+            actual.publication().models(),
+            expected.publication().models()
+        );
+        assert!(actual.publication().summary());
         assert_eq!(records(&output), records(&scalar), "{source}");
-        let (batch, search, queued) = execution.snapshots.last().unwrap();
-        assert_eq!((batch.pending, *queued), (0, 0));
-        assert_eq!(batch.committed, search.candidates);
-        assert_eq!(batch.residuals, search.candidates);
-        assert_eq!(batch.propagated, 0);
-        assert!(execution.proposed.iter().all(|batch| batch.len() <= 3));
-        assert!(actual.formula_execution.is_none());
+        assert_eq!(costs(&output), costs(&scalar), "{source}");
+        let batch = actual.semantic().formula_execution().unwrap();
+        require_cpu_batches(batch);
+        assert_eq!((batch.pending_candidates, batch.queued_models), (0, 0));
+        assert_eq!(batch.cpu_residuals, actual.semantic().candidate_progress());
+        assert_eq!(
+            batch.completion.entered,
+            actual.semantic().candidate_progress()
+        );
     }
 }
 
 #[test]
-fn requested_output_and_delayed_proposal_limits_preserve_queued_accounting() {
+fn requested_publication_limit_reports_partial_coverage() {
     let mut options = options();
     options.models = 1;
-    let mut execution = NativeBatch::default();
-    let report = run(
-        "{a;b;c}.",
-        &options,
-        &Control::default(),
-        &mut Vec::new(),
-        &mut Vec::new(),
-        &mut execution,
-    )
-    .unwrap();
-    assert_eq!(report.completion, Completion::RequestedModels);
-    assert_eq!((report.models, report.checked), (1, 3));
-    assert_eq!(execution.queue.len(), 2);
-    assert_eq!(execution.snapshots[0].0.committed, 3);
-    options.models = 0;
-    options.max_candidates = 2;
     let mut output = Vec::new();
-    let mut execution = NativeBatch::default();
-    let report = run(
+    let captured = run(
         "{a;b;c}.",
         &options,
         &Control::default(),
         &mut output,
         &mut Vec::new(),
-        &mut execution,
     )
     .unwrap();
-    assert_eq!(report.completion, Completion::Interrupted);
-    assert_eq!((report.models, report.checked), (2, 2));
-    assert_eq!(execution.queue.len(), 0);
-    assert!(std::str::from_utf8(&output).unwrap().contains("INCOMPLETE"));
-    assert!(
-        !std::str::from_utf8(&output)
-            .unwrap()
-            .contains("coverage=exhausted")
+    assert_eq!(captured.report().completion, Completion::RequestedModels);
+    assert_eq!(
+        (captured.report().models, captured.report().checked),
+        (1, 3)
     );
+    let execution = captured.semantic().formula_execution().unwrap();
+    require_cpu_batches(execution);
+    assert_eq!(execution.queued_models, 2);
+    assert_eq!(records(&output).len(), 1);
+    let text = std::str::from_utf8(&output).unwrap();
+    assert!(text.contains("Coverage: partial"));
+    assert!(!text.contains("Coverage: exhausted"));
+}
+
+#[test]
+fn proposal_limit_publishes_an_incomplete_prefix() {
+    let mut options = options();
+    options.max_candidates = 2;
+    let mut output = Vec::new();
+    let captured = run(
+        "{a;b;c}.",
+        &options,
+        &Control::default(),
+        &mut output,
+        &mut Vec::new(),
+    )
+    .unwrap();
+    assert_eq!(captured.report().completion, Completion::Interrupted);
+    assert_eq!(
+        (captured.report().models, captured.report().checked),
+        (2, 2)
+    );
+    let execution = captured.semantic().formula_execution().unwrap();
+    require_cpu_batches(execution);
+    assert_eq!(execution.queued_models, 0);
+    assert_eq!(records(&output).len(), 2);
+    let text = std::str::from_utf8(&output).unwrap();
+    assert!(text.contains("INCOMPLETE"));
+    assert!(!text.contains("Coverage: exhausted"));
 }
 
 struct CancelOnAnswer {
@@ -261,27 +201,29 @@ impl Write for CancelOnAnswer {
 }
 
 #[test]
-fn cancellation_after_a_buffered_answer_does_not_publish_queued_models() {
+fn cancellation_prevents_queued_answer_publication() {
     let control = Control::default();
     let mut output = CancelOnAnswer {
         bytes: Vec::new(),
         control: control.clone(),
     };
-    let mut execution = NativeBatch::default();
-    let report = run(
+    let captured = run(
         "{a;b;c}. #show x.",
         &options(),
         &control,
         &mut output,
         &mut Vec::new(),
-        &mut execution,
     )
     .unwrap();
-    assert_eq!(report.completion, Completion::Interrupted);
-    assert_eq!(report.models, 1);
-    assert_eq!(records(&output.bytes).len(), 1);
-    assert_eq!(execution.queue.len(), 2);
-    assert_eq!(execution.snapshots.last().unwrap().0.pending, 0);
+    assert_eq!(captured.report().completion, Completion::Interrupted);
+    assert_eq!(captured.publication().models(), 1);
+    assert_eq!(records(&output.bytes), [vec!["x".to_owned()]]);
+    let execution = captured.semantic().formula_execution().unwrap();
+    require_cpu_batches(execution);
+    assert_eq!(
+        (execution.queued_models, execution.pending_candidates),
+        (2, 0)
+    );
     assert!(
         std::str::from_utf8(&output.bytes)
             .unwrap()
@@ -290,109 +232,79 @@ fn cancellation_after_a_buffered_answer_does_not_publish_queued_models() {
 }
 
 #[test]
-fn objective_updates_score_already_queued_models_and_keep_all_hidden_optimal_ties() {
+fn hidden_optimal_ties_keep_display_multiplicity() {
     let source = "1 {a;b;c} 1. #minimize{1,a:a;1,b:b;2,c:c}. #show.";
-    let mut expected = None;
     for enabled in [false, true] {
         let mut options = options();
         if !enabled {
             options.max_objective_bound_work = 0;
         }
-        let mut execution = NativeBatch::default();
         let mut output = Vec::new();
-        let report = run(
+        let mut diagnostics = Vec::new();
+        let captured = run(
             source,
             &options,
             &Control::default(),
             &mut output,
-            &mut Vec::new(),
-            &mut execution,
+            &mut diagnostics,
         )
         .unwrap();
-        assert_eq!(report.completion, Completion::Exhausted);
-        let optimum = report.optimization.unwrap();
+        require_cpu_batches(captured.semantic().formula_execution().unwrap());
+        assert_eq!(captured.report().completion, Completion::Exhausted);
+        let optimum = captured.semantic().incumbent().unwrap();
         assert_eq!(optimum.tied_models, 2);
-        assert_eq!(optimum.score.costs(), &[(0, 1)]);
-        assert_eq!(records(&output), vec![Vec::<String>::new(), Vec::new()]);
+        assert_eq!(optimum.score.costs(), [(0, 1)]);
         assert_eq!(optimum.scored_models, 3);
-        if enabled {
-            assert!(execution.snapshots.iter().any(|(_, statistics, queued)| {
-                statistics.candidate_restrictions > 0 && *queued > 0
-            }));
-        }
-        if let Some(expected) = &expected {
-            assert_eq!(records(&output), *expected);
-        } else {
-            expected = Some(records(&output));
-        }
+        assert_eq!(records(&output), [Vec::<String>::new(), Vec::new()]);
+        assert_eq!(costs(&output), [vec![1], vec![1]]);
+        assert!(
+            std::str::from_utf8(&output)
+                .unwrap()
+                .contains("OPTIMUM FOUND")
+        );
+        assert_eq!(
+            std::str::from_utf8(&diagnostics)
+                .unwrap()
+                .contains("Objective pruning: bound"),
+            enabled
+        );
     }
 }
 
 #[test]
-fn real_scoring_retention_and_native_work_stops_never_claim_optimality() {
+fn bounded_search_never_publishes_optimum_status() {
     for kind in 0..4 {
         let mut options = options();
-        let mut execution = NativeBatch::default();
         match kind {
             0 => options.max_objective_work = 0,
             1 => options.max_optimal_models = 1,
             2 => options.max_batch_bytes = 0,
-            _ => execution.fail_work = true,
+            _ => options.max_search_work = 0,
         }
         let mut output = Vec::new();
-        let report = run(
+        let captured = run(
             "1 {a;b;c} 1. #minimize{1,a:a;1,b:b;1,c:c}.",
             &options,
             &Control::default(),
             &mut output,
             &mut Vec::new(),
-            &mut execution,
         )
         .unwrap();
-        assert_eq!(report.completion, Completion::Interrupted);
+        assert_eq!(captured.report().completion, Completion::Interrupted);
+        assert!(!captured.semantic().optimum_proved());
         let text = std::str::from_utf8(&output).unwrap();
+        assert!(text.contains("INCOMPLETE"));
         assert!(!text.contains("OPTIMUM FOUND"));
-        assert!(!text.contains("coverage=exhausted"));
+        assert!(!text.contains("Coverage: exhausted"));
         if kind == 1 {
-            assert_eq!(report.models, 1);
-            assert_eq!(report.optimization.unwrap().tied_models, 2);
-        }
-        if kind == 3 {
-            assert_eq!(execution.snapshots.last().unwrap().0.pending, 3);
-            assert_eq!(report.models, 0);
+            assert_eq!(captured.publication().models(), 1);
+            assert_eq!(captured.semantic().incumbent().unwrap().tied_models, 2);
         }
     }
 }
 
 #[test]
-fn malformed_checker_shape_is_a_real_protocol_error_before_any_answer() {
-    let mut execution = NativeBatch {
-        omit_verdict: true,
-        ..NativeBatch::default()
-    };
-    let mut output = Vec::new();
-    let error = run(
-        "{a;b;c}.",
-        &options(),
-        &Control::default(),
-        &mut output,
-        &mut Vec::new(),
-        &mut execution,
-    )
-    .unwrap_err();
-    assert!(matches!(
-        error,
-        RunError::FormulaBatchShape {
-            expected: 3,
-            actual: 2
-        }
-    ));
-    assert!(output.is_empty());
-    assert_eq!(execution.snapshots.last().unwrap().0.pending, 3);
-}
-
-#[test]
-fn every_common_loop_output_and_diagnostic_truncation_keeps_its_exact_prefix() {
+fn every_publication_truncation_preserves_its_prefix() {
     for source in [
         "{a;b}. #show x.",
         "1 {a;b;c} 1. #minimize{1,a:a;1,b:b;2,c:c}.",
@@ -400,15 +312,15 @@ fn every_common_loop_output_and_diagnostic_truncation_keeps_its_exact_prefix() {
         let options = options();
         let mut output = Vec::new();
         let mut diagnostics = Vec::new();
-        run(
+        let captured = run(
             source,
             &options,
             &Control::default(),
             &mut output,
             &mut diagnostics,
-            &mut NativeBatch::default(),
         )
         .unwrap();
+        require_cpu_batches(captured.semantic().formula_execution().unwrap());
         for (cut_diagnostics, reference) in [(false, &output), (true, &diagnostics)] {
             for capacity in 0..reference.len() {
                 let mut broken = BoundedWriter::new(capacity);
@@ -420,7 +332,6 @@ fn every_common_loop_output_and_diagnostic_truncation_keeps_its_exact_prefix() {
                         &Control::default(),
                         &mut other,
                         &mut broken,
-                        &mut NativeBatch::default(),
                     )
                 } else {
                     run(
@@ -429,11 +340,10 @@ fn every_common_loop_output_and_diagnostic_truncation_keeps_its_exact_prefix() {
                         &Control::default(),
                         &mut broken,
                         &mut other,
-                        &mut NativeBatch::default(),
                     )
                 };
                 assert!(
-                    matches!(result, Err(RunError::Output(ref error)) if error.kind() == io::ErrorKind::BrokenPipe)
+                    matches!(result, Err(ref failure) if matches!(failure.cause.as_ref(), RunError::Output(error) if error.kind() == io::ErrorKind::BrokenPipe))
                 );
                 assert_eq!(broken.bytes(), &reference[..capacity]);
             }
@@ -442,7 +352,7 @@ fn every_common_loop_output_and_diagnostic_truncation_keeps_its_exact_prefix() {
 }
 
 #[test]
-fn all_original_corpus_contracts_hold_through_native_residual_batches() {
+fn cpu_batches_preserve_original_corpus_displays() {
     let fixture: serde_json::Value =
         serde_json::from_str(include_str!("../fixtures/kr-domains/complete-models.json")).unwrap();
     let cases = fixture["cases"].as_array().unwrap();
@@ -460,61 +370,39 @@ fn original_case(root: &std::path::Path, case: &serde_json::Value) {
     options.batch_size = NonZeroUsize::new(64).unwrap();
     let bundle = zetesis_themelios::SourceBundle::load(
         root.join(path),
-        zetesis_themelios::BundleLimits {
-            max_roots: options.max_source_roots,
-            max_files: options.max_source_files,
-            max_file_bytes: options.max_source_bytes,
-            max_total_bytes: options.max_total_source_bytes,
-            max_include_depth: options.max_include_depth,
-        },
+        zetesis_themelios::BundleLimits::default(),
     )
     .unwrap();
-    let admitted = zetesis_themelios::admit_bundle_formula(
-        bundle,
-        zetesis_themelios::BundleAdmissionOptions::default(),
-        crate::admission::expansion_limits(&options),
-        crate::admission::formula_limits(&options),
-    )
-    .unwrap();
-    let control = Control::default();
-    let context = super::FormulaRun {
-        input: super::Input {
-            theory: admitted.theory(),
-            atoms: admitted.atoms(),
-            gate_atoms: 0,
-            objectives: admitted.objectives(),
-            observations: admitted.metadata().observations(),
-        },
-        display: crate::display::Display {
-            selection: admitted.metadata().output(),
-            observations: admitted.metadata().observations(),
-            options: &options,
-            control: &control,
-        },
-    };
     let mut output = Vec::new();
     let mut diagnostics = Vec::new();
-    let mut execution = NativeBatch::default();
-    let report = context
-        .solve(
-            &mut output,
-            &mut diagnostics,
-            &mut execution,
-            &crate::phase_timing::Recorder::new(options.stats),
-        )
-        .unwrap()
-        .report()
-        .unwrap();
+    let captured = crate::run_bundle_finalized_with_diagnostics(
+        bundle,
+        &options,
+        &mut output,
+        &mut diagnostics,
+        &Control::default(),
+    )
+    .unwrap();
     assert_eq!(
-        report.completion,
+        captured.report().completion,
         Completion::Exhausted,
-        "{path}: {}\n{}",
-        std::str::from_utf8(&output).unwrap(),
-        std::str::from_utf8(&diagnostics).unwrap()
+        "{path}"
+    );
+    let execution = captured.semantic().formula_execution().unwrap();
+    require_cpu_batches(execution);
+    assert_eq!(
+        (execution.pending_candidates, execution.queued_models),
+        (0, 0),
+        "{path}"
+    );
+    assert_eq!(
+        execution.completion.entered,
+        captured.semantic().candidate_progress(),
+        "{path}"
     );
     let expected = &case["answer"];
     assert_eq!(
-        u64::try_from(report.models).unwrap(),
+        u64::try_from(captured.publication().models()).unwrap(),
         expected["model_count"].as_u64().unwrap(),
         "{path}"
     );
@@ -541,7 +429,7 @@ fn original_case(root: &std::path::Path, case: &serde_json::Value) {
             .collect::<Vec<_>>()
     });
     assert_eq!(
-        report.optimization.map(|score| score
+        captured.semantic().incumbent().map(|score| score
             .score
             .costs()
             .iter()
@@ -550,7 +438,10 @@ fn original_case(root: &std::path::Path, case: &serde_json::Value) {
         expected_cost,
         "{path}"
     );
-    let (batch, statistics, queued) = execution.snapshots.last().unwrap();
-    assert_eq!(batch.committed, statistics.candidates, "{path}");
-    assert_eq!((batch.pending, *queued), (0, 0), "{path}");
+    assert_eq!(
+        costs(&output),
+        expected_cost.map_or_else(Vec::new, |cost| vec![cost; captured.publication().models()]),
+        "{path}"
+    );
+    assert!(captured.publication().summary());
 }

@@ -70,8 +70,8 @@ fn run_input(
         }
     };
     result
-        .map(crate::SolveReport::into_report)
-        .map_err(crate::SolveFailure::into_legacy)
+        .map(crate::PublicationReport::into_report)
+        .map_err(crate::PublicationFailure::into_legacy)
 }
 
 enum Input {
@@ -91,7 +91,7 @@ fn load_input(options: &Options) -> Result<Input, RunError> {
     {
         return Err(RunError::MixedStandardInput);
     }
-    crate::engine::validate_combination(&options.into())?;
+    crate::SolveConfig::from(options).validate()?;
     if options.input.as_os_str() == "-" {
         let source = read_source(options).map_err(RunError::Input)?;
         Ok(Input::Source(source))

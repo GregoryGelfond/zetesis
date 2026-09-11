@@ -15,20 +15,20 @@ esac
 # Each row names a report group, Cargo target, required count and exact tests.
 # All invocations keep workspace feature unification, including the library
 # selection: narrowing to one package can change instrumented dependency builds.
-metal_groups='wgpu-lib|lib|7|aggregate::device::tests::metal_aggregate_readback_failure_retains_submitted_work lazy::transport_tests::metal_lazy_transport_reuse_preserves_round_truth lazy::transport_tests::metal_input_slack_preserves_exact_admission lazy::transport_tests::metal_lazy_transport_refusal_preserves_reuse lazy::transport_tests::metal_lazy_transport_cancelled_read_discards_capacity formula::device::tests::metal_busy_refusal_preserves_formula_state aggregate::device::tests::metal_readback_failure_invalidates_context_peers
+metal_groups='wgpu-lib|lib|10|aggregate::device::tests::metal_aggregate_readback_failure_retains_submitted_work lazy::transport_tests::metal_lazy_transport_reuse_preserves_round_truth lazy::transport_tests::metal_input_slack_preserves_exact_admission lazy::transport_tests::metal_lazy_transport_refusal_preserves_reuse lazy::transport_tests::metal_lazy_transport_cancelled_read_discards_capacity formula::device::tests::metal_busy_refusal_preserves_formula_state aggregate::device::tests::metal_readback_failure_invalidates_context_peers formula::device::tests::metal_profile_starts_fresh_formula_oracles formula::device::tests::metal_profiles_identify_exact_compilations formula::device::tests::metal_profile_reuse_checks_context_lifecycle
 tight|hardware_tight|4|metal_support_matches_exact_reduct_semantics metal_support_preserves_batch_isolation metal_support_refusals_preserve_reusable_residency metal_support_residency_tracks_theory_identity
 formula|hardware_formula|2|metal_formula_limits_resize_identity_and_word_boundaries_remain_explicit metal_formula_queries_preserve_exact_frozen_semantics_and_residency
 aggregate|hardware_aggregate|3|metal_aggregate_reductions_match_native_occurrences metal_aggregate_guards_preserve_numeric_boundaries metal_aggregate_exact_admission_preserves_cache_lifecycle
 lazy|hardware_lazy|4|metal_lazy_worlds_match_exact_frozen_cpu_closures metal_lazy_growth_preserves_previous_round_truth metal_lazy_catalog_fits_when_static_carrier_refuses metal_source_selections_preserve_each_frozen_closure
 cli-lazy|lazy_gpu|5|physical::ordinary_lazy_metal_preserves_complete_cpu_models physical::automatic_metal_keeps_lazy_grounding physical::requested_model_limit_retains_completed_lazy_candidates physical::lazy_source_stop_preserves_unfinished_candidate_counts physical::lazy_writer_failure_preserves_completed_device_work
 cli-formula|formula_gpu|2|physical::ordinary_metal_formula_batches_match_complete_cpu_models_costs_and_displays physical::ordinary_metal_formula_limits_preserve_partial_coverage_and_writer_errors
-world-views|world_views_gpu|2|metal_world_view_preserves_nonoptimal_answers metal_collection_limit_retains_checked_accounting
+world-views|world_views_gpu|4|metal_world_view_preserves_nonoptimal_answers metal_collection_limit_retains_checked_accounting metal_collection_refuses_a_foreign_context metal_collection_observer_failure_retains_a_prefix
 aggregate-measurement|aggregate_measurement|1|metal_aggregate_measurements_require_actual_submissions
 relation|hardware_relation|2|metal_relation_masks_match_typed_rows metal_relation_refusals_preserve_prepared_view
 relation-measurement|relation_measurement|1|metal_relation_measurement_keeps_complete_masks
 context|hardware_context|1|metal_formula_executes_while_relation_columns_remain_prepared
-cli-context|lib|2|engine::resource_tests::metal_closure_retains_the_supplied_context formula_execution::resource_tests::metal_formula_retains_the_supplied_context
-session-resources|session_resources_gpu|4|metal_resources_preserve_independent_sessions metal_resource_policy_refusal_preserves_reuse metal_resources_preserve_cpu_policies metal_observer_failure_preserves_resource_reuse'
+solve-context|lib|3|engine::resource_tests::metal_closure_retains_the_supplied_context formula_execution::resource_tests::metal_formula_retains_the_supplied_context formula_execution::resource_tests::metal_formula_sessions_reuse_the_supplied_profile
+session-resources|session_resources_gpu|5|metal_resources_preserve_independent_sessions metal_resource_policy_refusal_preserves_reuse metal_resources_preserve_cpu_policies metal_observer_failure_preserves_resource_reuse metal_formula_profiles_preserve_independent_sessions'
 
 repo_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 cd -- "$repo_dir"
@@ -156,19 +156,20 @@ run_profile() {
         set --
     else
         cargo +1.97.1 llvm-cov "$@" --locked --no-report
-        set -- --package zetesis-cli
+        set -- --package zetesis-cli --package zetesis-solve
     fi
     write_report "$report_dir" "$@"
 }
 
 run_profile workspace --all-features
-run_profile cli-cpu --package zetesis-cli --no-default-features
+# Keep this artifact name; the CPU population includes the extracted solver.
+run_profile cli-cpu --package zetesis-cli --package zetesis-solve --no-default-features
 
 export CARGO_LLVM_COV_TARGET_DIR="$coverage_dir/build-workspace"
 if [ "$mode" = gate ]; then
     cargo +1.97.1 llvm-cov report --locked --fail-under-lines "$floor"
     export CARGO_LLVM_COV_TARGET_DIR="$coverage_dir/build-cli-cpu"
-    cargo +1.97.1 llvm-cov report --package zetesis-cli --locked --fail-under-lines "$floor"
+    cargo +1.97.1 llvm-cov report --package zetesis-cli --package zetesis-solve --locked --fail-under-lines "$floor"
     completion_status=gate-passed
 else
     completion_status='baseline-complete (nongating)'

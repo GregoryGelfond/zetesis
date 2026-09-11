@@ -1,73 +1,13 @@
-//! Common-loop failure evidence with real native membership and an injected checker.
-//! The adapter label explicitly identifies a test double, never physical GPU evidence.
+//! Publication failures retain semantic evidence from real CPU completion batches.
 
-use std::io::{self, Write};
-use std::num::NonZeroUsize;
-
-use clap::Parser;
-use zetesis_cpu::Control;
-use zetesis_ferraris::{Interpretation, Theory};
-use zetesis_sat::{BatchVerdict, StableModels};
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
-
-use crate::formula_execution::{Failure, FormulaExecutionStatistics, MembershipExecution};
-use crate::formula_queue::BatchQueue;
-use crate::phase_timing::Recorder;
 use crate::test_writer::BoundedWriter;
-use crate::{Options, Report, RunError, RunFailure};
-
-#[derive(Default)]
-struct Injected {
-    queue: BatchQueue,
-    calls: usize,
-    fail_on: usize,
-    shape_on: usize,
-}
-impl Injected {
-    fn check(&mut self, candidates: &[Interpretation]) -> Result<Vec<BatchVerdict>, Failure> {
-        self.calls += 1;
-        if self.calls == self.fail_on {
-            return Err(Failure::Run(RunError::Output(io::Error::new(
-                io::ErrorKind::ConnectionReset,
-                "original checker transport failure",
-            ))));
-        }
-        let count = candidates.len() - usize::from(self.calls == self.shape_on);
-        Ok(vec![BatchVerdict::Residual; count])
-    }
-}
-impl MembershipExecution for Injected {
-    fn next(
-        &mut self,
-        models: &mut StableModels,
-        options: &crate::SolveConfig,
-        control: &Control,
-        _: &Recorder,
-    ) -> Option<Result<Interpretation, Failure>> {
-        let mut queue = std::mem::take(&mut self.queue);
-        let result = queue.next(models, options, control, |_: &Theory, candidates| {
-            self.check(candidates)
-        });
-        self.queue = queue;
-        result
-    }
-    fn statistics(&self, models: &StableModels) -> Option<FormulaExecutionStatistics> {
-        let batch = models.batch_statistics();
-        Some(FormulaExecutionStatistics {
-            adapter: "injected native checker; no physical device".into(),
-            gpu_batches: 0,
-            gpu_candidates: 0,
-            gpu_work: 0,
-            gpu_rounds: 0,
-            gpu_decided: 0,
-            cpu_residuals: batch.residuals,
-            pending_candidates: batch.pending,
-            queued_models: self.queue.len(),
-            peak_accounted_bytes: 0,
-            completion: self.queue.accounting(),
-        })
-    }
-}
+use crate::{Completion, Options, PublicationFailure, RunError, run_finalized_with_diagnostics};
+use clap::Parser;
+use std::{
+    io::{self, Write},
+    num::NonZeroUsize,
+};
+use zetesis_cpu::Control;
 
 fn options() -> Options {
     let mut options = Options::try_parse_from([
@@ -80,9 +20,42 @@ fn options() -> Options {
         "0",
     ])
     .unwrap();
-    options.batch_size = NonZeroUsize::new(2).unwrap();
-    options.max_objective_bound_work = 0;
+    options.batch_size = NonZeroUsize::new(3).unwrap();
+    options.completion_workers = NonZeroUsize::new(4).unwrap();
     options
+}
+
+struct FailAnswer {
+    limit: usize,
+    accepted: usize,
+    bytes: Vec<u8>,
+}
+impl FailAnswer {
+    fn after(limit: usize) -> Self {
+        Self {
+            limit,
+            accepted: 0,
+            bytes: Vec::new(),
+        }
+    }
+}
+impl Write for FailAnswer {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        if bytes.starts_with(b"Answer:") {
+            if self.accepted == self.limit {
+                return Err(io::Error::new(
+                    io::ErrorKind::ConnectionReset,
+                    "answer sink closed",
+                ));
+            }
+            self.accepted += 1;
+        }
+        self.bytes.extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 fn run(
@@ -90,208 +63,204 @@ fn run(
     options: &Options,
     output: &mut impl Write,
     diagnostics: &mut impl Write,
-    execution: &mut Injected,
-) -> Result<Report, RunFailure> {
-    let admitted = admit_formula(
+) -> PublicationFailure {
+    run_finalized_with_diagnostics(
         source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
+        options,
+        output,
+        diagnostics,
+        &Control::default(),
     )
-    .unwrap();
-    let control = Control::default();
-    let phases = Recorder::new(options.stats);
-    let result = super::FormulaRun {
-        input: super::Input {
-            theory: admitted.theory(),
-            atoms: admitted.atoms(),
-            gate_atoms: 0,
-            objectives: admitted.objectives(),
-            observations: admitted.metadata().observations(),
-        },
-        display: crate::display::Display {
-            selection: admitted.metadata().output(),
-            observations: admitted.metadata().observations(),
-            options,
-            control: &control,
-        },
-    }
-    .solve(output, diagnostics, execution, &phases);
-    crate::driver::report_statistics(result, diagnostics, options, &phases)
+    .unwrap_err()
+}
+
+fn require_cpu_batches(failure: &PublicationFailure) {
+    let execution = failure.semantic().unwrap().formula_execution().unwrap();
+    assert_eq!(execution.completion.requested_workers, 4);
+    assert_eq!(execution.gpu_batches, 0);
+    assert_eq!(execution.gpu_work, 0);
+}
+
+fn require_answer_error(failure: &PublicationFailure) {
+    assert!(matches!(failure.cause.as_ref(), RunError::Output(error)
+        if error.kind() == io::ErrorKind::ConnectionReset && error.to_string() == "answer sink closed"));
 }
 
 #[test]
-fn a_late_checker_failure_preserves_prior_answers_and_uncommitted_candidates() {
-    let mut output = Vec::new();
-    let failure = run(
-        "{a;b}.",
-        &options(),
-        &mut output,
-        &mut Vec::new(),
-        &mut Injected {
-            fail_on: 2,
-            ..Default::default()
-        },
-    )
-    .unwrap_err();
-    assert!(matches!(&*failure.cause, RunError::Output(error)
-        if error.kind() == io::ErrorKind::ConnectionReset && error.to_string() == "original checker transport failure"));
-    let partial = failure.partial_report.unwrap();
+fn late_output_failure_retains_published_prefix() {
+    let mut output = FailAnswer::after(2);
+    let failure = run("{a;b;c}.", &options(), &mut output, &mut Vec::new());
+    require_answer_error(&failure);
+    require_cpu_batches(&failure);
+    let partial = failure.partial_report.as_ref().unwrap();
     assert_eq!(
         (
             partial.published_models,
             partial.verified_models,
             partial.checked
         ),
-        (2, 2, 4)
+        (2, 3, 3)
     );
     assert_eq!(partial.completion, None);
     assert!(!partial.summary_published);
-    let execution = partial.formula_execution.unwrap();
+    assert_eq!(failure.publication().unwrap().models(), 2);
+    let text = std::str::from_utf8(&output.bytes).unwrap();
+    assert_eq!(text.matches("Answer:").count(), 2);
+    assert!(!text.contains("Coverage:"));
+    let execution = failure.semantic().unwrap().formula_execution().unwrap();
     assert_eq!(
         (
             execution.pending_candidates,
             execution.queued_models,
             execution.cpu_residuals
         ),
-        (2, 0, 2)
+        (0, 0, 3)
     );
-    let text = std::str::from_utf8(&output).unwrap();
-    assert_eq!(text.matches("Answer:").count(), 2);
-    assert!(!text.contains("Coverage:"));
+}
+
+#[derive(Default)]
+struct RefuseBound {
+    bytes: Vec<u8>,
+    refusals: usize,
+}
+impl Write for RefuseBound {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        if bytes.starts_with(b"Objective pruning:") {
+            self.refusals += 1;
+            return Err(io::Error::new(
+                io::ErrorKind::BrokenPipe,
+                "bound diagnostic closed",
+            ));
+        }
+        self.bytes.extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 #[test]
-fn checker_failure_does_not_flush_retained_incumbents_or_lose_tie_metadata() {
+fn failed_bound_diagnostics_leave_incumbents_unpublished() {
     let mut output = Vec::new();
+    let mut diagnostics = RefuseBound::default();
     let failure = run(
-        "{a;b}. #minimize{0:a;0:b}. #show.",
+        "1 {a;b;c} 1. #minimize{1,a:a;1,b:b;2,c:c}. #show.",
         &options(),
         &mut output,
-        &mut Vec::new(),
-        &mut Injected {
-            fail_on: 2,
-            ..Default::default()
-        },
-    )
-    .unwrap_err();
+        &mut diagnostics,
+    );
+    assert!(matches!(failure.cause.as_ref(), RunError::Output(error)
+        if error.kind() == io::ErrorKind::BrokenPipe && error.to_string() == "bound diagnostic closed"));
+    assert_eq!(diagnostics.refusals, 1);
+    require_cpu_batches(&failure);
     assert!(output.is_empty());
-    let partial = failure.partial_report.unwrap();
-    assert_eq!((partial.published_models, partial.verified_models), (0, 2));
-    assert_eq!(partial.formula_execution.unwrap().pending_candidates, 2);
-    let incumbent = partial.optimization.unwrap();
-    assert_eq!((incumbent.tied_models, incumbent.scored_models), (2, 2));
-    assert_eq!(incumbent.score.costs(), &[(0, 0)]);
-    assert_eq!(partial.completion, None);
+    let semantic = failure.semantic().unwrap();
+    assert_eq!(semantic.verified_models(), 3);
+    assert_eq!(semantic.retained_models(), 1);
+    assert_eq!(semantic.incumbent().unwrap().tied_models, 1);
+    assert_eq!(semantic.incumbent().unwrap().scored_models, 1);
+    assert_eq!(semantic.incumbent().unwrap().score.costs(), [(0, 1)]);
+    assert_eq!(semantic.completion(), None);
+    assert!(!semantic.optimum_proved());
+    assert_eq!(failure.publication().unwrap().models(), 0);
+    assert!(!failure.publication().unwrap().summary());
+    let execution = semantic.formula_execution().unwrap();
+    assert_eq!(
+        (execution.pending_candidates, execution.queued_models),
+        (0, 2)
+    );
 }
 
 #[test]
-fn protocol_shape_and_secondary_reporting_failures_retain_the_primary_and_pending_set() {
+fn secondary_reporting_failure_preserves_primary_cause() {
     let mut options = options();
     options.stats = true;
-    let mut initial_diagnostics = Vec::new();
-    run(
+    let mut reference = Vec::new();
+    let initial = run(
         "{a;b}.",
         &options,
-        &mut Vec::new(),
-        &mut initial_diagnostics,
-        &mut Injected {
-            shape_on: 1,
-            ..Default::default()
-        },
-    )
-    .unwrap_err();
-    let prefix = std::str::from_utf8(&initial_diagnostics)
+        &mut FailAnswer::after(0),
+        &mut reference,
+    );
+    require_answer_error(&initial);
+    let prefix = std::str::from_utf8(&reference)
         .unwrap()
         .find("Statistics:")
         .unwrap();
+    let mut diagnostics = BoundedWriter::new(prefix);
     let failure = run(
         "{a;b}.",
         &options,
-        &mut Vec::new(),
-        &mut BoundedWriter::new(prefix),
-        &mut Injected {
-            shape_on: 1,
-            ..Default::default()
-        },
-    )
-    .unwrap_err();
-    assert!(matches!(
-        *failure.cause,
-        RunError::FormulaBatchShape {
-            expected: 2,
-            actual: 1
-        }
-    ));
+        &mut FailAnswer::after(0),
+        &mut diagnostics,
+    );
+    require_answer_error(&failure);
+    require_cpu_batches(&failure);
     assert_eq!(
-        failure.secondary_output.unwrap().kind(),
+        failure.secondary_output.as_ref().unwrap().kind(),
         io::ErrorKind::BrokenPipe
     );
-    let partial = failure.partial_report.unwrap();
+    assert_eq!(
+        failure.diagnostics_failure().unwrap().kind(),
+        io::ErrorKind::BrokenPipe
+    );
+    assert_eq!(diagnostics.bytes(), &reference[..prefix]);
+    let partial = failure.partial_report.as_ref().unwrap();
     assert_eq!(
         (
             partial.verified_models,
             partial.published_models,
             partial.checked
         ),
-        (0, 0, 2)
+        (3, 0, 3)
     );
-    assert_eq!(partial.formula_execution.unwrap().pending_candidates, 2);
+    assert_eq!(partial.formula_execution.as_ref().unwrap().queued_models, 2);
+    assert_eq!(partial.completion, None);
     assert!(failure.phase_timings.is_some());
 }
 
 #[test]
-fn partial_answer_retains_verified_queue_separately_from_the_published_count() {
-    let mut options = options();
-    options.batch_size = NonZeroUsize::new(3).unwrap();
+fn partial_answer_retains_unpublished_membership() {
     let mut output = BoundedWriter::new(4);
-    let failure = run(
-        "{a;b}.",
-        &options,
-        &mut output,
-        &mut Vec::new(),
-        &mut Injected::default(),
-    )
-    .unwrap_err();
-    let partial = failure.partial_report.unwrap();
+    let failure = run("{a;b}.", &options(), &mut output, &mut Vec::new());
+    require_cpu_batches(&failure);
+    assert!(
+        matches!(failure.cause.as_ref(), RunError::Output(error) if error.kind() == io::ErrorKind::BrokenPipe)
+    );
     assert_eq!(output.bytes(), b"Answ");
+    let partial = failure.partial_report.as_ref().unwrap();
     assert_eq!((partial.published_models, partial.verified_models), (0, 3));
-    let execution = partial.formula_execution.unwrap();
+    let execution = partial.formula_execution.as_ref().unwrap();
     assert_eq!(
         (execution.pending_candidates, execution.queued_models),
         (0, 2)
     );
     assert_eq!(partial.countermodel_statistics.unwrap().stable_models, 3);
     assert_eq!(partial.completion, None);
+    assert_eq!(failure.publication().unwrap().models(), 0);
+    assert!(!failure.publication().unwrap().summary());
 }
 
 #[test]
-fn failed_device_shaped_checks_do_not_recount_previous_parallel_completion() {
-    for workers in [1, 2, 4] {
-        for shape in [false, true] {
-            let mut options = options();
-            options.completion_workers = NonZeroUsize::new(workers).unwrap();
-            let mut execution = Injected {
-                queue: BatchQueue::new(&(&options).into()).unwrap(),
-                fail_on: if shape { 0 } else { 2 },
-                shape_on: if shape { 2 } else { 0 },
-                ..Default::default()
-            };
-            let failure = run(
-                "{a;b}.",
-                &options,
-                &mut Vec::new(),
-                &mut Vec::new(),
-                &mut execution,
-            )
-            .unwrap_err();
-            let partial = failure.partial_report.unwrap();
-            let statistics = partial.formula_execution.unwrap();
-            assert_eq!(statistics.completion.entered, 2);
-            assert_eq!(statistics.completion.residual_completed, 2);
-            assert_eq!(statistics.completion.failed, 0);
-            assert_eq!(statistics.pending_candidates, 2);
-            assert_eq!((partial.published_models, partial.verified_models), (2, 2));
-        }
-    }
+fn failed_answer_output_preserves_complete_optimum() {
+    let mut options = options();
+    options.max_objective_bound_work = 0;
+    let failure = run(
+        "{a;b}. #minimize{0:a;0:b}. #show.",
+        &options,
+        &mut FailAnswer::after(0),
+        &mut Vec::new(),
+    );
+    require_answer_error(&failure);
+    require_cpu_batches(&failure);
+    let semantic = failure.semantic().unwrap();
+    assert_eq!(semantic.completion(), Some(Completion::Exhausted));
+    assert!(semantic.optimum_proved());
+    assert_eq!(semantic.verified_models(), 4);
+    assert_eq!(semantic.retained_models(), 4);
+    assert_eq!(semantic.incumbent().unwrap().tied_models, 4);
+    assert_eq!(semantic.incumbent().unwrap().score.costs(), [(0, 0)]);
+    assert_eq!(failure.publication().unwrap().models(), 0);
+    assert!(!failure.publication().unwrap().summary());
 }

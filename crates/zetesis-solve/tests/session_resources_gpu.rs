@@ -1,0 +1,753 @@
+//! Ordinary sessions share device ownership, never search or answer-set evidence.
+#![cfg(feature = "gpu")]
+
+use std::{convert::Infallible, num::NonZeroUsize};
+
+use zetesis_core::{
+    Atom, Predicate, Sign, Value,
+    relation::{Limits, Relation},
+};
+use zetesis_cpu::{Control, Stop};
+use zetesis_solve::{
+    AnswerSelection, AnswerSet, Backend, Completion, ExecutionObservation, ExecutionObserver,
+    ExecutionResources, Grounder, Interruption, Oracle, PreparedInput, SemanticOutcome, Session,
+    SolveConfig, SolveError, Subject,
+};
+use zetesis_themelios::{
+    AdmissionOptions, Admitted, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_extended,
+    admit_formula,
+};
+use zetesis_wgpu::{
+    AdapterBackend, AdapterCategory, GateProjection, GpuBackendPreference, GpuContext, GpuError,
+    GpuErrorKind, GpuFormulaProfile, GpuOptions, GpuRelationExecutor, GpuSelection,
+    RelationGpuLimits,
+};
+
+#[derive(Clone, Copy)]
+enum Device {
+    Metal,
+    Vulkan,
+}
+
+impl Device {
+    fn backend(self) -> Backend {
+        match self {
+            Self::Metal => Backend::Metal,
+            Self::Vulkan => Backend::Vulkan,
+        }
+    }
+
+    fn observed(self) -> AdapterBackend {
+        match self {
+            Self::Metal => AdapterBackend::Metal,
+            Self::Vulkan => AdapterBackend::Vulkan,
+        }
+    }
+
+    fn selection(self) -> GpuSelection {
+        GpuSelection {
+            backend: match self {
+                Self::Metal => GpuBackendPreference::Metal,
+                Self::Vulkan => GpuBackendPreference::Vulkan,
+            },
+            vendor_id: None,
+        }
+    }
+
+    fn other(self) -> Self {
+        match self {
+            Self::Metal => Self::Vulkan,
+            Self::Vulkan => Self::Metal,
+        }
+    }
+
+    fn context(self) -> GpuContext {
+        let context = GpuContext::new_selected(GpuOptions::default(), self.selection()).unwrap();
+        assert_eq!(context.info().backend_kind(), self.observed());
+        assert!(context.info().is_hardware_gpu());
+        eprintln!("session resources adapter={:?}", context.info().metadata());
+        context
+    }
+}
+
+#[derive(Clone, Copy)]
+enum Profile {
+    Eager,
+    Lazy,
+    Formula,
+}
+
+fn config(backend: Backend, profile: Profile) -> SolveConfig {
+    SolveConfig {
+        backend,
+        grounder: match profile {
+            Profile::Lazy => Grounder::Lazy,
+            Profile::Eager | Profile::Formula => Grounder::Eager,
+        },
+        oracle: match profile {
+            Profile::Formula => Oracle::Countermodel,
+            Profile::Eager | Profile::Lazy => Oracle::Closure,
+        },
+        models: 0,
+        batch_size: NonZeroUsize::new(4).unwrap(),
+        workers: NonZeroUsize::MIN,
+        completion_workers: NonZeroUsize::MIN,
+        max_candidates: 128,
+        max_search_work: 1_000_000,
+        max_search_decisions: 1_000,
+        max_work: 100_000,
+        max_atoms: 256,
+        max_optimal_models: 8,
+        ..Default::default()
+    }
+}
+
+fn normal(source: &str) -> Admitted {
+    admit_extended(
+        source.into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+    )
+    .unwrap()
+}
+
+fn formula(source: &str) -> AdmittedFormula {
+    admit_formula(
+        source.into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap()
+}
+
+fn atom(name: &str, sign: Sign, values: Vec<Value>) -> Atom {
+    Atom::new(
+        Predicate::with_sign(name, values.len(), sign).unwrap(),
+        values,
+    )
+    .unwrap()
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct Record {
+    atoms: Vec<Atom>,
+    costs: Option<Vec<(i32, i64)>>,
+}
+
+impl Record {
+    fn expected(choice: &str, value: Value, cost: Option<i64>) -> Self {
+        let mut atoms = vec![
+            atom(choice, Sign::Positive, vec![]),
+            atom("value", Sign::Positive, vec![value]),
+            atom("tag", Sign::Negative, vec![Value::String("7".into())]),
+        ];
+        atoms.sort();
+        Self {
+            atoms,
+            costs: cost.map(|cost| vec![(2, cost)]),
+        }
+    }
+
+    fn from_answer(answer: &AnswerSet) -> Self {
+        let atoms = answer.interpretation().atoms().iter().cloned().collect();
+        Self {
+            atoms,
+            costs: answer.score().map(|score| {
+                assert!(score.is_present());
+                score.costs().to_vec()
+            }),
+        }
+    }
+}
+
+#[derive(Default)]
+struct Routes {
+    device_closure: usize,
+    device_formula: usize,
+    cpu_closure: usize,
+    cpu_formula: usize,
+    observed_backend: Option<AdapterBackend>,
+}
+
+impl ExecutionObserver for Routes {
+    type Error = Infallible;
+
+    fn observe(&mut self, observation: ExecutionObservation<'_>) -> Result<(), Self::Error> {
+        let adapter = match observation {
+            ExecutionObservation::DeviceClosure { adapter, .. } => {
+                self.device_closure += 1;
+                Some(adapter)
+            }
+            ExecutionObservation::DeviceFormula { adapter, .. } => {
+                self.device_formula += 1;
+                Some(adapter)
+            }
+            ExecutionObservation::CpuClosure { .. } => {
+                self.cpu_closure += 1;
+                None
+            }
+            ExecutionObservation::CpuFormula { .. } => {
+                self.cpu_formula += 1;
+                None
+            }
+            _ => None,
+        };
+        if let Some(adapter) = adapter {
+            assert!(matches!(
+                adapter.category,
+                AdapterCategory::IntegratedGpu | AdapterCategory::DiscreteGpu
+            ));
+            self.observed_backend = Some(adapter.backend);
+        }
+        Ok(())
+    }
+}
+
+struct Capture {
+    records: Vec<Record>,
+    outcome: SemanticOutcome,
+    routes: Routes,
+}
+
+fn solve(
+    input: PreparedInput<'_>,
+    subject: &Subject,
+    config: SolveConfig,
+    resources: &ExecutionResources,
+    selection: AnswerSelection,
+) -> Capture {
+    let mut routes = Routes::default();
+    let mut session = Session::builder(input, config, Control::default())
+        .resources(resources)
+        .selection(selection)
+        .start_observed(&mut routes)
+        .unwrap();
+    let mut records = Vec::new();
+    while let Some(answer) = session.next_observed(&mut routes) {
+        let answer = answer.unwrap();
+        assert!(answer.subject().same_instance(subject));
+        records.push(Record::from_answer(&answer));
+    }
+    assert!(session.next_observed(&mut routes).is_none());
+    let outcome = session.outcome().unwrap();
+    assert!(outcome.subject().unwrap().same_instance(subject));
+    records.sort();
+    Capture {
+        records,
+        outcome,
+        routes,
+    }
+}
+
+fn require_device(capture: &Capture, device: Device, profile: Profile) {
+    assert_eq!(capture.routes.observed_backend, Some(device.observed()));
+    assert_eq!(capture.routes.cpu_closure + capture.routes.cpu_formula, 0);
+    match profile {
+        Profile::Eager => assert_eq!(capture.routes.device_closure, 1),
+        Profile::Lazy => {
+            assert_eq!(capture.routes.device_closure, 1);
+            assert!(capture.outcome.lazy_execution().unwrap().dispatches > 0);
+        }
+        Profile::Formula => {
+            assert_eq!(capture.routes.device_formula, 1);
+            let execution = capture.outcome.formula_execution().unwrap();
+            assert!(execution.gpu_batches > 0);
+            assert!(execution.gpu_work > 0);
+            assert!(execution.gpu_candidates > 0);
+            assert_eq!(execution.pending_candidates + execution.queued_models, 0);
+        }
+    }
+}
+
+fn require_complete(capture: &Capture, expected: &[Record]) {
+    assert_eq!(capture.outcome.completion(), Some(Completion::Exhausted));
+    assert!(capture.outcome.interruption().is_none());
+    assert_eq!(capture.records, expected);
+    assert!(!capture.outcome.unsatisfiable());
+}
+
+const NORMAL_NUMBER: &str = "a :- not b. b :- not a. value(7). -tag(\"7\"). #show.";
+const NORMAL_STRING: &str = "a :- not b. b :- not a. value(\"7\"). -tag(\"7\"). #show.";
+const FORMULA_FIRST: &str = "1 {a;b} 1. value(7). -tag(\"7\"). #minimize {1@2,a:a;2@2,b:b}. #show.";
+const FORMULA_SECOND: &str =
+    "1 {a;b} 1. value(7). -tag(\"7\"). #minimize {9@2,a:a;4@2,b:b}. #show.";
+
+fn independent_closures(resources: &ExecutionResources, device: Device) {
+    let first = normal(NORMAL_NUMBER);
+    let second = normal(NORMAL_STRING);
+    assert!(!first.program().same_instance(second.program()));
+    for profile in [Profile::Eager, Profile::Lazy] {
+        let subject = Subject::Program(first.program().clone());
+        let mut limited = config(device.backend(), profile);
+        limited.max_candidates = 0;
+        let stopped = solve(
+            PreparedInput::admitted(&first),
+            &subject,
+            limited,
+            resources,
+            AnswerSelection::All,
+        );
+        assert!(stopped.records.is_empty());
+        assert_eq!(stopped.outcome.verified_models(), 0);
+        assert_eq!(stopped.outcome.completion(), Some(Completion::Interrupted));
+        assert_eq!(
+            stopped.outcome.interruption(),
+            Some(Interruption::Oracle(Stop::CandidateLimit)),
+        );
+        for (owner, value) in [
+            (&first, Value::Number(7)),
+            (&second, Value::String("7".into())),
+        ] {
+            let subject = Subject::Program(owner.program().clone());
+            let captured = solve(
+                PreparedInput::admitted(owner),
+                &subject,
+                config(device.backend(), profile),
+                resources,
+                AnswerSelection::All,
+            );
+            require_device(&captured, device, profile);
+            assert_eq!(captured.outcome.verified_models(), 2);
+            assert!(captured.outcome.incumbent().is_none());
+            require_complete(
+                &captured,
+                &[
+                    Record::expected("a", value.clone(), None),
+                    Record::expected("b", value, None),
+                ],
+            );
+        }
+    }
+}
+
+fn independent_formulas(resources: &ExecutionResources, device: Device) {
+    let first = formula(FORMULA_FIRST);
+    let second = formula(FORMULA_SECOND);
+    assert!(!first.theory().same_instance(second.theory()));
+    for (owner, choice, cost) in [(&first, "a", 1), (&second, "b", 4), (&first, "a", 1)] {
+        let subject = Subject::Theory(owner.theory().clone());
+        let captured = solve(
+            PreparedInput::formula(owner),
+            &subject,
+            config(device.backend(), Profile::Formula),
+            resources,
+            AnswerSelection::Optimal,
+        );
+        let reference = solve(
+            PreparedInput::formula(owner),
+            &subject,
+            config(Backend::Cpu, Profile::Formula),
+            &ExecutionResources::default(),
+            AnswerSelection::Optimal,
+        );
+        assert_eq!(captured.records, reference.records);
+        require_device(&captured, device, Profile::Formula);
+        assert!(captured.outcome.optimum_proved());
+        assert_eq!(
+            captured.outcome.incumbent().unwrap().score.costs(),
+            [(2, cost)]
+        );
+        assert_eq!(captured.outcome.incumbent().unwrap().tied_models, 1);
+        require_complete(
+            &captured,
+            &[Record::expected(choice, Value::Number(7), Some(cost))],
+        );
+    }
+    let all = solve(
+        PreparedInput::formula(&second),
+        &Subject::Theory(second.theory().clone()),
+        config(device.backend(), Profile::Formula),
+        resources,
+        AnswerSelection::All,
+    );
+    require_device(&all, device, Profile::Formula);
+    assert_eq!(all.outcome.selection(), Some(AnswerSelection::All));
+    assert_eq!(all.outcome.retained_models(), 0);
+    assert!(all.outcome.incumbent().is_none());
+    assert!(!all.outcome.optimum_proved());
+    require_complete(
+        &all,
+        &[
+            Record::expected("a", Value::Number(7), Some(9)),
+            Record::expected("b", Value::Number(7), Some(4)),
+        ],
+    );
+}
+
+fn independent_sessions(device: Device) {
+    let context = device.context();
+    let resources = ExecutionResources::with_gpu(&context);
+    let retained = resources.clone();
+    assert!(context.same_instance(retained.gpu_context().unwrap()));
+    let predicate = Predicate::new("value", 1).unwrap();
+    let atoms = [
+        Atom::new(predicate.clone(), vec![Value::Number(7)]).unwrap(),
+        Atom::new(predicate.clone(), vec![Value::String("7".into())]).unwrap(),
+    ];
+    let rows = [1, 0, 0];
+    let relation = Relation::from_catalog(&predicate, &atoms, &rows, Limits::default()).unwrap();
+    let mut executor = GpuRelationExecutor::from_context(&context).unwrap();
+    let mut prepared = executor
+        .prepare(&relation, RelationGpuLimits::default(), &Control::default())
+        .unwrap();
+    drop(resources);
+    drop(context);
+    independent_closures(&retained, device);
+    independent_formulas(&retained, device);
+    let value = Value::Number(7);
+    let query = relation.query(&[(0, &value)], Limits::default()).unwrap();
+    let masks = prepared
+        .filter(&[query], RelationGpuLimits::default(), &Control::default())
+        .unwrap();
+    assert!(relation.same_owner(masks.relation()));
+    let selected = masks.selection(0, Limits::default()).unwrap();
+    assert_eq!(selected.positions(), [1, 2]);
+    assert_eq!(selected.row(0).unwrap().source_index(), 0);
+    assert_eq!(selected.row(1).unwrap().source_index(), 0);
+    assert_eq!(prepared.activity().submissions, 1);
+    assert_eq!(prepared.activity().completed_queries, 1);
+}
+
+fn resource_variants(device: Device) -> [ExecutionResources; 2] {
+    let context = device.context();
+    let profile = GpuFormulaProfile::from_context(&context).unwrap();
+    [
+        ExecutionResources::with_gpu(&context),
+        ExecutionResources::with_formula_profile(&profile),
+    ]
+}
+
+fn independent_profile_sessions(device: Device) {
+    let context = device.context();
+    for projection in GateProjection::ALL {
+        let profile =
+            GpuFormulaProfile::from_context_with_projection(&context, projection).unwrap();
+        let resources = ExecutionResources::with_formula_profile(&profile);
+        let retained = resources.clone();
+        assert!(retained.formula_profile().unwrap().same_instance(&profile));
+        assert!(retained.gpu_context().unwrap().same_instance(&context));
+        drop(resources);
+        drop(profile);
+        let owner = formula(FORMULA_FIRST);
+        let mut limited = config(device.backend(), Profile::Formula);
+        limited.max_candidates = 0;
+        let stopped = solve(
+            PreparedInput::formula(&owner),
+            &Subject::Theory(owner.theory().clone()),
+            limited,
+            &retained,
+            AnswerSelection::Optimal,
+        );
+        assert!(stopped.records.is_empty());
+        assert_eq!(stopped.outcome.verified_models(), 0);
+        assert_eq!(stopped.outcome.completion(), Some(Completion::Interrupted));
+        assert_eq!(
+            stopped.outcome.interruption(),
+            Some(Interruption::Countermodel(
+                zetesis_sat::Incomplete::CandidateLimit
+            ))
+        );
+        assert!(!stopped.outcome.optimum_proved());
+        assert!(!stopped.outcome.unsatisfiable());
+        assert!(stopped.outcome.incumbent().is_none());
+        assert_eq!(stopped.outcome.formula_execution().unwrap().gpu_batches, 0);
+        independent_formulas(&retained, device);
+    }
+}
+
+fn policy_refusal(device: Device) {
+    for resources in resource_variants(device) {
+        policy_refusal_with(&resources, device);
+    }
+}
+
+fn policy_refusal_with(resources: &ExecutionResources, device: Device) {
+    let owner = normal(NORMAL_NUMBER);
+    let formula = formula(FORMULA_FIRST);
+    for (profile, input, subject) in [
+        (
+            Profile::Eager,
+            PreparedInput::admitted(&owner),
+            Subject::Program(owner.program().clone()),
+        ),
+        (
+            Profile::Lazy,
+            PreparedInput::admitted(&owner),
+            Subject::Program(owner.program().clone()),
+        ),
+        (
+            Profile::Formula,
+            PreparedInput::formula(&formula),
+            Subject::Theory(formula.theory().clone()),
+        ),
+    ] {
+        let mut routes = Routes::default();
+        let failure = Session::builder(
+            input,
+            config(device.other().backend(), profile),
+            Control::default(),
+        )
+        .resources(resources)
+        .start_observed(&mut routes)
+        .err()
+        .expect("a supplied context cannot switch backend");
+        assert!(matches!(failure.cause.as_ref(), SolveError::Gpu(error)
+            if error.kind() == GpuErrorKind::AdapterRefused));
+        assert!(failure.subject().unwrap().same_instance(&subject));
+        assert!(failure.semantic().is_none());
+        assert_eq!(
+            routes.device_closure + routes.cpu_closure + routes.device_formula + routes.cpu_formula,
+            0
+        );
+        let complete = solve(
+            input,
+            &subject,
+            config(device.backend(), profile),
+            resources,
+            AnswerSelection::Optimal,
+        );
+        require_device(&complete, device, profile);
+        require_complete(&complete, &expected(profile));
+    }
+}
+
+fn cpu_policies(device: Device) {
+    for resources in resource_variants(device) {
+        cpu_policies_with(&resources);
+    }
+}
+
+fn cpu_policies_with(resources: &ExecutionResources) {
+    let owner = normal(NORMAL_NUMBER);
+    for profile in [Profile::Eager, Profile::Lazy] {
+        let capture = solve(
+            PreparedInput::admitted(&owner),
+            &Subject::Program(owner.program().clone()),
+            config(Backend::Cpu, profile),
+            resources,
+            AnswerSelection::All,
+        );
+        assert_eq!(capture.routes.cpu_closure, 1);
+        assert!(capture.routes.observed_backend.is_none());
+        assert!(capture.outcome.lazy_execution().is_none());
+        require_complete(
+            &capture,
+            &[
+                Record::expected("a", Value::Number(7), None),
+                Record::expected("b", Value::Number(7), None),
+            ],
+        );
+    }
+    let formula = formula(FORMULA_FIRST);
+    for backend in [Backend::Cpu, Backend::Auto] {
+        let capture = solve(
+            PreparedInput::formula(&formula),
+            &Subject::Theory(formula.theory().clone()),
+            config(backend, Profile::Formula),
+            resources,
+            AnswerSelection::Optimal,
+        );
+        assert_eq!(capture.routes.cpu_formula, 1);
+        assert!(capture.routes.observed_backend.is_none());
+        assert!(capture.outcome.formula_execution().is_none());
+        assert!(capture.outcome.optimum_proved());
+        require_complete(
+            &capture,
+            &[Record::expected("a", Value::Number(7), Some(1))],
+        );
+    }
+}
+
+struct RejectDeviceObservation {
+    cause: GpuError,
+    calls: usize,
+}
+
+impl ExecutionObserver for RejectDeviceObservation {
+    type Error = GpuError;
+
+    fn observe(&mut self, observation: ExecutionObservation<'_>) -> Result<(), Self::Error> {
+        if matches!(
+            observation,
+            ExecutionObservation::DeviceClosure { .. } | ExecutionObservation::DeviceFormula { .. }
+        ) {
+            self.calls += 1;
+            return Err(self.cause.clone());
+        }
+        Ok(())
+    }
+}
+
+fn observer_failure(device: Device) {
+    for resources in resource_variants(device) {
+        observer_failure_with(&resources, device);
+    }
+}
+
+fn observer_failure_with(resources: &ExecutionResources, device: Device) {
+    let context = resources.gpu_context().unwrap();
+    let owner = normal(NORMAL_NUMBER);
+    let formula = formula(FORMULA_FIRST);
+    // Reuse a real typed policy refusal as an external callback error. Its type
+    // must not turn the observation failure into device fallback evidence.
+    let cause = context
+        .check_selection(GpuOptions::default(), device.other().selection())
+        .unwrap_err();
+    for (profile, input, subject) in [
+        (
+            Profile::Eager,
+            PreparedInput::admitted(&owner),
+            Subject::Program(owner.program().clone()),
+        ),
+        (
+            Profile::Lazy,
+            PreparedInput::admitted(&owner),
+            Subject::Program(owner.program().clone()),
+        ),
+        (
+            Profile::Formula,
+            PreparedInput::formula(&formula),
+            Subject::Theory(formula.theory().clone()),
+        ),
+    ] {
+        let mut observer = RejectDeviceObservation {
+            cause: cause.clone(),
+            calls: 0,
+        };
+        let failure =
+            Session::builder(input, config(device.backend(), profile), Control::default())
+                .resources(resources)
+                .start_observed(&mut observer)
+                .err()
+                .expect("the preparation observer refuses the session");
+        let SolveError::ExecutionObservation(error) = failure.cause.as_ref() else {
+            panic!("external failure changed class: {failure:?}");
+        };
+        assert_eq!(error.downcast_ref::<GpuError>(), Some(&cause));
+        assert_eq!(observer.calls, 1);
+        assert!(failure.subject().unwrap().same_instance(&subject));
+        assert!(failure.semantic().is_none());
+        let complete = solve(
+            input,
+            &subject,
+            config(device.backend(), profile),
+            resources,
+            AnswerSelection::Optimal,
+        );
+        require_device(&complete, device, profile);
+        require_complete(&complete, &expected(profile));
+    }
+}
+
+fn expected(profile: Profile) -> Vec<Record> {
+    match profile {
+        Profile::Eager | Profile::Lazy => vec![
+            Record::expected("a", Value::Number(7), None),
+            Record::expected("b", Value::Number(7), None),
+        ],
+        Profile::Formula => vec![Record::expected("a", Value::Number(7), Some(1))],
+    }
+}
+
+#[test]
+fn session_resource_fixture_families_are_exact() {
+    let resources = ExecutionResources::default();
+    for (source, value) in [
+        (NORMAL_NUMBER, Value::Number(7)),
+        (NORMAL_STRING, Value::String("7".into())),
+    ] {
+        let owner = normal(source);
+        for profile in [Profile::Eager, Profile::Lazy] {
+            let capture = solve(
+                PreparedInput::admitted(&owner),
+                &Subject::Program(owner.program().clone()),
+                config(Backend::Cpu, profile),
+                &resources,
+                AnswerSelection::All,
+            );
+            require_complete(
+                &capture,
+                &[
+                    Record::expected("a", value.clone(), None),
+                    Record::expected("b", value.clone(), None),
+                ],
+            );
+        }
+    }
+    for (source, choice, cost) in [(FORMULA_FIRST, "a", 1), (FORMULA_SECOND, "b", 4)] {
+        let owner = formula(source);
+        let capture = solve(
+            PreparedInput::formula(&owner),
+            &Subject::Theory(owner.theory().clone()),
+            config(Backend::Cpu, Profile::Formula),
+            &resources,
+            AnswerSelection::Optimal,
+        );
+        assert!(capture.outcome.optimum_proved());
+        require_complete(
+            &capture,
+            &[Record::expected(choice, Value::Number(7), Some(cost))],
+        );
+    }
+}
+
+#[test]
+#[ignore = "requires actual Metal; independent ordinary sessions share one context"]
+fn metal_resources_preserve_independent_sessions() {
+    independent_sessions(Device::Metal);
+}
+
+#[test]
+#[ignore = "requires actual Vulkan GPU; independent ordinary sessions share one context"]
+fn vulkan_resources_preserve_independent_sessions() {
+    independent_sessions(Device::Vulkan);
+}
+
+#[test]
+#[ignore = "requires actual Metal; policy refusal cannot replace the supplied context"]
+fn metal_resource_policy_refusal_preserves_reuse() {
+    policy_refusal(Device::Metal);
+}
+
+#[test]
+#[ignore = "requires actual Vulkan GPU; policy refusal cannot replace the supplied context"]
+fn vulkan_resource_policy_refusal_preserves_reuse() {
+    policy_refusal(Device::Vulkan);
+}
+
+#[test]
+#[ignore = "requires actual Metal; a supplied context does not select the device policy"]
+fn metal_resources_preserve_cpu_policies() {
+    cpu_policies(Device::Metal);
+}
+
+#[test]
+#[ignore = "requires actual Vulkan GPU; a supplied context does not select the device policy"]
+fn vulkan_resources_preserve_cpu_policies() {
+    cpu_policies(Device::Vulkan);
+}
+
+#[test]
+#[ignore = "requires actual Metal; observation failure does not poison shared resources"]
+fn metal_observer_failure_preserves_resource_reuse() {
+    observer_failure(Device::Metal);
+}
+
+#[test]
+#[ignore = "requires actual Vulkan GPU; observation failure does not poison shared resources"]
+fn vulkan_observer_failure_preserves_resource_reuse() {
+    observer_failure(Device::Vulkan);
+}
+
+#[test]
+#[ignore = "requires actual Metal; independent formula sessions share one compilation"]
+fn metal_formula_profiles_preserve_independent_sessions() {
+    independent_profile_sessions(Device::Metal);
+}
+
+#[test]
+#[ignore = "requires actual Vulkan; independent formula sessions share one compilation"]
+fn vulkan_formula_profiles_preserve_independent_sessions() {
+    independent_profile_sessions(Device::Vulkan);
+}

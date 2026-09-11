@@ -5,7 +5,7 @@ semantic configuration and control, with no argument parsing, standard streams
 or answer rendering. This example enumerates the guided tour's complete family:
 
 ```rust
-# extern crate zetesis_cli;
+# extern crate zetesis_solve;
 # extern crate zetesis_core;
 # extern crate zetesis_cpu;
 # extern crate zetesis_themelios;
@@ -89,11 +89,23 @@ or query interfaces requires a separate adapter contract.
 `Session::builder(input, config, control)` composes a request before execution.
 Use `selection(AnswerSelection::All)` for unrestricted enumeration, or retain
 the default objective selection. `resources(&resources)` supplies reusable
-execution infrastructure. `start()` and `start_observed(&mut observer)` use the
+execution infrastructure. `collect(limits)` consumes the unstarted request,
+selects all original answers regardless of a prior selection setting, and
+requires complete retention. `collect_observed` uses one observer throughout
+setup and all pulls. A consumed session cannot establish that a newly retained
+suffix is the complete family.
+
+`start()` and `start_observed(&mut observer)` use the
 same session initialization; the builder retains no observer. Existing
 constructors are conveniences over this path. Creating or modifying a request
 does no validation, grounding or device discovery. Starting it preserves the
 ordinary strategy checks and control polling order.
+
+`measurements(&measurements)` supplies an explicit shared host-measurement scope;
+its enabled setting replaces `config.stats`. Source preparation and publication
+can record into the same scope without entering the solver's private state.
+Each formula session imports only new cumulative timing work, so repeated
+snapshots cannot count it again. Measurements never establish semantic coverage.
 
 `PreparedInput::program` borrows a native `zetesis_core::Program` without source
 metadata. It reaches the same relational session as a source-admitted program,
@@ -105,7 +117,7 @@ fact `ready.` through the native library and retains only its selected grounding
 mode:
 
 ```rust
-# extern crate zetesis_cli;
+# extern crate zetesis_solve;
 # extern crate zetesis_core;
 # extern crate zetesis_cpu;
 {{#include ../examples/observations.rs:example}}
@@ -138,7 +150,7 @@ on the same device. It requires an accessible physical GPU; the manual checks
 its compilation without attempting device discovery.
 
 ```rust,no_run
-# extern crate zetesis_cli;
+# extern crate zetesis_solve;
 # extern crate zetesis_core;
 # extern crate zetesis_cpu;
 # extern crate zetesis_wgpu;
@@ -146,12 +158,13 @@ its compilation without attempting device discovery.
 ```
 
 Resources retain device infrastructure, not programs, candidates, prepared
-formula graphs, worker pools or incumbents. Each started session constructs its
-own primitive pipelines and subject preparation. Sharing therefore avoids
-repeated device creation; it does not yet reuse pipelines or ground graphs
-across independently prepared inputs. The builder clones a shared handle, so
-the original resource variable need not outlive the session. Unused handles are
-released; prepared executors retain the context they require.
+formula graphs, worker pools or incumbents. Context-only resources create fresh
+primitive pipelines. `ExecutionResources::with_formula_profile(&profile)` also
+retains an exact compiled `GpuFormulaProfile`; repeated formula sessions reuse
+that compilation while creating fresh subject preparation, residency and epochs.
+The profile includes its exact context and gate projection. It cannot be paired
+with a different device through an independent field. The builder clones shared
+handles, so the original variables need not outlive the session.
 
 Resource ownership does not choose an execution policy. CPU paths ignore a
 supplied context. Automatic formula execution retains its CPU policy; automatic
@@ -166,6 +179,18 @@ invalidation affects its other clients, while input and observer refusals do
 not invalidate it. Sessions retain separate work budgets and semantic evidence.
 Per-primitive allocation limits do not impose a combined context or process
 memory ceiling. See the [ownership contract](../architecture/ownership.md#device-resource-scope).
+
+The following example reuses one compiled formula profile for complete
+collections over distinct source owners. Collection includes nonoptimal answers
+and their scores. It requires an accessible physical GPU.
+
+```rust,no_run
+# extern crate zetesis_solve;
+# extern crate zetesis_cpu;
+# extern crate zetesis_themelios;
+# extern crate zetesis_wgpu;
+{{#include ../examples/profiles.rs:example}}
+```
 
 ### Retain the original subject
 

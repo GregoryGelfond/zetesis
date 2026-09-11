@@ -218,7 +218,10 @@ fn prepared_strategies_refuse_incompatible_requests() {
         let failure = Session::new(input, configured, Control::default())
             .err()
             .unwrap();
-        assert!(matches!(*failure.cause, RunError::PreparedInput { .. }));
+        assert!(matches!(
+            *failure.cause,
+            zetesis_cli::SolveError::PreparedInput { .. }
+        ));
         assert!(failure.semantic().is_none());
     }
 }
@@ -701,7 +704,6 @@ fn prepared_strategy_failure_retains_only_known_subject() {
             .same_instance(&Subject::Program(admitted.program().clone()))
     );
     assert!(failure.semantic().is_none());
-    assert!(failure.publication().is_none());
 }
 
 #[derive(Clone, Copy)]
@@ -753,7 +755,7 @@ impl zetesis_cli::ExecutionObserver for RejectObservation {
     }
 }
 fn observer_cause(failure: &zetesis_cli::SolveFailure) {
-    let RunError::ExecutionObservation(cause) = failure.cause.as_ref() else {
+    let zetesis_cli::SolveError::ExecutionObservation(cause) = failure.cause.as_ref() else {
         panic!("the callback failure must remain external: {failure}")
     };
     assert!(matches!(
@@ -849,7 +851,6 @@ fn bound_observer_failure_retains_the_verified_incumbent() {
     );
     assert_eq!(outcome.completion(), None);
     assert!(!outcome.optimum_proved());
-    assert!(failure.publication().is_none());
     let calls = observer.calls;
     assert!(session.next_observed(&mut observer).is_none());
     assert!(session.next().is_none());

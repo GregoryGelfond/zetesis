@@ -11,6 +11,39 @@ batched membership.
 The [ownership chapter](ownership.md) describes prepared data, shared device
 contexts, invocation lifetimes and the dependencies that permit parallel work.
 
+## The composed solver boundary
+
+`zetesis-solve` owns the ordinary computation from a coherent `PreparedInput`
+to checked `AnswerSet` values and a `SemanticOutcome`. Its configuration contains
+execution policy and resource limits. It contains no command-line options,
+source-file loading or output writers. `zetesis-cli` admits input and consumes
+the same public session interface as an embedding application.
+
+```text
+source or native program
+    → admission and preparation
+    → PreparedInput + SolveConfig + Control
+    → SessionBuilder + optional resources and measurements
+    → Session: candidate generation → exact membership → checked AnswerSet
+    → consumer retention or publication
+```
+
+The membership step follows one of the reduct paths below. `SessionBuilder`
+composes the effects before execution; it does not add a second semantic engine.
+Streaming permits partial consumption. `SessionBuilder::collect` instead owns
+unrestricted enumeration and complete retention, producing a `WorldView` only
+when both succeed. Output formatting consumes checked values after membership;
+an output failure cannot retract checked membership or prove search exhaustion.
+
+This boundary is implemented by
+[`Session`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/session.rs),
+[`WorldView`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/world_view.rs)
+and the CLI's
+[publication adapter](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cli/src/publication.rs).
+The [library manual](../rust/sessions.md) gives checked examples and operation
+contracts; the [proof correspondence](../lean/correspondence.md) distinguishes
+the semantic laws from the remaining executable refinement obligations.
+
 ## Two exact membership paths
 
 For the normal profile, a seed fixes the reduct's gates. Positive inference

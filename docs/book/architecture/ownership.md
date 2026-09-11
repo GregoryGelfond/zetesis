@@ -66,7 +66,8 @@ answer-set claim or change the primitive's input subject.
 
 Compilation reuse changes handle ownership only. Dispatch still uses that
 profile's exact gate implementation, validates each candidate against the
-oracle's original theory and creates its own candidate-local transport. The
+oracle's original theory. Each oracle owns its subject residency and reusable
+transport; each invocation refreshes candidate-local truth. The
 profile retains no mutable truth or epoch that could influence another oracle's
 frozen-reduct query. Reusing it requires fixed-cost checks and an owner clone;
 each live oracle's retained graph and transport remain separate costs.

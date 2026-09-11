@@ -11,8 +11,8 @@ use std::{
 
 use clap::Parser;
 use zetesis_cli::{
-    Backend, Completion, Grounder, Interruption, Options, PreparedInput, PreparedProfile, RunError,
-    Session, SolveConfig, SolvePhase, Subject, run_finalized,
+    Backend, Completion, Grounder, Interruption, Options, PreparedInput, PreparedProfile, Session,
+    SolveConfig, SolveError, SolvePhase, Subject, run_finalized,
 };
 use zetesis_core::{Model, StaticError};
 use zetesis_cpu::Control;
@@ -285,7 +285,7 @@ fn eager_setup_refusal_leaves_the_owner_reusable() {
     )
     .err()
     .unwrap();
-    let RunError::Static(error) = failure.cause.as_ref() else {
+    let zetesis_cli::SolveError::Static(error) = failure.cause.as_ref() else {
         panic!("expected static materialization refusal: {failure}")
     };
     assert!(
@@ -295,7 +295,7 @@ fn eager_setup_refusal_leaves_the_owner_reusable() {
         failure
             .source()
             .unwrap()
-            .downcast_ref::<RunError>()
+            .downcast_ref::<SolveError>()
             .unwrap()
             .source()
             .unwrap()
@@ -303,7 +303,6 @@ fn eager_setup_refusal_leaves_the_owner_reusable() {
         Some(error)
     );
     assert!(failure.semantic().is_none());
-    assert!(failure.publication().is_none());
     assert!(
         failure
             .phase_timings

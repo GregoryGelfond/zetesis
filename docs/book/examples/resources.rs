@@ -2,12 +2,12 @@
 
 // ANCHOR: example
 use std::collections::BTreeSet;
-use zetesis_cli::{
+use zetesis_core::{AdmissionLimits, Atom, AtomPattern, Predicate, Program, Template};
+use zetesis_cpu::Control;
+use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionResources, Grounder, PreparedInput, Session,
     SolveConfig, Subject,
 };
-use zetesis_core::{AdmissionLimits, Atom, AtomPattern, Predicate, Program, Template};
-use zetesis_cpu::Control;
 use zetesis_wgpu::{GpuContext, GpuOptions, GpuSelection};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

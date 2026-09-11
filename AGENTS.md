@@ -69,7 +69,7 @@ coverage populations and evidence requirements.
 | --- | --- |
 | `scripts/check.sh portable` | Rust tests, formatting, strict lint and docs, benchmark correctness |
 | `scripts/check.sh oracle` | External clingo comparisons |
-| `scripts/check.sh coverage` | Independent workspace and CPU-only CLI coverage floors |
+| `scripts/check.sh coverage` | Independent workspace and CPU-only solver/CLI coverage floors |
 | `scripts/check.sh coverage --metal` | Coverage with the specified physical Metal tests |
 | `scripts/check.sh proofs` | Lean build, axiom audit and proof records |
 | `scripts/check.sh book` | Manual build and checked examples |

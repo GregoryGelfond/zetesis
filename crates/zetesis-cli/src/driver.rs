@@ -1,52 +1,15 @@
 use crate::failure::Progress;
-use crate::phase_timing::{Recorder, SolvePhase};
+use crate::phase_timing::Recorder;
 use crate::presentation::Diagnostics;
-use crate::{Backend, Grounder, Options, RunFailure};
+use crate::{Backend, Completion, Grounder, Interruption, Options, RunFailure};
 use std::fmt;
 use std::io::{self, Write};
-use zetesis_core::{Model, Program};
+use zetesis_core::Model;
 use zetesis_cpu::{BatchError, Control, Stop};
 use zetesis_themelios::{
     AdmissionFailure, BundleAdmissionFailure, BundleError, ExpansionFailure, OutputSelection,
     SourceBundle,
 };
-
-/// Why a successful driver invocation stopped.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Completion {
-    /// Every relevant candidate was checked. With an objective, candidates
-    /// worse than a verified incumbent may be omitted; all optimal ties remain
-    /// covered. This is search coverage, independently of output delivery.
-    /// UNSAT additionally requires no verified stable model.
-    Exhausted,
-    /// The requested number of models was returned; coverage remains partial.
-    RequestedModels,
-    /// Search or one oracle stopped with explicit incomplete coverage.
-    Interrupted,
-}
-
-/// A typed reason why model enumeration could not establish complete coverage.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Interruption {
-    /// Incremental candidate enumeration or a closure oracle stopped.
-    Oracle(Stop),
-    /// Reduct countermodel encoding, search or independent witness checking stopped.
-    Countermodel(zetesis_sat::Incomplete),
-    /// An objective could not be completely evaluated for a verified model.
-    Objective(zetesis_objective::Error),
-    /// Retaining complete incumbent models exceeded an explicit bound.
-    Incumbent(crate::OptimizationStop),
-}
-impl fmt::Display for Interruption {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Oracle(error) => error.fmt(f),
-            Self::Countermodel(error) => error.fmt(f),
-            Self::Objective(error) => error.fmt(f),
-            Self::Incumbent(error) => error.fmt(f),
-        }
-    }
-}
 
 /// Publication counts and search coverage from a completed driver invocation.
 /// Without objectives, stable models are written as found. Optimization retains
@@ -407,8 +370,8 @@ pub fn run_detailed_with_diagnostics(
     control: &Control,
 ) -> Result<Report, RunFailure> {
     run_finalized_with_diagnostics(source, options, output, diagnostics, control)
-        .map(crate::SolveReport::into_report)
-        .map_err(crate::SolveFailure::into_legacy)
+        .map(crate::PublicationReport::into_report)
+        .map_err(crate::PublicationFailure::into_legacy)
 }
 
 /// Admit source and publish models, retaining semantic evidence independently.
@@ -422,7 +385,7 @@ pub fn run_finalized(
     options: &Options,
     output: &mut impl Write,
     control: &Control,
-) -> Result<crate::SolveReport, crate::SolveFailure> {
+) -> Result<crate::PublicationReport, crate::PublicationFailure> {
     run_finalized_with_diagnostics(source, options, output, &mut io::sink(), control)
 }
 
@@ -436,7 +399,7 @@ pub fn run_finalized_with_diagnostics(
     output: &mut impl Write,
     diagnostics: &mut impl Write,
     control: &Control,
-) -> Result<crate::SolveReport, crate::SolveFailure> {
+) -> Result<crate::PublicationReport, crate::PublicationFailure> {
     let mut diagnostics = Diagnostics::new(diagnostics, options.color.human(options.json));
     run_source_with_writer(source, options, output, &mut diagnostics, control)
 }
@@ -447,7 +410,7 @@ pub(crate) fn run_source_with_writer(
     output: &mut impl Write,
     diagnostics: &mut Diagnostics<impl Write>,
     control: &Control,
-) -> Result<crate::SolveReport, crate::SolveFailure> {
+) -> Result<crate::PublicationReport, crate::PublicationFailure> {
     let mut document = crate::output::Document::new(output, options.json)?;
     let phases = Recorder::new(options.stats);
     let result = crate::admission::source(
@@ -502,8 +465,8 @@ pub fn run_bundle_detailed_with_diagnostics(
     control: &Control,
 ) -> Result<Report, RunFailure> {
     run_bundle_finalized_with_diagnostics(bundle, options, output, diagnostics, control)
-        .map(crate::SolveReport::into_report)
-        .map_err(crate::SolveFailure::into_legacy)
+        .map(crate::PublicationReport::into_report)
+        .map_err(crate::PublicationFailure::into_legacy)
 }
 
 /// Run with finalized semantic evidence independent of publication.
@@ -516,7 +479,7 @@ pub fn run_bundle_finalized_with_diagnostics(
     output: &mut impl Write,
     diagnostics: &mut impl Write,
     control: &Control,
-) -> Result<crate::SolveReport, crate::SolveFailure> {
+) -> Result<crate::PublicationReport, crate::PublicationFailure> {
     let mut diagnostics = Diagnostics::new(diagnostics, options.color.human(options.json));
     run_bundle_with_writer(bundle, options, output, &mut diagnostics, control)
 }
@@ -527,7 +490,7 @@ pub(crate) fn run_bundle_with_writer(
     output: &mut impl Write,
     diagnostics: &mut Diagnostics<impl Write>,
     control: &Control,
-) -> Result<crate::SolveReport, crate::SolveFailure> {
+) -> Result<crate::PublicationReport, crate::PublicationFailure> {
     let mut document = crate::output::Document::new(output, options.json)?;
     let phases = Recorder::new(options.stats);
     let result = crate::admission::bundle(
@@ -542,25 +505,12 @@ pub(crate) fn run_bundle_with_writer(
     document.finish(result, options)
 }
 
-#[cfg(test)]
-pub(crate) fn report_statistics(
-    result: Result<Progress, crate::SolveFailure>,
-    diagnostics: &mut impl Write,
-    options: &Options,
-    phases: &Recorder,
-) -> Result<Report, RunFailure> {
-    report_progress_statistics(result, diagnostics, options, phases)
-        .and_then(Progress::finalize)
-        .map(crate::SolveReport::into_report)
-        .map_err(crate::SolveFailure::into_legacy)
-}
-
 fn report_progress_statistics(
-    mut result: Result<Progress, crate::SolveFailure>,
+    mut result: Result<Progress, crate::PublicationFailure>,
     diagnostics: &mut impl Write,
     options: &Options,
     phases: &Recorder,
-) -> Result<Progress, crate::SolveFailure> {
+) -> Result<Progress, crate::PublicationFailure> {
     if let Some(timings) = phases.snapshot() {
         match &mut result {
             Ok(progress) => progress.phase_timings = Some(timings),
@@ -591,62 +541,6 @@ fn report_progress_statistics(
         result = reported.map(|(progress, _)| progress);
     }
     result
-}
-
-pub(crate) fn solve_program(
-    program: &Program,
-    selection: &OutputSelection,
-    options: &Options,
-    output: &mut impl Write,
-    diagnostics: &mut Diagnostics<impl Write>,
-    control: &Control,
-    phases: &Recorder,
-) -> Result<Progress, crate::SolveFailure> {
-    let _solving = phases.stage(crate::SolveStage::Solving);
-    let config = options.into();
-    let mut session = crate::closure_session::ClosureSession::new(
-        program,
-        None,
-        &config,
-        diagnostics,
-        control,
-        phases,
-    )?;
-    let mut progress = Progress::new();
-    let observations = zetesis_themelios::observation::ObservationProgram::default();
-    let display = crate::display::Display {
-        selection,
-        observations: &observations,
-        options,
-        control,
-    };
-    loop {
-        let next = session.next(&config, diagnostics, control, phases);
-        progress.apply(session.outcome());
-        match next {
-            Some(Ok(model)) => {
-                let result = phases.measure(SolvePhase::ObservationOutput, || {
-                    display.write(output, progress.publication.models + 1, &model, None)
-                });
-                if let Err(error) = result {
-                    return Err(progress.fail(error));
-                }
-                progress.publication.models += 1;
-            }
-            Some(Err(error)) => return Err(progress.fail(error)),
-            None => break,
-        }
-    }
-    let finished = phases.measure(SolvePhase::ObservationOutput, || {
-        finish(output, &progress, options.json, options.color)
-    });
-    match finished {
-        Ok(()) => {
-            progress.publication.summary = !options.json;
-            Ok(progress)
-        }
-        Err(error) => Err(progress.fail(error)),
-    }
 }
 
 pub(crate) fn write_atoms(
@@ -766,6 +660,45 @@ pub(crate) fn finish(
         )?;
     }
     Ok(())
+}
+
+impl From<zetesis_solve::SolveError> for RunError {
+    fn from(error: zetesis_solve::SolveError) -> Self {
+        use zetesis_solve::SolveError;
+        match error {
+            SolveError::Batch(error) => Self::Batch(error),
+            SolveError::CompletionPool(error) => Self::CompletionPool(error),
+            SolveError::BackendUnavailable => Self::BackendUnavailable,
+            SolveError::UnsupportedSourceBatching => Self::UnsupportedSourceBatching,
+            SolveError::Static(error) => Self::Static(error),
+            SolveError::LazyStatisticsOverflow => Self::LazyStatisticsOverflow,
+            SolveError::SharedCpu(error) => Self::SharedCpu(error),
+            SolveError::Words(error) => Self::Words(error),
+            SolveError::UnsupportedOracle { backend, grounder } => {
+                Self::UnsupportedOracle { backend, grounder }
+            }
+            SolveError::PreparedInput {
+                profile,
+                oracle,
+                grounder,
+            } => Self::PreparedInput {
+                profile,
+                oracle,
+                grounder,
+            },
+            SolveError::FormulaBatchShape { expected, actual } => {
+                Self::FormulaBatchShape { expected, actual }
+            }
+            #[cfg(feature = "gpu")]
+            SolveError::Gpu(error) => Self::Gpu(error),
+            #[cfg(feature = "gpu")]
+            SolveError::LazyGpu(error) => Self::LazyGpu(error),
+            SolveError::ExecutionObservation(error) => match error.downcast::<std::io::Error>() {
+                Ok(error) => Self::Output(*error),
+                Err(error) => Self::ExecutionObservation(error),
+            },
+        }
+    }
 }
 
 #[cfg(test)]

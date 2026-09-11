@@ -148,13 +148,13 @@ impl Progress {
         })
     }
 
-    pub(crate) fn finalize(self) -> Result<crate::SolveReport, crate::SolveFailure> {
+    pub(crate) fn finalize(self) -> Result<crate::PublicationReport, crate::PublicationFailure> {
         let report = match self.report() {
             Ok(report) => report,
             Err(cause) => return Err(self.fail(cause)),
         };
         match self.semantic {
-            Some(semantic) => Ok(crate::SolveReport {
+            Some(semantic) => Ok(crate::PublicationReport {
                 publication: self.publication,
                 semantic,
                 report,
@@ -163,7 +163,7 @@ impl Progress {
         }
     }
 
-    pub(crate) fn fail(self, cause: RunError) -> crate::SolveFailure {
+    pub(crate) fn fail(self, cause: RunError) -> crate::PublicationFailure {
         let semantic = self.semantic();
         let partial_report = PartialReport {
             published_models: self.publication.models,
@@ -190,7 +190,7 @@ impl Progress {
                 .and_then(crate::SemanticOutcome::incumbent)
                 .cloned(),
         };
-        let mut failure = crate::SolveFailure::from(RunFailure {
+        let mut failure = crate::PublicationFailure::from(RunFailure {
             cause: Box::new(cause),
             phase_timings: self.phase_timings.map(Box::new),
             partial_report: Some(Box::new(partial_report)),

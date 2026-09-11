@@ -1,55 +1,7 @@
-//! CLI rendering and frontend-boundary adaptation for reusable stage telemetry.
+//! CLI rendering of library-owned host measurements.
 
-use std::cell::RefCell;
+use crate::{GroundingMode, SolveStage, StageTimings};
 use std::io::{self, Write};
-use zetesis_telemetry::{GroundingMode, SolveStage, StageRecorder, StageSpan, StageTimings};
-
-// The current frontend ground() boundary is non-reentrant. Nested callback
-// boundaries would require retaining a stack of stage guards.
-pub(crate) struct Observer<'a> {
-    recorder: &'a StageRecorder,
-    grounding: &'a crate::grounding_timing::Recorder,
-    span: RefCell<Option<StageSpan<'a>>>,
-}
-impl<'a> Observer<'a> {
-    pub(crate) const fn new(
-        recorder: &'a StageRecorder,
-        grounding: &'a crate::grounding_timing::Recorder,
-    ) -> Self {
-        Self {
-            recorder,
-            grounding,
-            span: RefCell::new(None),
-        }
-    }
-}
-impl zetesis_themelios::GroundingObserver for Observer<'_> {
-    fn enter(&self) {
-        *self.span.borrow_mut() = Some(self.recorder.enter(SolveStage::Grounding));
-    }
-    fn exit(&self) {
-        self.span.borrow_mut().take();
-    }
-    fn details_enabled(&self) -> bool {
-        true
-    }
-    fn phase_enter(
-        &self,
-        phase: crate::GroundingPhase,
-        _location: Option<zetesis_themelios::base::span::Location>,
-    ) {
-        self.grounding.enter(phase);
-    }
-    fn phase_exit(
-        &self,
-        phase: crate::GroundingPhase,
-        _location: Option<zetesis_themelios::base::span::Location>,
-        outcome: crate::GroundingOutcome,
-        work: crate::GroundingWork,
-    ) {
-        self.grounding.exit(phase, outcome, work);
-    }
-}
 
 pub(crate) fn write(sink: &mut impl Write, timings: &StageTimings) -> io::Result<()> {
     write_friendly(sink, timings)?;

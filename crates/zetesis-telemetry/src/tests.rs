@@ -3,7 +3,7 @@ use super::*;
 fn recorder(start: Instant) -> StageRecorder {
     StageRecorder {
         started: Some(start),
-        state: Cell::new(State::default()),
+        state: Mutex::new(State::default()),
     }
 }
 fn finish(span: &mut StageSpan<'_>, now: Instant) {
@@ -149,7 +149,8 @@ fn disabled_recording_has_no_measurements() {
     assert!(
         disabled
             .state
-            .get()
+            .lock()
+            .unwrap()
             .measurements
             .iter()
             .all(Option::is_none)
@@ -167,7 +168,7 @@ fn error_exit_restores_recording() {
     let result = enabled.snapshot().unwrap();
     assert!(result.is_complete());
     assert_eq!(result.get(SolveStage::Solving).unwrap().calls, 1);
-    assert_eq!(enabled.state.get().active, None);
+    assert_eq!(enabled.state.lock().unwrap().active, None);
 }
 
 #[test]
@@ -182,7 +183,7 @@ fn unwind_restores_recording() {
     let result = enabled.snapshot().unwrap();
     assert!(result.is_complete());
     assert_eq!(result.get(SolveStage::Solving).unwrap().calls, 1);
-    assert_eq!(enabled.state.get().active, None);
+    assert_eq!(enabled.state.lock().unwrap().active, None);
 }
 
 #[test]
@@ -199,13 +200,13 @@ fn out_of_order_drop_invalidates_partition() {
 fn call_overflow_invalidates_partition() {
     let start = Instant::now();
     let recorder = recorder(start);
-    let mut state = recorder.state.get();
+    let mut state = *recorder.state.lock().unwrap();
     state.measurements[SolveStage::Solving as usize] = Some(StageMeasurement {
         calls: u64::MAX,
         elapsed: Duration::ZERO,
         overflowed: false,
     });
-    recorder.state.set(state);
+    *recorder.state.lock().unwrap() = state;
     drop(recorder.enter(SolveStage::Solving));
     let result = recorder.snapshot().unwrap();
     assert!(!result.is_complete());
@@ -247,4 +248,63 @@ fn overflowed_measurement_is_incomplete() {
         overflowed: true,
     });
     assert!(!snapshot.is_complete());
+}
+
+#[test]
+fn sequential_threads_preserve_exclusive_attribution() {
+    fn assert_send_sync<T: Send + Sync>() {}
+    assert_send_sync::<StageRecorder>();
+    assert_send_sync::<StageSpan<'static>>();
+
+    let recorder = StageRecorder::new(true);
+    std::thread::scope(|scope| {
+        scope
+            .spawn(|| {
+                let _outer = recorder.enter(SolveStage::Solving);
+                let _inner = recorder.enter(SolveStage::Grounding);
+            })
+            .join()
+            .unwrap();
+        scope
+            .spawn(|| drop(recorder.enter(SolveStage::Solving)))
+            .join()
+            .unwrap();
+    });
+    let snapshot = recorder.snapshot().unwrap();
+    assert!(snapshot.is_complete());
+    assert_eq!(snapshot.get(SolveStage::Solving).unwrap().calls, 2);
+    assert_eq!(snapshot.get(SolveStage::Grounding).unwrap().calls, 1);
+}
+
+#[test]
+fn transferring_a_live_guard_makes_exclusive_attribution_unavailable() {
+    let recorder = StageRecorder::new(true);
+    let guard = recorder.enter(SolveStage::Solving);
+    std::thread::scope(|scope| scope.spawn(|| drop(guard)).join().unwrap());
+    let snapshot = recorder.snapshot().unwrap();
+    assert_eq!(snapshot.unattributed, None);
+    assert!(!snapshot.is_complete());
+    assert_eq!(snapshot.get(SolveStage::Solving).unwrap().calls, 1);
+}
+
+#[test]
+fn poisoned_bookkeeping_does_not_change_application_control() {
+    let recorder = StageRecorder::new(true);
+    let span = recorder.enter(SolveStage::Solving);
+    let unwind = std::panic::catch_unwind(|| {
+        let _bookkeeping = recorder.state.lock().unwrap();
+        panic!("controlled bookkeeping poison");
+    });
+    assert!(unwind.is_err());
+    drop(span);
+    // Every subsequent operation recovers without turning timing failure into
+    // application failure. The partition remains explicitly unavailable.
+    recorder.mark_lazy_grounding();
+    drop(recorder.enter(SolveStage::Grounding));
+    let snapshot = recorder.snapshot().unwrap();
+    assert_eq!(snapshot.unattributed, None);
+    assert!(!snapshot.is_complete());
+    assert_eq!(snapshot.get(SolveStage::Solving).unwrap().calls, 1);
+    assert_eq!(snapshot.get(SolveStage::Grounding).unwrap().calls, 1);
+    assert_eq!(snapshot.grounding_mode, GroundingMode::Mixed);
 }
