@@ -200,6 +200,10 @@ performance trend.
 
 ### Performance evidence
 
+The measurements below apply to their explicitly named revisions. No timing or
+peak-RSS measurements were collected for
+[`74c0627f`](https://github.com/GregoryGelfond/zetesis/tree/74c0627f3aab89ae466a1a33cc61e352264b8af1).
+
 Storage contracts and elapsed time are separate results. Formula joins reuse
 one cleared expression workspace across prefix checks, generators and final
 filters. Packed GPU support reduces the support buffer to one bit per atom.
@@ -317,10 +321,10 @@ The 4 MiB per-process capture ceiling, 128 MiB cumulative capture allowance and
 
 #### Four-case CPU comparison, 11 September 2026
 
-A separate comparison of four unchanged corpus cases used the previous build
-from [`3afaf719`](https://github.com/GregoryGelfond/zetesis/tree/3afaf719949de0e8c2162e6ff2b107fb26675c24),
+A separate comparison of four unchanged corpus cases used the builds from
+[`3afaf719`](https://github.com/GregoryGelfond/zetesis/tree/3afaf719949de0e8c2162e6ff2b107fb26675c24),
 qualified at [`dca674c0`](https://github.com/GregoryGelfond/zetesis/tree/dca674c067e08286d91cd8426bacb5932b42e1ac),
-and the current build from
+and
 [`0d287734`](https://github.com/GregoryGelfond/zetesis/tree/0d2877346b4d5822b74c655a34e3daa3c1938913).
 These are Rust 1.97.1 release builds for macOS arm64, measured on Apple M4 Pro
 running macOS 26.6.2 (build 25G83). One fixed `zetesis-perf` executable served
@@ -329,12 +333,12 @@ These observations are separate from the September 10 nine-case comparison.
 
 | Executable | SHA-256 |
 | --- | --- |
-| Previous zetesis | `7be291273d37c9814411b3165cfddca0c09967eae8bf9b411d45eba77f03e69b` |
-| Current zetesis | `20406e3936563b17e006d659c29baa1b1c0dd208f5e4afa020add000d368b3f7` |
+| zetesis `3afaf719` | `7be291273d37c9814411b3165cfddca0c09967eae8bf9b411d45eba77f03e69b` |
+| zetesis `0d287734` | `20406e3936563b17e006d659c29baa1b1c0dd208f5e4afa020add000d368b3f7` |
 | Shared zetesis-perf runner | `2fd427ec77ec91faa038fbeddf10e686f2f539cc6c2222c16635a8084a637469` |
 | Direct clingo 5.8.2 | `31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015` |
 
-Four sequential previous/current/current/previous blocks used eager CPU,
+Four sequential `3afaf719 / 0d287734 / 0d287734 / 3afaf719` blocks used eager CPU,
 `--oracle auto`, one search worker, one completion worker and complete
 enumeration. Each case had qualification, two warmup pairs, five timed pairs,
 one separate native statistics observation and three separate memory pairs.
@@ -350,7 +354,7 @@ include startup, grounding, solving, output and capture; native runs use human
 output without statistics, while clingo uses JSON. These descriptive ranges
 are not confidence intervals.
 
-| Case | Previous zetesis, ms | Current zetesis, ms | Direct clingo, ms |
+| Case | zetesis `3afaf719`, ms | zetesis `0d287734`, ms | Direct clingo, ms |
 | --- | ---: | ---: | ---: |
 | [Queens 2, N=8](../../../examples/kr-domains/standalone/n-queens/variant-02.lp) | 93.173–93.467 | 94.042–94.846 | 126.297–127.296 |
 | [SEND + MORE = MONEY](../../../examples/kr-domains/standalone/send-money/send-money.lp) | 40.301–40.653 | 40.719–41.735 | 13.050–14.131 |
@@ -362,19 +366,19 @@ six observations per native revision/case and twelve for clingo. The ranges
 again span block medians. The `RUSAGE_CHILDREN` scope described above applies:
 these are neither simultaneous process-tree RSS nor GPU memory.
 
-| Case | Previous zetesis, MiB | Current zetesis, MiB | Direct clingo, MiB |
+| Case | zetesis `3afaf719`, MiB | zetesis `0d287734`, MiB | Direct clingo, MiB |
 | --- | ---: | ---: | ---: |
 | Queens 2, N=8 | 12.969–13.031 | 13.266–13.281 | 9.328–10.406 |
 | SEND + MORE = MONEY | 26.031–26.203 | 26.297–26.391 | 8.469–8.734 |
 | Task allocation: scheduling | 40.281–40.359 | 40.484–40.562 | 21.625–22.188 |
 | Shortest path: layered DAG | 12.875 | 13.188–13.203 | 5.641–5.766 |
 
-Current wall and peak-RSS medians are slightly higher in all four cases.
+The `0d287734` wall and peak-RSS medians are slightly higher in all four cases.
 Task allocation is a possible regression signal, but the unchanged clingo
 executable also took longer in the middle blocks: 189.656–192.129 ms versus
-184.024–184.225 ms at the endpoints. The two current zetesis diagnostic solving
+184.024–184.225 ms at the endpoints. The two `0d287734` zetesis diagnostic solving
 intervals for task allocation were 107.064 and 113.013 ms, versus 105.010 and
-104.685 ms previously; those separate statistics runs do not provide a
+104.685 ms for `3afaf719`; those separate statistics runs do not provide a
 phase-time distribution for the timed samples. Shared block variation prevents
 attributing the whole difference to code changes. This sample establishes
 neither a broad speedup nor a general absence of regressions, and does not
@@ -396,7 +400,7 @@ zetesis-perf examples/kr-domains \
 ```
 
 Use the same runner and direct clingo executable for all four blocks, in
-previous/current/current/previous order. Finish and check each invocation
+`3afaf719 / 0d287734 / 0d287734 / 3afaf719` order. Finish and check each invocation
 before starting the next, with competing builds and measurements stopped.
 The manifest SHA-256 remains
 `b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958`.
@@ -656,11 +660,11 @@ status. A newer source remains unqualified until its own checks complete.
 
 | Population | Covered / instrumented lines | Coverage |
 | --- | ---: | ---: |
-| Workspace, all features, portable tests plus 49 physical Metal tests | 50,905 / 54,156 | 94.00% |
+| Workspace, all features, portable tests plus 49 physical Metal tests | 51,117 / 54,358 | 94.04% |
 | CPU-only solver library and CLI, separate instrumentation | 4,671 / 5,016 | 93.12% |
 
 This snapshot was qualified on 11 September 2026 for
-[`0d287734`](https://github.com/GregoryGelfond/zetesis/tree/0d2877346b4d5822b74c655a34e3daa3c1938913),
+[`74c0627f`](https://github.com/GregoryGelfond/zetesis/tree/74c0627f3aab89ae466a1a33cc61e352264b8af1),
 using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS 26.6.2 with Apple M4 Pro
 Metal. Both populations passed their independent 91% floor. The workspace
 combines its portable and physical profiles; the CPU-only population remains
