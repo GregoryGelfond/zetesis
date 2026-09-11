@@ -1045,3 +1045,5 @@ import Zetesis
 #print axioms Zetesis.ObjectiveConditionTable.admitted_correspondence
 #print axioms Zetesis.ObjectiveConditionTable.original_truth
 #print axioms Zetesis.ObjectiveConditionTable.model_identity
+#print axioms Zetesis.ObjectiveConditions.formula_query_truth
+#print axioms Zetesis.ObjectiveConditions.formula_query_changes_reduct

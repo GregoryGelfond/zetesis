@@ -64,6 +64,48 @@ theorem original_truth (model : A → Bool) (query : Query A) :
   | disj left right leftTruth rightTruth =>
     simpa [evaluate, formula, Ferraris.Satisfies] using or_congr leftTruth rightTruth
 
+/-- Read a formula as an original-model query, translating each atom through
+the supplied identity map. Implication becomes Boolean disjunction with a
+negated antecedent. This operation does not translate a frozen reduct. -/
+def ofFormula {B : Type v} (atom : A → B) : Ferraris.Formula A → Query B
+  | .atom value => .atom (atom value)
+  | .bot => .boolean false
+  | .conj left right => .conj (ofFormula atom left) (ofFormula atom right)
+  | .disj left right => .disj (ofFormula atom left) (ofFormula atom right)
+  | .imp left right => .disj (.neg (ofFormula atom left)) (ofFormula atom right)
+
+/-- A formula's closed query has exactly its original truth under the supplied
+atom interpretation. The induction preserves conjunction and disjunction;
+the implication case checks the antecedent's and consequent's Boolean truth.
+The atom map need not be injective for this reading law. Correspondence with
+the caller's intended atom identities is an independent implementation premise. -/
+theorem formula_query_truth {B : Type v} (atom : A → B) (model : B → Bool)
+    (source : Ferraris.Formula A) :
+    evaluate model (ofFormula atom source) = true ↔
+      Ferraris.Satisfies (fun value => model (atom value) = true) source := by
+  induction source with
+  | atom value => rfl
+  | bot => simp [ofFormula, evaluate, Ferraris.Satisfies]
+  | conj left right leftTruth rightTruth =>
+    simpa [ofFormula, evaluate, Ferraris.Satisfies] using and_congr leftTruth rightTruth
+  | disj left right leftTruth rightTruth =>
+    simpa [ofFormula, evaluate, Ferraris.Satisfies] using or_congr leftTruth rightTruth
+  | imp left right leftTruth rightTruth =>
+    cases antecedent : evaluate model (ofFormula atom left) <;>
+      cases consequent : evaluate model (ofFormula atom right) <;>
+      simp_all [ofFormula, evaluate, Ferraris.Satisfies]
+
+/-- Original truth is insufficient to justify a reduct rewrite. At the candidate
+containing one atom, the empty interpretation satisfies the reduct of `a → a`
+but not that of its query meaning `not a ∨ a`. Thus the query conversion belongs
+only to consumers reading the original model. -/
+theorem formula_query_changes_reduct :
+    let source : Ferraris.Formula Unit := .imp (.atom ()) (.atom ())
+    Ferraris.Satisfies (fun _ => False) (Ferraris.Reduct (fun _ => True) source) ∧
+      ¬ Ferraris.Satisfies (fun _ => False)
+        (Ferraris.Reduct (fun _ => True) (formula (ofFormula id source))) := by
+  simp [ofFormula, formula, Ferraris.Neg, Ferraris.Reduct, Ferraris.Satisfies]
+
 /-- Replacing the interpretation by an atomwise identical one preserves every
 condition. A displayed projection with omitted atoms does not meet this premise. -/
 theorem model_identity (left right : A → Bool) (same : ∀ atom, left atom = right atom)

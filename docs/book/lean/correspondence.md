@@ -185,6 +185,12 @@ not establish search completion or alter answer-set acceptance.
 
 [`ObjectiveConditions`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ObjectiveConditions.lean)
 evaluates conditions in the supplied original interpretation.
+Its `formula_query_truth` law permits reading a formula through a closed Boolean
+query, with an explicit map from source atom identities to queried atoms.
+Implication becomes `not antecedent or consequent` only for this original-truth
+operation. `formula_query_changes_reduct` gives a counterexample to using that
+conversion as a program rewrite: at `{a}`, the empty interpretation satisfies
+the reduct of `a → a`, but not that of `not a ∨ a`.
 [`ObjectiveEligibility`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ObjectiveEligibility.lean)
 separately proves a three-valued truth cover: absent rows cannot contribute,
 required rows are true, and optional rows retain both possibilities. Optional
