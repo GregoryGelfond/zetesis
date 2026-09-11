@@ -1,6 +1,7 @@
 //! Finite substitutions and support-preserving conditional-choice formulas.
 
 mod objectives;
+mod atoms;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -110,8 +111,7 @@ fn instantiate<'a>(
         let mut builder = Builder {
             limits,
             budget,
-            atoms: Vec::new(),
-            atom_indices: BTreeMap::new(),
+            catalog: atoms::Catalog::default(),
             producers: Vec::new(),
             producer_origins: Vec::new(),
             atom_locations: Vec::new(),
@@ -174,8 +174,7 @@ struct Emission {
 pub(super) struct Builder<'a> {
     pub(super) limits: &'a FormulaLimits,
     pub(super) budget: &'a mut Budget,
-    atoms: Vec<Atom>,
-    atom_indices: BTreeMap<Atom, usize>,
+    catalog: atoms::Catalog,
     producers: Vec<Vec<usize>>,
     producer_origins: Vec<BTreeSet<Location>>,
     atom_locations: Vec<Location>,
@@ -222,7 +221,7 @@ impl Builder<'_> {
             self.support_guards()
         })?;
         Ok(Emission {
-            atoms: self.atoms,
+            atoms: self.catalog.into_atoms(),
             nodes: self.nodes,
             roots: self.roots,
             origins: self.origins,
@@ -233,8 +232,8 @@ impl Builder<'_> {
     // Only the completed atom catalog establishes which opposite tuples can
     // coexist. Reuse its IDs; coherence must create neither atoms nor support.
     fn coherence(&mut self) -> Result<(), FormulaFailure> {
-        for index in 0..self.atoms.len() {
-            let atom = &self.atoms[index];
+        for index in 0..self.catalog.len() {
+            let atom = &self.catalog.atoms()[index];
             if atom.predicate().sign() != zetesis_core::Sign::Negative {
                 continue;
             }
@@ -250,7 +249,7 @@ impl Builder<'_> {
             )
             .expect("opposite atom keeps the same arity");
             self.work(location)?;
-            if let Some(&other) = self.atom_indices.get(&opposite) {
+            if let Some(other) = self.catalog.find(&opposite) {
                 let positive = self.node(Node::Atom(other), location)?;
                 let negative = self.node(Node::Atom(index), location)?;
                 let both = self.and(positive, negative, location)?;
@@ -370,7 +369,8 @@ impl Builder<'_> {
                     .expect("all scoped variables assigned"),
             );
         }
-        // One temporary identity plus at most two retained copies; charge before cloning.
+        // Conservative symbolic allowance for lookup and retained atom/index
+        // storage. This cumulative admission charge is not live heap occupancy.
         self.budget.charge(
             ExpansionResource::ScalarBytes,
             bytes.saturating_mul(3),
@@ -380,25 +380,27 @@ impl Builder<'_> {
             .instantiate(assignment)
             .expect("all scoped variables assigned");
         self.counters.record(Event::AtomLookup);
-        let index = if let Some(index) = self.atom_indices.get(&atom) {
-            *index
-        } else {
-            ceiling(
-                FormulaResource::Atoms,
-                self.atoms.len() as u128 + 1,
-                self.limits.theory.max_atoms as u128,
-                location,
-            )?;
-            let index = self.atoms.len();
-            self.budget
-                .charge(ExpansionResource::Origins, 1, location)?;
-            self.atoms.push(atom.clone());
-            self.producers.push(Vec::new());
-            self.producer_origins.push(BTreeSet::from([location]));
-            self.atom_locations.push(location);
-            self.atom_indices.insert(atom, index);
-            self.counters.record(Event::AtomInserted);
-            index
+        let required = self.catalog.len() as u128 + 1;
+        let index = match self.catalog.entry(atom) {
+            atoms::Entry::Occupied(index) => index,
+            atoms::Entry::Vacant(entry) => {
+                ceiling(
+                    FormulaResource::Atoms,
+                    required,
+                    self.limits.theory.max_atoms as u128,
+                    location,
+                )?;
+                self.budget
+                    .charge(ExpansionResource::Origins, 1, location)?;
+                let index = entry
+                    .insert()
+                    .map_err(|error| FormulaFailure::AtomAllocation { error, location })?;
+                self.producers.push(Vec::new());
+                self.producer_origins.push(BTreeSet::from([location]));
+                self.atom_locations.push(location);
+                self.counters.record(Event::AtomInserted);
+                index
+            }
         };
         self.node(Node::Atom(index), location)
     }
@@ -603,7 +605,7 @@ impl Builder<'_> {
         Ok(())
     }
     fn support_guards(&mut self) -> Result<(), FormulaFailure> {
-        for atom in 0..self.atoms.len() {
+        for atom in 0..self.catalog.len() {
             let location = self.atom_locations[atom];
             let mut supported = 0;
             for antecedent in std::mem::take(&mut self.producers[atom]) {
@@ -702,7 +704,7 @@ impl Builder<'_> {
                         eligible: &eligible,
                         tuple_keys: keys,
                         nodes: &self.nodes,
-                        atoms: &self.atoms,
+                        atoms: self.catalog.atoms(),
                         bounds,
                         origins: &rule.origins,
                         location: rule.location,

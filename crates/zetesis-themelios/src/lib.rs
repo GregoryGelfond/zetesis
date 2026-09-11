@@ -98,9 +98,9 @@ pub use diagnostic::{AdmissionFailure, InputLimit, ProfileFeature, SyntaxFailure
 pub use expansion::{ExpansionFailure, ExpansionLimits, ExpansionResource};
 pub use extended::admit_extended;
 pub use formula::{
-    AdmittedFormula, AdmittedFormulaBundle, AnalysisBasis, FormulaBundleFailure, FormulaFailure,
-    FormulaLimits, FormulaResource, PreparedFormula, PreparedFormulaBundle, admit_bundle_formula,
-    admit_bundle_formula_with_grounding_observer, admit_formula,
+    AdmittedFormula, AdmittedFormulaBundle, AnalysisBasis, AtomAllocation, FormulaBundleFailure,
+    FormulaFailure, FormulaLimits, FormulaResource, PreparedFormula, PreparedFormulaBundle,
+    admit_bundle_formula, admit_bundle_formula_with_grounding_observer, admit_formula,
     admit_formula_with_grounding_observer, prepare_bundle_formula, prepare_formula,
 };
 mod formula_count_plan;

@@ -167,9 +167,44 @@ impl fmt::Display for FormulaResource {
     }
 }
 
+/// Failed reservation for the formula's atom sequence or its ID lookup index.
+/// These failures are separate from configured source-resource exhaustion.
+#[derive(Debug)]
+pub enum AtomAllocation {
+    /// The authoritative atom sequence could not reserve capacity.
+    Atoms(std::collections::TryReserveError),
+    /// The ID-only lookup table could not reserve capacity.
+    Index(hashbrown::TryReserveError),
+}
+
+impl fmt::Display for AtomAllocation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Atoms(error) => write!(f, "formula atom storage: {error}"),
+            Self::Index(error) => write!(f, "formula atom index: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for AtomAllocation {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Atoms(error) => Some(error),
+            Self::Index(error) => Some(error),
+        }
+    }
+}
+
 /// A located refusal of finite formula source admission; never semantic UNSAT.
 #[derive(Debug)]
 pub enum FormulaFailure {
+    /// Formula atom or lookup-index capacity could not be allocated.
+    AtomAllocation {
+        /// Original reservation error, independent of configured resource limits.
+        error: AtomAllocation,
+        /// Source occurrence whose new atom required storage.
+        location: Location,
+    },
     /// A typed relation view refused construction or query resolution.
     SupportRelation {
         /// Exact core refusal; never an empty relation or semantic UNSAT.
@@ -283,7 +318,8 @@ impl FormulaFailure {
                     )
                 })
                 .collect(),
-            Self::SupportRelation { location, .. }
+            Self::AtomAllocation { location, .. }
+            | Self::SupportRelation { location, .. }
             | Self::ChoiceSource { location }
             | Self::Limit { location, .. }
             | Self::UnsafeVariable { location, .. }
@@ -303,6 +339,7 @@ impl FormulaFailure {
 impl fmt::Display for FormulaFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::AtomAllocation { error, .. } => error.fmt(f),
             Self::SupportRelation { error, .. } => error.fmt(f),
             Self::ChoiceSource { .. } => {
                 f.write_str("Boolean choice source occurrences could not be preserved")
@@ -340,6 +377,7 @@ impl fmt::Display for FormulaFailure {
 impl std::error::Error for FormulaFailure {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::AtomAllocation { error, .. } => Some(error),
             Self::SupportRelation { error, .. } => Some(error),
             Self::Expansion(error) => Some(error),
             Self::Include(error) => Some(error.as_ref()),

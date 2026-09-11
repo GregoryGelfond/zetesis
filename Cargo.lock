@@ -2049,6 +2049,7 @@ version = "0.1.0"
 name = "zetesis-themelios"
 version = "0.1.0"
 dependencies = [
+ "hashbrown 0.17.1",
  "proptest",
  "serde_json",
  "tempfile",
