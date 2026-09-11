@@ -565,17 +565,19 @@ status. A newer source remains unqualified until its own checks complete.
 
 | Population | Covered / instrumented lines | Coverage |
 | --- | ---: | ---: |
-| Workspace, all features, portable tests plus 31 physical Metal tests | 47,156 / 50,419 | 93.53% |
-| CPU-only CLI, separate instrumentation | 4,319 / 4,625 | 93.38% |
+| Workspace, all features, portable tests plus 34 physical Metal tests | 47,613 / 50,915 | 93.51% |
+| CPU-only CLI, separate instrumentation | 4,480 / 4,789 | 93.55% |
 
 This snapshot was qualified on 11 September 2026 for
-[`55f5aa73`](https://github.com/GregoryGelfond/zetesis/tree/55f5aa739ec3fc941f27359dcb4d0c8608b82284),
+[`95e64fcb`](https://github.com/GregoryGelfond/zetesis/tree/95e64fcb159b5e584225209efb120729769b9a19),
 using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS 26.6.2 with Apple M4 Pro
 Metal. Both populations passed their independent 91% floor. The workspace
 combines its portable and physical profiles; the CPU-only population remains
 separate. Each of the four tight-oracle physical tests exercises both Atomic
 and Grouped support construction. The relation tests cover typed equality masks,
 prepared-view refusals and matched scalar/Rayon/Metal measurement results.
+The shared-context tests cover formula execution while relation columns remain
+prepared, non-destructive contention refusal and failure propagation to peers.
 The automatic-selection regression checks that actual Metal use preserves
 lazy grounding for an admitted relational program.
 Vulkan and other untested devices are outside this measurement.
