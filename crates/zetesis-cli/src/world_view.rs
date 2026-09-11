@@ -4,9 +4,10 @@ use std::fmt;
 
 use zetesis_cpu::Control;
 
+use crate::execution_observation::ExecutionSink;
 use crate::{
-    AnswerSelection, AnswerSet, Completion, PreparedInput, SemanticOutcome, Session, SolveConfig,
-    SolveFailure, Subject,
+    AnswerSelection, AnswerSet, Completion, PreparedInput, SemanticOutcome, Session,
+    SessionBuilder, SolveConfig, SolveFailure, Subject,
 };
 
 /// Storage ceilings for explicitly collecting a complete answer-set family.
@@ -164,6 +165,9 @@ impl WorldView {
     /// pruning and incumbent selection are disabled, while objective evaluation
     /// and its cumulative budgets remain active. Members are moved into the
     /// collection with no repeated membership check or full-model clone.
+    /// To supply caller-owned execution resources or observe the entire solve,
+    /// use [`SessionBuilder::collect`] or [`SessionBuilder::collect_observed`].
+    /// This convenience operation uses that same request and collection loop.
     ///
     /// Work is the ordinary search and scoring plus a scan of every returned
     /// answer's payload. Retained space is the full family within `limits`, in
@@ -183,16 +187,29 @@ impl WorldView {
         limits: WorldViewLimits,
         control: Control,
     ) -> Result<Self, WorldViewFailure> {
-        let subject = input.subject();
-        let mut session =
-            Session::enumerate(input, config, control).map_err(|error| WorldViewFailure {
+        Session::builder(input, config, control).collect(limits)
+    }
+
+    pub(crate) fn collect_request(
+        request: SessionBuilder<'_>,
+        limits: WorldViewLimits,
+        observations: &mut impl ExecutionSink,
+    ) -> Result<Self, WorldViewFailure> {
+        // Owning an unstarted request ensures that no answer can have escaped
+        // retention before this loop begins. Exhaustion alone would not repair
+        // the missing prefix of an already consumed session.
+        let subject = request.subject();
+        let mut session = request
+            .selection(AnswerSelection::All)
+            .start_with(observations)
+            .map_err(|error| WorldViewFailure {
                 outcome: error.semantic().cloned().map(Box::new),
                 cause: WorldViewError::Solve(Box::new(error)),
                 subject: subject.clone(),
                 answer_sets: Vec::new(),
             })?;
         let mut collection = Collection::default();
-        for result in session.by_ref() {
+        while let Some(result) = session.pull(observations) {
             let admission = result
                 .map_err(|error| WorldViewError::Solve(Box::new(error)))
                 .and_then(|answer| collection.retain(answer, limits));

@@ -24,7 +24,8 @@ use crate::formula_session::FormulaSession;
 use crate::phase_timing::{Recorder, SolvePhase};
 use crate::{
     AnswerSelection, Completion, ExecutionResources, Grounder, Interruption, Oracle, PhaseTimings,
-    RunError, SemanticOutcome, SolveConfig, SolveFailure,
+    RunError, SemanticOutcome, SolveConfig, SolveFailure, WorldView, WorldViewFailure,
+    WorldViewLimits,
 };
 
 /// The complete semantic representation supplied to an ordinary session.
@@ -287,6 +288,48 @@ impl<'a> SessionBuilder<'a> {
         self
     }
 
+    /// Enumerate and retain the complete original answer-set family using this
+    /// request's input, execution resources, configuration and control.
+    ///
+    /// Collection always uses [`AnswerSelection::All`], overriding any earlier
+    /// [`Self::selection`] choice. Objectives annotate every answer, including
+    /// nonoptimal answers. The request is consumed before any search begins;
+    /// an already started or partially consumed [`Session`] cannot be collected
+    /// through this operation. Use `config.models = 0` to request exhaustion.
+    ///
+    /// Work and retained space follow [`WorldView::collect`]. Members move into
+    /// one bounded collection without repeated membership checks or full-model
+    /// clones. The resource handles do not retain the collected family.
+    ///
+    /// # Errors
+    /// Preserves [`WorldView::collect`]'s typed setup, execution, incomplete
+    /// coverage and storage failures, including the checked prefix and original
+    /// subject. Supplied device failures retain their ordinary session boundary.
+    pub fn collect(self, limits: WorldViewLimits) -> Result<WorldView, WorldViewFailure> {
+        WorldView::collect_request(self, limits, &mut Ignore)
+    }
+
+    /// Collect the complete original family with synchronous observations of
+    /// both session preparation and every subsequent pull.
+    ///
+    /// This has [`Self::collect`]'s unrestricted selection and storage contract.
+    /// The observer is borrowed for the whole operation and no event queue is
+    /// retained. Its effects and storage remain outside solver limits.
+    ///
+    /// # Errors
+    /// Returns [`Self::collect`]'s failures. An observer refusal retains its
+    /// original external cause and the checked prefix, stops subsequent work
+    /// and callbacks, and cannot establish complete coverage or trigger device
+    /// fallback. Formula preparation failures deferred to the first pull retain
+    /// [`Self::start_observed`]'s failure semantics.
+    pub fn collect_observed(
+        self,
+        limits: WorldViewLimits,
+        observer: &mut impl ExecutionObserver,
+    ) -> Result<WorldView, WorldViewFailure> {
+        WorldView::collect_request(self, limits, &mut Observer(observer))
+    }
+
     /// Validate the request and start a fresh session without observations.
     ///
     /// # Errors
@@ -308,7 +351,11 @@ impl<'a> SessionBuilder<'a> {
         self.start_with(&mut Observer(observer))
     }
 
-    fn start_with(
+    pub(crate) fn subject(&self) -> Subject {
+        self.input.subject()
+    }
+
+    pub(crate) fn start_with(
         self,
         observations: &mut impl ExecutionSink,
     ) -> Result<Session<'a>, SolveFailure> {
@@ -591,7 +638,7 @@ impl<'a> Session<'a> {
         self.pull(&mut Observer(observer))
     }
 
-    fn pull(
+    pub(crate) fn pull(
         &mut self,
         observations: &mut impl ExecutionSink,
     ) -> Option<Result<AnswerSet, SolveFailure>> {

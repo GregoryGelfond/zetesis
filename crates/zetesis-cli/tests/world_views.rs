@@ -1,10 +1,11 @@
 //! Complete original families require unrestricted coverage and retained members.
 
-use std::{collections::BTreeSet, num::NonZeroUsize, sync::Arc};
+use std::{collections::BTreeSet, convert::Infallible, io, num::NonZeroUsize, sync::Arc};
 
 use zetesis_cli::{
-    AnswerSelection, AnswerSet, Backend, Completion, Grounder, Interruption, Oracle, PreparedInput,
-    Session, SolveConfig, Subject, WorldView, WorldViewError, WorldViewLimits,
+    AnswerSelection, AnswerSet, Backend, Completion, ExecutionObservation, ExecutionObserver,
+    ExecutionResources, Grounder, Interruption, Oracle, PreparedInput, RunError, Session,
+    SolveConfig, Subject, WorldView, WorldViewError, WorldViewFailure, WorldViewLimits,
 };
 use zetesis_core::{GroundProgram, StaticLimits};
 use zetesis_cpu::Control;
@@ -63,6 +64,36 @@ fn collect(input: PreparedInput<'_>) -> WorldView {
         Control::default(),
     )
     .unwrap()
+}
+
+#[test]
+fn builder_collection_overrides_optimal_selection() {
+    let owner = formula("1 {a;b} 1. #minimize {1@2,a:a; 2@2,b:b}.");
+    let resources = ExecutionResources::default();
+    let world_view = Session::builder(PreparedInput::formula(&owner), config(), Control::default())
+        .selection(AnswerSelection::Optimal)
+        .resources(&resources)
+        .collect(WorldViewLimits::default())
+        .unwrap();
+    let answers: BTreeSet<_> = world_view
+        .answer_sets()
+        .iter()
+        .map(|answer| (names(answer), answer.score().unwrap().costs().to_vec()))
+        .collect();
+    assert_eq!(
+        answers,
+        BTreeSet::from([
+            (vec!["a".into()], vec![(2, 1)]),
+            (vec!["b".into()], vec![(2, 2)]),
+        ])
+    );
+    assert_eq!(world_view.outcome().selection(), Some(AnswerSelection::All));
+    assert_eq!(
+        world_view.outcome().completion(),
+        Some(Completion::Exhausted)
+    );
+    assert_eq!(world_view.outcome().retained_models(), 0);
+    assert!(world_view.outcome().incumbent().is_none());
 }
 
 #[test]
@@ -344,14 +375,19 @@ fn exact_prepared_routes_enumerate_the_same_family() {
             grounder,
             ..config()
         };
-        let world_view = WorldView::collect(
-            input,
-            configured,
-            WorldViewLimits::default(),
-            Control::default(),
-        )
-        .unwrap();
+        let mut routes = Routes::default();
+        let world_view = Session::builder(input, configured, Control::default())
+            .resources(&ExecutionResources::default())
+            .collect_observed(WorldViewLimits::default(), &mut routes)
+            .unwrap();
         assert_eq!(family(&world_view), expected);
+        if oracle == Oracle::Countermodel {
+            assert_eq!(routes.formulas, 1);
+            assert!(routes.closures.is_empty());
+        } else {
+            assert_eq!(routes.closures, [grounder]);
+            assert_eq!(routes.formulas, 0);
+        }
         assert_eq!(
             world_view.outcome().countermodel_statistics().is_some(),
             oracle == Oracle::Countermodel
@@ -421,15 +457,15 @@ fn formula_completion_batches_preserve_the_original_family() {
 #[test]
 fn requested_model_limit_refuses_complete_collection() {
     let owner = formula("{a;b}. #minimize {1,k:a}.");
-    let failure = WorldView::collect(
+    let failure = Session::builder(
         PreparedInput::formula(&owner),
         SolveConfig {
             models: 1,
             ..config()
         },
-        WorldViewLimits::default(),
         Control::default(),
     )
+    .collect(WorldViewLimits::default())
     .unwrap_err();
     assert!(matches!(failure.cause(), WorldViewError::NotExhausted));
     assert_eq!(failure.answer_sets().len(), 1);
@@ -466,9 +502,9 @@ fn cancellation_cannot_produce_an_empty_world_view() {
         PreparedInput::formula(&formulas),
     ] {
         let control = Control::default();
+        let request = Session::builder(input, config(), control.clone());
         control.cancel();
-        let failure =
-            WorldView::collect(input, config(), WorldViewLimits::default(), control).unwrap_err();
+        let failure = request.collect(WorldViewLimits::default()).unwrap_err();
         assert!(matches!(failure.cause(), WorldViewError::NotExhausted));
         assert!(failure.answer_sets().is_empty());
         let outcome = failure.outcome().unwrap();
@@ -570,16 +606,13 @@ fn unrestricted_scoring_spends_one_cumulative_budget() {
 #[test]
 fn answer_storage_limit_preserves_the_retained_prefix() {
     let owner = formula("a. {b}.");
-    let failure = WorldView::collect(
-        PreparedInput::formula(&owner),
-        config(),
-        WorldViewLimits {
+    let failure = Session::builder(PreparedInput::formula(&owner), config(), Control::default())
+        .resources(&ExecutionResources::default())
+        .collect(WorldViewLimits {
             max_answer_sets: 1,
             ..Default::default()
-        },
-        Control::default(),
-    )
-    .unwrap_err();
+        })
+        .unwrap_err();
     assert!(matches!(failure.cause(), WorldViewError::AnswerSets));
     assert_eq!(failure.answer_sets().len(), 1);
     assert!(
@@ -698,15 +731,15 @@ fn score_priorities_consume_collection_payload() {
 #[test]
 fn setup_refusal_preserves_the_original_subject() {
     let owner = formula("a | b.");
-    let failure = WorldView::collect(
+    let failure = Session::builder(
         PreparedInput::formula(&owner),
         SolveConfig {
             oracle: Oracle::Closure,
             ..config()
         },
-        WorldViewLimits::default(),
         Control::default(),
     )
+    .collect(WorldViewLimits::default())
     .unwrap_err();
     assert!(
         matches!(failure.cause(), WorldViewError::Solve(error) if matches!(error.cause.as_ref(), zetesis_cli::RunError::PreparedInput { .. }))
@@ -718,4 +751,99 @@ fn setup_refusal_preserves_the_original_subject() {
             .subject()
             .same_instance(&Subject::Theory(owner.theory().clone()))
     );
+}
+
+#[derive(Default)]
+struct Routes {
+    closures: Vec<Grounder>,
+    formulas: usize,
+}
+
+impl ExecutionObserver for Routes {
+    type Error = Infallible;
+
+    fn observe(&mut self, observation: ExecutionObservation<'_>) -> Result<(), Self::Error> {
+        match observation {
+            ExecutionObservation::CpuClosure { grounder, .. } => self.closures.push(grounder),
+            ExecutionObservation::CpuFormula { .. } => self.formulas += 1,
+            _ => {}
+        }
+        Ok(())
+    }
+}
+
+enum Refusal {
+    Execution,
+    Formula,
+}
+
+struct RefuseObservation {
+    at: Refusal,
+    calls: usize,
+}
+
+impl ExecutionObserver for RefuseObservation {
+    type Error = io::Error;
+
+    fn observe(&mut self, observation: ExecutionObservation<'_>) -> Result<(), Self::Error> {
+        self.calls += 1;
+        let refuse = matches!(
+            (&self.at, observation),
+            (Refusal::Execution, ExecutionObservation::CpuFormula { .. })
+                | (Refusal::Formula, ExecutionObservation::Formula { .. })
+        );
+        if refuse {
+            return Err(io::Error::new(
+                io::ErrorKind::ConnectionAborted,
+                "collection observer refused",
+            ));
+        }
+        Ok(())
+    }
+}
+
+fn observer_failure(at: Refusal) -> (WorldViewFailure, usize) {
+    let owner = formula("1 {a;b} 1. #minimize {1,a:a; 2,b:b}.");
+    let mut observer = RefuseObservation { at, calls: 0 };
+    let failure = Session::builder(PreparedInput::formula(&owner), config(), Control::default())
+        .resources(&ExecutionResources::default())
+        .collect_observed(WorldViewLimits::default(), &mut observer)
+        .unwrap_err();
+    assert!(
+        failure
+            .subject()
+            .same_instance(&Subject::Theory(owner.theory().clone()))
+    );
+    assert!(failure.answer_sets().is_empty());
+    let WorldViewError::Solve(solve) = failure.cause() else {
+        panic!("observer refusal must retain a solve failure: {failure:?}");
+    };
+    let RunError::ExecutionObservation(cause) = solve.cause.as_ref() else {
+        panic!("observer refusal must remain external: {failure:?}");
+    };
+    assert_eq!(
+        cause.downcast_ref::<io::Error>().unwrap().kind(),
+        io::ErrorKind::ConnectionAborted
+    );
+    assert_eq!(cause.to_string(), "collection observer refused");
+    (failure, observer.calls)
+}
+
+#[test]
+fn collection_preserves_preparation_observer_failure() {
+    let (failure, calls) = observer_failure(Refusal::Execution);
+    assert_eq!(calls, 1);
+    assert!(failure.outcome().is_none());
+}
+
+#[test]
+fn collection_preserves_deferred_formula_failure() {
+    let (failure, calls) = observer_failure(Refusal::Formula);
+    assert_eq!(calls, 2);
+    let outcome = failure.outcome().unwrap();
+    assert!(outcome.subject().unwrap().same_instance(failure.subject()));
+    assert_eq!(outcome.selection(), Some(AnswerSelection::All));
+    assert_eq!(outcome.verified_models(), 0);
+    assert_eq!(outcome.completion(), None);
+    assert!(!outcome.unsatisfiable());
 }
