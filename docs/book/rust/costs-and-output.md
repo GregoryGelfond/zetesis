@@ -40,6 +40,21 @@ on the current answer is not permission to remove its priority slot. The
 [language reference](../reference/language.md) states the admitted finite
 source profiles and their remaining boundaries.
 
+An always-zero slot can differ from clingo's reported vector without changing
+objective ordering. For example, `a.a|b.#minimize{1:b}.` has the sole answer
+`{a}`. zetesis retains priority 0 with cost 0; clingo 5.8.2 reports no cost slot.
+Replacing a fact by an equivalent derivation can change clingo's retained slots.
+Source activity therefore is not a certificate of an identical clingo display.
+Compare costs at identified priorities, distinguish an absent slot from a retained
+zero in reports, and establish that any extra slot is zero across all answers
+before treating the two rankings as equivalent.
+
+[`ObjectivePriorities.zero_slot_comparison`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ObjectivePriorities.lean)
+proves that inserting a zero slot at a fixed position preserves lexicographic
+comparison; `zero_slot_optima` preserves every optimum tie of the unchanged
+theory. Neither law proves that a particular source row is inactive. Source
+coverage and condition evaluation must establish that premise separately.
+
 `ObservationProgram::evaluate` returns typed shown symbols;
 `ObservationProgram::render` composes these with the selected atom channel.
 Both preserve complete model identity. A term and an atom with the same printed

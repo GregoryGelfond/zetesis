@@ -1028,3 +1028,11 @@ import Zetesis
 #print axioms Zetesis.WorldViews.same_members_preserve_world_view
 #print axioms Zetesis.WorldViews.world_view_ties_are_exact
 #print axioms Zetesis.WorldViews.optimal_family_omits_worse_answer
+#print axioms Zetesis.HeadContributions.neutral_values_are_zero
+#print axioms Zetesis.HeadContributions.nonpositive_is_neutral
+#print axioms Zetesis.HeadContributions.positive_measure
+#print axioms Zetesis.HeadContributions.unbounded_equivalent
+#print axioms Zetesis.HeadContributions.unbounded_in_context
+#print axioms Zetesis.HeadContributions.neutral_permission_is_not_truth
+#print axioms Zetesis.ObjectivePriorities.zero_slot_comparison
+#print axioms Zetesis.ObjectivePriorities.zero_slot_optima

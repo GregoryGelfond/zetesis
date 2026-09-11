@@ -158,4 +158,38 @@ theorem partition_optima [DecidableEq σ] {A : Type w} (theory : Ferraris.Theory
       Optimal theory (fun candidate => mixedVector priorities (truth candidate) rows) M := by
   simp only [partition_vector]
 
+/-- Inserting the same zero-cost slot at a fixed priority position preserves
+lexicographic comparison. The higher and lower priority lists are shared by both
+interpretations; their costs may differ. Proof outline: a differing higher slot
+already decides the order. Otherwise remove the equal higher slots and the
+inserted zero, then compare the unchanged lower slots.
+
+This law does not identify which source rows are retained. A reporting difference
+is harmless to ranking only after its extra slots are proved always zero. -/
+theorem zero_slot_comparison (higher lower : List Int) (left right : Int → Int) :
+    compareVectors (higher.map left ++ 0 :: lower.map left)
+      (higher.map right ++ 0 :: lower.map right) =
+    compareVectors ((higher ++ lower).map left) ((higher ++ lower).map right) := by
+  induction higher with
+  | nil => simp [compareVectors]
+  | cons priority rest remaining =>
+    simp only [List.map_cons, List.cons_append, compareVectors]
+    by_cases less : left priority < right priority
+    · simp [less]
+    · by_cases greater : right priority < left priority
+      · simp [less, greater]
+      · simpa only [less, greater, ↓reduceIte] using remaining
+
+/-- Adding an always-zero priority slot preserves every optimal answer set,
+including all optimum ties. The original theory and the ordered existing slots
+remain fixed. Apply zero-slot comparison to every competing answer set; the
+Ferraris stability requirement is identical on both sides. No enumeration or
+source-retention completeness is inferred by this law. -/
+theorem zero_slot_optima {A : Type w} (theory : Ferraris.Theory A)
+    (higher lower : List Int) (cost : Atoms A → Int → Int) (M : Atoms A) :
+    Optimal theory (fun candidate =>
+      higher.map (cost candidate) ++ 0 :: lower.map (cost candidate)) M ↔
+    Optimal theory (fun candidate => (higher ++ lower).map (cost candidate)) M := by
+  simp only [Optimal, zero_slot_comparison]
+
 end Zetesis.ObjectivePriorities

@@ -82,6 +82,7 @@ import Zetesis.ObjectiveEligibility
 import Zetesis.BooleanHeads
 import Zetesis.BooleanHeadElements
 import Zetesis.SignedHeadElements
+import Zetesis.HeadContributions
 import Zetesis.OrderedHeadActivity
 import Zetesis.Examples.Choices
 import Zetesis.EvaluatedWitnesses

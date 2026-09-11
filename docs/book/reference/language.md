@@ -141,7 +141,7 @@ in both the original formula and every frozen reduct. Head permissions and signe
 activity remain separate: a true bound cannot supply support for an atom.
 Source bindings, eligibility, measured values and reached arithmetic still undergo
 their required validation before a comparison is folded. Logical bounds do not
-admit missing or unsupported head measures.
+bypass the missing-value boundary for guarded extremum heads.
 
 The [logical-bound contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/logical_bounds.rs)
 cover declared answer families, all comparison relations, arbitrary frozen
@@ -182,8 +182,8 @@ separated in the [Lean proof boundary](../lean/correspondence.md).
 | Body `#min`, `#max` | Comparisons over complete logical values; empty extrema; admitted acyclic assignments | Numeric endpoint guard below and unsupported consumer/observer combinations |
 | Assignment consumers | Dependency-ordered scalar/tuple filters and equalities, evaluated positive arguments/heads, admitted outer negative atoms, finite outer ranges, logical choice bounds, nonbinding aggregate guards and universal conditionals | Broader local scopes, objective-relevant new consumers and objective-relevant multiple assignments |
 | `#count` heads | Positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions and Boolean operands | Unsupported eligibility/observer contexts and objective-relevant heads remain refused |
-| `#sum`, `#sum+` heads | Signed numeric `#sum` and nonnegative numeric `#sum+`; positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions and Boolean operands; zero-weight positive atomic heads retain permission | Missing/nonnumeric measured values, negative `#sum+` weights, unsupported eligibility contexts and objective-relevant heads remain refused |
-| `#min`, `#max` heads | Complete logical first tuple values in ASP term order; positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions and Boolean operands | Missing measured values, the numeric endpoint guard, unsupported eligibility contexts and objective-relevant heads remain refused |
+| `#sum`, `#sum+` heads | Signed numeric `#sum` and positive-only numeric `#sum+`; missing/nonnumeric measures contribute zero; positive atomic permission is independent of numeric contribution, including nonpositive `#sum+` weights | Unsupported eligibility contexts and objective-relevant heads remain refused |
+| `#min`, `#max` heads | Complete logical first tuple values in ASP term order; positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions and Boolean operands | Guarded empty-tuple elements, the numeric endpoint guard, unsupported eligibility contexts and objective-relevant heads remain refused |
 
 A tuple becomes active when any occurrence has a true head operand and satisfies
 its own condition. An unsigned atomic operand is true when that atom is selected;
@@ -193,6 +193,11 @@ complete tuples remain distinct contributions even if they share an atom:
 `3#sum{1:a;2:a}3.` admits `{a}`, as does `2#sum{1,k:a;1,l:a}2.`. Conditions
 retain their model-relative truth and reduct implications. Atom permission is
 independent of contribution, so `0#sum+{0:a;0:b}0.` retains all four choices.
+Missing or nonnumeric sum measures also contribute zero without removing
+permission. Thus `0#sum{:a;word:b}0.` has those same four answer sets. For
+`#sum+`, a negative numeric weight contributes zero: `0#sum+{-2:a;2:b}0.`
+admits `{}` and `{a}`. A head with no bound retains its permissions without an
+aggregate constraint; no extremum result is required in that case.
 Boolean and atomic occurrences may share one explicit tuple: in
 `{a}.1#count{1:#true:a;1:b}1.`, either a selected `a` or a selected `b`
 activates tuple `1`, giving `{a}`, `{b}` and `{a,b}`. Repeating that tuple
@@ -208,7 +213,9 @@ Default-negated or Boolean operands also prevent a group from supplying that
 atom-only certificate. Any nonnumeric logical bound excludes its whole group
 from this numeric certificate, even when another bound is numeric. Other independently
 qualified numeric groups remain eligible for the specialization. A false operand
-or body does not bypass validation of a closed measured value: `0#sum{word:#false}0:-#false.` remains refused.
+or body does not bypass required source validation. A nonnumeric sum measure is
+valid and neutral; undefined arithmetic is a distinct error and is not replaced
+by zero.
 
 An extremum measure retains the complete first value of its tuple. For example:
 
@@ -227,8 +234,16 @@ separate these concerns and state the required order and carrier assumptions.
 Acyclic aggregate assignments may depend on earlier assignments through scalar
 and range values. A proposed value remains guarded by the original aggregate
 equality. Membership in possible support cannot replace model-relative aggregate
-truth. An extremum head still requires a first tuple value; an empty tuple is
-distinct from a complete logical value such as `#sup`.
+truth. A guarded extremum head requires a first tuple value; an empty tuple is
+distinct from a complete logical value such as `#sup`. An actually empty
+aggregate retains its ordinary empty-extremum value.
+
+These head permissions and numeric contributions follow [Abstract Gringo,
+§§2.1 and 3](https://arxiv.org/pdf/1507.06576v2). Some source forms produce
+different answer-set families in clingo 5.8.2. The [contribution contract and
+comparison table](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/head-contributions.md) give the original
+programs, both results and the remaining source-correspondence limits. Those
+differences are tested explicitly and do not count as clingo parity.
 
 ### Interpreting source analysis
 

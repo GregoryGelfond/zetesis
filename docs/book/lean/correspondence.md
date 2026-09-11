@@ -161,17 +161,43 @@ correspondence obligations. Excluding nonnumeric bounds from the numeric count-p
 certificate is a separate runtime admission rule, not a consequence granted by
 the theorem.
 
+[`HeadContributions`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/HeadContributions.lean)
+keeps numeric normalization independent of head permission. Missing/nonnumeric
+sum values and nonpositive positive-only weights are neutral contributions;
+`neutral_permission_is_not_truth` proves that their permission still matters in
+the frozen reduct. Removing an absent bound preserves the permission formula in
+arbitrary context. These laws apply after complete active tuple keys have been
+coalesced. The [head contribution contract](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/head-contributions.md)
+separates formal source translation, executable evidence, reference differences
+and the guarded missing-extremum boundary.
+
 [`ObjectivePriorities`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ObjectivePriorities.lean)
 keeps weight, priority, tuple and eligibility in one resolved row.
 `completed_presence` assumes exact eligible binding coverage; `partition_vector`
 and `partition_optima` preserve the cost vector and all optimal ties under a fixed
 priority layout. The Rust
 [`Preparation::specialize`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/objectives.rs)
-resolves each template from the same binding while retaining its positive
-conditions. These laws do not prove that possible aggregate support establishes
+resolves each template from the same binding while retaining its original-model
+condition. These laws do not prove that possible aggregate support establishes
 priority presence, that the source join is complete, or that checked arithmetic
 and bounded execution implement mathematical evaluation. Objective laws also do
 not establish search completion or alter answer-set acceptance.
+
+[`ObjectiveConditions`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ObjectiveConditions.lean)
+evaluates conditions in the supplied original interpretation.
+[`ObjectiveEligibility`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ObjectiveEligibility.lean)
+separately proves a three-valued truth cover: absent rows cannot contribute,
+required rows are true, and optional rows retain both possibilities. Optional
+does not assert that a row can be realized in an answer set. Complete source
+bindings and a sound activity classification are premises, not consequences of
+the truth algebra. The Rust DAG evaluator and source analysis still need their
+own refinement.
+
+`ObjectivePriorities.zero_slot_comparison` and `zero_slot_optima` show that an
+always-zero slot at a fixed priority position preserves ordering and all optimum
+ties. They do not establish an identical raw priority layout in clingo. Proving
+an extra slot always zero requires the source-coverage and actual-condition
+arguments above; a zero observed in one answer is insufficient.
 
 [`AggregateInvariants`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AggregateInvariants.lean)
 states when optional tuple keys cannot change a required sum or extremum.
