@@ -454,27 +454,21 @@ fn formula_gpu(
 }
 
 fn closure(sink: &mut impl Write, options: &Options, report: &Report) -> io::Result<()> {
+    let grounder = if options.grounder == Grounder::Eager {
+        "eager"
+    } else {
+        "lazy"
+    };
     let cpu = report.shared_execution.is_some()
         || options.backend == Backend::Cpu
-        || (options.backend == Backend::Auto
-            && (options.grounder == Grounder::Lazy || !cfg!(feature = "gpu")));
+        || (options.backend == Backend::Auto && !cfg!(feature = "gpu"));
     if cpu {
-        let grounder = if options.grounder == Grounder::Eager {
-            "eager"
-        } else {
-            "lazy"
-        };
         writeln!(
             sink,
             "  effective execution: backend=cpu; oracle=closure; grounder={grounder}; workers={}",
             options.workers
         )?;
     } else if options.backend == Backend::Auto {
-        let grounder = if options.grounder == Grounder::Eager {
-            "eager"
-        } else {
-            "untracked (lazy/eager possible)"
-        };
         writeln!(
             sink,
             "  effective execution: oracle=closure; backend=untracked (CPU/GPU/mixed possible); grounder={grounder}"
@@ -484,11 +478,6 @@ fn closure(sink: &mut impl Write, options: &Options, report: &Report) -> io::Res
             "  auto selection: may change between batches; see backend diagnostics for actual adapter and fallback events"
         )?;
     } else {
-        let grounder = if report.lazy_execution.is_some() || report.shared_execution.is_some() {
-            "lazy"
-        } else {
-            "eager"
-        };
         writeln!(
             sink,
             "  effective execution: oracle=closure; backend=requested GPU policy; grounder={grounder}; see backend diagnostics for actual adapter"

@@ -126,6 +126,8 @@ mod physical {
             let diagnostics = String::from_utf8(diagnostics).unwrap();
             assert!(diagnostics.contains("effective=lazy"));
             assert!(!diagnostics.contains("effective=eager"));
+            assert!(!diagnostics.contains("effective execution: backend=cpu;"));
+            assert!(!diagnostics.contains("grounder=untracked"));
         }
     }
 
