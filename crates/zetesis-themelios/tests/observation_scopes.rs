@@ -445,3 +445,21 @@ fn guarded_aggregate_bindings_keep_their_additional_comparisons() {
         "2"
     );
 }
+
+#[test]
+fn aggregate_secondary_guards_can_read_the_assigned_result() {
+    for (guard, shown) in [
+        ("=N", true),
+        ("<N+1", true),
+        (">N+1", false),
+        ("!=N", false),
+    ] {
+        assert_eq!(
+            rendered(&format!(
+                "p(1).p(2). #show. #show N:N=#count{{X:p(X)}}{guard}."
+            )),
+            if shown { "2" } else { "" },
+            "{guard}"
+        );
+    }
+}

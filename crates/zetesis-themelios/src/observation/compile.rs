@@ -286,16 +286,23 @@ impl Compiler<'_> {
         Ok(Pattern { predicate, terms })
     }
     fn ready(&self, term: &Template) -> bool {
+        self.ready_with(term, &BTreeSet::new())
+    }
+    fn ready_with(&self, term: &Template, available: &BTreeSet<usize>) -> bool {
         match term {
-            Template::Variable(slot) => self.safe.contains(slot),
+            Template::Variable(slot) => self.safe.contains(slot) || available.contains(slot),
             Template::Value(_) => true,
-            Template::Unary(_, argument) | Template::Absolute(argument) => self.ready(argument),
+            Template::Unary(_, argument) | Template::Absolute(argument) => {
+                self.ready_with(argument, available)
+            }
             Template::Binary(_, left, right) | Template::Interval(left, right) => {
-                self.ready(left) && self.ready(right)
+                self.ready_with(left, available) && self.ready_with(right, available)
             }
             Template::Function(_, _, arguments)
             | Template::Tuple(arguments)
-            | Template::Pool(arguments) => arguments.iter().all(|argument| self.ready(argument)),
+            | Template::Pool(arguments) => arguments
+                .iter()
+                .all(|argument| self.ready_with(argument, available)),
         }
     }
     fn assignment(&self, condition: &Condition) -> Option<(usize, bool)> {
@@ -428,10 +435,9 @@ impl Compiler<'_> {
             };
             (guard.relation == Relation::Eq
                 && !self.safe.contains(&slot)
-                && guards
-                    .iter()
-                    .enumerate()
-                    .all(|(other, guard)| other == index || self.ready(&guard.bound)))
+                && guards.iter().enumerate().all(|(other, guard)| {
+                    other == index || self.ready_with(&guard.bound, &BTreeSet::from([slot]))
+                }))
             .then_some((index, slot))
         })
     }
