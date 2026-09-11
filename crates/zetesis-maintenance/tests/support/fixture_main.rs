@@ -68,10 +68,20 @@ fn physical(arguments: &[String]) -> Result<(), String> {
     } else {
         value(arguments, "--test").ok_or("missing mock test target")?
     };
+    let position = arguments
+        .iter()
+        .position(|arg| arg == "--exact")
+        .ok_or("missing exact filter")?;
+    let filters = &arguments[position + 1..];
     let fields: Vec<_> = include_str!("physical-selection.txt")
         .lines()
         .map(|line| line.split('|').collect::<Vec<_>>())
-        .find(|fields| fields[1] == target)
+        .find(|fields| {
+            fields[1] == target
+                && fields[3]
+                    .split_whitespace()
+                    .any(|name| filters.iter().any(|filter| filter == name))
+        })
         .ok_or("unexpected physical target")?;
     let group = fields[0];
     let mut mode = variable("COVERAGE_TEST_PHYSICAL", "passed");
@@ -81,11 +91,6 @@ fn physical(arguments: &[String]) -> Result<(), String> {
     if mode == "failed" {
         return fail("simulated physical test failure");
     }
-    let position = arguments
-        .iter()
-        .position(|arg| arg == "--exact")
-        .ok_or("missing exact filter")?;
-    let filters = &arguments[position + 1..];
     let mut selected: Vec<String> = fields[3]
         .split_whitespace()
         .filter(|name| filters.iter().any(|arg| arg == name))

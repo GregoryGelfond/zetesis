@@ -106,7 +106,14 @@ fn bundled_llvm_versions_preserve_schedule() {
 }
 #[test]
 fn omitted_physical_group_prevents_instrumentation() {
-    for group in ["lazy", "relation", "relation-measurement", "context"] {
+    for group in [
+        "lazy",
+        "relation",
+        "relation-measurement",
+        "context",
+        "cli-context",
+        "session-resources",
+    ] {
         let f = Fixture::new();
         let row = groups()
             .into_iter()
@@ -165,6 +172,8 @@ fn failed_physical_execution_preserves_its_exit_code() {
         "aggregate-measurement",
         "relation",
         "relation-measurement",
+        "cli-context",
+        "session-resources",
     ] {
         let f = Fixture::new();
         let result = f.coverage(

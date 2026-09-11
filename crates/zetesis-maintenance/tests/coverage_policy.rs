@@ -105,6 +105,30 @@ fn physical_selection_is_a_fixed_contract() {
     }
 }
 #[test]
+fn library_groups_require_one_positive_summary() {
+    for group in coverage::selection(TABLE)
+        .unwrap()
+        .into_iter()
+        .filter(|group| group.target_kind == "lib")
+    {
+        let mut observed = output(&group.tests, true);
+        observed.push_str("test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n");
+        assert!(coverage::physical_result(&observed, &group).is_err());
+    }
+}
+#[test]
+fn library_results_cannot_qualify_another_group() {
+    let groups = coverage::selection(TABLE).unwrap();
+    let libraries: Vec<_> = groups
+        .iter()
+        .filter(|group| group.target_kind == "lib")
+        .collect();
+    assert_eq!(libraries.len(), 2);
+    for (expected, observed) in [(libraries[0], libraries[1]), (libraries[1], libraries[0])] {
+        assert!(coverage::physical_result(&output(&observed.tests, true), expected).is_err());
+    }
+}
+#[test]
 fn metal_selection_refuses_vulkan_substitution() {
     for (metal, vulkan) in [
         (
@@ -122,6 +146,30 @@ fn metal_selection_refuses_vulkan_substitution() {
         (
             "metal_formula_executes_while_relation_columns_remain_prepared",
             "vulkan_formula_executes_while_relation_columns_remain_prepared",
+        ),
+        (
+            "engine::resource_tests::metal_closure_retains_the_supplied_context",
+            "engine::resource_tests::vulkan_closure_retains_the_supplied_context",
+        ),
+        (
+            "formula_execution::resource_tests::metal_formula_retains_the_supplied_context",
+            "formula_execution::resource_tests::vulkan_formula_retains_the_supplied_context",
+        ),
+        (
+            "metal_resources_preserve_independent_sessions",
+            "vulkan_resources_preserve_independent_sessions",
+        ),
+        (
+            "metal_resource_policy_refusal_preserves_reuse",
+            "vulkan_resource_policy_refusal_preserves_reuse",
+        ),
+        (
+            "metal_resources_preserve_cpu_policies",
+            "vulkan_resources_preserve_cpu_policies",
+        ),
+        (
+            "metal_observer_failure_preserves_resource_reuse",
+            "vulkan_observer_failure_preserves_resource_reuse",
         ),
     ] {
         let changed = TABLE.replacen(metal, vulkan, 1);
@@ -176,8 +224,8 @@ fn physical_metadata_keeps_floor_populations_separate() {
         record["floor_profiles"],
         serde_json::json!(["workspace", "cli-cpu"])
     );
-    assert_eq!(record["expected_physical_tests"], 34);
-    assert_eq!(record["physical_test_groups"].as_array().unwrap().len(), 12);
+    assert_eq!(record["expected_physical_tests"], 40);
+    assert_eq!(record["physical_test_groups"].as_array().unwrap().len(), 14);
     assert_eq!(
         record["project_added_filename_filters"],
         serde_json::json!([])
