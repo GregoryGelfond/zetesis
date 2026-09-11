@@ -99,6 +99,12 @@ fn physical_selection_is_a_fixed_contract() {
     for table in [
         TABLE.replacen("lazy|hardware_lazy|4|", "altered|hardware_lazy|4|", 1),
         TABLE.replacen("solve-context|lib|3|", "cli-context|lib|3|", 1),
+        TABLE.replacen(
+            "language-consumers|language_consumers|2|",
+            "language-consumers|formula_gpu|2|",
+            1,
+        ),
+        TABLE.lines().take(14).collect::<Vec<_>>().join("\n"),
         TABLE.replace("metal_support_matches_exact_reduct_semantics", "unknown"),
         TABLE.lines().skip(1).collect::<Vec<_>>().join("\n"),
     ] {
@@ -200,6 +206,14 @@ fn metal_selection_refuses_vulkan_substitution() {
             "metal_formula_profiles_preserve_independent_sessions",
             "vulkan_formula_profiles_preserve_independent_sessions",
         ),
+        (
+            "physical::metal_families_retain_scored_observations",
+            "physical::vulkan_families_retain_scored_observations",
+        ),
+        (
+            "physical::metal_optimum_ties_retain_full_answers",
+            "physical::vulkan_optimum_ties_retain_full_answers",
+        ),
     ] {
         let changed = TABLE.replacen(metal, vulkan, 1);
         assert_ne!(changed, TABLE);
@@ -248,6 +262,8 @@ fn llvm_version_requires_the_pinned_build() {
 #[test]
 fn physical_metadata_keeps_floor_populations_separate() {
     let record = metadata("LLVM version 22.1.6", true).unwrap();
+    assert_eq!(record["committed_floor"], "91");
+    assert_eq!(record["primary"], "workspace --all-features");
     assert_eq!(record["profiles_merged"], false);
     assert_eq!(
         record["supplemental"],
@@ -257,12 +273,68 @@ fn physical_metadata_keeps_floor_populations_separate() {
         record["floor_profiles"],
         serde_json::json!(["workspace", "cli-cpu"])
     );
-    assert_eq!(record["expected_physical_tests"], 47);
-    assert_eq!(record["physical_test_groups"].as_array().unwrap().len(), 14);
+    assert_eq!(record["expected_physical_tests"], 49);
+    assert_eq!(record["physical_test_groups"].as_array().unwrap().len(), 15);
     assert_eq!(
         record["project_added_filename_filters"],
         serde_json::json!([])
     );
+}
+
+#[test]
+fn physical_metadata_retains_the_reviewed_schedule() {
+    let record = metadata("LLVM version 22.1.6", true).unwrap();
+    let groups = record["physical_test_groups"].as_array().unwrap();
+    let identities: Vec<_> = groups
+        .iter()
+        .map(|group| {
+            serde_json::json!([
+                group["group"],
+                group["target_kind"],
+                group["target"],
+                group["expected_tests"]
+            ])
+        })
+        .collect();
+    assert_eq!(
+        identities,
+        serde_json::json!([
+            ["wgpu-lib", "lib", "workspace libraries", 10],
+            ["tight", "test", "hardware_tight", 4],
+            ["formula", "test", "hardware_formula", 2],
+            ["aggregate", "test", "hardware_aggregate", 3],
+            ["lazy", "test", "hardware_lazy", 4],
+            ["cli-lazy", "test", "lazy_gpu", 5],
+            ["cli-formula", "test", "formula_gpu", 2],
+            ["world-views", "test", "world_views_gpu", 4],
+            ["aggregate-measurement", "test", "aggregate_measurement", 1],
+            ["relation", "test", "hardware_relation", 2],
+            ["relation-measurement", "test", "relation_measurement", 1],
+            ["context", "test", "hardware_context", 1],
+            ["solve-context", "lib", "workspace libraries", 3],
+            ["session-resources", "test", "session_resources_gpu", 5],
+            ["language-consumers", "test", "language_consumers", 2]
+        ])
+        .as_array()
+        .unwrap()
+        .as_slice()
+    );
+    let language_tests = serde_json::json!([
+        "physical::metal_families_retain_scored_observations",
+        "physical::metal_optimum_ties_retain_full_answers"
+    ]);
+    assert_eq!(groups[14]["tests"], language_tests);
+    let tests = record["physical_tests"].as_array().unwrap();
+    assert_eq!(tests.len(), 49);
+    assert_eq!(&tests[47..], language_tests.as_array().unwrap().as_slice());
+    let scope = record["physical_scope"].as_str().unwrap();
+    assert!(scope.starts_with("49 exact Metal tests: "));
+    assert!(
+        scope.contains(
+            "combined language-consumer families with scored observations and optimum ties"
+        )
+    );
+    assert!(scope.ends_with("Unlisted tests and Vulkan are not selected."));
 }
 #[test]
 fn portable_metadata_makes_no_physical_claim() {
