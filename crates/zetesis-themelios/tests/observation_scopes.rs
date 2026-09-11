@@ -360,3 +360,16 @@ fn extremum_elements_require_a_measure_at_admission() {
         assert!(error.location().is_some());
     }
 }
+
+#[test]
+fn aggregate_tuple_pools_preserve_distinct_alternatives() {
+    assert_eq!(rendered("#show. #show x:#count{(1;2)}=2."), "x");
+}
+#[test]
+fn local_ranges_generate_the_aggregate_tuple_family() {
+    assert_eq!(rendered("#show. #show x:#sum{X:X=1..3}=6."), "x");
+}
+#[test]
+fn conditional_ranges_quantify_over_each_generated_binding() {
+    assert_eq!(rendered("p(1).p(2). #show. #show x:p(X):X=1..2."), "x");
+}

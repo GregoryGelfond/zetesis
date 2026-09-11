@@ -17,7 +17,7 @@ fn symbol(value: &Value, work: &mut Work<'_>) -> Result<Symbol, Error> {
     work.construction_check(metric)?;
     work.copy_reference(Reference::Value(value))
 }
-fn own(value: &Symbol, work: &mut Work<'_>) -> Result<(Symbol, Metric), Error> {
+pub(super) fn own(value: &Symbol, work: &mut Work<'_>) -> Result<(Symbol, Metric), Error> {
     let mut metric = Metric::default();
     work.symbol_check(value, 1, &mut metric)?;
     work.construction_check(metric)?;

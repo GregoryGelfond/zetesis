@@ -2,6 +2,7 @@
 
 mod scopes;
 mod patterns;
+mod values;
 
 use std::cmp::Ordering;
 
@@ -278,6 +279,9 @@ impl Work<'_> {
                 )?;
                 metric.nodes += 1;
             }
+            Template::Pool(_) | Template::Interval(_, _) => {
+                unreachable!("finite alternatives use the expansion evaluator")
+            }
             Template::Function(_, _, arguments) | Template::Tuple(arguments) => {
                 self.check(
                     Resource::Nodes,
@@ -365,6 +369,9 @@ impl Work<'_> {
             }
             Template::Unary(_, _) | Template::Binary(_, _, _) | Template::Absolute(_) => {
                 Symbol::Number(self.numeric(term, binding)?)
+            }
+            Template::Pool(_) | Template::Interval(_, _) => {
+                unreachable!("finite alternatives use the expansion evaluator")
             }
             Template::Function(_, _, arguments) | Template::Tuple(arguments) => {
                 let mut values = self.reserve(arguments.len())?;
@@ -652,6 +659,18 @@ fn complete<'a>(
     }
 }
 
+fn undo_slots(query: &Query, work: &Work<'_>) -> Result<Vec<Vec<usize>>, Error> {
+    let mut undos = work.reserve(query.binders.len())?;
+    for binder in &query.binders {
+        let count = match binder {
+            Binder::Atom(pattern) => pattern.terms.iter().map(patterns::slots).sum(),
+            Binder::Assign(_, _) => 1,
+        };
+        undos.push(work.reserve(count)?);
+    }
+    Ok(undos)
+}
+
 fn visit<'a>(
     query: &Query,
     atoms: &[&'a Atom],
@@ -667,20 +686,15 @@ fn visit<'a>(
             .map(|value| value.as_ref().map(|value| Bound::Borrowed(value.borrow()))),
     );
     binding.resize_with(query.variables, || None);
+    let mut alternatives: Vec<Option<values::Values>> = work.reserve(query.binders.len())?;
+    alternatives.resize_with(query.binders.len(), || None);
     let result = (|| {
         if query.binders.is_empty() {
             return complete(query, atoms, &mut binding, work, visitor);
         }
         let mut cursors = work.reserve(query.binders.len())?;
         cursors.resize(query.binders.len(), 0usize);
-        let mut undos: Vec<Vec<usize>> = work.reserve(query.binders.len())?;
-        for binder in &query.binders {
-            let count = match binder {
-                Binder::Atom(pattern) => pattern.terms.iter().map(patterns::slots).sum(),
-                Binder::Assign(_, _) => 1,
-            };
-            undos.push(work.reserve(count)?);
-        }
+        let mut undos = undo_slots(query, work)?;
         let mut depth = 0;
         loop {
             work.step(1 + undos[depth].len() as u128)?;
@@ -691,10 +705,20 @@ fn visit<'a>(
             }
             let count = match &query.binders[depth] {
                 Binder::Atom(_) => atoms.len(),
-                Binder::Assign(_, _) => 1,
+                Binder::Assign(_, expression) => {
+                    if expression.multiple() && alternatives[depth].is_none() {
+                        alternatives[depth] = Some(values::collect(expression, &binding, work)?);
+                    }
+                    alternatives[depth]
+                        .as_ref()
+                        .map_or(1, |values| values.values.len())
+                }
             };
             if cursors[depth] == count {
                 cursors[depth] = 0;
+                if let Some(values) = alternatives[depth].take() {
+                    work.local_bytes -= values.bytes;
+                }
                 if depth == 0 {
                     break;
                 }
@@ -717,7 +741,11 @@ fn visit<'a>(
                     }
                 }
                 Binder::Assign(slot, expression) => {
-                    let (value, metric) = work.own(expression, &binding)?;
+                    let (value, metric) = if let Some(values) = &alternatives[depth] {
+                        patterns::own(&values.values[cursor].0, work)?
+                    } else {
+                        work.own(expression, &binding)?
+                    };
                     binding[*slot] = Some(Bound::Owned(value, metric));
                     undos[depth].push(*slot);
                 }
@@ -734,6 +762,11 @@ fn visit<'a>(
     })();
     // The visitor may retain aggregate keys in its enclosing scope. Release only
     // this query's owned bindings, on success, early termination, and error alike.
+    work.local_bytes -= alternatives
+        .iter()
+        .flatten()
+        .map(|values| values.bytes)
+        .sum::<u128>();
     work.local_bytes -= binding
         .iter()
         .filter_map(|bound| match bound {
@@ -761,11 +794,9 @@ pub(super) fn terms(
     for directive in &program.directives {
         work.location = directive.origins.first().copied();
         visit(&directive.query, &atoms, &[], work, &mut |binding, work| {
-            let mut metric = Metric::default();
-            work.measure(&directive.term, binding, 1, &mut metric)?;
-            work.construction_check(metric)?;
-            let term = work.construct(&directive.term, binding)?;
-            insert(term, metric, &mut result, &mut bytes, work)?;
+            values::each(&directive.term, binding, work, |term, metric, work| {
+                insert(term, metric, &mut result, &mut bytes, work)
+            })?;
             Ok(true)
         })?;
     }

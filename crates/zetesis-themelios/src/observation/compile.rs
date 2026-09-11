@@ -26,6 +26,8 @@ struct Compiler<'a> {
     origins: usize,
     variables: BTreeMap<String, usize>,
     safe: BTreeSet<usize>,
+    slots: usize,
+    generated: Vec<(usize, Template)>,
 }
 impl Compiler<'_> {
     fn error(&self, kind: ErrorKind) -> Error {
@@ -82,11 +84,12 @@ impl Compiler<'_> {
         }
         self.check(
             Resource::Variables,
-            self.variables.len().saturating_add(1),
+            self.slots.saturating_add(1),
             self.limits.max_variables as usize,
         )?;
         self.text(name.as_str())?;
-        let slot = self.variables.len();
+        let slot = self.slots;
+        self.slots += 1;
         self.variables.insert(name.as_str().to_owned(), slot);
         Ok(slot)
     }
@@ -162,6 +165,17 @@ impl Compiler<'_> {
             Term::Absolute(argument) => {
                 Template::Absolute(Box::new(self.template(argument, depth + 1)?))
             }
+            Term::Pool(arguments) => {
+                let mut values = Vec::new();
+                for argument in arguments {
+                    values.push(self.template(argument, depth + 1)?);
+                }
+                Template::Pool(values)
+            }
+            Term::Interval { lower, upper } => Template::Interval(
+                Box::new(self.template(lower, depth + 1)?),
+                Box::new(self.template(upper, depth + 1)?),
+            ),
             Term::Tuple(arguments) => {
                 self.arity(arguments.len())?;
                 let mut terms = Vec::new();
@@ -170,7 +184,7 @@ impl Compiler<'_> {
                 }
                 Template::Tuple(terms)
             }
-            _ => return Err(self.unsupported(Feature::Term)),
+            Term::External { .. } => return Err(self.unsupported(Feature::Term)),
         })
     }
     fn function(
@@ -223,7 +237,10 @@ impl Compiler<'_> {
                 }
                 Operand::Tuple(values)
             }
-            _ => Operand::Expression(self.template(term, depth)?),
+            _ => {
+                let expression = self.template(term, depth)?;
+                Operand::Expression(self.lift(expression)?)
+            }
         })
     }
     fn operand_function(
@@ -269,10 +286,12 @@ impl Compiler<'_> {
             Template::Variable(slot) => self.safe.contains(slot),
             Template::Value(_) => true,
             Template::Unary(_, argument) | Template::Absolute(argument) => self.ready(argument),
-            Template::Binary(_, left, right) => self.ready(left) && self.ready(right),
-            Template::Function(_, _, arguments) | Template::Tuple(arguments) => {
-                arguments.iter().all(|argument| self.ready(argument))
+            Template::Binary(_, left, right) | Template::Interval(left, right) => {
+                self.ready(left) && self.ready(right)
             }
+            Template::Function(_, _, arguments)
+            | Template::Tuple(arguments)
+            | Template::Pool(arguments) => arguments.iter().all(|argument| self.ready(argument)),
         }
     }
     fn assignment(&self, condition: &Condition) -> Option<(usize, bool)> {
@@ -314,6 +333,20 @@ impl Compiler<'_> {
             self.safe.insert(slot);
         }
     }
+    fn lift(&mut self, term: Template) -> Result<Template, Error> {
+        if !term.multiple() {
+            return Ok(term);
+        }
+        self.check(
+            Resource::Variables,
+            self.slots.saturating_add(1),
+            self.limits.max_variables as usize,
+        )?;
+        let slot = self.slots;
+        self.slots += 1;
+        self.generated.push((slot, term));
+        Ok(Template::Variable(slot))
+    }
     fn test(&mut self, literal: &themelios_program::program::Literal) -> Result<Condition, Error> {
         Ok(match &literal.inner {
             LiteralInner::Atom(atom) => {
@@ -321,9 +354,11 @@ impl Compiler<'_> {
             }
             LiteralInner::Comparison(comparison) => {
                 let first = self.template(comparison.get().first(), 1)?;
+                let first = self.lift(first)?;
                 let mut steps = Vec::new();
                 for (relation, right) in comparison.get().steps() {
-                    steps.push((relation, self.template(right, 1)?));
+                    let right = self.template(right, 1)?;
+                    steps.push((relation, self.lift(right)?));
                 }
                 Condition::Compare(literal.negation, first, steps)
             }
@@ -376,6 +411,7 @@ impl Compiler<'_> {
         mut conditions: Vec<Condition>,
     ) -> Result<Query, Error> {
         let mut binders = Vec::new();
+        let mut generated = std::mem::take(&mut self.generated);
         loop {
             if let Some(index) = positive
                 .iter()
@@ -388,6 +424,15 @@ impl Compiler<'_> {
                 binders.push(Binder::Atom(pattern));
                 continue;
             }
+            if let Some(index) = generated
+                .iter()
+                .position(|(_, expression)| self.ready(expression))
+            {
+                let (slot, expression) = generated.remove(index);
+                self.safe.insert(slot);
+                binders.push(Binder::Assign(slot, expression));
+                continue;
+            }
             let before = binders.len();
             self.assignments(&mut conditions, &mut binders);
             if before == binders.len() {
@@ -395,6 +440,7 @@ impl Compiler<'_> {
             }
         }
         if !positive.is_empty()
+            || !generated.is_empty()
             || self
                 .variables
                 .values()
@@ -405,7 +451,7 @@ impl Compiler<'_> {
         Ok(Query {
             binders,
             conditions,
-            variables: self.variables.len(),
+            variables: self.slots,
         })
     }
     fn directive(
@@ -416,6 +462,8 @@ impl Compiler<'_> {
     ) -> Result<Directive, Error> {
         self.variables.clear();
         self.safe.clear();
+        self.slots = 0;
+        self.generated.clear();
         let term = self.template(term, 1)?;
         let mut positive = Vec::new();
         let mut conditions = Vec::new();
@@ -508,6 +556,8 @@ pub(crate) fn compile(
         origins: 0,
         variables: BTreeMap::new(),
         safe: BTreeSet::new(),
+        slots: 0,
+        generated: Vec::new(),
     };
     let mut result = ObservationProgram::default();
     for entry in source.statements() {

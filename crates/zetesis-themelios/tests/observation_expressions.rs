@@ -278,3 +278,82 @@ fn failed_nested_matches_release_their_partial_bindings() {
         &[zetesis_themelios::observation::Symbol::Number(3)]
     );
 }
+
+#[test]
+fn finite_intervals_construct_each_integer_inclusively() {
+    assert_eq!(terms("#show. #show 1..3."), ["1", "2", "3"]);
+}
+#[test]
+fn pools_deduplicate_only_after_expanding_the_term_channel() {
+    assert_eq!(terms("#show. #show (1;2;1)."), ["1", "2"]);
+}
+#[test]
+fn constructors_take_the_cartesian_product_of_finite_arguments() {
+    assert_eq!(
+        terms("#show. #show f((1;2),(3;4))."),
+        ["f(1,3)", "f(1,4)", "f(2,3)", "f(2,4)"]
+    );
+}
+#[test]
+fn an_empty_range_does_not_remove_other_pool_alternatives() {
+    assert_eq!(terms("#show. #show (3..1;7;9..10)."), ["7", "9", "10"]);
+}
+#[test]
+fn finite_ranges_bind_variables_in_dependency_order() {
+    assert_eq!(
+        terms("#show. #show (X,Y):Y=X+1,X=1..2."),
+        ["(1,2)", "(2,3)"]
+    );
+}
+#[test]
+fn arithmetic_uses_each_selected_interval_value() {
+    assert_eq!(terms("#show. #show (1..2)+3."), ["4", "5"]);
+}
+#[test]
+fn finite_arguments_are_evaluated_in_observation_atoms() {
+    assert_eq!(terms("p(2). #show. #show x:p(1..2)."), ["x"]);
+}
+#[test]
+fn a_pool_comparison_enables_each_matching_source_expansion() {
+    assert_eq!(terms("#show. #show x:1=(1;2)."), ["x"]);
+}
+#[test]
+fn generated_alternatives_have_an_inclusive_payload_ceiling() {
+    let input = admit("#show. #show (1;2).");
+    let run = |max_local_bytes| {
+        input.metadata().observations().evaluate(
+            &Model::default(),
+            Limits {
+                max_local_bytes,
+                ..Limits::default()
+            },
+            &Control::default(),
+        )
+    };
+    assert_eq!(run(32).unwrap().symbols().len(), 2);
+    assert!(matches!(
+        run(31).unwrap_err().kind(),
+        ErrorKind::Limit {
+            resource: Resource::LocalBytes,
+            observed: 32,
+            ..
+        }
+    ));
+}
+#[test]
+fn independent_directives_release_their_finite_alternatives() {
+    let input = admit("#show. #show (1;2). #show (3;4).");
+    let result = input
+        .metadata()
+        .observations()
+        .evaluate(
+            &Model::default(),
+            Limits {
+                max_local_bytes: 32,
+                ..Limits::default()
+            },
+            &Control::default(),
+        )
+        .unwrap();
+    assert_eq!(result.symbols().len(), 4);
+}

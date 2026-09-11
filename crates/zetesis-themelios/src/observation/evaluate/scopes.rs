@@ -132,13 +132,12 @@ pub(super) fn aggregate(
     let result = (|| {
         for element in &query.elements {
             visit(&element.query, atoms, outer, work, &mut |binding, work| {
-                let mut metric = Metric::default();
-                work.measure(&element.tuple, binding, 1, &mut metric)?;
-                work.construction_check(metric)?;
-                let tuple = work.construct(&element.tuple, binding)?;
-                if eligible(query.function, &tuple) {
-                    key(tuple, metric, &mut keys, work)?;
-                }
+                super::values::each(&element.tuple, binding, work, |tuple, metric, work| {
+                    if eligible(query.function, &tuple) {
+                        key(tuple, metric, &mut keys, work)?;
+                    }
+                    Ok(())
+                })?;
                 Ok(true)
             })?;
         }

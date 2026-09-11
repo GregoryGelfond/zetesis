@@ -24,15 +24,17 @@ impl Compiler<'_> {
                 Relation::Ge => Relation::Le,
                 other => other,
             };
+            let bound = self.template(&left.get().term, 1)?;
             guards.push(Guard {
                 relation,
-                bound: self.template(&left.get().term, 1)?,
+                bound: self.lift(bound)?,
             });
         }
         if let Some(right) = guarded.right_guard() {
+            let bound = self.template(&right.get().term, 1)?;
             guards.push(Guard {
                 relation: right.get().relation.unwrap_or(Relation::Le),
-                bound: self.template(&right.get().term, 1)?,
+                bound: self.lift(bound)?,
             });
         }
         Ok(guards)
@@ -40,9 +42,13 @@ impl Compiler<'_> {
     fn local<T>(&mut self, action: impl FnOnce(&mut Self) -> Result<T, Error>) -> Result<T, Error> {
         let variables = self.variables.clone();
         let safe = self.safe.clone();
+        let slots = self.slots;
+        let generated = std::mem::take(&mut self.generated);
         let result = action(self);
         self.variables = variables;
         self.safe = safe;
+        self.slots = slots;
+        self.generated = generated;
         result
     }
     fn literals(

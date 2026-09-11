@@ -37,7 +37,7 @@ pub struct AdmissionLimits {
     pub max_depth: u32,
     /// Cumulative owned text payload.
     pub max_bytes: u32,
-    /// Named variables in each directive-local scope.
+    /// Named and generated binding slots in each directive-local scope.
     pub max_variables: u32,
     /// Body conditions per directive.
     pub max_body_elements: u32,
@@ -79,7 +79,8 @@ pub struct Limits {
     /// Retained term payload (16 bytes/node plus UTF-8 text; excluding allocator
     /// overhead) and complete rendered line bytes, each independently.
     pub max_output_bytes: usize,
-    /// Simultaneously retained owned bindings and aggregate tuple keys, measured
+    /// Simultaneously retained generated expression alternatives, owned bindings,
+    /// and aggregate tuple keys, measured
     /// as 16 bytes per semantic node plus UTF-8 text. Borrowed model values,
     /// container capacity and allocator overhead are excluded; this is not RSS.
     /// Storage is released when its local query or key scope ends.
@@ -161,7 +162,7 @@ pub enum Resource {
 /// A source form outside this observation slice.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Feature {
-    /// Intervals, pools or external calls.
+    /// External calls cannot be evaluated by a pure observation query.
     Term,
     /// Anonymous variables cannot occur in the output term.
     AnonymousOutput,
@@ -251,6 +252,21 @@ enum Template {
     Unary(UnaryOp, Box<Self>),
     Binary(BinaryOp, Box<Self>, Box<Self>),
     Absolute(Box<Self>),
+    Pool(Vec<Self>),
+    Interval(Box<Self>, Box<Self>),
+}
+impl Template {
+    fn multiple(&self) -> bool {
+        match self {
+            Self::Pool(_) | Self::Interval(_, _) => true,
+            Self::Unary(_, argument) | Self::Absolute(argument) => argument.multiple(),
+            Self::Binary(_, left, right) => left.multiple() || right.multiple(),
+            Self::Function(_, _, arguments) | Self::Tuple(arguments) => {
+                arguments.iter().any(Self::multiple)
+            }
+            Self::Value(_) | Self::Variable(_) => false,
+        }
+    }
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Operand {
