@@ -204,6 +204,7 @@ pub(super) fn render(
         construction,
         control,
         statistics: Statistics::default(),
+        local_bytes: 0,
         location: None,
     };
     let symbols = terms(program, model, &mut work)?;

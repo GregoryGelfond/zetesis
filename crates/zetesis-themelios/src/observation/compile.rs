@@ -8,8 +8,9 @@ use themelios_program::symbol::{Name, Sign, Symbol};
 use themelios_program::term::{Term, Variable};
 
 use super::{
-    AdmissionLimits, Condition, DefaultNegation, Directive, Error, ErrorKind, Feature,
-    ObservationProgram, Operand, Pattern, Predicate, Resource, Statistics, Template,
+    AdmissionLimits, Binder, Condition, DefaultNegation, Directive, Error, ErrorKind, Feature,
+    ObservationProgram, Operand, Pattern, Predicate, Query, Relation, Resource, Statistics,
+    Template,
 };
 use crate::expansion::Budget;
 use crate::{AdmissionOptions, FormulaFailure};
@@ -232,6 +233,56 @@ impl Compiler<'_> {
         .map_err(|_| self.error(ErrorKind::InvalidSymbol))?;
         Ok(Pattern { predicate, terms })
     }
+    fn ready(&self, term: &Template) -> bool {
+        match term {
+            Template::Variable(slot) => self.safe.contains(slot),
+            Template::Value(_) => true,
+            Template::Unary(_, argument) | Template::Absolute(argument) => self.ready(argument),
+            Template::Binary(_, left, right) => self.ready(left) && self.ready(right),
+            Template::Function(_, _, arguments) | Template::Tuple(arguments) => {
+                arguments.iter().all(|argument| self.ready(argument))
+            }
+        }
+    }
+    fn assignment(&self, condition: &Condition) -> Option<(usize, bool)> {
+        let Condition::Compare(DefaultNegation::None, left, steps) = condition else {
+            return None;
+        };
+        let [(Relation::Eq, right)] = steps.as_slice() else {
+            return None;
+        };
+        if let Template::Variable(slot) = left
+            && !self.safe.contains(slot)
+            && self.ready(right)
+        {
+            return Some((*slot, true));
+        }
+        if let Template::Variable(slot) = right
+            && !self.safe.contains(slot)
+            && self.ready(left)
+        {
+            return Some((*slot, false));
+        }
+        None
+    }
+    fn assignments(&mut self, conditions: &mut Vec<Condition>, binders: &mut Vec<Binder>) {
+        while let Some((index, slot, forward)) =
+            conditions
+                .iter()
+                .enumerate()
+                .find_map(|(index, condition)| {
+                    self.assignment(condition)
+                        .map(|(slot, forward)| (index, slot, forward))
+                })
+        {
+            let Condition::Compare(_, left, mut steps) = conditions.remove(index) else {
+                unreachable!()
+            };
+            let expression = if forward { steps.remove(0).1 } else { left };
+            binders.push(Binder::Assign(slot, expression));
+            self.safe.insert(slot);
+        }
+    }
     fn directive(
         &mut self,
         term: &Term,
@@ -281,6 +332,8 @@ impl Compiler<'_> {
                 }
             }
         }
+        let mut binders: Vec<_> = positive.into_iter().map(Binder::Atom).collect();
+        self.assignments(&mut conditions, &mut binders);
         if self
             .variables
             .values()
@@ -290,9 +343,11 @@ impl Compiler<'_> {
         }
         Ok(Directive {
             term,
-            positive,
-            conditions,
-            variables: self.variables.len(),
+            query: Query {
+                binders,
+                conditions,
+                variables: self.variables.len(),
+            },
             origins,
         })
     }

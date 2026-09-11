@@ -66,7 +66,7 @@ impl Default for AdmissionLimits {
 pub struct Limits {
     /// Charged scalar/key comparisons, scans, construction, and rendering work.
     pub max_work: u64,
-    /// Complete positive relational bindings inspected.
+    /// Completed substitutions inspected in outer directives and local queries.
     pub max_bindings: u64,
     /// Distinct enabled shown terms.
     pub max_terms: usize,
@@ -79,6 +79,11 @@ pub struct Limits {
     /// Retained term payload (16 bytes/node plus UTF-8 text; excluding allocator
     /// overhead) and complete rendered line bytes, each independently.
     pub max_output_bytes: usize,
+    /// Simultaneously retained owned bindings and aggregate tuple keys, measured
+    /// as 16 bytes per semantic node plus UTF-8 text. Borrowed model values,
+    /// container capacity and allocator overhead are excluded; this is not RSS.
+    /// Storage is released when its local query or key scope ends.
+    pub max_local_bytes: usize,
 }
 impl Default for Limits {
     fn default() -> Self {
@@ -90,6 +95,7 @@ impl Default for Limits {
             max_symbol_depth: 64,
             max_symbol_bytes: 1_048_576,
             max_output_bytes: 8_388_608,
+            max_local_bytes: 8_388_608,
         }
     }
 }
@@ -140,7 +146,7 @@ pub enum Resource {
     Origins,
     /// Runtime charged work.
     Work,
-    /// Complete positive bindings.
+    /// Completed outer or local substitutions.
     Bindings,
     /// Unique enabled output terms.
     Terms,
@@ -148,6 +154,8 @@ pub enum Resource {
     OutputBytes,
     /// Conservative per-symbol construction cells, text and conversion stack.
     ConstructionBytes,
+    /// Live owned bindings and local aggregate tuple payload.
+    LocalBytes,
 }
 
 /// A source form outside this observation slice.
@@ -197,7 +205,7 @@ pub enum ErrorKind {
 pub struct Statistics {
     /// Charged operations including text/key payload comparisons.
     pub work: u64,
-    /// Complete positive relational substitutions examined.
+    /// Completed outer or local substitutions examined.
     pub bindings: u64,
 }
 
@@ -260,11 +268,20 @@ enum Condition {
     Boolean(bool),
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct Directive {
-    term: Template,
-    positive: Vec<Pattern>,
+enum Binder {
+    Atom(Pattern),
+    Assign(usize, Template),
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Query {
+    binders: Vec<Binder>,
     conditions: Vec<Condition>,
     variables: usize,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Directive {
+    term: Template,
+    query: Query,
     origins: Vec<Location>,
 }
 

@@ -8,8 +8,8 @@ use themelios_program::term::UnaryOp;
 use zetesis_core::Atom;
 
 use super::{
-    Condition, ConstructionLimits, Control, DefaultNegation, Directive, Error, ErrorKind,
-    Evaluation, EvaluationError, Limits, Model, ObservationProgram, Operand, Pattern, Relation,
+    Binder, Condition, ConstructionLimits, Control, DefaultNegation, Error, ErrorKind, Evaluation,
+    EvaluationError, Limits, Model, ObservationProgram, Operand, Pattern, Query, Relation,
     Resource, Statistics, Symbol, Template, Value,
 };
 
@@ -19,6 +19,7 @@ pub(super) struct Work<'a> {
     pub control: &'a Control,
     pub statistics: Statistics,
     pub location: Option<Location>,
+    pub local_bytes: u128,
 }
 impl Work<'_> {
     pub fn error(&self, kind: ErrorKind) -> Error {
@@ -58,12 +59,15 @@ impl Work<'_> {
         self.step(value_work(left) + value_work(right))?;
         Ok(left.compare_terms(right))
     }
-    fn numeric(&mut self, term: &Template, binding: &[Option<&Value>]) -> Result<i32, Error> {
+    fn numeric(&mut self, term: &Template, binding: &[Option<Bound<'_>>]) -> Result<i32, Error> {
         self.step(1)?;
         let result = match term {
             Template::Value(Symbol::Number(value)) => Ok(*value),
-            Template::Variable(slot) => match binding[*slot] {
-                Some(Value::Number(value)) => Ok(*value),
+            Template::Variable(slot) => match binding[*slot].as_ref().map(Bound::borrow) {
+                Some(
+                    Reference::Value(Value::Number(value))
+                    | Reference::Symbol(Symbol::Number(value)),
+                ) => Ok(*value),
                 _ => Err(EvaluationError::Undefined),
             },
             Template::Unary(operator, argument) => {
@@ -96,7 +100,7 @@ impl Work<'_> {
         &mut self,
         left: &Template,
         right: &Template,
-        binding: &[Option<&Value>],
+        binding: &[Option<Bound<'_>>],
     ) -> Result<Ordering, Error> {
         let mut left_metric = Metric::default();
         let mut right_metric = Metric::default();
@@ -110,6 +114,76 @@ impl Work<'_> {
         let right = self.construct(right, binding)?;
         self.step(left_metric.payload() + right_metric.payload())?;
         Ok(left.cmp(&right))
+    }
+    fn measure_reference(
+        &mut self,
+        value: Reference<'_>,
+        depth: usize,
+        metric: &mut Metric,
+    ) -> Result<(), Error> {
+        match value {
+            Reference::Symbol(value) => self.symbol_check(value, depth, metric),
+            Reference::Value(value) => {
+                let count = if let Value::Structured(value) = value {
+                    self.check(
+                        Resource::Depth,
+                        depth as u128 + value.depth() as u128 - 1,
+                        self.limits.max_symbol_depth as u128,
+                    )?;
+                    self.step(value.nodes().len() as u128)?;
+                    value.nodes().len()
+                } else {
+                    1
+                };
+                self.check(
+                    Resource::Nodes,
+                    metric.nodes as u128 + count as u128,
+                    self.limits.max_symbol_nodes as u128,
+                )?;
+                metric.nodes += count;
+                self.payload(scalar_bytes(value), metric)
+            }
+        }
+    }
+    fn copy_reference(&mut self, value: Reference<'_>) -> Result<Symbol, Error> {
+        match value {
+            Reference::Symbol(value) => self.copy_symbol(value),
+            Reference::Value(value) => scalar(value).map_err(|kind| self.error(kind)),
+        }
+    }
+    fn compare_reference(
+        &mut self,
+        left: Reference<'_>,
+        right: Reference<'_>,
+    ) -> Result<Ordering, Error> {
+        if let (Reference::Value(left), Reference::Value(right)) = (left, right) {
+            return self.compare(left, right);
+        }
+        let mut metric = Metric::default();
+        self.measure_reference(left, 1, &mut metric)?;
+        self.measure_reference(right, 1, &mut metric)?;
+        self.construction_check(metric)?;
+        let left = self.copy_reference(left)?;
+        let right = self.copy_reference(right)?;
+        self.step(metric.payload())?;
+        Ok(left.cmp(&right))
+    }
+    fn own(
+        &mut self,
+        term: &Template,
+        binding: &[Option<Bound<'_>>],
+    ) -> Result<(Symbol, Metric), Error> {
+        let mut metric = Metric::default();
+        self.measure(term, binding, 1, &mut metric)?;
+        self.construction_check(metric)?;
+        self.check(
+            Resource::LocalBytes,
+            self.local_bytes + metric.payload(),
+            self.limits.max_local_bytes as u128,
+        )?;
+        let symbol = self.construct(term, binding)?;
+        self.local_bytes += metric.payload();
+        Ok((symbol, metric))
     }
     fn symbol_check(
         &mut self,
@@ -162,7 +236,7 @@ impl Work<'_> {
     fn measure(
         &mut self,
         term: &Template,
-        binding: &[Option<&Value>],
+        binding: &[Option<Bound<'_>>],
         depth: usize,
         metric: &mut Metric,
     ) -> Result<(), Error> {
@@ -175,26 +249,14 @@ impl Work<'_> {
         match term {
             Template::Value(symbol) => self.symbol_check(symbol, depth, metric)?,
             Template::Variable(slot) => {
-                let value =
-                    binding[*slot].expect("compiled observation variable has a positive binder");
-                let count = if let Value::Structured(value) = value {
-                    self.check(
-                        Resource::Depth,
-                        depth as u128 + value.depth() as u128 - 1,
-                        self.limits.max_symbol_depth as u128,
-                    )?;
-                    self.step(value.nodes().len() as u128)?;
-                    value.nodes().len()
-                } else {
-                    1
-                };
-                self.check(
-                    Resource::Nodes,
-                    metric.nodes as u128 + count as u128,
-                    self.limits.max_symbol_nodes as u128,
+                self.measure_reference(
+                    binding[*slot]
+                        .as_ref()
+                        .expect("safe observation variable")
+                        .borrow(),
+                    depth,
+                    metric,
                 )?;
-                metric.nodes += count;
-                self.payload(scalar_bytes(value), metric)?;
             }
             Template::Unary(UnaryOp::Negate, argument) => {
                 self.measure(argument, binding, depth, metric)?;
@@ -262,12 +324,20 @@ impl Work<'_> {
 
     // Measurement precedes every clone/allocation in this construction. Compiled
     // template recursion is capped at 64; bound structured values convert iteratively.
-    fn construct(&mut self, term: &Template, binding: &[Option<&Value>]) -> Result<Symbol, Error> {
+    fn construct(
+        &mut self,
+        term: &Template,
+        binding: &[Option<Bound<'_>>],
+    ) -> Result<Symbol, Error> {
         self.step(0)?;
         Ok(match term {
             Template::Value(symbol) => self.copy_symbol(symbol)?,
-            Template::Variable(slot) => scalar(binding[*slot].expect("safe observation variable"))
-                .map_err(|kind| self.error(kind))?,
+            Template::Variable(slot) => self.copy_reference(
+                binding[*slot]
+                    .as_ref()
+                    .expect("safe observation variable")
+                    .borrow(),
+            )?,
             Template::Unary(UnaryOp::Negate, argument) => {
                 let mut value = self.construct(argument, binding)?;
                 match &mut value {
@@ -362,17 +432,34 @@ pub(super) fn scalar(value: &Value) -> Result<Symbol, ErrorKind> {
         },
     })
 }
-fn resolve<'a>(operand: &'a Operand, binding: &[Option<&'a Value>]) -> Option<&'a Value> {
+#[derive(Clone, Copy)]
+enum Reference<'a> {
+    Value(&'a Value),
+    Symbol(&'a Symbol),
+}
+enum Bound<'a> {
+    Borrowed(Reference<'a>),
+    Owned(Symbol, Metric),
+}
+impl Bound<'_> {
+    fn borrow(&self) -> Reference<'_> {
+        match self {
+            Self::Borrowed(reference) => *reference,
+            Self::Owned(symbol, _) => Reference::Symbol(symbol),
+        }
+    }
+}
+fn resolve<'a>(operand: &'a Operand, binding: &'a [Option<Bound<'_>>]) -> Option<Reference<'a>> {
     match operand {
-        Operand::Value(value) => Some(value),
-        Operand::Variable(slot) => binding[*slot],
+        Operand::Value(value) => Some(Reference::Value(value)),
+        Operand::Variable(slot) => binding[*slot].as_ref().map(Bound::borrow),
         Operand::Any => None,
     }
 }
 fn matches<'a>(
-    pattern: &'a Pattern,
+    pattern: &Pattern,
     atom: &'a Atom,
-    binding: &mut [Option<&'a Value>],
+    binding: &mut [Option<Bound<'a>>],
     undo: &mut Vec<usize>,
     bind: bool,
     work: &mut Work<'_>,
@@ -384,24 +471,24 @@ fn matches<'a>(
     for (term, value) in pattern.terms.iter().zip(atom.values()) {
         work.step(1)?;
         if let Some(expected) = resolve(term, binding) {
-            if work.compare(expected, value)? != Ordering::Equal {
+            if work.compare_reference(expected, Reference::Value(value))? != Ordering::Equal {
                 return Ok(false);
             }
         } else if let Operand::Variable(slot) = term {
             debug_assert!(bind, "only positive patterns bind variables");
-            binding[*slot] = Some(value);
+            binding[*slot] = Some(Bound::Borrowed(Reference::Value(value)));
             undo.push(*slot);
         }
     }
     Ok(true)
 }
 fn conditions<'a>(
-    directive: &'a Directive,
+    query: &Query,
     atoms: &[&'a Atom],
-    binding: &mut [Option<&'a Value>],
+    binding: &mut [Option<Bound<'a>>],
     work: &mut Work<'_>,
 ) -> Result<bool, Error> {
-    for condition in &directive.conditions {
+    for condition in &query.conditions {
         work.step(1)?;
         match condition {
             Condition::Atom(negation, pattern) => {
@@ -480,14 +567,15 @@ fn insert(
     result.insert(lower, (term, metric));
     Ok(())
 }
-fn emit<'a>(
-    directive: &'a Directive,
+type Visitor<'a> = dyn FnMut(&[Option<Bound<'_>>], &mut Work<'_>) -> Result<bool, Error> + 'a;
+
+fn complete<'a>(
+    query: &Query,
     atoms: &[&'a Atom],
-    binding: &mut [Option<&'a Value>],
-    result: &mut Vec<(Symbol, Metric)>,
-    bytes: &mut u128,
+    binding: &mut [Option<Bound<'a>>],
     work: &mut Work<'_>,
-) -> Result<(), Error> {
+    visitor: &mut Visitor<'_>,
+) -> Result<bool, Error> {
     work.step(1)?;
     work.check(
         Resource::Bindings,
@@ -495,14 +583,100 @@ fn emit<'a>(
         u128::from(work.limits.max_bindings),
     )?;
     work.statistics.bindings += 1;
-    if conditions(directive, atoms, binding, work)? {
-        let mut metric = Metric::default();
-        work.measure(&directive.term, binding, 1, &mut metric)?;
-        work.construction_check(metric)?;
-        let term = work.construct(&directive.term, binding)?;
-        insert(term, metric, result, bytes, work)?;
+    if conditions(query, atoms, binding, work)? {
+        visitor(binding, work)
+    } else {
+        Ok(true)
     }
-    Ok(())
+}
+
+fn visit<'a>(
+    query: &Query,
+    atoms: &[&'a Atom],
+    outer: &'a [Option<Bound<'a>>],
+    work: &mut Work<'_>,
+    visitor: &mut Visitor<'_>,
+) -> Result<bool, Error> {
+    work.step(1 + query.variables as u128 + query.binders.len() as u128)?;
+    let mut binding = work.reserve(query.variables)?;
+    binding.extend(
+        outer
+            .iter()
+            .map(|value| value.as_ref().map(|value| Bound::Borrowed(value.borrow()))),
+    );
+    binding.resize_with(query.variables, || None);
+    let mut owned_bytes = 0;
+    let result = (|| {
+        if query.binders.is_empty() {
+            return complete(query, atoms, &mut binding, work, visitor);
+        }
+        let mut cursors = work.reserve(query.binders.len())?;
+        cursors.resize(query.binders.len(), 0usize);
+        let mut undos: Vec<Vec<usize>> = work.reserve(query.binders.len())?;
+        for binder in &query.binders {
+            let count = match binder {
+                Binder::Atom(pattern) => pattern.terms.len(),
+                Binder::Assign(_, _) => 1,
+            };
+            undos.push(work.reserve(count)?);
+        }
+        let mut depth = 0;
+        loop {
+            work.step(1 + undos[depth].len() as u128)?;
+            for slot in undos[depth].drain(..) {
+                if let Some(Bound::Owned(_, metric)) = binding[slot].take() {
+                    work.local_bytes -= metric.payload();
+                    owned_bytes -= metric.payload();
+                }
+            }
+            let count = match &query.binders[depth] {
+                Binder::Atom(_) => atoms.len(),
+                Binder::Assign(_, _) => 1,
+            };
+            if cursors[depth] == count {
+                cursors[depth] = 0;
+                if depth == 0 {
+                    break;
+                }
+                depth -= 1;
+                continue;
+            }
+            let cursor = cursors[depth];
+            cursors[depth] += 1;
+            match &query.binders[depth] {
+                Binder::Atom(pattern) => {
+                    if !matches(
+                        pattern,
+                        atoms[cursor],
+                        &mut binding,
+                        &mut undos[depth],
+                        true,
+                        work,
+                    )? {
+                        continue;
+                    }
+                }
+                Binder::Assign(slot, expression) => {
+                    let (value, metric) = work.own(expression, &binding)?;
+                    owned_bytes += metric.payload();
+                    binding[*slot] = Some(Bound::Owned(value, metric));
+                    undos[depth].push(*slot);
+                }
+            }
+            if depth + 1 == query.binders.len() {
+                if !complete(query, atoms, &mut binding, work, visitor)? {
+                    return Ok(false);
+                }
+            } else {
+                depth += 1;
+            }
+        }
+        Ok(true)
+    })();
+    // The visitor may retain aggregate keys in its enclosing scope. Release only
+    // this query's owned bindings, on success, early termination, and error alike.
+    work.local_bytes -= owned_bytes;
+    result
 }
 
 pub(super) fn terms(
@@ -521,66 +695,14 @@ pub(super) fn terms(
     let mut bytes = 0;
     for directive in &program.directives {
         work.location = directive.origins.first().copied();
-        work.step(1 + directive.variables as u128 + directive.positive.len() as u128)?;
-        let mut binding = work.reserve(directive.variables)?;
-        binding.resize(directive.variables, None);
-        if directive.positive.is_empty() {
-            emit(
-                directive,
-                &atoms,
-                &mut binding,
-                &mut result,
-                &mut bytes,
-                work,
-            )?;
-            continue;
-        }
-        let mut cursors = work.reserve(directive.positive.len())?;
-        cursors.resize(directive.positive.len(), 0usize);
-        let mut undos = work.reserve(directive.positive.len())?;
-        for pattern in &directive.positive {
-            undos.push(work.reserve(pattern.terms.len())?);
-        }
-        let mut depth = 0;
-        loop {
-            work.step(1)?;
-            work.step(undos[depth].len() as u128)?;
-            for slot in undos[depth].drain(..) {
-                binding[slot] = None;
-            }
-            if cursors[depth] == atoms.len() {
-                cursors[depth] = 0;
-                if depth == 0 {
-                    break;
-                }
-                depth -= 1;
-                continue;
-            }
-            let atom = atoms[cursors[depth]];
-            cursors[depth] += 1;
-            if !matches(
-                &directive.positive[depth],
-                atom,
-                &mut binding,
-                &mut undos[depth],
-                true,
-                work,
-            )? {
-                continue;
-            }
-            if depth + 1 == directive.positive.len() {
-                emit(
-                    directive,
-                    &atoms,
-                    &mut binding,
-                    &mut result,
-                    &mut bytes,
-                    work,
-                )?;
-            } else {
-                depth += 1;
-            }
-        }
+        visit(&directive.query, &atoms, &[], work, &mut |binding, work| {
+            let mut metric = Metric::default();
+            work.measure(&directive.term, binding, 1, &mut metric)?;
+            work.construction_check(metric)?;
+            let term = work.construct(&directive.term, binding)?;
+            insert(term, metric, &mut result, &mut bytes, work)?;
+            Ok(true)
+        })?;
     }
     work.step(result.len() as u128)?;
     let mut symbols = work.reserve(result.len())?;
@@ -599,6 +721,7 @@ pub(super) fn evaluate(
         construction,
         control,
         statistics: Statistics::default(),
+        local_bytes: 0,
         location: None,
     };
     let symbols = terms(program, model, &mut work)?;

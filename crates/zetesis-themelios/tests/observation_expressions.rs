@@ -150,3 +150,72 @@ fn expression_observations_preserve_source_priority_presence() {
         shown.objectives().priorities()
     );
 }
+
+#[test]
+fn directed_equalities_are_ordered_by_their_dependencies() {
+    assert_eq!(
+        terms("#show. #show f(X,Y,Z):X=Y+1,Z=f(X),Y=2."),
+        ["f(3,2,f(3))"]
+    );
+}
+
+#[test]
+fn equality_binding_accepts_the_reversed_scalar_side() {
+    assert_eq!(terms("#show. #show X:2=X."), ["2"]);
+}
+
+#[test]
+fn generated_bindings_obey_the_live_local_payload_limit() {
+    let input = admit("#show. #show X:X=2.");
+    let run = |max_local_bytes| {
+        input.metadata().observations().evaluate(
+            &Model::default(),
+            Limits {
+                max_local_bytes,
+                ..Limits::default()
+            },
+            &Control::default(),
+        )
+    };
+    assert_eq!(run(16).unwrap().symbols().len(), 1);
+    assert!(matches!(
+        run(15).unwrap_err().kind(),
+        ErrorKind::Limit {
+            resource: Resource::LocalBytes,
+            observed: 16,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn completed_directives_release_their_owned_bindings() {
+    let input = admit("#show. #show X:X=2. #show Y:Y=3.");
+    let result = input
+        .metadata()
+        .observations()
+        .evaluate(
+            &Model::default(),
+            Limits {
+                max_local_bytes: 16,
+                ..Limits::default()
+            },
+            &Control::default(),
+        )
+        .unwrap();
+    assert_eq!(result.symbols().len(), 2);
+}
+
+#[test]
+fn circular_equalities_do_not_establish_a_finite_binding() {
+    let result = admit_formula(
+        "#show X:X=Y,Y=X.".into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    );
+    assert!(
+        matches!(result, Err(zetesis_themelios::FormulaFailure::Observation { error })
+        if error.kind() == &ErrorKind::Unsupported(zetesis_themelios::observation::Feature::UnsafeVariable))
+    );
+}
