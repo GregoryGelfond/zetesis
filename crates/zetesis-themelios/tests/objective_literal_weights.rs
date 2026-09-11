@@ -21,7 +21,8 @@ use zetesis_themelios::{
 };
 
 const CONDITION_CASES: &str = r##"{"name":"absent_condition","source":"#minimize{foo:a}.","records":[[[],null]]}
-{"name":"weak_condition","source":"{a}. :~a.[foo]","records":[[[],null],[["a"],null]]}"##;
+{"name":"weak_condition","source":"{a}. :~a.[foo]","records":[[[],null],[["a"],null]]}
+{"name":"ignored_absent_negative","source":"a.#minimize{foo@7:not a}.","records":[[["a"],null]]}"##;
 
 #[test]
 fn literal_conditions_preserve_complete_records() {
@@ -113,7 +114,6 @@ fn ignored_weights_do_not_hide_invalid_siblings() {
     for source in [
         "a.#minimize{foo@7;1@X:a}.",
         "a.#minimize{foo@7,X:a}.",
-        "a.#minimize{foo@7:not a}.",
         "a.#maximize{foo@7;-2147483648@3}.",
     ] {
         let error = admit(source, &FormulaLimits::default()).unwrap_err();
@@ -217,14 +217,15 @@ fn endpoint_priorities_supply_no_contribution() {
 }
 
 #[test]
-fn endpoint_tuple_components_remain_refused() {
+fn ignored_endpoint_tuples_supply_no_contribution() {
     for endpoint in ["#inf", "#sup"] {
         for source in [
             format!("#minimize{{foo@7,{endpoint}}}."),
             format!("#maximize{{foo@7,{endpoint}}}."),
             format!(":~.[foo@7,{endpoint}]"),
         ] {
-            refused_endpoint(&source, ProfileFeature::Symbol);
+            let input = admit(&source, &FormulaLimits::default()).unwrap();
+            assert_eq!(exhaustive(&input), Records::from([(BTreeSet::new(), None)]));
         }
     }
 }

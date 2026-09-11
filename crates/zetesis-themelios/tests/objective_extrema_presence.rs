@@ -63,31 +63,6 @@ fn presence_keeps_the_original_reduct_subject() {
 }
 
 #[test]
-fn unqualified_conditions_keep_located_refusals() {
-    for source in [
-        "b.c.{a}.n(N):-N=#max{2:a;foo:b,c}.#minimize{X@7:n(X)}.",
-        "c.b:-c.{a}.n(N):-N=#max{2:a;foo:b}.#minimize{X@7:n(X)}.",
-        "1{b}1.{a}.n(N):-N=#max{2:a;foo:b}.#minimize{X@7:n(X)}.",
-        "d(k).b.{a}.n(G,N):-d(G),N=#max{2:a;foo:b}.#minimize{X@7,G:n(G,X)}.",
-        "b.{a}.n(N):-N=#max{2:a;foo:b}.n(7).#minimize{X@7:n(X)}.",
-        "b.{a}.n(N):-N=#max{2:a;foo:b}.m(M):-M=#count{Y:n(Y)}.#minimize{M@7:m(M)}.",
-    ] {
-        let error = admit(source, &FormulaLimits::default()).unwrap_err();
-        assert!(!error.diagnostics().is_empty(), "{source}");
-        assert!(
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                    feature: ProfileFeature::ObjectiveAggregateDependency,
-                    ..
-                }))
-            ),
-            "{source}: {error}"
-        );
-    }
-}
-
-#[test]
 fn presence_completion_respects_inclusive_limits() {
     let source =
         "b.{a}.n(N):-N=#max{2:a;foo:b}.p(X):-n(X).q(Y):-p(Y).#minimize{Y@7:q(Y);0@3:q(Z)}.";

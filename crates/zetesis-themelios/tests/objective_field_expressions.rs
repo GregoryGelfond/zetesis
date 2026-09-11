@@ -12,7 +12,7 @@ use zetesis_themelios::FormulaLimits;
 const CASES: &str = include_str!("fixtures/objective-field-expressions.jsonl");
 
 #[test]
-fn evaluated_fields_preserves_full_scored_answers() {
+fn evaluated_fields_preserve_full_scored_answers() {
     let cases = source_cases::cases(CASES);
     assert_eq!(cases.len(), 18);
     for (case, row) in cases.into_iter().zip(CASES.lines()) {
@@ -74,7 +74,7 @@ fn evaluated_fields_keeps_the_original_reduct_subject() {
 
 #[test]
 #[ignore = "requires independent clingo for 18 original expression sources"]
-fn evaluated_fields_matches_fresh_clingo() {
+fn evaluated_fields_match_fresh_clingo() {
     for case in source_cases::cases(CASES) {
         assert_eq!(
             source_oracle::records(&case.source),
@@ -137,7 +137,7 @@ fn source_exclusion_precedes_field_evaluation() {
 }
 
 #[test]
-fn resolved_fields_share_template_and_tuple_ceilings() {
+fn resolved_fields_retain_template_ceiling() {
     let source = "p(1;2).#minimize{X+1,X+1:p(X)}.";
     let mut limits = FormulaLimits::default();
     limits.objective.max_templates = 2;
@@ -159,7 +159,19 @@ fn resolved_fields_share_template_and_tuple_ceilings() {
             ..
         }
     ));
-    limits.objective.max_templates = 2;
+}
+
+#[test]
+fn resolved_fields_retain_tuple_width_ceiling() {
+    let source = "p(1;2).#minimize{X+1,X+1:p(X)}.";
+    let mut limits = FormulaLimits::default();
+    limits.objective.max_tuple_width = 1;
+    let input = source_records::admit(source, &limits).unwrap();
+    assert_eq!(input.objectives().templates().len(), 2);
+    assert_eq!(
+        source_records::exhaustive(&input).iter().next().unwrap().1,
+        Some(vec![5])
+    );
     limits.objective.max_tuple_width = 0;
     assert!(matches!(
         source_records::admit(source, &limits).unwrap_err(),

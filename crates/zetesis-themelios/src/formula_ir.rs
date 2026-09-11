@@ -36,8 +36,8 @@ pub(crate) struct Prepared {
     pub rules: Vec<RuleIr>,
     pub objectives: Vec<ObjectiveIr>,
     pub objective_declarations: Vec<Location>,
-    /// Extrema tuple carriers requiring a numeric-objective presence certificate
-    /// after support completion. Unqualified mixed carriers remain refused.
+    /// Extrema tuple carriers selected for an optional numeric-weight precision
+    /// refinement after support completion.
     pub objective_extrema: BTreeSet<usize>,
 }
 pub(crate) struct ObjectiveIr {
@@ -49,9 +49,9 @@ pub(crate) struct ObjectiveIr {
     pub polarity: WeightPolarity,
     /// Positive conditions whose generated values affect priority evaluation or
     /// source eligibility through a literal, filter or repeated variable.
-    /// Grounding certifies these complete carriers before retaining any row.
+    /// Applicable completed refinements may exclude impossible source values.
     pub priority_sources: BTreeSet<usize>,
-    /// Use the completed acyclic source abstraction and a closed model query.
+    /// Use finite source truth coverage and a closed original-model query.
     pub source_completion: bool,
     pub condition: Vec<LiteralIr>,
     pub variables: usize,
@@ -355,13 +355,8 @@ pub(crate) fn prepare(
     }
     let analyzed = SourceProgram::of_nodes(analyzed);
     let analysis = crate::formula_analysis::analyze(&analyzed, limits, compiler.budget, fallback)?;
-    let objective_extrema = crate::formula_objective_dependencies::check(
-        &rules,
-        &mut objectives,
-        &analysis,
-        &analyzed,
-        fallback,
-    )?;
+    let objective_extrema =
+        crate::formula_objective_dependencies::check(&rules, &mut objectives, &analysis);
     validate_objectives(&objectives, limits)?;
     let analysis_basis = if compiler.dependency_projection {
         crate::AnalysisBasis::DependencyProjection

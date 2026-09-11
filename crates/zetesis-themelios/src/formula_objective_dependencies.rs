@@ -1,4 +1,9 @@
-//! Structural objective observers over total scalar aggregate assignments.
+//! Select source-eligibility precision without changing the original query.
+//!
+//! A structural positive observer plan enables optional completed carrier
+//! refinements. Nonqualification selects ordinary/possible-support completion;
+//! it is not a failure of an applied certificate. Resource and evaluation errors
+//! arise during materialization and always propagate.
 
 mod forwarding;
 mod presence;
@@ -12,22 +17,17 @@ use themelios_analysis::{
     Analysis,
     depend::{DependencyGraph, DependencyKind},
 };
-use themelios_base::span::Location;
-use themelios_program::program::{DefaultNegation, Program, Statement};
+use themelios_program::program::DefaultNegation;
 use themelios_program::symbol::{Name, Signature};
 use zetesis_core::{Filter, Predicate, Term};
 
-use crate::diagnostic::unsupported;
 use crate::formula_ir::{HeadIr, HeadLiteral, LiteralIr, ObjectiveIr, RuleIr};
-use crate::{FormulaFailure, ProfileFeature, extended};
 
 pub(crate) fn check(
     rules: &[RuleIr],
     objectives: &mut [ObjectiveIr],
     analysis: &Analysis,
-    source: &Program,
-    fallback: Location,
-) -> Result<BTreeSet<usize>, FormulaFailure> {
+) -> BTreeSet<usize> {
     let mut extrema = BTreeSet::new();
     for objective in objectives {
         let graph = analysis.dependencies();
@@ -41,53 +41,50 @@ pub(crate) fn check(
                     _ => None,
                 }),
         );
-        if completed_profile(rules, std::slice::from_ref(objective), graph, &relevant) {
-            objective.source_completion = true;
+        let precision =
+            if completed_profile(rules, std::slice::from_ref(objective), graph, &relevant) {
+                None
+            } else {
+                positive_precision(rules, std::slice::from_mut(objective), graph, &relevant)
+            };
+        if let Some(required) = precision {
+            extrema.extend(required);
         } else {
-            extrema.extend(check_legacy(
-                rules,
-                std::slice::from_mut(objective),
-                graph,
-                &relevant,
-                source,
-                fallback,
-            )?);
+            objective.source_completion = true;
         }
     }
-    Ok(extrema)
+    extrema
 }
 
-fn check_legacy(
+/// This is an applicability decision over admitted source structure. `None`
+/// requires the conservative carrier, never a guessed exact source priority.
+fn positive_precision(
     rules: &[RuleIr],
     objectives: &mut [ObjectiveIr],
     graph: &DependencyGraph,
     relevant: &BTreeSet<Signature>,
-    source: &Program,
-    fallback: Location,
-) -> Result<BTreeSet<usize>, FormulaFailure> {
+) -> Option<BTreeSet<usize>> {
     let mut generated = BTreeMap::<Signature, BTreeSet<usize>>::new();
     for rule in rules {
         if !relevant_head(&rule.head, relevant) {
             continue;
         }
         // The existing total-observer certificate assumes no filter or value
-        // consumer of its aggregate output. A scheduled proposal does not prove
-        // that the objective priority survives grounding simplification.
+        // consumer of its aggregate output. A scheduled proposal does not justify
+        // the more precise flat carrier; completed support remains applicable.
         if rule.bindings.as_ref().is_some_and(|plan| plan.consumers) {
-            return Err(refusal(rule.location));
+            return None;
         }
         if rule
             .body
             .iter()
             .any(|literal| matches!(literal, LiteralIr::Conditional(_)))
         {
-            return Err(unsupported(
-                ProfileFeature::ObjectiveConditionalDependency,
-                rule.location,
-            )
-            .into());
+            return None;
         }
-        head_profile(rule)?;
+        if !head_profile(rule) {
+            return None;
+        }
         let aggregates: Vec<_> = rule
             .body
             .iter()
@@ -103,10 +100,10 @@ fn check_legacy(
             continue;
         }
         let [aggregate] = aggregates.as_slice() else {
-            return Err(refusal(rule.location));
+            return None;
         };
         let (Some(target), HeadIr::Normal(Some(head))) = (aggregate.binding, &rule.head) else {
-            return Err(refusal(rule.location));
+            return None;
         };
         let positions: BTreeSet<_> = head
             .terms()
@@ -115,7 +112,7 @@ fn check_legacy(
             .filter_map(|(index, term)| (*term == Term::Variable(target)).then_some(index))
             .collect();
         if positions.is_empty() {
-            return Err(refusal(rule.location));
+            return None;
         }
         generated
             .entry(signature(head.predicate()))
@@ -129,11 +126,7 @@ fn check_legacy(
         }
         for (kind, dependency) in graph.edges_from(producer) {
             if kind == DependencyKind::Negative {
-                return Err(unsupported(
-                    ProfileFeature::ObjectiveNegativeDependency,
-                    origin(source, producer, dependency, fallback),
-                )
-                .into());
+                return None;
             }
             // Generated positions follow certified argument permutations before
             // downstream consumers are checked. The original rules and aggregate
@@ -142,14 +135,14 @@ fn check_legacy(
                 && !forwarded.contains(producer)
                 && !total_dependency(rules, producer, dependency, &generated)
             {
-                return Err(refusal(origin(source, producer, dependency, fallback)));
+                return None;
             }
         }
     }
     for objective in objectives.iter_mut() {
         objective.priority_sources = observer(objective, &generated);
     }
-    Ok(presence::required(rules, objectives, graph, &generated))
+    Some(presence::required(rules, objectives, graph, &generated))
 }
 
 fn completed_profile(
@@ -222,23 +215,15 @@ fn dependency_closure(
     relevant
 }
 
-fn head_profile(rule: &RuleIr) -> Result<(), FormulaFailure> {
-    if matches!(rule.head, HeadIr::Disjunction(_)) {
-        return Err(unsupported(
-            ProfileFeature::ObjectiveDisjunctionDependency,
-            rule.location,
-        )
-        .into());
-    }
-    if let HeadIr::Choice(group) = &rule.head
-        && group
+fn head_profile(rule: &RuleIr) -> bool {
+    match &rule.head {
+        HeadIr::Disjunction(_) => false,
+        HeadIr::Choice(group) => group
             .elements
             .iter()
-            .any(|element| element.key.tuple().is_some())
-    {
-        return Err(refusal(rule.location));
+            .all(|element| element.key.tuple().is_none()),
+        HeadIr::Normal(_) => true,
     }
-    Ok(())
 }
 fn relevant_head(head: &HeadIr, relevant: &BTreeSet<Signature>) -> bool {
     match head {
@@ -399,26 +384,4 @@ fn signature(predicate: &Predicate) -> Signature {
         name: Name::new(predicate.name()).expect("validated source predicate"),
         arity: u32::try_from(predicate.arity()).expect("bounded source arity"),
     }
-}
-fn origin(
-    source: &Program,
-    producer: &Signature,
-    dependency: &Signature,
-    fallback: Location,
-) -> Location {
-    source
-        .statements()
-        .find_map(|statement| {
-            if let Statement::Rule(rule) = statement.get()
-                && rule.head_signatures().any(|head| head == *producer)
-                && rule.body_signatures().any(|(_, body)| body == *dependency)
-            {
-                return Some(extended::origin(statement, fallback));
-            }
-            None
-        })
-        .unwrap_or(fallback)
-}
-fn refusal(location: Location) -> FormulaFailure {
-    unsupported(ProfileFeature::ObjectiveAggregateDependency, location).into()
 }

@@ -95,19 +95,6 @@ fn signed_choice_bounds_still_filter_observed_answers() {
 }
 
 #[test]
-fn mixed_choice_observers_keep_the_producer_refusal() {
-    let source = format!("{SIGNED_BASE}{{not copied(0);copied(3)}}.{SIGNED_OBJECTIVE}");
-    let error = admit(&source, &FormulaLimits::default()).unwrap_err();
-    assert!(matches!(
-        error,
-        FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-            feature: ProfileFeature::ObjectiveAggregateDependency,
-            ..
-        }))
-    ));
-}
-
-#[test]
 #[ignore = "requires independently installed clingo"]
 fn signed_observer_sources_match_clingo_costs() {
     for base in [
@@ -244,64 +231,20 @@ fn forwarded_observers_leave_the_original_theory_intact() {
 }
 
 #[test]
-fn unsupported_observer_paths_keep_located_refusals() {
-    for source in [
-        "n(N):-N=#count{}.p(X):-n(X),X=0.#minimize{X:p(X)}.",
-        "n(N):-N=#count{}.p(X):-n(X),d(X).d(0).#minimize{X:p(X)}.",
-        "n(N):-N=#count{}.p(0):-n(0).#minimize{X:p(X)}.",
-        "n(N,N):-N=#count{}.p(X):-n(X,X).#minimize{X:p(X)}.",
-        "n(N):-N=#count{}.p(X,X):-n(X).#minimize{X,Y:p(X,Y)}.",
-        "n(N):-N=#count{}.p(f(X)):-n(X).#minimize{1,X:p(X)}.",
-        "n(N):-N=#count{}.p(X):-n(X).p(3).#minimize{X:p(X)}.",
-        "n(N):-N=#count{}.p(X):-n(X).{p(3)}.#minimize{X:p(X)}.",
-        "n(N):-N=#count{}.p(X):-n(X).p(X):-p(X).#minimize{X:p(X)}.",
-        "n(N):-N=#count{1:p(X)}.p(X):-n(X).#minimize{X:p(X)}.",
-        "n(N):-N=#count{}.p(X):-n(X).q(X):-p(X).#minimize{1:q(0)}.",
-        "n(N):-N=#count{}.p(X):-n(X).q(X):-p(X).#minimize{X:q(X),X!=0}.",
-        "n(N):-N=#count{}.p(X):-n(X).q(X):-p(X).#minimize{X:q(X),q(X)}.",
-        "n(N):-N=#count{}.p(X):-n(X).m(M):-M=#sum{X:p(X),X>0}.#minimize{M:m(M)}.",
-        "a.n(N):-N=#count{1:a}.p(X):-n(X).#minimize{1@7:p(0)}.",
-        "d(k).a.n(G,N):-d(G),N=#count{1:a}.p(Y,X):-n(X,Y).#minimize{1@7,K:p(0,K)}.",
-    ] {
-        let error = admit(source, &FormulaLimits::default()).unwrap_err();
-        assert!(!error.diagnostics().is_empty(), "{source}: located refusal");
-        assert!(
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                    feature: ProfileFeature::ObjectiveAggregateDependency,
-                    ..
-                }))
-            ),
-            "{source}: {error}"
-        );
-    }
-}
-
-#[test]
-fn unqualified_extrema_do_not_claim_numeric_presence() {
-    // The first seven unchanged originals now have a flat-carrier certificate.
-    let cases: Vec<_> = cases(EXTREMA_REFUSALS).into_iter().skip(7).collect();
-    assert_eq!(cases.len(), 3);
-    for case in cases {
-        let error = admit(&case.source, &FormulaLimits::default()).unwrap_err();
-        let FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-            feature,
-            location,
-        })) = error
-        else {
-            panic!(
-                "{}: expected the objective presence refusal: {error}",
-                case.name
-            );
-        };
-        assert_eq!(feature, ProfileFeature::ObjectiveAggregateDependency);
-        assert!(
-            !location.span.is_empty(),
-            "{}: producer location",
-            case.name
-        );
-    }
+fn recursive_aggregate_generators_keep_located_refusals() {
+    let source = "n(N):-N=#count{1:p(X)}.p(X):-n(X).#minimize{X:p(X)}.";
+    let error = admit(source, &FormulaLimits::default()).unwrap_err();
+    assert!(!error.diagnostics().is_empty());
+    assert!(
+        matches!(
+            error,
+            FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
+                feature: ProfileFeature::ObjectiveSourceEligibility,
+                ..
+            }))
+        ),
+        "{error}"
+    );
 }
 
 #[test]
@@ -314,15 +257,12 @@ fn preparation_defers_carrier_presence_to_grounding() {
         ExpansionLimits::default(),
         FormulaLimits::default(),
     )
-    .expect("structural preparation is not completed objective grounding");
-    let error = prepared.ground().unwrap_err();
-    assert!(matches!(
-        error,
-        FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-            feature: ProfileFeature::ObjectiveAggregateDependency,
-            ..
-        }))
-    ));
+    .unwrap();
+    let input = prepared.ground().unwrap();
+    assert_eq!(input.objectives().priorities(), &[7]);
+    let records = exhaustive(&input);
+    assert_eq!(records.len(), 2);
+    assert!(records.iter().all(|(_, costs)| *costs == Some(vec![0])));
 }
 
 #[derive(Clone, Copy)]

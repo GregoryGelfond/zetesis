@@ -1,4 +1,4 @@
-//! Finite source eligibility over an acyclic producer cone.
+//! Finite source eligibility from ordinary activity and complete possible support.
 //!
 //! Required/possible activity is a source grounding abstraction, not answer-set
 //! realization. Optional means retained as a grounding possibility; it does not
@@ -15,6 +15,7 @@ use themelios_program::symbol::Signature;
 use zetesis_core::{Atom, AtomPattern, Value};
 mod query;
 mod cyclic;
+mod possible;
 
 pub(crate) use query::condition as model_condition;
 
@@ -24,6 +25,19 @@ use crate::formula::ceiling;
 use crate::formula_ir::{HeadIr, LiteralIr, Prepared, RuleIr};
 use crate::formula_support::{self, Counters, Join, Support};
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
+
+fn ordinary(literals: &[LiteralIr]) -> bool {
+    literals.iter().all(|literal| {
+        matches!(
+            literal,
+            LiteralIr::Atom(..)
+                | LiteralIr::Compare(..)
+                | LiteralIr::Guard(_)
+                | LiteralIr::Bind { .. }
+                | LiteralIr::Range { .. }
+        )
+    })
+}
 
 fn refusal(location: Location) -> FormulaFailure {
     crate::diagnostic::unsupported(crate::ProfileFeature::ObjectiveSourceEligibility, location)
@@ -233,30 +247,74 @@ impl Completion {
                 result.cyclic(prepared, support, &remaining, temporary, context)?;
                 break;
             };
-            for rule in &prepared.rules {
-                context.work()?;
-                let produces = match &rule.head {
-                    HeadIr::Normal(Some(head)) => signature(head.predicate()) == predicate,
-                    HeadIr::Choice(group) => group
-                        .elements
-                        .iter()
-                        .filter_map(|element| element.head.positive_atom())
-                        .any(|head| signature(head.predicate()) == predicate),
-                    HeadIr::Disjunction(heads) => heads
-                        .iter()
-                        .filter_map(|head| head.positive_atom())
-                        .any(|head| signature(head.predicate()) == predicate),
-                    HeadIr::Normal(None) => false,
-                };
-                if !produces {
-                    continue;
-                }
-                result.rule(rule, &predicate, support, temporary, context)?;
-            }
+            result.predicate(prepared, &predicate, support, temporary, context)?;
             remaining.remove(&predicate);
             completed.insert(predicate);
         }
         Ok(result)
+    }
+
+    fn predicate(
+        &mut self,
+        prepared: &Prepared,
+        predicate: &Signature,
+        support: &Support<'_>,
+        temporary: usize,
+        context: &mut Context<'_>,
+    ) -> Result<(), FormulaFailure> {
+        let produces = |rule: &RuleIr| match &rule.head {
+            HeadIr::Normal(Some(head)) => signature(head.predicate()) == *predicate,
+            HeadIr::Choice(group) => group
+                .elements
+                .iter()
+                .filter_map(|element| element.head.positive_atom())
+                .any(|head| signature(head.predicate()) == *predicate),
+            HeadIr::Disjunction(heads) => heads
+                .iter()
+                .filter_map(|head| head.positive_atom())
+                .any(|head| signature(head.predicate()) == *predicate),
+            HeadIr::Normal(None) => false,
+        };
+        let mut precise = true;
+        for rule in &prepared.rules {
+            context.work()?;
+            if !produces(rule) {
+                continue;
+            }
+            context.location = rule.location;
+            precise &= ordinary(&rule.body)
+                && match &rule.head {
+                    HeadIr::Choice(group) => group
+                        .elements
+                        .iter()
+                        .all(|element| ordinary(&element.condition)),
+                    HeadIr::Disjunction(heads) => {
+                        heads.iter().all(|head| head.positive_atom().is_some())
+                    }
+                    HeadIr::Normal(_) => true,
+                };
+        }
+        if precise {
+            for rule in &prepared.rules {
+                context.work()?;
+                if !produces(rule) {
+                    continue;
+                }
+                self.rule(rule, predicate, support, temporary, context)?;
+            }
+        } else {
+            // Completed finite Support is a truth upper carrier for every
+            // admitted rich producer. Query truth remains with original atoms;
+            // no source-only aggregate or conditional evaluator is introduced.
+            for candidate in support.predicates() {
+                context.work()?;
+                if signature(candidate) == *predicate {
+                    self.possible(candidate, support, temporary, context)?;
+                    break;
+                }
+            }
+        }
+        Ok(())
     }
 
     fn rule(

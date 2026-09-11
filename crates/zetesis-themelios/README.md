@@ -239,23 +239,25 @@ logical extrema retain typed value identity. Simple fields retain lifted joins;
 resolved fields feed the same global key, score and candidate-bound operations.
 Aggregate/conditional weak bodies remain unsupported.
 
-Objective dependencies have additional boundaries because a possible-support
-upper bound alone cannot determine clingo-compatible priority presence.
-The additional ordinary source-completion profile admits acyclic producer cones
-with normal rules, positive atomic disjunctions, ordinary choices and admitted
-aggregate heads. Every positive head supplies possible objective eligibility;
-its permission is independent of whether its tuple contributes to the bound.
-Bodies may
-contain positive/default-negated atoms and admitted scalar guards. Objective
-conditions in that profile may use default negation, double negation, Boolean
-truth and bounded scalar comparisons, including arithmetic on independently
-bound variables. These conditions lower into closed queries over the original
-complete model; they do not add atoms or theory roots. Finite ordinary cyclic
-cones and their unresolved dependants use completed possible support as an
-explicit conservative certificate: every covered atom remains optional, and
-atoms outside that carrier are absent. This does not infer realization or run
-another solver. Cyclic aggregate generators and richer producer forms outside
-these certificates retain a located `ObjectiveSourceEligibility` refusal.
+Objective conditions admit default negation, double negation, Boolean truth and
+bounded scalar comparisons on independently bound values. They lower into closed
+queries over original typed model atoms and do not add theory roots or support.
+
+Source eligibility selects an explicit precision plan per objective. Ordinary
+acyclic producers compute absent/optional/required activity directly. Rich finite
+acyclic producers, including aggregate assignments and guards, conditional
+bodies, filtered or joined outputs, multiple/non-unary outputs, nested observer
+chains, constructed values and competing producers, can use the already
+completed possible Support carrier. This is a coverage certificate; the original
+producer formulas determine actual truth. No second source-only aggregate or
+conditional evaluator is introduced. Every positive aggregate head supplies
+possible eligibility independently of its measured contribution.
+
+Finite ordinary cyclic cones and their unresolved dependants use the same
+conservative carrier: covered atoms are optional, and atoms outside the carrier
+are absent. Cyclic aggregate generators and richer cyclic scoped bodies retain a
+located `ObjectiveSourceEligibility` refusal. Aggregate/conditional syntax in a
+weak constraint's own query is a separate boundary from a rich producer's body.
 
 The completed activity is a source grounding abstraction: absent, optional or
 required. Optional means retained as a grounding possibility, not simultaneously
@@ -270,47 +272,31 @@ where clingo 5.8.2 omits the objective vector. Both return the same sole answer
 `{a}`. Missing slots are zero in cost comparison, so additional identically-zero
 slots preserve every ordering and optimal tie. Derived-fact and repeated-disjunct
 counterparts have separately recorded raw reference outcomes; they are not
-silently normalized in comparisons. Source completion visits the finite dependency cone in order, charges
-all ground joins and bounds retained activity entries independently of model
+silently normalized in comparisons. Source completion visits finite dependency
+cones, charges all ground joins and bounds retained activity entries independently of model
 evaluation. Producer traversal computes activity directly; only an eligible
 objective row constructs a closed model query and consumes its per-template
 condition-node ceiling. Dependency storage is checked before each new predicate
-is retained, including coexisting legacy certificates. Each objective selects its own certificate. An independent extended
-query does not impose this cone's acyclicity requirement on a previously admitted
-positive objective; completed activity and legacy aggregate carriers share the
+is retained, including coexisting precision certificates. Independent objectives
+compose their own selected plans; completed activity and aggregate carriers share the
 retained-presence ceiling when they coexist. Neither certificate searches for
 answer sets or replaces original rules.
 
-Aggregate-dependent cones retain additional producer boundaries. A structural
-certificate admits specified total assignments and acyclic
-bijective predicate forwarding. It does not admit arbitrary joins, filters,
-alternative producers or constructed forwarding arguments.
+Existing structural and flat certificates remain useful precision refinements.
+The flat profile has an unconditional unary assignment, closed complete tuples,
+and empty or one positive closed fact/unbounded-choice condition per tuple.
+Unique unary forwarding shares the refinement. Required symbolic extrema can
+exclude numeric weight proposals without changing support or the original
+aggregate equality. Generated fields can use the measures of all complete key
+sets `S` with `R ⊆ S ⊆ P`, where `R` is required and `P` is possible; full tuple
+identity coalesces required/optional aliases first.
 
-An ordinary choice containing only default-negated occurrences does not create
-a competing positive producer. Such occurrences can compose with certified
-forwarding or assignment dependencies; their bounds still constrain the answers.
-This does not remove the separate function-head or objective-condition refusals.
-
-For variable objective weights, a mixed numeric/nonnumeric extrema carrier needs
-an additional completed-presence certificate. Its admitted flat profile has an
-unconditional unary assignment, closed tuples, and tuple conditions that are
-empty or one positive closed fact/unbounded-choice atom. Relevant forwarding is
-a unique unary positive renaming. Exact signed facts are mandatory; optional
-choices remain possible even when constraints correlate them. Outer joins,
-filtered/alternative producers and nested reductions do not gain this certificate.
-Preparation can succeed before materialization detects the unsupported case.
-Generated priority inputs additionally require a completed source measure
-carrier. In the same flat unary profile, its values are the measures of all
-complete key sets `S` with `R ⊆ S ⊆ P`, where `R` is required and `P` is possible.
-Required/optional aliases coalesce by the full tuple. Unique unary renamings
-share the certificate. Completed objective rows must belong to their source
-carrier before priority evaluation; all fields resolve from the same binding.
-Original aggregate equalities remain in the reduct theory and decide which
-values realize in each answer. Shared optional conditions can leave source
-values unrealized; their numeric priority slots still remain, with zero cost.
-Undefined source priority arithmetic remains a located error even for such a
-row. Invariant carriers are the singleton case. Broader producer shapes remain
-outside this certificate.
+A nonapplicable refinement leaves the complete possible carrier eligible; it
+does not certify exact priority metadata or refuse otherwise covered finite
+solving. Resource or evaluation failure during an applied refinement remains an
+error. Original model queries decide which retained rows contribute. Correlated
+source possibilities can remain unrealized and retain zero slots. Required
+arithmetic evaluation still fails explicitly, including on such source rows.
 
 Within that completed flat-carrier profile, objective conditions may select a
 generated value by a literal, equality/disequality filter, or a repeated variable

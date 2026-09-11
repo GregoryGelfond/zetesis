@@ -8,10 +8,7 @@ mod source_cases;
 mod source_oracle;
 
 use source_records::{admit, exhaustive};
-use zetesis_themelios::{
-    AdmissionFailure, ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource,
-    ProfileFeature,
-};
+use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 const CASES: &str = r#"{"name":"mandatory_count","source":"a.n(N):-N=#count{1:a}.#minimize{1@N:n(N)}.","priorities":[1],"records":[[["a","n(1)"],[1]]]}
 {"name":"required_duplicate_key","source":"a.{b}.n(N):-N=#count{1:a;1:b}.#minimize{1@N:n(N)}.","priorities":[1],"records":[[["a","n(1)"],[1]],[["a","b","n(1)"],[1]]]}
@@ -74,27 +71,6 @@ fn invariant_priorities_preserve_scored_answers() {
             "{}",
             case.name,
         );
-    }
-}
-
-#[test]
-fn competing_producers_require_further_evidence() {
-    for source in [
-        "a.n(N):-N=#count{1:a}.n(7).#minimize{1@N:n(N)}.",
-        "a.n(N):-N=#count{1:a}.copied(X):-n(X).{copied(7)}.#minimize{1@X:copied(X)}.",
-    ] {
-        let error = admit(source, &FormulaLimits::default()).unwrap_err();
-        assert!(
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                    feature: ProfileFeature::ObjectiveAggregateDependency,
-                    ..
-                }))
-            ),
-            "{source}: {error}"
-        );
-        assert!(!error.diagnostics().is_empty());
     }
 }
 

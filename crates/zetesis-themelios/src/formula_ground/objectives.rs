@@ -1,6 +1,6 @@
 //! Resolve complete eligible objective rows into fixed-priority templates.
 //!
-//! Conditions remain positive model queries after specialization: a possible
+//! Conditions remain original-model queries after specialization: a possible
 //! binding never establishes an active contribution. Priority, weight and tuple
 //! always come from one binding. Fixed priorities retain the lifted evaluator;
 //! resolved priorities retain at most one bounded template per eligible row.

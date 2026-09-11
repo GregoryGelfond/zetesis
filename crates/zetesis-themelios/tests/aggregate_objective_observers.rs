@@ -173,7 +173,7 @@ fn observer_cases_preserve_recorded_contracts() {
             admitted += 1;
         }
     }
-    assert_eq!((admitted, refused), (77, 15));
+    assert_eq!((admitted, refused), (92, 0));
 }
 
 static NEXT: AtomicU64 = AtomicU64::new(0);

@@ -162,6 +162,11 @@ pub(super) struct RelationRows<'source> {
 }
 
 impl Support<'_> {
+    /// Predicates with a completed possible relation, borrowed from its sole owner.
+    pub(crate) fn predicates(&self) -> impl Iterator<Item = &Predicate> {
+        self.rows.keys().copied()
+    }
+
     pub(super) fn len(&self) -> usize {
         self.atoms
     }

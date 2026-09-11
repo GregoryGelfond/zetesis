@@ -6,25 +6,11 @@
 
 use std::collections::BTreeSet;
 use themelios_program::symbol::Signature;
-use zetesis_core::Atom;
 
-use super::{Activity, Completion, Context, refusal, signature};
-use crate::formula_ir::{HeadIr, LiteralIr, Prepared};
-use crate::formula_support::{self, Support};
-use crate::{ExpansionResource, FormulaFailure};
-
-fn ordinary(literals: &[LiteralIr]) -> bool {
-    literals.iter().all(|literal| {
-        matches!(
-            literal,
-            LiteralIr::Atom(..)
-                | LiteralIr::Compare(..)
-                | LiteralIr::Guard(_)
-                | LiteralIr::Bind { .. }
-                | LiteralIr::Range { .. }
-        )
-    })
-}
+use super::{Completion, Context, ordinary, refusal, signature};
+use crate::FormulaFailure;
+use crate::formula_ir::{HeadIr, Prepared};
+use crate::formula_support::Support;
 
 impl Completion {
     pub(super) fn cyclic(
@@ -60,68 +46,10 @@ impl Completion {
                 _ => {}
             }
         }
-        for rule in &prepared.rules {
+        for predicate in support.predicates() {
             context.work()?;
-            context.location = rule.location;
-            match &rule.head {
-                HeadIr::Normal(Some(atom)) => {
-                    self.possible(atom.predicate(), support, unresolved, temporary, context)?;
-                }
-                HeadIr::Disjunction(heads) => {
-                    for atom in heads.iter().filter_map(|head| head.positive_atom()) {
-                        self.possible(atom.predicate(), support, unresolved, temporary, context)?;
-                    }
-                }
-                HeadIr::Choice(group) => {
-                    for atom in group
-                        .elements
-                        .iter()
-                        .filter_map(|element| element.head.positive_atom())
-                    {
-                        self.possible(atom.predicate(), support, unresolved, temporary, context)?;
-                    }
-                }
-                HeadIr::Normal(None) => {}
-            }
-        }
-        Ok(())
-    }
-
-    fn possible(
-        &mut self,
-        predicate: &zetesis_core::Predicate,
-        support: &Support<'_>,
-        unresolved: &BTreeSet<Signature>,
-        temporary: usize,
-        context: &mut Context<'_>,
-    ) -> Result<(), FormulaFailure> {
-        context.work()?;
-        if !unresolved.contains(&signature(predicate)) {
-            return Ok(());
-        }
-        for row in support.rows(predicate) {
-            context.work()?;
-            let mut values = Vec::new();
-            values
-                .try_reserve_exact(predicate.arity())
-                .map_err(|_| context.allocation())?;
-            for value in formula_support::row_values(row) {
-                context.work()?;
-                values.push(formula_support::copy(
-                    value,
-                    context.budget,
-                    context.location,
-                )?);
-            }
-            context.budget.charge(
-                ExpansionResource::ScalarBytes,
-                predicate.name().len() as u128,
-                context.location,
-            )?;
-            let atom = Atom::new(predicate.clone(), values).expect("completed support arity");
-            if !self.atoms.contains_key(&atom) {
-                context.entries(temporary.saturating_add(self.atoms.len()).saturating_add(1))?;
-                self.atoms.insert(atom, Activity::Optional);
+            if unresolved.contains(&signature(predicate)) {
+                self.possible(predicate, support, temporary, context)?;
             }
         }
         Ok(())

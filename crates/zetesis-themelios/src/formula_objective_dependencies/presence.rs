@@ -9,8 +9,9 @@
 //! optional conditions do not erase values from this source abstraction.
 //! Objective preparation filters priority rows against the completed carrier;
 //! the original equalities and model-relative conditions remain authoritative.
-//! Other carriers retain an explicit refusal. The implicit empty endpoint is
-//! not a contributing tuple.
+//! If a flat refinement does not apply, the complete possible carrier remains
+//! eligible. A failed applied refinement still propagates its resource or value
+//! error. The implicit empty endpoint is not a contributing tuple.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -25,9 +26,7 @@ use crate::formula_ir::{AggregateIr, AggregateKey, Prepared};
 use crate::formula_support::{Counters, Join, Support};
 use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 
-use super::{
-    LiteralIr, ObjectiveIr, RuleIr, dependency_closure, refusal, relevant_head, signature,
-};
+use super::{LiteralIr, ObjectiveIr, RuleIr, dependency_closure, relevant_head, signature};
 
 mod flat;
 
@@ -51,7 +50,8 @@ impl Presence<'_> {
     }
 
     /// A completed proposal row is eligible only when every certified observer
-    /// in it carries a value in its completed source carrier. Equalities remain in
+    /// in it carries a value in its completed source carrier. Predicates without
+    /// an applicable refinement retain their complete possible values. Equalities remain in
     /// the theory; this filter affects objective specialization only.
     pub(crate) fn eligible(
         &self,
@@ -192,7 +192,7 @@ pub(crate) fn check<'a>(
                         counters,
                     )?
                     else {
-                        return Err(refusal(rule.location));
+                        continue;
                     };
                     for predicate in excluded {
                         counters.work(limits, rule.location)?;
@@ -207,8 +207,9 @@ pub(crate) fn check<'a>(
     Ok(presence)
 }
 
-/// Source dependency analysis names every generated priority input. Only a
-/// completed source-carrier certificate can discharge that obligation here.
+/// Try applicable flat refinements for requested generated fields. No returned
+/// carrier means no extra exclusion, while an applied operation's errors remain
+/// errors. This never equates unqualified precision with successful proof.
 fn certify_priorities<'a>(
     prepared: &'a Prepared,
     presence: &mut Presence<'a>,
@@ -267,21 +268,6 @@ fn certify_priorities<'a>(
             })?;
         presence.carrier_entries += entries;
         presence.carriers.push(carrier);
-    }
-    for objective in &prepared.objectives {
-        for &index in &objective.priority_sources {
-            counters.work(limits, objective.location)?;
-            let mut qualified = false;
-            for carrier in &presence.carriers {
-                counters.work(limits, objective.location)?;
-                qualified |= carrier
-                    .predicates
-                    .contains(objective.positive[index].predicate());
-            }
-            if !qualified {
-                return Err(refusal(objective.location));
-            }
-        }
     }
     Ok(())
 }

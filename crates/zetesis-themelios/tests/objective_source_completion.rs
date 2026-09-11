@@ -78,6 +78,8 @@ fn source_completion_limits_are_inclusive() {
         "p(1;2).{q(1);q(2)}.#minimize{X@X:p(X),not q(X)}.",
         "{a;b}.n(N):-N=#count{1:a;2:b}.#minimize{1@N:n(N);1@3:not a}.",
         "a:-not b.b:-not a.#minimize{1:not a}.",
+        "d(1;2).{q(1);q(2)}.p:-q(X):d(X).#minimize{1:not p}.",
+        "d(1;2).{p(1);p(2)}.n(K,N):-d(K),N=#count{X:p(X),X=K}.#minimize{N@K:n(K,N),not not n(K,N)}.",
     ] {
         let expected = source_records::exhaustive(
             &source_records::admit(source, &FormulaLimits::default()).unwrap(),

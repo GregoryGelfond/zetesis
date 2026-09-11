@@ -12,7 +12,7 @@ use zetesis_themelios::FormulaLimits;
 const CASES: &str = include_str!("fixtures/objective-cyclic-producers.jsonl");
 
 #[test]
-fn cyclic_producers_preserves_full_scored_answers() {
+fn cyclic_producers_preserve_full_scored_answers() {
     let cases = source_cases::cases(CASES);
     assert_eq!(cases.len(), 15);
     for (case, row) in cases.into_iter().zip(CASES.lines()) {
@@ -74,7 +74,7 @@ fn cyclic_producers_keeps_the_original_reduct_subject() {
 
 #[test]
 #[ignore = "requires independent clingo for 15 original cyclic sources"]
-fn cyclic_producers_matches_fresh_clingo() {
+fn cyclic_producers_match_fresh_clingo() {
     for case in source_cases::cases(CASES) {
         assert_eq!(
             source_oracle::records(&case.source),
