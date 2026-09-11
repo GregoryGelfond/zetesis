@@ -410,6 +410,8 @@
 'Zetesis.Ferraris.reduct_self' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Ferraris.models_reduct_self' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Ferraris.stable_iff_minimal_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Ferraris.stable_append_of_models' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Ferraris.stable_append_facts' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Ferraris.atom_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Ferraris.neg_atom_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Ferraris.double_neg_atom_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -474,6 +476,12 @@
 'Zetesis.GroundGuards.classical_tautology_is_not_a_guard_replacement' depends on axioms: [propext,
  Classical.choice,
  Quot.sound]
+'Zetesis.HeadContributions.neutral_values_are_zero' depends on axioms: [propext]
+'Zetesis.HeadContributions.nonpositive_is_neutral' depends on axioms: [propext]
+'Zetesis.HeadContributions.positive_measure' depends on axioms: [propext, Quot.sound]
+'Zetesis.HeadContributions.unbounded_equivalent' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.HeadContributions.unbounded_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.HeadContributions.neutral_permission_is_not_truth' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.HeadMeasures.bound_original' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.HeadMeasures.bound_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.HeadMeasures.bound_equivalent' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -599,6 +607,19 @@
 'Zetesis.ObjectiveBounds.bounded_optimum_keeps_original_reduct' depends on axioms: [propext,
  Classical.choice,
  Quot.sound]
+'Zetesis.ObjectiveConditionTable.node_correspondence' depends on axioms: [propext, Quot.sound]
+'Zetesis.ObjectiveConditionTable.rows_correspondence' depends on axioms: [propext, Quot.sound]
+'Zetesis.ObjectiveConditionTable.backward_node_total' depends on axioms: [propext, Quot.sound]
+'Zetesis.ObjectiveConditionTable.admitted_rows_total' depends on axioms: [propext, Quot.sound]
+'Zetesis.ObjectiveConditionTable.unfolding_correspondence' depends on axioms: [propext, Quot.sound]
+'Zetesis.ObjectiveConditionTable.admitted_correspondence' depends on axioms: [propext, Quot.sound]
+'Zetesis.ObjectiveConditionTable.original_truth' depends on axioms: [propext, Quot.sound]
+'Zetesis.ObjectiveConditionTable.model_identity' depends on axioms: [propext, Quot.sound]
+'Zetesis.ObjectiveConditions.original_truth' depends on axioms: [propext]
+'Zetesis.ObjectiveConditions.formula_query_truth' depends on axioms: [propext]
+'Zetesis.ObjectiveConditions.formula_query_changes_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ObjectiveConditions.model_identity' depends on axioms: [Quot.sound]
+'Zetesis.ObjectiveConditions.condition_vector' depends on axioms: [propext, Quot.sound]
 'Zetesis.ObjectiveDirections.same_contribution_iff_key' depends on axioms: [propext]
 'Zetesis.ObjectiveDirections.raw_cost_keys' depends on axioms: [propext, Quot.sound]
 'Zetesis.ObjectiveDirections.conditions_for_active' depends on axioms: [propext, Quot.sound]
@@ -624,6 +645,12 @@
 'Zetesis.ObjectiveDirections.opposite_directions_coalesce' does not depend on any axioms
 'Zetesis.ObjectiveDirections.same_weight_directions_distinct' depends on axioms: [propext, Quot.sound]
 'Zetesis.ObjectiveDirections.collision_and_cancellation_examples' depends on axioms: [propext]
+'Zetesis.ObjectiveEligibility.possible_support_covers' depends on axioms: [propext]
+'Zetesis.ObjectiveEligibility.negation_covers' depends on axioms: [propext]
+'Zetesis.ObjectiveEligibility.conjunction_covers' depends on axioms: [propext]
+'Zetesis.ObjectiveEligibility.disjunction_covers' depends on axioms: [propext]
+'Zetesis.ObjectiveEligibility.optional_contradiction' depends on axioms: [propext]
+'Zetesis.ObjectiveEligibility.absent_excludes' does not depend on any axioms
 'Zetesis.ObjectivePriorities.selected_presence' depends on axioms: [propext, Quot.sound]
 'Zetesis.ObjectivePriorities.completed_presence' depends on axioms: [propext, Quot.sound]
 'Zetesis.ObjectivePriorities.ignored_priority_preserves_vector' depends on axioms: [propext, Quot.sound]
@@ -632,6 +659,8 @@
 'Zetesis.ObjectivePriorities.partition_cost' depends on axioms: [propext, Quot.sound]
 'Zetesis.ObjectivePriorities.partition_vector' depends on axioms: [propext, Quot.sound]
 'Zetesis.ObjectivePriorities.partition_optima' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ObjectivePriorities.zero_slot_comparison' depends on axioms: [propext]
+'Zetesis.ObjectivePriorities.zero_slot_optima' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ObjectiveTransport.present_transport' depends on axioms: [propext, Quot.sound]
 'Zetesis.ObjectiveTransport.transport_key' does not depend on any axioms
 'Zetesis.ObjectiveTransport.transport_composes' does not depend on any axioms
@@ -645,6 +674,13 @@
 'Zetesis.ObjectiveValues.selected_entry_preserves_key' depends on axioms: [propext]
 'Zetesis.ObjectiveValues.ignored_entry_preserves_cost' depends on axioms: [propext]
 'Zetesis.ObjectiveValues.ignored_entry_preserves_optima' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Observations.completed_terms_exact' does not depend on any axioms
+'Zetesis.Observations.same_rows_preserve_terms' does not depend on any axioms
+'Zetesis.Observations.equal_measures_do_not_identify_tuple_keys' does not depend on any axioms
+'Zetesis.Observations.original_family_projection' depends on axioms: [propext, Quot.sound]
+'Zetesis.Observations.decorated_world_view' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Observations.different_models_remain_different_records' does not depend on any axioms
+'Zetesis.Observations.display_deduplication_can_shrink_a_family' does not depend on any axioms
 'Zetesis.Optimization.best_none_iff' depends on axioms: [propext]
 'Zetesis.Optimization.best_spec' depends on axioms: [propext, Quot.sound]
 'Zetesis.Optimization.optimal_is_stable' depends on axioms: [propext, Classical.choice, Quot.sound]
