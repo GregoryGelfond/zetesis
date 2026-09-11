@@ -9,6 +9,8 @@
 
 mod execution_observation;
 pub use execution_observation::{ExecutionObservation, ExecutionObserver};
+mod execution_resources;
+pub use execution_resources::ExecutionResources;
 mod options;
 mod policy;
 mod driver;

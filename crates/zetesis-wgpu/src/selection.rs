@@ -328,12 +328,7 @@ fn choose<'a>(
     let mut best: Option<(usize, &GpuInfo)> = None;
     for (index, info) in infos {
         seen = true;
-        if !selection.backend.admits(info.raw.backend)
-            || selection
-                .vendor_id
-                .is_some_and(|vendor| vendor != info.vendor_id())
-            || (options.require_gpu && !info.is_hardware_gpu())
-        {
+        if !matches_selection(info, options, selection) {
             continue;
         }
         matched = true;
@@ -371,6 +366,38 @@ fn choose<'a>(
         )
     };
     Err(GpuError::new(kind, detail))
+}
+
+fn matches_selection(info: &GpuInfo, options: GpuOptions, selection: GpuSelection) -> bool {
+    selection.backend.admits(info.raw.backend)
+        && selection
+            .vendor_id
+            .is_none_or(|vendor| vendor == info.vendor_id())
+        && (!options.require_gpu || info.is_hardware_gpu())
+}
+
+pub(crate) fn check_selection(
+    info: &GpuInfo,
+    options: GpuOptions,
+    selection: GpuSelection,
+) -> Result<(), GpuError> {
+    if matches_selection(info, options, selection) {
+        Ok(())
+    } else {
+        Err(GpuError::new(
+            GpuErrorKind::AdapterRefused,
+            format!(
+                "supplied context adapter {} ({}, vendor_id=0x{:04x}, category={}) does not match backend={}, vendor_id={:?}, require_gpu={}",
+                info.name(),
+                info.backend(),
+                info.vendor_id(),
+                info.device_type(),
+                selection.backend,
+                selection.vendor_id,
+                options.require_gpu,
+            ),
+        ))
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -761,3 +788,7 @@ mod contract_tests;
 #[cfg(test)]
 #[path = "../tests/support/adapter_metadata.rs"]
 mod metadata_tests;
+
+#[cfg(test)]
+#[path = "../tests/support/context_selection.rs"]
+mod context_policy_tests;

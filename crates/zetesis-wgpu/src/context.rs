@@ -59,6 +59,26 @@ impl GpuContext {
         &self.resources.info
     }
 
+    /// Check this device's reported identity against a caller's hard policy.
+    ///
+    /// Uses the same backend, exact vendor ID and physical-category predicate as
+    /// discovery. No adapter is rediscovered or substituted. This metadata-only
+    /// operation does not acquire a lease, inspect device health or establish a
+    /// primitive's capability requirements; its constructor still checks those.
+    /// A matching context can therefore be busy, invalidated or unsuitable for
+    /// the requested primitive. Success has fixed cost; a refusal formats detail.
+    ///
+    /// # Errors
+    /// Returns [`GpuErrorKind::AdapterRefused`] when the retained device does not
+    /// match the policy. Refusal leaves context health and residency unchanged.
+    pub fn check_selection(
+        &self,
+        options: GpuOptions,
+        selection: GpuSelection,
+    ) -> Result<(), GpuError> {
+        selection::check_selection(self.info(), options, selection)
+    }
+
     /// Whether both handles retain the exact same device context.
     ///
     /// Equal adapter metadata does not imply shared context identity.
