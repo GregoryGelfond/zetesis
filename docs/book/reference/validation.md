@@ -568,11 +568,11 @@ status. A newer source remains unqualified until its own checks complete.
 
 | Population | Covered / instrumented lines | Coverage |
 | --- | ---: | ---: |
-| Workspace, all features, portable tests plus 40 physical Metal tests | 48,019 / 51,079 | 94.01% |
-| CPU-only CLI, separate instrumentation | 4,579 / 4,894 | 93.56% |
+| Workspace, all features, portable tests plus 47 physical Metal tests | 48,222 / 51,318 | 93.97% |
+| CPU-only solver library and CLI, separate instrumentation | 4,671 / 5,016 | 93.12% |
 
 This snapshot was qualified on 11 September 2026 for
-[`6df022e3`](https://github.com/GregoryGelfond/zetesis/tree/6df022e38932cc1b1b95600bed8c9d60d38dd79e),
+[`3afaf719`](https://github.com/GregoryGelfond/zetesis/tree/3afaf719949de0e8c2162e6ff2b107fb26675c24),
 using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS 26.6.2 with Apple M4 Pro
 Metal. Both populations passed their independent 91% floor. The workspace
 combines its portable and physical profiles; the CPU-only population remains
@@ -585,6 +585,11 @@ Ordinary-session tests check exact context identity across eager/lazy closure,
 delayed automatic selection and formula setup. Repeated sessions preserve
 independent subjects, budgets, costs and outcomes while sharing the device;
 policy and observer refusals preserve later reuse.
+Compiled-profile tests check exact pipeline identity across fresh formula oracles
+and ordinary library sessions, including device health and contention boundaries.
+Builder collection tests use caller-owned resources and retain incomplete results
+without claiming a complete `WorldView`. The independent CPU population covers
+both the composed solver and its CLI consumer after their crate separation.
 The automatic-selection regression checks that actual Metal use preserves
 lazy grounding for an admitted relational program.
 Vulkan and other untested devices are outside this measurement.
