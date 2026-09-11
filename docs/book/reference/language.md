@@ -178,7 +178,7 @@ separated in the [Lean proof boundary](../lean/correspondence.md).
 
 | Aggregate form | Implemented scope | Remaining boundary |
 | --- | --- | --- |
-| Body `#count`, `#sum`, `#sum+` | Finite comparisons against complete logical bounds, recursive eligibility, complete-tuple coalescing and acyclic fresh-target assignments | Cyclic/self-dependent assignment generators, unsupported local generators and cyclic aggregate-dependent objective cones |
+| Body `#count`, `#sum`, `#sum+` | Finite comparisons against complete logical bounds, recursive eligibility, complete-tuple coalescing and acyclic fresh-target assignments | Cyclic/self-dependent assignment generators, unsupported local generators and unresolved cyclic objective producers with aggregate/conditional body operations |
 | Body `#min`, `#max` | Comparisons over complete logical values; empty extrema; admitted acyclic assignments | Numeric endpoint guard below and unsupported consumer/observer combinations |
 | Assignment consumers | Dependency-ordered scalar/tuple filters and equalities, evaluated positive arguments/heads, admitted outer negative atoms, finite outer ranges, logical choice bounds, nonbinding aggregate guards and universal conditionals; acyclic objective dependencies can include several assignments | Broader local scopes and cyclic assignment generators |
 | `#count` heads | Positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions, Boolean operands and objective dependencies | Unsupported local eligibility scopes |
@@ -327,8 +327,9 @@ an atom absent or required, or leave it optional. Rich acyclic producer cones
 and finite ordinary cycles use completed possible support where a more precise
 classification is unavailable. This support covers every true atom without
 claiming that every proposed row is realizable. Original-model queries decide
-which retained contributions actually count. Cyclic aggregate-dependent
-objective cones remain refused.
+which retained contributions actually count. Unresolved cyclic producer scopes
+containing aggregate or conditional body operations remain refused. An ordinary
+cycle may depend on an earlier completed acyclic aggregate producer.
 
 Applicable source-carrier refinements can exclude impossible generated values.
 Their errors remain errors; lack of an applicable refinement does not invalidate
