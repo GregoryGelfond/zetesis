@@ -45,7 +45,7 @@ impl Backend {
 /// Materialization policy, independent of execution hardware.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum Grounder {
-    /// Preserve adaptive behavior: CPU starts lazy; GPU uses static lowering.
+    /// Prefer lazy source grounding where admitted, independently of hardware.
     #[default]
     Auto,
     /// Require source joins without materializing a complete ground rule store.
@@ -148,8 +148,8 @@ pub struct Options {
     pub backend: Backend,
     /// Grounding mode, independent of execution backend.
     ///
-    /// Lazy uses source joins for the relational profile on CPU or an explicit
-    /// GPU. General formula inputs require eager grounding, bounded by atom,
+    /// Lazy uses source joins for the relational profile on CPU or GPU,
+    /// including automatic hardware selection. General formulas require eager grounding, bounded by atom,
     /// substitution and ground-rule ceilings.
     #[arg(long, value_enum, default_value_t)]
     pub grounder: Grounder,

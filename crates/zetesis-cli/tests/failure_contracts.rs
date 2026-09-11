@@ -493,7 +493,7 @@ fn device_inventory_exposes_availability_without_claiming_execution() {
 }
 
 #[test]
-fn automatic_lazy_routing_preserves_source_execution_without_device_discovery() {
+fn tiny_automatic_lazy_run_uses_cpu() {
     let mut options = options(&["--oracle", "closure", "--grounder", "lazy"]);
     options.backend = zetesis_cli::Backend::Auto;
     let mut output = Vec::new();
@@ -509,7 +509,12 @@ fn automatic_lazy_routing_preserves_source_execution_without_device_discovery() 
     assert_eq!(report.completion, Completion::Exhausted);
     assert_eq!(report.models, 1);
     let diagnostics = String::from_utf8(diagnostics).unwrap();
-    assert!(diagnostics.contains("using CPU without device discovery"));
+    #[cfg(feature = "gpu")]
+    assert!(diagnostics.contains("GPU discovery deferred"));
+    #[cfg(not(feature = "gpu"))]
+    assert!(diagnostics.contains("GPU support was not compiled"));
+    assert!(diagnostics.contains("Backend: cpu"));
+    assert!(report.lazy_execution.is_none());
     assert!(diagnostics.contains("effective=lazy"));
     assert!(!diagnostics.contains("effective=eager"));
 }

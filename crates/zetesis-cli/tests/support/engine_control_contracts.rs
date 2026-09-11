@@ -12,6 +12,46 @@ use crate::presentation::Diagnostics;
 use crate::{ColorMode, Options};
 
 #[test]
+fn automatic_lazy_policy_permits_device_discovery() {
+    let admitted = admit("a.".into(), AdmissionOptions::default()).unwrap();
+    for grounder in ["auto", "lazy", "eager"] {
+        let options =
+            Options::try_parse_from(["zetesis", "--grounder", grounder, "--workers", "1"]).unwrap();
+        let engine = Engine::new(
+            &(&options).into(),
+            admitted.program(),
+            &mut Diagnostics::new(Vec::new(), ColorMode::Never),
+            &crate::phase_timing::Recorder::new(false),
+        )
+        .unwrap();
+        assert_eq!(engine.automatic, cfg!(feature = "gpu"));
+        assert!(!engine.attempted_gpu);
+        assert_eq!(engine.executor.ground().is_some(), grounder == "eager");
+    }
+}
+
+#[test]
+fn retired_device_work_excludes_cpu_queue_entries() {
+    let admitted = admit("a.".into(), AdmissionOptions::default()).unwrap();
+    let options = Options::try_parse_from(["zetesis", "--backend", "cpu"]).unwrap();
+    let mut engine = Engine::new(
+        &(&options).into(),
+        admitted.program(),
+        &mut Diagnostics::new(Vec::new(), ColorMode::Never),
+        &crate::phase_timing::Recorder::new(false),
+    )
+    .unwrap();
+    // A reporting fixture represents a failed attempt, not physical execution.
+    let prior = crate::lazy_execution::tests::fixture();
+    engine.retired_lazy_statistics = Some(prior.clone());
+    let observed = engine.lazy_statistics(32).unwrap();
+    assert_eq!(observed.queued_results, 0);
+    assert_eq!(observed.completed_candidates, prior.completed_candidates);
+    assert_eq!(observed.stopped_candidates, prior.stopped_candidates);
+    assert_eq!(observed.dispatches, prior.dispatches);
+}
+
+#[test]
 fn collected_seeds_observe_cancellation_and_deadline_before_any_oracle() {
     let admitted = admit("p.".into(), AdmissionOptions::default()).unwrap();
     let program = admitted.program();

@@ -93,7 +93,7 @@ fn eager_and_lazy_cpu_return_the_same_models_and_complete_coverage() {
 }
 
 #[test]
-fn lazy_ignores_ground_store_and_substitution_caps_even_in_large_auto_batches() {
+fn lazy_ignores_static_lowering_caps() {
     let (report, output, diagnostics) = solve(
         "{a}. {b}. {c}. {d}. {e}. {f}.",
         &[
@@ -105,17 +105,17 @@ fn lazy_ignores_ground_store_and_substitution_caps_even_in_large_auto_batches() 
             "0",
             "--max-substitutions",
             "0",
-            "--max-batch-bytes",
-            "0",
         ],
     );
     assert_eq!(report.completion, Completion::Exhausted);
     assert_eq!((report.models, report.checked), (64, 64));
     assert_eq!(models(&output).len(), 64);
-    assert!(diagnostics.contains("using CPU without device discovery"));
+    #[cfg(feature = "gpu")]
+    assert!(diagnostics.contains("GPU discovery deferred"));
+    #[cfg(not(feature = "gpu"))]
+    assert!(diagnostics.contains("GPU support was not compiled"));
     assert!(diagnostics.contains("requested=lazy, effective=lazy"));
     assert!(!diagnostics.contains("static atoms="));
-    assert!(!diagnostics.contains("GPU unavailable"));
 }
 
 #[test]

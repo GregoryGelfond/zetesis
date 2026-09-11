@@ -19,7 +19,7 @@ pub fn devices(output: &mut impl Write) -> Result<(), RunError> {
     inventory(output)?;
     writeln!(
         output,
-        "Auto backend: CPU for the first seed and batches smaller than {}; larger batches may use a physical GPU. --grounder lazy keeps auto on CPU; --grounder eager preserves static lowering across fallback.",
+        "Auto backend: CPU for the first seed and batches smaller than {}; larger batches may use a physical GPU. Auto/lazy grounding stays lazy across hardware changes; --grounder eager preserves static lowering across fallback.",
         crate::engine::AUTO_GPU_MIN_BATCH
     )?;
     writeln!(

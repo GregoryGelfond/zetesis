@@ -98,6 +98,24 @@ not evidence that it ran; adapter identity, submitted work, completed work and
 residual work are separate observations. GPU support does not mean the complete
 solver is device-resident.
 
+For admitted relational programs, automatic materialization selects lazy source
+grounding on both CPU and GPU. Hardware changes do not require a complete ground
+rule store. Explicit eager grounding retains its compiled graph, including when
+automatic device execution falls back to CPU. General formulas still require
+eager grounding.
+
+The relational scheduler starts on CPU and may discover a GPU when a later
+candidate batch contains at least 32 candidates. This is a provisional scheduling
+heuristic, not a measured crossover. Explicit lazy grounding permits the same
+automatic discovery. An explicit GPU backend initializes its requested device
+immediately; explicit shared CPU source batching remains a CPU policy.
+
+If automatic device execution fails before publishing a batch, the engine can
+retry those same seeds on CPU. It retains the failed lazy device attempt's work
+record. A source limit or cancellation remains an incomplete result rather than
+a reason to exceed that bound. Device statistics count device attempts; they do
+not include seeds checked only by the CPU.
+
 ## Immutable rounds and commit boundaries
 
 Each lazy batch has independent frozen seeds and positive snapshots. All chunks

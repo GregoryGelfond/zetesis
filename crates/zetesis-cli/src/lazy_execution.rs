@@ -3,12 +3,13 @@
 mod transport;
 pub use transport::{LazyBufferUsage, LazyTransportUsage};
 
-/// Cumulative work from the explicitly selected lazy device executor. A selected
+/// Cumulative work from the lazy device executor, including automatic selection
+/// and attempts followed by CPU fallback. A selected
 /// adapter does not establish execution: actual dispatch and transfer counts do.
 /// Source work is shared across candidate occurrences, not a per-world CPU cost.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LazyExecutionStatistics {
-    /// User's explicit hardware request.
+    /// Requested hardware policy, including automatic selection.
     pub requested_backend: crate::Backend,
     /// Reported selected device name.
     pub adapter: String,

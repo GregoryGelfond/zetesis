@@ -25,6 +25,9 @@ fn options(mode: ColorMode) -> Options {
         "lazy",
         "--workers",
         "1",
+        // Keep formatting and writer-boundary checks independent of hardware.
+        "--batch-size",
+        "16",
         "--models",
         "0",
     ])
@@ -62,13 +65,18 @@ fn diagnostics(mode: ColorMode, json: bool) -> (Vec<u8>, String) {
 }
 
 #[test]
-fn plain_metadata_retains_the_legacy_bytes() {
+fn plain_metadata_describes_the_execution_policy() {
+    let automatic = if cfg!(feature = "gpu") {
+        "GPU discovery deferred; the first seed stays CPU. Later batches of at least 32 candidates may use a physical GPU with lazy grounding (provisional heuristic)."
+    } else {
+        "GPU support was not compiled; using CPU without device discovery."
+    };
     let expected = format!(
         "Source: 1 original files ({} bytes)\n\
          Oracle: reduct closure\n\
          Grounding: requested=lazy, effective=lazy (source joins; no complete ground-rule store)\n\
          Backend: cpu (lazy source joins, 1 workers)\n\
-         Auto: --grounder lazy requires source joins; using CPU without device discovery.\n",
+         Auto: {automatic}\n",
         bundle().total_bytes()
     );
     assert_eq!(diagnostics(ColorMode::Never, false).1, expected);

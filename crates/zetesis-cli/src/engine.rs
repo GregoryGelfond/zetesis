@@ -43,6 +43,8 @@ pub(crate) struct Engine {
     executor: Executor,
     automatic: bool,
     attempted_gpu: bool,
+    // Retain attempted device work if automatic execution resumes on CPU.
+    retired_lazy_statistics: Option<crate::LazyExecutionStatistics>,
 }
 
 impl Engine {
@@ -52,12 +54,20 @@ impl Engine {
             _ => None,
         }
     }
-    pub(crate) fn lazy_statistics(&self) -> Option<crate::LazyExecutionStatistics> {
-        match &self.executor {
+    pub(crate) fn lazy_statistics(
+        &self,
+        queued_results: usize,
+    ) -> Option<crate::LazyExecutionStatistics> {
+        let (statistics, owns_queue) = match &self.executor {
             #[cfg(feature = "gpu")]
-            Executor::LazyGpu(executor) => Some(executor.statistics.clone()),
-            _ => None,
-        }
+            Executor::LazyGpu(executor) => (Some(&executor.statistics), true),
+            _ => (self.retired_lazy_statistics.as_ref(), false),
+        };
+        statistics.map(|statistics| {
+            let mut statistics = statistics.clone();
+            statistics.queued_results = if owns_queue { queued_results } else { 0 };
+            statistics
+        })
     }
     #[cfg(test)]
     pub(crate) fn new(
@@ -83,15 +93,10 @@ impl Engine {
                 if options.backend == Backend::Auto {
                     if options.source_batching != SourceBatching::Independent {
                         diagnostics.metadata(Label::Auto, format_args!("explicit shared source batching selects CPU without device discovery."))?;
-                    } else if options.grounder == Grounder::Lazy {
-                        diagnostics.metadata(
-                            Label::Auto,
-                            format_args!("--grounder lazy requires source joins; using CPU without device discovery."),
-                        )?;
                     } else if cfg!(feature = "gpu") {
                         diagnostics.metadata(
                             Label::Auto,
-                            format_args!("GPU discovery deferred; the first seed stays CPU. Later batches of at least {AUTO_GPU_MIN_BATCH} candidates may use a physical GPU with static lowering (provisional heuristic)."),
+                            format_args!("GPU discovery deferred; the first seed stays CPU. Later batches of at least {AUTO_GPU_MIN_BATCH} candidates may use a physical GPU with {} grounding (provisional heuristic).", grounding_mode(options)),
                         )?;
                     } else {
                         diagnostics.metadata(
@@ -110,9 +115,9 @@ impl Engine {
             executor,
             automatic: options.backend == Backend::Auto
                 && options.source_batching == SourceBatching::Independent
-                && options.grounder != Grounder::Lazy
                 && cfg!(feature = "gpu"),
             attempted_gpu: false,
+            retired_lazy_statistics: None,
         })
     }
 
@@ -149,7 +154,7 @@ impl Engine {
                         Label::Auto,
                         format_args!(
                             "retaining {} CPU; GPU unavailable: {error}",
-                            cpu_mode(options)
+                            grounding_mode(options)
                         ),
                     )?;
                 }
@@ -163,14 +168,16 @@ impl Engine {
         match phases.measure(phase, || {
             self.executor.check(options, program, seeds, control)
         }) {
+            Err(error @ RunError::LazyStatisticsOverflow) => Err(error),
             Err(error) if self.automatic && self.executor.is_gpu() => {
                 // No failed-batch result has been published. Eager retains the
-                // same graph; Auto returns to source joins for these same seeds.
+                // same graph; lazy execution retries these same source seeds.
+                self.retired_lazy_statistics = self.lazy_statistics(0);
                 diagnostics.metadata(
                     Label::Auto,
                     format_args!(
                         "GPU batch failed; retrying on {} CPU: {error}",
-                        cpu_mode(options)
+                        grounding_mode(options)
                     ),
                 )?;
                 self.executor = phases.measure(SolvePhase::ExecutionSetup, || {
@@ -195,7 +202,7 @@ fn should_probe_gpu(automatic: bool, attempted: bool, candidates: usize) -> bool
     automatic && !attempted && candidates >= AUTO_GPU_MIN_BATCH
 }
 
-fn cpu_mode(options: &SolveConfig) -> &'static str {
+fn grounding_mode(options: &SolveConfig) -> &'static str {
     if options.grounder == Grounder::Eager {
         "eager"
     } else {
@@ -321,7 +328,7 @@ impl Executor {
     ) -> Result<Self, RunError> {
         use zetesis_wgpu::{GpuOptions, GpuOracle};
 
-        if options.grounder == Grounder::Lazy {
+        if options.grounder != Grounder::Eager {
             let oracle = zetesis_wgpu::GpuLazyOracle::new_selected(
                 GpuOptions::default(),
                 selection(options.backend),
@@ -330,7 +337,7 @@ impl Executor {
             let statistics =
                 crate::LazyExecutionStatistics::new(options.backend, oracle.info().metadata());
             phases.lazy_grounding();
-            diagnostics.metadata(Label::Grounding, format_args!("requested=lazy, effective=lazy (host source joins; per-world device consequences; no complete ground-rule store)"))?;
+            diagnostics.metadata(Label::Grounding, format_args!("requested={}, effective=lazy (host source joins; per-world device consequences; no complete ground-rule store)", options.grounder.label()))?;
             diagnostics.metadata(
                 Label::Backend,
                 format_args!(

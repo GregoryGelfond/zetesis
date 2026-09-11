@@ -85,6 +85,50 @@ mod physical {
 
     const WORLDS: &str = "a:-not b. b:-not a. x:-a. y:-b. cross:-x,y. :-cross.";
 
+    #[test]
+    #[ignore = "requires physical Metal through automatic lazy selection"]
+    fn automatic_metal_keeps_lazy_grounding() {
+        let source = "{a}. {b}. {c}. {d}. {e}. {f}.";
+        let (_, expected, _) = solve(source, &["--backend", "cpu", "--json"]);
+        for (backend, grounder) in [
+            (zetesis_cli::Backend::Auto, zetesis_cli::Grounder::Auto),
+            (zetesis_cli::Backend::Auto, zetesis_cli::Grounder::Lazy),
+            (zetesis_cli::Backend::Metal, zetesis_cli::Grounder::Auto),
+        ] {
+            let mut selected = options(&["--stats", "--json"]);
+            selected.backend = backend;
+            selected.grounder = grounder;
+            // A hidden static lowering cannot succeed under these limits.
+            selected.max_ground_rules = 0;
+            selected.max_substitutions = 0;
+            let mut output = Vec::new();
+            let mut diagnostics = Vec::new();
+            let report = run_with_diagnostics(
+                source.into(),
+                &selected,
+                &mut output,
+                &mut diagnostics,
+                &Control::default(),
+            )
+            .unwrap();
+            let actual: serde_json::Value = serde_json::from_slice(&output).unwrap();
+            assert_eq!(report.completion, Completion::Exhausted);
+            assert_eq!(report.models, 64);
+            assert_eq!(actual["models"], expected["models"]);
+            let stats = report.lazy_execution.unwrap();
+            assert_eq!(stats.requested_backend, backend);
+            assert_eq!(stats.backend, "Metal");
+            assert!(stats.dispatches > 0);
+            assert!(stats.completed_candidates > 0);
+            assert_eq!(stats.submitted_candidates, stats.completed_candidates);
+            assert!(stats.completed_candidates <= report.checked);
+            assert_eq!(stats.stopped_candidates, 0);
+            let diagnostics = String::from_utf8(diagnostics).unwrap();
+            assert!(diagnostics.contains("effective=lazy"));
+            assert!(!diagnostics.contains("effective=eager"));
+        }
+    }
+
     fn solve(source: &str, arguments: &[&str]) -> (zetesis_cli::Report, serde_json::Value, String) {
         let mut output = Vec::new();
         let mut diagnostics = Vec::new();

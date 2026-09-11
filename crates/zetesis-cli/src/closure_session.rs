@@ -195,11 +195,7 @@ impl<'a> ClosureSession<'a> {
                 .engine
                 .as_ref()
                 .ok()
-                .and_then(Engine::lazy_statistics)
-                .map(|mut statistics| {
-                    statistics.queued_results = self.ready.len();
-                    statistics
-                }),
+                .and_then(|engine| engine.lazy_statistics(self.ready.len())),
         }
     }
 }
