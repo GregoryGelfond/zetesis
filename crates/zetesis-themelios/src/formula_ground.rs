@@ -39,7 +39,11 @@ pub(crate) fn ground(
         builder,
         objectives,
         objective_origins,
-    } = instantiate(&prepared, limits, budget, location, &profile, count_plan)?;
+        analysis_basis,
+        analysis,
+        analyzed,
+        objective_declarations,
+    } = instantiate(prepared, limits, budget, location, &profile, count_plan)?;
     let Emission {
         atoms,
         nodes,
@@ -56,16 +60,16 @@ pub(crate) fn ground(
         |collector| collector.finish(&theory),
     );
     Ok(Compiled {
-        count_plan,
-        analysis_basis: prepared.analysis_basis,
-        analysis: prepared.analysis,
-        analyzed: prepared.analyzed,
+        analysis_basis,
+        analysis,
+        analyzed,
         theory,
+        count_plan,
         atoms,
         origins,
         objectives,
         objective_origins,
-        objective_declarations: prepared.objective_declarations,
+        objective_declarations,
     })
 }
 
@@ -75,10 +79,14 @@ struct Instantiation<'a> {
     builder: Builder<'a>,
     objectives: zetesis_objective::ObjectiveProgram,
     objective_origins: Vec<Vec<Location>>,
+    analysis_basis: crate::AnalysisBasis,
+    analysis: themelios_analysis::Analysis,
+    analyzed: themelios_program::program::Program,
+    objective_declarations: Vec<Location>,
 }
 
 fn instantiate<'a>(
-    prepared: &Prepared,
+    prepared: Prepared,
     limits: &'a FormulaLimits,
     budget: &'a mut Budget,
     location: Location,
@@ -89,14 +97,14 @@ fn instantiate<'a>(
 
     let mut counters = Counters::observed(profile.work());
     let catalog = profile.phase(GroundingPhase::SupportCompletion, None, || {
-        formula_support::build(prepared, limits, budget, &mut counters, location)
+        formula_support::build(&prepared, limits, budget, &mut counters, location)
     })?;
     let support = profile.phase(GroundingPhase::SupportCompletion, None, || {
         catalog.snapshot(limits, &mut counters, location)
     })?;
     let (objectives, objective_origins) =
         profile.phase(GroundingPhase::ObjectiveActivation, None, || {
-            objectives::prepare(prepared, &support, limits, budget, &mut counters, location)
+            objectives::prepare(&prepared, &support, limits, budget, &mut counters, location)
         })?;
     let mut builder = profile.phase(GroundingPhase::FormulaInitialization, None, || {
         let mut builder = Builder {
@@ -146,6 +154,10 @@ fn instantiate<'a>(
         builder,
         objectives,
         objective_origins,
+        analysis_basis: prepared.analysis_basis,
+        analysis: prepared.analysis,
+        analyzed: prepared.analyzed,
+        objective_declarations: prepared.objective_declarations,
     })
 }
 
