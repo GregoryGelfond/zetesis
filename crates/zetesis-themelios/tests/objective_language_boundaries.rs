@@ -1,9 +1,9 @@
 //! Exact witnesses for the remaining aggregate-head and objective boundaries.
 //!
 //! The fixture retains complete clingo 5.8.2 byte captures from the unchanged
-//! sources. The two missing-extremum heads now admit with complete empty families;
-//! their matching reference results do not determine a general source policy. Cyclic objective refusals
-//! are distinguished from invalid programs by exhaustive original-theory checks.
+//! sources. Native expectations separately specify the empty extremum-head
+//! families and cyclic objective scores. Complete objective-free families remain
+//! checked independently; reference observations do not define native semantics.
 
 #[path = "support/source_records.rs"]
 mod source_records;
@@ -48,10 +48,12 @@ fn residual_sources_have_located_profile_refusals() {
         let Some(feature) = case["native_feature"].as_str() else {
             continue;
         };
+        if feature == "ObjectiveSourceEligibility" {
+            continue;
+        }
         let source = case["source"].as_str().unwrap();
         let expected = match feature {
             "AnalysisPool" => ProfileFeature::AnalysisPool,
-            "ObjectiveSourceEligibility" => ProfileFeature::ObjectiveSourceEligibility,
             feature => panic!("unclassified boundary {feature}"),
         };
         let error = admit_formula(
@@ -89,7 +91,7 @@ fn residual_sources_have_located_profile_refusals() {
         assert_eq!(diagnostics[0].primary().location, *location, "{source}");
         refused += 1;
     }
-    assert_eq!(refused, 5);
+    assert_eq!(refused, 1);
 }
 
 #[test]
@@ -129,7 +131,52 @@ fn missing_extremum_witnesses_have_no_answers() {
 }
 
 #[test]
-fn cyclic_objective_gaps_preserve_original_answers() {
+fn cyclic_sources_have_declared_scored_answers() {
+    let mut migrated = 0;
+    for case in cases()
+        .into_iter()
+        .filter(|case| case["native_feature"] == "ObjectiveSourceEligibility")
+    {
+        let (priorities, records) = match case["name"].as_str().unwrap() {
+            "cyclic-aggregate" => (vec![0], serde_json::json!([[["p"], [1]]])),
+            "cyclic-conditional" => (vec![0], serde_json::json!([[["d"], [0]]])),
+            "cyclic-priority" => (vec![1, 0], serde_json::json!([[["n(1)", "p"], [1, 0]]])),
+            "cyclic-multiple-observer" => (vec![1], serde_json::json!([[["n(1,2)", "p"], [2]]])),
+            name => panic!("unclassified cyclic source {name}"),
+        };
+        let input =
+            source_records::admit(case["source"].as_str().unwrap(), &FormulaLimits::default())
+                .unwrap_or_else(|error| panic!("{}: {error}", case["name"]));
+        let expected = records
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| {
+                (
+                    source_records::atoms(&row[0]),
+                    source_records::costs(&row[1]),
+                )
+            })
+            .collect();
+        assert_eq!(
+            source_records::exhaustive(&input),
+            expected,
+            "{}",
+            case["name"]
+        );
+        assert_eq!(
+            input.objectives().priorities(),
+            priorities,
+            "{}",
+            case["name"]
+        );
+        migrated += 1;
+    }
+    assert_eq!(migrated, 4);
+}
+
+#[test]
+fn cyclic_objectives_preserve_original_answers() {
     let mut originals = 0;
     for case in cases() {
         let Some(original) = case["original_source"].as_str() else {
