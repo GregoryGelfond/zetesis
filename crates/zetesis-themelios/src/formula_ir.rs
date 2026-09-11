@@ -47,8 +47,9 @@ pub(crate) struct ObjectiveIr {
     pub positive: Vec<AtomPattern>,
     pub filters: Vec<Filter>,
     pub polarity: WeightPolarity,
-    /// Indices of positive conditions supplying generated priority inputs.
-    /// Grounding must certify their exact values before publishing priorities.
+    /// Positive conditions whose generated values affect priority evaluation or
+    /// source eligibility through a literal, filter or repeated variable.
+    /// Grounding certifies these complete carriers before retaining any row.
     pub priority_sources: BTreeSet<usize>,
     pub condition: Vec<LiteralIr>,
     pub variables: usize,

@@ -1,0 +1,12 @@
+{"name":"repeated_alias","source":"{a}.n(N):-N=#count{1:a}.alias(P):-n(P).#minimize{1@N:n(N),alias(N)}.","priorities":[1,0],"records":[[["alias(0)","n(0)"],[0,1]],[["a","alias(1)","n(1)"],[1,0]]]}
+{"name":"filtered_priority","source":"{a}.n(N):-N=#count{1:a}.#minimize{1@N:n(N),N!=0}.","priorities":[1],"records":[[["n(0)"],[0]],[["a","n(1)"],[1]]]}
+{"name":"filtered_weight","source":"{a}.n(N):-N=#sum{2:a;3:a}.#minimize{N@7:n(N),N!=0}.","priorities":[7],"records":[[["n(0)"],[0]],[["a","n(5)"],[5]]]}
+{"name":"excluded_literal","source":"{a}.n(N):-N=#sum{2:a;3:a}.#minimize{1@7:n(1)}.","priorities":[],"records":[[["n(0)"],null],[["a","n(5)"],null]]}
+{"name":"unrealized_literal","source":"{a}.n(N):-N=#sum{2:a;3:a}.#minimize{1@7:n(2)}.","priorities":[7],"records":[[["n(0)"],[0]],[["a","n(5)"],[0]]]}
+{"name":"required_excludes_empty","source":"a.{b}.n(N):-N=#sum{2:a;3:b}.#minimize{1@7:n(0)}.","priorities":[],"records":[[["a","n(2)"],null],[["a","b","n(5)"],null]]}
+{"name":"shared_ordinary_binding","source":"d(2).{a}.n(N):-N=#sum{2:a;3:a}.#minimize{1@N:n(N),d(N)}.","priorities":[2],"records":[[["d(2)","n(0)"],[0]],[["a","d(2)","n(5)"],[0]]]}
+{"name":"repeated_observer","source":"{a}.n(N):-N=#count{1:a}.#minimize{N@7:n(N),n(N)}.","priorities":[7],"records":[[["n(0)"],[0]],[["a","n(1)"],[1]]]}
+{"name":"filtered_mixed_maximum","source":"{a}.n(N):-N=#max{2:a;foo:a}.#minimize{N@7:n(N),N=2}.","priorities":[7],"records":[[["n(#inf)"],[0]],[["a","n(foo)"],[0]]]}
+{"name":"filter_precedes_priority","source":"{a}.n(N):-N=#sum{2:a;3:a}.#minimize{1@(1/(N-2)):n(N),N!=2}.","priorities":[1,0],"records":[[["n(0)"],[0,1]],[["a","n(5)"],[0,1]]]}
+{"name":"shared_product_binding","source":"{a}.n(N):-N=#count{1:a}.m(M):-M=#sum{2:a}.#minimize{1@N:n(N),m(N)}.","priorities":[0],"records":[[["m(0)","n(0)"],[1]],[["a","m(2)","n(1)"],[0]]]}
+{"name":"product_equality","source":"{a}.n(N):-N=#count{1:a}.m(M):-M=#sum{2:a}.#minimize{1@N:n(N),m(M),N=M}.","priorities":[0],"records":[[["m(0)","n(0)"],[1]],[["a","m(2)","n(1)"],[0]]]}

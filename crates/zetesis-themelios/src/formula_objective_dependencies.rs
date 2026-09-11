@@ -120,7 +120,7 @@ pub(crate) fn check(
         }
     }
     for objective in objectives.iter_mut() {
-        objective.priority_sources = observer(objective, &generated)?;
+        objective.priority_sources = observer(objective, &generated);
     }
     Ok(presence::required(rules, objectives, graph, &generated))
 }
@@ -277,7 +277,7 @@ fn total_dependency(
 fn observer(
     objective: &ObjectiveIr,
     generated: &BTreeMap<Signature, BTreeSet<usize>>,
-) -> Result<BTreeSet<usize>, FormulaFailure> {
+) -> BTreeSet<usize> {
     let mut priorities = BTreeSet::new();
     let mut occurrences = BTreeMap::<usize, usize>::new();
     for atom in &objective.positive {
@@ -292,27 +292,27 @@ fn observer(
             continue;
         };
         for &position in positions {
-            let Term::Variable(variable) = atom.terms()[position] else {
-                return Err(refusal(objective.location));
+            let required = match atom.terms()[position] {
+                Term::Constant(_) => true,
+                Term::Variable(variable) => {
+                    occurrences.get(&variable) != Some(&1)
+                        || objective.filters.iter().any(|filter| {
+                            let (left, right) = match filter {
+                                Filter::Eq(left, right) | Filter::Neq(left, right) => (left, right),
+                            };
+                            *left == Term::Variable(variable) || *right == Term::Variable(variable)
+                        })
+                        || objective.priority.inputs().any(|input| input == variable)
+                }
             };
-            if occurrences.get(&variable) != Some(&1)
-                || objective.filters.iter().any(|filter| {
-                    let (left, right) = match filter {
-                        Filter::Eq(left, right) | Filter::Neq(left, right) => (left, right),
-                    };
-                    *left == Term::Variable(variable) || *right == Term::Variable(variable)
-                })
-            {
-                return Err(refusal(objective.location));
-            }
-            // Generated proposals are not exact priority carriers. Record the
-            // producer so grounding must establish its eligibility certificate.
-            if objective.priority.inputs().any(|input| input == variable) {
+            // A literal, filter or join can distinguish a proposal from a
+            // completed source value even when the priority itself is fixed.
+            if required {
                 priorities.insert(index);
             }
         }
     }
-    Ok(priorities)
+    priorities
 }
 fn signature(predicate: &Predicate) -> Signature {
     Signature {

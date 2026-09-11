@@ -259,6 +259,15 @@ values unrealized; their numeric priority slots still remain, with zero cost.
 Undefined source priority arithmetic remains a located error even for such a
 row. Invariant carriers are the singleton case. Broader producer shapes remain
 outside this certificate.
+
+Within that completed flat-carrier profile, objective conditions may select a
+generated value by a literal, equality/disequality filter, or a repeated variable
+shared with another positive condition. Selection applies to whole bindings
+before priority evaluation, including fixed-priority objectives. An unrealized
+value in the source carrier can retain an inactive priority slot; a proposal
+outside the completed carrier cannot. The original aggregate equalities and
+model-relative objective conditions remain intact. Selected fixed-priority rows
+use the same bounded specialization path as dynamic priorities.
 `FormulaLimits::max_objective_presence_entries` conservatively bounds
 logical presence-planning slots, including completed carrier values,
 rather than allocator bytes. Transient numeric subset construction separately

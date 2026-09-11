@@ -64,7 +64,9 @@ impl Preparation<'_> {
         may_have_numeric_weight: bool,
         presence: &Presence<'_>,
     ) -> Result<(), FormulaFailure> {
-        if let [Operation::Constant(Value::Number(priority))] = objective.priority.nodes.as_slice()
+        if objective.priority_sources.is_empty()
+            && let [Operation::Constant(Value::Number(priority))] =
+                objective.priority.nodes.as_slice()
         {
             if may_have_numeric_weight && self.has_numeric_row(objective, support)? {
                 self.retain(objective, objective.template(*priority))?;

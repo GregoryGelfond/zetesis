@@ -227,22 +227,62 @@ fn source_products_bound_specialized_objectives() {
 }
 
 #[test]
-fn repeated_generated_inputs_keep_the_scope_refusal() {
-    for source in [
-        "{a}.n(N):-N=#count{1:a}.alias(P):-n(P).#minimize{1@N:n(N),alias(N)}.",
-        "{a}.n(N):-N=#count{1:a}.#minimize{1@N:n(N),N!=0}.",
-    ] {
-        let error = admit(source, &FormulaLimits::default()).unwrap_err();
-        assert!(matches!(
-            error,
-            FormulaFailure::Expansion(ExpansionFailure::Admission(
-                zetesis_themelios::AdmissionFailure::Profile {
-                    feature: zetesis_themelios::ProfileFeature::ObjectiveAggregateDependency,
-                    ..
-                }
-            ))
-        ));
-        assert!(!error.diagnostics().is_empty());
+fn selected_carriers_preserve_complete_scored_answers() {
+    let rows = include_str!("fixtures/objective-filtered-carriers.jsonl");
+    let cases = source_cases::cases(rows);
+    assert_eq!(cases.len(), 12);
+    for (case, row) in cases.into_iter().zip(rows.lines()) {
+        let expected: serde_json::Value = serde_json::from_str(row).unwrap();
+        let input = admit(&case.source, &FormulaLimits::default())
+            .unwrap_or_else(|error| panic!("{}: {error}", case.name));
+        assert_eq!(exhaustive(&input), case.records, "{}", case.name);
+        assert_eq!(
+            serde_json::to_value(input.objectives().priorities()).unwrap(),
+            expected["priorities"],
+            "{}",
+            case.name
+        );
+    }
+}
+
+#[test]
+fn selected_carriers_preserve_original_equalities() {
+    for case in source_cases::cases(include_str!("fixtures/objective-filtered-carriers.jsonl")) {
+        let program = case.source.split("#minimize").next().unwrap();
+        let original = admit(program, &FormulaLimits::default()).unwrap();
+        let selected = admit(&case.source, &FormulaLimits::default()).unwrap();
+        assert_eq!(original.atoms(), selected.atoms(), "{}", case.name);
+        assert_eq!(
+            original.theory().nodes(),
+            selected.theory().nodes(),
+            "{}",
+            case.name
+        );
+        assert_eq!(
+            original.theory().roots(),
+            selected.theory().roots(),
+            "{}",
+            case.name
+        );
+        assert_eq!(
+            original.formula_origins(),
+            selected.formula_origins(),
+            "{}",
+            case.name
+        );
+    }
+}
+
+#[test]
+#[ignore = "requires independent clingo for 12 original filtered-carrier sources"]
+fn selected_source_carriers_match_fresh_clingo() {
+    for case in source_cases::cases(include_str!("fixtures/objective-filtered-carriers.jsonl")) {
+        assert_eq!(
+            source_oracle::records(&case.source),
+            case.records,
+            "{}",
+            case.name
+        );
     }
 }
 
