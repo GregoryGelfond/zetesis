@@ -181,7 +181,7 @@ fn admitted_sources_match_complete_recorded_display_and_cost_multisets() {
         records += expected.len();
         admitted += 1;
     }
-    assert_eq!((admitted, records), (49, 65));
+    assert_eq!((admitted, records), (52, 69));
 }
 #[test]
 fn every_outside_profile_source_has_an_explicit_typed_refusal() {
@@ -243,7 +243,7 @@ fn every_outside_profile_source_has_an_explicit_typed_refusal() {
         }
         refused += 1;
     }
-    assert_eq!(refused, 14);
+    assert_eq!(refused, 11);
 }
 #[test]
 fn metadata_preserves_the_original_formula_and_source_identity() {

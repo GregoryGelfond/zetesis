@@ -1,0 +1,16 @@
+{"source":"p(1).p(2).q(1). #show. #show x:#count{X:p(X);X:q(X)}=2.","solver":"clingo version 5.8.2","witnesses":[["x"]],"result":"SATISFIABLE"}
+{"source":"p(1). #show. #show x:#count{X,a:p(X);X,b:p(X)}=2.","solver":"clingo version 5.8.2","witnesses":[["x"]],"result":"SATISFIABLE"}
+{"source":"p(2).q(2). #show. #show x:#sum{X,a:p(X);X,a:q(X);X,b:p(X)}=4.","solver":"clingo version 5.8.2","witnesses":[["x"]],"result":"SATISFIABLE"}
+{"source":"p(-2).p(0).p(3). #show. #show x:#sum+{X:p(X)}=3.","solver":"clingo version 5.8.2","witnesses":[["x"]],"result":"SATISFIABLE"}
+{"source":"p(2).p(a).p(f(1)). #show. #show x:#min{X:p(X)}=2,#max{X:p(X)}=f(1).","solver":"clingo version 5.8.2","witnesses":[["x"]],"result":"SATISFIABLE"}
+{"source":"#show. #show x:#count{}=0,#sum{}=0,#min{}=#sup,#max{}=#inf.","solver":"clingo version 5.8.2","witnesses":[["x"]],"result":"SATISFIABLE"}
+{"source":"p(1). #show. #show x:not #count{X:p(X)}=0. #show y:not not #count{X:p(X)}=1.","solver":"clingo version 5.8.2","witnesses":[["y","x"]],"result":"SATISFIABLE"}
+{"source":"p(1).p(2).q(1). #show. #show X:p(X),#count{X:q(X)}=1.","solver":"clingo version 5.8.2","witnesses":[["1"]],"result":"SATISFIABLE"}
+{"source":"p(1).p(2).q(1). #show. #show x:q(X):p(X).","solver":"clingo version 5.8.2","witnesses":[[]],"result":"SATISFIABLE"}
+{"source":"#show. #show x:q(X):p(X).","solver":"clingo version 5.8.2","witnesses":[["x"]],"result":"SATISFIABLE"}
+{"source":"p(1).p(2).q(1). #show. #show X:p(X),q(X):p(X).","solver":"clingo version 5.8.2","witnesses":[["1"]],"result":"SATISFIABLE"}
+{"source":"p(2). #show. #show x:#count{Y:p(X),Y=f(X+1)}=1.","solver":"clingo version 5.8.2","witnesses":[["x"]],"result":"SATISFIABLE"}
+{"source":"#show. #show x:#sum{a;2}=2,#sum+{a;-2;2}=2.","solver":"clingo version 5.8.2","witnesses":[["x"]],"result":"SATISFIABLE"}
+{"source":"#show. #show x:#sum{2147483647,a;2147483647,b;-2147483647,c;-2147483647,d}=0.","solver":"clingo version 5.8.2","witnesses":[["x"]],"result":"SATISFIABLE"}
+{"source":"#show. #show x:#sum{2147483647,a;2147483647,b}>2147483647.","solver":"clingo version 5.8.2","witnesses":[[]],"result":"SATISFIABLE","reference_difference":"clingo_i32_wrapping","expected_native":["x"]}
+{"source":"p. #show. #show x:2{p;not not p}=2.","solver":"clingo version 5.8.2","witnesses":[["x"]],"result":"SATISFIABLE"}

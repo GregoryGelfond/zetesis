@@ -1,5 +1,7 @@
 //! Model-relative bounded joins. No source carrier or solver is consulted.
 
+mod scopes;
+
 use std::cmp::Ordering;
 
 use themelios_base::span::Location;
@@ -482,55 +484,107 @@ fn matches<'a>(
     }
     Ok(true)
 }
-fn conditions<'a>(
-    query: &Query,
-    atoms: &[&'a Atom],
-    binding: &mut [Option<Bound<'a>>],
+fn relation_holds(relation: Relation, order: Ordering) -> bool {
+    match relation {
+        Relation::Lt => order.is_lt(),
+        Relation::Le => !order.is_gt(),
+        Relation::Gt => order.is_gt(),
+        Relation::Ge => !order.is_lt(),
+        Relation::Eq => order.is_eq(),
+        Relation::Neq => !order.is_eq(),
+    }
+}
+fn test_pattern(
+    pattern: &Pattern,
+    atom: &Atom,
+    binding: &[Option<Bound<'_>>],
     work: &mut Work<'_>,
 ) -> Result<bool, Error> {
-    for condition in &query.conditions {
+    work.step(1 + pattern.predicate.name().len() as u128 + atom.predicate().name().len() as u128)?;
+    if pattern.predicate != *atom.predicate() {
+        return Ok(false);
+    }
+    for (term, value) in pattern.terms.iter().zip(atom.values()) {
         work.step(1)?;
-        match condition {
-            Condition::Atom(negation, pattern) => {
-                let mut present = false;
-                for &atom in atoms {
-                    if matches(pattern, atom, binding, &mut Vec::new(), false, work)? {
-                        present = true;
-                        break;
-                    }
-                }
-                if present != (*negation == DefaultNegation::NotNot) {
-                    return Ok(false);
-                }
-            }
-            Condition::Compare(negation, first, steps) => {
-                let mut left = first;
-                let mut truth = true;
-                for (relation, right) in steps {
-                    let order = work.compare_templates(left, right, binding)?;
-                    truth = match relation {
-                        Relation::Lt => order.is_lt(),
-                        Relation::Le => !order.is_gt(),
-                        Relation::Gt => order.is_gt(),
-                        Relation::Ge => !order.is_lt(),
-                        Relation::Eq => order.is_eq(),
-                        Relation::Neq => !order.is_eq(),
-                    };
-                    if !truth {
-                        break;
-                    }
-                    left = right;
-                }
-                if truth == (*negation == DefaultNegation::Not) {
-                    return Ok(false);
-                }
-            }
-            Condition::Boolean(false) => return Ok(false),
-            Condition::Boolean(true) => {}
+        if let Some(expected) = resolve(term, binding)
+            && work.compare_reference(expected, Reference::Value(value))? != Ordering::Equal
+        {
+            return Ok(false);
         }
     }
     Ok(true)
 }
+fn condition(
+    condition: &Condition,
+    atoms: &[&Atom],
+    binding: &[Option<Bound<'_>>],
+    work: &mut Work<'_>,
+) -> Result<bool, Error> {
+    work.step(1)?;
+    match condition {
+        Condition::Atom(negation, pattern) => {
+            let mut present = false;
+            for &atom in atoms {
+                if test_pattern(pattern, atom, binding, work)? {
+                    present = true;
+                    break;
+                }
+            }
+            Ok(present != (*negation == DefaultNegation::Not))
+        }
+        Condition::Compare(negation, first, steps) => {
+            let mut left = first;
+            let mut truth = true;
+            for (relation, right) in steps {
+                truth = relation_holds(*relation, work.compare_templates(left, right, binding)?);
+                if !truth {
+                    break;
+                }
+                left = right;
+            }
+            Ok(truth != (*negation == DefaultNegation::Not))
+        }
+        Condition::Boolean(truth) => Ok(*truth),
+        Condition::Conditional(query, consequent) => {
+            visit(query, atoms, binding, work, &mut |local, work| {
+                self::condition(consequent, atoms, local, work)
+            })
+        }
+        Condition::Aggregate(negation, aggregate, guards) => {
+            let (value, metric) = scopes::aggregate(aggregate, atoms, binding, work)?;
+            let mut truth = true;
+            for guard in guards {
+                let mut bound_metric = Metric::default();
+                work.measure(&guard.bound, binding, 1, &mut bound_metric)?;
+                work.construction_check(Metric {
+                    nodes: metric.nodes + bound_metric.nodes,
+                    bytes: metric.bytes + bound_metric.bytes,
+                })?;
+                let bound = work.construct(&guard.bound, binding)?;
+                work.step(metric.payload() + bound_metric.payload())?;
+                if !relation_holds(guard.relation, value.compare(&bound)) {
+                    truth = false;
+                    break;
+                }
+            }
+            Ok(truth != (*negation == DefaultNegation::Not))
+        }
+    }
+}
+fn conditions(
+    query: &Query,
+    atoms: &[&Atom],
+    binding: &[Option<Bound<'_>>],
+    work: &mut Work<'_>,
+) -> Result<bool, Error> {
+    for test in &query.conditions {
+        if !condition(test, atoms, binding, work)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 fn insert(
     term: Symbol,
     metric: Metric,

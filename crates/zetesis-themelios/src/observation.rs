@@ -15,7 +15,7 @@ pub use view::{ModelView, ViewError, ViewLimits};
 use std::fmt;
 
 use themelios_base::span::Location;
-use themelios_program::program::{DefaultNegation, Relation};
+use themelios_program::program::{AggregateFunction, DefaultNegation, Relation};
 /// Shared logical symbol vocabulary, nameable without another pinned dependency.
 pub use themelios_program::symbol::{Name, Sign as SymbolSign, Symbol};
 /// Checked arithmetic causes from the pinned shared value vocabulary.
@@ -136,7 +136,7 @@ pub enum Resource {
     Depth,
     /// Source or constructed symbol text payload.
     Bytes,
-    /// Directive-local variables.
+    /// Variables in the current scope, including inherited outer slots.
     Variables,
     /// Body elements.
     BodyElements,
@@ -165,7 +165,7 @@ pub enum Feature {
     Term,
     /// Anonymous variables cannot occur in the output term.
     AnonymousOutput,
-    /// Aggregate or conditional body literal.
+    /// Theory atoms or a future body form without a pure finite interpretation.
     Body,
     /// Pooled predicate arguments.
     Atom,
@@ -266,6 +266,23 @@ enum Condition {
     Atom(DefaultNegation, Pattern),
     Compare(DefaultNegation, Template, Vec<(Relation, Template)>),
     Boolean(bool),
+    Conditional(Query, Box<Self>),
+    Aggregate(DefaultNegation, AggregateQuery, Vec<Guard>),
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Guard {
+    relation: Relation,
+    bound: Template,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct AggregateElement {
+    tuple: Template,
+    query: Query,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct AggregateQuery {
+    function: AggregateFunction,
+    elements: Vec<AggregateElement>,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Binder {

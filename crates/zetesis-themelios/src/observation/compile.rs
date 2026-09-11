@@ -1,5 +1,7 @@
 //! Directive-local compilation, independent of logical grounding and its carrier.
 
+mod scopes;
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use themelios_base::span::Location;
@@ -283,6 +285,60 @@ impl Compiler<'_> {
             self.safe.insert(slot);
         }
     }
+    fn test(&mut self, literal: &themelios_program::program::Literal) -> Result<Condition, Error> {
+        Ok(match &literal.inner {
+            LiteralInner::Atom(atom) => {
+                Condition::Atom(literal.negation, self.pattern(atom.get(), false)?)
+            }
+            LiteralInner::Comparison(comparison) => {
+                let first = self.template(comparison.get().first(), 1)?;
+                let mut steps = Vec::new();
+                for (relation, right) in comparison.get().steps() {
+                    steps.push((relation, self.template(right, 1)?));
+                }
+                Condition::Compare(literal.negation, first, steps)
+            }
+            LiteralInner::True | LiteralInner::False => {
+                let truth = matches!(literal.inner, LiteralInner::True);
+                Condition::Boolean(truth != (literal.negation == DefaultNegation::Not))
+            }
+        })
+    }
+    fn literal(
+        &mut self,
+        literal: &themelios_program::program::Literal,
+        positive: &mut Vec<Pattern>,
+        conditions: &mut Vec<Condition>,
+    ) -> Result<(), Error> {
+        if literal.negation == DefaultNegation::None
+            && let LiteralInner::Atom(atom) = &literal.inner
+        {
+            positive.push(self.pattern(atom.get(), true)?);
+        } else {
+            conditions.push(self.test(literal)?);
+        }
+        Ok(())
+    }
+    fn finish(
+        &mut self,
+        positive: Vec<Pattern>,
+        mut conditions: Vec<Condition>,
+    ) -> Result<Query, Error> {
+        let mut binders: Vec<_> = positive.into_iter().map(Binder::Atom).collect();
+        self.assignments(&mut conditions, &mut binders);
+        if self
+            .variables
+            .values()
+            .any(|slot| !self.safe.contains(slot))
+        {
+            return Err(self.unsupported(Feature::UnsafeVariable));
+        }
+        Ok(Query {
+            binders,
+            conditions,
+            variables: self.variables.len(),
+        })
+    }
     fn directive(
         &mut self,
         term: &Term,
@@ -302,52 +358,45 @@ impl Compiler<'_> {
                     self.limits.max_body_elements as usize,
                 )?;
                 self.node(1)?;
-                let BodyElement::Literal(literal) = element.get() else {
-                    return Err(self.unsupported(Feature::Body));
-                };
-                match &literal.inner {
-                    LiteralInner::Atom(atom) => {
-                        let is_positive = literal.negation == DefaultNegation::None;
-                        let pattern = self.pattern(atom.get(), is_positive)?;
-                        if is_positive {
-                            positive.push(pattern);
-                        } else {
-                            conditions.push(Condition::Atom(literal.negation, pattern));
-                        }
-                    }
-                    LiteralInner::Comparison(comparison) => {
-                        let first = self.template(comparison.get().first(), 1)?;
-                        let mut steps = Vec::new();
-                        for (relation, right) in comparison.get().steps() {
-                            steps.push((relation, self.template(right, 1)?));
-                        }
-                        conditions.push(Condition::Compare(literal.negation, first, steps));
-                    }
-                    LiteralInner::True | LiteralInner::False => {
-                        let truth = matches!(literal.inner, LiteralInner::True);
-                        conditions.push(Condition::Boolean(
-                            truth != (literal.negation == DefaultNegation::Not),
-                        ));
-                    }
+                if let BodyElement::Literal(literal) = element.get() {
+                    self.literal(literal, &mut positive, &mut conditions)?;
                 }
             }
         }
-        let mut binders: Vec<_> = positive.into_iter().map(Binder::Atom).collect();
-        self.assignments(&mut conditions, &mut binders);
-        if self
-            .variables
-            .values()
-            .any(|slot| !self.safe.contains(slot))
-        {
-            return Err(self.unsupported(Feature::UnsafeVariable));
+        let mut pending = Vec::new();
+        if let Some(body) = body {
+            for element in body.elements() {
+                match element.get() {
+                    BodyElement::Aggregate {
+                        negation,
+                        aggregate,
+                    } => {
+                        pending.push((Some((*negation, aggregate, self.guards(aggregate)?)), None));
+                    }
+                    BodyElement::Conditional(conditional) => {
+                        pending.push((None, Some(conditional)));
+                    }
+                    BodyElement::Literal(_) => {}
+                    _ => return Err(self.unsupported(Feature::Body)),
+                }
+            }
+        }
+        let mut query = self.finish(positive, conditions)?;
+        for (aggregate, conditional) in pending {
+            if let Some((negation, aggregate, guards)) = aggregate {
+                query.conditions.push(Condition::Aggregate(
+                    negation,
+                    self.aggregate(aggregate)?,
+                    guards,
+                ));
+            }
+            if let Some(conditional) = conditional {
+                query.conditions.push(self.conditional(conditional)?);
+            }
         }
         Ok(Directive {
             term,
-            query: Query {
-                binders,
-                conditions,
-                variables: self.variables.len(),
-            },
+            query,
             origins,
         })
     }
