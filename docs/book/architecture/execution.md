@@ -8,6 +8,8 @@ operations; they are not learned approximations or neural attention layers.
 The [alignment chapter](alignment.md) connects the two vocabularies with a
 diagram, primitive map and pseudocode for closure, frozen satisfaction and
 batched membership.
+The [ownership chapter](ownership.md) describes prepared data, shared device
+contexts, invocation lifetimes and the dependencies that permit parallel work.
 
 ## Two exact membership paths
 

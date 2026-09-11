@@ -15,7 +15,7 @@ esac
 # Each row names a report group, Cargo target, required count and exact tests.
 # All invocations keep workspace feature unification, including the library
 # selection: narrowing to one package can change instrumented dependency builds.
-metal_groups='wgpu-lib|lib|5|aggregate::device::tests::metal_aggregate_readback_failure_retains_submitted_work lazy::transport_tests::metal_lazy_transport_reuse_preserves_round_truth lazy::transport_tests::metal_input_slack_preserves_exact_admission lazy::transport_tests::metal_lazy_transport_refusal_preserves_reuse lazy::transport_tests::metal_lazy_transport_cancelled_read_discards_capacity
+metal_groups='wgpu-lib|lib|7|aggregate::device::tests::metal_aggregate_readback_failure_retains_submitted_work lazy::transport_tests::metal_lazy_transport_reuse_preserves_round_truth lazy::transport_tests::metal_input_slack_preserves_exact_admission lazy::transport_tests::metal_lazy_transport_refusal_preserves_reuse lazy::transport_tests::metal_lazy_transport_cancelled_read_discards_capacity formula::device::tests::metal_busy_refusal_preserves_formula_state aggregate::device::tests::metal_readback_failure_invalidates_context_peers
 tight|hardware_tight|4|metal_support_matches_exact_reduct_semantics metal_support_preserves_batch_isolation metal_support_refusals_preserve_reusable_residency metal_support_residency_tracks_theory_identity
 formula|hardware_formula|2|metal_formula_limits_resize_identity_and_word_boundaries_remain_explicit metal_formula_queries_preserve_exact_frozen_semantics_and_residency
 aggregate|hardware_aggregate|3|metal_aggregate_reductions_match_native_occurrences metal_aggregate_guards_preserve_numeric_boundaries metal_aggregate_exact_admission_preserves_cache_lifecycle
@@ -25,7 +25,8 @@ cli-formula|formula_gpu|2|physical::ordinary_metal_formula_batches_match_complet
 world-views|world_views_gpu|2|metal_world_view_preserves_nonoptimal_answers metal_collection_limit_retains_checked_accounting
 aggregate-measurement|aggregate_measurement|1|metal_aggregate_measurements_require_actual_submissions
 relation|hardware_relation|2|metal_relation_masks_match_typed_rows metal_relation_refusals_preserve_prepared_view
-relation-measurement|relation_measurement|1|metal_relation_measurement_keeps_complete_masks'
+relation-measurement|relation_measurement|1|metal_relation_measurement_keeps_complete_masks
+context|hardware_context|1|metal_formula_executes_while_relation_columns_remain_prepared'
 
 repo_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 cd -- "$repo_dir"

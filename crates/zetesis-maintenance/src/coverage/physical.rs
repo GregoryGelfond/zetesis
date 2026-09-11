@@ -22,8 +22,8 @@ pub struct Group {
 /// # Errors
 /// Refuses missing/extra groups, altered target/count identities or duplicate tests.
 pub fn selection(table: &str) -> Result<Vec<Group>, Error> {
-    const EXPECTED: [(&str, &str, usize); 11] = [
-        ("wgpu-lib", "lib", 5),
+    const EXPECTED: [(&str, &str, usize); 12] = [
+        ("wgpu-lib", "lib", 7),
         ("tight", "hardware_tight", 4),
         ("formula", "hardware_formula", 2),
         ("aggregate", "hardware_aggregate", 3),
@@ -34,15 +34,16 @@ pub fn selection(table: &str) -> Result<Vec<Group>, Error> {
         ("aggregate-measurement", "aggregate_measurement", 1),
         ("relation", "hardware_relation", 2),
         ("relation-measurement", "relation_measurement", 1),
+        ("context", "hardware_context", 1),
     ];
     require(
         table.trim() == include_str!("physical-selection.txt").trim(),
-        "physical coverage requires the reviewed 31 exact test identities",
+        "physical coverage requires the reviewed 34 exact test identities",
     )?;
     let rows: Vec<_> = table.lines().collect();
     require(
         rows.len() == EXPECTED.len(),
-        "physical coverage requires all eleven groups and 31 named tests",
+        "physical coverage requires all twelve groups and 34 named tests",
     )?;
     let mut groups = Vec::new();
     let mut all_names = BTreeSet::new();

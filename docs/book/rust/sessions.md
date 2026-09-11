@@ -86,6 +86,36 @@ or query interfaces requires a separate adapter contract.
 
 ## Reuse and identity
 
+`PreparedInput::program` borrows a native `zetesis_core::Program` without source
+metadata. It reaches the same relational session as a source-admitted program,
+including lazy execution; it does not first compile a complete ground graph.
+
+An execution observer receives typed, borrowed facts about preparation and
+execution choices. It need not parse diagnostics. This example constructs the
+fact `ready.` through the native library and retains only its selected grounding
+mode:
+
+```rust
+# extern crate zetesis_cli;
+# extern crate zetesis_core;
+# extern crate zetesis_cpu;
+{{#include ../examples/observations.rs:example}}
+```
+
+`enumerate_observed` observes setup; `next_observed` observes subsequent pulls.
+Each call borrows the observer independently. Ordinary iterator pulls discard
+execution observations. The solver retains no event queue; any collection or
+side effects belong to the observer. Successful observation does not establish
+membership, coverage or publication.
+
+An observer error stops the relevant operation and is retained separately from
+device errors, so it cannot request automatic backend fallback. Some formula
+initialization failures are retained in a session and delivered by its first
+pull. After a failed pull, later pulls return `None`; the failure retains the
+original cause and any established semantic evidence. `SolveFailure::subject`
+can identify a prepared input even when setup failed before a search outcome
+existed.
+
 The admitted owner can outlive several sessions. Each session starts fresh
 search budgets, worker pools, pending queues and incumbent storage. Reusing an
 owner does not resume a previous search.

@@ -93,6 +93,29 @@ In particular, a false final filter does not hide an arithmetic error in a later
 final filter. The [caller regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation/tests/callers.rs)
 check these actual consumers as well as their values and failure boundaries.
 
+Formula construction has an explicit ownership boundary. Source instantiation
+consumes the source IR and owns the completed support catalog and its snapshot
+while it emits formulas and activates objectives. A consuming builder then adds
+coherence and support guards.
+It passes nodes and roots into theory validation and retains the ordered atoms
+and origins for the compiled owner. Interning indexes, producer tables and
+aggregate caches remain construction scratch.
+The [finalizer](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground.rs)
+preserves vector order and cumulative work/resource charges. Releasing completed
+scratch reduces overlap between phases; it does not establish a lower earlier
+construction peak or process RSS. The [ownership chapter](ownership.md) relates
+these lifetimes to prepared views and execution state.
+
+The final formula catalog owns one atom sequence and indexes it with dense IDs.
+Lookup uses full typed atom equality; hashes alone never establish identity.
+Insertion order fixes the IDs, and the table is never iterated to emit the final
+sequence. Lookup has expected constant table work plus hashing and equality;
+collisions can require a full scan of the catalog. The
+[catalog](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/atoms.rs)
+reserves sequence and index capacity before publishing a new ID. Failed
+reservations return a located `FormulaFailure::AtomAllocation`. Conservative
+cumulative scalar-byte charges remain separate from actual live index capacity.
+
 An atom in a **possible support relation** is a witness available to source
 enumeration. It is not thereby true in a candidate, and an aggregate's proposed
 result is not thereby its evaluated result. The emitted formula must retain the
@@ -190,9 +213,10 @@ order or arithmetic. The existing matcher remains responsible for structural
 terms, repeated variables and checked binding generation. The
 [column laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/column-relations.md)
 state the reconstruction and ordered-selection arguments and their limits.
-This library view does not replace ordinary source storage. Production adoption
-requires a coherent tuple owner and removal of redundant stores; an experimental
-copy alone establishes neither a smaller memory footprint nor faster grounding.
+The eager support catalog uses this representation as described above. Adoption
+by other grounding consumers requires the same coherent tuple ownership and
+removal of redundant stores; an experimental copy alone establishes neither a
+smaller memory footprint nor faster grounding.
 
 The formula binding planner also derives finite integer envelopes from directed
 affine comparisons when ordinary binding steps cannot advance. For an inequality

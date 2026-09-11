@@ -24,6 +24,9 @@ operations to the joins, masks, fixed points and batches that implement them.
 The [alignment chapter](docs/book/architecture/alignment.md) makes that connection
 explicit with a diagram, algorithm pseudocode and links to the corresponding
 Rust and Lean definitions.
+The [ownership chapter](docs/book/architecture/ownership.md) explains how logical
+identity, prepared data and invocation state delimit memory reuse and parallel
+work.
 
 ## Restore a route
 

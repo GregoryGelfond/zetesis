@@ -167,8 +167,9 @@ struct WaitPolicy {
     quantum: Duration,
 }
 
-// Poll control between bounded waits. Failure invalidates the shared context,
-// and buffers are dropped rather than reused while a submission remains live.
+// Poll control between bounded waits. The caller invalidates the shared context
+// on failure, preventing reuse while a submission may remain live. Resident
+// buffer handles can remain owned until explicit release or owner destruction.
 pub(crate) fn read_polled<T>(
     device: &wgpu::Device,
     readback: &wgpu::Buffer,

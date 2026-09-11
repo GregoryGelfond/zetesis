@@ -13,6 +13,42 @@ silently stand for all of them.
 | Machine execution | Checked Rust behavior and qualified WGSL paths | Establish executable refinement, arithmetic and device semantics |
 | Observation | Semantic coverage and delivery laws | Connect actual output writes and counters to the retained semantic evidence |
 
+## Ownership and execution correspondence
+
+An ownership refactor can preserve the semantic theorem statements. Its proof
+obligation is then to preserve the denotation and evidence through the changed
+representation or transition, rather than to define another answer-set relation.
+
+The formula grounder's consuming phases retain atom/node/root order, origins,
+activated objectives and the original cumulative budget. Discarded support and
+construction indexes have no later semantic consumer. The ID-only atom catalog
+requires lookup soundness, lookup completeness and stable insertion IDs under
+full typed equality, including collisions. The dictionary laws below express
+the lookup contract abstractly; they do not prove hash-table construction or
+fallible Rust allocation.
+
+Device context identity, logical subject identity and submission identity remain
+separate. Sharing a context changes resource and failure ownership, not a
+candidate's frozen reduct. A busy refusal starts no device query. Context-wide
+invalidation prevents a later primitive from reusing failed execution state.
+`LazyRounds` and `BatchAccounting` supply the existing semantic round and
+coverage laws; context leases, scope cleanup and their concrete Rust transitions
+remain executable correspondence obligations.
+
+Typed execution observations describe attempted setup or execution choices.
+They are not membership or coverage receipts. A failed observer can stop driving
+the session but cannot reinterpret its error as a device failure, request
+fallback or establish a conclusion. The observation boundary must preserve
+already checked evidence and distinguish it from publication, as required by
+`Outcomes`. Tests exercise these failure paths; they do not close the formal
+refinement.
+
+The [ownership chapter](../architecture/ownership.md) and
+[session example](../rust/sessions.md#reuse-and-identity) connect these obligations
+to the maintained implementation.
+
+## Representation and source laws
+
 [`ColumnRelations`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ColumnRelations.lean)
 relates complete typed tuples to aligned equality-ID columns. Dictionary round
 trips and exact cell encoding imply reconstruction; equality selection returns

@@ -45,3 +45,7 @@ path = "../../docs/book/examples/source.rs"
 [[example]]
 name = "book-selection"
 path = "../../docs/book/examples/selection.rs"
+
+[[example]]
+name = "book-observations"
+path = "../../docs/book/examples/observations.rs"

@@ -156,10 +156,11 @@ Their checks remain separate from the workspace coverage population. Run
 `scripts/check.sh oracle` for the relevant external
 clingo comparisons, `scripts/check.sh coverage` for both independent 91% line
 coverage floors, and `scripts/check.sh proofs` when proof sources or records change.
-Local `scripts/check.sh coverage --metal` adds 31 exact physical tests within
+Local `scripts/check.sh coverage --metal` adds 34 exact physical tests within
 workspace coverage: native aggregate reduction and measurement, lazy transport
 and source closure, typed relation masks and measurement, tight and formula
-oracles, and ordinary lazy/formula CLI paths plus complete-world-view collection.
+oracles, shared-context composition and failure handling, and ordinary
+lazy/formula CLI paths plus complete-world-view collection.
 Every target group must report its
 expected named passing tests. The
 portable report is retained separately; the CPU-only CLI profile stays

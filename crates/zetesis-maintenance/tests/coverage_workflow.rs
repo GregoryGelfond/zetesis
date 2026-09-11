@@ -106,7 +106,7 @@ fn bundled_llvm_versions_preserve_schedule() {
 }
 #[test]
 fn omitted_physical_group_prevents_instrumentation() {
-    for group in ["lazy", "relation", "relation-measurement"] {
+    for group in ["lazy", "relation", "relation-measurement", "context"] {
         let f = Fixture::new();
         let row = groups()
             .into_iter()

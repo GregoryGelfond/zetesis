@@ -28,7 +28,7 @@ selection and libtest output checks from execution. It retains the existing
 `toolchain.json` schema and independent workspace/CPU-only CLI populations. No
 floor or filename filter is changed. The shell driver keeps the exclusive lock,
 fresh cleanup, ordered commands and incomplete status until both floors pass.
-The eleven physical groups contain 31 exact tests; the Rust checker rejects
+The twelve physical groups contain 34 exact tests; the Rust checker rejects
 selection drift, zero matches and incomplete individual outcomes.
 
 `scripts/maintenance.sh` launches the current source-tree command. Set

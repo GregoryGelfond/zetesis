@@ -10,6 +10,7 @@
 - [Source programs and grounding](architecture/grounding.md)
 - [Grounding compared with clingo](architecture/grounding-comparison.md)
 - [Composing exact execution](architecture/execution.md)
+- [Ownership, dependencies and parallel work](architecture/ownership.md)
 
 # Part II — The Rust library programmer's manual
 

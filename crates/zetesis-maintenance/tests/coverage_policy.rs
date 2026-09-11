@@ -119,6 +119,10 @@ fn metal_selection_refuses_vulkan_substitution() {
             "metal_relation_measurement_keeps_complete_masks",
             "vulkan_relation_measurement_keeps_complete_masks",
         ),
+        (
+            "metal_formula_executes_while_relation_columns_remain_prepared",
+            "vulkan_formula_executes_while_relation_columns_remain_prepared",
+        ),
     ] {
         let changed = TABLE.replacen(metal, vulkan, 1);
         assert_ne!(changed, TABLE);
@@ -172,8 +176,8 @@ fn physical_metadata_keeps_floor_populations_separate() {
         record["floor_profiles"],
         serde_json::json!(["workspace", "cli-cpu"])
     );
-    assert_eq!(record["expected_physical_tests"], 31);
-    assert_eq!(record["physical_test_groups"].as_array().unwrap().len(), 11);
+    assert_eq!(record["expected_physical_tests"], 34);
+    assert_eq!(record["physical_test_groups"].as_array().unwrap().len(), 12);
     assert_eq!(
         record["project_added_filename_filters"],
         serde_json::json!([])

@@ -21,6 +21,7 @@ construction and standalone analysis APIs belong to its own manual.
 | Repeated queries against one candidate's reduct | `zetesis_ferraris::FrozenReduct` |
 | Native formula candidate/countermodel search | `zetesis_sat` |
 | Bounded device execution | `zetesis_wgpu` |
+| Several device primitives on one selected device | `GpuContext` and each primitive's `from_context` constructor |
 | Device equality masks over one relation | `zetesis_wgpu::GpuRelationExecutor` |
 | Model-relative objective evaluation | `zetesis_objective` |
 | Source-domain analysis | `zetesis_domain` |
@@ -57,6 +58,8 @@ its admitted owner; it is not a transferable identity across admissions.
 
 `PreparedInput::admitted` borrows an `Admitted` owner; `PreparedInput::formula`
 borrows an `AdmittedFormula`. Bundle variants retain multi-file provenance.
+`PreparedInput::program` accepts an already admitted native `Program` directly,
+without source metadata or eager compilation.
 The formula owner keeps the theory, atom indexing, objective program and
 observations together. Do not build a session by independently pairing a theory
 with an atom table from another admission.
@@ -85,6 +88,11 @@ reconstructs checked local row positions for one query at a time. Complete
 pattern matching remains a separate operation. Preparation and each filter have
 explicit resource limits; zero rows or zero queries require no compute dispatch.
 This is a bounded device primitive, not ordinary source grounding on the GPU.
+Other primitives constructed from the same `GpuContext` can execute while this
+prepared relation remains live. Operations take a nonblocking context lease;
+overlap is a typed busy refusal, and device failure invalidates every dependent
+primitive. Read the [ownership contract](../architecture/ownership.md#device-resource-scope)
+before sharing contexts or accounting for several prepared views.
 The [relation measurement profile](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-experiments/README.md#retained-relation-selection)
 uses these library operations with matched typed inputs, packed outputs and
 shared reconstruction across scalar CPU, Rayon and physical GPU execution.
