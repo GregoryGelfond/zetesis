@@ -191,14 +191,9 @@ fn repeated_outer_rows_recompute_guard_bounds() {
 
 #[test]
 fn guard_consumers_preserve_scored_answers() {
-    // The unconsumed total assignment retains its established observer path.
-    assert_eq!(
-        input("q(N):-N=#count{}.#minimize{N:q(N)}.")
-            .objectives()
-            .priorities(),
-        &[0]
-    );
     for source in [
+        // The unconsumed total assignment retains its established observer path.
+        "q(N):-N=#count{}.#minimize{N:q(N)}.",
         "q(N):-N=#count{},N=#sum{}.#minimize{N:q(N)}.",
         "q(N):-N=#count{},not N!=#count{}.#minimize{N:q(N)}.",
         "{q}:-N=#count{},N<=#count{}.#minimize{1:q}.",
@@ -208,8 +203,6 @@ fn guard_consumers_preserve_scored_answers() {
 }
 #[path = "support/objective_boundaries.rs"]
 mod objective_boundaries;
-#[path = "support/source_records.rs"]
-mod source_records;
 
 #[test]
 fn nonbinding_guards_cannot_supply_missing_inputs() {

@@ -232,8 +232,6 @@ fn negative_producers_preserve_scored_answers() {
 }
 #[path = "support/objective_boundaries.rs"]
 mod objective_boundaries;
-#[path = "support/source_records.rs"]
-mod source_records;
 
 #[test]
 fn objective_dependency_restrictions_do_not_reject_negative_constraints() {

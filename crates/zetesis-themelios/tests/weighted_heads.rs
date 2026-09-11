@@ -253,8 +253,6 @@ fn weighted_head_producers_preserve_scored_answers() {
 }
 #[path = "support/objective_boundaries.rs"]
 mod objective_boundaries;
-#[path = "support/source_records.rs"]
-mod source_records;
 
 #[test]
 fn signed_neutral_weights_supply_no_support() {

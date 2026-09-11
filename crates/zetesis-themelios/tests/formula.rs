@@ -1,5 +1,8 @@
 //! Finite source-to-Ferraris admission preserves support, scopes, and evidence.
 
+#[path = "support/objective_boundaries.rs"]
+mod objective_boundaries;
+
 use std::collections::BTreeSet;
 use std::fs;
 use std::io::Write;
@@ -222,6 +225,11 @@ fn extended_profile_refuses_bounded_choices() {
 fn signed_choice_bounds_do_not_create_support() {
     assert_eq!(native("1{not a}1."), Models::from([BTreeSet::new()]));
     assert!(native("1{not not a}1.").is_empty());
+}
+
+#[test]
+fn negative_maximize_preserves_scored_answers() {
+    objective_boundaries::check("#maximize{1:not a}.");
 }
 
 #[test]

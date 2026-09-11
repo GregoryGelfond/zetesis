@@ -310,8 +310,6 @@ fn excluded_head_forms_remain_located_refusals() {
 }
 #[path = "support/objective_boundaries.rs"]
 mod objective_boundaries;
-#[path = "support/source_records.rs"]
-mod source_records;
 
 #[test]
 fn evaluated_producers_preserve_scored_answers() {

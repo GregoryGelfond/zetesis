@@ -257,8 +257,6 @@ fn range_consumers_preserve_scored_answers() {
 }
 #[path = "support/objective_boundaries.rs"]
 mod objective_boundaries;
-#[path = "support/source_records.rs"]
-mod source_records;
 
 #[test]
 fn false_filters_cannot_hide_undefined_endpoints() {

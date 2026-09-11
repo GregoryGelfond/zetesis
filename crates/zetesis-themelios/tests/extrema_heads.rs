@@ -474,8 +474,6 @@ fn extrema_producers_preserve_scored_answers() {
 }
 #[path = "support/objective_boundaries.rs"]
 mod objective_boundaries;
-#[path = "support/source_records.rs"]
-mod source_records;
 
 #[test]
 fn signed_extrema_do_not_supply_atom_support() {

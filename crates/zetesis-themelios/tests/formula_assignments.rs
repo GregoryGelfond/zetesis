@@ -209,8 +209,6 @@ fn assignment_consumers_preserve_scored_answers() {
 }
 #[path = "support/objective_boundaries.rs"]
 mod objective_boundaries;
-#[path = "support/source_records.rs"]
-mod source_records;
 
 #[test]
 fn generated_positions_union_across_producers_without_changing_full_model_identity() {

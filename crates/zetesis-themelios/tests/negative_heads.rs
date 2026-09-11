@@ -443,8 +443,6 @@ fn conditional_negative_disjuncts_remain_explicit_refusals() {
 }
 #[path = "support/objective_boundaries.rs"]
 mod objective_boundaries;
-#[path = "support/source_records.rs"]
-mod source_records;
 
 #[test]
 fn negative_head_producers_preserve_scored_answers() {

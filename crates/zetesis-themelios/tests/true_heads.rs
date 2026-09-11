@@ -297,8 +297,6 @@ fn true_disjuncts_preserve_scored_answers() {
 }
 #[path = "support/objective_boundaries.rs"]
 mod objective_boundaries;
-#[path = "support/source_records.rs"]
-mod source_records;
 
 #[test]
 fn extended_profile_refuses_true_disjunctions() {

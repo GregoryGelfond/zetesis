@@ -422,8 +422,6 @@ fn signed_atoms_do_not_broaden_unsafe_or_unsupported_value_profiles() {
 }
 #[path = "support/objective_boundaries.rs"]
 mod objective_boundaries;
-#[path = "support/source_records.rs"]
-mod source_records;
 
 #[test]
 fn coherence_roots_are_bounded_and_keep_both_original_source_locations() {
