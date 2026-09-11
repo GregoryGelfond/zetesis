@@ -119,7 +119,7 @@ impl Preparation<'_> {
             if !presence.eligible(objective, &binding, self.limits, self.counters)? {
                 continue;
             }
-            let query = if objective.source_completion {
+            if objective.source_completion {
                 let completion = self
                     .completion
                     .expect("selected source completion prepared");
@@ -134,14 +134,7 @@ impl Preparation<'_> {
                 {
                     continue;
                 }
-                Some(model_condition(
-                    &objective.condition,
-                    &binding,
-                    &mut context,
-                )?)
-            } else {
-                None
-            };
+            }
             let priority = formula_support::expression(
                 &objective.priority,
                 &binding,
@@ -155,7 +148,7 @@ impl Preparation<'_> {
                 && let Some(weight) = self.weight(objective, &binding)?
             {
                 self.capacity(objective.location)?;
-                let template = self.specialize(objective, &binding, weight, priority, query)?;
+                let template = self.specialize(objective, &binding, weight, priority)?;
                 self.retain(objective, template)?;
             }
         }
@@ -215,7 +208,6 @@ impl Preparation<'_> {
         binding: &[Value],
         weight: i32,
         priority: i32,
-        query: Option<zetesis_objective::Condition>,
     ) -> Result<ObjectiveTemplate, FormulaFailure> {
         let mut tuple = reserved(objective.tuple.len(), objective.location)?;
         for field in &objective.tuple {
@@ -225,7 +217,17 @@ impl Preparation<'_> {
                 objective.location,
             )?));
         }
-        if let Some(query) = query {
+        if objective.source_completion {
+            let query = model_condition(
+                &objective.condition,
+                binding,
+                &mut Context {
+                    limits: self.limits,
+                    budget: self.budget,
+                    counters: self.counters,
+                    location: objective.location,
+                },
+            )?;
             return Ok(ObjectiveTemplate::new(
                 Term::Constant(Value::Number(weight)),
                 priority,

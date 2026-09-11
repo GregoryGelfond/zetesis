@@ -199,3 +199,69 @@ fn absent_rows_retain_no_query_capacity() {
     assert_eq!(records.len(), 1);
     assert_eq!(records.iter().next().unwrap().1, None);
 }
+
+#[test]
+fn ignored_values_do_not_retain_query_capacity() {
+    for source in [
+        "{a}.#minimize{symbol:not not a}.",
+        "w(symbol).{a}.#minimize{W:w(W),not not a}.",
+        "{a}.#minimize{#inf:not not a}.",
+        "{a}.#minimize{1@symbol:not not a}.",
+        "p(symbol).{a}.#minimize{1@P:p(P),not not a}.",
+    ] {
+        let mut limits = FormulaLimits::default();
+        limits.objective.max_condition_nodes = 0;
+        let input = source_records::admit(source, &limits).unwrap();
+        assert!(input.objectives().templates().is_empty(), "{source}");
+        let records = source_records::exhaustive(&input);
+        assert_eq!(records.len(), 2, "{source}");
+        assert!(records.iter().all(|(_, costs)| costs.is_none()));
+    }
+}
+
+#[test]
+fn numeric_zero_retains_its_model_query() {
+    let mut limits = FormulaLimits::default();
+    limits.objective.max_condition_nodes = 5;
+    let source = "{a}.#minimize{symbol:not not a;0:not not a;1@symbol:not not a}.";
+    let input = source_records::admit(source, &limits).unwrap();
+    assert_eq!(input.objectives().templates().len(), 1);
+    assert_eq!(
+        input.objectives().templates()[0].condition().nodes().len(),
+        5
+    );
+    assert_eq!(input.objectives().priorities(), &[0]);
+    let records = source_records::exhaustive(&input);
+    assert_eq!(records.len(), 2);
+    assert!(records.iter().all(|(_, costs)| *costs == Some(vec![0])));
+    limits.objective.max_condition_nodes = 0;
+    assert!(matches!(
+        source_records::admit(source, &limits).unwrap_err(),
+        FormulaFailure::Objective {
+            error: zetesis_objective::AdmissionError::Limit {
+                resource: zetesis_objective::AdmissionResource::ConditionNodes,
+                ..
+            },
+            ..
+        }
+    ));
+}
+
+#[test]
+fn source_arithmetic_precedes_query_materialization() {
+    for source in [
+        "d(0).{a}.#minimize{1/X:d(X),not not a}.",
+        "d(0).{a}.#minimize{1@1/X:d(X),not not a}.",
+        "d(0).{a}.#minimize{1,1/X:d(X),not not a}.",
+    ] {
+        let mut limits = FormulaLimits::default();
+        limits.objective.max_condition_nodes = 0;
+        assert!(
+            matches!(
+                source_records::admit(source, &limits).unwrap_err(),
+                FormulaFailure::Expansion(zetesis_themelios::ExpansionFailure::Evaluation { .. })
+            ),
+            "{source}"
+        );
+    }
+}
