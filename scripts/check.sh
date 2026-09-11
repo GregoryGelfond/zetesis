@@ -1,5 +1,5 @@
 #!/bin/sh
-# Independent check layers; full target is allowed to fail while unsupported.
+# Independent validation layers; full runs every layer in sequence.
 set -eu
 mode=${1:-portable}
 coverage_option=${2:-}
