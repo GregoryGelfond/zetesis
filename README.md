@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 ![Rust 1.97+](https://img.shields.io/badge/rust-1.97%2B-orange?style=flat-square)
-[![Line coverage: 93.48% (CPU + Metal)](https://img.shields.io/badge/coverage-93.48%25%20%28CPU%20%2B%20Metal%29-brightgreen?style=flat-square)](docs/book/reference/validation.md#coverage)
+[![Line coverage: 93.53% (CPU + Metal)](https://img.shields.io/badge/coverage-93.53%25%20%28CPU%20%2B%20Metal%29-brightgreen?style=flat-square)](docs/book/reference/validation.md#coverage)
 
 ζήτησις, *inquiry/search* — candidate-directed answer-set solving through the reduct.
 
@@ -195,9 +195,12 @@ end-to-end solves from kernel measurements when comparing performance.
 The [validation chapter](docs/book/reference/validation.md) explains which
 claims the corpus, proof and physical execution checks can establish.
 Its [performance evidence](docs/book/reference/validation.md#performance-evidence)
-records CPU/eager solve measurements and separate GPU primitive measurements,
-including unchanged-binary drift. Reusable expression workspaces and packed
-support have explicit storage contracts; neither establishes a general speedup.
+records nine-case CPU/eager comparisons with clingo, side-by-side child peak-RSS
+comparisons, and bounded N=8/N=10 queens comparisons. Results retain failed and
+unavailable cases alongside complete native-model agreement. The columnar
+integration has not demonstrated a broad latency or RSS reduction. Matched
+Metal solves and separate GPU primitive measurements retain their own scopes
+and recorded hardware.
 
 See [Contributing](CONTRIBUTING.md) for development and verification requirements,
 and [build the book](docs/book/building.md) to read the complete manual locally.

@@ -205,54 +205,230 @@ one cleared expression workspace across prefix checks, generators and final
 filters. Packed GPU support reduces the support buffer to one bit per atom.
 Neither change establishes a general latency improvement or lower process RSS.
 
-The following measurements compare
-[`f1c6365a`](https://github.com/GregoryGelfond/zetesis/tree/f1c6365af66a56902d985fb3f61f584c860527de)
-with [`e7e5e410`](https://github.com/GregoryGelfond/zetesis/tree/e7e5e410d4072457eee4a469b600981d713f5d15),
-using uninstrumented Rust 1.97.1 release builds on Apple M4 Pro on 10 September
-2026. Both sources already use packed Atomic support. The order is
-before/current/current/before; unchanged-executable drift remains part of the
-result. These are descriptive screens, not statistical confidence estimates.
-
 #### Ordinary CPU/eager solving
 
-The 13 selected kr-domains cases include all six queens encodings, SEND and
-shortest-path/task-allocation cases. Each block uses one closure worker, one
-completion worker, `--oracle auto` and `--models 0`. Each case has one
-qualification pair, one warmup pair, five timed native/clingo pairs and a
-separate native statistics observation. Completed displayed results, costs and
-optimum ties agree with clingo 5.8.2. This comparison does not reconstruct hidden
-atoms from displayed output.
+These measurements compare the previous executable built from
+[`d871e91b`](https://github.com/GregoryGelfond/zetesis/tree/d871e91b56406c20b312e63f9d3437e6352803e2),
+qualified at
+[`e69890b2`](https://github.com/GregoryGelfond/zetesis/tree/e69890b234c12f7565923b4a2f7bc312e92eae51),
+with [`55f5aa73`](https://github.com/GregoryGelfond/zetesis/tree/55f5aa739ec3fc941f27359dcb4d0c8608b82284).
+Both are Rust 1.97.1 release builds measured on Apple M4 Pro on 10 September
+2026, with clingo 5.8.2 as the reference.
 
-The table reports the median of ten whole-process native observations per
-executable and case. Before drift is the last before-block median relative to
-the first. Positive change means more elapsed time.
+| Executable | SHA-256 |
+| --- | --- |
+| Previous zetesis | `dc9224f4df6e1809180a7cb4566110c920e94aecdd43b15124a58058de170907` |
+| Current zetesis | `197e49c3f81bd5be18fb19441351b1727a2a3814f5f7ecad66281f271bca66f8` |
+| clingo 5.8.2 | `31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015` |
 
-| Case | Before, ms | Current, ms | Change | Before drift |
-| --- | ---: | ---: | ---: | ---: |
-| [Queens 1](../../../examples/kr-domains/standalone/n-queens/variant-01.lp) | 9.194 | 9.321 | +1.38% | −0.15% |
-| [Queens 2](../../../examples/kr-domains/standalone/n-queens/variant-02.lp) | 91.299 | 91.346 | +0.05% | +3.03% |
-| [Queens 3](../../../examples/kr-domains/standalone/n-queens/variant-03.lp) | 9.144 | 9.120 | −0.26% | −0.48% |
-| [Queens 4](../../../examples/kr-domains/standalone/n-queens/variant-04.lp) | 7.866 | 7.840 | −0.33% | −0.08% |
-| [Queens 5](../../../examples/kr-domains/standalone/n-queens/variant-05.lp) | 11.592 | 11.612 | +0.17% | −0.35% |
-| [Queens 6](../../../examples/kr-domains/standalone/n-queens/variant-06.lp) | 11.630 | 11.601 | −0.25% | +0.11% |
-| [SEND + MORE = MONEY](../../../examples/kr-domains/standalone/send-money/send-money.lp) | 38.584 | 39.255 | +1.74% | +3.76% |
-| [Shortest path: cycles](../../../examples/kr-domains/scenarios/shortest-path/variant-01/07-cycles.lp) | 5.366 | 5.364 | −0.03% | −0.19% |
-| [Shortest path: ordering and cap](../../../examples/kr-domains/scenarios/shortest-path/variant-04/06-layered-dag-ordering-cap.lp) | 9.081 | 9.043 | −0.42% | +13.49% |
-| [Shortest path: unsatisfiable budget](../../../examples/kr-domains/scenarios/shortest-path/variant-03/05-budget-unsat.lp) | 5.358 | 5.379 | +0.41% | +1.73% |
-| [Task allocation: larger mix](../../../examples/kr-domains/scenarios/task-allocation/variant-01/05-larger-mix.lp) | 5.311 | 5.314 | +0.07% | −0.26% |
-| [Task allocation: makespan tie](../../../examples/kr-domains/scenarios/task-allocation/variant-02/02-makespan-tiebreak.lp) | 5.323 | 5.322 | −0.02% | −1.08% |
-| [Task allocation: scheduling](../../../examples/kr-domains/scenarios/task-allocation/variant-04/05-larger-mix.lp) | 127.127 | 127.651 | +0.41% | +2.66% |
+All four previous/current/current/previous blocks passed their displayed-model,
+cost and optimum-tie checks: 279 observations per block, 1,116 total. Each case
+has one qualification pair, two warmup pairs, nine timed pairs, one separate
+native statistics observation and three separate memory pairs. Each native
+revision therefore has 18 timed observations and six child peak-RSS observations
+per case. Execution uses eager CPU, one closure worker, one completion worker,
+`--oracle auto` and complete enumeration.
 
-Per-case changes range from −0.42% to +1.74%, with larger unchanged-baseline
-drift in several cases. The measurements do not isolate a timing benefit from
-workspace reuse. Reproduce the selected population with `zetesis-perf`, passing
-the linked case paths relative to `examples/kr-domains` with `--case`,
-`--warmups 1`, `--repetitions 5`,
-`--memory-runs 0`, `--timeout-seconds 10` and `--campaign-seconds 120`.
-Run the two frozen executables in the stated four-block order and retain each
-report separately. Statistics observations are outside the timed population.
+The table gives the range of the two native block medians for each revision
+and the four clingo block medians, in milliseconds. These are ranges of
+observations, not confidence intervals. Timed native runs use human output
+without statistics; clingo uses JSON. Process startup, grounding, solving,
+rendering and capture remain included.
+
+| Case | Previous zetesis, ms | Current zetesis, ms | clingo, ms |
+| --- | ---: | ---: | ---: |
+| [Queens 1, N=8](../../../examples/kr-domains/standalone/n-queens/variant-01.lp) | 9.224–9.237 | 9.225–9.239 | 6.160–6.187 |
+| [Queens 2, N=8](../../../examples/kr-domains/standalone/n-queens/variant-02.lp) | 93.551–93.741 | 92.266–93.555 | 123.634–125.123 |
+| [Queens 3, N=8](../../../examples/kr-domains/standalone/n-queens/variant-03.lp) | 9.325–9.338 | 9.323–9.336 | 6.192–6.227 |
+| [Queens 4, N=8](../../../examples/kr-domains/standalone/n-queens/variant-04.lp) | 7.726–7.751 | 7.732–7.753 | 6.157–6.164 |
+| [Queens 5, N=8](../../../examples/kr-domains/standalone/n-queens/variant-05.lp) | 10.733–10.743 | 10.735–10.737 | 6.153–6.169 |
+| [Queens 6, N=8](../../../examples/kr-domains/standalone/n-queens/variant-06.lp) | 12.236–12.256 | 12.251–12.253 | 6.158–6.173 |
+| [SEND + MORE = MONEY](../../../examples/kr-domains/standalone/send-money/send-money.lp) | 40.658–40.839 | 39.393–40.830 | 12.230–13.759 |
+| [Task allocation: scheduling](../../../examples/kr-domains/scenarios/task-allocation/variant-04/05-larger-mix.lp) | 123.917–126.926 | 123.913–131.220 | 185.434–194.311 |
+| [Shortest path: layered DAG](../../../examples/kr-domains/scenarios/shortest-path/variant-01/06-layered-dag.lp) | 7.884–7.888 | 7.842–7.852 | 6.188–6.241 |
+
+These results do not demonstrate a broad application speedup from the columnar
+integration. Most differences are small; one current task-allocation block is
+slower than the other three blocks. Zetesis is faster than clingo on queens-02
+and this task-allocation case; clingo is faster on the other selected cases.
+This selection does not establish a general solver ranking.
+
+Separate peak-memory observations cover the same nine cases:
+
+| Case | Prior zetesis (MiB) | Current zetesis (MiB) | clingo (MiB) |
+|---|---:|---:|---:|
+| Queens 01 (N=8) | 12.031–12.094 | 12.078–12.156 | 5.422 |
+| Queens 02 (N=8) | 12.969–12.984 | 12.906–12.938 | 7.969–8.844 |
+| Queens 03 (N=8) | 12.172–12.188 | 12.234–12.297 | 5.438 |
+| Queens 04 (N=8) | 12.047–12.125 | 12.125 | 5.469 |
+| Queens 05 (N=8) | 12.891–12.922 | 12.828–12.875 | 5.531 |
+| Queens 06 (N=8) | 13.094–13.141 | 13.078–13.094 | 5.563 |
+| SEND + MORE = MONEY | 26.188–26.203 | 26.094 | 8.281 |
+| Task allocation 04/05 | 40.234–40.266 | 40.188–40.234 | 19.359–20.938 |
+| Shortest path 01/06 | 12.891–12.906 | 12.875–12.938 | 5.641 |
+
+All four ordinary ABBA reports passed. Each contains three memory observations
+per solver per case: six per case for each zetesis build and twelve per case for
+clingo, totaling 216 memory observations across the nine cases. The table gives
+ranges of block medians (two blocks per zetesis build, four for clingo), rounded
+to three decimals; these are descriptive ranges, not confidence intervals.
+
+These are separate fresh-helper memory observations, not the timed samples. On
+macOS, the retained raw `ru_maxrss` values are bytes; MiB means 1,048,576 bytes.
+The helper waits for the solver and reads `RUSAGE_CHILDREN`, excluding its own
+memory. The operating system may propagate usage from descendants reaped by the
+solver. This is neither simultaneous process-tree RSS nor GPU/device-memory
+usage.
+
+Clingo used less reported peak memory in all nine cases. Current and prior
+zetesis values are close and mixed; these observations do not establish a broad
+peak-memory reduction from the columnar changes.
+
+These eager CPU runs used one zetesis worker and one completion worker. The
+accepted comparisons cover selected output and costs, including optimum ties;
+clingo’s hidden interpretations are unavailable.
+
+Reproduce each block with the same nine cases and an unused report path:
+
+```sh
+zetesis-perf examples/kr-domains \
+  --case standalone/n-queens/variant-01.lp \
+  --case standalone/n-queens/variant-02.lp \
+  --case standalone/n-queens/variant-03.lp \
+  --case standalone/n-queens/variant-04.lp \
+  --case standalone/n-queens/variant-05.lp \
+  --case standalone/n-queens/variant-06.lp \
+  --case standalone/send-money/send-money.lp \
+  --case scenarios/task-allocation/variant-04/05-larger-mix.lp \
+  --case scenarios/shortest-path/variant-01/06-layered-dag.lp \
+  --zetesis /path/to/zetesis --clingo /path/to/clingo \
+  --warmups 2 --repetitions 9 --memory-runs 3 \
+  --timeout-seconds 30 --campaign-seconds 180 \
+  --sample-bytes 4194304 --capture-bytes 134217728 --report-bytes 536870912 \
+  --report target/ordinary-cpu.json
+```
+
+Run the frozen executables in previous/current/current/previous order, retaining
+four reports. Compare block medians without pooling away unchanged-executable
+drift. The source manifest is
+`b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958`.
+The 4 MiB per-process capture ceiling, 128 MiB cumulative capture allowance and
+512 MiB serialized-report ceiling apply independently.
+
+#### Instrumented queens limits
+
+The same executables were compared on all six queens encodings at N=8 and N=10
+using the [parameterized workload API](#compare-a-parameterized-workload).
+Each report has 60 positions: four eager/lazy × one/four-worker native profiles
+and one clingo profile, qualification followed by one timed round, with no
+warmups. The profiles use `--oracle auto`, batch size 64, 256 MiB completion
+scratch and one clingo worker. Input derivation preserves the source closure
+and records each workload's identity.
+
+| N | Native passes | Reference passes | Native refusals | Native incomplete | Capture stops | Skipped positions |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 8 | 24 | 12 | 12 | 0 | 0 | 12 |
+| 10 | 12 | 12 | 12 | 2 | 4 | 18 |
+
+The two revisions have the same disposition populations. At N=8, every eager
+profile completes 92 models. The 24 paired passing native positions agree in
+complete typed atom families, model multiplicities, shown records and
+priority/cost vectors; 24 native positions remain unavailable for comparison.
+At N=10, eager variants 01, 03 and 04 complete 724 models, with equal complete
+native records in all 12 paired passing positions. The other 36 native
+positions remain unavailable. Comparisons with clingo concern displayed-model
+multisets, costs and optimum ties; hidden clingo interpretations are unavailable.
+
+Explicit lazy execution remains unsupported for these six formula encodings.
+At N=10, variant 02 reaches the native countermodel work ceiling before
+publishing an answer. Variants 05/06 reach the measurement harness's 4 MiB
+capture ceiling; that does not establish a solver scalability limit. A larger
+capture allowance also needs an appropriate independent native-decoder budget.
+No failed or skipped sample is replaced.
+
+Native JSON retains hidden atoms and includes statistics. At N=8, variants
+05/06 produce about 2.04 MB per invocation, versus about 224 KB for the other
+variants. Output accounts for about 40 ms of their approximately 52 ms
+single-worker wall interval. These instrumented times belong to a different
+population from the ordinary CLI table. One timed sample per cell does not
+establish a performance trend, and no RSS observation is inferred from it.
+
+#### Complete Metal solves
+
+The same old/current source and executable identities listed above were compared
+on Apple M4 Pro using all six N=8 queens encodings. Four blocks ran in
+old/current/current/old order. Each used four host and completion workers,
+automatic oracle selection, batches of at most 64 candidates and one clingo
+worker. Qualification and one warmup preceded five timed rounds per block.
+
+All 504 positions were accounted for: 168 complete eager Metal solves, 168
+passing references, 24 explicit lazy refusals and 144 subsequent skipped
+positions. All 84 old/current pairs of complete native results agree on full
+typed atom families, costs, shown values and multiplicities; each enumerates
+92 answer sets. Reference agreement covers displayed results, not hidden
+clingo atoms. Lazy requests select an unsupported countermodel/grounder
+combination for these encodings; they are not completed solves or evidence
+about the separate lazy closure path.
+
+Every complete native solve reports the Apple M4 Pro Metal adapter, two GPU
+batches, 92 GPU-decided candidates and no CPU residuals or pending results.
+GPU work and accounted execution bytes are identical between revisions for
+each encoding. This establishes device use, not GPU execution of grounding or
+candidate generation.
+
+Ranges span the two block medians per native revision and four clingo block
+medians, each based on five timed observations. They are not confidence
+intervals. Native runs include full typed JSON and statistics; clingo emits its
+displayed-model JSON. These timings therefore differ from the ordinary
+human-output CLI measurements above.
+
+| Queens variant | Old Metal, ms | Current Metal, ms | clingo, ms |
+| --- | ---: | ---: | ---: |
+| 01 | 31.788–31.899 | 31.844–31.971 | 6.514–6.560 |
+| 02 | 120.935–122.279 | 119.837–121.020 | 120.690–122.121 |
+| 03 | 31.686–31.753 | 31.693–31.703 | 6.493–6.538 |
+| 04 | 29.165–29.186 | 29.171–29.201 | 6.509–6.550 |
+| 05 | 68.769–69.196 | 69.181–69.192 | 6.512–6.545 |
+| 06 | 71.945–72.093 | 72.120–72.177 | 6.585–6.616 |
+
+Whole-invocation times are broadly unchanged. Grounding medians for variants
+05/06 rise by approximately 0.08–0.11 ms; no grounding-speed gain is established.
+Current execution setup costs 8.334–8.491 ms. Variants 05/06 emit approximately
+2.04 MB of JSON and spend 35.690–36.083 ms in output. Host GPU-oracle intervals
+include work and waits; they are not kernel timings. These small workloads do
+not establish a general GPU speedup or a lower memory footprint.
+
+Reproduce the workload and execution configuration with the maintained matrix
+CLI. Run once per executable in the stated four-block order, choosing a new
+report path for each invocation:
+
+```sh
+zetesis-perf examples/kr-domains --suite queens \
+  --profile metal-eager --profile metal-lazy \
+  --workers 4 --completion-workers 4 --clingo-workers 1 --batch-size 64 \
+  --zetesis /path/to/zetesis --clingo /path/to/clingo \
+  --warmups 1 --repetitions 5 \
+  --timeout-seconds 30 --campaign-seconds 180 \
+  --sample-bytes 4194304 --native-report-bytes 8388608 \
+  --capture-bytes 134217728 --report-bytes 536870912 \
+  --report target/queens-metal.json
+```
+
+The default completion scratch ceiling is 256 MiB. Preserve refused and skipped
+cells when reviewing the report. The measurements used the maintained
+`performance::matrix::run_workloads` API with unchanged N=8 sources; the command
+above selects the same inputs, profiles and schedule through the base-corpus
+report view. Raw report schemas need not be identical.
 
 #### Tight GPU membership
+
+The following tight-oracle measurements compare
+[`f1c6365a`](https://github.com/GregoryGelfond/zetesis/tree/f1c6365af66a56902d985fb3f61f584c860527de)
+with [`e7e5e410`](https://github.com/GregoryGelfond/zetesis/tree/e7e5e410d4072457eee4a469b600981d713f5d15),
+using Rust 1.97.1 release builds on Apple M4 Pro on 10 September 2026.
+Both sources use packed Atomic support. The order is
+previous/current/current/previous; unchanged-executable drift remains part of
+the result. These descriptive observations are not confidence estimates.
 
 The [tight-oracle benchmark](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-experiments/README.md)
 compares identical candidates through scalar, Rayon, fresh-device and
@@ -389,17 +565,19 @@ status. A newer source remains unqualified until its own checks complete.
 
 | Population | Covered / instrumented lines | Coverage |
 | --- | ---: | ---: |
-| Workspace, all features, portable tests plus 30 physical Metal tests | 46,198 / 49,420 | 93.48% |
-| CPU-only CLI, separate instrumentation | 4,312 / 4,626 | 93.21% |
+| Workspace, all features, portable tests plus 31 physical Metal tests | 47,156 / 50,419 | 93.53% |
+| CPU-only CLI, separate instrumentation | 4,319 / 4,625 | 93.38% |
 
-This snapshot was qualified on 10 September 2026 for
-[`d871e91b`](https://github.com/GregoryGelfond/zetesis/tree/d871e91b56406c20b312e63f9d3437e6352803e2),
-using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS with Apple M4 Pro
+This snapshot was qualified on 11 September 2026 for
+[`55f5aa73`](https://github.com/GregoryGelfond/zetesis/tree/55f5aa739ec3fc941f27359dcb4d0c8608b82284),
+using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS 26.6.2 with Apple M4 Pro
 Metal. Both populations passed their independent 91% floor. The workspace
 combines its portable and physical profiles; the CPU-only population remains
 separate. Each of the four tight-oracle physical tests exercises both Atomic
 and Grouped support construction. The relation tests cover typed equality masks,
 prepared-view refusals and matched scalar/Rayon/Metal measurement results.
+The automatic-selection regression checks that actual Metal use preserves
+lazy grounding for an admitted relational program.
 Vulkan and other untested devices are outside this measurement.
 
 Reproduce the populations with `scripts/check.sh coverage --metal` using the
