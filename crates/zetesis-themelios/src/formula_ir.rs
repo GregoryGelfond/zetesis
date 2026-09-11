@@ -41,9 +41,9 @@ pub(crate) struct Prepared {
     pub objective_extrema: BTreeSet<usize>,
 }
 pub(crate) struct ObjectiveIr {
-    pub weight: CoreTerm,
+    pub weight: ObjectiveField,
     pub priority: Expression,
-    pub tuple: Vec<CoreTerm>,
+    pub tuple: Vec<ObjectiveField>,
     pub positive: Vec<AtomPattern>,
     pub filters: Vec<Filter>,
     pub polarity: WeightPolarity,
@@ -58,17 +58,42 @@ pub(crate) struct ObjectiveIr {
     pub origins: Vec<Location>,
     pub location: Location,
 }
+/// A simple field stays lifted; evaluated fields share the existing scalar
+/// expression semantics and are specialized only after a complete source join.
+pub(crate) enum ObjectiveField {
+    Term(CoreTerm),
+    Expression(Expression),
+}
+impl ObjectiveField {
+    pub(crate) fn term(&self) -> Option<&CoreTerm> {
+        match self {
+            Self::Term(term) => Some(term),
+            Self::Expression(_) => None,
+        }
+    }
+    pub(crate) fn uses(&self, variable: usize) -> bool {
+        match self {
+            Self::Term(term) => *term == CoreTerm::Variable(variable),
+            Self::Expression(expression) => expression.inputs().any(|input| input == variable),
+        }
+    }
+}
 impl ObjectiveIr {
-    /// Preserve the lifted positive conditions once the priority is fixed.
-    pub(super) fn template(&self, priority: i32) -> ObjectiveTemplate {
-        ObjectiveTemplate::new(
-            self.weight.clone(),
-            priority,
-            self.tuple.clone(),
-            self.positive.clone(),
-            self.filters.clone(),
+    /// Preserve the lifted evaluator when every data field is a simple term.
+    pub(super) fn template(&self, priority: i32) -> Option<ObjectiveTemplate> {
+        Some(
+            ObjectiveTemplate::new(
+                self.weight.term()?.clone(),
+                priority,
+                self.tuple
+                    .iter()
+                    .map(|field| field.term().cloned())
+                    .collect::<Option<Vec<_>>>()?,
+                self.positive.clone(),
+                self.filters.clone(),
+            )
+            .with_weight_polarity(self.polarity),
         )
-        .with_weight_polarity(self.polarity)
     }
 }
 pub(crate) struct RuleIr {
@@ -359,9 +384,8 @@ fn validate_objectives(
     limits: &FormulaLimits,
 ) -> Result<(), FormulaFailure> {
     for (index, objective) in objectives.iter().enumerate() {
-        ObjectiveTemplate::validate_fields(
-            &objective.weight,
-            &objective.tuple,
+        ObjectiveTemplate::validate_scope(
+            objective.tuple.len(),
             &objective.positive,
             &objective.filters,
             limits.objective,
@@ -607,7 +631,7 @@ impl Compiler<'_> {
                 }
             }
         }
-        let weight = self.objective_weight(element.weight().term(), &mut variables)?;
+        let weight = self.objective_field(element.weight().term(), &mut variables)?;
         // Nonnumeric literals follow the same resolved-value contract as bound
         // weights: they supply no contribution or numeric priority witness.
         // Still admit the whole element, including priority, tuple and safety,
@@ -627,7 +651,7 @@ impl Compiler<'_> {
         };
         let tuple = element
             .terms()
-            .map(|term| self.objective_term(term, &mut variables))
+            .map(|term| self.objective_field(term, &mut variables))
             .collect::<Result<Vec<_>, _>>()?;
         variables.safety(self.location)?;
         let count = variables.count;
@@ -666,21 +690,30 @@ impl Compiler<'_> {
         }
     }
 
-    fn objective_weight(
+    fn objective_field(
         &mut self,
         term: &Term,
         variables: &mut Variables,
-    ) -> Result<CoreTerm, FormulaFailure> {
-        // Extrema are ignored logical weights, not finite arithmetic endpoints.
-        // Other objective term contexts retain their own admission contract.
-        let value = match term {
-            Term::Symbolic(Symbol::Infimum) => Value::Infimum,
-            Term::Symbolic(Symbol::Supremum) => Value::Supremum,
-            _ => return self.objective_term(term, variables),
-        };
-        self.budget
-            .charge(ExpansionResource::TermWork, 1, self.location)?;
-        Ok(CoreTerm::Constant(value))
+    ) -> Result<ObjectiveField, FormulaFailure> {
+        match term {
+            Term::Symbolic(Symbol::Infimum | Symbol::Supremum) => {
+                self.budget
+                    .charge(ExpansionResource::TermWork, 1, self.location)?;
+                Ok(ObjectiveField::Term(CoreTerm::Constant(
+                    if matches!(term, Term::Symbolic(Symbol::Infimum)) {
+                        Value::Infimum
+                    } else {
+                        Value::Supremum
+                    },
+                )))
+            }
+            Term::Variable(_) | Term::Symbolic(_) => self
+                .objective_term(term, variables)
+                .map(ObjectiveField::Term),
+            _ => self
+                .expression(term, variables)
+                .map(ObjectiveField::Expression),
+        }
     }
     pub(super) fn rule(
         &mut self,

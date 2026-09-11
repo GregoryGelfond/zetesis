@@ -288,3 +288,67 @@ fn an_active_unrepresentable_maximize_weight_is_distinct_from_a_missing_binding(
         &[(7, 0)]
     );
 }
+
+#[test]
+fn source_expression_scope_shares_field_admission_bounds() {
+    let template = template(0);
+    for maximum in 0..=2 {
+        for limits in [
+            AdmissionLimits {
+                max_tuple_width: maximum,
+                ..Default::default()
+            },
+            AdmissionLimits {
+                max_variables_per_template: maximum,
+                ..Default::default()
+            },
+            AdmissionLimits {
+                max_positive_body: maximum,
+                ..Default::default()
+            },
+            AdmissionLimits {
+                max_predicate_arity: maximum,
+                ..Default::default()
+            },
+            AdmissionLimits {
+                max_filters: maximum,
+                ..Default::default()
+            },
+        ] {
+            assert_eq!(
+                ObjectiveTemplate::validate_scope(
+                    template.tuple().len(),
+                    template.positive(),
+                    template.filters(),
+                    limits,
+                    4
+                ),
+                ObjectiveTemplate::validate_fields(
+                    template.weight(),
+                    template.tuple(),
+                    template.positive(),
+                    template.filters(),
+                    limits,
+                    4
+                ),
+            );
+        }
+    }
+}
+
+#[test]
+fn source_expression_scope_rejects_unbound_filters() {
+    assert_eq!(
+        ObjectiveTemplate::validate_scope(
+            0,
+            &[pattern(0)],
+            &[Filter::Eq(Term::Variable(0), Term::Variable(1))],
+            AdmissionLimits::default(),
+            4
+        ),
+        Err(AdmissionError::UnsafeVariable {
+            template: 4,
+            variable: 1
+        }),
+    );
+}

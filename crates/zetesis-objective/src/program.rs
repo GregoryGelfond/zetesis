@@ -135,6 +135,37 @@ impl ObjectiveTemplate {
     ) -> Result<usize, AdmissionError> {
         admit_fields(weight, tuple, positive, filters, limits, index)
     }
+
+    /// Validate the relational scope and output width before evaluating source
+    /// expressions. The source frontend must independently establish that every
+    /// expression input has a binder in `positive`; expressions never add binders.
+    /// This shares shape, dense-variable and filter checks with `validate_fields`.
+    /// Resolved output values must still pass through [`ObjectiveProgram::new`].
+    ///
+    /// # Errors
+    /// Refuses shape limits, unsafe or sparse variable IDs, overflow or allocation.
+    pub fn validate_scope(
+        tuple_width: usize,
+        positive: &[AtomPattern],
+        filters: &[Filter],
+        limits: AdmissionLimits,
+        index: usize,
+    ) -> Result<usize, AdmissionError> {
+        admit_scope(
+            tuple_width,
+            positive
+                .iter()
+                .flat_map(AtomPattern::terms)
+                .chain(filters.iter().flat_map(|filter| {
+                    let (left, right) = filter.terms();
+                    [left, right]
+                })),
+            positive,
+            filters,
+            limits,
+            index,
+        )
+    }
 }
 
 fn terms<'a>(
@@ -142,7 +173,7 @@ fn terms<'a>(
     tuple: &'a [Term],
     positive: &'a [AtomPattern],
     filters: &'a [Filter],
-) -> impl Iterator<Item = &'a Term> {
+) -> impl Iterator<Item = &'a Term> + Clone {
     std::iter::once(weight)
         .chain(tuple)
         .chain(positive.iter().flat_map(AtomPattern::terms))
@@ -446,10 +477,28 @@ fn admit_fields(
     limits: AdmissionLimits,
     index: usize,
 ) -> Result<usize, AdmissionError> {
+    admit_scope(
+        tuple.len(),
+        terms(weight, tuple, positive, filters),
+        positive,
+        filters,
+        limits,
+        index,
+    )
+}
+
+fn admit_scope<'a>(
+    tuple_width: usize,
+    terms: impl Iterator<Item = &'a Term> + Clone,
+    positive: &[AtomPattern],
+    filters: &[Filter],
+    limits: AdmissionLimits,
+    index: usize,
+) -> Result<usize, AdmissionError> {
     for (resource, actual, limit) in [
         (
             AdmissionResource::TupleWidth,
-            tuple.len(),
+            tuple_width,
             limits.max_tuple_width,
         ),
         (
@@ -474,7 +523,7 @@ fn admit_fields(
         )?;
     }
     let mut count = 0;
-    for term in terms(weight, tuple, positive, filters) {
+    for term in terms.clone() {
         if let Term::Variable(variable) = term {
             let proposed = variable.checked_add(1).ok_or(AdmissionError::Overflow {
                 template: Some(index),
@@ -492,7 +541,7 @@ fn admit_fields(
     used.resize(count, false);
     let mut bound = reserved(count)?;
     bound.resize(count, false);
-    for term in terms(weight, tuple, positive, filters) {
+    for term in terms {
         if let Term::Variable(variable) = term {
             used[*variable] = true;
         }

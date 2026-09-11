@@ -369,6 +369,11 @@ fn observer(
                             *left == Term::Variable(variable) || *right == Term::Variable(variable)
                         })
                         || objective.priority.inputs().any(|input| input == variable)
+                        || (objective.weight.term().is_none() && objective.weight.uses(variable))
+                        || objective
+                            .tuple
+                            .iter()
+                            .any(|field| field.term().is_none() && field.uses(variable))
                 }
             };
             // A literal, filter or join can distinguish a proposal from a

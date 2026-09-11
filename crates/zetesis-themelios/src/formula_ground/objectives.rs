@@ -11,7 +11,7 @@ use zetesis_objective::{AdmissionError, ObjectiveProgram, ObjectiveTemplate, Wei
 
 use crate::expansion::Budget;
 use crate::formula::ceiling;
-use crate::formula_ir::{ObjectiveIr, Operation, Prepared};
+use crate::formula_ir::{ObjectiveField, ObjectiveIr, Operation, Prepared};
 use crate::formula_objective_dependencies::Presence;
 use crate::formula_objective_dependencies::completion::{Activity, Completion, Context};
 use crate::formula_support::{self, Counters, Join, Support};
@@ -90,9 +90,16 @@ impl Preparation<'_> {
             && !objective.source_completion
             && let [Operation::Constant(Value::Number(priority))] =
                 objective.priority.nodes.as_slice()
+            && objective.weight.term().is_some()
+            && objective.tuple.iter().all(|field| field.term().is_some())
         {
             if may_have_numeric_weight && self.has_numeric_row(objective, support)? {
-                self.retain(objective, objective.template(*priority))?;
+                self.retain(
+                    objective,
+                    objective
+                        .template(*priority)
+                        .expect("simple objective fields"),
+                )?;
             }
             return Ok(());
         }
@@ -185,21 +192,17 @@ impl Preparation<'_> {
         objective: &ObjectiveIr,
         binding: &[Value],
     ) -> Result<Option<i32>, FormulaFailure> {
-        self.counters.work(self.limits, objective.location)?;
-        let Value::Number(weight) = objective
-            .weight
-            .resolve(binding)
-            .expect("safe objective weight")
-        else {
+        let value = self.field(&objective.weight, binding, objective.location)?;
+        let Value::Number(weight) = value else {
             return Ok(None);
         };
-        objective.polarity.normalize(*weight).ok_or_else(|| {
+        objective.polarity.normalize(weight).ok_or_else(|| {
             crate::diagnostic::unsupported(
                 crate::ProfileFeature::NumericOverflow,
                 objective.location,
             )
         })?;
-        Ok(Some(*weight))
+        Ok(Some(weight))
     }
 
     fn specialize(
@@ -210,7 +213,14 @@ impl Preparation<'_> {
         priority: i32,
         query: Option<zetesis_objective::Condition>,
     ) -> Result<ObjectiveTemplate, FormulaFailure> {
-        let tuple = self.terms(&objective.tuple, binding, objective.location)?;
+        let mut tuple = reserved(objective.tuple.len(), objective.location)?;
+        for field in &objective.tuple {
+            tuple.push(Term::Constant(self.field(
+                field,
+                binding,
+                objective.location,
+            )?));
+        }
         if let Some(query) = query {
             return Ok(ObjectiveTemplate::new(
                 Term::Constant(Value::Number(weight)),
@@ -243,6 +253,30 @@ impl Preparation<'_> {
             Vec::new(),
         )
         .with_weight_polarity(objective.polarity))
+    }
+
+    fn field(
+        &mut self,
+        field: &ObjectiveField,
+        binding: &[Value],
+        location: Location,
+    ) -> Result<Value, FormulaFailure> {
+        self.counters.work(self.limits, location)?;
+        match field {
+            ObjectiveField::Term(term) => formula_support::copy(
+                term.resolve(binding).expect("safe objective field"),
+                self.budget,
+                location,
+            ),
+            ObjectiveField::Expression(expression) => formula_support::expression(
+                expression,
+                binding,
+                self.limits,
+                self.budget,
+                self.counters,
+                location,
+            ),
+        }
     }
 
     fn terms(

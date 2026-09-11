@@ -93,7 +93,7 @@ impl Presence<'_> {
             return Ok(true);
         }
         counters.work(limits, objective.location)?;
-        let Term::Variable(weight) = &objective.weight else {
+        let Some(Term::Variable(weight)) = objective.weight.term() else {
             return Ok(true);
         };
         for atom in &objective.positive {
@@ -119,7 +119,7 @@ pub(super) fn required(
 ) -> BTreeSet<usize> {
     let mut observed = BTreeSet::new();
     for objective in objectives {
-        let Term::Variable(weight) = &objective.weight else {
+        let Some(Term::Variable(weight)) = objective.weight.term() else {
             continue;
         };
         for atom in &objective.positive {

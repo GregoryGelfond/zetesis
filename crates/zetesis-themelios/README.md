@@ -219,8 +219,8 @@ from the logical theory. `zetesis-objective` scores supplied verified models;
 objectives do not derive atoms or replace reduct acceptance.
 
 The source profile admits `#minimize`, `#maximize` and weak constraints
-with scalar literal or positively bound variable weights, finite safely bound
-priority expressions, closed/whole-variable tuples, positive ordinary conditions and scalar
+with finite safely bound weight, priority and tuple expressions, positive
+ordinary conditions and scalar
 equality/disequality filters. Maximize weights undergo checked negation before
 global `(priority, normalized weight, full tuple)` deduplication. Costs use the
 normalized minimization sign. Weight, priority and tuple are resolved from the
@@ -232,8 +232,12 @@ contribute neither cost nor priority. Their tuple, priority, binding, filter and
 resource checks still run. A numeric zero retains a priority; an omitted weight
 does not. Eligible unrepresentable maximize negation is a located failure;
 an excluded nonnumeric priority needs no weight normalization. Undefined priority
-arithmetic remains a located source-evaluation failure. Variable weight arithmetic
-and aggregate/conditional weak bodies remain unsupported.
+arithmetic remains a located source-evaluation failure. Weight and tuple
+expressions reuse that same scalar evaluator and are specialized after source
+eligibility selects a complete binding. Arithmetic, structural constructors and
+logical extrema retain typed value identity. Simple fields retain lifted joins;
+resolved fields feed the same global key, score and candidate-bound operations.
+Aggregate/conditional weak bodies remain unsupported.
 
 Objective dependencies have additional boundaries because a possible-support
 upper bound alone cannot determine clingo-compatible priority presence.

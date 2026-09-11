@@ -313,7 +313,7 @@ fn original_objective_budgets_count_occurrences_before_canonicalization() {
 
 #[test]
 fn unsupported_objective_syntax_and_unsafe_variables_are_typed_refusals() {
-    for source in ["#minimize{X:a}.", "d(1). #minimize{X+1:d(X)}."] {
+    for source in ["#minimize{X:a}.", "d(1). #minimize{Y+1:d(X)}."] {
         assert!(
             admit_formula(
                 source.to_owned(),

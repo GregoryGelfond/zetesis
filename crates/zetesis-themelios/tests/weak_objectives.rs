@@ -161,11 +161,7 @@ fn unsupported_weak_scopes_remain_typed_refusals() {
             "{source}"
         );
     }
-    for source in [
-        "{a}. :~#count{1:a}>0.[1]",
-        "{a}. :~a:a.[1]",
-        "{p(1)}. :~p(X).[X+1]",
-    ] {
+    for source in ["{a}. :~#count{1:a}>0.[1]", "{a}. :~a:a.[1]"] {
         assert!(
             matches!(
                 admit_formula(

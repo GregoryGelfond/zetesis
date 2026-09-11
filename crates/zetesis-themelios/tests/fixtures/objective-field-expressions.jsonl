@@ -1,0 +1,18 @@
+{"name":"bound_weight","source":"{p(1);p(2)}.#minimize{X+1:p(X)}.","priorities":[0],"records":[[[],[0]],[["p(1)"],[2]],[["p(1)","p(2)"],[5]],[["p(2)"],[3]]]}
+{"name":"weak_bound_weight","source":"{p(1);p(2)}.:~p(X).[X+1]","priorities":[0],"records":[[[],[0]],[["p(1)"],[2]],[["p(1)","p(2)"],[5]],[["p(2)"],[3]]]}
+{"name":"same_binding_fields","source":"{p(1);p(2)}.#minimize{2*X@3-X,X+1:p(X)}.","priorities":[2,1],"records":[[[],[0,0]],[["p(1)"],[2,0]],[["p(1)","p(2)"],[2,4]],[["p(2)"],[0,4]]]}
+{"name":"arithmetic_maximize","source":"{p(1);p(2)}.#maximize{2*X-3:p(X)}.","priorities":[0],"records":[[[],[0]],[["p(1)"],[1]],[["p(1)","p(2)"],[0]],[["p(2)"],[-1]]]}
+{"name":"tuple_coalescing","source":"p(1;2).#minimize{1,X-X:p(X)}.","priorities":[0],"records":[[["p(1)","p(2)"],[1]]]}
+{"name":"mixed_tuple_coalescing","source":"p(1).#minimize{2,X+1:p(X);2,2:p(X)}.","priorities":[0],"records":[[["p(1)"],[2]]]}
+{"name":"structured_tuple","source":"{p(1);p(2)}.#minimize{1,f(X+1):p(X)}.","priorities":[0],"records":[[[],[0]],[["p(1)"],[1]],[["p(1)","p(2)"],[2]],[["p(2)"],[1]]]}
+{"name":"negative_structured_tuple","source":"p(1).#minimize{1,-f(X),X+1:p(X);1,-f(1),2:p(X)}.","priorities":[0],"records":[[["p(1)"],[1]]]}
+{"name":"division_remainder","source":"{p(2);p(3)}.#minimize{X/2+X\\2:p(X)}.","priorities":[0],"records":[[[],[0]],[["p(2)"],[1]],[["p(2)","p(3)"],[3]],[["p(3)"],[2]]]}
+{"name":"absolute_weight","source":"{p(-2);p(1)}.#minimize{|X|:p(X)}.","priorities":[0],"records":[[[],[0]],[["p(-2)"],[2]],[["p(-2)","p(1)"],[3]],[["p(1)"],[1]]]}
+{"name":"power_weight","source":"{p(1);p(2)}.#minimize{2**X:p(X)}.","priorities":[0],"records":[[[],[0]],[["p(1)"],[2]],[["p(1)","p(2)"],[6]],[["p(2)"],[4]]]}
+{"name":"negative_arithmetic_condition","source":"d(1;2).{p(1);p(2)}.#minimize{X+1@X,X*X:d(X),not p(X)}.","priorities":[2,1],"records":[[["d(1)","d(2)"],[3,2]],[["d(1)","d(2)","p(1)"],[3,0]],[["d(1)","d(2)","p(1)","p(2)"],[0,0]],[["d(1)","d(2)","p(2)"],[0,2]]]}
+{"name":"completed_count_weight","source":"a.{b}.n(N):-N=#count{1:a;2:b}.#minimize{N+2:n(N)}.","priorities":[0],"records":[[["a","b","n(2)"],[4]],[["a","n(1)"],[3]]]}
+{"name":"completed_count_tuple","source":"a.{b}.n(N):-N=#count{1:a;2:b}.#minimize{1,N+2:n(N)}.","priorities":[0],"records":[[["a","b","n(2)"],[1]],[["a","n(1)"],[1]]]}
+{"name":"completed_filtered_weight","source":"a.{b}.n(N):-N=#count{1:a;2:b}.#minimize{N+2:n(N),N=1}.","priorities":[0],"records":[[["a","b","n(2)"],[0]],[["a","n(1)"],[3]]]}
+{"name":"weak_full_fields","source":"{p(1);p(2)}.:~p(X),X>1.[X+1@3-X,f(X)]","priorities":[1],"records":[[[],[0]],[["p(1)"],[0]],[["p(1)","p(2)"],[3]],[["p(2)"],[3]]]}
+{"name":"tuple_extrema","source":"p(1).#minimize{1,#inf:p(X);1,#sup:p(X)}.","priorities":[0],"records":[[["p(1)"],[2]]]}
+{"name":"priority_nonnumeric","source":"p(1).#minimize{X+1@symbol:p(X)}.","priorities":[],"records":[[["p(1)"],null]]}

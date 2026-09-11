@@ -34,6 +34,11 @@ must occur in a positive condition. Comparisons do not bind variables. Templates
 retain their input order, so admission and evaluation failures can report a
 `template_index()` into the caller's separate source-origin table. The admitted
 program is immutable and cheaply shared through `Arc`.
+`ObjectiveTemplate::validate_scope` exposes the same output-width, relational
+shape and binder checks to frontends that evaluate richer source expressions.
+The frontend must establish every expression input's safety independently and
+admit the resolved templates through `ObjectiveProgram::new`; scope validation
+alone does not establish source eligibility, numeric presence or a valid query.
 
 `evaluate(&program, &model, Limits, &Control)` returns an `Evaluation` with:
 

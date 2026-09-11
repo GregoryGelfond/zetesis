@@ -42,6 +42,9 @@ fn source_completion_keeps_the_original_reduct_subject() {
             .split("#minimize")
             .next()
             .unwrap()
+            .split("#maximize")
+            .next()
+            .unwrap()
             .split(":~")
             .next()
             .unwrap();
