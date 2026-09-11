@@ -113,6 +113,7 @@ fn omitted_physical_group_prevents_instrumentation() {
         "context",
         "solve-context",
         "session-resources",
+        "language-consumers",
     ] {
         let f = Fixture::new();
         let row = groups()
@@ -174,6 +175,7 @@ fn failed_physical_execution_preserves_its_exit_code() {
         "relation-measurement",
         "solve-context",
         "session-resources",
+        "language-consumers",
     ] {
         let f = Fixture::new();
         let result = f.coverage(
