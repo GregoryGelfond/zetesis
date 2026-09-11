@@ -1,7 +1,7 @@
 //! Independent materialization selection and provisional hardware scheduling.
 
-use crate::presentation::{Diagnostics, Label};
-use std::io::Write;
+use crate::ExecutionObservation as Event;
+use crate::execution_observation::ExecutionSink;
 use std::sync::Arc;
 
 use zetesis_core::{GroundProgram, Model, Program, Seed, StaticLimits};
@@ -73,43 +73,38 @@ impl Engine {
     pub(crate) fn new(
         options: &SolveConfig,
         program: &Program,
-        diagnostics: &mut Diagnostics<impl Write>,
+        observations: &mut impl ExecutionSink,
         phases: &Recorder,
     ) -> Result<Self, RunError> {
-        Self::with_ground(options, program, None, diagnostics, phases)
+        Self::with_ground(options, program, None, observations, phases)
     }
 
     pub(crate) fn with_ground(
         options: &SolveConfig,
         program: &Program,
         cached: Option<Arc<GroundProgram>>,
-        diagnostics: &mut Diagnostics<impl Write>,
+        observations: &mut impl ExecutionSink,
         phases: &Recorder,
     ) -> Result<Self, RunError> {
         validate_combination(options)?;
         let executor = match options.backend {
             Backend::Auto | Backend::Cpu => {
-                let cpu = Executor::cpu(options, program, cached, diagnostics, phases)?;
+                let cpu = Executor::cpu(options, program, cached, observations, phases)?;
                 if options.backend == Backend::Auto {
                     if options.source_batching != SourceBatching::Independent {
-                        diagnostics.metadata(Label::Auto, format_args!("explicit shared source batching selects CPU without device discovery."))?;
+                        observations.record(Event::SharedCpu)?;
                     } else if cfg!(feature = "gpu") {
-                        diagnostics.metadata(
-                            Label::Auto,
-                            format_args!("GPU discovery deferred; the first seed stays CPU. Later batches of at least {AUTO_GPU_MIN_BATCH} candidates may use a physical GPU with {} grounding (provisional heuristic).", grounding_mode(options)),
-                        )?;
+                        observations.record(Event::DeferredDevice {
+                            minimum_batch: AUTO_GPU_MIN_BATCH,
+                            grounder: grounding_mode(options),
+                        })?;
                     } else {
-                        diagnostics.metadata(
-                            Label::Auto,
-                            format_args!(
-                                "GPU support was not compiled; using CPU without device discovery."
-                            ),
-                        )?;
+                        observations.record(Event::DeviceNotCompiled)?;
                     }
                 }
                 cpu
             }
-            _ => Executor::gpu(options, program, cached, diagnostics, phases)?,
+            _ => Executor::gpu(options, program, cached, observations, phases)?,
         };
         Ok(Self {
             executor,
@@ -121,12 +116,33 @@ impl Engine {
         })
     }
 
+    // Accept a prepared executor only after all its observations succeeded.
+    // External observation failures are terminal, never device unavailability.
+    fn finish_device_attempt(
+        &mut self,
+        attempt: Result<Executor, RunError>,
+        options: &SolveConfig,
+        observations: &mut impl ExecutionSink,
+    ) -> Result<(), RunError> {
+        match attempt {
+            Ok(gpu) => self.executor = gpu,
+            Err(error @ (RunError::Output(_) | RunError::ExecutionObservation(_))) => {
+                return Err(error);
+            }
+            Err(error) => observations.record(Event::DeviceUnavailable {
+                grounder: grounding_mode(options),
+                cause: &error,
+            })?,
+        }
+        Ok(())
+    }
+
     pub(crate) fn check(
         &mut self,
         options: &SolveConfig,
         program: &Program,
         seeds: &[Seed],
-        diagnostics: &mut Diagnostics<impl Write>,
+        observations: &mut impl ExecutionSink,
         control: &Control,
         phases: &Recorder,
     ) -> Result<Vec<Result<Option<Model>, Stop>>, RunError> {
@@ -138,27 +154,16 @@ impl Engine {
         }
         if should_probe_gpu(self.automatic, self.attempted_gpu, seeds.len()) {
             self.attempted_gpu = true;
-            match phases.measure(SolvePhase::ExecutionSetup, || {
+            let attempt = phases.measure(SolvePhase::ExecutionSetup, || {
                 Executor::gpu(
                     options,
                     program,
                     self.executor.ground(),
-                    diagnostics,
+                    observations,
                     phases,
                 )
-            }) {
-                Ok(gpu) => self.executor = gpu,
-                Err(error @ RunError::Output(_)) => return Err(error),
-                Err(error) => {
-                    diagnostics.metadata(
-                        Label::Auto,
-                        format_args!(
-                            "retaining {} CPU; GPU unavailable: {error}",
-                            grounding_mode(options)
-                        ),
-                    )?;
-                }
-            }
+            });
+            self.finish_device_attempt(attempt, options, observations)?;
         }
         let phase = if self.executor.is_gpu() {
             SolvePhase::GpuHostOracle
@@ -173,19 +178,16 @@ impl Engine {
                 // No failed-batch result has been published. Eager retains the
                 // same graph; lazy execution retries these same source seeds.
                 self.retired_lazy_statistics = self.lazy_statistics(0);
-                diagnostics.metadata(
-                    Label::Auto,
-                    format_args!(
-                        "GPU batch failed; retrying on {} CPU: {error}",
-                        grounding_mode(options)
-                    ),
-                )?;
+                observations.record(Event::DeviceRetry {
+                    grounder: grounding_mode(options),
+                    cause: &error,
+                })?;
                 self.executor = phases.measure(SolvePhase::ExecutionSetup, || {
                     Executor::cpu(
                         options,
                         program,
                         self.executor.ground(),
-                        diagnostics,
+                        observations,
                         phases,
                     )
                 })?;
@@ -202,11 +204,11 @@ fn should_probe_gpu(automatic: bool, attempted: bool, candidates: usize) -> bool
     automatic && !attempted && candidates >= AUTO_GPU_MIN_BATCH
 }
 
-fn grounding_mode(options: &SolveConfig) -> &'static str {
+fn grounding_mode(options: &SolveConfig) -> Grounder {
     if options.grounder == Grounder::Eager {
-        "eager"
+        Grounder::Eager
     } else {
-        "lazy"
+        Grounder::Lazy
     }
 }
 
@@ -242,7 +244,7 @@ impl Executor {
         options: &SolveConfig,
         program: &Program,
         cached: Option<Arc<GroundProgram>>,
-        diagnostics: &mut Diagnostics<impl Write>,
+        observations: &mut impl ExecutionSink,
         phases: &Recorder,
     ) -> Result<Self, RunError> {
         let oracle =
@@ -252,37 +254,34 @@ impl Executor {
                 Some(ground) => ground,
                 None => compile_static(options, program, options.max_atoms, phases)?,
             };
-            static_diagnostics(options, &ground, diagnostics)?;
-            diagnostics.metadata(
-                Label::Backend,
-                format_args!(
-                    "cpu (eager static closure scans, {} workers)",
-                    options.workers
-                ),
-            )?;
+            observe_static(options, &ground, observations)?;
+            observations.record(Event::CpuClosure {
+                grounder: Grounder::Eager,
+                batching: options.source_batching,
+                workers: options.workers,
+            })?;
             Ok(Self::StaticCpu { oracle, ground })
         } else {
             phases.lazy_grounding();
-            diagnostics.metadata(
-                Label::Grounding,
-                format_args!(
-                    "requested={}, effective=lazy (source joins; no complete ground-rule store)",
-                    options.grounder.label()
-                ),
-            )?;
+            observations.record(Event::LazyGrounding {
+                requested: options.grounder,
+            })?;
             if let Some(selection) = options.source_batching.selection() {
-                diagnostics.metadata(Label::Backend, format_args!(
-                    "cpu (shared {} source rounds, {} workers; collective source and per-world evaluation budgets)",
-                    options.source_batching.label(), options.workers))?;
+                observations.record(Event::CpuClosure {
+                    grounder: Grounder::Lazy,
+                    batching: options.source_batching,
+                    workers: options.workers,
+                })?;
                 Ok(Self::SharedCpu {
                     oracle,
                     statistics: crate::SharedExecutionStatistics::new(options, selection),
                 })
             } else {
-                diagnostics.metadata(
-                    Label::Backend,
-                    format_args!("cpu (lazy source joins, {} workers)", options.workers),
-                )?;
+                observations.record(Event::CpuClosure {
+                    grounder: Grounder::Lazy,
+                    batching: options.source_batching,
+                    workers: options.workers,
+                })?;
                 Ok(Self::Cpu(oracle))
             }
         }
@@ -312,7 +311,7 @@ impl Executor {
         _: &SolveConfig,
         _: &Program,
         _: Option<Arc<GroundProgram>>,
-        _: &mut impl Write,
+        _: &mut impl ExecutionSink,
         _: &Recorder,
     ) -> Result<Self, RunError> {
         Err(RunError::BackendUnavailable)
@@ -323,7 +322,7 @@ impl Executor {
         options: &SolveConfig,
         program: &Program,
         cached: Option<Arc<GroundProgram>>,
-        diagnostics: &mut Diagnostics<impl Write>,
+        observations: &mut impl ExecutionSink,
         phases: &Recorder,
     ) -> Result<Self, RunError> {
         use zetesis_wgpu::{GpuOptions, GpuOracle};
@@ -337,16 +336,13 @@ impl Executor {
             let statistics =
                 crate::LazyExecutionStatistics::new(options.backend, oracle.info().metadata());
             phases.lazy_grounding();
-            diagnostics.metadata(Label::Grounding, format_args!("requested={}, effective=lazy (host source joins; per-world device consequences; no complete ground-rule store)", options.grounder.label()))?;
-            diagnostics.metadata(
-                Label::Backend,
-                format_args!(
-                    "gpu ({}, {}; vendor=0x{:04x}; lazy immutable reduct rounds)",
-                    oracle.info().name(),
-                    oracle.info().backend(),
-                    oracle.info().vendor_id()
-                ),
-            )?;
+            observations.record(Event::LazyDeviceGrounding {
+                requested: options.grounder,
+            })?;
+            observations.record(Event::DeviceClosure {
+                adapter: oracle.info().metadata(),
+                static_counts: None,
+            })?;
             return Ok(Self::LazyGpu(Box::new(LazyGpu { oracle, statistics })));
         }
 
@@ -368,18 +364,11 @@ impl Executor {
             }
             None => compile_static(options, program, atom_limit, phases)?,
         };
-        static_diagnostics(options, &ground, diagnostics)?;
-        diagnostics.metadata(
-            Label::Backend,
-            format_args!(
-                "gpu ({}, {}; vendor=0x{:04x}; static atoms={}, rules={})",
-                oracle.info().name(),
-                oracle.info().backend(),
-                oracle.info().vendor_id(),
-                ground.atom_count(),
-                ground.rules().len()
-            ),
-        )?;
+        observe_static(options, &ground, observations)?;
+        observations.record(Event::DeviceClosure {
+            adapter: oracle.info().metadata(),
+            static_counts: Some((ground.atom_count(), ground.rules().len())),
+        })?;
         Ok(Self::Gpu {
             oracle: Box::new(oracle),
             ground,
@@ -510,23 +499,21 @@ fn compile_static(
     result.map(Arc::new).map_err(RunError::Static)
 }
 
-fn static_diagnostics(
+fn observe_static(
     options: &SolveConfig,
     ground: &GroundProgram,
-    diagnostics: &mut Diagnostics<impl Write>,
+    observations: &mut impl ExecutionSink,
 ) -> Result<(), RunError> {
-    diagnostics.metadata(
-        Label::Grounding,
-        format_args!(
-            "requested={}, effective=eager (static atoms={}, rules={}; lowering caps atoms={}, rules={}, substitutions={})",
-            options.grounder.label(),
-            ground.atom_count(),
-            ground.rules().len(),
-            options.max_atoms,
-            options.max_ground_rules,
-            options.max_substitutions
-        ),
-    )?;
+    observations.record(Event::StaticGrounding {
+        requested: options.grounder,
+        atoms: ground.atom_count(),
+        rules: ground.rules().len(),
+        limits: StaticLimits {
+            max_atoms: options.max_atoms,
+            max_ground_rules: options.max_ground_rules,
+            max_substitutions: options.max_substitutions,
+        },
+    })?;
     Ok(())
 }
 

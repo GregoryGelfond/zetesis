@@ -66,12 +66,23 @@ pub struct SolveFailure {
     pub phase_timings: Option<Box<PhaseTimings>>,
     /// Compatibility view of the latest secondary reporting error.
     pub secondary_output: Option<io::Error>,
+    pub(crate) subject: Option<crate::Subject>,
     pub(crate) semantic: Option<Box<SemanticOutcome>>,
     pub(crate) publication: Option<Publication>,
     diagnostics: Option<Arc<io::Error>>,
     summary: Option<Arc<io::Error>>,
 }
 impl SolveFailure {
+    /// Known original input, including a prepared session's setup failure.
+    /// A subject association does not establish that search started, membership
+    /// completed or any coverage was obtained. Failures before source admission
+    /// can have no subject.
+    #[must_use]
+    pub fn subject(&self) -> Option<&crate::Subject> {
+        self.semantic()
+            .and_then(SemanticOutcome::subject)
+            .or(self.subject.as_ref())
+    }
     /// Finalized evidence from the entered session, even if publication failed.
     #[must_use]
     pub fn semantic(&self) -> Option<&SemanticOutcome> {
@@ -134,6 +145,7 @@ impl From<RunFailure> for SolveFailure {
             partial_report: failure.partial_report,
             phase_timings: failure.phase_timings,
             secondary_output: failure.secondary_output,
+            subject: None,
             semantic: None,
             publication: None,
             diagnostics: None,

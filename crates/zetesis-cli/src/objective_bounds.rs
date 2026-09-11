@@ -1,6 +1,7 @@
 //! Optional incumbent pruning; no bound enters the original reduct theory.
 
-use std::io::{self, Write};
+use crate::ExecutionObservation as Event;
+use crate::execution_observation::ExecutionSink;
 
 use zetesis_cpu::Control;
 use zetesis_objective::Score;
@@ -9,8 +10,8 @@ use zetesis_themelios::objective_bound::{
     ObjectiveBoundLimits, ObjectivePlan, ObjectivePlanLimits,
 };
 
-use crate::SolveConfig;
 use crate::countermodel::Input;
+use crate::{RunError, SolveConfig};
 
 pub(crate) struct Bounds {
     plan: Option<ObjectivePlan>,
@@ -21,9 +22,9 @@ impl Bounds {
     pub(crate) fn new(
         input: Input<'_>,
         options: &SolveConfig,
-        diagnostics: &mut impl Write,
+        observations: &mut impl ExecutionSink,
         control: &Control,
-    ) -> io::Result<Self> {
+    ) -> Result<Self, RunError> {
         let mut state = Self {
             plan: None,
             work: 0,
@@ -45,10 +46,7 @@ impl Bounds {
             }
             Err(error) => {
                 state.work = error.statistics().work;
-                writeln!(
-                    diagnostics,
-                    "Objective pruning unavailable: {error}; exact search continues"
-                )?;
+                observations.record(Event::ObjectiveUnavailable(error))?;
             }
         }
         Ok(state)
@@ -60,9 +58,9 @@ impl Bounds {
         score: &Score,
         models: &mut StableModels,
         options: &SolveConfig,
-        diagnostics: &mut impl Write,
+        observations: &mut impl ExecutionSink,
         control: &Control,
-    ) -> io::Result<()> {
+    ) -> Result<(), RunError> {
         let Some(plan) = &self.plan else {
             return Ok(());
         };
@@ -77,10 +75,7 @@ impl Bounds {
             }
             Err(error) => {
                 self.work += error.statistics().work;
-                writeln!(
-                    diagnostics,
-                    "Objective pruning stopped: {error}; exact search continues"
-                )?;
+                observations.record(Event::ObjectiveBoundStopped(error))?;
                 self.plan = None;
                 return Ok(());
             }
@@ -88,29 +83,21 @@ impl Bounds {
         // Atom-count equality alone cannot establish semantic index meanings.
         // Input owns the completed catalog for this exact immutable theory.
         if !bound.original().same_instance(models.theory()) {
-            writeln!(
-                diagnostics,
-                "Objective pruning stopped: original theory mismatch; exact search continues"
-            )?;
+            observations.record(Event::ObjectiveTheoryMismatch)?;
             self.plan = None;
             return Ok(());
         }
         if let Err(error) = models.restrict_candidates(bound.theory()) {
             // Extension is transactional. Previous dominance bounds remain sound;
             // the next search step still observes any spent budget or cancellation.
-            writeln!(
-                diagnostics,
-                "Objective pruning stopped: {error}; exact search continues"
-            )?;
+            observations.record(Event::ObjectiveRestrictionStopped(error))?;
             self.plan = None;
         } else {
-            writeln!(
-                diagnostics,
-                "Objective pruning: bound {}; cost <= {:?}; construction work {}",
-                models.statistics().candidate_restrictions,
-                score.costs(),
-                self.work,
-            )?;
+            observations.record(Event::ObjectiveBound {
+                restrictions: models.statistics().candidate_restrictions,
+                costs: score.costs(),
+                work: self.work,
+            })?;
         }
         Ok(())
     }

@@ -1,6 +1,7 @@
 //! Stateful ordinary formula enumeration, scoring and incumbent retention.
 
-use std::io::Write;
+use crate::ExecutionObservation as Event;
+use crate::execution_observation::ExecutionSink;
 
 use zetesis_core::Model;
 use zetesis_cpu::Control;
@@ -32,7 +33,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         input: Input<'a>,
         execution: E,
         config: &SolveConfig,
-        diagnostics: &mut impl Write,
+        observations: &mut impl ExecutionSink,
         control: &Control,
         phases: &Recorder,
     ) -> Self {
@@ -40,7 +41,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             input,
             execution,
             config,
-            diagnostics,
+            observations,
             control,
             phases,
             AnswerSelection::Optimal,
@@ -51,7 +52,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         input: Input<'a>,
         execution: E,
         config: &SolveConfig,
-        diagnostics: &mut impl Write,
+        observations: &mut impl ExecutionSink,
         control: &Control,
         phases: &Recorder,
         selection: AnswerSelection,
@@ -72,7 +73,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             final_outcome: None,
             pending_error: None,
         };
-        if let Err(error) = session.initialize(config, diagnostics, control, phases) {
+        if let Err(error) = session.initialize(config, observations, control, phases) {
             session.fail(error, phases);
         }
         session
@@ -81,17 +82,15 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
     fn initialize(
         &mut self,
         config: &SolveConfig,
-        diagnostics: &mut impl Write,
+        observations: &mut impl ExecutionSink,
         control: &Control,
         phases: &Recorder,
     ) -> Result<(), RunError> {
-        writeln!(
-            diagnostics,
-            "Formula: {} atoms, {} nodes, {} roots",
-            self.input.theory.atom_count(),
-            self.input.theory.nodes().len(),
-            self.input.theory.roots().len()
-        )?;
+        observations.record(Event::Formula {
+            atoms: self.input.theory.atom_count(),
+            nodes: self.input.theory.nodes().len(),
+            roots: self.input.theory.roots().len(),
+        })?;
         let models = phases.measure(SolvePhase::CandidateSetup, || {
             StableModels::new(
                 self.input.theory,
@@ -118,7 +117,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         self.models = Some(models);
         let models = self.models.as_mut().expect("candidate stream installed");
         if let Some(error) =
-            crate::countermodel::prepare_certificate(models, config, diagnostics, phases)?
+            crate::countermodel::prepare_certificate(models, config, observations, phases)?
         {
             self.complete(
                 Completion::Interrupted,
@@ -131,10 +130,10 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             self.bounds = Some(
                 if self.input.objectives.is_present() && config.max_objective_bound_work != 0 {
                     phases.measure(SolvePhase::ObjectiveFeedback, || {
-                        Bounds::new(self.input, config, diagnostics, control)
+                        Bounds::new(self.input, config, observations, control)
                     })?
                 } else {
-                    Bounds::new(self.input, config, diagnostics, control)?
+                    Bounds::new(self.input, config, observations, control)?
                 },
             );
         }
@@ -144,7 +143,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
     pub(crate) fn next(
         &mut self,
         config: &SolveConfig,
-        diagnostics: &mut impl Write,
+        observations: &mut impl ExecutionSink,
         control: &Control,
         phases: &Recorder,
     ) -> Option<Result<(Model, Option<Score>), RunError>> {
@@ -232,11 +231,11 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                                 .expect("retained improvement has a score"),
                             self.models.as_mut().expect("owned candidate stream"),
                             config,
-                            diagnostics,
+                            observations,
                             control,
                         );
                     if let Err(error) = improved {
-                        self.fail(RunError::Output(error), phases);
+                        self.fail(error, phases);
                         return self.pending_error.take().map(Err);
                     }
                 }

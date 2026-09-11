@@ -154,6 +154,8 @@ pub enum RunError {
     FormulaBundleAdmission(zetesis_themelios::FormulaBundleFailure),
     /// Output could not be written.
     Output(io::Error),
+    /// An external execution observer failed; no device fallback may consume it.
+    ExecutionObservation(Box<dyn std::error::Error + Send + Sync>),
     /// Cancellation or a deadline stopped record preparation or prepublication.
     PublicationStopped(Stop),
     /// Explicit static lowering was refused.
@@ -223,6 +225,7 @@ impl fmt::Display for RunError {
             Self::FormulaAdmission(error) => error.fmt(f),
             Self::FormulaBundleAdmission(error) => error.fmt(f),
             Self::Output(error) => write!(f, "output: {error}"),
+            Self::ExecutionObservation(error) => write!(f, "execution observer: {error}"),
             Self::PublicationStopped(error) => write!(f, "publication stopped: {error}"),
             Self::Observation(error) => error.fmt(f),
             Self::JsonRecord(error) => error.fmt(f),
@@ -288,6 +291,7 @@ impl std::error::Error for RunError {
             Self::Batch(error) => Some(error),
             Self::CompletionPool(error) => Some(error),
             Self::Output(error) => Some(error),
+            Self::ExecutionObservation(error) => Some(error.as_ref()),
             Self::PublicationStopped(error) => Some(error),
             Self::Observation(error) => Some(error),
             Self::JsonRecord(error) => Some(error),

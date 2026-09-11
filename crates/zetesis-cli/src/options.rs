@@ -2,112 +2,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
-/// Execution policy. Explicit GPU requests require a real selected device.
-/// General formulas use GPU propagation with exact native CPU residual search.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
-pub enum Backend {
-    /// CPU formula search; closure may use GPU batches of 32 or more after its first seed.
-    #[default]
-    Auto,
-    /// Source joins or static closure scans on an owned Rayon pool.
-    Cpu,
-    /// Exact integer GPU batches, including explicit lazy relational execution.
-    Gpu,
-    /// Require a physical GPU using Metal.
-    Metal,
-    /// Require a physical GPU using Vulkan.
-    Vulkan,
-    /// Require a physical GPU using DirectX 12.
-    Dx12,
-    /// Require a physical GPU using OpenGL or OpenGL ES.
-    Gl,
-    /// Require an NVIDIA GPU through a compiled graphics API; this is not CUDA.
-    Nvidia,
-}
-
-impl Backend {
-    /// Stable spelling for configuration and machine-readable execution reports.
-    #[must_use]
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::Auto => "auto",
-            Self::Cpu => "cpu",
-            Self::Gpu => "gpu",
-            Self::Metal => "metal",
-            Self::Vulkan => "vulkan",
-            Self::Dx12 => "dx12",
-            Self::Gl => "gl",
-            Self::Nvidia => "nvidia",
-        }
-    }
-}
-
-/// Materialization policy, independent of execution hardware.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
-pub enum Grounder {
-    /// Prefer lazy source grounding where admitted, independently of hardware.
-    #[default]
-    Auto,
-    /// Require source joins without materializing a complete ground rule store.
-    /// Explicit GPU requests use immutable relational rounds; Auto stays on CPU.
-    Lazy,
-    /// Materialize a bounded static program before checking on CPU or GPU.
-    Eager,
-}
-
-impl Grounder {
-    pub(crate) const fn label(self) -> &'static str {
-        match self {
-            Self::Auto => "auto",
-            Self::Lazy => "lazy",
-            Self::Eager => "eager",
-        }
-    }
-}
-
-/// Relational CPU source traversal across candidate occurrences.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
-pub enum SourceBatching {
-    /// Each candidate owns an independent relational join traversal.
-    #[default]
-    Independent,
-    /// Share the union carrier; evaluate each frozen candidate on Rayon.
-    Union,
-    /// Prune source prefixes with per-world membership; evaluate on Rayon.
-    Worlds,
-}
-
-impl SourceBatching {
-    /// Stable policy spelling for diagnostics and machine-readable reports.
-    #[must_use]
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::Independent => "independent",
-            Self::Union => "union",
-            Self::Worlds => "worlds",
-        }
-    }
-
-    pub(crate) const fn selection(self) -> Option<zetesis_cpu::lazy::SourceSelection> {
-        match self {
-            Self::Independent => None,
-            Self::Union => Some(zetesis_cpu::lazy::SourceSelection::Union),
-            Self::Worlds => Some(zetesis_cpu::lazy::SourceSelection::Worlds),
-        }
-    }
-}
-
-/// Exact stable-model oracle selection, independent of language support.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
-pub enum Oracle {
-    /// Select reduct closure, checked tight support, or general reduct checking.
-    #[default]
-    Auto,
-    /// Require reduct closure with sparse gate candidates on CPU or static GPU batches.
-    Closure,
-    /// Require eager Ferraris search: CPU, or GPU propagation with exact CPU residuals.
-    Countermodel,
-}
+use crate::{Backend, Grounder, Oracle, SourceBatching};
 
 /// Commands that do not read an answer-set program.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Subcommand)]
@@ -305,4 +200,117 @@ pub struct Options {
     /// Shared CPU rounds use the full allowance for source/world state.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_batch_bytes, hide_short_help = true)]
     pub max_batch_bytes: u64,
+}
+
+impl From<&Options> for crate::SolveConfig {
+    fn from(options: &Options) -> Self {
+        Self {
+            backend: options.backend,
+            grounder: options.grounder,
+            source_batching: options.source_batching,
+            oracle: options.oracle,
+            stats: options.stats,
+            models: options.models,
+            max_search_work: options.max_search_work,
+            max_search_decisions: options.max_search_decisions,
+            max_objective_work: options.max_objective_work,
+            max_objective_bound_work: options.max_objective_bound_work,
+            max_objective_bindings: options.max_objective_bindings,
+            max_objective_keys: options.max_objective_keys,
+            max_objective_key_bytes: options.max_objective_key_bytes,
+            max_optimal_models: options.max_optimal_models,
+            max_optimal_atoms: options.max_optimal_atoms,
+            max_optimal_bytes: options.max_optimal_bytes,
+            batch_size: options.batch_size,
+            workers: options.workers,
+            completion_workers: options.completion_workers,
+            max_completion_scratch_bytes: options.max_completion_scratch_bytes,
+            max_candidates: options.max_candidates,
+            max_carrier_atoms: options.max_carrier_atoms,
+            max_work: options.max_work,
+            max_source_work: options.max_source_work,
+            max_atoms: options.max_atoms,
+            max_substitutions: options.max_substitutions,
+            max_ground_rules: options.max_ground_rules,
+            max_batch_bytes: options.max_batch_bytes,
+        }
+    }
+}
+
+impl ValueEnum for Backend {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[
+            Self::Auto,
+            Self::Cpu,
+            Self::Gpu,
+            Self::Metal,
+            Self::Vulkan,
+            Self::Dx12,
+            Self::Gl,
+            Self::Nvidia,
+        ]
+    }
+
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        Some(match self {
+            Self::Auto => clap::builder::PossibleValue::new("auto").help("CPU formula search; closure may use GPU batches of 32 or more after its first seed."),
+            Self::Cpu => clap::builder::PossibleValue::new("cpu").help("Source joins or static closure scans on an owned Rayon pool."),
+            Self::Gpu => clap::builder::PossibleValue::new("gpu").help("Exact integer GPU batches, including explicit lazy relational execution."),
+            Self::Metal => clap::builder::PossibleValue::new("metal").help("Require a physical GPU using Metal."),
+            Self::Vulkan => clap::builder::PossibleValue::new("vulkan").help("Require a physical GPU using Vulkan."),
+            Self::Dx12 => clap::builder::PossibleValue::new("dx12").help("Require a physical GPU using DirectX 12."),
+            Self::Gl => clap::builder::PossibleValue::new("gl").help("Require a physical GPU using OpenGL or OpenGL ES."),
+            Self::Nvidia => clap::builder::PossibleValue::new("nvidia").help("Require an NVIDIA GPU through a compiled graphics API; this is not CUDA."),
+        })
+    }
+}
+
+impl ValueEnum for Grounder {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[Self::Auto, Self::Lazy, Self::Eager]
+    }
+
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        Some(match self {
+            Self::Auto => clap::builder::PossibleValue::new("auto").help("Prefer lazy source grounding where admitted, independently of hardware."),
+            Self::Lazy => clap::builder::PossibleValue::new("lazy").help("Require source joins without materializing a complete ground rule store. Explicit GPU requests use immutable relational rounds; Auto may discover a device after the first seed."),
+            Self::Eager => clap::builder::PossibleValue::new("eager").help("Materialize a bounded static program before checking on CPU or GPU."),
+        })
+    }
+}
+
+impl ValueEnum for SourceBatching {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[Self::Independent, Self::Union, Self::Worlds]
+    }
+
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        Some(match self {
+            Self::Independent => clap::builder::PossibleValue::new("independent")
+                .help("Each candidate owns an independent relational join traversal."),
+            Self::Union => clap::builder::PossibleValue::new("union")
+                .help("Share the union carrier; evaluate each frozen candidate on Rayon."),
+            Self::Worlds => clap::builder::PossibleValue::new("worlds")
+                .help("Prune source prefixes with per-world membership; evaluate on Rayon."),
+        })
+    }
+}
+
+impl ValueEnum for Oracle {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[Self::Auto, Self::Closure, Self::Countermodel]
+    }
+
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        Some(match self {
+            Self::Auto => clap::builder::PossibleValue::new("auto")
+                .help("Select reduct closure, checked tight support, or general reduct checking."),
+            Self::Closure => clap::builder::PossibleValue::new("closure").help(
+                "Require reduct closure with sparse gate candidates on CPU or static GPU batches.",
+            ),
+            Self::Countermodel => clap::builder::PossibleValue::new("countermodel").help(
+                "Require eager Ferraris search: CPU, or GPU propagation with exact CPU residuals.",
+            ),
+        })
+    }
 }

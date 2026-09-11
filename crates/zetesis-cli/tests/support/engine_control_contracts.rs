@@ -162,3 +162,50 @@ fn eager_static_cache_reuse_does_not_record_a_second_materialization() {
         1
     );
 }
+
+#[test]
+fn observer_failure_cannot_become_device_unavailability() {
+    use crate::execution_observation::{ExecutionSink, Ignore, Observer};
+    use crate::{ExecutionObservation, ExecutionObserver, RunError, SolveConfig};
+
+    struct Adversarial;
+    impl ExecutionObserver for Adversarial {
+        type Error = RunError;
+        fn observe(&mut self, _: ExecutionObservation<'_>) -> Result<(), Self::Error> {
+            Err(RunError::BackendUnavailable)
+        }
+    }
+    struct RefuseFallback;
+    impl ExecutionSink for RefuseFallback {
+        fn record(&mut self, _: ExecutionObservation<'_>) -> Result<(), RunError> {
+            panic!("an external observation failure must not emit fallback or retry")
+        }
+    }
+    let admitted = zetesis_themelios::admit_extended(
+        "a.".into(),
+        zetesis_themelios::AdmissionOptions::default(),
+        zetesis_themelios::ExpansionLimits::default(),
+    )
+    .unwrap();
+    let options = SolveConfig {
+        backend: crate::Backend::Cpu,
+        workers: std::num::NonZeroUsize::MIN,
+        ..Default::default()
+    };
+    let phases = crate::phase_timing::Recorder::new(false);
+    let mut engine =
+        super::Engine::new(&options, admitted.program(), &mut Ignore, &phases).unwrap();
+    let error = Observer(&mut Adversarial)
+        .record(ExecutionObservation::SharedCpu)
+        .unwrap_err();
+    let result = engine.finish_device_attempt(Err(error), &options, &mut RefuseFallback);
+    let RunError::ExecutionObservation(cause) = result.unwrap_err() else {
+        panic!("the observer failure must remain external")
+    };
+    assert!(matches!(
+        cause.downcast_ref::<RunError>(),
+        Some(RunError::BackendUnavailable)
+    ));
+    assert!(!engine.executor.is_gpu());
+    assert!(engine.retired_lazy_statistics.is_none());
+}

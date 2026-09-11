@@ -2,7 +2,7 @@
 
 use std::num::NonZeroUsize;
 
-use crate::{Backend, Grounder, Options, Oracle, SourceBatching};
+use crate::{Backend, Grounder, Oracle, SourceBatching};
 
 /// Policy for one semantic session. Budgets retain their existing ownership:
 /// Formula search/objective work is cumulative. Independent closure work is per
@@ -111,40 +111,5 @@ impl SolveConfig {
 impl Default for SolveConfig {
     fn default() -> Self {
         Self::DEFAULT
-    }
-}
-
-impl From<&Options> for SolveConfig {
-    fn from(options: &Options) -> Self {
-        Self {
-            backend: options.backend,
-            grounder: options.grounder,
-            source_batching: options.source_batching,
-            oracle: options.oracle,
-            stats: options.stats,
-            models: options.models,
-            max_search_work: options.max_search_work,
-            max_search_decisions: options.max_search_decisions,
-            max_objective_work: options.max_objective_work,
-            max_objective_bound_work: options.max_objective_bound_work,
-            max_objective_bindings: options.max_objective_bindings,
-            max_objective_keys: options.max_objective_keys,
-            max_objective_key_bytes: options.max_objective_key_bytes,
-            max_optimal_models: options.max_optimal_models,
-            max_optimal_atoms: options.max_optimal_atoms,
-            max_optimal_bytes: options.max_optimal_bytes,
-            batch_size: options.batch_size,
-            workers: options.workers,
-            completion_workers: options.completion_workers,
-            max_completion_scratch_bytes: options.max_completion_scratch_bytes,
-            max_candidates: options.max_candidates,
-            max_carrier_atoms: options.max_carrier_atoms,
-            max_work: options.max_work,
-            max_source_work: options.max_source_work,
-            max_atoms: options.max_atoms,
-            max_substitutions: options.max_substitutions,
-            max_ground_rules: options.max_ground_rules,
-            max_batch_bytes: options.max_batch_bytes,
-        }
     }
 }

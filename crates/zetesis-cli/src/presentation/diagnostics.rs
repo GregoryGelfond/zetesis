@@ -68,3 +68,60 @@ impl<W: Write> Write for Diagnostics<W> {
         self.writer.flush()
     }
 }
+
+impl<W: Write> crate::execution_observation::ExecutionSink for Diagnostics<W> {
+    fn record(
+        &mut self,
+        observation: crate::ExecutionObservation<'_>,
+    ) -> Result<(), crate::RunError> {
+        use crate::ExecutionObservation as Event;
+        match observation {
+            Event::StaticGrounding { requested, atoms, rules, limits } => self.metadata(
+                Label::Grounding,
+                format_args!("requested={}, effective=eager (static atoms={atoms}, rules={rules}; lowering caps atoms={}, rules={}, substitutions={})", requested.label(), limits.max_atoms, limits.max_ground_rules, limits.max_substitutions),
+            ),
+            Event::LazyGrounding { requested } => self.metadata(Label::Grounding,
+                format_args!("requested={}, effective=lazy (source joins; no complete ground-rule store)", requested.label())),
+            Event::CpuClosure { grounder: crate::Grounder::Eager, workers, .. } => self.metadata(
+                Label::Backend, format_args!("cpu (eager static closure scans, {workers} workers)")),
+            Event::CpuClosure { batching: crate::SourceBatching::Independent, workers, .. } => self.metadata(
+                Label::Backend, format_args!("cpu (lazy source joins, {workers} workers)")),
+            Event::CpuClosure { batching, workers, .. } => self.metadata(Label::Backend,
+                format_args!("cpu (shared {} source rounds, {workers} workers; collective source and per-world evaluation budgets)", batching.label())),
+            Event::CpuFormula { oracle, grounder } => {
+                let oracle = if oracle == crate::Oracle::Auto { "Ferraris reduct membership" } else { "Ferraris reduct countermodel" };
+                self.metadata(Label::Backend, format_args!("cpu; oracle: {oracle}; grounder: eager (requested {})", grounder.label()))
+            }
+            Event::ExactCompletion { workers, max_scratch_bytes } => writeln!(self,
+                "Exact completion: requested workers={workers}; bounded logical scratch bytes={max_scratch_bytes}"),
+            Event::DeferredDevice { minimum_batch, grounder } => self.metadata(Label::Auto,
+                format_args!("GPU discovery deferred; the first seed stays CPU. Later batches of at least {minimum_batch} candidates may use a physical GPU with {} grounding (provisional heuristic).", grounder.label())),
+            Event::SharedCpu => self.metadata(Label::Auto, format_args!("explicit shared source batching selects CPU without device discovery.")),
+            Event::DeviceNotCompiled => self.metadata(Label::Auto,
+                format_args!("GPU support was not compiled; using CPU without device discovery.")),
+            Event::DeviceUnavailable { grounder, cause } => self.metadata(Label::Auto,
+                format_args!("retaining {} CPU; GPU unavailable: {cause}", grounder.label())),
+            Event::DeviceRetry { grounder, cause } => self.metadata(Label::Auto,
+                format_args!("GPU batch failed; retrying on {} CPU: {cause}", grounder.label())),
+            #[cfg(feature = "gpu")]
+            Event::LazyDeviceGrounding { requested } => self.metadata(Label::Grounding,
+                format_args!("requested={}, effective=lazy (host source joins; per-world device consequences; no complete ground-rule store)", requested.label())),
+            #[cfg(feature = "gpu")]
+            Event::DeviceClosure { adapter, static_counts } => match static_counts {
+                None => self.metadata(Label::Backend, format_args!("gpu ({}, {}; vendor=0x{:04x}; lazy immutable reduct rounds)", adapter.name, adapter.backend, adapter.vendor_id)),
+                Some((atoms, rules)) => self.metadata(Label::Backend, format_args!("gpu ({}, {}; vendor=0x{:04x}; static atoms={atoms}, rules={rules})", adapter.name, adapter.backend, adapter.vendor_id)),
+            },
+            #[cfg(feature = "gpu")]
+            Event::DeviceFormula { adapter, grounder, batch_size, completion_workers } => self.metadata(Label::Backend,
+                format_args!("hybrid GPU propagation + exact CPU residual search ({}, {}; vendor=0x{:04x}); oracle: Ferraris reduct countermodel; grounder: eager (requested {}); batch={batch_size}; CPU completion requested workers={completion_workers}", adapter.name, adapter.backend, adapter.vendor_id, grounder.label())),
+            Event::Formula { atoms, nodes, roots } => writeln!(self, "Formula: {atoms} atoms, {nodes} nodes, {roots} roots"),
+            Event::TightMembership => writeln!(self, "Membership: checked tight support certificate; exact reduct residual completion"),
+            Event::GeneralMembership(error) => writeln!(self, "Membership: general reduct; tight certificate refused: {error}"),
+            Event::ObjectiveUnavailable(error) => writeln!(self, "Objective pruning unavailable: {error}; exact search continues"),
+            Event::ObjectiveBoundStopped(error) => writeln!(self, "Objective pruning stopped: {error}; exact search continues"),
+            Event::ObjectiveTheoryMismatch => writeln!(self, "Objective pruning stopped: original theory mismatch; exact search continues"),
+            Event::ObjectiveRestrictionStopped(error) => writeln!(self, "Objective pruning stopped: {error}; exact search continues"),
+            Event::ObjectiveBound { restrictions, costs, work } => writeln!(self, "Objective pruning: bound {restrictions}; cost <= {costs:?}; construction work {work}"),
+        }.map_err(crate::RunError::Output)
+    }
+}

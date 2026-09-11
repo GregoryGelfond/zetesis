@@ -295,6 +295,7 @@ fn error_kind(error: &RunError) -> &'static str {
         RunError::FormulaAdmission(_) => "formula_admission",
         RunError::FormulaBundleAdmission(_) => "formula_bundle_admission",
         RunError::Output(_) => "output",
+        RunError::ExecutionObservation(_) => "execution_observation",
         RunError::PublicationStopped(_) => "publication_stopped",
         RunError::Static(_) => "static",
         RunError::Words(_) => "words",

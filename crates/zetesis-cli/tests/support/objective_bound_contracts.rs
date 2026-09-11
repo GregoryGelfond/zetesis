@@ -12,8 +12,9 @@ use zetesis_themelios::{
 };
 
 use super::Bounds;
-use crate::Options;
 use crate::countermodel::Input;
+use crate::presentation::Diagnostics;
+use crate::{ColorMode, Options};
 
 fn admitted(source: &str) -> AdmittedFormula {
     admit_formula(
@@ -83,7 +84,7 @@ fn equal_atom_counts_do_not_authorize_a_bound_from_a_different_theory() {
     let mut bounds = Bounds::new(
         input(&planned),
         &(&options).into(),
-        &mut diagnostics,
+        &mut Diagnostics::new(&mut diagnostics, ColorMode::Never),
         &Control::default(),
     )
     .unwrap();
@@ -96,7 +97,7 @@ fn equal_atom_counts_do_not_authorize_a_bound_from_a_different_theory() {
             &score(&planned, &["a"]),
             &mut models,
             &(&options).into(),
-            &mut diagnostics,
+            &mut Diagnostics::new(&mut diagnostics, ColorMode::Never),
             &Control::default(),
         )
         .unwrap();
@@ -112,7 +113,7 @@ fn equal_atom_counts_do_not_authorize_a_bound_from_a_different_theory() {
             &score(&planned, &[]),
             &mut models,
             &(&options).into(),
-            &mut diagnostics,
+            &mut Diagnostics::new(&mut diagnostics, ColorMode::Never),
             &Control::default(),
         )
         .unwrap();
@@ -138,7 +139,7 @@ fn bound_capacity_failure_restores_exact_search_and_disables_only_pruning() {
     let mut bounds = Bounds::new(
         input(&admitted),
         &(&options).into(),
-        &mut diagnostics,
+        &mut Diagnostics::new(&mut diagnostics, ColorMode::Never),
         &Control::default(),
     )
     .unwrap();
@@ -159,7 +160,7 @@ fn bound_capacity_failure_restores_exact_search_and_disables_only_pruning() {
             &score(&admitted, &["a"]),
             &mut models,
             &(&options).into(),
-            &mut diagnostics,
+            &mut Diagnostics::new(&mut diagnostics, ColorMode::Never),
             &Control::default(),
         )
         .unwrap();

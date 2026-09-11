@@ -651,3 +651,259 @@ fn stopped_prepared_inputs_skip_execution_setup() {
         assert_eq!(Arc::strong_count(&graph), 1);
     }
 }
+
+#[test]
+fn native_program_preparation_reuses_the_original_subject() {
+    let admitted = normal("{a}. b :- a.");
+    let prepared = PreparedInput::program(admitted.program());
+    assert!(prepared.metadata().is_none());
+    let mut session = Session::new(prepared, config(), Control::default()).unwrap();
+    let actual: BTreeSet<_> = session
+        .by_ref()
+        .map(|answer| {
+            let answer = answer.unwrap();
+            assert!(
+                answer
+                    .subject()
+                    .same_instance(&Subject::Program(admitted.program().clone()))
+            );
+            atoms(&answer)
+        })
+        .collect();
+    assert_eq!(
+        actual,
+        BTreeSet::from([vec![], vec!["a".into(), "b".into()]])
+    );
+    assert_eq!(
+        session.outcome().unwrap().completion(),
+        Some(Completion::Exhausted)
+    );
+}
+
+#[test]
+fn prepared_strategy_failure_retains_only_known_subject() {
+    let admitted = normal("a.");
+    let result = Session::new(
+        PreparedInput::program(admitted.program()),
+        SolveConfig {
+            oracle: Oracle::Countermodel,
+            ..config()
+        },
+        Control::default(),
+    );
+    let Err(failure) = result else {
+        panic!("native source is not an eager formula")
+    };
+    assert!(
+        failure
+            .subject()
+            .unwrap()
+            .same_instance(&Subject::Program(admitted.program().clone()))
+    );
+    assert!(failure.semantic().is_none());
+    assert!(failure.publication().is_none());
+}
+
+#[derive(Clone, Copy)]
+enum Rejection {
+    Execution,
+    Formula,
+    Bound,
+}
+struct RejectObservation {
+    rejection: Rejection,
+    calls: usize,
+    failures: usize,
+}
+impl RejectObservation {
+    const fn new(rejection: Rejection) -> Self {
+        Self {
+            rejection,
+            calls: 0,
+            failures: 0,
+        }
+    }
+}
+impl zetesis_cli::ExecutionObserver for RejectObservation {
+    // Deliberately backend-shaped: an external fault must never enter the
+    // automatic device fallback path, even if its source has that type.
+    type Error = RunError;
+    fn observe(
+        &mut self,
+        observation: zetesis_cli::ExecutionObservation<'_>,
+    ) -> Result<(), Self::Error> {
+        use zetesis_cli::ExecutionObservation as Event;
+        self.calls += 1;
+        if matches!(
+            (self.rejection, observation),
+            (Rejection::Execution, Event::CpuFormula { .. })
+                | (Rejection::Formula, Event::Formula { .. })
+                | (Rejection::Bound, Event::ObjectiveBound { .. })
+        ) {
+            self.failures += 1;
+            Err(RunError::BackendUnavailable)
+        } else {
+            Ok(())
+        }
+    }
+}
+fn observer_cause(failure: &zetesis_cli::SolveFailure) {
+    let RunError::ExecutionObservation(cause) = failure.cause.as_ref() else {
+        panic!("the callback failure must remain external: {failure}")
+    };
+    assert!(matches!(
+        cause.downcast_ref::<RunError>(),
+        Some(RunError::BackendUnavailable)
+    ));
+}
+
+#[test]
+fn execution_observer_failure_precedes_formula_search() {
+    let admitted = formula("a | b.");
+    let mut observer = RejectObservation::new(Rejection::Execution);
+    let result = Session::new_observed(
+        PreparedInput::formula(&admitted),
+        config(),
+        Control::default(),
+        &mut observer,
+    );
+    let Err(failure) = result else {
+        panic!("execution observation failed")
+    };
+    observer_cause(&failure);
+    assert_eq!(observer.calls, 1);
+    assert_eq!(observer.failures, 1);
+    assert!(
+        failure
+            .subject()
+            .unwrap()
+            .same_instance(&Subject::Theory(admitted.theory().clone()))
+    );
+    assert!(failure.semantic().is_none());
+}
+
+#[test]
+fn formula_setup_observer_failure_is_retained_for_first_pull() {
+    let admitted = formula("a | b.");
+    let mut observer = RejectObservation::new(Rejection::Formula);
+    let mut session = Session::new_observed(
+        PreparedInput::formula(&admitted),
+        config(),
+        Control::default(),
+        &mut observer,
+    )
+    .unwrap();
+    assert_eq!(observer.calls, 2);
+    assert_eq!(observer.failures, 1);
+    let failure = session.next_observed(&mut observer).unwrap().unwrap_err();
+    observer_cause(&failure);
+    let outcome = failure.semantic().unwrap();
+    assert_eq!(outcome.verified_models(), 0);
+    assert_eq!(outcome.completion(), None);
+    assert!(
+        failure
+            .subject()
+            .unwrap()
+            .same_instance(&Subject::Theory(admitted.theory().clone()))
+    );
+    assert!(session.next_observed(&mut observer).is_none());
+    assert!(session.next().is_none());
+    assert_eq!(
+        observer.calls, 2,
+        "failed initialization never reaches certificate setup"
+    );
+}
+
+#[test]
+fn bound_observer_failure_retains_the_verified_incumbent() {
+    let admitted = formula("{a;b}. #minimize {1,a:a;1,b:b}.");
+    let mut observer = RejectObservation::new(Rejection::Bound);
+    let mut session = Session::new_observed(
+        PreparedInput::formula(&admitted),
+        config(),
+        Control::default(),
+        &mut observer,
+    )
+    .unwrap();
+    let failure = session.next_observed(&mut observer).unwrap().unwrap_err();
+    observer_cause(&failure);
+    assert_eq!(observer.failures, 1);
+    let outcome = failure.semantic().unwrap();
+    assert_eq!(outcome.verified_models(), 1);
+    assert_eq!(outcome.scored_models(), 1);
+    assert_eq!(outcome.retained_models(), 1);
+    assert_eq!(outcome.completion(), None);
+    assert!(!outcome.optimum_proved());
+    assert!(failure.publication().is_none());
+    let calls = observer.calls;
+    assert!(session.next_observed(&mut observer).is_none());
+    assert!(session.next().is_none());
+    assert_eq!(observer.calls, calls);
+    assert_eq!(session.outcome().unwrap().verified_models(), 1);
+}
+
+#[test]
+fn observed_enumeration_preserves_all_objective_scores() {
+    use std::convert::Infallible;
+    use zetesis_cli::{ExecutionObservation, ExecutionObserver};
+
+    #[derive(Default)]
+    struct Facts {
+        formula: Option<(usize, usize, usize)>,
+        bounds: usize,
+    }
+    impl ExecutionObserver for Facts {
+        type Error = Infallible;
+        fn observe(&mut self, observation: ExecutionObservation<'_>) -> Result<(), Self::Error> {
+            match observation {
+                ExecutionObservation::Formula {
+                    atoms,
+                    nodes,
+                    roots,
+                } => {
+                    assert!(self.formula.replace((atoms, nodes, roots)).is_none());
+                }
+                ExecutionObservation::ObjectiveBound { .. } => self.bounds += 1,
+                _ => {}
+            }
+            Ok(())
+        }
+    }
+    let admitted = formula("{a;b}. #minimize {1,a:a;1,b:b}.");
+    let input = PreparedInput::formula(&admitted);
+    let mut observer = Facts::default();
+    let mut session =
+        Session::enumerate_observed(input, config(), Control::default(), &mut observer).unwrap();
+    assert_eq!(
+        observer.formula,
+        Some((
+            admitted.theory().atom_count(),
+            admitted.theory().nodes().len(),
+            admitted.theory().roots().len()
+        ))
+    );
+    let mut actual = Vec::new();
+    while let Some(answer) = session.next_observed(&mut observer) {
+        let answer = answer.unwrap();
+        actual.push((atoms(&answer), answer.score().unwrap().costs().to_vec()));
+    }
+    let mut expected: Vec<_> = Session::enumerate(input, config(), Control::default())
+        .unwrap()
+        .map(|answer| {
+            let answer = answer.unwrap();
+            (atoms(&answer), answer.score().unwrap().costs().to_vec())
+        })
+        .collect();
+    actual.sort();
+    expected.sort();
+    assert_eq!(actual, expected);
+    assert_eq!(actual.len(), 4);
+    assert_eq!(
+        observer.bounds, 0,
+        "unrestricted enumeration installs no dominance bounds"
+    );
+    assert_eq!(
+        session.outcome().unwrap().completion(),
+        Some(Completion::Exhausted)
+    );
+}

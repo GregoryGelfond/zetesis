@@ -7,7 +7,10 @@
 //! operations to process arguments, standard streams, and exit codes.
 #![forbid(unsafe_code)]
 
+mod execution_observation;
+pub use execution_observation::{ExecutionObservation, ExecutionObserver};
 mod options;
+mod policy;
 mod driver;
 mod failure;
 mod display;
@@ -49,7 +52,8 @@ pub use lazy_execution::{
     LazyBufferUsage, LazyExecutionStatistics, LazyTransportReplacements, LazyTransportUsage,
 };
 mod shared_execution;
-pub use options::{Backend, Command, Grounder, Options, Oracle, SourceBatching};
+pub use options::{Command, Options};
+pub use policy::{Backend, Grounder, Oracle, SourceBatching};
 pub use presentation::ColorMode;
 pub use process::entry;
 pub use semantic_outcome::{AnswerSelection, SemanticOutcome};

@@ -5,8 +5,9 @@
 //! can reuse its immutable owner across sessions; each session owns fresh search
 //! budgets, its worker pools, pending results and incumbent storage.
 
-use crate::presentation::Diagnostics;
-use std::{io, sync::Arc};
+use crate::ExecutionObserver;
+use crate::execution_observation::{ExecutionSink, Ignore, Observer};
+use std::sync::Arc;
 
 use zetesis_core::{GroundProgram, Model, Program};
 use zetesis_cpu::Control;
@@ -52,6 +53,17 @@ pub struct PreparedInput<'a> {
     metadata: Option<&'a SourceMetadata>,
 }
 impl<'a> PreparedInput<'a> {
+    /// Reuse an admitted native relational program without source metadata.
+    /// This borrows the program directly: it performs no parsing, carrier
+    /// expansion or grounding. Lazy and eager execution use the same relational
+    /// session branch as source-admitted programs.
+    #[must_use]
+    pub const fn program(program: &'a Program) -> Self {
+        Self {
+            input: Prepared::Relational(program),
+            metadata: None,
+        }
+    }
     /// Reuse an admitted normal program and its source metadata.
     #[must_use]
     pub fn admitted(owner: &'a Admitted) -> Self {
@@ -286,7 +298,13 @@ impl<'a> Session<'a> {
         config: SolveConfig,
         control: Control,
     ) -> Result<Self, SolveFailure> {
-        Self::with_selection(input, config, control, AnswerSelection::Optimal)
+        Self::with_selection(
+            input,
+            config,
+            control,
+            AnswerSelection::Optimal,
+            &mut Ignore,
+        )
     }
     /// Stream the original program's answer sets, including nonoptimal answers.
     ///
@@ -308,16 +326,74 @@ impl<'a> Session<'a> {
         config: SolveConfig,
         control: Control,
     ) -> Result<Self, SolveFailure> {
-        Self::with_selection(input, config, control, AnswerSelection::All)
+        Self::with_selection(input, config, control, AnswerSelection::All, &mut Ignore)
     }
+    /// Start an ordinary solve with synchronous typed execution observations.
+    ///
+    /// The observer is borrowed only during preparation. Use
+    /// [`Self::next_observed`] for subsequent pulls; ordinary iteration discards
+    /// later observations. Events belong to this prepared input, not any other
+    /// session the observer may also serve. No event queue is retained.
+    ///
+    /// # Errors
+    /// Execution-setup failures return immediately, retaining the known subject.
+    /// Formula initialization owns its terminal failure: an observer failure at
+    /// formula, certificate or objective setup stops further initialization and
+    /// is returned by the first pull. No later callback runs for that failure.
+    /// Both paths preserve the original cause and establish no coverage.
+    pub fn new_observed(
+        input: PreparedInput<'a>,
+        config: SolveConfig,
+        control: Control,
+        observer: &mut impl ExecutionObserver,
+    ) -> Result<Self, SolveFailure> {
+        Self::with_selection(
+            input,
+            config,
+            control,
+            AnswerSelection::Optimal,
+            &mut Observer(observer),
+        )
+    }
+
+    /// Enumerate all answer sets with typed preparation observations.
+    ///
+    /// This has [`Self::enumerate`]'s selection policy and
+    /// [`Self::new_observed`]'s observation lifetime and failure contract.
+    ///
+    /// # Errors
+    /// Returns the setup and observation failures of [`Self::new_observed`].
+    pub fn enumerate_observed(
+        input: PreparedInput<'a>,
+        config: SolveConfig,
+        control: Control,
+        observer: &mut impl ExecutionObserver,
+    ) -> Result<Self, SolveFailure> {
+        Self::with_selection(
+            input,
+            config,
+            control,
+            AnswerSelection::All,
+            &mut Observer(observer),
+        )
+    }
+
     fn with_selection(
         input: PreparedInput<'a>,
         config: SolveConfig,
         control: Control,
         selection: AnswerSelection,
+        observations: &mut impl ExecutionSink,
     ) -> Result<Self, SolveFailure> {
         let phases = Recorder::new(config.stats);
-        let result = Self::initialize(input, config, &control, &phases, input.selection(selection));
+        let result = Self::initialize(
+            input,
+            config,
+            &control,
+            &phases,
+            input.selection(selection),
+            observations,
+        );
         match result {
             Ok((state, config)) => Ok(Self {
                 state,
@@ -328,6 +404,7 @@ impl<'a> Session<'a> {
             }),
             Err(error) => {
                 let mut failure = SolveFailure::from(error);
+                failure.subject = Some(input.subject());
                 failure.phase_timings = phases.snapshot().map(Box::new);
                 Err(failure)
             }
@@ -339,6 +416,7 @@ impl<'a> Session<'a> {
         control: &Control,
         phases: &Recorder,
         selection: AnswerSelection,
+        observations: &mut impl ExecutionSink,
     ) -> Result<(State<'a>, SolveConfig), RunError> {
         let config = input.configure(config)?;
         let _solving = phases.stage(crate::SolveStage::Solving);
@@ -367,13 +445,12 @@ impl<'a> Session<'a> {
                 config,
             ));
         }
-        let mut diagnostics = Diagnostics::new(io::sink(), crate::ColorMode::Never);
         let state = match input.input {
             Prepared::Relational(program) => State::Closure(Box::new(ClosureSession::new(
                 program,
                 None,
                 &config,
-                &mut diagnostics,
+                observations,
                 control,
                 phases,
             )?)),
@@ -381,19 +458,19 @@ impl<'a> Session<'a> {
                 ground.program(),
                 Some(Arc::clone(ground)),
                 &config,
-                &mut diagnostics,
+                observations,
                 control,
                 phases,
             )?)),
             Prepared::Formula(input) => {
                 let execution = phases.measure(SolvePhase::ExecutionSetup, || {
-                    Execution::new(&config, &mut diagnostics)
+                    Execution::new(&config, observations)
                 })?;
                 State::Formula(Box::new(FormulaSession::with_selection(
                     input,
                     execution,
                     &config,
-                    &mut diagnostics,
+                    observations,
                     control,
                     phases,
                     selection,
@@ -430,18 +507,35 @@ impl<'a> Session<'a> {
             State::Stopped(outcome) => (**outcome).clone(),
         }
     }
-}
-impl Iterator for Session<'_> {
-    type Item = Result<AnswerSet, SolveFailure>;
-    fn next(&mut self) -> Option<Self::Item> {
+    /// Pull the next answer using synchronous typed execution observations.
+    ///
+    /// The observer is borrowed only for this pull. Events describe this session's
+    /// attempted work and cannot establish answer-set membership or coverage.
+    /// An observer error stops this session: later pulls return None, with its
+    /// checked prefix retained in the failure and [`Self::outcome`]. Successful
+    /// callbacks do not imply that subsequent work or answer publication succeeds.
+    ///
+    /// # Errors
+    /// Returns ordinary solve faults or the observer's external error, wrapped
+    /// separately from device faults so it cannot trigger fallback or retry.
+    pub fn next_observed(
+        &mut self,
+        observer: &mut impl ExecutionObserver,
+    ) -> Option<Result<AnswerSet, SolveFailure>> {
+        self.pull(&mut Observer(observer))
+    }
+
+    fn pull(
+        &mut self,
+        observations: &mut impl ExecutionSink,
+    ) -> Option<Result<AnswerSet, SolveFailure>> {
         let solving = self.phases.stage(crate::SolveStage::Solving);
-        let mut diagnostics = Diagnostics::new(io::sink(), crate::ColorMode::Never);
         let next = match &mut self.state {
             State::Closure(state) => state
-                .next(&self.config, &mut diagnostics, &self.control, &self.phases)
+                .next(&self.config, observations, &self.control, &self.phases)
                 .map(|result| result.map(|model| (model, None))),
             State::Formula(state) => {
-                state.next(&self.config, &mut diagnostics, &self.control, &self.phases)
+                state.next(&self.config, observations, &self.control, &self.phases)
             }
             State::Stopped(_) => None,
         };
@@ -459,6 +553,12 @@ impl Iterator for Session<'_> {
                 Err(failure)
             }
         })
+    }
+}
+impl Iterator for Session<'_> {
+    type Item = Result<AnswerSet, SolveFailure>;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.pull(&mut Ignore)
     }
 }
 impl std::iter::FusedIterator for Session<'_> {}

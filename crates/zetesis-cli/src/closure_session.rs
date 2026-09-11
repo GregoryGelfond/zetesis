@@ -1,7 +1,6 @@
 //! The ordinary closure loop retained across semantic pulls.
 
-use crate::presentation::Diagnostics;
-use std::io::Write;
+use crate::execution_observation::ExecutionSink;
 use std::sync::Arc;
 
 use zetesis_core::{GroundProgram, Model, Program};
@@ -31,13 +30,13 @@ impl<'a> ClosureSession<'a> {
         program: &'a Program,
         ground: Option<Arc<GroundProgram>>,
         config: &SolveConfig,
-        diagnostics: &mut Diagnostics<impl Write>,
+        observations: &mut impl ExecutionSink,
         control: &Control,
         phases: &Recorder,
     ) -> Result<Self, RunError> {
         let engine = match control.poll() {
             Ok(()) => Ok(phases.measure(SolvePhase::ExecutionSetup, || {
-                Engine::with_ground(config, program, ground, diagnostics, phases)
+                Engine::with_ground(config, program, ground, observations, phases)
             })?),
             Err(stop) => Err(stop),
         };
@@ -70,7 +69,7 @@ impl<'a> ClosureSession<'a> {
     pub(crate) fn next(
         &mut self,
         config: &SolveConfig,
-        diagnostics: &mut Diagnostics<impl Write>,
+        observations: &mut impl ExecutionSink,
         control: &Control,
         phases: &Recorder,
     ) -> Option<Result<Model, RunError>> {
@@ -129,7 +128,7 @@ impl<'a> ClosureSession<'a> {
             drop(generation);
             let results = match &mut self.engine {
                 Ok(engine) => {
-                    engine.check(config, self.program, &seeds, diagnostics, control, phases)
+                    engine.check(config, self.program, &seeds, observations, control, phases)
                 }
                 Err(_) if seeds.is_empty() => Ok(Vec::new()),
                 Err(stop) => Ok(vec![Err(*stop)]),

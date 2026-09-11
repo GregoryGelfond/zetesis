@@ -1,5 +1,7 @@
 //! Eager finite formula search with scalar CPU or batched hybrid membership.
 
+use crate::ExecutionObservation as Event;
+use crate::execution_observation::ExecutionSink;
 use crate::presentation::Diagnostics;
 use std::io::Write;
 
@@ -69,17 +71,18 @@ impl FormulaRun<'_> {
         phases: &Recorder,
     ) -> Result<Progress, crate::SolveFailure> {
         let config = self.display.options.into();
+        let mut observations = Diagnostics::new(&mut *diagnostics, self.display.options.color);
         let mut session = crate::formula_session::FormulaSession::new(
             self.input,
             execution,
             &config,
-            diagnostics,
+            &mut observations,
             self.display.control,
             phases,
         );
         let mut progress = Progress::new(self.input.gate_atoms);
         loop {
-            let next = session.next(&config, diagnostics, self.display.control, phases);
+            let next = session.next(&config, &mut observations, self.display.control, phases);
             progress.apply(session.outcome(phases));
             match next {
                 Some(Ok((model, score))) => {
@@ -130,7 +133,7 @@ impl FormulaRun<'_> {
 pub(crate) fn prepare_certificate(
     models: &mut zetesis_sat::StableModels,
     options: &SolveConfig,
-    diagnostics: &mut impl Write,
+    diagnostics: &mut impl ExecutionSink,
     phases: &Recorder,
 ) -> Result<Option<zetesis_sat::Incomplete>, RunError> {
     if options.oracle != crate::Oracle::Auto
@@ -145,19 +148,14 @@ pub(crate) fn prepare_certificate(
         })
     });
     match eligibility {
-        Ok(true) => writeln!(
-            diagnostics,
-            "Membership: checked tight support certificate; exact reduct residual completion"
-        )?,
-        Ok(false) => writeln!(
-            diagnostics,
-            "Membership: general reduct; tight certificate refused: {}",
+        Ok(true) => diagnostics.record(Event::TightMembership)?,
+        Ok(false) => diagnostics.record(Event::GeneralMembership(
             models
                 .statistics()
                 .certified
                 .and_then(|s| s.refusal)
-                .expect("refused certificate records its reason")
-        )?,
+                .expect("refused certificate records its reason"),
+        ))?,
         Err(error) => return Ok(Some(error)),
     }
     Ok(None)

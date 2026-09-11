@@ -13,9 +13,10 @@ use zetesis_themelios::{
 };
 
 use super::Bounds;
-use crate::Options;
 use crate::countermodel::Input;
+use crate::presentation::Diagnostics;
 use crate::test_writer::BoundedWriter;
+use crate::{ColorMode, Options, RunError};
 
 fn admitted(source: &str) -> AdmittedFormula {
     admit_formula(
@@ -27,7 +28,7 @@ fn admitted(source: &str) -> AdmittedFormula {
     .unwrap()
 }
 
-fn attempt(foreign: bool, sink: &mut impl Write) -> (io::Result<()>, StableModels) {
+fn attempt(foreign: bool, sink: &mut impl Write) -> (Result<(), RunError>, StableModels) {
     let planned = admitted("{a;b}. #minimize{1,a:a;1,b:b}.");
     let different = foreign.then(|| admitted("{x;y}."));
     let original = different.as_ref().unwrap_or(&planned);
@@ -60,7 +61,7 @@ fn attempt(foreign: bool, sink: &mut impl Write) -> (io::Result<()>, StableModel
             observations: planned.metadata().observations(),
         },
         &(&options).into(),
-        &mut io::sink(),
+        &mut crate::execution_observation::Ignore,
         &Control::default(),
     )
     .unwrap();
@@ -74,7 +75,7 @@ fn attempt(foreign: bool, sink: &mut impl Write) -> (io::Result<()>, StableModel
         score.score(),
         &mut models,
         &(&options).into(),
-        sink,
+        &mut Diagnostics::new(sink, ColorMode::Never),
         &Control::default(),
     );
     assert_eq!(models.statistics().candidate_restrictions, 0);
@@ -110,7 +111,9 @@ fn check_refusal(foreign: bool, cause: &str) {
     for capacity in [0, "Objective pruning stopped:".len(), reference.len() - 1] {
         let mut sink = BoundedWriter::new(capacity);
         let (result, models) = attempt(foreign, &mut sink);
-        let error = result.unwrap_err();
+        let RunError::Output(error) = result.unwrap_err() else {
+            panic!("original output failure must remain typed")
+        };
         assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
         assert_eq!(error.to_string(), "diagnostic sink closed");
         assert_eq!(sink.bytes(), &reference[..capacity]);
