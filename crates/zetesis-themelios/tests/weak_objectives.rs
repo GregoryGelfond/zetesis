@@ -146,7 +146,7 @@ fn weak_occurrences_count_before_upstream_statement_deduplication() {
 }
 
 #[test]
-fn safety_and_outside_positive_profile_remain_typed_refusals() {
+fn unsupported_weak_scopes_remain_typed_refusals() {
     for source in [":~.[X]", ":~X=1.[X]", "{p(1)}. :~p(_).[_]"] {
         assert!(
             matches!(
@@ -162,11 +162,8 @@ fn safety_and_outside_positive_profile_remain_typed_refusals() {
         );
     }
     for source in [
-        "{a}. :~not a.[1]",
-        "{a}. :~not not a.[1]",
         "{a}. :~#count{1:a}>0.[1]",
         "{a}. :~a:a.[1]",
-        "{p(1)}. :~p(X),X>0.[X]",
         "{p(1)}. :~p(X).[X+1]",
     ] {
         assert!(

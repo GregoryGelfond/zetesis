@@ -51,6 +51,8 @@ pub(crate) struct ObjectiveIr {
     /// source eligibility through a literal, filter or repeated variable.
     /// Grounding certifies these complete carriers before retaining any row.
     pub priority_sources: BTreeSet<usize>,
+    /// Use the completed acyclic source abstraction and a closed model query.
+    pub source_completion: bool,
     pub condition: Vec<LiteralIr>,
     pub variables: usize,
     pub origins: Vec<Location>,
@@ -555,20 +557,37 @@ impl Compiler<'_> {
         let mut filters = Vec::new();
         let mut condition = Vec::new();
         for literal in element.condition().literals() {
-            if literal.get().negation != DefaultNegation::None {
-                return Err(unsupported(ProfileFeature::Objective, self.location).into());
-            }
             match &literal.get().inner {
                 LiteralInner::Atom(atom) => {
-                    let pattern = self.atom(atom.get(), &mut variables, true)?;
-                    positive.push(pattern.clone());
-                    condition.push(LiteralIr::Atom(DefaultNegation::None, pattern));
+                    let negation = literal.get().negation;
+                    let pattern = self.atom(
+                        atom.get(),
+                        &mut variables,
+                        negation == DefaultNegation::None,
+                    )?;
+                    if negation == DefaultNegation::None {
+                        positive.push(pattern.clone());
+                    }
+                    condition.push(LiteralIr::Atom(negation, pattern));
                 }
                 LiteralInner::Comparison(comparison) => {
                     let mut steps = comparison.get().steps();
                     let (relation, right) = steps.next().expect("comparison has step");
-                    if steps.next().is_some() || !matches!(relation, Relation::Eq | Relation::Neq) {
-                        return Err(unsupported(ProfileFeature::Objective, self.location).into());
+                    if literal.get().negation != DefaultNegation::None
+                        || steps.next().is_some()
+                        || !matches!(relation, Relation::Eq | Relation::Neq)
+                        || !matches!(
+                            comparison.get().first(),
+                            Term::Variable(_) | Term::Symbolic(_)
+                        )
+                        || !matches!(right, Term::Variable(_) | Term::Symbolic(_))
+                    {
+                        condition.push(self.comparison_guard(
+                            comparison.get(),
+                            literal.get().negation,
+                            &mut variables,
+                        )?);
+                        continue;
                     }
                     let left = self.objective_term(comparison.get().first(), &mut variables)?;
                     let right = self.objective_term(right, &mut variables)?;
@@ -583,7 +602,9 @@ impl Compiler<'_> {
                         Filter::Neq(left, right)
                     });
                 }
-                _ => return Err(unsupported(ProfileFeature::Objective, self.location).into()),
+                LiteralInner::True | LiteralInner::False => {
+                    condition.push(self.literal(literal.get(), &mut variables)?);
+                }
             }
         }
         let weight = self.objective_weight(element.weight().term(), &mut variables)?;
@@ -618,6 +639,7 @@ impl Compiler<'_> {
             filters,
             polarity,
             priority_sources: BTreeSet::new(),
+            source_completion: false,
             condition,
             variables: count,
             origins,

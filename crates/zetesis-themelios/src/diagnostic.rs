@@ -97,6 +97,8 @@ pub enum ProfileFeature {
     ObjectiveConditionalDependency,
     /// Aggregate producer support cannot yet determine exact objective priority presence.
     ObjectiveAggregateDependency,
+    /// An objective producer cone lacks the completed finite source-eligibility profile.
+    ObjectiveSourceEligibility,
 }
 
 impl fmt::Display for ProfileFeature {
@@ -132,6 +134,9 @@ impl fmt::Display for ProfileFeature {
             Self::ObjectiveDisjunctionDependency => "a disjunctive objective dependency",
             Self::ObjectiveConditionalDependency => "a universal conditional objective dependency",
             Self::ObjectiveAggregateDependency => "an aggregate objective dependency",
+            Self::ObjectiveSourceEligibility => {
+                "an objective dependency without complete source eligibility"
+            }
         })
     }
 }

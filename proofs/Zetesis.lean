@@ -78,6 +78,7 @@ import Zetesis.CountHeadActivity
 import Zetesis.WeightedHeadActivity
 import Zetesis.ObjectiveTransport
 import Zetesis.ObjectiveConditions
+import Zetesis.ObjectiveEligibility
 import Zetesis.BooleanHeads
 import Zetesis.BooleanHeadElements
 import Zetesis.SignedHeadElements

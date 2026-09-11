@@ -1,0 +1,29 @@
+{"name":"negative_optional","source":"{a}.#minimize{1:not a}.","priorities":[0],"records":[[[],[1]],[["a"],[0]]]}
+{"name":"negative_fact","source":"a.#minimize{1:not a}.","priorities":[],"records":[[["a"],null]]}
+{"name":"negative_absent","source":"#minimize{1:not a}.","priorities":[0],"records":[[[],[1]]]}
+{"name":"double_negative_optional","source":"{a}.#minimize{1:not not a}.","priorities":[0],"records":[[[],[0]],[["a"],[1]]]}
+{"name":"double_negative_fact","source":"a.#minimize{1:not not a}.","priorities":[0],"records":[[["a"],[1]]]}
+{"name":"double_negative_absent","source":"#minimize{1:not not a}.","priorities":[],"records":[[[],null]]}
+{"name":"contradictory_condition","source":"{a}.#minimize{1:a,not a}.","priorities":[0],"records":[[[],[0]],[["a"],[0]]]}
+{"name":"contradictory_producer","source":"{a}.b:-a,not a.#minimize{1:b}.","priorities":[0],"records":[[[],[0]],[["a"],[0]]]}
+{"name":"correlated_producers","source":"{a}.b:-a.c:-not a.#minimize{1:b,c}.","priorities":[0],"records":[[["c"],[0]],[["a","b"],[0]]]}
+{"name":"negative_producer","source":"{a}.b:-not a.#minimize{1:b}.","priorities":[0],"records":[[["b"],[1]],[["a"],[0]]]}
+{"name":"excluded_negative_producer","source":"a.b:-not a.#minimize{1:b}.","priorities":[],"records":[[["a"],null]]}
+{"name":"required_negative_producer","source":"b:-not a.#minimize{1:b}.","priorities":[0],"records":[[["b"],[1]]]}
+{"name":"disjunctive_producer","source":"a|b.#minimize{2:a;3:b}.","priorities":[0],"records":[[["b"],[3]],[["a"],[2]]]}
+{"name":"negative_disjunction_query","source":"a|b.#minimize{2:not a;3:not b}.","priorities":[0],"records":[[["b"],[2]],[["a"],[3]]]}
+{"name":"bounded_choice_is_optional","source":"1{a}1.#minimize{1:not a}.","priorities":[0],"records":[[["a"],[0]]]}
+{"name":"negative_choice_condition","source":"{a}.{b:not a}.#minimize{1:b}.","priorities":[0],"records":[[[],[0]],[["b"],[1]],[["a"],[0]]]}
+{"name":"excluded_choice_condition","source":"a.{b:not a}.#minimize{1:b}.","priorities":[],"records":[[["a"],null]]}
+{"name":"ordered_condition","source":"{p(1);p(2)}.#minimize{1@3,X:p(X),X>1}.","priorities":[3],"records":[[[],[0]],[["p(1)"],[0]],[["p(2)"],[1]],[["p(1)","p(2)"],[1]]]}
+{"name":"arithmetic_condition","source":"{p(1);p(2)}.#minimize{1@3,X:p(X),X+1=2}.","priorities":[3],"records":[[[],[0]],[["p(2)"],[0]],[["p(1)"],[1]],[["p(1)","p(2)"],[1]]]}
+{"name":"negated_comparison","source":"{p(1);p(2)}.#minimize{1@3,X:p(X),not X=1}.","priorities":[3],"records":[[[],[0]],[["p(1)"],[0]],[["p(2)"],[1]],[["p(1)","p(2)"],[1]]]}
+{"name":"true_condition","source":"{a}.#minimize{1:a,#true}.","priorities":[0],"records":[[[],[0]],[["a"],[1]]]}
+{"name":"false_condition","source":"{a}.#minimize{1:a,#false}.","priorities":[],"records":[[[],null],[["a"],null]]}
+{"name":"negative_bound_weight","source":"p(1).{q(1)}.#minimize{X@X:p(X),not q(X)}.","priorities":[1],"records":[[["p(1)"],[1]],[["p(1)","q(1)"],[0]]]}
+{"name":"weak_negative","source":"{a}.:~not a.[2@3,k]","priorities":[3],"records":[[[],[2]],[["a"],[0]]]}
+{"name":"strong_negative_condition","source":"{-p(1);p(1)}.#minimize{2@1,k:not -p(1)}.","priorities":[1],"records":[[[],[2]],[["p(1)"],[2]],[["-p(1)"],[0]]]}
+{"name":"weak_double_negative","source":"{a}.:~not not a.[1]","priorities":[0],"records":[[[],[0]],[["a"],[1]]]}
+{"name":"weak_ordered_filter","source":"{p(1)}.:~p(X),X>0.[X]","priorities":[0],"records":[[[],[0]],[["p(1)"],[1]]]}
+{"name":"negative_maximize","source":"#maximize{1:not a}.","priorities":[0],"records":[[[],[-1]]]}
+{"name":"ordered_fact_filter","source":"d(1).#minimize{1:d(X),X<2}.","priorities":[0],"records":[[["d(1)"],[1]]]}

@@ -2,6 +2,7 @@
 
 mod forwarding;
 mod presence;
+pub(crate) mod completion;
 
 pub(crate) use presence::{Presence, check as check_presence};
 
@@ -35,9 +36,19 @@ pub(crate) fn check(
         graph,
         objectives
             .iter()
-            .flat_map(|objective| &objective.positive)
-            .map(|atom| signature(atom.predicate())),
+            .flat_map(|objective| &objective.condition)
+            .filter_map(|literal| match literal {
+                LiteralIr::Atom(_, atom) => Some(signature(atom.predicate())),
+                _ => None,
+            }),
     );
+    if completed_profile(rules, objectives, graph, &relevant) {
+        for objective in objectives {
+            objective.source_completion = true;
+        }
+        return Ok(BTreeSet::new());
+    }
+
     let mut generated = BTreeMap::<Signature, BTreeSet<usize>>::new();
     for rule in rules {
         if !relevant_head(&rule.head, &relevant) {
@@ -123,6 +134,45 @@ pub(crate) fn check(
         objective.priority_sources = observer(objective, &generated);
     }
     Ok(presence::required(rules, objectives, graph, &generated))
+}
+
+fn completed_profile(
+    rules: &[RuleIr],
+    objectives: &[ObjectiveIr],
+    graph: &DependencyGraph,
+    relevant: &BTreeSet<Signature>,
+) -> bool {
+    let queried = objectives.iter().any(|objective| {
+        objective.condition.iter().any(|literal| {
+            !matches!(
+                literal,
+                LiteralIr::Atom(DefaultNegation::None, _) | LiteralIr::Compare(..)
+            )
+        })
+    });
+    let expanded = relevant.iter().any(|predicate| {
+        graph
+            .edges_from(predicate)
+            .any(|(kind, _)| kind == DependencyKind::Negative)
+    }) || rules.iter().any(|rule| {
+        relevant_head(&rule.head, relevant) && matches!(rule.head, HeadIr::Disjunction(_))
+    });
+    let ordinary = rules
+        .iter()
+        .filter(|rule| relevant_head(&rule.head, relevant))
+        .all(|rule| {
+            rule.body.iter().all(|literal| {
+                matches!(
+                    literal,
+                    LiteralIr::Atom(..)
+                        | LiteralIr::Compare(..)
+                        | LiteralIr::Guard(_)
+                        | LiteralIr::Bind { .. }
+                        | LiteralIr::Range { .. }
+                )
+            })
+        });
+    queried || (expanded && ordinary)
 }
 
 /// Include the roots and every producer that can feed them. Each analyzed

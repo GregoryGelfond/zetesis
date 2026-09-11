@@ -210,13 +210,13 @@ Formula results expose lifted objectives, origins and declarations separately
 from the logical theory. `zetesis-objective` scores supplied verified models;
 objectives do not derive atoms or replace reduct acceptance.
 
-The source profile admits `#minimize`, `#maximize` and positive weak constraints
+The source profile admits `#minimize`, `#maximize` and weak constraints
 with scalar literal or positively bound variable weights, finite safely bound
 priority expressions, closed/whole-variable tuples, positive ordinary conditions and scalar
 equality/disequality filters. Maximize weights undergo checked negation before
 global `(priority, normalized weight, full tuple)` deduplication. Costs use the
 normalized minimization sign. Weight, priority and tuple are resolved from the
-same eligible binding; specialization retains the original positive model query.
+same eligible binding; specialization retains the original model query.
 Runtime objective templates always have fixed integer priorities.
 
 Resolved nonnumeric weights or priorities, including `#inf`/`#sup`,
@@ -224,13 +224,33 @@ contribute neither cost nor priority. Their tuple, priority, binding, filter and
 resource checks still run. A numeric zero retains a priority; an omitted weight
 does not. Eligible unrepresentable maximize negation is a located failure;
 an excluded nonnumeric priority needs no weight normalization. Undefined priority
-arithmetic remains a located source-evaluation failure. Variable weight arithmetic, negative objective conditions
-and richer weak bodies remain unsupported.
+arithmetic remains a located source-evaluation failure. Variable weight arithmetic
+and aggregate/conditional weak bodies remain unsupported.
 
 Objective dependencies have additional boundaries because a possible-support
 upper bound alone cannot determine clingo-compatible priority presence.
-Relevant negative, disjunctive, conditional and general aggregate producers are
-refused. A structural certificate admits specified total assignments and acyclic
+The additional ordinary source-completion profile admits acyclic producer cones
+with normal rules, positive atomic disjunctions and ordinary choices. Bodies may
+contain positive/default-negated atoms and admitted scalar guards. Objective
+conditions in that profile may use default negation, double negation, Boolean
+truth and bounded scalar comparisons, including arithmetic on independently
+bound variables. These conditions lower into closed queries over the original
+complete model; they do not add atoms or theory roots. Extended cyclic cones
+and producer forms outside this certificate have a located
+`ObjectiveSourceEligibility` refusal.
+
+The completed activity is a source grounding abstraction: absent, optional or
+required. Optional means retained as a grounding possibility, not simultaneously
+satisfiable or realized in an answer. Thus `{a}.#minimize{1:a,not a}.` retains
+its zero-valued priority even though the complete conjunctive model query is
+always false. In contrast, `a.#minimize{1:not a}.` has no retained objective row.
+Choice bounds and constraints never turn optional source atoms into required
+ones. Source completion visits the finite dependency cone in order, charges
+all ground joins and bounds retained activity entries independently of model
+evaluation. It neither searches for answer sets nor replaces original rules.
+
+Aggregate-dependent cones retain additional producer boundaries. A structural
+certificate admits specified total assignments and acyclic
 bijective predicate forwarding. It does not admit arbitrary joins, filters,
 alternative producers or constructed forwarding arguments.
 

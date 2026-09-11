@@ -613,6 +613,11 @@ import Zetesis
 #print axioms Zetesis.ObjectiveConditions.original_truth
 #print axioms Zetesis.ObjectiveConditions.model_identity
 #print axioms Zetesis.ObjectiveConditions.condition_vector
+#print axioms Zetesis.ObjectiveEligibility.negation_covers
+#print axioms Zetesis.ObjectiveEligibility.conjunction_covers
+#print axioms Zetesis.ObjectiveEligibility.disjunction_covers
+#print axioms Zetesis.ObjectiveEligibility.optional_contradiction
+#print axioms Zetesis.ObjectiveEligibility.absent_excludes
 #print axioms Zetesis.ObjectiveValues.ignored_entry_has_no_numeric_key
 #print axioms Zetesis.ObjectiveValues.numeric_entries_ignore
 #print axioms Zetesis.ObjectiveValues.ignored_entry_preserves_presence

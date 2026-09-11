@@ -13,6 +13,7 @@ use crate::expansion::Budget;
 use crate::formula::ceiling;
 use crate::formula_ir::{ObjectiveIr, Operation, Prepared};
 use crate::formula_objective_dependencies::Presence;
+use crate::formula_objective_dependencies::completion::{Activity, Completion, Context};
 use crate::formula_support::{self, Counters, Join, Support};
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
 
@@ -24,15 +25,38 @@ pub(super) fn prepare(
     counters: &mut Counters,
     location: Location,
 ) -> Result<(ObjectiveProgram, Vec<Vec<Location>>), FormulaFailure> {
-    let presence = crate::formula_objective_dependencies::check_presence(
-        prepared, support, limits, budget, counters,
-    )?;
+    let completion = if prepared
+        .objectives
+        .iter()
+        .any(|objective| objective.source_completion)
+    {
+        Some(Completion::build(
+            prepared,
+            support,
+            &mut Context {
+                limits,
+                budget,
+                counters,
+                location,
+            },
+        )?)
+    } else {
+        None
+    };
+    let presence = if completion.is_some() {
+        Presence::default()
+    } else {
+        crate::formula_objective_dependencies::check_presence(
+            prepared, support, limits, budget, counters,
+        )?
+    };
     let mut preparation = Preparation {
         limits,
         budget,
         counters,
         templates: Vec::new(),
         origins: Vec::new(),
+        completion: completion.as_ref(),
     };
     for objective in &prepared.objectives {
         let may_have_numeric_weight =
@@ -54,6 +78,7 @@ struct Preparation<'a> {
     counters: &'a mut Counters,
     templates: Vec<ObjectiveTemplate>,
     origins: Vec<Vec<Location>>,
+    completion: Option<&'a Completion>,
 }
 
 impl Preparation<'_> {
@@ -65,6 +90,7 @@ impl Preparation<'_> {
         presence: &Presence<'_>,
     ) -> Result<(), FormulaFailure> {
         if objective.priority_sources.is_empty()
+            && !objective.source_completion
             && let [Operation::Constant(Value::Number(priority))] =
                 objective.priority.nodes.as_slice()
         {
@@ -87,6 +113,24 @@ impl Preparation<'_> {
             if !presence.eligible(objective, &binding, self.limits, self.counters)? {
                 continue;
             }
+            let query = if let Some(completion) = self.completion {
+                let completed = completion.condition(
+                    &objective.condition,
+                    &binding,
+                    &mut Context {
+                        limits: self.limits,
+                        budget: self.budget,
+                        counters: self.counters,
+                        location: objective.location,
+                    },
+                )?;
+                if completed.activity == Activity::Absent {
+                    continue;
+                }
+                Some(completed.query)
+            } else {
+                None
+            };
             let priority = formula_support::expression(
                 &objective.priority,
                 &binding,
@@ -100,7 +144,7 @@ impl Preparation<'_> {
                 && let Some(weight) = self.weight(objective, &binding)?
             {
                 self.capacity(objective.location)?;
-                let template = self.specialize(objective, &binding, weight, priority)?;
+                let template = self.specialize(objective, &binding, weight, priority, query)?;
                 self.retain(objective, template)?;
             }
         }
@@ -164,8 +208,20 @@ impl Preparation<'_> {
         binding: &[Value],
         weight: i32,
         priority: i32,
+        query: Option<zetesis_objective::Condition>,
     ) -> Result<ObjectiveTemplate, FormulaFailure> {
         let tuple = self.terms(&objective.tuple, binding, objective.location)?;
+        if let Some(query) = query {
+            return Ok(ObjectiveTemplate::new(
+                Term::Constant(Value::Number(weight)),
+                priority,
+                tuple,
+                Vec::new(),
+                Vec::new(),
+            )
+            .with_weight_polarity(objective.polarity)
+            .with_condition(query));
+        }
         let mut positive = reserved(objective.positive.len(), objective.location)?;
         for atom in &objective.positive {
             self.counters.work(self.limits, objective.location)?;
