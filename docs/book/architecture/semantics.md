@@ -106,6 +106,21 @@ their combined retained data. Closed query storage is charged only when the
 numeric contribution is retained; source evaluation and its work limits remain
 separate obligations.
 
+Scoped objective bodies reuse the formula operations through an isolated
+temporary builder. The compiler borrows completed producer support, validates
+the body for one outer binding, and then translates reachable formula nodes
+into a closed query if the numeric contribution is retained. The temporary
+builder cannot publish program roots or enlarge the original atom universe.
+Its storage limits are separate from the retained query limit; both operations
+consume the source preparation budget.
+
+This reuse depends on the consumer's semantics. Replacing `A → B` by
+`not A ∨ B` preserves truth in a supplied original interpretation, so it is
+valid inside this objective query. It does not generally preserve Ferraris
+reducts and is not a program transformation. The
+[`formula_query_truth` law and reduct counterexample](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ObjectiveConditions.lean)
+state both sides of this boundary.
+
 In aggregate heads, positive head permission and aggregate measure also have
 distinct roles. A positive head occurrence can permit an atom even when its
 measure contributes zero. Complete tuple identity determines aggregate

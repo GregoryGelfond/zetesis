@@ -34,6 +34,13 @@ condition's acyclic references and admission limits. `evaluate` reads the
 supplied model; the caller establishes whether that model is an answer set.
 It uses one contribution-key and priority-ordering contract for all templates.
 
+At the source boundary, admitted scoped weak constraints use the existing body
+compiler and aggregate operations. Their temporary formulas become closed
+queries over typed atoms; they never become program roots. Source body storage,
+retained query storage and cumulative preparation work have separate limits.
+The [scoped example](../reference/language.md#objectives-and-observations)
+combines a count head, aggregate assignment, conditional cost and shown count.
+
 Source priority presence is a separate preparation result. A retained priority
 may have cost zero in every answer. In particular, a condition's false value
 on the current answer is not permission to remove its priority slot. The

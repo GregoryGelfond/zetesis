@@ -53,7 +53,7 @@ struct DisplayRecord {
     displays: Vec<(Vec<String>, u64)>,
 }
 
-fn cases() -> [Case; 7] {
+fn cases() -> [Case; 8] {
     [
         Case {
             source: include_str!("fixtures/language-consumers/symbolic-weight.lp"),
@@ -124,19 +124,15 @@ fn cases() -> [Case; 7] {
                 })
                 .into(),
         },
+        independent_objectives(),
         Case {
-            source: include_str!("fixtures/language-consumers/independent-objectives.lp"),
-            file: "independent-objectives.lp",
+            source: include_str!("fixtures/language-consumers/scoped-objectives.lp"),
+            file: "scoped-objectives.lp",
             reference_difference: None,
             answers: [
-                (&[][..], [(2, 1), (1, 0)], ""),
-                (&["a"][..], [(2, 0), (1, 0)], "flag(a)"),
-                (&["b", "p", "q"][..], [(2, 1), (1, 1)], "flag(b)"),
-                (
-                    &["a", "b", "p", "q"][..],
-                    [(2, 0), (1, 1)],
-                    "flag(a) flag(b)",
-                ),
+                (&["a"][..], [(2, 1), (1, 1)], "score(1)"),
+                (&["b"][..], [(2, 1), (1, 0)], "score(1)"),
+                (&["a", "b"][..], [(2, 2), (1, 1)], "score(2)"),
             ]
             .map(|(atoms, costs, display)| Record {
                 atoms: atoms.iter().map(|name| atom(name, vec![])).collect(),
@@ -156,6 +152,30 @@ fn cases() -> [Case; 7] {
             ]),
         },
     ]
+}
+
+fn independent_objectives() -> Case {
+    Case {
+        source: include_str!("fixtures/language-consumers/independent-objectives.lp"),
+        file: "independent-objectives.lp",
+        reference_difference: None,
+        answers: [
+            (&[][..], [(2, 1), (1, 0)], ""),
+            (&["a"][..], [(2, 0), (1, 0)], "flag(a)"),
+            (&["b", "p", "q"][..], [(2, 1), (1, 1)], "flag(b)"),
+            (
+                &["a", "b", "p", "q"][..],
+                [(2, 0), (1, 1)],
+                "flag(a) flag(b)",
+            ),
+        ]
+        .map(|(atoms, costs, display)| Record {
+            atoms: atoms.iter().map(|name| atom(name, vec![])).collect(),
+            costs: costs.into(),
+            display: display.into(),
+        })
+        .into(),
+    }
 }
 
 fn admit(case: &Case) -> AdmittedFormula {

@@ -185,7 +185,9 @@ disjunctive and conditional producer dependencies retain their original theory;
 finite ordinary cycles use conservative support coverage. Original-model
 conditions determine costs, independently of answer-set membership. Remaining
 source scopes and explicit clingo reporting differences are documented alongside
-the supported contracts.
+the supported contracts. Finite scoped weak constraints can use aggregate
+assignments and universal conditionals; their costs read the original answer
+without adding rules or support.
 Directed finite affine comparison chains can bind several variables while
 retaining the original correlations and checked source arithmetic.
 Choice and aggregate-head elements preserve `not` and `not not` explicitly.

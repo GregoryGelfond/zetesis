@@ -263,7 +263,7 @@ analysis results; other admitted constructs can also require a projection.
 
 `#minimize`, `#maximize` and weak constraints admit finite safely bound priority
 expressions; an omitted priority is zero. Priority inputs come from the element's
-admitted positive ordinary conditions. Weight, priority and tuple values must
+admitted outer bindings. Weight, priority and tuple values must
 belong to the same completed binding. Grounding retains the model-relative
 conditions in fixed-priority objective templates; it does not add producer support
 or change the original answer-set theory.
@@ -293,8 +293,34 @@ Objectives admit signed atomic and Boolean conditions, default and double
 negation, scalar comparisons and checked expressions in their weight, priority
 and complete tuple. Producer dependencies can include disjunctions, aggregate
 heads, finite ordinary cycles, and acyclic aggregate assignments or universal
-conditionals. Direct aggregate or universal-conditional weak-constraint bodies
-remain a separate admission boundary.
+conditionals. Weak-constraint bodies can directly use the admitted finite
+aggregate guards, assignments and universal conditionals. Scalar binders,
+intervals and structural positive patterns also supply outer bindings in weak
+constraints and optimization elements where their grammar permits them. A local
+aggregate or conditional variable cannot bind an outer weight, priority or tuple.
+Pool-containing analyzed weak bodies remain refused with `AnalysisPool`;
+cyclic assignment generators and unsupported local scopes remain restricted.
+
+For example:
+
+```asp
+{{#include ../../../crates/zetesis-solve/tests/fixtures/language-consumers/scoped-objectives.lp}}
+```
+
+The full answers are `{a}`, `{b}` and `{a,b}`, with costs `[1,1]`, `[1,0]`
+and `[2,1]` at priorities `[2,1]`. The count supplies the higher-priority cost;
+the conditional `a : b` supplies the lower-priority cost precisely when `b`
+implies `a` in that answer. Only `{b}` is optimal. The shown count is a separate
+query; it does not supply support or change either cost.
+
+Scoped body compilation uses a separate value domain and transient formula
+storage. Each completed eligible row undergoes required body validation before
+activity exclusion or numeric selection. Only retained numeric rows allocate
+closed objective query nodes. `FormulaLimits::max_objective_formula_atoms` and
+`max_objective_formula_nodes` bound each transient body independently of the
+original theory and retained `objective.max_condition_nodes`; cumulative source
+work and value budgets still apply. The [scoped objective contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_scopes.rs)
+check full costs, scope, required errors and independent limits.
 
 Each objective has its own source-eligibility plan. Ordinary activity can prove
 an atom absent or required, or leave it optional. Rich acyclic producer cones
@@ -313,6 +339,13 @@ complete tuple keys and P its possible keys. The carrier is
 Unique unary renamings preserve the carrier. Original aggregate equalities
 remain in the theory; carrier membership filters objective proposal rows before
 priority evaluation.
+
+The base predicate and each forwarding edge qualify independently. A filtered
+or multiply produced descendant uses its own source-support carrier; observing
+it cannot discard an established base or sibling refinement. The
+[composition contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_carrier_composition.rs)
+check this independence under source order, additional observers and competing
+producers, including the shared work and storage limits.
 
 ```asp
 {{#include ../../../crates/zetesis-cli/tests/fixtures/finite-carriers/count.lp}}
