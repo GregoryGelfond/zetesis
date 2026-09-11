@@ -45,3 +45,24 @@ eligibility, priority presence, checked arithmetic, allocation, work limits and
 cancellation remain separate implementation obligations. Unfolding is a
 mathematical specification and may duplicate shared subqueries; it is not a
 runtime algorithm or a performance claim.
+
+For a scoped weak body, pooled conditional consequents use the same runtime
+formula as rule-body conditionals. In
+`d(1;2). {p(1);p(2);p(3)}. :~p(X;X+1):d(X).[1]`, the objective condition is
+`(p(1) or p(2)) and (p(2) or p(3))`. The family containing only `p(2)` therefore
+incurs cost one. [ConsequentAlternatives.original_semantics](../Zetesis/ConsequentAlternatives.lean)
+and [ProjectedConditionals.original_semantics](../Zetesis/ProjectedConditionals.lean)
+state the universal-row/existential-alternative order for supplied complete
+families. `ObjectiveConditions.formula_query_truth` connects the resulting
+formula's original truth to its Boolean query.
+
+The separate Rust dependency-analysis projection replaces each pooled consequent
+with several pool-free occurrences so established analysis can inspect their
+signatures and polarities. Its conjunction would require all three `p` atoms in
+the example and is deliberately not used as an equivalent objective condition.
+`AnalysisBasis::DependencyProjection` exposes that distinction. The shared
+projection preserves each weak statement's complete weight, priority and tuple,
+while runtime compilation reads the original scoped body. Signature coverage,
+source provenance, the independent pre-clone bounds and Rust representation
+correspondence remain implementation obligations; these semantic laws do not
+certify the analysis transformation.

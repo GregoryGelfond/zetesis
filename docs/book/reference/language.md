@@ -322,8 +322,18 @@ aggregate guards, assignments and universal conditionals. Scalar binders,
 intervals and structural positive patterns also supply outer bindings in weak
 constraints and optimization elements where their grammar permits them. A local
 aggregate or conditional variable cannot bind an outer weight, priority or tuple.
-Pool-containing analyzed weak bodies remain refused with `AnalysisPool`;
-cyclic assignment generators and unsupported local scopes remain restricted.
+Pooled conditional consequents in weak bodies retain their local alternatives:
+`p(X;X+1):d(X)` requires, for each completed `d(X)` binding, at least one of
+`p(X)` and `p(X+1)`. Negation applies to each alternative before their disjunction.
+The analyzed program uses the same bounded signature/polarity projection as rule
+bodies and reports `AnalysisBasis::DependencyProjection`; its conjunction of
+projected occurrences is not the objective's truth condition. Weight, priority,
+complete tuple and runtime query remain attached to the original weak constraint.
+Pools in ordinary weak-body atoms, local conditions and aggregate elements remain
+restricted, as do pooled scalar binders and objective fields; the
+[objective pool contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_pools.rs)
+retain exact witnesses. Cyclic assignment generators and unsupported local scopes
+remain restricted.
 
 For example:
 

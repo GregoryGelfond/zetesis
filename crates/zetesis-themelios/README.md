@@ -269,8 +269,16 @@ failures retain their typed partial accounting. Required scoped data evaluation
 runs on each completed outer row before activity exclusion and numeric selection, even for ignored rows. Only a retained numeric
 row creates Condition nodes. Source shape checks are shared with objective
 admission; scope and assignment safety remain with the source compiler.
-Pool-containing analyzed weak bodies retain the explicit `AnalysisPool` refusal;
-no unbounded upstream unpooling or synthetic producer is introduced.
+Pooled conditional consequents share the bounded rule-body dependency projection.
+The analyzed weak statement retains its original weight, priority and tuple;
+`AnalysisBasis::DependencyProjection` identifies its signature/polarity purpose.
+The runtime conditional still disjoins source alternatives inside each local
+condition row. Neither the projected conjunction nor a synthetic producer enters
+the objective query. Ordinary body pools, pooled local conditions, aggregate
+elements, scalar binders and objective fields retain their explicit boundaries;
+[objective pool contracts](tests/objective_pools.rs) record both admissions and
+remaining refusals. The independent pool-free analysis preflight still prevents
+unbounded upstream unpooling.
 
 Objective conditions admit default negation, double negation, Boolean truth and
 bounded scalar comparisons on independently bound values. They lower into closed

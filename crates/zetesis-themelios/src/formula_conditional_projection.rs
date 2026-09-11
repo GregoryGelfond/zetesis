@@ -61,10 +61,12 @@ impl Compiler<'_> {
         statement: &WithProvenance<Statement>,
         projection_nodes: &mut u128,
     ) -> Result<WithProvenance<Statement>, FormulaFailure> {
-        let Statement::Rule(rule) = statement.get() else {
-            unreachable!("formula source rule")
+        let (body, reserved_source) = match statement.get() {
+            Statement::Rule(rule) => (rule.body().get(), true),
+            Statement::WeakConstraint(weak) => (weak.body().get(), false),
+            _ => unreachable!("a rule or scoped weak body"),
         };
-        let pooled = rule.body().get().elements().any(|element| {
+        let pooled = body.elements().any(|element| {
             matches!(element.get(), BodyElement::Conditional(conditional)
                 if matches!(&conditional.literal.inner, LiteralInner::Atom(atom) if atom_width(atom.get()).1 != 0))
         });
@@ -74,6 +76,18 @@ impl Compiler<'_> {
         let mut elements = Vec::new();
         let mut payload = Payload::default();
         payload.visit_statement(statement.get());
+        // The rule cursor already reserves its complete source family. A weak
+        // observation has no outer cursor, so reserve its base copy here before
+        // the same per-alternative analysis expansion below.
+        if !reserved_source {
+            *projection_nodes = projection_nodes.saturating_add(payload.nodes + 1);
+            ceiling(
+                FormulaResource::AnalysisNodes,
+                *projection_nodes,
+                self.limits.max_analysis_nodes as u128,
+                self.location,
+            )?;
+        }
         self.budget.charge(
             ExpansionResource::TermWork,
             payload.nodes.saturating_mul(2),
@@ -86,14 +100,14 @@ impl Compiler<'_> {
             payload.bytes.saturating_mul(2),
             self.location,
         )?;
-        for element in rule.body().get().elements() {
+        for element in body.elements() {
             if let BodyElement::Conditional(conditional) = element.get()
                 && let LiteralInner::Atom(atom) = &conditional.literal.inner
                 && atom_width(atom.get()).1 != 0
             {
-                // The outer pool cursor already reserved one source-copy
-                // equivalent. Extra conditional copies share its cumulative
-                // allowance across every statement and outer substitution.
+                // The base source copy is already reserved. Extra conditional
+                // copies share a cumulative allowance across every statement
+                // and outer substitution, including weak observations.
                 let count = atom_width(atom.get()).0;
                 *projection_nodes = projection_nodes
                     .saturating_add(count.saturating_sub(1).saturating_mul(payload.nodes + 1));
@@ -143,7 +157,7 @@ impl Compiler<'_> {
             rewrite(Program::of_nodes([statement.clone()]), &mut projection)
                 .statements()
                 .next()
-                .expect("projection retains rule")
+                .expect("projection retains its statement")
                 .clone(),
         )
     }
@@ -157,7 +171,7 @@ impl Rewrite for Projection {
         TransformTag::new("zetesis-conditional-dependencies")
     }
     fn rewrite_body(&mut self, _: Body) -> Body {
-        self.body.take().expect("one rule body")
+        self.body.take().expect("one source body")
     }
 }
 

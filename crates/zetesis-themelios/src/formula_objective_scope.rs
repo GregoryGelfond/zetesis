@@ -25,19 +25,18 @@ impl Compiler<'_> {
         origins: &[Location],
         objectives: &mut Vec<ObjectiveIr>,
         declarations: &mut Vec<Location>,
-        analyzed: &mut Vec<WithProvenance<Statement>>,
-    ) -> Result<bool, FormulaFailure> {
+        projection_nodes: &mut u128,
+    ) -> Result<Option<WithProvenance<Statement>>, FormulaFailure> {
         if let Statement::WeakConstraint(weak) = statement.get()
             && selection::scoped(weak, self.budget, self.location)?
         {
-            analyzed.push(statement.clone());
+            let analyzed = self.conditional_projection(statement, projection_nodes)?;
             self.weak_objective(weak, origins, objectives, declarations)?;
-            return Ok(true);
+            return Ok(Some(analyzed));
         }
         let normalized = crate::formula_weak::normalize(statement, self.budget, self.location)?;
         let statement = normalized.as_ref().unwrap_or(statement);
         if let Statement::Optimize(optimize) = statement.get() {
-            analyzed.push(statement.clone());
             self.objectives(
                 optimize,
                 origins,
@@ -45,9 +44,9 @@ impl Compiler<'_> {
                 objectives,
                 declarations,
             )?;
-            return Ok(true);
+            return Ok(Some(statement.clone()));
         }
-        Ok(false)
+        Ok(None)
     }
 
     pub(super) fn weak_objective(

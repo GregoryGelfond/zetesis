@@ -338,13 +338,14 @@ pub(crate) fn prepare(
         }
         let statement = rewritten.statements().next().expect("rewrite keeps a rule");
         let origins = extended::parsed_origins(carrier);
-        if compiler.objective_statement(
+        if let Some(observation) = compiler.objective_statement(
             statement,
             &origins,
             &mut objectives,
             &mut objective_declarations,
-            &mut analyzed,
+            &mut pool_projection_nodes,
         )? {
+            analyzed.push(observation);
             continue;
         }
         if let Some(facts) = fact_expansion::facts(statement, compiler.budget, compiler.location)? {
