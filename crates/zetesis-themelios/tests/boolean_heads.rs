@@ -1,5 +1,8 @@
 //! Boolean heads retain their original truth without supplying atom support.
 
+#[path = "support/objective_dependency_records.rs"]
+mod objective_dependencies;
+
 #[path = "support/boolean_heads.rs"]
 mod cases;
 #[path = "support/boolean_elements.rs"]
@@ -276,21 +279,13 @@ fn unsupported_conditions_remain_located_refusals() {
 }
 
 #[test]
-fn boolean_disjuncts_preserve_objective_guards() {
+fn boolean_disjuncts_preserve_scored_answers() {
     for source in [
         "#true|a.#minimize{1@7:a}.",
         "#false|a.#minimize{1@7:a}.",
         "#true|not a.#minimize{1@7:a}.",
     ] {
-        let error = limited(source, &FormulaLimits::default()).unwrap_err();
-        assert!(!error.diagnostics().is_empty());
-        assert!(matches!(
-            error,
-            FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                feature: ProfileFeature::ObjectiveDisjunctionDependency,
-                ..
-            }))
-        ));
+        objective_dependencies::check(source);
     }
 }
 

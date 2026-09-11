@@ -5,15 +5,17 @@
 //! source/model contracts and the independent reduct evaluator do not prescribe
 //! a physical lowering. Clingo agreement is separate empirical corroboration.
 
+#[path = "support/objective_dependency_records.rs"]
+mod objective_dependencies;
+
 #[path = "support/head_element_reference.rs"]
 mod reference;
 
 use reference::{Selection, cost_records, expected, external, input, models};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AnalysisBasis, BundleAdmissionOptions, BundleLimits,
-    CountPlanLimits, CountPlanStatus, ExpansionFailure, ExpansionLimits, FormulaFailure,
-    FormulaLimits, FormulaResource, ProfileFeature, SourceBundle, admit_bundle_formula,
-    admit_formula, prepare_formula,
+    AdmissionOptions, AnalysisBasis, BundleAdmissionOptions, BundleLimits, CountPlanLimits,
+    CountPlanStatus, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
+    FormulaResource, SourceBundle, admit_bundle_formula, admit_formula, prepare_formula,
 };
 
 const CASES: &[(&str, &[&[&str]])] = &[
@@ -339,26 +341,15 @@ fn constants_do_not_certify_atom_count_plans() {
 }
 
 #[test]
-fn tuple_producers_keep_objective_refusals() {
-    for function in ["#count", "#sum", "#sum+", "#min", "#max"] {
-        let source = format!("1{function}{{1:#true;1:a}}1.#minimize{{1:a}}.");
-        let error = admit_formula(
-            source,
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_err();
-        assert!(
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                    feature: ProfileFeature::ObjectiveAggregateDependency,
-                    ..
-                }))
-            ),
-            "{error}"
-        );
+fn boolean_tuple_producers_preserve_scored_answers() {
+    for source in [
+        "1#count{1:#true;1:a}1.#minimize{1:a}.",
+        "1#sum{1:#true;1:a}1.#minimize{1:a}.",
+        "1#sum+{1:#true;1:a}1.#minimize{1:a}.",
+        "1#min{1:#true;1:a}1.#minimize{1:a}.",
+        "1#max{1:#true;1:a}1.#minimize{1:a}.",
+    ] {
+        objective_dependencies::check(source);
     }
 }
 

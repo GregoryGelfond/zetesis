@@ -1,5 +1,8 @@
 //! Dependent aggregate proposals retain their original equality and frozen truth.
 
+#[path = "support/objective_dependency_records.rs"]
+mod objective_dependencies;
+
 #[path = "support/aggregate_dependencies.rs"]
 mod cases;
 #[path = "support/finite_bindings.rs"]
@@ -12,9 +15,8 @@ use reference::{Models, atom_text, exhaustive, external, holds, native, values};
 use themelios_base::source::SourceId;
 use themelios_program::term::EvalError;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
-    admit_formula, prepare_formula,
+    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(157);
@@ -254,21 +256,6 @@ fn producer_inputs_require_independent_bindings() {
     }
 }
 
-fn profile(source: &str, expected: ProfileFeature) {
-    let error = prepare_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_err();
-    assert!(
-        matches!(error, FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile { feature, .. })) if feature == expected),
-        "{source}: {error}"
-    );
-    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
-}
-
 #[test]
 fn additional_guards_do_not_become_duplicate_producers() {
     for source in [
@@ -283,13 +270,13 @@ fn additional_guards_do_not_become_duplicate_producers() {
 }
 
 #[test]
-fn dependent_producers_preserve_objective_restrictions() {
+fn dependent_producers_preserve_scored_answers() {
     for source in [
         "q(M):-N=#count{},M=#sum{N}.#minimize{M:q(M)}.",
         "M{q}M:-N=#count{},M=#sum{N}.#minimize{1:q}.",
         "M#count{1:q}M:-N=#count{},M=#sum{N}.#minimize{1:q}.",
     ] {
-        profile(source, ProfileFeature::ObjectiveAggregateDependency);
+        objective_dependencies::check(source);
     }
 }
 

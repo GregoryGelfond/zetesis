@@ -2,6 +2,9 @@
 //! in the original formula. The reference evaluator implements the finite
 //! reduct definition without the production reduct masks or countermodel search.
 
+#[path = "support/objective_dependency_records.rs"]
+mod objective_dependencies;
+
 use std::collections::BTreeSet;
 use std::fs::{self, File};
 use std::path::PathBuf;
@@ -15,9 +18,8 @@ use zetesis_core::{Atom, Sign, Value};
 use zetesis_cpu::Control;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
-    admit_formula,
+    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
 };
 
 type Models = BTreeSet<BTreeSet<String>>;
@@ -210,20 +212,6 @@ fn independent_generator_order_preserves_scopes_and_full_models() {
     }
 }
 
-fn profile(error: &FormulaFailure, expected: ProfileFeature) {
-    assert!(
-        matches!(
-            error,
-            FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                feature,
-                ..
-            })) if *feature == expected
-        ),
-        "{error}"
-    );
-    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
-}
-
 #[test]
 fn extra_aggregate_guards_test_completed_values() {
     for source in [
@@ -256,12 +244,8 @@ fn own_target_and_unbound_variables_keep_their_safety_refusal() {
 }
 
 #[test]
-fn objective_dependency_contract_is_not_silently_broadened() {
-    let source = "{p}.r(N,M):-N=#count{1:p},M=#sum{2:p}.#minimize{N@3,M:r(N,M)}.";
-    profile(
-        &input(source).unwrap_err(),
-        ProfileFeature::ObjectiveAggregateDependency,
-    );
+fn multiple_assignments_preserve_scored_answers() {
+    objective_dependencies::check("{p}.r(N,M):-N=#count{1:p},M=#sum{2:p}.#minimize{N@3,M:r(N,M)}.");
     let unrelated = "{p}.r(N,M):-N=#count{1:p},M=#sum{2:p}.#minimize{1@3:p}.";
     assert_eq!(input(unrelated).unwrap().objectives().priorities(), &[3]);
 }

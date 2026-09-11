@@ -1,5 +1,8 @@
 //! Checked finite tuple/atom count heads preserve complete models and frozen reducts.
 
+#[path = "support/objective_dependency_records.rs"]
+mod objective_dependencies;
+
 use std::collections::BTreeSet;
 use std::fs::{self, File};
 use std::io::Write;
@@ -12,10 +15,9 @@ use serde_json::{Value as Json, json};
 use zetesis_core::{Atom, Sign, Value};
 use zetesis_ferraris::{Node, Theory};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
-    ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
-    FormulaResource, ProfileFeature, SourceBundle, admit_bundle_formula, admit_extended,
-    admit_formula,
+    AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
+    ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
+    SourceBundle, admit_bundle_formula, admit_extended, admit_formula,
 };
 
 type Names = BTreeSet<String>;
@@ -336,12 +338,6 @@ fn count_bounds_preserve_frozen_formulas() {
     }
 }
 
-fn profile(error: &FormulaFailure, expected: ProfileFeature) -> bool {
-    matches!(error, FormulaFailure::Expansion(ExpansionFailure::Admission(
-        AdmissionFailure::Profile { feature, .. }
-    )) if *feature == expected)
-}
-
 #[test]
 fn count_aliases_admit_complete_groups() {
     for source in [
@@ -361,14 +357,8 @@ fn count_aliases_admit_complete_groups() {
 }
 
 #[test]
-fn count_head_objective_dependencies_are_refused() {
-    let source = "1#count{1:a}1.#minimize{1:a}.";
-    let error = input(source).expect_err(source);
-    assert!(profile(
-        &error,
-        ProfileFeature::ObjectiveAggregateDependency
-    ));
-    assert!(!error.diagnostics().is_empty());
+fn count_heads_preserve_scored_answers() {
+    objective_dependencies::check("1#count{1:a}1.#minimize{1:a}.");
 }
 
 #[test]

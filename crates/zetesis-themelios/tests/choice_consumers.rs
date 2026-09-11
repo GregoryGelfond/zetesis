@@ -1,5 +1,8 @@
 //! Outer body substitutions preserve complete choice/count groups and reducts.
 
+#[path = "support/objective_dependency_records.rs"]
+mod objective_dependencies;
+
 #[path = "support/choice_consumers.rs"]
 mod cases;
 #[path = "support/finite_bindings.rs"]
@@ -12,9 +15,8 @@ use cases::CASES;
 use reference::{Models, atom_text, exhaustive, external, holds, native, values};
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
-    admit_formula, prepare_formula,
+    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(137);
@@ -163,26 +165,6 @@ fn outer_activation_guards_the_complete_group() {
     assert_ne!(native(&input("{e}.1{a}1:-e.1{b}1:-e.")), expected);
 }
 
-fn assert_profile(source: &str, feature: ProfileFeature) {
-    let error = admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_err();
-    assert!(
-        matches!(
-            error,
-            FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                feature: actual, ..
-            })) if actual == feature
-        ),
-        "{source}: {error}"
-    );
-    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
-}
-
 #[test]
 fn conditional_consumers_preserve_complete_groups() {
     for (body, expanded) in [
@@ -211,14 +193,14 @@ fn negative_count_eligibility_uses_outer_consumers() {
 }
 
 #[test]
-fn dependent_objective_observers_remain_refused() {
+fn choice_consumers_preserve_scored_answers() {
     for source in [
         "Y{p}Y:-N=#count{},Y=N+1.#minimize{1:p}.",
         "{p}:-N=#count{},N>0.#minimize{1:p}.",
         "Y#count{1:p}Y:-N=#count{},Y=N+1.#minimize{1:p}.",
         "p(1).{a}:-N=#count{},p(N+1).#minimize{1:a}.",
     ] {
-        assert_profile(source, ProfileFeature::ObjectiveAggregateDependency);
+        objective_dependencies::check(source);
     }
 }
 

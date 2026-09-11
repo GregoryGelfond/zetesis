@@ -1,5 +1,8 @@
 //! Complete aggregate proposals enter scoped original conditional implications.
 
+#[path = "support/objective_dependency_records.rs"]
+mod objective_dependencies;
+
 #[path = "support/conditional_consumers.rs"]
 mod cases;
 #[path = "support/finite_bindings.rs"]
@@ -11,8 +14,8 @@ use cases::CASES;
 use reference::{Models, atom_text, exhaustive, external, holds, native, values};
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_formula, prepare_formula,
+    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, FormulaFailure,
+    FormulaLimits, FormulaResource, admit_formula, prepare_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(163);
@@ -298,30 +301,13 @@ fn local_scopes_cannot_repair_unsafe_outer_bindings() {
 }
 
 #[test]
-fn conditional_consumers_retain_objective_restrictions() {
+fn conditional_consumers_preserve_scored_answers() {
     for source in [
         "q(N):-N=#count{};p(N):d.#minimize{1,N:q(N)}.",
         "{a}:-N=#count{};not p(N):d.#minimize{1:a}.",
         "#count{1:a}:-N=#count{};not not p(N):d.#minimize{1:a}.",
     ] {
-        let error = prepare_formula(
-            source.into(),
-            options(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_err();
-        assert!(
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                    feature: ProfileFeature::ObjectiveAggregateDependency,
-                    ..
-                }))
-            ),
-            "{source}: {error}"
-        );
-        assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+        objective_dependencies::check(source);
     }
 }
 

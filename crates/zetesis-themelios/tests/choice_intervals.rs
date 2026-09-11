@@ -1,5 +1,8 @@
 //! Closed choice ranges preserve one group, local products and every reduct.
 
+#[path = "support/objective_dependency_records.rs"]
+mod objective_dependencies;
+
 use std::collections::BTreeSet;
 use std::fs::{self, File};
 use std::path::PathBuf;
@@ -328,7 +331,6 @@ fn refused(error: &FormulaFailure, expected: &str) -> bool {
                 "Symbol" => ProfileFeature::Symbol,
                 "PooledArguments" => ProfileFeature::PooledArguments,
                 "StrongNegation" => ProfileFeature::StrongNegation,
-                "ObjectiveNegativeDependency" => ProfileFeature::ObjectiveNegativeDependency,
                 _ => return false,
             };
             *feature == predicted
@@ -343,6 +345,7 @@ fn excluded_endpoints_syntax_and_unsafe_scopes_remain_typed_refusals() {
     // covered by evaluated_heads and finite_pools with explicit expansions.
     for case in cases().iter().filter(|case| {
         case["native"] != "admit"
+            && case["native"] != "ObjectiveNegativeDependency"
             && !matches!(
                 case["name"].as_str().unwrap(),
                 "dependent_global_endpoint"
@@ -373,7 +376,7 @@ fn excluded_endpoints_syntax_and_unsafe_scopes_remain_typed_refusals() {
         assert!(!error.diagnostics().is_empty());
         count += 1;
     }
-    assert_eq!(count, 17);
+    assert_eq!(count, 16);
     assert!(
         admit_extended(
             "1{p(1..2)}1.".into(),
@@ -674,4 +677,16 @@ fn fresh_bounded_clingo_replays_complete_contracts_and_explicit_diagnostics() {
         runs += 1;
     }
     assert_eq!(runs, 41);
+}
+
+#[test]
+fn negative_choice_conditions_preserve_scored_answers() {
+    let sources: Vec<_> = cases()
+        .into_iter()
+        .filter(|case| case["native"] == "ObjectiveNegativeDependency")
+        .collect();
+    assert_eq!(sources.len(), 1);
+    for case in sources {
+        objective_dependencies::check(case["source"].as_str().unwrap());
+    }
 }

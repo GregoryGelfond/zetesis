@@ -6,10 +6,12 @@ use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
-    admit_formula, prepare_formula,
+    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,
 };
+
+#[path = "support/objective_dependency_records.rs"]
+mod objective_dependencies;
 
 const SOURCE: SourceId = SourceId::new(113);
 fn options() -> AdmissionOptions {
@@ -347,29 +349,13 @@ fn captured_arguments_cannot_supply_missing_inputs() {
 }
 
 #[test]
-fn objective_consumers_keep_their_observer_refusal() {
+fn aggregate_consumers_preserve_scored_answers() {
     for source in [
         "N{p}N:-N=#count{}.#minimize{1:p}.",
         "n(N):-N=#count{},N>0.#minimize{N:n(N)}.",
         "n(N,Y):-N=#count{},Y=N+1.#minimize{N,Y:n(N,Y)}.",
     ] {
-        let error = prepare_formula(
-            source.into(),
-            options(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_err();
-        assert!(
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                    feature: ProfileFeature::ObjectiveAggregateDependency,
-                    ..
-                }))
-            ),
-            "{source}: {error}"
-        );
+        objective_dependencies::check(source);
     }
 }
 

@@ -1,6 +1,9 @@
 //! Signed unconditional source disjunctions retain their original reduct.
 //! Hand-written formula trees are independent of source normalization and SAT.
 
+#[path = "support/objective_dependency_records.rs"]
+mod objective_dependencies;
+
 use std::collections::BTreeSet;
 
 use serde_json::Value as Json;
@@ -288,7 +291,7 @@ fn unrelated_objectives_preserve_presence_priorities_and_tuple_identity() {
 }
 
 #[test]
-fn excluded_heads_and_objective_dependencies_are_located_refusals() {
+fn excluded_heads_remain_located_refusals() {
     for case in cases()
         .iter()
         // The immutable fixture records a historical arithmetic refusal.
@@ -296,6 +299,7 @@ fn excluded_heads_and_objective_dependencies_are_located_refusals() {
         // have dedicated tests.
         .filter(|case| {
             case["expected_native"] == "refuse"
+                && case["expected_refusal"] != "ObjectiveDisjunctionDependency"
                 && !matches!(
                     case["name"].as_str().unwrap(),
                     "variable-arithmetic-head"
@@ -316,7 +320,6 @@ fn excluded_heads_and_objective_dependencies_are_located_refusals() {
             );
         } else {
             let feature = match case["expected_refusal"].as_str().unwrap() {
-                "ObjectiveDisjunctionDependency" => ProfileFeature::ObjectiveDisjunctionDependency,
                 "ConditionalDisjunction" | "conditional disjunction element" => {
                     ProfileFeature::ConditionalDisjunction
                 }
@@ -499,4 +502,16 @@ fn replay_recorded_clingo_models_optimum_slots_and_refusals() {
         }
     }
     assert_eq!(runs, 62);
+}
+
+#[test]
+fn disjunctive_producers_preserve_scored_answers() {
+    let sources: Vec<_> = cases()
+        .into_iter()
+        .filter(|case| case["expected_refusal"] == "ObjectiveDisjunctionDependency")
+        .collect();
+    assert_eq!(sources.len(), 12);
+    for case in sources {
+        objective_dependencies::check(case["source"].as_str().unwrap());
+    }
 }

@@ -9,6 +9,9 @@
 //! Formal references: Ferraris (arXiv:0812.1462),
 //! Proposition 12; Abstract Gringo (arXiv:1507.06576), equation 22 and Theorem 1.
 
+#[path = "support/objective_dependency_records.rs"]
+mod objective_dependencies;
+
 use std::collections::BTreeSet;
 use std::io::Write;
 use std::process::{Command, Stdio};
@@ -314,25 +317,12 @@ fn aggregate_translation_refusals_identify_original_rule_and_resource() {
 }
 
 #[test]
-fn aggregate_producers_do_not_invent_observable_objective_priorities() {
-    // A support overapproximation can contain a despite the false aggregate,
-    // or n(0) despite the fact p. clingo drops those priority declarations;
-    // current admission explicitly refuses to claim that simplification.
+fn possible_producers_preserve_scored_answers() {
     for source in [
         "a :- #count{}=1. #minimize{1@7,k:a}.",
         "p. d(0;1). n(N) :- d(N),#count{1:p}=N. #minimize{1@9,k:n(0);1@7,k:n(1)}.",
     ] {
-        let error = admit_formula(
-            source.to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .expect_err("exact objective priority presence is not yet established");
-        assert_refusal(
-            &error,
-            Refusal::Feature(ProfileFeature::ObjectiveAggregateDependency),
-        );
+        objective_dependencies::check(source);
     }
 }
 
