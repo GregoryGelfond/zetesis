@@ -11,7 +11,6 @@ pub(super) use carrier::{Carrier, certify as carrier};
 
 use std::collections::BTreeSet;
 
-use themelios_analysis::depend::DependencyGraph;
 use themelios_base::span::Location;
 use themelios_program::program::{AggregateFunction, DefaultNegation};
 use themelios_program::symbol::Signature;
@@ -267,37 +266,19 @@ fn cone<'a>(
     }
 }
 
-fn depends(
-    graph: &DependencyGraph,
-    head: &Predicate,
-    reachable: &BTreeSet<&Predicate>,
-    context: &mut Context<'_>,
-) -> Result<bool, FormulaFailure> {
-    for predicate in graph.predicates() {
-        if !context.matches(head, predicate)? {
-            continue;
-        }
-        for (_, dependency) in graph.edges_from(predicate) {
-            context.inspect()?;
-            for ancestor in reachable {
-                if context.matches(ancestor, dependency)? {
-                    return Ok(true);
-                }
-            }
-        }
-    }
-    Ok(false)
-}
-
 /// Each successful round adds a source predicate. Only unique unary renamings
-/// inherit the completed carrier; finite scans never recurse.
+/// inherit the completed carrier; finite scans never recurse. Qualification of
+/// another observed descendant cannot invalidate this predicate's certificate.
+/// Nonqualifying descendants keep their independent source-support carrier.
 fn transport<'a>(
     prepared: &'a Prepared,
     predicate: &'a Predicate,
     context: &mut Context<'_>,
 ) -> Result<Option<BTreeSet<&'a Predicate>>, FormulaFailure> {
+    if !unique(prepared, predicate, context)? {
+        return Ok(None);
+    }
     let relevant = cone(prepared, context)?;
-    let graph = prepared.analysis.dependencies();
     let mut reachable = BTreeSet::new();
     context.retain(&mut reachable, predicate)?;
     loop {
@@ -307,29 +288,25 @@ fn transport<'a>(
             let HeadIr::Normal(Some(head)) = &rule.head else {
                 continue;
             };
-            if !context.relevant(head.predicate(), &relevant)?
-                || !depends(graph, head.predicate(), &reachable, context)?
+            if reachable.contains(head.predicate())
+                || !context.relevant(head.predicate(), &relevant)?
             {
                 continue;
             }
             let [LiteralIr::Atom(DefaultNegation::None, body)] = rule.body.as_slice() else {
-                return Ok(None);
+                continue;
             };
             context.inspect()?;
             if !matches!((head.terms(), body.terms()), ([Term::Variable(left)], [Term::Variable(right)]) if left == right)
                 || !reachable.contains(body.predicate())
+                || !unique(prepared, head.predicate(), context)?
             {
-                return Ok(None);
+                continue;
             }
             context.retain(&mut reachable, head.predicate())?;
         }
         if reachable.len() == previous {
             break;
-        }
-    }
-    for predicate in &reachable {
-        if !unique(prepared, predicate, context)? {
-            return Ok(None);
         }
     }
     Ok(Some(reachable))

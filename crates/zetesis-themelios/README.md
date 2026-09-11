@@ -313,7 +313,10 @@ answer sets or replaces original rules.
 Existing structural and flat certificates remain useful precision refinements.
 The flat profile has an unconditional unary assignment, closed complete tuples,
 and empty or one positive closed fact/unbounded-choice condition per tuple.
-Unique unary forwarding shares the refinement. Required symbolic extrema can
+Unique unary forwarding shares the refinement. Qualification belongs to the
+base producer and each forwarding edge independently: observing a filtered or
+multiply produced descendant cannot erase an established base or sibling
+carrier. Such descendants retain their separately covered possible support. Required symbolic extrema can
 exclude numeric weight proposals without changing support or the original
 aggregate equality. Generated fields can use the measures of all complete key
 sets `S` with `R ⊆ S ⊆ P`, where `R` is required and `P` is possible; full tuple
