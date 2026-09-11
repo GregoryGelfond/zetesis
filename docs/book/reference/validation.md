@@ -163,6 +163,7 @@ retains the original and derived source identities. Its complete clingo result
 is the comparison expectation, rather than the original N=8 model count.
 
 ```rust,no_run
+# extern crate zetesis_validation;
 {{#include ../examples/workload.rs:example}}
 ```
 

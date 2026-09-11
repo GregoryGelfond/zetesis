@@ -14,7 +14,7 @@ construction and standalone analysis APIs belong to its own manual.
 | Ordinary solve over an admitted owner | `zetesis_cli::{PreparedInput, Session, SolveConfig}` |
 | All original answers, streamed or completely collected | `Session::enumerate`, `WorldView::collect`, checked `AnswerSet` |
 | Finite relational templates and atoms | `zetesis_core::{Program, Template, Atom, Seed}` |
-| Bounded typed column views and ordered equality selection | `zetesis_core::relation::{Relation, Query, Selection}` |
+| Bounded typed column views and equality selection | `zetesis_core::relation::{Relation, Query, Selection, Mask}` |
 | Explicit complete relational graph | `zetesis_core::GroundProgram::compile` |
 | Normal reduct membership | `zetesis_cpu::{check, check_static, BatchOracle}` |
 | Finite formula construction and reference membership | `zetesis_ferraris::{Theory, Node, Interpretation, check}` |
