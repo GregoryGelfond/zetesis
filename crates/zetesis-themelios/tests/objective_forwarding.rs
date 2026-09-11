@@ -14,12 +14,13 @@ use zetesis_core::Model;
 use zetesis_cpu::Control;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure,
-    FormulaLimits, FormulaResource, ProfileFeature, prepare_formula,
+    AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
+    prepare_formula,
 };
 
 const FIXTURE: &str = include_str!("fixtures/objective-forwarding.jsonl");
 const EXTREMA_REFUSALS: &str = include_str!("fixtures/objective-extrema-refusals.jsonl");
+const RECURSIVE_COUNT: &str = "n(N):-N=#count{1:p(X)}.p(X):-n(X).#minimize{X:p(X)}.";
 
 #[test]
 fn forwarding_preserves_complete_model_cost_records() {
@@ -217,34 +218,34 @@ fn frozen_forwarding_keeps_assignment_equalities() {
 
 #[test]
 fn forwarded_observers_leave_the_original_theory_intact() {
-    let program = "{a}.n(N):-N=#count{1:a}.p(X):-n(X).q(Y):-p(Y).";
-    let ordinary = admit(program, &FormulaLimits::default()).unwrap();
-    let observed = admit(
-        &format!("{program}#minimize{{Y@7:q(Y)}}."),
-        &FormulaLimits::default(),
-    )
-    .unwrap();
-    assert_eq!(ordinary.atoms(), observed.atoms());
-    assert_eq!(ordinary.theory().nodes(), observed.theory().nodes());
-    assert_eq!(ordinary.theory().roots(), observed.theory().roots());
-    assert_eq!(ordinary.formula_origins(), observed.formula_origins());
+    for source in [
+        "{a}.n(N):-N=#count{1:a}.p(X):-n(X).q(Y):-p(Y).#minimize{Y@7:q(Y)}.",
+        RECURSIVE_COUNT,
+    ] {
+        let (program, _) = source.split_once("#minimize").unwrap();
+        let ordinary = admit(program, &FormulaLimits::default()).unwrap();
+        let observed = admit(source, &FormulaLimits::default()).unwrap();
+        assert_eq!(ordinary.atoms(), observed.atoms());
+        assert_eq!(ordinary.theory().nodes(), observed.theory().nodes());
+        assert_eq!(ordinary.theory().roots(), observed.theory().roots());
+        assert_eq!(ordinary.formula_origins(), observed.formula_origins());
+    }
 }
 
 #[test]
-fn recursive_aggregate_generators_keep_located_refusals() {
-    let source = "n(N):-N=#count{1:p(X)}.p(X):-n(X).#minimize{X:p(X)}.";
-    let error = admit(source, &FormulaLimits::default()).unwrap_err();
-    assert!(!error.diagnostics().is_empty());
-    assert!(
-        matches!(
-            error,
-            FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                feature: ProfileFeature::ObjectiveSourceEligibility,
-                ..
-            }))
-        ),
-        "{error}"
-    );
+fn recursive_count_forwarding_has_no_answer_set() {
+    let input = admit(RECURSIVE_COUNT, &FormulaLimits::default()).unwrap();
+    assert_eq!(input.objectives().priorities(), [0]);
+    // With no p, count zero forces n(0) and p(0). With any p, the
+    // unique tuple key has count one, leaving only the unsupported
+    // positive n(1)/p(1) cycle in the reduct. Neither is an answer set.
+    assert_eq!(exhaustive(&input), Records::new());
+}
+
+#[test]
+#[ignore = "requires independently installed clingo"]
+fn recursive_count_forwarding_matches_clingo() {
+    assert_eq!(clingo(RECURSIVE_COUNT), Records::new());
 }
 
 #[test]
