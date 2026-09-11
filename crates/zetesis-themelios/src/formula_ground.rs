@@ -21,7 +21,7 @@ use crate::formula_ir::{
     HeadMeasure, HeadOperand, LiteralIr, Prepared, Projection, RuleIr, value_bytes,
 };
 use crate::formula_support::{self, Counters, Join, Support};
-use crate::grounding_observer::Event;
+use crate::grounding_observer::{Event, Profile};
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
 
 pub(crate) fn ground(
@@ -34,17 +34,69 @@ pub(crate) fn ground(
 ) -> Result<Compiled, FormulaFailure> {
     use crate::GroundingPhase;
 
-    let profile = crate::grounding_observer::Profile::new(observer);
+    let profile = Profile::new(observer);
+    let Instantiation {
+        builder,
+        objectives,
+        objective_origins,
+    } = instantiate(&prepared, limits, budget, location, &profile, count_plan)?;
+    let Emission {
+        atoms,
+        nodes,
+        roots,
+        origins,
+        count_plan,
+    } = builder.finish(&profile)?;
+    let theory = profile.phase(GroundingPhase::TheoryValidation, None, || {
+        Theory::new(atoms.len(), nodes, roots, limits.theory)
+            .map_err(|error| FormulaFailure::Theory { error, location })
+    })?;
+    let count_plan = count_plan.map_or(
+        crate::formula_count_plan::Outcome::NotRequested,
+        |collector| collector.finish(&theory),
+    );
+    Ok(Compiled {
+        count_plan,
+        analysis_basis: prepared.analysis_basis,
+        analysis: prepared.analysis,
+        analyzed: prepared.analyzed,
+        theory,
+        atoms,
+        origins,
+        objectives,
+        objective_origins,
+        objective_declarations: prepared.objective_declarations,
+    })
+}
+
+/// Source-dependent construction owns possible support only while joins use it.
+/// The returned builder owns emitted atoms, not a borrowed support catalog.
+struct Instantiation<'a> {
+    builder: Builder<'a>,
+    objectives: zetesis_objective::ObjectiveProgram,
+    objective_origins: Vec<Vec<Location>>,
+}
+
+fn instantiate<'a>(
+    prepared: &Prepared,
+    limits: &'a FormulaLimits,
+    budget: &'a mut Budget,
+    location: Location,
+    profile: &Profile<'_>,
+    count_plan: Option<crate::formula_count_plan::Request<'_>>,
+) -> Result<Instantiation<'a>, FormulaFailure> {
+    use crate::GroundingPhase;
+
     let mut counters = Counters::observed(profile.work());
     let catalog = profile.phase(GroundingPhase::SupportCompletion, None, || {
-        formula_support::build(&prepared, limits, budget, &mut counters, location)
+        formula_support::build(prepared, limits, budget, &mut counters, location)
     })?;
     let support = profile.phase(GroundingPhase::SupportCompletion, None, || {
         catalog.snapshot(limits, &mut counters, location)
     })?;
     let (objectives, objective_origins) =
         profile.phase(GroundingPhase::ObjectiveActivation, None, || {
-            objectives::prepare(&prepared, &support, limits, budget, &mut counters, location)
+            objectives::prepare(prepared, &support, limits, budget, &mut counters, location)
         })?;
     let mut builder = profile.phase(GroundingPhase::FormulaInitialization, None, || {
         let mut builder = Builder {
@@ -90,35 +142,21 @@ pub(crate) fn ground(
             },
         )?;
     }
-    profile.phase(GroundingPhase::Coherence, None, || builder.coherence())?;
-    profile.phase(GroundingPhase::SupportGuards, None, || {
-        builder.support_guards()
-    })?;
-    let theory = profile.phase(GroundingPhase::TheoryValidation, None, || {
-        Theory::new(
-            builder.atoms.len(),
-            builder.nodes,
-            builder.roots,
-            limits.theory,
-        )
-        .map_err(|error| FormulaFailure::Theory { error, location })
-    })?;
-    let count_plan = builder.count_plan.map_or(
-        crate::formula_count_plan::Outcome::NotRequested,
-        |collector| collector.finish(&theory),
-    );
-    Ok(Compiled {
-        count_plan,
-        analysis_basis: prepared.analysis_basis,
-        analysis: prepared.analysis,
-        analyzed: prepared.analyzed,
-        theory,
-        atoms: builder.atoms,
-        origins: builder.origins,
+    Ok(Instantiation {
+        builder,
         objectives,
         objective_origins,
-        objective_declarations: prepared.objective_declarations.clone(),
     })
+}
+
+/// Only these owned vectors and optional premises survive formula construction.
+/// Validation borrows no interning index, producer table or aggregate cache.
+struct Emission {
+    atoms: Vec<Atom>,
+    nodes: Vec<Node>,
+    roots: Vec<usize>,
+    origins: Vec<Vec<Location>>,
+    count_plan: Option<crate::formula_count_plan::Collector>,
 }
 
 pub(super) struct Builder<'a> {
@@ -161,6 +199,25 @@ impl GroundAggregate {
     }
 }
 impl Builder<'_> {
+    /// Complete the semantic additions before discarding construction indexes.
+    /// Moving the emitted vectors preserves IDs, root order and source origins;
+    /// cumulative budgets are never released with the discarded scratch.
+    fn finish(mut self, profile: &Profile<'_>) -> Result<Emission, FormulaFailure> {
+        use crate::GroundingPhase;
+
+        profile.phase(GroundingPhase::Coherence, None, || self.coherence())?;
+        profile.phase(GroundingPhase::SupportGuards, None, || {
+            self.support_guards()
+        })?;
+        Ok(Emission {
+            atoms: self.atoms,
+            nodes: self.nodes,
+            roots: self.roots,
+            origins: self.origins,
+            count_plan: self.count_plan,
+        })
+    }
+
     // Only the completed atom catalog establishes which opposite tuples can
     // coexist. Reuse its IDs; coherence must create neither atoms nor support.
     fn coherence(&mut self) -> Result<(), FormulaFailure> {

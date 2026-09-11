@@ -5,7 +5,7 @@ use std::cell::{Cell, RefCell};
 use themelios_base::span::Location;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
-    GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork,
+    FormulaResource, GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork,
     admit_formula_with_grounding_observer,
 };
 
@@ -242,6 +242,49 @@ fn node_refusal_retains_attempted_interning() {
     assert_eq!(last.outcome, GroundingOutcome::Failed);
     assert_eq!(last.work.node_lookups, Some(2));
     assert_eq!(last.work.nodes_inserted, Some(1));
+}
+
+fn root_refusal(source: &str, roots: usize, phase: GroundingPhase) {
+    let limits = FormulaLimits {
+        theory: zetesis_ferraris::AdmissionLimits {
+            max_roots: roots,
+            ..zetesis_ferraris::AdmissionLimits::default()
+        },
+        ..FormulaLimits::default()
+    };
+    let observer = Observer::default();
+    let error = compile(source, &limits, Some(&observer)).unwrap_err();
+    assert!(matches!(
+        error,
+        FormulaFailure::Limit {
+            resource: FormulaResource::Roots,
+            observed,
+            limit,
+            ..
+        } if observed == roots as u128 + 1 && limit == roots as u128
+    ));
+    let records = observer.records.borrow();
+    let last = records.last().unwrap();
+    assert_eq!(last.phase, phase);
+    assert_eq!(last.outcome, GroundingOutcome::Failed);
+    assert!(
+        records[..records.len() - 1]
+            .iter()
+            .all(|record| record.outcome == GroundingOutcome::Completed)
+    );
+    assert!(!observer.active.get());
+}
+
+#[test]
+fn coherence_preserves_the_cumulative_root_limit() {
+    // Both source facts consume the allowance before their coherence constraint.
+    root_refusal("p. -p.", 2, GroundingPhase::Coherence);
+}
+
+#[test]
+fn support_guards_preserve_the_cumulative_root_limit() {
+    // A fact consumes the allowance before its necessary-support guard.
+    root_refusal("p.", 1, GroundingPhase::SupportGuards);
 }
 
 #[test]
