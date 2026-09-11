@@ -56,8 +56,8 @@ remain separate; successful and partial reporting values are derived views.
 The refinement obligation is that every projection retains the snapshot's
 conclusions, including absent completion, and cannot feed fabricated conclusions
 back into it. `Outcomes` already distinguishes established membership, complete
-search and delivery. Removing redundant mutable copies does not strengthen that
-theorem into a proof of the concrete Rust projection or writer behavior.
+search and delivery. Removing redundant mutable copies does not turn these laws
+into a proof of the concrete Rust projection or writer behavior.
 
 The [ownership chapter](../architecture/ownership.md) and
 [session example](../rust/sessions.md#reuse-and-identity) connect these obligations

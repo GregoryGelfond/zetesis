@@ -52,8 +52,9 @@ support or performance claim follows from these portable example tests.
 The derived-workload acquisition block uses `no_run`: mdBook checks its types
 without launching solvers. Its Cargo example test separately checks N=4 source
 derivation and identity against the admitted corpus, with no child processes.
-The shared-device example also uses `no_run`: its GPU API is compiled, while
-actual device execution requires physical qualification. GPU support is compiled
+The shared-device example also uses `no_run`: mdBook checks compilation without
+device discovery. Device behavior is checked by the separate physical test
+population. Running the example requires an accessible GPU. GPU support is compiled
 for this dependency set; the other examples select CPU execution explicitly.
 The same files are registered as Cargo examples, so workspace formatting and
 all-target Clippy checks apply to them. The authored-lint inventory includes

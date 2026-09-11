@@ -107,7 +107,7 @@ rule store. Explicit eager grounding retains its compiled graph, including when
 automatic device execution falls back to CPU. General formulas still require
 eager grounding.
 
-The relational scheduler starts on CPU and may attempt GPU execution when a later
+The automatic relational scheduler starts on CPU and may attempt GPU execution when a later
 candidate batch contains at least 32 candidates. This is a provisional scheduling
 heuristic, not a measured crossover. Explicit lazy grounding permits the same
 automatic attempt. An explicit GPU backend prepares its executor during session
