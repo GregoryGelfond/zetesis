@@ -219,3 +219,62 @@ fn circular_equalities_do_not_establish_a_finite_binding() {
         if error.kind() == &ErrorKind::Unsupported(zetesis_themelios::observation::Feature::UnsafeVariable))
     );
 }
+
+#[test]
+fn nested_constructor_patterns_bind_their_subvalues() {
+    assert_eq!(
+        terms("p(f(1,g(2))). #show. #show (X,Y):p(f(X,g(Y)))."),
+        ["(1,2)"]
+    );
+}
+#[test]
+fn tuple_patterns_enforce_repeated_named_slots() {
+    assert_eq!(terms("p((1,1)).p((1,2)). #show. #show X:p((X,X))."), ["1"]);
+}
+#[test]
+fn signed_constructor_patterns_retain_their_sign() {
+    assert_eq!(terms("p(-f(1)).p(f(2)). #show. #show X:p(-f(X))."), ["1"]);
+}
+#[test]
+fn anonymous_nested_patterns_do_not_equate_occurrences() {
+    assert_eq!(terms("p(f(1,2)). #show. #show x:p(f(_,_))."), ["x"]);
+}
+#[test]
+fn arithmetic_atom_arguments_wait_for_their_bindings() {
+    assert_eq!(terms("p(2).q(1). #show. #show X:p(X+1),q(X)."), ["1"]);
+}
+#[test]
+fn constructor_patterns_wait_for_embedded_arithmetic_inputs() {
+    assert_eq!(
+        terms("p(f(1,3)).q(2). #show. #show (X,Y):p(f(X,Y+1)),q(Y)."),
+        ["(1,2)"]
+    );
+}
+#[test]
+fn default_negation_tests_nested_patterns_without_rebinding() {
+    assert_eq!(
+        terms("p(1).p(2).q(f(1)). #show. #show X:p(X),not q(f(X))."),
+        ["2"]
+    );
+}
+#[test]
+fn failed_nested_matches_release_their_partial_bindings() {
+    let input = admit("p(f(1,2)).p(f(3,3)). #show. #show X:p(f(X,X)).");
+    let model = Model::new(input.atoms().iter().cloned());
+    let result = input
+        .metadata()
+        .observations()
+        .evaluate(
+            &model,
+            Limits {
+                max_local_bytes: 16,
+                ..Limits::default()
+            },
+            &Control::default(),
+        )
+        .unwrap();
+    assert_eq!(
+        result.symbols(),
+        &[zetesis_themelios::observation::Symbol::Number(3)]
+    );
+}

@@ -28,6 +28,9 @@ fn eligible(function: AggregateFunction, tuple: &Symbol) -> bool {
         (AggregateFunction::Count, _)
         | (AggregateFunction::Sum, Some(Symbol::Number(_)))
         | (AggregateFunction::Min | AggregateFunction::Max, Some(_)) => true,
+        (AggregateFunction::Min | AggregateFunction::Max, None) => {
+            unreachable!("admission rejects missing extremum measures")
+        }
         _ => false,
     }
 }

@@ -169,6 +169,8 @@ pub enum Feature {
     Body,
     /// Pooled predicate arguments.
     Atom,
+    /// An extremum element lacks its required first tuple component.
+    AggregateMeasure,
     /// A comparison form without a finite checked interpretation.
     Comparison,
     /// A named variable lacks an ordinary positive binding, or an anonymous
@@ -255,6 +257,9 @@ enum Operand {
     Value(Value),
     Variable(usize),
     Any,
+    Function(SymbolSign, Name, Vec<Self>),
+    Tuple(Vec<Self>),
+    Expression(Template),
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Pattern {

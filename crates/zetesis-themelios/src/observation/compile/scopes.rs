@@ -88,6 +88,14 @@ impl Compiler<'_> {
                         for term in element.get().terms() {
                             tuple.push(compiler.template(term, 1)?);
                         }
+                        if tuple.is_empty()
+                            && matches!(
+                                source.function(),
+                                AggregateFunction::Min | AggregateFunction::Max
+                            )
+                        {
+                            return Err(compiler.unsupported(Feature::AggregateMeasure));
+                        }
                         compiler.arity(tuple.len())?;
                         let mut positive = Vec::new();
                         let mut conditions = Vec::new();

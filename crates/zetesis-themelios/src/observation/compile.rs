@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use themelios_base::span::Location;
 use themelios_program::program::{Arguments, BodyElement, LiteralInner, Program, Show, Statement};
 use themelios_program::symbol::{Name, Sign, Symbol};
-use themelios_program::term::{Term, Variable};
+use themelios_program::term::{Term, UnaryOp, Variable};
 
 use super::{
     AdmissionLimits, Binder, Condition, DefaultNegation, Directive, Error, ErrorKind, Feature,
@@ -188,20 +188,59 @@ impl Compiler<'_> {
         }
         Ok(Template::Function(sign, name.clone(), terms))
     }
-    fn operand(&mut self, term: &Term, anonymous: bool) -> Result<Operand, Error> {
-        self.node(1)?;
+    fn operand(&mut self, term: &Term, anonymous: bool, depth: usize) -> Result<Operand, Error> {
+        self.node(depth)?;
         Ok(match term {
             Term::Variable(Variable::Anonymous) if anonymous => Operand::Any,
+            Term::Variable(Variable::Anonymous) => {
+                return Err(self.unsupported(Feature::UnsafeVariable));
+            }
             Term::Variable(variable) => Operand::Variable(self.variable(variable)?),
             Term::Symbolic(symbol) => {
-                let symbol = self.symbol(symbol, 1, true)?;
+                let symbol = self.symbol(symbol, depth, true)?;
                 Operand::Value(
                     crate::structural_value::from_symbol(&symbol)
                         .map_err(|_| self.unsupported(Feature::Comparison))?,
                 )
             }
-            _ => return Err(self.unsupported(Feature::Term)),
+            Term::Function { name, arguments } => {
+                self.operand_function(name, arguments, anonymous, depth, Sign::Positive)?
+            }
+            Term::UnaryOperation {
+                operator: UnaryOp::Negate,
+                argument,
+            } if matches!(argument.as_ref(), Term::Function { .. }) => {
+                let Term::Function { name, arguments } = argument.as_ref() else {
+                    unreachable!()
+                };
+                self.operand_function(name, arguments, anonymous, depth + 1, Sign::Negative)?
+            }
+            Term::Tuple(arguments) => {
+                self.arity(arguments.len())?;
+                let mut values = Vec::new();
+                for argument in arguments {
+                    values.push(self.operand(argument, anonymous, depth + 1)?);
+                }
+                Operand::Tuple(values)
+            }
+            _ => Operand::Expression(self.template(term, depth)?),
         })
+    }
+    fn operand_function(
+        &mut self,
+        name: &Name,
+        arguments: &[Term],
+        anonymous: bool,
+        depth: usize,
+        sign: Sign,
+    ) -> Result<Operand, Error> {
+        self.text(name.as_str())?;
+        self.arity(arguments.len())?;
+        let mut values = Vec::new();
+        for argument in arguments {
+            values.push(self.operand(argument, anonymous, depth + 1)?);
+        }
+        Ok(Operand::Function(sign, name.clone(), values))
     }
     fn pattern(
         &mut self,
@@ -215,17 +254,7 @@ impl Compiler<'_> {
         self.arity(arguments.len())?;
         let mut terms = Vec::new();
         for argument in arguments {
-            if !positive
-                && atom.sign == Sign::Negative
-                && matches!(argument, Term::Variable(Variable::Anonymous))
-            {
-                return Err(self.unsupported(Feature::UnsafeVariable));
-            }
-            let term = self.operand(argument, true)?;
-            if positive && let Operand::Variable(slot) = term {
-                self.safe.insert(slot);
-            }
-            terms.push(term);
+            terms.push(self.operand(argument, positive || atom.sign != Sign::Negative, 1)?);
         }
         let predicate = Predicate::with_sign(
             atom.name.as_str(),
@@ -319,17 +348,57 @@ impl Compiler<'_> {
         }
         Ok(())
     }
+    fn operand_ready(&self, operand: &Operand) -> bool {
+        match operand {
+            Operand::Expression(expression) => self.ready(expression),
+            Operand::Function(_, _, arguments) | Operand::Tuple(arguments) => arguments
+                .iter()
+                .all(|argument| self.operand_ready(argument)),
+            Operand::Value(_) | Operand::Variable(_) | Operand::Any => true,
+        }
+    }
+    fn provided(&mut self, operand: &Operand) {
+        match operand {
+            Operand::Variable(slot) => {
+                self.safe.insert(*slot);
+            }
+            Operand::Function(_, _, arguments) | Operand::Tuple(arguments) => {
+                for argument in arguments {
+                    self.provided(argument);
+                }
+            }
+            _ => {}
+        }
+    }
     fn finish(
         &mut self,
-        positive: Vec<Pattern>,
+        mut positive: Vec<Pattern>,
         mut conditions: Vec<Condition>,
     ) -> Result<Query, Error> {
-        let mut binders: Vec<_> = positive.into_iter().map(Binder::Atom).collect();
-        self.assignments(&mut conditions, &mut binders);
-        if self
-            .variables
-            .values()
-            .any(|slot| !self.safe.contains(slot))
+        let mut binders = Vec::new();
+        loop {
+            if let Some(index) = positive
+                .iter()
+                .position(|pattern| pattern.terms.iter().all(|term| self.operand_ready(term)))
+            {
+                let pattern = positive.remove(index);
+                for term in &pattern.terms {
+                    self.provided(term);
+                }
+                binders.push(Binder::Atom(pattern));
+                continue;
+            }
+            let before = binders.len();
+            self.assignments(&mut conditions, &mut binders);
+            if before == binders.len() {
+                break;
+            }
+        }
+        if !positive.is_empty()
+            || self
+                .variables
+                .values()
+                .any(|slot| !self.safe.contains(slot))
         {
             return Err(self.unsupported(Feature::UnsafeVariable));
         }

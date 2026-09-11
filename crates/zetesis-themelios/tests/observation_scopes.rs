@@ -340,3 +340,23 @@ fn unchanged_scoped_sources_match_fresh_clingo_evidence() {
         );
     }
 }
+
+#[test]
+fn extremum_elements_require_a_measure_at_admission() {
+    for function in ["#min", "#max"] {
+        let result = admit_formula(
+            format!("#show x:{function}{{:}}=0."),
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        );
+        let Err(FormulaFailure::Observation { error }) = result else {
+            panic!("missing extremum measure was admitted")
+        };
+        assert_eq!(
+            error.kind(),
+            &ErrorKind::Unsupported(Feature::AggregateMeasure)
+        );
+        assert!(error.location().is_some());
+    }
+}

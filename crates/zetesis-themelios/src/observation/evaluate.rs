@@ -1,6 +1,7 @@
 //! Model-relative bounded joins. No source carrier or solver is consulted.
 
 mod scopes;
+mod patterns;
 
 use std::cmp::Ordering;
 
@@ -161,9 +162,14 @@ impl Work<'_> {
         if let (Reference::Value(left), Reference::Value(right)) = (left, right) {
             return self.compare(left, right);
         }
-        let mut metric = Metric::default();
-        self.measure_reference(left, 1, &mut metric)?;
-        self.measure_reference(right, 1, &mut metric)?;
+        let mut left_metric = Metric::default();
+        let mut right_metric = Metric::default();
+        self.measure_reference(left, 1, &mut left_metric)?;
+        self.measure_reference(right, 1, &mut right_metric)?;
+        let metric = Metric {
+            nodes: left_metric.nodes + right_metric.nodes,
+            bytes: left_metric.bytes + right_metric.bytes,
+        };
         self.construction_check(metric)?;
         let left = self.copy_reference(left)?;
         let right = self.copy_reference(right)?;
@@ -455,7 +461,9 @@ fn resolve<'a>(operand: &'a Operand, binding: &'a [Option<Bound<'_>>]) -> Option
     match operand {
         Operand::Value(value) => Some(Reference::Value(value)),
         Operand::Variable(slot) => binding[*slot].as_ref().map(Bound::borrow),
-        Operand::Any => None,
+        Operand::Any | Operand::Function(_, _, _) | Operand::Tuple(_) | Operand::Expression(_) => {
+            None
+        }
     }
 }
 fn matches<'a>(
@@ -480,6 +488,8 @@ fn matches<'a>(
             debug_assert!(bind, "only positive patterns bind variables");
             binding[*slot] = Some(Bound::Borrowed(Reference::Value(value)));
             undo.push(*slot);
+        } else if !patterns::matches_value(term, value, binding, undo, bind, work)? {
+            return Ok(false);
         }
     }
     Ok(true)
@@ -506,9 +516,7 @@ fn test_pattern(
     }
     for (term, value) in pattern.terms.iter().zip(atom.values()) {
         work.step(1)?;
-        if let Some(expected) = resolve(term, binding)
-            && work.compare_reference(expected, Reference::Value(value))? != Ordering::Equal
-        {
+        if !patterns::test_value(term, value, binding, work)? {
             return Ok(false);
         }
     }
@@ -659,7 +667,6 @@ fn visit<'a>(
             .map(|value| value.as_ref().map(|value| Bound::Borrowed(value.borrow()))),
     );
     binding.resize_with(query.variables, || None);
-    let mut owned_bytes = 0;
     let result = (|| {
         if query.binders.is_empty() {
             return complete(query, atoms, &mut binding, work, visitor);
@@ -669,7 +676,7 @@ fn visit<'a>(
         let mut undos: Vec<Vec<usize>> = work.reserve(query.binders.len())?;
         for binder in &query.binders {
             let count = match binder {
-                Binder::Atom(pattern) => pattern.terms.len(),
+                Binder::Atom(pattern) => pattern.terms.iter().map(patterns::slots).sum(),
                 Binder::Assign(_, _) => 1,
             };
             undos.push(work.reserve(count)?);
@@ -680,7 +687,6 @@ fn visit<'a>(
             for slot in undos[depth].drain(..) {
                 if let Some(Bound::Owned(_, metric)) = binding[slot].take() {
                     work.local_bytes -= metric.payload();
-                    owned_bytes -= metric.payload();
                 }
             }
             let count = match &query.binders[depth] {
@@ -712,7 +718,6 @@ fn visit<'a>(
                 }
                 Binder::Assign(slot, expression) => {
                     let (value, metric) = work.own(expression, &binding)?;
-                    owned_bytes += metric.payload();
                     binding[*slot] = Some(Bound::Owned(value, metric));
                     undos[depth].push(*slot);
                 }
@@ -729,7 +734,13 @@ fn visit<'a>(
     })();
     // The visitor may retain aggregate keys in its enclosing scope. Release only
     // this query's owned bindings, on success, early termination, and error alike.
-    work.local_bytes -= owned_bytes;
+    work.local_bytes -= binding
+        .iter()
+        .filter_map(|bound| match bound {
+            Some(Bound::Owned(_, metric)) => Some(metric.payload()),
+            _ => None,
+        })
+        .sum::<u128>();
     result
 }
 
