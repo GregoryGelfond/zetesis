@@ -109,7 +109,9 @@ zetesis devices
 
 Automatic selection uses the admitted program profile and available execution
 capabilities. Explicit choices remain useful for reproducible comparisons.
-Normal relational programs support lazy source joins and CPU/Metal closure.
+Normal relational programs default to lazy source joins, including when
+automatic selection moves later batches from CPU to Metal. Explicit eager
+grounding remains available on either backend.
 General formulas use eager source grounding, with host candidate search,
 optional GPU propagation and exact CPU completion of unresolved reduct queries.
 When GPU execution is selected, adapter discovery and initialization happen
@@ -126,9 +128,11 @@ semantic guarantees, scheduling and the work that remains on the host.
 The tight GPU library offers atomic-OR and grouped-word support construction;
 both have physical Metal checks. Atomic remains its default. These are reusable
 membership primitives, and ordinary solving does not automatically select them.
-An experimental typed column view also provides shared CPU/Rayon/GPU equality
-selection with checked row reconstruction. It preserves logical values and row
-identity; ordinary source grounding still uses its existing relation store.
+Eager formula grounding uses typed column snapshots over one possible-atom
+catalog. The same relation library supplies CPU/Rayon/GPU equality-selection
+primitives with checked row reconstruction. It preserves logical values and row
+identity. The eager support consumer currently runs on the host; GPU equality
+selection is a separate library capability.
 The [primitive measurements](crates/zetesis-experiments/README.md) describe the
 operation boundaries and reproducible commands.
 
