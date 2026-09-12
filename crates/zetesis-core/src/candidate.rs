@@ -5,7 +5,9 @@ use std::collections::BTreeSet;
 use std::fmt;
 
 mod selection;
-pub use selection::{SeedSelection, SeedSelectionError, SeedView};
+pub use selection::{
+    GateAtom, GateAtomError, GateAtoms, SeedAtom, SeedSelection, SeedSelectionError, SeedView,
+};
 
 /// A complete candidate represented only by its finite true atoms. Any atom
 /// absent from this exact set is false; candidate construction never expands S.
@@ -105,6 +107,8 @@ pub enum SeedError {
     },
     /// The seed belongs to a separately admitted instance.
     WrongProgram,
+    /// A core-minted position is missing from the graph's complete gate carrier.
+    InvalidGatePosition,
     /// Caller-provided word storage has a different graph width.
     WordCount {
         /// Required complete interpretation words.
@@ -122,6 +126,9 @@ impl fmt::Display for SeedError {
                 write!(f, "candidate atom lies outside the gate carrier: {atom:?}")
             }
             Self::WrongProgram => f.write_str("candidate belongs to a different program instance"),
+            Self::InvalidGatePosition => {
+                f.write_str("candidate gate position violates the complete carrier")
+            }
             Self::WordCount { expected, actual } => {
                 write!(f, "candidate requires {expected} words, received {actual}")
             }

@@ -201,8 +201,9 @@ pub fn check_static(
 
 /// Check an owned or shared selection through the same static reduct checker.
 /// The view borrows its true atoms; no seed payload or tree is materialized.
-/// Packing still resolves each selected atom in the supplied graph, with the
-/// same work charges and program identity check as [`check_static`].
+/// Core-minted entries resolve by checked gate position; manual atoms use
+/// canonical lookup. Both retain the same per-entry work/poll charge and program
+/// identity check as [`check_static`].
 ///
 /// # Errors
 /// Returns the same typed stops as [`check_static`], without partial results.
@@ -223,11 +224,11 @@ pub fn check_static_view(
     };
     let mut frozen = work.words(graph.word_count())?;
     let mut closure = work.words(graph.word_count())?;
-    for atom in seed.atoms() {
+    for atom in seed.entries() {
         work.tick()?;
         insert(
             &mut frozen,
-            graph.atom_id(atom).ok_or(Stop::InvalidProgram)?,
+            atom.resolve_in(graph).map_err(|_| Stop::InvalidProgram)?,
         );
     }
     let mut consequences = Vec::new();

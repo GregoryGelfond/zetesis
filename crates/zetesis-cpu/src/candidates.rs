@@ -2,8 +2,9 @@
 
 use std::iter::FusedIterator;
 use std::sync::Arc;
-
-use zetesis_core::{Atom, AtomIter, Program, Seed, SeedSelection, SeedSelectionError};
+use zetesis_core::{
+    GateAtom, GateAtomError, GateAtoms, Program, Seed, SeedSelection, SeedSelectionError,
+};
 
 use crate::oracle::restrictions::{Conflict, Restrictions};
 use crate::{Control, Stop};
@@ -100,8 +101,8 @@ pub enum CandidateTermination {
 /// carrier and selected-handle vectors use typed fallible reservation.
 pub struct Candidates<'a> {
     program: &'a Program,
-    carrier: AtomIter<'a>,
-    atoms: Vec<Arc<Atom>>,
+    carrier: GateAtoms<'a>,
+    atoms: Vec<Arc<GateAtom>>,
     bits: Vec<bool>,
     limits: CandidateLimits,
     control: Control,
@@ -118,7 +119,7 @@ impl<'a> Candidates<'a> {
     pub fn new(program: &'a Program, limits: CandidateLimits, control: Control) -> Self {
         Self {
             program,
-            carrier: program.gate_atoms(),
+            carrier: program.indexed_gate_atoms(),
             atoms: Vec::new(),
             bits: Vec::new(),
             limits,
@@ -207,17 +208,19 @@ impl<'a> Candidates<'a> {
         if self.emitted >= self.limits.max_candidates {
             return Err(Stop::CandidateLimit);
         }
-        let seed = SeedSelection::new(
+        let seed = SeedSelection::from_gate_atoms(
             self.program,
             self.atoms
                 .iter()
                 .zip(&self.bits)
                 .filter(|(_, selected)| **selected)
-                .map(|(atom, _)| Arc::clone(atom)),
+                .map(|(atom, _)| atom.clone()),
         )
         .map_err(|error| match error {
             SeedSelectionError::Allocation => Stop::Allocation,
-            SeedSelectionError::OutsideCarrier { .. } => Stop::InvalidProgram,
+            SeedSelectionError::OutsideCarrier { .. } | SeedSelectionError::WrongProgram => {
+                Stop::InvalidProgram
+            }
         })?;
         Ok(Some(seed))
     }
@@ -306,7 +309,10 @@ impl<'a> Candidates<'a> {
         let Some(atom) = self.carrier.next() else {
             return Ok(false);
         };
-        let atom = atom.map_err(|_| Stop::Allocation)?;
+        let atom = atom.map_err(|error| match error {
+            GateAtomError::Carrier(_) => Stop::Allocation,
+            GateAtomError::OrdinalOverflow => Stop::CarrierLimit,
+        })?;
         if self.atoms.len() >= self.limits.max_carrier_atoms {
             return Err(Stop::CarrierLimit);
         }

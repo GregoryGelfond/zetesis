@@ -2,8 +2,9 @@
 
 use super::{Relations, Work, source::copy_atom, visit};
 use crate::{CandidateRestrictionLimits, Control, Stop};
+
 use std::sync::Arc;
-use zetesis_core::{Atom, AtomPattern, Model, Program, Template, Term};
+use zetesis_core::{Atom, AtomPattern, GateAtom, Model, Program, Template, Term};
 
 pub(crate) struct Restrictions {
     forbidden: Vec<Vec<Atom>>,
@@ -44,7 +45,7 @@ impl Restrictions {
 
     pub(crate) fn conflict(
         &self,
-        atoms: &[Arc<Atom>],
+        atoms: &[Arc<GateAtom>],
         bits: &[bool],
         max_work: u64,
         control: &Control,
@@ -56,7 +57,7 @@ impl Restrictions {
 
     fn find_conflict(
         &self,
-        atoms: &[Arc<Atom>],
+        atoms: &[Arc<GateAtom>],
         bits: &[bool],
         work: &mut Work<'_>,
     ) -> Result<Option<Conflict>, Stop> {
@@ -83,7 +84,7 @@ impl Restrictions {
 
 fn selected_index(
     premise: &Atom,
-    atoms: &[Arc<Atom>],
+    atoms: &[Arc<GateAtom>],
     bits: &[bool],
     work: &mut Work<'_>,
 ) -> Result<Option<usize>, Stop> {
@@ -92,8 +93,8 @@ fn selected_index(
     while start < end {
         let middle = start + (end - start) / 2;
         charge_atom(premise, work)?;
-        charge_atom(&atoms[middle], work)?;
-        match atoms[middle].as_ref().cmp(premise) {
+        charge_atom(atoms[middle].atom(), work)?;
+        match atoms[middle].atom().cmp(premise) {
             std::cmp::Ordering::Less => start = middle + 1,
             std::cmp::Ordering::Greater => end = middle,
             std::cmp::Ordering::Equal => return Ok(bits[middle].then_some(middle)),

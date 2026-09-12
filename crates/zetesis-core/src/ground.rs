@@ -280,14 +280,15 @@ impl GroundProgram {
     /// Pack a borrowed seed into caller-owned, exact-width storage. On success
     /// every output word is replaced, including zero complement and tail bits.
     /// No input tree, payload copy or temporary word vector is constructed.
-    /// Each true atom is resolved in this graph's canonical carrier; this costs
-    /// one binary lookup per selected atom plus initialization of all words.
+    /// Core-minted entries resolve by gate position; manual entries use canonical
+    /// binary lookup. Both initialize all output words and set each selected bit.
     ///
     /// # Errors
     /// Refuses foreign program identity, then a wrong output word count, before
     /// changing output. Equal source syntax admitted separately is foreign.
-    /// An atom absent from the graph reports [`SeedError::OutsideCarrier`]; this
-    /// violates the admitted complete-carrier invariant and may leave partial
+    /// An atom absent from the graph reports [`SeedError::OutsideCarrier`]; a
+    /// missing indexed position reports [`SeedError::InvalidGatePosition`]. Both
+    /// violate the admitted complete-carrier invariant and may leave partial
     /// output, which must not be used as a packed candidate.
     pub fn seed_words_into(&self, seed: SeedView<'_>, words: &mut [u32]) -> Result<(), SeedError> {
         if !self.program.same_instance(seed.program()) {
@@ -300,10 +301,8 @@ impl GroundProgram {
             });
         }
         words.fill(0);
-        for atom in seed.atoms() {
-            let Some(id) = self.atom_id(atom) else {
-                return Err(SeedError::OutsideCarrier { atom: atom.clone() });
-            };
+        for atom in seed.entries() {
+            let id = atom.resolve_in(self)?;
             let index = id as usize;
             words[index / WORD_BITS] |= 1 << (index % WORD_BITS);
         }

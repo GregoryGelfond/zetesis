@@ -150,3 +150,39 @@ fn carrier_refusal_is_shared_after_the_first_empty_candidate() {
         Some(CandidateTermination::Stopped(Stop::CarrierLimit))
     );
 }
+
+#[test]
+fn discovered_positions_preserve_static_checks_across_batches() {
+    use zetesis_core::{GroundProgram, StaticLimits};
+    use zetesis_cpu::{Limits, check_static, check_static_view};
+    let program = program();
+    let graph = GroundProgram::compile(&program, StaticLimits::default()).unwrap();
+    let mut candidates = candidates(&program, CandidateLimits::default());
+    let mut retained = Vec::new();
+    while let Some(selection) = candidates.next_selection() {
+        retained.push(selection.unwrap());
+    }
+    assert_eq!(retained.len(), 6);
+    drop(candidates);
+    for selection in retained.iter().rev().chain(&retained) {
+        let owned = selection.to_seed();
+        let reference =
+            check_static(&graph, &owned, Limits::default(), &Control::default()).unwrap();
+        let actual = check_static_view(
+            &graph,
+            selection.view(),
+            Limits::default(),
+            &Control::default(),
+        )
+        .unwrap();
+        assert!(actual.accepted());
+        assert_eq!(
+            graph
+                .model_from_words(actual.closure_words())
+                .unwrap()
+                .atoms(),
+            owned.atoms()
+        );
+        assert_eq!(actual.statistics(), reference.statistics());
+    }
+}

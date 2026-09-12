@@ -27,6 +27,31 @@ and budgets; they create neither a seed tree nor a temporary view vector.
 The owned-seed methods delegate through views. Derived closures retain their
 existing output allocation and ownership contracts.
 
+`Candidates::next_selection` retains opaque gate atoms minted in canonical
+carrier order. The complete graph's gate-ID list has that same order, so a
+selected token resolves by one checked array lookup. Its program, position and
+payload cannot be changed separately. The candidate stream checks its carrier
+bound and reserves handle storage before sharing each newly discovered token.
+Selections sort and deduplicate these positions with integer comparisons;
+this still costs `O(n log n)` comparisons for `n` selected handles. Manually
+supplied `Arc<Atom>` selections retain typed atom sorting and explicit symbolic
+lookup. Both use one entry representation and the same checker, with one work
+charge and control poll before each static resolution.
+Each discovered token additionally retains a program handle and one position;
+the selected-entry variant also occupies more metadata than a bare Arc handle.
+The change avoids repeated payload copies and lookup, without promising fewer
+bytes for every small candidate.
+
+`GroundProgram::seed_words_into` writes a view directly into exact-width
+caller storage. Identity and width errors leave that storage unchanged; successful
+packing clears every complement and tail bit. It performs no implicit mapping
+registration or cache allocation. Graphs compiled from the same immutable
+program share canonical positions; independently admitted equal source remains
+foreign. The finite ordering law is
+[`GatePositions.retained_position_exact`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/GatePositions.lean),
+with Rust's carrier construction, token ownership and machine bounds remaining
+explicit correspondence obligations.
+
 Calling `Check::into_stable_interpretation` on an accepted native check transfers
 its closure into an instance-bound receipt without copying atoms. Rejection
 returns the original check intact. The receipt's `into_interpretation` explicitly discards its program
