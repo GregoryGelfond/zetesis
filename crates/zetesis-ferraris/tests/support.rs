@@ -237,3 +237,103 @@ fn support_preserves_every_small_reduct_answer_set() {
         }
     }
 }
+
+#[test]
+fn atomic_choices_decline_complete_support_extraction() {
+    let original = theory(
+        2,
+        vec![
+            Node::Atom(0),
+            Node::Atom(1),
+            Node::False,
+            Node::Or(0, 1),
+            Node::Implies(0, 2),
+            Node::Or(0, 4),
+        ],
+        vec![3, 5],
+    );
+    assert!(
+        support_restriction(&original, limits(), &Control::default())
+            .result
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn support_admission_dimensions_are_inclusive() {
+    use zetesis_ferraris::AdmissionError;
+    let original = theory(
+        2,
+        vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)],
+        vec![2],
+    );
+    let result = restrictions(&original);
+    let exact = AdmissionLimits {
+        max_atoms: 2,
+        max_nodes: result.nodes().len(),
+        max_roots: 2,
+    };
+    assert!(
+        support_restriction(
+            &original,
+            SupportLimits {
+                admission: exact,
+                ..limits()
+            },
+            &Control::default()
+        )
+        .result
+        .unwrap()
+        .is_some()
+    );
+    for admission in [
+        AdmissionLimits {
+            max_atoms: 1,
+            ..exact
+        },
+        AdmissionLimits {
+            max_nodes: exact.max_nodes - 1,
+            ..exact
+        },
+        AdmissionLimits {
+            max_roots: 1,
+            ..exact
+        },
+    ] {
+        assert!(matches!(
+            support_restriction(
+                &original,
+                SupportLimits {
+                    admission,
+                    ..limits()
+                },
+                &Control::default()
+            )
+            .result,
+            Err(SupportError::Admission(AdmissionError::Limit))
+        ));
+    }
+}
+
+#[test]
+fn shared_head_dags_do_not_expand_into_occurrence_trees() {
+    let mut nodes = vec![Node::Atom(0)];
+    for _ in 0..128 {
+        let previous = nodes.len() - 1;
+        nodes.push(Node::Or(previous, previous));
+    }
+    let original = theory(1, nodes, vec![128]);
+    let result = support_restriction(
+        &original,
+        SupportLimits {
+            max_work: 1_000,
+            ..limits()
+        },
+        &Control::default(),
+    )
+    .result
+    .unwrap()
+    .unwrap();
+    assert!(satisfies(&result, 1));
+}
