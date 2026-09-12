@@ -2,6 +2,7 @@
 
 use std::cmp::Ordering;
 
+use super::tests::reported_static_admission;
 use super::{GpuBackendPreference, GpuInfo, GpuSelection, HostPlatform, choose, compare_info};
 use crate::{GpuErrorKind, GpuOptions};
 
@@ -78,6 +79,7 @@ fn each_reported_identity_field_breaks_ties_independently_of_input_order() {
                 GpuOptions::default(),
                 GpuSelection::default(),
                 HostPlatform::Other,
+                reported_static_admission,
             )
             .unwrap();
             assert_eq!(inventory[selected], &first);
@@ -108,7 +110,8 @@ fn software_categories_have_stable_order_only_when_explicitly_admitted() {
             reports.iter().enumerate(),
             GpuOptions::default(),
             GpuSelection::default(),
-            HostPlatform::Other
+            HostPlatform::Other,
+            reported_static_admission,
         )
         .unwrap_err()
         .kind(),
@@ -119,7 +122,8 @@ fn software_categories_have_stable_order_only_when_explicitly_admitted() {
             reports.iter().enumerate(),
             GpuOptions { require_gpu: false },
             GpuSelection::default(),
-            HostPlatform::Other
+            HostPlatform::Other,
+            reported_static_admission,
         )
         .unwrap(),
         0

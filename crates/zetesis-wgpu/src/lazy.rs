@@ -112,7 +112,7 @@ impl GpuLazyOracle {
             pipeline_label: "zetesis lazy consequence pipeline",
             shader: Cow::Borrowed(SHADER),
             entry_point: "consequence",
-            validate_limits: crate::check_adapter_limits,
+            validate_limits: check_limits,
         }
     }
 
@@ -394,6 +394,42 @@ impl LazyGpuStatistics {
         })
     }
 }
+
+fn check_limits(limits: &wgpu::Limits) -> Result<(), GpuError> {
+    // The immutable-round shader has no workgroup variables. Its five storage
+    // buffers and uniform are independent of the static closure kernel's scratch.
+    for (name, required, available) in [
+        (
+            "workgroup invocations",
+            64,
+            limits.max_compute_invocations_per_workgroup,
+        ),
+        ("workgroup width", 64, limits.max_compute_workgroup_size_x),
+        (
+            "storage bindings",
+            5,
+            limits.max_storage_buffers_per_shader_stage,
+        ),
+        (
+            "uniform bindings",
+            1,
+            limits.max_uniform_buffers_per_shader_stage,
+        ),
+        ("bindings per group", 6, limits.max_bindings_per_bind_group),
+    ] {
+        if available < required {
+            return Err(GpuError::new(
+                GpuErrorKind::Capacity,
+                format!("lazy {name}: need {required}, device provides {available}"),
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "../tests/lazy/capabilities.rs"]
+mod capability_tests;
 
 #[cfg(test)]
 mod tests {

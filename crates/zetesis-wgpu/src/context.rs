@@ -93,9 +93,8 @@ impl GpuContext {
         label: &'static str,
         validate: fn(&wgpu::Limits) -> Result<(), GpuError>,
     ) -> Result<Self, GpuError> {
-        let (adapter, info) = selection::select_adapter(options, selection).await?;
+        let (adapter, info) = selection::select_adapter(options, selection, validate).await?;
         let limits = adapter.limits();
-        validate(&limits)?;
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some(label),

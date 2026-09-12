@@ -94,13 +94,9 @@ impl GpuInfo {
     }
 
     fn from_report(raw: wgpu::AdapterInfo, limits: &wgpu::Limits, compute: bool) -> Self {
-        let capability_issue = if compute {
-            check_adapter_limits(limits)
-                .err()
-                .map(|error| error.to_string())
-        } else {
-            Some("the adapter does not advertise compute shaders".to_owned())
-        };
+        let capability_issue = check_capabilities(compute, limits, check_adapter_limits)
+            .err()
+            .map(|error| error.to_string());
         Self {
             raw,
             capability_issue,
@@ -265,6 +261,7 @@ struct Candidate {
 pub(crate) async fn select_adapter(
     options: GpuOptions,
     selection: GpuSelection,
+    validate: fn(&wgpu::Limits) -> Result<(), GpuError>,
 ) -> Result<(wgpu::Adapter, GpuInfo), GpuError> {
     let mut candidates = enumerate(selection.backend).await?;
     let index = choose(
@@ -275,9 +272,34 @@ pub(crate) async fn select_adapter(
         options,
         selection,
         HostPlatform::current(),
+        |index, _| {
+            let adapter = &candidates[index].adapter;
+            check_capabilities(
+                adapter
+                    .get_downlevel_capabilities()
+                    .flags
+                    .contains(wgpu::DownlevelFlags::COMPUTE_SHADERS),
+                &adapter.limits(),
+                validate,
+            )
+        },
     )?;
     let candidate = candidates.swap_remove(index);
     Ok((candidate.adapter, candidate.info))
+}
+
+fn check_capabilities(
+    compute: bool,
+    limits: &wgpu::Limits,
+    validate: fn(&wgpu::Limits) -> Result<(), GpuError>,
+) -> Result<(), GpuError> {
+    if !compute {
+        return Err(GpuError::new(
+            GpuErrorKind::Capacity,
+            "the adapter does not advertise compute shaders",
+        ));
+    }
+    validate(limits)
 }
 
 async fn enumerate(preference: GpuBackendPreference) -> Result<Vec<Candidate>, GpuError> {
@@ -321,6 +343,7 @@ fn choose<'a>(
     options: GpuOptions,
     selection: GpuSelection,
     platform: HostPlatform,
+    mut validate: impl FnMut(usize, &GpuInfo) -> Result<(), GpuError>,
 ) -> Result<usize, GpuError> {
     let mut seen = false;
     let mut matched = false;
@@ -332,8 +355,11 @@ fn choose<'a>(
             continue;
         }
         matched = true;
-        if let Some(reason) = info.capability_issue() {
-            issue.get_or_insert(reason);
+        if let Err(error) = validate(index, info) {
+            if error.kind() != GpuErrorKind::Capacity {
+                return Err(error);
+            }
+            issue.get_or_insert(error);
             continue;
         }
         if best.is_none_or(|(_, current)| compare_info(info, current, platform).is_lt()) {
@@ -352,8 +378,11 @@ fn choose<'a>(
         (
             GpuErrorKind::Capacity,
             format!(
-                "matching adapters do not satisfy the static oracle profile: {}",
-                issue.unwrap_or("unsupported capabilities"),
+                "matching adapters do not satisfy the requested compute profile: {}",
+                issue.map_or_else(
+                    || "unsupported capabilities".to_owned(),
+                    |error| error.to_string()
+                ),
             ),
         )
     } else {
@@ -468,7 +497,13 @@ mod tests {
         GpuBackendPreference, GpuInfo, GpuSelection, HostPlatform, NVIDIA_VENDOR_ID, choose,
         requested_backends,
     };
-    use crate::{GpuErrorKind, GpuOptions};
+    use crate::{GpuError, GpuErrorKind, GpuOptions};
+
+    pub(super) fn reported_static_admission(_: usize, info: &GpuInfo) -> Result<(), GpuError> {
+        info.capability_issue().map_or(Ok(()), |reason| {
+            Err(GpuError::new(GpuErrorKind::Capacity, reason))
+        })
+    }
 
     fn report(name: &str, backend: wgpu::Backend, kind: wgpu::DeviceType, vendor: u32) -> GpuInfo {
         let mut raw = wgpu::AdapterInfo::new(kind, backend);
@@ -483,6 +518,7 @@ mod tests {
             GpuOptions::default(),
             selection,
             platform,
+            reported_static_admission,
         )
         .expect("compatible physical adapter")
     }
@@ -605,6 +641,7 @@ mod tests {
                     GpuOptions::default(),
                     selection,
                     HostPlatform::Other,
+                    reported_static_admission,
                 )
                 .unwrap_err()
                 .kind(),
@@ -616,6 +653,7 @@ mod tests {
                     GpuOptions { require_gpu: false },
                     selection,
                     HostPlatform::Other,
+                    reported_static_admission,
                 )
                 .unwrap(),
                 0
@@ -645,6 +683,7 @@ mod tests {
                 GpuOptions { require_gpu: false },
                 GpuSelection::default(),
                 HostPlatform::Apple,
+                reported_static_admission,
             )
             .unwrap(),
             1
@@ -682,6 +721,7 @@ mod tests {
                 GpuOptions::default(),
                 contradictory,
                 HostPlatform::Apple,
+                reported_static_admission,
             )
             .unwrap_err()
             .kind(),
@@ -709,6 +749,7 @@ mod tests {
                     GpuOptions { require_gpu: false },
                     GpuSelection::default(),
                     HostPlatform::Other,
+                    reported_static_admission,
                 )
                 .unwrap_err()
                 .kind(),
@@ -725,6 +766,7 @@ mod tests {
                 GpuOptions::default(),
                 GpuSelection::default(),
                 HostPlatform::Other,
+                reported_static_admission,
             )
             .unwrap_err()
             .kind(),
@@ -747,6 +789,7 @@ mod tests {
                     GpuOptions::default(),
                     GpuSelection::default(),
                     HostPlatform::Other,
+                    reported_static_admission,
                 )
                 .unwrap_err()
                 .kind(),
@@ -792,3 +835,7 @@ mod metadata_tests;
 #[cfg(test)]
 #[path = "../tests/support/context_selection.rs"]
 mod context_policy_tests;
+
+#[cfg(test)]
+#[path = "../tests/support/primitive_selection.rs"]
+mod primitive_tests;
