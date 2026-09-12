@@ -5,14 +5,19 @@ use std::io::Write;
 
 use zetesis_cpu::Control;
 use zetesis_themelios::{
-    AdmissionOptions, BundleAdmissionError, BundleAdmissionOptions, ExpansionLimits, SourceBundle,
-    admit_bundle_extended, admit_extended,
+    AdmissionOptions, BundleAdmissionError, BundleAdmissionOptions, ExpansionLimits, ParsedSource,
+    SourceBundle, SourceFailure, admit_bundle_extended,
 };
 
 use crate::SolvePhase;
 use crate::failure::Progress;
 use crate::phase_timing::Recorder;
 use crate::{Options, Oracle, PublicationFailure, RunError};
+
+enum Input {
+    Text(String),
+    Parsed(ParsedSource),
+}
 
 pub(crate) fn source(
     source: String,
@@ -34,13 +39,15 @@ pub(crate) fn source(
         ..Default::default()
     };
     let source = if options.oracle == Oracle::Countermodel {
-        source
+        Input::Text(source)
     } else {
-        // A retry never duplicates an input already beyond its source ceiling.
-        let retry = (options.oracle == Oracle::Auto && source.len() <= options.max_source_bytes)
-            .then(|| source.clone());
+        let source = phases
+            .measure(SolvePhase::AdmissionMaterialization, || {
+                ParsedSource::new(source, admission)
+            })
+            .map_err(|error| RunError::Expansion(error.into()))?;
         match phases.measure(SolvePhase::AdmissionMaterialization, || {
-            admit_extended(source, admission, expansion_limits(options))
+            source.admit_extended(expansion_limits(options))
         }) {
             Ok(admitted) => {
                 diagnostics.metadata(Label::Oracle, format_args!("reduct closure"))?;
@@ -54,10 +61,12 @@ pub(crate) fn source(
                 )
                 .map_err(|failure| source_failure(failure, "<input>", admitted.source()));
             }
-            Err(error) if retry.is_some() && error.needs_formula_admission() => {
-                retry.expect("retry guard established an owned source")
+            Err(error)
+                if options.oracle == Oracle::Auto && error.error().needs_formula_admission() =>
+            {
+                Input::Parsed(error.into_source())
             }
-            Err(error) => return Err(RunError::Expansion(error).into()),
+            Err(error) => return Err(RunError::Expansion(error.into_error()).into()),
         }
     };
     crate::SolveConfig::from(options).validate_formula()?;
@@ -69,15 +78,18 @@ pub(crate) fn source(
     let observer = phases.grounding_observer();
     let admitted = phases
         .measure(SolvePhase::AdmissionMaterialization, || {
-            zetesis_themelios::admit_formula_with_grounding_observer(
-                source,
-                admission,
-                expansion_limits(options),
-                formula_limits(options),
-                observer
-                    .as_ref()
-                    .map(|observer| observer as &dyn zetesis_themelios::GroundingObserver),
-            )
+            let parsed = match source {
+                Input::Text(text) => ParsedSource::new(text, admission)?,
+                Input::Parsed(parsed) => parsed,
+            };
+            parsed
+                .prepare_formula(expansion_limits(options), formula_limits(options))
+                .map_err(SourceFailure::into_error)?
+                .ground_with_observer(
+                    observer
+                        .as_ref()
+                        .map(|observer| observer as &dyn zetesis_themelios::GroundingObserver),
+                )
         })
         .map_err(RunError::FormulaAdmission)?;
     crate::publication::solve(

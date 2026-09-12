@@ -2,8 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use themelios_base::source::Source;
-use themelios_base::span::{ByteOffset, Location, Span};
+use themelios_base::span::Location;
 use themelios_program::program::{Const, Program as SourceProgram, Statement};
 use themelios_program::provenance::{Origin, TransformTag, WithProvenance};
 use themelios_program::raise::raise;
@@ -11,8 +10,7 @@ use themelios_program::symbol::{Sign, Symbol};
 use themelios_program::term::{EvalError, Term, TermParts};
 use themelios_program::transform::{Rewrite, rewrite};
 use themelios_syntax::ast::{self, AstToken};
-use themelios_syntax::dialect::Dialect;
-use themelios_syntax::parse::{Parse, parse};
+use themelios_syntax::parse::Parse;
 use themelios_syntax::tree::AstNode;
 use zetesis_core::{AdmissionLimits, Program};
 
@@ -20,8 +18,8 @@ use crate::diagnostic::unsupported;
 use crate::expansion::{Budget, check};
 use crate::{
     AdmissionFailure, AdmissionOptions, Admitted, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, InputLimit, ProfileFeature, SourceMetadata, compile, fact_expansion,
-    metadata, profile,
+    ExpansionResource, ParsedSource, ProfileFeature, SourceFailure, SourceMetadata, compile,
+    fact_expansion, metadata, profile,
 };
 
 /// Admit a bounded extension of S0: unannotated acyclic scalar `#const`
@@ -49,49 +47,55 @@ pub fn admit_extended(
     options: AdmissionOptions,
     limits: ExpansionLimits,
 ) -> Result<Admitted, ExpansionFailure> {
-    let start = Location {
-        source: options.source_id,
-        span: Span::empty(ByteOffset::new(0)),
-    };
-    if text.len() > options.max_source_bytes {
-        return Err(AdmissionFailure::Limit {
-            resource: InputLimit::SourceBytes,
-            limit: options.max_source_bytes,
-            observed: text.len(),
-            location: start,
-        }
-        .into());
+    ParsedSource::new(text, options)?
+        .admit_extended(limits)
+        .map_err(SourceFailure::into_error)
+}
+
+struct Compilation {
+    program: Program,
+    template_origins: Vec<Vec<Location>>,
+    metadata: SourceMetadata,
+}
+
+pub(crate) fn admit_parsed(
+    source: ParsedSource,
+    limits: ExpansionLimits,
+) -> Result<Admitted, SourceFailure<ExpansionFailure>> {
+    match compile_parsed(&source, limits) {
+        Ok(compiled) => Ok(Admitted {
+            program: compiled.program,
+            source: source.into_source(),
+            template_origins: compiled.template_origins,
+            metadata: compiled.metadata,
+        }),
+        Err(error) => Err(SourceFailure::new(source, error)),
     }
-    let source =
-        Source::new(options.source_id, text).map_err(|error| AdmissionFailure::Source {
-            error,
-            location: start,
-        })?;
-    let parsed = parse(&source, Dialect::Clingo);
-    if !parsed.diagnostics().is_empty() {
-        let diagnostics = parsed.diagnostics().to_vec();
-        return Err(
-            AdmissionFailure::Syntax(crate::SyntaxFailure::new(source, diagnostics)).into(),
-        );
-    }
-    profile::check_extended(&parsed, options)?;
-    check_definitions(&parsed, limits)?;
-    metadata::check_count(&parsed, limits, &mut 0)?;
-    let raised = raise(&parsed);
+}
+
+fn compile_parsed(
+    source: &ParsedSource,
+    limits: ExpansionLimits,
+) -> Result<Compilation, ExpansionFailure> {
+    let parsed = source.parsed();
+    let options = source.options();
+    profile::check_extended(parsed, options)?;
+    check_definitions(parsed, limits)?;
+    metadata::check_count(parsed, limits, &mut 0)?;
+    let raised = raise(parsed);
     if !raised.diagnostics().is_empty() {
         return Err(AdmissionFailure::Raise(raised.diagnostics().to_vec()).into());
     }
     let mut source_metadata = SourceMetadata::default();
     metadata::collect(raised.program(), &mut source_metadata)?;
     let location = Location {
-        source: source.id(),
-        span: source.span(),
+        source: source.source().id(),
+        span: source.source().span(),
     };
     let (program, template_origins) =
         compile_owned(raised.program(), options.core_limits, limits, location)?;
-    Ok(Admitted {
+    Ok(Compilation {
         program,
-        source,
         template_origins,
         metadata: source_metadata.finish(),
     })

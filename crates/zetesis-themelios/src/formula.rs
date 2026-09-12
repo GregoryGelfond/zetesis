@@ -5,17 +5,15 @@ use std::fmt;
 
 use themelios_base::diagnostic::Diagnostic;
 use themelios_base::source::Source;
-use themelios_base::span::{ByteOffset, Location, Span};
+use themelios_base::span::Location;
 use themelios_program::program::{Program as SourceProgram, Statement};
-use themelios_syntax::dialect::Dialect;
-use themelios_syntax::parse::parse;
 use zetesis_core::Atom;
 use zetesis_ferraris::Theory;
 
 use crate::{
     AdmissionFailure, AdmissionOptions, BundleAdmissionError, BundleAdmissionOptions,
-    ExpansionFailure, ExpansionLimits, InputLimit, SourceBundle, SourceMetadata, bundle_admission,
-    extended, formula_ir, metadata, profile,
+    ExpansionFailure, ExpansionLimits, ParsedSource, SourceBundle, SourceFailure, SourceMetadata,
+    bundle_admission, extended, formula_ir, metadata, profile,
 };
 
 mod preparation;
@@ -796,54 +794,56 @@ pub fn prepare_formula(
     expansion: ExpansionLimits,
     limits: FormulaLimits,
 ) -> Result<PreparedFormula, FormulaFailure> {
-    let start = Location {
-        source: options.source_id,
-        span: Span::empty(ByteOffset::new(0)),
-    };
-    if text.len() > options.max_source_bytes {
-        return Err(AdmissionFailure::Limit {
-            resource: InputLimit::SourceBytes,
-            limit: options.max_source_bytes,
-            observed: text.len(),
-            location: start,
-        }
-        .into());
+    ParsedSource::new(text, options)?
+        .prepare_formula(expansion, limits)
+        .map_err(SourceFailure::into_error)
+}
+
+pub(crate) fn prepare_parsed(
+    source: ParsedSource,
+    expansion: ExpansionLimits,
+    limits: &FormulaLimits,
+) -> Result<PreparedFormula, SourceFailure<FormulaFailure>> {
+    match prepare_source(&source, expansion, limits) {
+        Ok((preparation, metadata)) => Ok(PreparedFormula::new(
+            preparation,
+            source.into_source(),
+            metadata,
+        )),
+        Err(error) => Err(SourceFailure::new(source, error)),
     }
-    let source =
-        Source::new(options.source_id, text).map_err(|error| AdmissionFailure::Source {
-            error,
-            location: start,
-        })?;
-    let parsed = parse(&source, Dialect::Clingo);
-    if !parsed.diagnostics().is_empty() {
-        let diagnostics = parsed.diagnostics().to_vec();
-        return Err(
-            AdmissionFailure::Syntax(crate::SyntaxFailure::new(source, diagnostics)).into(),
-        );
-    }
-    profile::check_formula(&parsed, options, false)?;
-    extended::check_definitions_in(&parsed, expansion, &mut BTreeMap::new())?;
-    metadata::check_count(&parsed, expansion, &mut 0)?;
-    formula_ir::check_objectives(&parsed, &limits, &mut 0)?;
+}
+
+fn prepare_source(
+    source: &ParsedSource,
+    expansion: ExpansionLimits,
+    limits: &FormulaLimits,
+) -> Result<(Preparation, SourceMetadata), FormulaFailure> {
+    let parsed = source.parsed();
+    let options = source.options();
+    profile::check_formula(parsed, options, false)?;
+    extended::check_definitions_in(parsed, expansion, &mut BTreeMap::new())?;
+    metadata::check_count(parsed, expansion, &mut 0)?;
+    formula_ir::check_objectives(parsed, limits, &mut 0)?;
     let mut metadata = SourceMetadata::default();
     let mut budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates);
     let mut choices = crate::formula_choice_source::Catalog::default();
     let raised =
-        crate::formula_choice_source::raise(&parsed, &mut metadata, &mut budget, &mut choices)?;
+        crate::formula_choice_source::raise(parsed, &mut metadata, &mut budget, &mut choices)?;
     let location = Location {
-        source: source.id(),
-        span: source.span(),
+        source: source.source().id(),
+        span: source.source().span(),
     };
     let preparation = prepare(
         &raised,
         &choices,
         options,
         budget,
-        &limits,
+        limits,
         location,
         &mut metadata,
     )?;
-    Ok(PreparedFormula::new(preparation, source, metadata.finish()))
+    Ok((preparation, metadata.finish()))
 }
 
 /// Admit the same finite formula profile across original include graphs.

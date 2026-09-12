@@ -20,6 +20,42 @@ resource ceiling. Splitting the calls does not refresh the source expansion
 budget. Keeping the returned owner is therefore part of the contract, not merely
 a convenience for avoiding another parse.
 
+## Reuse original input across profiles
+
+`ParsedSource` owns original bytes, their successful parse and fixed
+`AdmissionOptions`. Its consuming profile operations retain that owner on
+failure. This is useful when relational admission identifies a construct that
+needs the finite formula profile:
+
+```rust
+# extern crate zetesis_themelios;
+use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, ParsedSource};
+
+let source = ParsedSource::new("1{a;b}1.".into(), AdmissionOptions::default())?;
+let failure = source.admit_extended(ExpansionLimits::default()).unwrap_err();
+assert!(failure.error().needs_formula_admission());
+let prepared = failure.into_source()
+    .prepare_formula(ExpansionLimits::default(), FormulaLimits::default())?;
+let admitted = prepared.ground()?;
+assert_eq!(admitted.atoms().len(), 2);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+The example's known bounded choice requires formula admission. General callers
+must inspect `needs_formula_admission()` before choosing that alternative;
+undefined arithmetic, syntax and resource refusals are not permissions to retry.
+`SourceFailure::error()` exposes the unchanged typed refusal, and `into_parts()`
+recovers both it and the parsed owner. The String-taking convenience functions
+preserve their existing result and error types.
+
+The automatic CLI route uses this same ownership transfer. It neither clones
+the entire stdin buffer nor reparses it on profile retry. The owner retains
+O(source bytes + syntax nodes) storage; a failed attempt boxes that owner once.
+Each attempt still checks its profile and performs any required raising and
+normalization. Source options remain fixed; supplied expansion and formula
+limits apply to the requested attempt. Formula grounding consumes the resulting
+preparation's remaining budget as before.
+
 Configure eager support storage through `FormulaLimits::max_support_bytes`
 before preparation. The default is 128 MiB of authored catalog, snapshot, index and
 query capacity, including construction scratch; nested atom payloads, allocator/tree

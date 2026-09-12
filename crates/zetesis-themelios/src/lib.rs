@@ -26,6 +26,7 @@
 
 mod diagnostic;
 mod source_diagnostics;
+mod parsed_source;
 mod profile;
 mod compile;
 mod coherence;
@@ -73,6 +74,7 @@ mod formula_weak;
 pub mod objective_bound;
 pub mod observation;
 
+pub use parsed_source::{ParsedSource, SourceFailure};
 /// Canonical shared frontend tiers, including all vocabulary exposed by this crate.
 pub use themelios_analysis as analysis;
 /// Canonical source identities, spans, diagnostics and source catalogs.
@@ -83,10 +85,8 @@ pub use themelios_program as logical;
 pub use themelios_syntax as syntax;
 
 use themelios_base::source::{Source, SourceId};
-use themelios_base::span::{ByteOffset, Location, Span};
+use themelios_base::span::Location;
 use themelios_program::raise::raise;
-use themelios_syntax::dialect::Dialect;
-use themelios_syntax::parse::parse;
 use zetesis_core::{AdmissionLimits, Program};
 
 pub use bundle::{
@@ -202,39 +202,15 @@ impl Admitted {
 /// Returns the typed source, syntax, profile, construction, or core admission
 /// refusal at the first failing stage, preserving that stage's diagnostics.
 pub fn admit(text: String, options: AdmissionOptions) -> Result<Admitted, AdmissionFailure> {
-    let start = Location {
-        source: options.source_id,
-        span: Span::empty(ByteOffset::new(0)),
-    };
-    if text.len() > options.max_source_bytes {
-        return Err(AdmissionFailure::Limit {
-            resource: InputLimit::SourceBytes,
-            limit: options.max_source_bytes,
-            observed: text.len(),
-            location: start,
-        });
-    }
-    let source =
-        Source::new(options.source_id, text).map_err(|error| AdmissionFailure::Source {
-            error,
-            location: start,
-        })?;
-    let parsed = parse(&source, Dialect::Clingo);
-    if !parsed.diagnostics().is_empty() {
-        let diagnostics = parsed.diagnostics().to_vec();
-        return Err(AdmissionFailure::Syntax(SyntaxFailure::new(
-            source,
-            diagnostics,
-        )));
-    }
-    profile::check(&parsed, options)?;
-    let raised = raise(&parsed);
+    let source = ParsedSource::new(text, options)?;
+    profile::check(source.parsed(), options)?;
+    let raised = raise(source.parsed());
     if !raised.diagnostics().is_empty() {
         return Err(AdmissionFailure::Raise(raised.diagnostics().to_vec()));
     }
     let source_location = Location {
-        source: source.id(),
-        span: source.span(),
+        source: source.source().id(),
+        span: source.source().span(),
     };
     let (mut templates, mut template_origins) =
         compile::program(raised.program(), source_location)?;
@@ -256,7 +232,7 @@ pub fn admit(text: String, options: AdmissionOptions) -> Result<Admitted, Admiss
     })?;
     Ok(Admitted {
         program,
-        source,
+        source: source.into_source(),
         template_origins,
         metadata: SourceMetadata::default(),
     })
