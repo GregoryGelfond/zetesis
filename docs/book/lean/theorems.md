@@ -17,6 +17,7 @@ The maintained full index is
 | Can relation storage grow without changing old queries? | `RelationExtension.acceptance_preserved` | Existing rows and dictionary meanings survive extension |
 | Do incremental positive joins cover every new combination once? | `DeltaJoins.partition_complete`, `partition_disjoint` | Source occurrence identities and old prefixes of the current row domains |
 | May a scope omit unrelated binding slots? | `BindingScopes.readAll_restrict` | Every requested slot belongs to the retained scope; absence is explicit |
+| Does borrowed atom lookup denote the materialized tuple? | `AtomKeys.membership_identity` | Successful substitution preserves the predicate and argument order |
 | Can impossible gate regions be skipped? | `GateRestrictions.answer_set_avoids`, `suffix_region_rejected` | Constraint premises witnessed by unconditional facts and the supplied carrier |
 | Must an ordinary disjunctive answer set have head support? | `DisjunctiveSupport.answer_set_supported` | Complete ordinary producer grammar; unchanged original theory |
 | When may candidate domains be narrowed? | `DomainContraction.compatible_contraction` | Unchanged theory, fixed assignment interpretation and activation, recognized constraints and a sound filter |

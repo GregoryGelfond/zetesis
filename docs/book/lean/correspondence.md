@@ -98,6 +98,10 @@ as materialization. Gate lookup and duplicate-head lookup create no owned atom;
 only a new consequence is copied into the pending delta. Key construction charges
 the argument span separately from catalog lookup receipts, including a deferred
 gate with a missing slot. Emitted source instances still own their values.
+`AtomKeys.tuple_agrees` equates views agreeing on all requested reads;
+`membership_identity` connects successful substitution to extensional tuple
+membership. Rust comparison/hash equivalence, index construction and binding
+lifetimes remain implementation obligations.
 
 The scalar lazy closure retains one typed `Catalog` for each predicate. Every
 round borrows their existing ordered rows; new consequences remain separate
