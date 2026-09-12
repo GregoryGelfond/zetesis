@@ -44,7 +44,7 @@ fn plan(
         },
     };
     compiler
-        .assignment_plan(body, variables, &[])
+        .assignment_plan(body, variables, variables, &[])
         .map(Option::unwrap)
 }
 

@@ -173,6 +173,7 @@ pub struct Options {
     pub max_source_work: u64,
     /// Maximum derived independent CPU atoms, shared CPU/GPU catalog atoms or
     /// eager atoms. A shared catalog cap is collective across the batch.
+    /// Formula admission also applies its independent 65,536-atom profile cap.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_atoms, hide_short_help = true)]
     pub max_atoms: usize,
     /// Maximum bytes in each original file or standard input before parsing.
@@ -194,6 +195,7 @@ pub struct Options {
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_substitutions, hide_short_help = true)]
     pub max_substitutions: usize,
     /// Maximum rules retained during eager CPU/GPU lowering.
+    /// Formula admission also applies its independent 262,144-root profile cap.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_ground_rules, hide_short_help = true)]
     pub max_ground_rules: usize,
     /// Maximum accounted batch bytes, excluding allocator/driver overhead.
@@ -257,22 +259,22 @@ fn policy_parser<T: Clone + Send + Sync + 'static, const N: usize>(
 
 fn backend_parser() -> impl TypedValueParser<Value = Backend> {
     policy_parser([
-        (Backend::Auto, PossibleValue::new("auto").help("CPU formula search; closure may use GPU batches of 32 or more after its first seed.")),
-        (Backend::Cpu, PossibleValue::new("cpu").help("Source joins or static closure scans on an owned Rayon pool.")),
-        (Backend::Gpu, PossibleValue::new("gpu").help("Exact integer GPU batches, including explicit lazy relational execution.")),
-        (Backend::Metal, PossibleValue::new("metal").help("Require a physical GPU using Metal.")),
-        (Backend::Vulkan, PossibleValue::new("vulkan").help("Require a physical GPU using Vulkan.")),
-        (Backend::Dx12, PossibleValue::new("dx12").help("Require a physical GPU using DirectX 12.")),
-        (Backend::Gl, PossibleValue::new("gl").help("Require a physical GPU using OpenGL or OpenGL ES.")),
-        (Backend::Nvidia, PossibleValue::new("nvidia").help("Require an NVIDIA GPU through a compiled graphics API; this is not CUDA.")),
+        (Backend::Auto, PossibleValue::new(Backend::Auto.label()).help("CPU formula search; closure may use GPU batches of 32 or more after its first seed.")),
+        (Backend::Cpu, PossibleValue::new(Backend::Cpu.label()).help("Source joins or static closure scans on an owned Rayon pool.")),
+        (Backend::Gpu, PossibleValue::new(Backend::Gpu.label()).help("Exact integer GPU batches, including explicit lazy relational execution.")),
+        (Backend::Metal, PossibleValue::new(Backend::Metal.label()).help("Require a physical GPU using Metal.")),
+        (Backend::Vulkan, PossibleValue::new(Backend::Vulkan.label()).help("Require a physical GPU using Vulkan.")),
+        (Backend::Dx12, PossibleValue::new(Backend::Dx12.label()).help("Require a physical GPU using DirectX 12.")),
+        (Backend::Gl, PossibleValue::new(Backend::Gl.label()).help("Require a physical GPU using OpenGL or OpenGL ES.")),
+        (Backend::Nvidia, PossibleValue::new(Backend::Nvidia.label()).help("Require an NVIDIA GPU through a compiled graphics API; this is not CUDA.")),
     ])
 }
 
 fn grounder_parser() -> impl TypedValueParser<Value = Grounder> {
     policy_parser([
-        (Grounder::Auto, PossibleValue::new("auto").help("Prefer lazy source grounding where admitted, independently of hardware.")),
-        (Grounder::Lazy, PossibleValue::new("lazy").help("Require source joins without materializing a complete ground rule store. Explicit GPU requests use immutable relational rounds; Auto may discover a device after the first seed.")),
-        (Grounder::Eager, PossibleValue::new("eager").help("Materialize a bounded static program before checking on CPU or GPU.")),
+        (Grounder::Auto, PossibleValue::new(Grounder::Auto.label()).help("Prefer lazy source grounding where admitted, independently of hardware.")),
+        (Grounder::Lazy, PossibleValue::new(Grounder::Lazy.label()).help("Require source joins without materializing a complete ground rule store. Explicit GPU requests use immutable relational rounds; Auto may discover a device after the first seed.")),
+        (Grounder::Eager, PossibleValue::new(Grounder::Eager.label()).help("Materialize a bounded static program before checking on CPU or GPU.")),
     ])
 }
 
@@ -280,17 +282,17 @@ fn source_batching_parser() -> impl TypedValueParser<Value = SourceBatching> {
     policy_parser([
         (
             SourceBatching::Independent,
-            PossibleValue::new("independent")
+            PossibleValue::new(SourceBatching::Independent.label())
                 .help("Each candidate owns an independent relational join traversal."),
         ),
         (
             SourceBatching::Union,
-            PossibleValue::new("union")
+            PossibleValue::new(SourceBatching::Union.label())
                 .help("Share the union carrier; evaluate each frozen candidate on Rayon."),
         ),
         (
             SourceBatching::Worlds,
-            PossibleValue::new("worlds")
+            PossibleValue::new(SourceBatching::Worlds.label())
                 .help("Prune source prefixes with per-world membership; evaluate on Rayon."),
         ),
     ])
@@ -300,18 +302,18 @@ fn oracle_parser() -> impl TypedValueParser<Value = Oracle> {
     policy_parser([
         (
             Oracle::Auto,
-            PossibleValue::new("auto")
+            PossibleValue::new(Oracle::Auto.label())
                 .help("Select reduct closure, checked tight support, or general reduct checking."),
         ),
         (
             Oracle::Closure,
-            PossibleValue::new("closure").help(
+            PossibleValue::new(Oracle::Closure.label()).help(
                 "Require reduct closure with sparse gate candidates on CPU or static GPU batches.",
             ),
         ),
         (
             Oracle::Countermodel,
-            PossibleValue::new("countermodel").help(
+            PossibleValue::new(Oracle::Countermodel.label()).help(
                 "Require eager Ferraris search: CPU, or GPU propagation with exact CPU residuals.",
             ),
         ),

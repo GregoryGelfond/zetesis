@@ -364,7 +364,7 @@ impl fmt::Display for FormulaFailure {
                 limit,
                 observed,
                 ..
-            } => write!(f, "formula {resource} limit {limit} exceeded by {observed}"),
+            } => write!(f, "formula {resource} limit {limit}; required {observed}"),
             Self::UnsafeVariable { variable, .. } => {
                 write!(f, "unsafe formula variable {variable}")
             }
@@ -678,30 +678,26 @@ pub(crate) struct Compiled {
 /// pruning. A bounded cursor proposes generated assignment values; each actual
 /// equality formula remains in the reduct theory.
 ///
-/// The objective profile retains lifted `#minimize`/`#maximize` elements and positive
-/// weak constraints normalized into the same path: scalar
-/// constant/variable weights and tuples, finite safely bound priority expressions
-/// (default zero),
-/// positive ordinary conditions, and scalar equality/disequality filters. Source
+/// The objective profile retains lifted `#minimize`/`#maximize` elements and
+/// admitted scoped weak constraints. Weights, priorities and tuple fields use
+/// finite checked expressions over safely bound inputs; priority defaults to zero.
+/// Conditions retain their admitted signed literals, scalar filters, aggregate
+/// guards and independently checked local scopes. Source
 /// weights normalize before global tuple deduplication; eligible maximize
 /// `i32::MIN` weights receive a located overflow refusal. Nonnumeric priorities
 /// contribute no key; undefined priority arithmetic remains a located error.
 /// Dynamic priorities read ordinary bound positions or generated values with a
-/// completed source-carrier certificate: closed unary assignment tuples, flat
-/// fact/closed unbounded-choice eligibility and unique unary renamings. Its
-/// values are measures of key sets between the required and possible complete
-/// keys; they need not all realize in an answer. Other generated producer shapes
-/// retain explicit refusals. Source
+/// completed source-carrier certificate. Eligibility precision is selected per
+/// objective: qualified positive dependencies can use a tighter carrier, while
+/// other admitted dependencies use completed possible support. Those possible
+/// values need not all realize in an answer. Source
 /// priorities survive zero weights and inactive models; templates with no possible
-/// positive/filter binding are omitted. Objective-enabled programs currently
-/// refuse default-negated producer bodies/choice conditions and general aggregate
-/// producer bodies. Pure total assignment producers admit only structural direct
-/// observers: generated positions are fresh, unshared, unfiltered variables in
-/// objective conditions. Unfiltered total assignments may observe another total
-/// assignment through aggregate tuple sources; other generated-value consumers
-/// and conditional producer dependencies retain explicit refusals. This boundary
-/// preserves priority presence without asserting value realizability. Negative
-/// and aggregate constraints remain supported. Objectives supply no
+/// positive/filter binding are omitted. Default-negated, aggregate and recursive
+/// producer dependencies retain their original formulas; possible support does
+/// not establish their truth in an answer. Original objective conditions are
+/// evaluated over the verified full model, independently of the source carrier
+/// used to retain priority presence. Unresolved binding dependencies and
+/// unsupported local generators remain explicit refusals. Objectives supply no
 /// logical support and are evaluated separately on reduct-verified full models.
 /// This route invokes no solver, changes no existing S0/extended API contract,
 /// and claims no parser-to-Lean refinement.
@@ -710,7 +706,18 @@ pub(crate) struct Compiled {
 /// Returns a typed located refusal on diagnostics, unsupported syntax, unsafe
 /// variables, undefined arithmetic, or any exceeded source/expansion/formula limit.
 /// Arithmetic in variable comparisons is checked on complete possible-positive
-/// joins. Encountered undefined operations refuse the input rather than emulating
+/// joins, including rows whose scalar filters are false. An incomplete positive
+/// prefix with no complete extension creates no such validation obligation.
+/// Row-dependent head atom values are evaluated only after their rule or local
+/// element's body scalar and range selection. Negative gates and aggregate truth remain formulas
+/// and do not select this stage. Closed-term syntax and arithmetic validation still
+/// occur during source preparation.
+/// Rejected complete rule and scoped-objective rows validate their bodies through
+/// isolated formula scratch before being discarded; that scratch supplies no
+/// atoms, roots, producers or objective keys to the admitted program. Rule-body
+/// scratch uses the existing theory atom/node ceilings; objective-body scratch
+/// retains its independent ceilings. Cumulative source work still applies.
+/// Encountered undefined operations refuse the input rather than emulating
 /// clingo's warning-and-drop behavior. Numeric typing of a variable objective
 /// weight is checked later when its contribution is active in a verified model.
 pub fn admit_formula(

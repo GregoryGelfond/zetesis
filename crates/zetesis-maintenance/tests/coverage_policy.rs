@@ -104,7 +104,12 @@ fn physical_selection_is_a_fixed_contract() {
             "language-consumers|formula_gpu|2|",
             1,
         ),
-        TABLE.lines().take(14).collect::<Vec<_>>().join("\n"),
+        TABLE.replacen("static|hardware|2|", "static|hardware_formula|2|", 1),
+        TABLE.replace(
+            "metal_static_oracle_matches_independent_closures",
+            "exact_static_oracle_matches_independent_cpu_closures",
+        ),
+        TABLE.lines().take(15).collect::<Vec<_>>().join("\n"),
         TABLE.replace("metal_support_matches_exact_reduct_semantics", "unknown"),
         TABLE.lines().skip(1).collect::<Vec<_>>().join("\n"),
     ] {
@@ -273,8 +278,8 @@ fn physical_metadata_keeps_floor_populations_separate() {
         record["floor_profiles"],
         serde_json::json!(["workspace", "cli-cpu"])
     );
-    assert_eq!(record["expected_physical_tests"], 49);
-    assert_eq!(record["physical_test_groups"].as_array().unwrap().len(), 15);
+    assert_eq!(record["expected_physical_tests"], 51);
+    assert_eq!(record["physical_test_groups"].as_array().unwrap().len(), 16);
     assert_eq!(
         record["project_added_filename_filters"],
         serde_json::json!([])
@@ -313,7 +318,8 @@ fn physical_metadata_retains_the_reviewed_schedule() {
             ["context", "test", "hardware_context", 1],
             ["solve-context", "lib", "workspace libraries", 3],
             ["session-resources", "test", "session_resources_gpu", 5],
-            ["language-consumers", "test", "language_consumers", 2]
+            ["language-consumers", "test", "language_consumers", 2],
+            ["static", "test", "hardware", 2]
         ])
         .as_array()
         .unwrap()
@@ -325,10 +331,20 @@ fn physical_metadata_retains_the_reviewed_schedule() {
     ]);
     assert_eq!(groups[14]["tests"], language_tests);
     let tests = record["physical_tests"].as_array().unwrap();
-    assert_eq!(tests.len(), 49);
-    assert_eq!(&tests[47..], language_tests.as_array().unwrap().as_slice());
+    assert_eq!(tests.len(), 51);
+    assert_eq!(
+        &tests[47..49],
+        language_tests.as_array().unwrap().as_slice()
+    );
+    let static_tests = serde_json::json!([
+        "metal_constructor_executes_resident_batches_without_fallback",
+        "metal_static_oracle_matches_independent_closures"
+    ]);
+    assert_eq!(groups[15]["tests"], static_tests);
+    assert_eq!(&tests[49..], static_tests.as_array().unwrap().as_slice());
     let scope = record["physical_scope"].as_str().unwrap();
-    assert!(scope.starts_with("49 exact Metal tests: "));
+    assert!(scope.starts_with("51 exact Metal tests: "));
+    assert!(scope.contains("static constructor and complete closure/reference checks"));
     assert!(
         scope.contains(
             "combined language-consumer families with scored observations and optimum ties"

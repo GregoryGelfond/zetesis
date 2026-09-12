@@ -235,6 +235,9 @@ impl ReportedAnswers {
 }
 
 /// Check clingo's JSON complete-enumeration or optN report convention.
+/// Object decoding keeps the last occurrence of a duplicate key, as in
+/// [`native_json`]. Validation applies to that decoded document and does not
+/// establish unique key spelling in the original bytes.
 ///
 /// Exactly the first final-cost incumbent discovery is removed in optN. Its
 /// complete display multiset must recur among the declared optimal witnesses.

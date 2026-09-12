@@ -145,7 +145,6 @@ fn unsupported_language_families_never_become_partial_programs() {
         "p(~1).",
         "p(- -1).",
         "p(@f()).",
-        "p(#inf).",
         "p :- 1 < 2.",
         "p :- 1 = 1 = 1.",
         "p :- not 1 = 1.",
@@ -168,27 +167,58 @@ fn empty_body_scalar_filters_do_not_need_variable_bindings() {
             .iter()
             .all(|template| template.positive().is_empty() && template.filters().len() == 1)
     );
+}
+
+#[test]
+fn scalar_assignments_require_binding_analysis() {
+    for source in ["p(X):-X=1.", "p(X):-X=Y.", "p :- r(_), _=1."] {
+        assert!(
+            matches!(
+                admit(source.to_owned(), AdmissionOptions::default()),
+                Err(AdmissionFailure::Profile {
+                    feature: ProfileFeature::ScalarBinding,
+                    ..
+                })
+            ),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn anonymous_occurrences_have_distinct_slots() {
+    let input = accepted("p(X) :- r(_,X,_).");
+    let template = &input.program().templates()[0];
+    let terms = template.positive()[0].terms();
+    assert_ne!(terms[0], terms[2]);
+}
+
+#[test]
+fn named_occurrences_share_slots() {
+    let input = accepted("p(X) :- r(_,X,_).");
+    let template = &input.program().templates()[0];
+    let terms = template.positive()[0].terms();
+    assert_eq!(template.head().expect("head").terms()[0], terms[1]);
+}
+
+#[test]
+fn anonymous_head_slots_remain_unsafe() {
     assert!(matches!(
-        admit("p(X) :- X=1.".to_owned(), AdmissionOptions::default()),
+        admit("p(_) :- r(_).".into(), AdmissionOptions::default()),
         Err(AdmissionFailure::Core { .. })
     ));
 }
 
 #[test]
-fn anonymous_occurrences_are_fresh_and_named_occurrences_are_shared() {
-    let input = accepted("p(X) :- r(_,X,_).");
-    let template = &input.program().templates()[0];
-    let terms = template.positive()[0].terms();
-    assert_ne!(terms[0], terms[2]);
-    assert_eq!(template.head().expect("head").terms()[0], terms[1]);
-    for text in ["p(_) :- r(_).", "p :- not r(_), s(_).", "p :- r(_), _=1."] {
-        assert!(
-            matches!(
-                admit(text.to_owned(), AdmissionOptions::default()),
-                Err(AdmissionFailure::Core { .. })
-            ),
-            "{text}"
-        );
+fn negated_anonymous_atoms_require_projection() {
+    for source in ["p :- not r(_), s(_).", "p :- not not r(_)."] {
+        assert!(matches!(
+            admit(source.into(), AdmissionOptions::default()),
+            Err(AdmissionFailure::Profile {
+                feature: ProfileFeature::AnonymousProjection,
+                ..
+            })
+        ));
     }
 }
 

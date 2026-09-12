@@ -341,7 +341,7 @@ impl SourceEligibility {
             context.counters,
             rule.location,
         )? {
-            let body = self.activity(&rule.body, &binding, context)?;
+            let body = self.activity(&rule.body, rule.body_binding(&binding), context)?;
             match &rule.head {
                 HeadIr::Normal(Some(head)) => {
                     self.retain(head, &binding, body, temporary, context)?;
@@ -370,10 +370,9 @@ impl SourceEligibility {
                         if signature(head.predicate()) != *predicate {
                             continue;
                         }
-                        let mut local = Join::new(
-                            &element.condition,
+                        let mut local = Join::element(
+                            element,
                             &binding,
-                            element.variables,
                             support,
                             context.budget,
                             rule.location,
@@ -384,7 +383,11 @@ impl SourceEligibility {
                             context.counters,
                             rule.location,
                         )? {
-                            let eligible = self.activity(&element.condition, &row, context)?;
+                            let eligible = self.activity(
+                                &element.condition,
+                                element.body_binding(&row),
+                                context,
+                            )?;
                             self.retain(
                                 head,
                                 &row,

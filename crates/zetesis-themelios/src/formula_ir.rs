@@ -123,10 +123,19 @@ impl ObjectiveIr {
 pub(crate) struct RuleIr {
     pub head: HeadIr,
     pub body: Vec<LiteralIr>,
+    /// Original body slots precede a suffix used only by generated head values.
+    /// Local body scopes are compiled before that suffix exists.
+    pub body_variables: usize,
     pub bindings: Option<crate::formula_assignment_plan::Plan>,
     pub variables: usize,
     pub origins: Vec<Location>,
     pub location: Location,
+}
+impl RuleIr {
+    /// Body-local frames never receive the synthetic head-value suffix.
+    pub(super) fn body_binding<'a>(&self, binding: &'a [Value]) -> &'a [Value] {
+        &binding[..self.body_variables]
+    }
 }
 pub(crate) enum HeadIr {
     Normal(Option<AtomPattern>),
@@ -186,7 +195,14 @@ pub(crate) struct Element {
     pub key: HeadElementKey,
     pub head: HeadLiteral,
     pub condition: Vec<LiteralIr>,
+    /// Local condition frame; later slots are generated head arguments only.
+    pub body_variables: usize,
     pub variables: usize,
+}
+impl Element {
+    pub(super) fn body_binding<'a>(&self, binding: &'a [Value]) -> &'a [Value] {
+        &binding[..self.body_variables]
+    }
 }
 /// Complete tuples have set identity. Ordinary atoms use their sign and grounded atom;
 /// ordinary Boolean elements instead retain every original source occurrence.
@@ -558,6 +574,7 @@ impl Compiler<'_> {
         Ok(RuleIr {
             head: HeadIr::Normal(Some(head)),
             body: Vec::new(),
+            body_variables: 0,
             bindings: None,
             variables: 0,
             origins: origins.to_vec(),
@@ -773,61 +790,9 @@ impl Compiler<'_> {
         let mut variables = Variables::default();
         let mut body = Vec::new();
         self.body_literals(rule.body().get(), &mut variables, &mut body)?;
-        // Declare every global before element-local scopes are cloned. In particular,
-        // a head variable cannot accidentally become safe inside an aggregate.
-        let ordinary = match rule.head().get() {
-            Head::Falsum => Some(HeadIr::Normal(None)),
-            Head::Verum => Some(self.verum_head()?),
-            Head::Literal(literal)
-                if literal.negation == DefaultNegation::None
-                    && matches!(literal.inner, LiteralInner::Atom(_)) =>
-            {
-                Some(HeadIr::Normal(Some(self.generated_head(
-                    literal,
-                    &mut variables,
-                    &mut body,
-                )?)))
-            }
-            Head::Literal(literal) => {
-                ceiling(
-                    FormulaResource::DisjunctionElements,
-                    1,
-                    self.limits.max_disjunction_elements as u128,
-                    self.location,
-                )?;
-                // The singleton retains its signed literal in the original
-                // implication. Neither default-negation sign supplies support.
-                Some(HeadIr::Disjunction(vec![self.head_literal(
-                    literal,
-                    &mut variables,
-                    &mut body,
-                )?]))
-            }
-            Head::Disjunction(disjunction) => {
-                let mut heads = Vec::new();
-                for element in disjunction.elements() {
-                    ceiling(
-                        FormulaResource::DisjunctionElements,
-                        heads.len() as u128 + 1,
-                        self.limits.max_disjunction_elements as u128,
-                        self.location,
-                    )?;
-                    self.true_head_condition(element.get().condition())?;
-                    // Generated arguments share outer bindings; each emitted
-                    // rule retains its original disjunction, without shifting.
-                    heads.push(self.head_literal(
-                        element.get().literal(),
-                        &mut variables,
-                        &mut body,
-                    )?);
-                }
-                Some(HeadIr::Disjunction(heads))
-            }
-            Head::Choice(_) | Head::Aggregate(_) => None,
-            Head::TheoryAtom(_) => {
-                return Err(unsupported(ProfileFeature::Head, self.location).into());
-            }
-        };
+        // Source head names are global even when their value is only needed
+        // after body selection. Declare them before cloning element-local scopes.
+        self.head_globals(rule.head().get(), &mut variables)?;
         let aggregate_guards = self.body_guards(rule.body().get(), &mut variables)?;
         let choice_guards = self.head_guards(rule.head().get(), &mut variables)?;
         let assignments =
@@ -842,7 +807,16 @@ impl Compiler<'_> {
             &mut body,
         )?;
         self.body_conditionals(rule.body().get(), &variables, &mut body)?;
-        let bindings = self.assignment_plan(&body, variables.count, &choice_guards)?;
+        let body_variables = variables.count;
+        let mut head_values = Vec::new();
+        let ordinary = self.ordinary_head(rule.head().get(), &mut variables, &mut head_values)?;
+        // Only fresh head-value targets are allocated after the body frame.
+        // Reuse the binding scheduler; no original body expression can name this suffix.
+        self.bindings(&mut head_values, &mut variables)?;
+        variables.safety(self.location)?;
+        body.extend(head_values);
+        let bindings =
+            self.assignment_plan(&body, variables.count, body_variables, &choice_guards)?;
         let head = if let Some(head) = ordinary {
             head
         } else {
@@ -866,6 +840,7 @@ impl Compiler<'_> {
         Ok(RuleIr {
             head,
             body,
+            body_variables,
             bindings,
             variables: variables.count,
             origins,
@@ -932,8 +907,10 @@ impl Compiler<'_> {
             });
         for element in choice.elements() {
             let mut local = variables.clone();
-            let mut condition = Vec::new();
-            let head = self.head_literal(element.get().literal(), &mut local, &mut condition)?;
+            self.head_global_literal(element.get().literal(), &mut local)?;
+            let mut condition = self.condition(element.get().condition(), &mut local)?;
+            let (head, body_variables) =
+                self.element_head(element.get().literal(), &mut local, &mut condition)?;
             let key = match &head.operand {
                 HeadOperand::Atom(_) => HeadElementKey::Atom,
                 HeadOperand::Boolean(_) => {
@@ -945,14 +922,13 @@ impl Compiler<'_> {
                     )
                 }
             };
-            condition.extend(self.condition(element.get().condition(), &mut local)?);
-            self.bindings(&mut condition, &mut local)?;
             self.variable_limit(&local)?;
             local.safety(self.location)?;
             elements.push(Element {
                 key,
                 head,
                 condition,
+                body_variables,
                 variables: local.count,
             });
         }

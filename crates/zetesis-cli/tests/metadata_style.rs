@@ -72,7 +72,7 @@ fn plain_metadata_describes_the_execution_policy() {
         "GPU support was not compiled; using CPU without device discovery."
     };
     let expected = format!(
-        "Source: 1 original files ({} bytes)\n\
+        "Source: 1 original file ({} bytes)\n\
          Oracle: reduct closure\n\
          Grounding: requested=lazy, effective=lazy (source joins; no complete ground-rule store)\n\
          Backend: cpu (lazy source joins, 1 workers)\n\

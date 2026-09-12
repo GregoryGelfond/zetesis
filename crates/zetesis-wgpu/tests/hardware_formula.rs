@@ -303,11 +303,30 @@ fn qualify_resources(backend: physical::Backend, projection: GateProjection) {
             .is_empty()
     );
     assert!(oracle.last_batch_stats().is_none());
+    assert_clears_residency(&mut oracle, &graph, &inputs);
+}
+
+fn assert_clears_residency(
+    oracle: &mut GpuFormulaOracle,
+    graph: &Theory,
+    inputs: &[Interpretation],
+) {
+    // Reestablish this exact theory and transport before clearing. Otherwise
+    // the last boundary graph above forces an upload even for a no-op clear.
+    oracle
+        .propagate_batch(graph, inputs, FormulaLimits::default())
+        .unwrap();
+    oracle
+        .propagate_batch(graph, inputs, FormulaLimits::default())
+        .unwrap();
+    let warm = oracle.last_batch_stats().unwrap();
+    assert!(!warm.theory_uploaded && !warm.transport_allocated);
     oracle.clear_residency();
     oracle
-        .propagate_batch(&graph, &inputs, FormulaLimits::default())
+        .propagate_batch(graph, inputs, FormulaLimits::default())
         .unwrap();
-    assert!(oracle.last_batch_stats().unwrap().theory_uploaded);
+    let cleared = oracle.last_batch_stats().unwrap();
+    assert!(cleared.theory_uploaded && cleared.transport_allocated);
 }
 
 #[test]

@@ -46,6 +46,7 @@ impl Compiler<'_> {
                     .charge(ExpansionResource::TermWork, 1, self.location)?;
             }
             let mut local = variables.clone();
+            self.head_global_literal(element.literal(), &mut local)?;
             let mut condition = self.condition(element.condition(), &mut local)?;
             let tuple = element
                 .terms()
@@ -65,8 +66,8 @@ impl Compiler<'_> {
                     Some(Term::Variable(_)) => {}
                 }
             }
-            let head = self.head_literal(element.literal(), &mut local, &mut condition)?;
-            self.bindings(&mut condition, &mut local)?;
+            let (head, body_variables) =
+                self.element_head(element.literal(), &mut local, &mut condition)?;
             self.variable_limit(&local)?;
             local.safety(self.location)?;
             debug_assert!(condition.iter().all(|literal| matches!(
@@ -85,6 +86,7 @@ impl Compiler<'_> {
                 key: HeadElementKey::Tuple(tuple),
                 head,
                 condition,
+                body_variables,
                 variables: local.count,
             });
         }
@@ -138,14 +140,7 @@ pub(super) fn validate_group(
         .all(|element| element.head.positive_atom().is_some());
     for element in elements {
         let terms = element.key.tuple().expect("uniform tuple group checked");
-        let mut local = Join::new(
-            &element.condition,
-            assignment,
-            element.variables,
-            support,
-            budget,
-            location,
-        )?;
+        let mut local = Join::element(element, assignment, support, budget, location)?;
         while let Some(binding) = local.next(limits, budget, counters, location)? {
             counters.work(limits, location)?;
             let mut tuple = Vec::new();
@@ -294,6 +289,7 @@ mod tests {
                 ),
             },
             condition: vec![],
+            body_variables: 0,
             variables: 0,
         }
     }

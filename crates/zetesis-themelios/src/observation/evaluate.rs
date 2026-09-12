@@ -31,6 +31,7 @@ pub(super) struct Work<'a> {
 impl Work<'_> {
     pub fn error(&self, kind: ErrorKind) -> Error {
         Error {
+            source: None,
             kind,
             location: self.location,
             statistics: self.statistics,

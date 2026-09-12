@@ -17,6 +17,123 @@ use crate::formula_ir::{Compiler, HeadIr, HeadLiteral, HeadOperand, LiteralIr, V
 use crate::{ExpansionResource, FormulaFailure, FormulaResource, ProfileFeature};
 
 impl Compiler<'_> {
+    /// Declare original ordinary/disjunctive head names without generating values.
+    /// Choice element names keep their separately scoped existing interpretation.
+    pub(super) fn head_globals(
+        &mut self,
+        head: &themelios_program::program::Head,
+        variables: &mut Variables,
+    ) -> Result<(), FormulaFailure> {
+        use themelios_program::program::Head;
+        match head {
+            Head::Literal(literal) => self.head_global_literal(literal, variables),
+            Head::Disjunction(disjunction) => {
+                for element in disjunction.elements() {
+                    self.true_head_condition(element.get().condition())?;
+                    self.head_global_literal(element.get().literal(), variables)?;
+                }
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+
+    pub(super) fn head_global_literal(
+        &mut self,
+        literal: &Literal,
+        variables: &mut Variables,
+    ) -> Result<(), FormulaFailure> {
+        let LiteralInner::Atom(atom) = &literal.inner else {
+            return Ok(());
+        };
+        let Arguments::Single(arguments) = &atom.get().arguments else {
+            return Err(unsupported(ProfileFeature::PooledArguments, self.location).into());
+        };
+        for term in arguments.iter().flat_map(Term::subterms) {
+            self.budget
+                .charge(ExpansionResource::TermWork, 1, self.location)?;
+            if let Term::Variable(variable @ Variable::Named(_)) = term {
+                variables.slot(variable);
+                self.variable_limit(variables)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Plan source element conditions before generating the element's atom.
+    /// Tuple measures remain in their existing source-validation scope.
+    pub(super) fn element_head(
+        &mut self,
+        literal: &Literal,
+        variables: &mut Variables,
+        condition: &mut Vec<LiteralIr>,
+    ) -> Result<(HeadLiteral, usize), FormulaFailure> {
+        self.bindings(condition, variables)?;
+        variables.safety(self.location)?;
+        let body_variables = variables.count;
+        let mut values = Vec::new();
+        let head = self.head_literal(literal, variables, &mut values)?;
+        self.bindings(&mut values, variables)?;
+        variables.safety(self.location)?;
+        condition.extend(values);
+        Ok((head, body_variables))
+    }
+
+    /// Lower ordinary heads after the source body frame is complete. Fresh
+    /// value targets belong exclusively to the later head-generation stage.
+    pub(super) fn ordinary_head(
+        &mut self,
+        head: &themelios_program::program::Head,
+        variables: &mut Variables,
+        values: &mut Vec<LiteralIr>,
+    ) -> Result<Option<HeadIr>, FormulaFailure> {
+        use themelios_program::program::Head;
+        Ok(match head {
+            Head::Falsum => Some(HeadIr::Normal(None)),
+            Head::Verum => Some(self.verum_head()?),
+            Head::Literal(literal)
+                if literal.negation == DefaultNegation::None
+                    && matches!(literal.inner, LiteralInner::Atom(_)) =>
+            {
+                Some(HeadIr::Normal(Some(
+                    self.generated_head(literal, variables, values)?,
+                )))
+            }
+            Head::Literal(literal) => {
+                ceiling(
+                    FormulaResource::DisjunctionElements,
+                    1,
+                    self.limits.max_disjunction_elements as u128,
+                    self.location,
+                )?;
+                // The singleton retains its signed literal in the original
+                // implication. Neither default-negation sign supplies support.
+                Some(HeadIr::Disjunction(vec![
+                    self.head_literal(literal, variables, values)?,
+                ]))
+            }
+            Head::Disjunction(disjunction) => {
+                let mut heads = Vec::new();
+                for element in disjunction.elements() {
+                    ceiling(
+                        FormulaResource::DisjunctionElements,
+                        heads.len() as u128 + 1,
+                        self.limits.max_disjunction_elements as u128,
+                        self.location,
+                    )?;
+                    // Generated arguments share outer bindings; each emitted
+                    // rule retains its original disjunction, without shifting.
+                    heads.push(self.head_literal(element.get().literal(), variables, values)?);
+                }
+                Some(HeadIr::Disjunction(heads))
+            }
+            Head::Choice(_) | Head::Aggregate(_) => None,
+            Head::TheoryAtom(_) => {
+                return Err(unsupported(ProfileFeature::Head, self.location).into());
+            }
+        })
+    }
+
     pub(super) fn verum_head(&self) -> Result<HeadIr, FormulaFailure> {
         ceiling(
             FormulaResource::DisjunctionElements,

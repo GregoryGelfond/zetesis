@@ -1,7 +1,7 @@
 //! Finite substitutions and support-preserving conditional-choice formulas.
 
 mod objectives;
-mod objective_query;
+mod scoped_body;
 mod atoms;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -137,10 +137,14 @@ fn instantiate<'a>(
                     return Ok(());
                 }
                 let mut outer = Join::rule(rule, support, builder.budget)?;
-                while let Some(binding) =
-                    outer.next(limits, builder.budget, &mut builder.counters, rule.location)?
+                while let Some(row) =
+                    outer.next_row(limits, builder.budget, &mut builder.counters, rule.location)?
                 {
-                    builder.rule(rule, &binding, support)?;
+                    if row.passes {
+                        builder.rule(rule, &row.values, support)?;
+                    } else {
+                        builder.validate_body(&rule.body, &row.values, support, rule.location)?;
+                    }
                 }
                 Ok::<_, FormulaFailure>(())
             },
@@ -192,6 +196,8 @@ pub(super) struct Builder<'a> {
 enum Purpose {
     Theory,
     Objective,
+    /// Discarded source-body validation, bounded by the existing theory ceilings.
+    Validation,
 }
 
 struct CachedAggregate {
@@ -243,7 +249,9 @@ impl Builder<'_> {
     }
     fn node_bound(&self) -> (FormulaResource, usize) {
         match self.purpose {
-            Purpose::Theory => (FormulaResource::Nodes, self.limits.theory.max_nodes),
+            Purpose::Theory | Purpose::Validation => {
+                (FormulaResource::Nodes, self.limits.theory.max_nodes)
+            }
             Purpose::Objective => (
                 FormulaResource::ObjectiveFormulaNodes,
                 self.limits.max_objective_formula_nodes,
@@ -252,7 +260,9 @@ impl Builder<'_> {
     }
     fn atom_bound(&self) -> (FormulaResource, usize) {
         match self.purpose {
-            Purpose::Theory => (FormulaResource::Atoms, self.limits.theory.max_atoms),
+            Purpose::Theory | Purpose::Validation => {
+                (FormulaResource::Atoms, self.limits.theory.max_atoms)
+            }
             Purpose::Objective => (
                 FormulaResource::ObjectiveFormulaAtoms,
                 self.limits.max_objective_formula_atoms,
@@ -453,6 +463,31 @@ impl Builder<'_> {
         };
         self.node(Node::Atom(index), location)
     }
+    /// Validate a rejected complete row without changing the original atom/node
+    /// catalog, caches, roots or producer tables. Scratch uses the existing
+    /// theory ceilings; cumulative source work and scalar copying remain shared.
+    fn validate_body(
+        &mut self,
+        literals: &[LiteralIr],
+        binding: &[Value],
+        support: &Support<'_>,
+        location: Location,
+    ) -> Result<(), FormulaFailure> {
+        let mut context = crate::formula_objective_dependencies::eligibility::Context {
+            limits: self.limits,
+            budget: self.budget,
+            counters: &mut self.counters,
+            location,
+        };
+        scoped_body::validate_with_purpose(
+            literals,
+            binding,
+            support,
+            &mut context,
+            Purpose::Validation,
+        )?;
+        Ok(())
+    }
     pub(super) fn body(
         &mut self,
         literals: &[LiteralIr],
@@ -581,7 +616,12 @@ impl Builder<'_> {
         support: &Support,
     ) -> Result<(), FormulaFailure> {
         self.work(rule.location)?;
-        let body = self.body(&rule.body, assignment, rule.location, support)?;
+        let body = self.body(
+            &rule.body,
+            rule.body_binding(assignment),
+            rule.location,
+            support,
+        )?;
         if body == 0 {
             return Ok(());
         }
@@ -800,18 +840,17 @@ impl Builder<'_> {
         let mut result = HeadGroup::default();
         let elements = &group.elements;
         for element in elements {
-            let mut local = Join::new(
-                &element.condition,
-                assignment,
-                element.variables,
-                support,
-                self.budget,
-                rule.location,
-            )?;
+            let mut local =
+                Join::element(element, assignment, support, self.budget, rule.location)?;
             while let Some(binding) =
                 local.next(self.limits, self.budget, &mut self.counters, rule.location)?
             {
-                let condition = self.body(&element.condition, &binding, rule.location, support)?;
+                let condition = self.body(
+                    &element.condition,
+                    element.body_binding(&binding),
+                    rule.location,
+                    support,
+                )?;
                 let (head, atom) = self.head_literal(&element.head, &binding, rule.location)?;
                 if let Some(atom) = atom {
                     if element.head.positive_atom().is_some() {

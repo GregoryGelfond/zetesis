@@ -114,6 +114,7 @@ fn omitted_physical_group_prevents_instrumentation() {
         "solve-context",
         "session-resources",
         "language-consumers",
+        "static",
     ] {
         let f = Fixture::new();
         let row = groups()
@@ -176,6 +177,7 @@ fn failed_physical_execution_preserves_its_exit_code() {
         "solve-context",
         "session-resources",
         "language-consumers",
+        "static",
     ] {
         let f = Fixture::new();
         let result = f.coverage(
@@ -334,6 +336,42 @@ fn record_gate_follows_actual_lean_commands() {
             }
         }
     }
+}
+
+#[test]
+fn book_checks_retain_the_repository_toolchain() {
+    let fixture = Fixture::new();
+    let result = fixture
+        .command("scripts/check.sh")
+        .arg("book")
+        .env_remove("RUSTUP_TOOLCHAIN")
+        .env("CHECK_TEST_BOOK_TOOLCHAIN", "1.97.1-fake-host")
+        .env("CHECK_TEST_TRACE", fixture.root().join("trace"))
+        .bounded_output();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(fixture.read("trace").contains("mdbook test --library-path"));
+}
+
+#[test]
+fn portable_test_campaigns_collect_target_failures() {
+    let fixture = Fixture::new();
+    let result = fixture
+        .command("scripts/check.sh")
+        .arg("portable")
+        .env("CHECK_TEST_TRACE", fixture.root().join("trace"))
+        .bounded_output();
+    assert!(result.status.success());
+    let trace = fixture.read("trace");
+    let campaigns: Vec<_> = trace
+        .lines()
+        .filter(|line| line.starts_with("cargo test "))
+        .collect();
+    assert_eq!(campaigns.len(), 8);
+    assert!(campaigns.iter().all(|line| line.contains("--no-fail-fast")));
 }
 
 fn workflow_block() -> String {

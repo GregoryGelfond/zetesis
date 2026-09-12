@@ -4,6 +4,99 @@ use clap::{CommandFactory, FromArgMatches, Parser, error::ErrorKind};
 use zetesis_cli::{Backend, Grounder, Options, Oracle, SolveConfig, SourceBatching};
 
 #[test]
+fn nondefault_options_preserve_each_solver_field() {
+    // Distinct values detect crossed fields whose defaults happen to coincide.
+    let options = Options::try_parse_from([
+        "zetesis",
+        "--backend",
+        "cpu",
+        "--grounder",
+        "lazy",
+        "--source-batching",
+        "worlds",
+        "--oracle",
+        "closure",
+        "--stats",
+        "--models",
+        "11",
+        "--max-search-work",
+        "12",
+        "--max-search-decisions",
+        "13",
+        "--max-objective-work",
+        "14",
+        "--max-objective-bound-work",
+        "15",
+        "--max-objective-bindings",
+        "16",
+        "--max-objective-keys",
+        "17",
+        "--max-objective-key-bytes",
+        "18",
+        "--max-optimal-models",
+        "19",
+        "--max-optimal-atoms",
+        "20",
+        "--max-optimal-bytes",
+        "21",
+        "--batch-size",
+        "22",
+        "--workers",
+        "23",
+        "--completion-workers",
+        "24",
+        "--max-completion-scratch-bytes",
+        "25",
+        "--max-candidates",
+        "26",
+        "--max-carrier-atoms",
+        "27",
+        "--max-work",
+        "28",
+        "--max-source-work",
+        "29",
+        "--max-atoms",
+        "30",
+        "--max-substitutions",
+        "31",
+        "--max-ground-rules",
+        "32",
+        "--max-batch-bytes",
+        "33",
+    ])
+    .unwrap();
+    let config = SolveConfig::from(&options);
+    assert_eq!(config.backend, Backend::Cpu);
+    assert_eq!(config.grounder, Grounder::Lazy);
+    assert_eq!(config.source_batching, SourceBatching::Worlds);
+    assert_eq!(config.oracle, Oracle::Closure);
+    assert!(config.stats);
+    assert_eq!(config.models, 11);
+    assert_eq!(config.max_search_work, 12);
+    assert_eq!(config.max_search_decisions, 13);
+    assert_eq!(config.max_objective_work, 14);
+    assert_eq!(config.max_objective_bound_work, 15);
+    assert_eq!(config.max_objective_bindings, 16);
+    assert_eq!(config.max_objective_keys, 17);
+    assert_eq!(config.max_objective_key_bytes, 18);
+    assert_eq!(config.max_optimal_models, 19);
+    assert_eq!(config.max_optimal_atoms, 20);
+    assert_eq!(config.max_optimal_bytes, 21);
+    assert_eq!(config.batch_size.get(), 22);
+    assert_eq!(config.workers.get(), 23);
+    assert_eq!(config.completion_workers.get(), 24);
+    assert_eq!(config.max_completion_scratch_bytes, 25);
+    assert_eq!(config.max_candidates, 26);
+    assert_eq!(config.max_carrier_atoms, 27);
+    assert_eq!(config.max_work, 28);
+    assert_eq!(config.max_source_work, 29);
+    assert_eq!(config.max_atoms, 30);
+    assert_eq!(config.max_substitutions, 31);
+    assert_eq!(config.max_ground_rules, 32);
+    assert_eq!(config.max_batch_bytes, 33);
+}
+
+#[test]
 fn backend_spellings_select_typed_policies() {
     for (spelling, expected) in [
         ("auto", Backend::Auto),

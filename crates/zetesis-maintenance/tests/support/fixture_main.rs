@@ -208,6 +208,13 @@ fn cargo(arguments: &[String]) -> Result<(), String> {
 }
 fn execute(role: &str, arguments: &[String]) -> Result<(), String> {
     trace(role, arguments);
+    if let Ok(expected) = env::var("CHECK_TEST_BOOK_TOOLCHAIN")
+        && ((role == "mdbook" && has(arguments, "test"))
+            || (role == "cargo" && has(arguments, "target/book-tests-gpu")))
+        && env::var("RUSTUP_TOOLCHAIN").ok().as_deref() != Some(expected.as_str())
+    {
+        return fail("temporary book compiler selected a different toolchain");
+    }
     let failure = variable("CHECK_TEST_FAILURE", "");
     if (role == "lake"
         && ((arguments == ["build"] && failure == "build")
@@ -218,6 +225,13 @@ fn execute(role: &str, arguments: &[String]) -> Result<(), String> {
     }
     match role {
         "cargo" => cargo(arguments),
+        "rustup" if arguments == ["show", "active-toolchain"] => {
+            println!(
+                "{} (overridden by repository toolchain)",
+                variable("CHECK_TEST_BOOK_TOOLCHAIN", "1.97.1-fake-host")
+            );
+            Ok(())
+        }
         "rustc" if arguments == ["+1.97.1", "--print", "sysroot"] => {
             println!("{}", env::var("COVERAGE_TEST_SYSROOT").unwrap());
             Ok(())

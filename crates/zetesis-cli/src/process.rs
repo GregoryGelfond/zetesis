@@ -1,44 +1,79 @@
 use crate::presentation::{Diagnostics, Streams};
 use crate::{Command, Completion, Options, Report, RunError, RunFailure, devices};
 use clap::Parser;
-use std::io::{self, IsTerminal, Read, Write};
+use std::io::{self, BufWriter, IsTerminal, Read, Write};
 use std::process::ExitCode;
 use zetesis_themelios::{BundleLimits, SourceBundle};
 
 /// Process adapter. Exit 0 means a completed request, 2 an input/backend/output
 /// error, and 3 an interrupted search. Satisfiability and coverage are printed
 /// independently; this is not clingo's numeric exit-code protocol.
+/// Standard output is explicitly flushed before returning. A flush failure is
+/// an output error, independently of any established semantic outcome.
 #[must_use]
 pub fn entry() -> ExitCode {
     let mut options = Options::parse();
-    let mut output = io::stdout().lock();
+    let output = io::stdout().lock();
+    let output_terminal = output.is_terminal();
     let no_color = std::env::var_os("NO_COLOR");
     let term = std::env::var_os("TERM");
     let disabled = color_disabled(no_color.as_deref(), term.as_deref());
     let diagnostics = io::stderr().lock();
     let colors = Streams::resolve(
         options.color.human(options.json),
-        output.is_terminal(),
+        output_terminal,
         diagnostics.is_terminal(),
         disabled,
     );
     options.color = colors.output;
+    let mut output = buffered_output(output, output_terminal);
     let mut diagnostics = Diagnostics::new(diagnostics, colors.diagnostics);
-    if options.command == Some(Command::Devices) {
-        return match devices(&mut output) {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(error) => {
-                let _ = diagnostics.error(&error);
-                ExitCode::from(2)
+    let result = if options.command == Some(Command::Devices) {
+        devices(&mut output)
+            .map(|()| ExitCode::SUCCESS)
+            .map_err(RunFailure::from)
+    } else {
+        run_input(&options, &mut output, &mut diagnostics).map(|report| {
+            if report.completion == Completion::Interrupted {
+                ExitCode::from(3)
+            } else {
+                ExitCode::SUCCESS
             }
-        };
-    }
-    let result = run_input(&options, &mut output, &mut diagnostics);
-    match result {
-        Ok(report) if report.completion == Completion::Interrupted => ExitCode::from(3),
-        Ok(_) => ExitCode::SUCCESS,
+        })
+    };
+    finish_output(output, result, &mut diagnostics)
+}
+
+// Fixed process-only staging for redirected output, independent of model count
+// and per-record ceilings. Terminal bytes bypass staging to retain prompt output.
+const OUTPUT_BUFFER_BYTES: usize = 8 * 1024;
+
+fn buffered_output<W: Write>(output: W, terminal: bool) -> BufWriter<W> {
+    BufWriter::with_capacity(if terminal { 0 } else { OUTPUT_BUFFER_BYTES }, output)
+}
+
+fn finish_output(
+    mut output: BufWriter<impl Write>,
+    result: Result<ExitCode, RunFailure>,
+    diagnostics: &mut Diagnostics<impl Write>,
+) -> ExitCode {
+    let flushed = output.flush();
+    // Do not retry a failed buffered write invisibly from BufWriter::drop.
+    let _ = output.into_parts();
+    let status = match result {
+        Ok(status) => status,
         Err(error) => {
             let _ = diagnostics.error(&error);
+            if let Some(secondary) = error.secondary_output {
+                let _ = diagnostics.error(&format_args!("secondary output: {secondary}"));
+            }
+            ExitCode::from(2)
+        }
+    };
+    match flushed {
+        Ok(()) => status,
+        Err(error) => {
+            let _ = diagnostics.error(&format_args!("output flush: {error}"));
             ExitCode::from(2)
         }
     }
@@ -149,3 +184,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/support/process_output.rs"]
+mod output_tests;

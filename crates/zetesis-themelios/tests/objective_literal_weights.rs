@@ -16,8 +16,8 @@ use zetesis_core::{Model, Value};
 use zetesis_cpu::Control;
 use zetesis_objective::{AdmissionError, AdmissionLimits, AdmissionResource};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_formula,
+    AdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure,
+    FormulaLimits, FormulaResource, admit_formula,
 };
 
 const CONDITION_CASES: &str = r##"{"name":"absent_condition","source":"#minimize{foo:a}.","records":[[[],null]]}
@@ -191,17 +191,6 @@ fn ignored_objectives_retain_variable_limits() {
     });
 }
 
-fn refused_endpoint(source: &str, expected: ProfileFeature) {
-    let error = admit(source, &FormulaLimits::default()).unwrap_err();
-    assert!(!error.diagnostics().is_empty(), "{source}");
-    assert!(
-        matches!(error, FormulaFailure::Expansion(ExpansionFailure::Admission(
-        AdmissionFailure::Profile { feature, .. }
-    )) if feature == expected),
-        "{source}: {error}"
-    );
-}
-
 #[test]
 fn endpoint_priorities_supply_no_contribution() {
     for endpoint in ["#inf", "#sup"] {
@@ -231,14 +220,16 @@ fn ignored_endpoint_tuples_supply_no_contribution() {
 }
 
 #[test]
-fn endpoint_objective_filters_remain_refused() {
+fn endpoint_filters_preserve_nonnumeric_weight_absence() {
     for endpoint in ["#inf", "#sup"] {
         for source in [
             format!("#minimize{{foo@7:{endpoint}=1}}."),
             format!("#maximize{{foo@7:1!={endpoint}}}."),
             format!(":~{endpoint}=1.[foo@7]"),
         ] {
-            refused_endpoint(&source, ProfileFeature::Symbol);
+            let input = admit(&source, &FormulaLimits::default()).unwrap();
+            assert!(!input.objectives().is_present(), "{source}");
+            assert_eq!(exhaustive(&input), Records::from([(BTreeSet::new(), None)]));
         }
     }
 }

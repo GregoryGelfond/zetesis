@@ -63,6 +63,7 @@ The four scoped obligations use certificate soundness, original-model necessity,
 exact residual completion, and the impossibility of stopped completion. The final
 case split composes them; no termination or successful completion is asserted.
 -/
+-- ANCHOR: completed_membership_exact
 theorem completed_membership_exact (T : Theory α) (M : Atoms α)
     (verdict : Verdict) (exact : Option Bool) (result : Bool)
     (sound : Sound T M verdict)
@@ -96,6 +97,7 @@ theorem completed_membership_exact (T : Theory α) (M : Atoms α)
   | notModel => exact rejected_case rfl
   | residual => exact residual_case rfl
   | stopped => exact False.elim (stopped_case rfl)
+-- ANCHOR_END: completed_membership_exact
 
 theorem interruption_cannot_accept (exact : Option Bool) :
     complete .stopped exact ≠ some true := by simp [complete]

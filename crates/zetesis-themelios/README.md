@@ -7,6 +7,8 @@ Admission does not invoke clingo or establish that an answer set exists.
 
 Start with the [library guide](../../docs/book/rust/libraries.md) and
 [grounding chapter](../../docs/book/architecture/grounding.md). The
+[implementation map](../../docs/book/architecture/source-pipeline.md) locates
+source lowering, binding plans, support completion and formula emission. The
 [public exports](src/lib.rs) and their rustdoc specify ownership, limits and
 errors; build the reference with:
 
@@ -64,7 +66,10 @@ ceiling is not a process-memory measurement.
 
 ### Values and bindings
 
-Logical values include integers, symbols, strings, closed functions and tuples.
+Logical values include integers, symbols, strings, closed functions, tuples and
+the extremal terms `#inf` and `#sup`, including ordinary atom arguments. Extrema
+retain their own types and ASP term order; they are neither integers nor the
+strings `"#inf"` and `"#sup"`. They supply no numeric objective weight or priority.
 Predicate strong negation, signed function constructors and numeric negation
 remain separate. Functions such as `f(1,g(2))`, signed constructors such as
 `-f(1)`, and tuples such as `()`, `(1,)` and `(1,2)` retain structural identity.
@@ -92,9 +97,12 @@ division expressions supply no new domains; independently bound expressions
 keep their existing scalar checks. Positive relational bindings alone do not
 make comparison endpoints closed. Normalized coefficients and constants must
 fit a signed 64-bit integer; endpoint accumulation must fit a signed 128-bit
-integer. Exceeding either fixed
-analysis capacity is a located `FormulaFailure::Limit`, distinct from source
-arithmetic failure. The [finite-chain contracts](tests/finite_chains.rs) check
+integer. An affine refinement exceeding either analysis capacity may be skipped
+when another sound finite envelope supplies the required values. The complete
+original guard still runs on those values, including its checked arithmetic.
+If generation requires the unavailable refinement, admission returns a located
+`FormulaFailure::Limit`, distinct from source arithmetic failure.
+The [finite-chain contracts](tests/finite_chains.rs) check
 correlation, local scopes, source order, frozen reducts and resource boundaries.
 Nested pools and broader constructor/interval contexts remain restricted;
 admitted consequent alternatives are described below.
@@ -379,7 +387,11 @@ See [dependency checks](src/formula_objective_dependencies.rs) and
 `SourceBundle::load_many` loads ordered original roots with global constants and
 retained include occurrences. Includes first use the captured working directory,
 then the including file's directory after a relative filesystem lookup failure.
-Repeated selected paths are included once. Lexical aliases of one canonical
+Repeated selected paths are included once after their traversal completes;
+encountering a file still on the active include chain is a cycle refusal. A
+diamond-shaped graph is therefore admitted, while a cyclic graph is refused.
+clingo 5.8.2 instead warns and skips an already included file on a cycle.
+Lexical aliases of one canonical
 source, include symlink redirections, cycles and unsupported library includes
 receive explicit refusals. File, root, byte and depth limits apply to the combined
 bundle. Loading is not a filesystem snapshot guarantee.
@@ -483,7 +495,14 @@ promise an exact process-memory bound.
 
 Syntax failures retain original source and typed themelios diagnostics.
 `SyntaxFailure::source()` and `diagnostics()` support caller-owned views;
-bundle failures retain the source catalog. Terminal styling belongs to the CLI.
+bundle failures retain the source catalog. Located observation errors expose
+`Error::diagnostic()` independently of rendering. `Error::retain_source()` can
+attach the matching original source and name, copying only that file's bytes;
+`diagnostic_source()` and `diagnostic_source_name()` expose that context.
+The human view then resolves the retained span without rereading files; typed
+cause and evaluation accounting stay unchanged. This diagnostic storage is
+separate from evaluation budgets and bounded by the caller's input limits.
+Terminal styling belongs to the CLI.
 
 Maintained regressions include [preparation](tests/formula_preparation.rs),
 [bindings](tests/structural_bindings.rs),

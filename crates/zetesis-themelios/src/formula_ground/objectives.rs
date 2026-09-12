@@ -9,7 +9,7 @@ use themelios_base::span::Location;
 use zetesis_core::{AtomPattern, Term, Value};
 use zetesis_objective::{AdmissionError, ObjectiveProgram, ObjectiveTemplate, WeightPolarity};
 
-use super::objective_query::{self, ValidatedBody};
+use super::scoped_body::{self, ValidatedBody};
 use crate::expansion::Budget;
 use crate::formula::ceiling;
 use crate::formula_ir::{ObjectiveCondition, ObjectiveField, ObjectiveIr, Operation, Prepared};
@@ -108,14 +108,15 @@ impl Preparation<'_> {
             return Ok(());
         }
         let mut bindings = Join::objective(objective, support, self.budget)?;
-        while let Some(binding) =
-            bindings.next(self.limits, self.budget, self.counters, objective.location)?
+        while let Some(row) =
+            bindings.next_row(self.limits, self.budget, self.counters, objective.location)?
         {
+            let binding = row.values;
             if !presence.eligible(objective, &binding, self.limits, self.counters)? {
                 continue;
             }
             let body = if matches!(objective.condition, ObjectiveCondition::Body { .. }) {
-                Some(objective_query::validate(
+                Some(scoped_body::validate(
                     objective.condition.literals(),
                     &binding,
                     support,
@@ -129,6 +130,9 @@ impl Preparation<'_> {
             } else {
                 None
             };
+            if !row.passes {
+                continue;
+            }
             if objective.needs_eligibility_query {
                 let eligibility = self
                     .eligibility

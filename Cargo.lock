@@ -1941,6 +1941,7 @@ dependencies = [
  "clap",
  "rayon",
  "serde_json",
+ "tempfile",
  "zetesis-core",
  "zetesis-cpu",
  "zetesis-ferraris",

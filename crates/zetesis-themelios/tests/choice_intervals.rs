@@ -328,7 +328,6 @@ fn refused(error: &FormulaFailure, expected: &str) -> bool {
         ) => {
             let predicted = match expected {
                 "Term" => ProfileFeature::Term,
-                "Symbol" => ProfileFeature::Symbol,
                 "PooledArguments" => ProfileFeature::PooledArguments,
                 "StrongNegation" => ProfileFeature::StrongNegation,
                 _ => return false,
@@ -365,6 +364,10 @@ fn excluded_endpoints_syntax_and_unsafe_scopes_remain_typed_refusals() {
                 &error,
                 if case["name"] == "dependent_unsafe_endpoint" {
                     "UnsafeVariable"
+                } else if case["name"] == "supremum_endpoint" {
+                    // Extremal values are admitted; a closed nonnumeric range
+                    // endpoint remains outside the finite integer generator.
+                    "Term"
                 } else {
                     case["native"].as_str().unwrap()
                 }

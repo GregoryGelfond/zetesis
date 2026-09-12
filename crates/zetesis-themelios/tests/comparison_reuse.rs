@@ -11,6 +11,7 @@ use themelios_program::term::EvalError;
 use zetesis_themelios::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
 
 const FIXTURE: &str = include_str!("fixtures/comparison-reuse.jsonl");
+const FALSE_FILTER_SOURCE: &str = "d(0).p:-d(X),X!=0,1/X>0.";
 
 #[test]
 fn complete_models_preserve_backtracking_generators_and_residual_filters() {
@@ -20,7 +21,19 @@ fn complete_models_preserve_backtracking_generators_and_residual_filters() {
         cases.iter().map(|case| case.records.len()).sum::<usize>(),
         35
     );
-    for case in cases {
+    let admitted: Vec<_> = cases
+        .into_iter()
+        .filter(|case| case.name != "earlier_false_discards_invalid")
+        .collect();
+    assert_eq!(admitted.len(), 19);
+    assert_eq!(
+        admitted
+            .iter()
+            .map(|case| case.records.len())
+            .sum::<usize>(),
+        34
+    );
+    for case in admitted {
         let input = source_records::admit(&case.source, &FormulaLimits::default())
             .unwrap_or_else(|error| panic!("{}: {error:?}", case.name));
         assert_eq!(
@@ -30,6 +43,34 @@ fn complete_models_preserve_backtracking_generators_and_residual_filters() {
             case.name
         );
     }
+}
+
+#[test]
+fn a_false_filter_preserves_required_undefined_arithmetic() {
+    let cases = source_cases::cases(FIXTURE);
+    let refused: Vec<_> = cases
+        .iter()
+        .filter(|case| case.name == "earlier_false_discards_invalid")
+        .collect();
+    assert_eq!(refused.len(), 1);
+    assert_eq!(refused[0].source, FALSE_FILTER_SOURCE);
+    // X=0 is a complete positive binding. Clingo's successful record remains
+    // in the unchanged fixture, but native admission validates the later 1/X.
+    let error = source_records::admit(FALSE_FILTER_SOURCE, &FormulaLimits::default())
+        .expect_err("the earlier false comparison cannot discard a required error");
+    let FormulaFailure::Expansion(ExpansionFailure::Evaluation {
+        error: EvalError::Undefined,
+        location,
+    }) = error
+    else {
+        panic!("expected located undefined arithmetic: {error:?}");
+    };
+    assert_eq!(location.source, themelios_base::source::SourceId::new(0));
+    assert_eq!(location.span.start().get(), 5);
+    assert_eq!(
+        usize::try_from(location.span.end().get()).unwrap(),
+        FALSE_FILTER_SOURCE.len()
+    );
 }
 
 #[test]
@@ -94,7 +135,7 @@ fn reused_comparisons_keep_the_work_ceiling_inclusive() {
 
 #[test]
 #[ignore = "requires the independent clingo executable on PATH"]
-fn unchanged_comparison_sources_match_fresh_clingo() {
+fn original_comparison_sources_retain_fresh_clingo_records() {
     for case in source_cases::cases(FIXTURE) {
         assert_eq!(
             source_oracle::records(&case.source),

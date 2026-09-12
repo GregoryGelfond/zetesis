@@ -682,27 +682,27 @@
   {
     "name": "Zetesis.CertifiedExecution.completed_membership_exact",
     "file": "Zetesis/CertifiedExecution.lean",
-    "line": 66
+    "line": 67
   },
   {
     "name": "Zetesis.CertifiedExecution.interruption_cannot_accept",
     "file": "Zetesis/CertifiedExecution.lean",
-    "line": 100
+    "line": 102
   },
   {
     "name": "Zetesis.CertifiedExecution.unsupported_requires_completion",
     "file": "Zetesis/CertifiedExecution.lean",
-    "line": 103
+    "line": 105
   },
   {
     "name": "Zetesis.CertifiedExecution.fallback_quota_is_cumulative",
     "file": "Zetesis/CertifiedExecution.lean",
-    "line": 107
+    "line": 109
   },
   {
     "name": "Zetesis.CertifiedExecution.restricted_result_original",
     "file": "Zetesis/CertifiedExecution.lean",
-    "line": 113
+    "line": 115
   },
   {
     "name": "Zetesis.ChoiceConsumers.original_bounds",
@@ -4037,37 +4037,37 @@
   {
     "name": "Zetesis.CoverageTree.mem_outputs_iff",
     "file": "Zetesis/Search.lean",
-    "line": 191
+    "line": 197
   },
   {
     "name": "Zetesis.CoverageTree.outputs_sound",
     "file": "Zetesis/Search.lean",
-    "line": 227
+    "line": 233
   },
   {
     "name": "Zetesis.CoverageTree.outputs_complete",
     "file": "Zetesis/Search.lean",
-    "line": 231
+    "line": 237
   },
   {
     "name": "Zetesis.CoverageTree.outputs_nodup",
     "file": "Zetesis/Search.lean",
-    "line": 236
+    "line": 242
   },
   {
     "name": "Zetesis.CoverageTree.exhausted_no_valid",
     "file": "Zetesis/Search.lean",
-    "line": 252
+    "line": 258
   },
   {
     "name": "Zetesis.rejected_sample_does_not_refute_region",
     "file": "Zetesis/Search.lean",
-    "line": 272
+    "line": 278
   },
   {
     "name": "Zetesis.accepted_sample_does_not_exhaust_region",
     "file": "Zetesis/Search.lean",
-    "line": 289
+    "line": 295
   },
   {
     "name": "Zetesis.Semantics.body_mono",

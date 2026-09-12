@@ -3,7 +3,7 @@
 
 use super::{BatchPlan, GraphPlan, PackedGraph, PackedSeeds, decode};
 use crate::{GpuErrorKind, GpuLimits};
-use std::time::Duration;
+use std::{num::NonZeroU32, time::Duration};
 use zetesis_core::{
     AdmissionLimits, AtomPattern, GroundProgram, Predicate, Program, Seed, StaticLimits, Template,
 };
@@ -67,13 +67,13 @@ fn assert_same_plan_and_semantics(
     let after = PackedSeeds::new(program, &seeds, retried).unwrap();
     assert_eq!(before.params, after.params);
     assert_eq!(before.seeds, after.seeds);
-    assert_eq!(after.params, [2, 1, 3, 2]);
+    assert_eq!(after.params, [2, 1, 3, 2, 1, 0, 0, 0]);
     assert_eq!(after.seeds, [0, 1]);
     // Empty a leaves no consequences. Choosing a derives both a and b, then
     // violates the b constraint; the gate projection itself still matches.
-    let words = [0, 0, 1, 3];
-    let before = decode(&words, baseline).unwrap();
-    let after = decode(&words, retried).unwrap();
+    let words = [1, 0, 0, 0x5352_4331, 0, 1, 1, 1, 0x5352_4331, 3];
+    let before = decode(&words, baseline, &before).unwrap();
+    let after = decode(&words, retried, &after).unwrap();
     assert_eq!(before, after);
     assert!(after[0].accepted());
     assert!(after[1].constraint_violated());
@@ -94,8 +94,15 @@ fn zero_wait_timeout_is_refused_and_positive_retry_preserves_the_host_contract()
     let graph = GraphPlan::new(&program, &device).unwrap();
     let packed = PackedGraph::new(&program, &graph).unwrap();
     for upload in [false, true] {
-        let baseline =
-            BatchPlan::for_graph(&graph, 2, GpuLimits::default(), &device, upload).unwrap();
+        let baseline = BatchPlan::for_graph(
+            &graph,
+            2,
+            GpuLimits::default(),
+            &device,
+            upload,
+            NonZeroU32::MIN,
+        )
+        .unwrap();
         let refused = BatchPlan::for_graph(
             &graph,
             2,
@@ -105,6 +112,7 @@ fn zero_wait_timeout_is_refused_and_positive_retry_preserves_the_host_contract()
             },
             &device,
             upload,
+            NonZeroU32::MIN,
         );
         let error = refused
             .err()
@@ -121,6 +129,7 @@ fn zero_wait_timeout_is_refused_and_positive_retry_preserves_the_host_contract()
             },
             &device,
             upload,
+            NonZeroU32::MIN,
         )
         .unwrap();
         assert_same_plan_and_semantics(&program, &baseline, &retried);
@@ -132,32 +141,91 @@ fn zero_wait_timeout_is_refused_and_positive_retry_preserves_the_host_contract()
 }
 
 #[test]
-fn uniform_binding_requires_all_sixteen_parameter_bytes_and_recovers_at_equality() {
+fn uniform_binding_covers_the_complete_submission_parameters() {
     let program = fixture();
     let device = wgpu::Limits::default();
     let graph = GraphPlan::new(&program, &device).unwrap();
     for upload in [false, true] {
-        let baseline =
-            BatchPlan::for_graph(&graph, 2, GpuLimits::default(), &device, upload).unwrap();
+        let baseline = BatchPlan::for_graph(
+            &graph,
+            2,
+            GpuLimits::default(),
+            &device,
+            upload,
+            NonZeroU32::MIN,
+        )
+        .unwrap();
         let insufficient = wgpu::Limits {
-            max_uniform_buffer_binding_size: 15,
+            max_uniform_buffer_binding_size: 31,
             ..device.clone()
         };
-        let refused = BatchPlan::for_graph(&graph, 2, GpuLimits::default(), &insufficient, upload);
+        let refused = BatchPlan::for_graph(
+            &graph,
+            2,
+            GpuLimits::default(),
+            &insufficient,
+            upload,
+            NonZeroU32::MIN,
+        );
         let error = refused
             .err()
-            .expect("15 bytes cannot bind the authored ABI");
+            .expect("31 bytes cannot bind the authored ABI");
         assert_eq!(error.kind(), GpuErrorKind::Capacity);
         assert_eq!(
             error.detail(),
-            "device cannot bind the 16-byte parameter buffer"
+            "device cannot bind the 32-byte parameter buffer"
         );
         let exact = wgpu::Limits {
-            max_uniform_buffer_binding_size: 16,
+            max_uniform_buffer_binding_size: 32,
             ..device.clone()
         };
-        let retried =
-            BatchPlan::for_graph(&graph, 2, GpuLimits::default(), &exact, upload).unwrap();
+        let retried = BatchPlan::for_graph(
+            &graph,
+            2,
+            GpuLimits::default(),
+            &exact,
+            upload,
+            NonZeroU32::MIN,
+        )
+        .unwrap();
         assert_same_plan_and_semantics(&program, &baseline, &retried);
+    }
+}
+
+#[test]
+fn framed_transport_has_an_inclusive_payload_budget() {
+    let program = fixture();
+    let device = wgpu::Limits::default();
+    let graph = GraphPlan::new(&program, &device).unwrap();
+    for upload in [false, true] {
+        let baseline = BatchPlan::for_graph(
+            &graph,
+            2,
+            GpuLimits::default(),
+            &device,
+            upload,
+            NonZeroU32::MIN,
+        )
+        .unwrap();
+        // Two one-word closures each need a four-word receipt. The retained
+        // transport is a 32-byte uniform, 8-byte seeds and two 40-byte buffers.
+        assert_eq!(baseline.result_bytes, 40);
+        assert_eq!(baseline.transport_bytes, 120);
+        let exact = GpuLimits {
+            max_batch_bytes: baseline.accounted_bytes,
+            ..GpuLimits::default()
+        };
+        assert!(BatchPlan::for_graph(&graph, 2, exact, &device, upload, NonZeroU32::MIN).is_ok());
+        let below = GpuLimits {
+            max_batch_bytes: exact.max_batch_bytes - 1,
+            ..exact
+        };
+        assert_eq!(
+            BatchPlan::for_graph(&graph, 2, below, &device, upload, NonZeroU32::MIN)
+                .err()
+                .unwrap()
+                .kind(),
+            GpuErrorKind::Capacity,
+        );
     }
 }

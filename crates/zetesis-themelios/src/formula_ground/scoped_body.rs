@@ -1,10 +1,12 @@
-//! Original-model scoped objective truth through the existing formula operations.
+//! Scoped body validation and original-model objective truth share formula lowering.
 //!
 //! A transient builder borrows complete Support and owns a separate atom table,
-//! node table and aggregate cache. Its explicit objective-formula ceilings and
-//! cumulative source work apply even when numeric selection later discards the
-//! row. Only final reachable Condition nodes consume the retained query ceiling.
-//! No roots, producers, coherence or support-guard completion reach the program.
+//! node table and aggregate cache. Objective rows use their explicit scratch
+//! ceilings even when filters or numeric selection later discard them. Rejected
+//! rule rows use the theory ceilings for their discarded validation scratch.
+//! Both share cumulative source work. Only final reachable objective Condition
+//! nodes consume the retained query ceiling. No roots, producers, coherence or
+//! support-guard completion from scratch reach the original program.
 
 use super::{Atom, Builder, Node, Purpose, Value};
 use crate::formula_ir::LiteralIr;
@@ -26,16 +28,20 @@ pub(super) fn validate(
     support: &Support<'_>,
     context: &mut Context<'_>,
 ) -> Result<ValidatedBody, FormulaFailure> {
+    validate_with_purpose(literals, binding, support, context, Purpose::Objective)
+}
+
+pub(super) fn validate_with_purpose(
+    literals: &[LiteralIr],
+    binding: &[Value],
+    support: &Support<'_>,
+    context: &mut Context<'_>,
+    purpose: Purpose,
+) -> Result<ValidatedBody, FormulaFailure> {
     // Transfer the sole cumulative counter owner and restore it on every error.
     // This never resets generated-value accounting or detaches its observer.
     let counters = std::mem::take(context.counters);
-    let mut builder = Builder::empty(
-        context.limits,
-        context.budget,
-        counters,
-        Purpose::Objective,
-        None,
-    );
+    let mut builder = Builder::empty(context.limits, context.budget, counters, purpose, None);
     let result = (|| {
         builder.node(Node::False, context.location)?;
         builder.node(Node::Implies(0, 0), context.location)?;

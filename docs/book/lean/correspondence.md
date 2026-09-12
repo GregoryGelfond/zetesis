@@ -361,6 +361,16 @@ readback remain unproved implementation correspondences. The packed membership
 refinement below concerns a different, 64-bit Rust representation and does not
 certify either shader schedule.
 
+The static closure transport validates a nonzero submission epoch, input-world
+ordinal and completion marker before publishing any batch. The marker is written
+after the workgroup's closure writes synchronize. Exact record count, verdict
+bits, closure padding and the original seed's gate projection are also checked.
+Pure malformed-record tests establish refusal at this host boundary; they do not
+establish that a particular device ran the shader. Framing does not independently
+prove least closure or constraint satisfaction, and the existing semantic laws do
+not certify the Rust/WGSL protocol or arbitrary driver behavior. Physical tests
+retain independent complete-closure comparisons across resident submissions.
+
 For a frozen mask, correctness means agreement with the fixed candidate's
 classical truth, not merely matching dimensions. For lazy inference, final
 source coverage means coverage at the final positive snapshot, not a successful

@@ -1,5 +1,7 @@
 //! Per-relational-row scalar/range cursors; no global value-domain products.
 
+use std::ops::Range;
+
 use themelios_base::span::Location;
 use zetesis_core::Value;
 
@@ -23,6 +25,7 @@ pub(super) struct Cursor<'a> {
     support: &'a Support<'a>,
     depth: usize,
     finished: bool,
+    variables: usize,
 }
 
 pub(super) fn target(literal: &LiteralIr) -> Option<usize> {
@@ -44,10 +47,12 @@ impl<'a> Cursor<'a> {
         values: Vec<Value>,
         support: &'a Support<'a>,
         plan: Option<&'a crate::formula_assignment_plan::Plan>,
+        targets: Range<usize>,
     ) -> Self {
         let generators = if let Some(plan) = plan {
             plan.steps
                 .iter()
+                .filter(|step| targets.contains(&step.produced))
                 .map(|step| &literals[step.literal])
                 .collect()
         } else {
@@ -57,12 +62,17 @@ impl<'a> Cursor<'a> {
                     matches!(
                         literal,
                         LiteralIr::Bind { .. } | LiteralIr::Range { binder: true, .. }
-                    )
+                    ) && target(literal).is_some_and(|target| targets.contains(&target))
                 })
                 .collect();
             generators.extend(literals.iter().filter(|literal| {
-            matches!(literal, LiteralIr::Aggregate(aggregate) if aggregate.binding.is_some())
-        }));
+                match literal {
+                    LiteralIr::Aggregate(aggregate) => aggregate
+                        .binding
+                        .is_some_and(|target| targets.contains(&target)),
+                    _ => false,
+                }
+            }));
             generators
         };
         let states = (0..generators.len()).map(|_| State::Fresh).collect();
@@ -73,6 +83,7 @@ impl<'a> Cursor<'a> {
             support,
             depth: 0,
             finished: false,
+            variables: targets.end,
         }
     }
 
@@ -91,6 +102,11 @@ impl<'a> Cursor<'a> {
         while !self.finished {
             counters.work(limits, location)?;
             if self.depth == self.generators.len() {
+                assert_eq!(
+                    self.values.len(),
+                    self.variables,
+                    "complete generated frame"
+                );
                 if self.depth == 0 {
                     self.finished = true;
                 } else {
@@ -129,7 +145,14 @@ impl<'a> Cursor<'a> {
             if let Some(value) = value {
                 counters.generated(&value, limits, budget, location)?;
                 let target = target(self.generators[self.depth]).expect("generator target");
-                self.values[target] = value;
+                if target == self.values.len() {
+                    // Head targets form a compiler-owned suffix. Its values are
+                    // appended only when evaluated; rejected bodies never own
+                    // fabricated head values or expose them to scoped validation.
+                    self.values.push(value);
+                } else {
+                    self.values[target] = value;
+                }
                 self.depth += 1;
             } else {
                 self.states[self.depth] = State::Fresh;

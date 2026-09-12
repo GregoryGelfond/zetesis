@@ -134,6 +134,22 @@ not evidence that it ran; adapter identity, submitted work, completed work and
 residual work are separate observations. GPU support does not mean the complete
 solver is device-resident.
 
+The static reduct oracle reads one framed closure record per candidate. A checked
+nonzero epoch identifies the submission, an ordinal identifies the input seed,
+and a nonzero marker follows synchronized closure writes. The host validates
+these fields, the exact record population, verdict bits and unused closure bits.
+It also checks the gate-carrier projection against the original seed. A missing
+or inconsistent record fails the whole batch instead of becoming acceptance.
+The 32-byte parameter buffer and four-word per-record header count toward the
+ordinary authored payload ceiling. Empty batches validate context health and
+graph admission without consuming dispatch resources or an epoch. The epoch
+sequence survives residency clearing and refuses overflow.
+
+These checks establish transport identity and representation consistency, not
+an independent proof of every rule consequence or constraint verdict. Actual
+shader execution still relies on the device API contract and requires physical
+qualification for each claimed backend; an observed driver fault is not presumed.
+
 For admitted relational programs, automatic materialization selects lazy source
 grounding on both CPU and GPU. Hardware changes do not require a complete ground
 rule store. Explicit eager grounding retains its compiled graph, including when

@@ -214,11 +214,15 @@ pub struct Statistics {
 }
 
 /// Located source failure or runtime refusal with partial accounting.
+/// The default human view contains the typed cause. [`Self::retain_source`]
+/// adds an original source excerpt through themelios's canonical plain view;
+/// terminal styling and publication remain the consumer's responsibility.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Error {
     kind: ErrorKind,
     location: Option<Location>,
     statistics: Statistics,
+    source: Option<Box<crate::source_diagnostics::RetainedSource>>,
 }
 impl Error {
     /// Typed cause.
@@ -231,6 +235,47 @@ impl Error {
     pub fn location(&self) -> Option<Location> {
         self.location
     }
+    /// Attach the matching original source for a later human diagnostic.
+    ///
+    /// Only a source with the error's retained identity is copied; an unlocated
+    /// error or a different identity leaves the current context unchanged. The
+    /// caller supplies the original bytes and display name, without rereading or
+    /// reminting their identity. This copies one source and name in linear time
+    /// and space, independently of observation evaluation budgets. Input loading
+    /// ceilings bound those bytes. No entire include graph is retained.
+    pub fn retain_source(&mut self, name: &str, source: &themelios_base::source::Source) {
+        if self
+            .location
+            .is_some_and(|location| location.source == source.id())
+        {
+            self.source = Some(Box::new(crate::source_diagnostics::RetainedSource {
+                name: name.to_owned(),
+                source: source.clone(),
+            }));
+        }
+    }
+    /// Original bytes attached for diagnostic rendering, if any.
+    #[must_use]
+    pub fn diagnostic_source(&self) -> Option<&themelios_base::source::Source> {
+        self.source.as_ref().map(|context| &context.source)
+    }
+    /// Display name attached with the original source, if any.
+    #[must_use]
+    pub fn diagnostic_source_name(&self) -> Option<&str> {
+        self.source.as_ref().map(|context| context.name.as_str())
+    }
+    /// Typed located diagnostic, independent of any attached source or styling.
+    /// Allocates the cause's diagnostic message; unlocated errors return `None`.
+    #[must_use]
+    pub fn diagnostic(&self) -> Option<themelios_base::diagnostic::Diagnostic> {
+        self.location.map(|location| {
+            crate::diagnostic::diagnostic(
+                "observation",
+                format!("observation refused: {:?}", self.kind),
+                location,
+            )
+        })
+    }
     /// Work actually charged before refusal.
     #[must_use]
     pub fn statistics(&self) -> Statistics {
@@ -239,7 +284,13 @@ impl Error {
 }
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "observation refused: {:?}", self.kind)
+        write!(f, "observation refused: {:?}", self.kind)?;
+        if let Some(context) = &self.source
+            && let Some(diagnostic) = self.diagnostic()
+        {
+            context.write(f, &diagnostic)?;
+        }
+        Ok(())
     }
 }
 impl std::error::Error for Error {}

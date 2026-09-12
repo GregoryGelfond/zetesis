@@ -87,6 +87,16 @@ fn rule(source: &Rule, location: Location) -> Result<Template, AdmissionFailure>
         };
         match &literal.inner {
             LiteralInner::Atom(value) => {
+                if literal.negation != DefaultNegation::None
+                    && let Arguments::Single(arguments) = &value.get().arguments
+                    && arguments.iter().any(|argument| {
+                        matches!(argument, SourceTerm::Variable(Variable::Anonymous))
+                    })
+                {
+                    // A negative anonymous position tests the complete witness
+                    // projection. It is not an unbound relational gate variable.
+                    return Err(unsupported(ProfileFeature::AnonymousProjection, location));
+                }
                 let pattern = atom(value.get(), &mut variables, location)?;
                 match literal.negation {
                     DefaultNegation::None => positive.push(pattern),
@@ -118,6 +128,9 @@ fn rule(source: &Rule, location: Location) -> Result<Template, AdmissionFailure>
             }
         }
     }
+    if needs_binding_analysis(&positive, &filters) {
+        return Err(unsupported(ProfileFeature::ScalarBinding, location));
+    }
     if choice {
         gate_true.push(
             head.as_ref()
@@ -128,6 +141,21 @@ fn rule(source: &Rule, location: Location) -> Result<Template, AdmissionFailure>
     Ok(Template::new(
         head, positive, gate_true, gate_false, filters,
     ))
+}
+
+/// S0 comparisons only test relational bindings. Equality involving another
+/// slot requires the formula profile's readiness and finite-binding analysis.
+/// This classifies capability; it does not establish that the binding is safe.
+fn needs_binding_analysis(positive: &[AtomPattern], filters: &[Filter]) -> bool {
+    filters.iter().any(|filter| {
+        let Filter::Eq(left, right) = filter else {
+            return false;
+        };
+        [left, right].into_iter().any(|term| {
+            matches!(term, Term::Variable(_))
+                && !positive.iter().any(|atom| atom.terms().contains(term))
+        })
+    })
 }
 
 fn head(
@@ -284,6 +312,7 @@ pub(crate) fn scalar(source: &Symbol, location: Location) -> Result<Value, Admis
                 }
             })
         }
-        Symbol::Infimum | Symbol::Supremum => Err(unsupported(ProfileFeature::Symbol, location)),
+        Symbol::Infimum => Ok(Value::Infimum),
+        Symbol::Supremum => Ok(Value::Supremum),
     }
 }

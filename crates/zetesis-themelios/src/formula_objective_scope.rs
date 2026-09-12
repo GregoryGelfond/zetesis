@@ -167,7 +167,7 @@ impl Compiler<'_> {
         variables.safety(self.location)?;
         self.body_aggregates(source, guards, assignments, &variables, &mut body)?;
         self.body_conditionals(source, &variables, &mut body)?;
-        let bindings = self.assignment_plan(&body, variables.count, &[])?;
+        let bindings = self.assignment_plan(&body, variables.count, variables.count, &[])?;
         self.variable_limit(&variables)?;
         let positive = body
             .iter()

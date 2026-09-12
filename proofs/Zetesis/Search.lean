@@ -157,9 +157,15 @@ end Cube
 /-!
 The following finite tree is a proof-carrying completion ledger. Refutation
 leaves require a sound region refutation, not a rejected sample. Narrowing
-nodes require forced truth/falsity bounds, not a partial upper closure. These
-are the local obligations a concrete checker must discharge. The coverage
-theorems below derive their global consequences structurally.
+nodes require forced truth/falsity bounds, not a partial upper closure. Split
+nodes require a fresh undecided atom: absent from the lower bound and present
+in the upper bound, as expressed by `Cube.Fresh`. `Cube.fresh_branches` proves
+that each decision strictly changes its corresponding bound. Partition and
+disjointness hold without freshness, so this is a strict-progress obligation
+rather than a premise needed by the coverage argument itself. These are the
+local obligations a concrete checker must discharge. The coverage theorems below
+derive their global consequences structurally from an already finite tree; they
+do not prove termination of a concrete tree-construction algorithm.
 -/
 
 inductive CoverageTree {α : Type u} (valid : Atoms α → Prop) : Cube α → Type u

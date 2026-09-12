@@ -40,6 +40,7 @@ impl Compiler<'_> {
         &mut self,
         body: &[LiteralIr],
         variables: usize,
+        body_variables: usize,
         guards: &[AggregateGuard],
     ) -> Result<Option<Plan>, FormulaFailure> {
         // Preserve the established source-work charge on aggregate-free rules.
@@ -78,13 +79,20 @@ impl Compiler<'_> {
                 // Count before reserving exact logical capacity. Repeated
                 // source scans are charged; growing/reallocating summaries
                 // must not hide additional copies of earlier input cells.
+                // Body-local slots cannot name the later synthetic head suffix.
+                // Scalar head instructions may read the completed body frame.
+                let scope = if matches!(literal, LiteralIr::Aggregate(_)) {
+                    body_variables
+                } else {
+                    variables
+                };
                 let mut inputs = 0;
-                for input in 0..variables {
+                for input in 0..scope {
                     inputs += usize::from(self.instruction_uses(literal, input)?);
                 }
                 self.plan_storage::<usize>(inputs)?;
                 let mut required = Vec::with_capacity(inputs);
-                for input in 0..variables {
+                for input in 0..scope {
                     if self.instruction_uses(literal, input)? {
                         required.push(input);
                     }
@@ -123,7 +131,8 @@ impl Compiler<'_> {
             aggregate_values[step.produced] = aggregate || dependent;
             steps.push(step);
         }
-        let consumers = self.assignment_context(body, guards, &aggregate_values)?;
+        let consumers =
+            self.assignment_context(body, guards, &aggregate_values[..body_variables])?;
         Ok(Some(Plan { steps, consumers }))
     }
 
@@ -178,11 +187,9 @@ impl Compiler<'_> {
             }
             LiteralIr::Aggregate(aggregate) => {
                 // Its own equality target is an output, not a guard input.
-                // Compiler::rule finishes ordinary body/head/guard registration
-                // before body_aggregates clones Variables for each element.
-                // Later conditional/choice compilation borrows that outer frame
-                // and extends only clones. Thus local slots cannot alias a
-                // subsequently allocated outer slot or enter this summary.
+                // The caller limits aggregate reads to the original body frame.
+                // Later head-only slots may reuse local numeric indices, but
+                // belong to another scope and never enter this summary.
                 for element in &aggregate.elements {
                     if self.element_uses(element, input)? {
                         return Ok(true);

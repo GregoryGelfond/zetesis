@@ -112,3 +112,15 @@ pub enum Oracle {
     /// Require eager Ferraris search: CPU, or GPU propagation with exact CPU residuals.
     Countermodel,
 }
+
+impl Oracle {
+    /// Stable spelling for configuration and execution reports.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Closure => "closure",
+            Self::Countermodel => "countermodel",
+        }
+    }
+}

@@ -14,9 +14,9 @@ fn header(sink: &mut impl Write, options: &Options, elapsed: Duration) -> io::Re
     )?;
     writeln!(
         sink,
-        "  requested: backend={:?}; oracle={:?}; grounder={}",
-        options.backend,
-        options.oracle,
+        "  requested: backend={}; oracle={}; grounder={}",
+        options.backend.label(),
+        options.oracle.label(),
         options.grounder.label()
     )?;
     writeln!(
@@ -80,12 +80,22 @@ fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
     )?;
     writeln!(
         sink,
-        "  grounding limits: atoms={}; carrier atoms={}; substitutions={}; ground rules={}; GPU batch bytes={}",
+        "  requested grounding limits: atoms={}; carrier atoms={}; substitutions={}; ground rules={}; GPU batch bytes={}",
         o.max_atoms,
         o.max_carrier_atoms,
         o.max_substitutions,
         o.max_ground_rules,
         o.max_batch_bytes
+    )?;
+    let formula = crate::admission::formula_limits(o);
+    writeln!(
+        sink,
+        "  formula profile ceilings: atoms={}; roots={}; nodes={}; source values={}; support rounds={} (applicable when formula admission is selected)",
+        formula.theory.max_atoms,
+        formula.theory.max_roots,
+        formula.theory.max_nodes,
+        formula.max_domain_values,
+        formula.max_support_rounds
     )?;
     writeln!(
         sink,

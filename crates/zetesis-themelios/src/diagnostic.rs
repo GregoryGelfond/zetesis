@@ -58,6 +58,8 @@ pub enum ProfileFeature {
     StrongNegation,
     /// An atom argument-list pool.
     PooledArguments,
+    /// An anonymous atom position projected before default negation.
+    AnonymousProjection,
     /// An aggregate, conditional literal, theory atom, or unknown body element.
     BodyElement,
     /// A Boolean literal in a body or non-atom head.
@@ -68,10 +70,10 @@ pub enum ProfileFeature {
     ComparisonChain,
     /// A comparison other than equality or disequality.
     ComparisonRelation,
+    /// Equality needs a value not already supplied by a positive relational atom.
+    ScalarBinding,
     /// A non-scalar term, unsupported operator, external call, pool, or interval.
     Term,
-    /// A compound symbol, tuple, or infinite bound.
-    Symbol,
     /// Checked numeric negation could not fit the scalar width.
     NumericOverflow,
     /// A NUL byte in a scalar string; clingo cannot preserve this identity.
@@ -112,13 +114,14 @@ impl fmt::Display for ProfileFeature {
             Self::NegatedHead => "default-negated head",
             Self::StrongNegation => "strong negation",
             Self::PooledArguments => "pooled arguments",
+            Self::AnonymousProjection => "anonymous projection under default negation",
             Self::BodyElement => "body element form",
             Self::BooleanLiteral => "Boolean literal",
             Self::NegatedComparison => "default-negated comparison",
             Self::ComparisonChain => "comparison chain",
             Self::ComparisonRelation => "comparison relation",
+            Self::ScalarBinding => "scalar equality requiring binding analysis",
             Self::Term => "non-scalar term or unsupported operator",
-            Self::Symbol => "compound or unbounded symbol",
             Self::NumericOverflow => "numeric negation overflow",
             Self::NulString => "a string containing NUL",
             Self::ShowTerm => "a term-valued or conditional show directive",

@@ -51,7 +51,8 @@ pub(crate) fn source(
                     diagnostics,
                     control,
                     phases,
-                );
+                )
+                .map_err(|failure| source_failure(failure, "<input>", admitted.source()));
             }
             Err(error) if retry.is_some() && error.needs_formula_admission() => {
                 retry.expect("retry guard established an owned source")
@@ -87,6 +88,7 @@ pub(crate) fn source(
         control,
         phases,
     )
+    .map_err(|failure| source_failure(failure, "<input>", admitted.source()))
 }
 
 pub(crate) fn bundle(
@@ -107,8 +109,13 @@ pub(crate) fn bundle(
     diagnostics.metadata(
         Label::Source,
         format_args!(
-            "{} original files ({} bytes)",
+            "{} original {} ({} bytes)",
             bundle.sources().len(),
+            if bundle.sources().len() == 1 {
+                "file"
+            } else {
+                "files"
+            },
             bundle.total_bytes()
         ),
     )?;
@@ -131,7 +138,8 @@ pub(crate) fn bundle(
                     diagnostics,
                     control,
                     phases,
-                );
+                )
+                .map_err(|failure| bundle_failure(failure, admitted.bundle()));
             }
             Err(error)
                 if options.oracle == Oracle::Auto
@@ -171,6 +179,31 @@ pub(crate) fn bundle(
         control,
         phases,
     )
+    .map_err(|failure| bundle_failure(failure, admitted.bundle()))
+}
+
+fn source_failure(
+    mut failure: PublicationFailure,
+    name: &str,
+    source: &zetesis_themelios::base::source::Source,
+) -> PublicationFailure {
+    if let RunError::Observation(error) = failure.cause.as_mut() {
+        error.retain_source(name, source);
+    }
+    failure
+}
+
+fn bundle_failure(mut failure: PublicationFailure, bundle: &SourceBundle) -> PublicationFailure {
+    use zetesis_themelios::base::source::Sources;
+
+    if let RunError::Observation(error) = failure.cause.as_mut()
+        && let Some(location) = error.location()
+        && let Some(source) = bundle.get(location.source)
+        && let Some(name) = bundle.name(location.source)
+    {
+        error.retain_source(name, source.source());
+    }
+    failure
 }
 
 pub(crate) fn expansion_limits(options: &Options) -> ExpansionLimits {

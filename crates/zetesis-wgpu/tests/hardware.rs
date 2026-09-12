@@ -13,7 +13,7 @@ use std::collections::BTreeSet;
 use zetesis_core::{
     AdmissionLimits, AtomPattern, GroundProgram, Predicate, Program, Seed, StaticLimits, Template,
 };
-use zetesis_wgpu::{GpuLimits, GpuOptions, GpuOracle};
+use zetesis_wgpu::{GpuCheck, GpuLimits, GpuOptions, GpuOracle};
 
 fn atom(name: &str) -> AtomPattern {
     AtomPattern::new(Predicate::new(name, 0).expect("valid signature"), vec![])
@@ -103,17 +103,9 @@ fn reference(graph: &GroundProgram, seed: &Seed) -> (Vec<u32>, u32) {
     (closure, u32::from(constraint) | (u32::from(mismatch) << 1))
 }
 
-fn compare(oracle: &mut GpuOracle, graph: &GroundProgram) -> usize {
-    let candidates = seeds(graph);
-    let checks = oracle
-        .check_batch(graph, &candidates, GpuLimits::default())
-        .expect("real GPU dispatch succeeds");
-    let cold = *oracle
-        .last_batch_stats()
-        .expect("nonempty batch statistics");
-    assert!(cold.graph_uploaded && cold.transport_allocated);
+fn assert_closures(graph: &GroundProgram, candidates: &[Seed], checks: &[GpuCheck]) {
     assert_eq!(checks.len(), candidates.len());
-    for (seed, check) in candidates.iter().zip(&checks) {
+    for (seed, check) in candidates.iter().zip(checks) {
         let (closure, status) = reference(graph, seed);
         assert_eq!(check.closure_words(), closure);
         assert_eq!(check.accepted(), status == 0);
@@ -123,12 +115,42 @@ fn compare(oracle: &mut GpuOracle, graph: &GroundProgram) -> usize {
             .model_from_words(check.closure_words())
             .expect("GPU closure reconstructs a valid model");
     }
+}
+
+fn compare(oracle: &mut GpuOracle, graph: &GroundProgram) -> usize {
+    let candidates = seeds(graph);
+    let checks = oracle
+        .check_batch(graph, &candidates, GpuLimits::default())
+        .expect("real GPU dispatch succeeds");
+    let cold = *oracle
+        .last_batch_stats()
+        .expect("nonempty batch statistics");
+    assert!(cold.graph_uploaded && cold.transport_allocated);
+    assert_closures(graph, &candidates, &checks);
+    // No-dispatch calls leave both residency and the next submission identity
+    // available, even with no payload/candidate budget or wait allowance.
+    assert!(
+        oracle
+            .check_batch(
+                graph,
+                &[],
+                GpuLimits {
+                    max_candidates: 0,
+                    max_batch_bytes: 0,
+                    timeout: std::time::Duration::ZERO,
+                },
+            )
+            .expect("an empty batch needs no dispatch resources")
+            .is_empty()
+    );
+    assert!(oracle.last_batch_stats().is_none());
     // The next epoch uses reversed candidate order and the same immutable
     // program. Any leaked candidate latches or stale lane mapping is visible.
     let reversed: Vec<_> = candidates.into_iter().rev().collect();
     let repeated = oracle
         .check_batch(graph, &reversed, GpuLimits::default())
         .expect("subsequent epoch succeeds");
+    assert_closures(graph, &reversed, &repeated);
     assert!(checks.iter().rev().eq(repeated.iter()));
     let hot = *oracle
         .last_batch_stats()
@@ -149,6 +171,7 @@ fn compare(oracle: &mut GpuOracle, graph: &GroundProgram) -> usize {
                 },
             )
             .expect("smaller transport replaces larger buffers under a hot budget");
+        assert_closures(graph, &reversed[..1], &smaller);
         assert_eq!(smaller, repeated[..1]);
         let resized = oracle
             .last_batch_stats()
@@ -191,6 +214,16 @@ fn qualify_constructor_executes_resident_batches_without_fallback(backend: physi
 #[ignore = "requires an actual GPU; run this hardware qualification explicitly"]
 fn exact_static_oracle_matches_independent_cpu_closures() {
     let oracle = GpuOracle::new(GpuOptions::default()).expect("physical GPU adapter is available");
+    qualify_static(oracle);
+}
+
+#[test]
+#[ignore = "requires an actual Metal GPU; explicit physical qualification"]
+fn metal_static_oracle_matches_independent_closures() {
+    let backend = physical::Backend::Metal;
+    let oracle = GpuOracle::new_selected(GpuOptions::default(), backend.selection())
+        .expect("requested physical Metal adapter must be available");
+    backend.verify(oracle.info());
     qualify_static(oracle);
 }
 

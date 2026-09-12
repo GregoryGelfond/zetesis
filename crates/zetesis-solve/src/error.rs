@@ -63,10 +63,10 @@ impl fmt::Display for SolveError {
             Self::CompletionPool(error) => write!(formatter, "completion worker pool: {error}"),
             Self::BackendUnavailable => formatter.write_str("GPU support was not compiled"),
             Self::UnsupportedOracle { backend, grounder } => write!(formatter,
-                "the countermodel oracle requires eager or automatic grounding; requested {backend:?} with {}", grounder.label()),
+                "the countermodel oracle requires eager or automatic grounding; requested {} with {}", backend.label(), grounder.label()),
             Self::UnsupportedSourceBatching => formatter.write_str("shared source batching requires the relational closure route with lazy/auto grounding and cpu/auto backend"),
             Self::PreparedInput { profile, oracle, grounder } => write!(formatter,
-                "prepared {profile:?} cannot honor oracle {oracle:?} with grounder {grounder:?}"),
+                "prepared {profile:?} cannot honor oracle {} with grounder {}", oracle.label(), grounder.label()),
             Self::ExecutionObservation(error) => write!(formatter, "execution observer: {error}"),
             Self::Static(error) => error.fmt(formatter),
             #[cfg(feature = "gpu")]

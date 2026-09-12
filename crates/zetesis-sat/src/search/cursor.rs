@@ -6,9 +6,11 @@ use crate::{Assignment, Cnf, Incomplete, Solve};
 mod projections;
 use projections::Projections;
 
-/// The caller retains one CNF and only appends clauses, without introducing
-/// variables or altering its original prefix. Appended clauses are filters at
-/// complete assignments; they are deliberately absent from the watch registry.
+/// During one traversal, the caller retains one CNF and only appends clauses,
+/// without introducing variables or altering the prefix present at initialization.
+/// Later clauses filter complete assignments without entering that traversal's
+/// watch registry. A fresh cursor after query refinement initializes from the
+/// strengthened CNF, so earlier filters then belong to its watched prefix.
 #[derive(Debug, Default)]
 pub(crate) struct Cursor {
     state: Option<State>,

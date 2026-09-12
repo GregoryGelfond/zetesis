@@ -641,12 +641,22 @@ scripts/check.sh book
 
 Physical Metal qualification adds the named device tests with
 `scripts/check.sh coverage --metal` on a machine exposing a Metal adapter.
+The current selection contains 51 exact tests in 16 groups, including explicit
+Metal static-oracle construction and complete closure comparisons against an
+independent ordered-set reference. The [static tests](../../../crates/zetesis-wgpu/tests/hardware.rs)
+check the static shader and readback contract; formula tests do not replace them.
 Use fresh instrumentation for the source being qualified; matching executable
 filenames do not establish matching builds. Coverage has independent workspace
 and CPU-only populations and does not replace assertion review. The CPU-only
 population selects both `zetesis-solve` and `zetesis-cli`, retaining the semantic
 engine and its command adapter across the crate boundary. Its report directory
 keeps the historical name `cli-cpu`; the directory name does not narrow its scope.
+
+The workspace report from `scripts/check.sh coverage` contains portable tests
+only. It is not the combined workspace report produced by `--metal`: the latter
+also instruments the selected physical tests, so both its covered lines and its
+instrumented population can differ. Compare like populations on the same source;
+neither report replaces the separate CPU-only gate.
 
 Keep durable fixtures, source attribution and runnable checks in the repository.
 The manual describes current contracts. Private development history and
@@ -689,8 +699,11 @@ observations and all optimum ties across aggregate heads, objectives and output
 queries. They require actual GPU work and exact accounting of CPU residuals.
 Vulkan and other untested devices are outside this measurement.
 
-Reproduce the populations with `scripts/check.sh coverage --metal` using the
-[verification tools](#prepare-verification-tools). Retain the generated JSON and
+Reproduce this recorded snapshot from the linked source revision with
+`scripts/check.sh coverage --metal` using the
+[verification tools](#prepare-verification-tools). That revision selected 49
+physical tests; the current 51-test selection requires a fresh qualification
+before replacing these recorded measurements. Retain the generated JSON and
 HTML reports under `target/coverage/workspace` and `target/coverage/cli-cpu`.
 Update the badge and this table together only after qualification completes.
 Line coverage identifies executed Rust lines; it does not establish assertion

@@ -180,7 +180,7 @@ fn summary(
     out.text(",\"interruption\":")?;
     write_interruption(&mut out, view.interruption)?;
     out.text(",\"optimization\":")?;
-    write_optimization(&mut out, view.optimization, view.completion)?;
+    write_optimization(&mut out, view.optimization, view.optimum_proved)?;
     out.text(",\"error\":")?;
     if let Err(failure) = result {
         out.text("{\"kind\":")?;
@@ -574,15 +574,12 @@ fn optional_number(out: &mut Buffer, value: Option<u128>) -> Result<(), RunError
 fn write_optimization(
     out: &mut Buffer,
     optimization: Option<&crate::Optimization>,
-    completed: Option<Completion>,
+    optimum_proved: bool,
 ) -> Result<(), RunError> {
     if let Some(best) = optimization {
         out.text(&format!(
             "{{\"optimal\":{},\"tied_models\":{},\"scored_models\":{},\"work\":{},\"costs\":[",
-            completed == Some(Completion::Exhausted),
-            best.tied_models,
-            best.scored_models,
-            best.work
+            optimum_proved, best.tied_models, best.scored_models, best.work
         ))?;
         for (index, (priority, value)) in best.score.costs().iter().enumerate() {
             if index != 0 {
@@ -600,6 +597,7 @@ fn write_optimization(
 // Borrow the retained semantic evidence; publication does not manufacture it.
 struct SummaryView<'a> {
     completion: Option<Completion>,
+    optimum_proved: bool,
     published_models: usize,
     verified_models: Option<u64>,
     checked: Option<u64>,
@@ -618,6 +616,7 @@ impl<'a> SummaryView<'a> {
                 let semantic = progress.semantic();
                 Self {
                     completion: semantic.and_then(crate::SemanticOutcome::completion),
+                    optimum_proved: semantic.is_some_and(crate::SemanticOutcome::optimum_proved),
                     published_models: progress.publication.models,
                     verified_models: semantic.map(crate::SemanticOutcome::verified_models),
                     checked: semantic.map(crate::SemanticOutcome::candidate_progress),
@@ -634,6 +633,9 @@ impl<'a> SummaryView<'a> {
                 let partial = failure.partial_report.as_deref();
                 Self {
                     completion: partial.and_then(|p| p.completion),
+                    optimum_proved: failure
+                        .semantic()
+                        .is_some_and(crate::SemanticOutcome::optimum_proved),
                     published_models: partial.map_or(0, |p| p.published_models),
                     verified_models: partial.map(|p| p.verified_models),
                     checked: partial.map(|p| p.checked),

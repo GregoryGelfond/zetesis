@@ -8,6 +8,7 @@
 - [Programs, answer sets, and the reduct](architecture/semantics.md)
 - [From answer-set semantics to exact transforms](architecture/alignment.md)
 - [Source programs and grounding](architecture/grounding.md)
+- [Source preparation and grounding modules](architecture/source-pipeline.md)
 - [Grounding compared with clingo](architecture/grounding-comparison.md)
 - [Composing exact execution](architecture/execution.md)
 - [Ownership, dependencies and parallel work](architecture/ownership.md)

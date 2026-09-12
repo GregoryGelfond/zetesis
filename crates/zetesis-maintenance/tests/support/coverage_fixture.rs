@@ -38,7 +38,7 @@ impl Fixture {
         fixture.write("scripts/coverage-floor.txt", b"91\n");
         fixture.write("target/coverage/status.txt", b"gate-passed\n");
         fs::create_dir_all(fixture.root().join("proofs")).unwrap();
-        for role in ["cargo", "rustc", "mdbook", "lake"] {
+        for role in ["cargo", "rustc", "rustup", "mdbook", "lake"] {
             fixture.tool(&format!("bin/{role}"), role);
         }
         for name in ["llvm-cov", "llvm-profdata"] {

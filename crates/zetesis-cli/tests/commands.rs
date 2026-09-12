@@ -186,14 +186,22 @@ fn cpu_only_devices_and_explicit_gpu_refusal_are_truthful() {
 
 #[cfg(feature = "gpu")]
 #[test]
-fn auto_gpu_failure_retries_without_losing_or_duplicating_models() {
+fn automatic_device_failure_preserves_complete_models() {
     let mut models = Vec::new();
     let mut diagnostics = Vec::new();
-    // A physical GPU may be absent; when present, the zero transport budget
-    // deterministically refuses dispatch. Either failure must preserve search.
+    // Eager grounding isolates the transport budget from lazy host source work.
+    // Without a GPU, discovery fails; with one, static dispatch refuses zero
+    // bytes. Both device failures must preserve this complete candidate family.
     let report = run_with_diagnostics(
         "{a}. {b}. {c}. {d}. {e}. {f}.".into(),
-        &options(&["--models", "0", "--max-batch-bytes", "0"]),
+        &options(&[
+            "--models",
+            "0",
+            "--grounder",
+            "eager",
+            "--max-batch-bytes",
+            "0",
+        ]),
         &mut models,
         &mut diagnostics,
         &Control::default(),
@@ -211,9 +219,12 @@ fn auto_gpu_failure_retries_without_losing_or_duplicating_models() {
     assert_eq!(answers.len(), 64);
     let diagnostics = String::from_utf8(diagnostics).unwrap();
     assert!(
-        diagnostics.contains("retaining lazy CPU; GPU unavailable:")
-            || diagnostics.contains("GPU batch failed; retrying on lazy CPU:")
+        diagnostics.contains("retaining eager CPU; GPU unavailable:")
+            || diagnostics.contains("GPU batch failed; retrying on eager CPU:")
     );
+    // Explicit hardware qualification retains this view to distinguish the
+    // zero-byte transport refusal from the portable discovery-failure branch.
+    println!("automatic device diagnostics:\n{diagnostics}");
 }
 
 #[cfg(feature = "gpu")]
@@ -223,7 +234,14 @@ fn explicit_gpu_failure_cannot_publish_a_cpu_model() {
     let mut diagnostics = Vec::new();
     let error = run_with_diagnostics(
         "a.".into(),
-        &options(&["--backend", "gpu", "--max-batch-bytes", "0"]),
+        &options(&[
+            "--backend",
+            "gpu",
+            "--grounder",
+            "eager",
+            "--max-batch-bytes",
+            "0",
+        ]),
         &mut models,
         &mut diagnostics,
         &Control::default(),
@@ -236,4 +254,5 @@ fn explicit_gpu_failure_cannot_publish_a_cpu_model() {
             .unwrap()
             .contains("Backend: cpu")
     );
+    println!("explicit device refusal: {error}");
 }

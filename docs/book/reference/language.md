@@ -12,6 +12,34 @@ profile, `admit_extended` adds its scalar expansions, and `admit_formula` builds
 the broader finite Ferraris representation. General formula grounding remains
 eager. Selecting a GPU does not expand the accepted source language.
 
+## Source loading and finite admission limits
+
+Original file roots and supported `#include` directives form one bounded source
+bundle. An include targeting a file on the active include chain is refused as a
+cycle. Reusing a file after its earlier traversal has completed is permitted and
+includes that file once, as with a diamond-shaped include graph. clingo 5.8.2
+warns and skips an already included file even on a cycle; zetesis requires an
+acyclic include chain. This is a source-loading contract, separate from the
+answer-set semantics of the resulting program. See
+[`SourceBundle`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/bundle.rs)
+for canonical identity, path and resource requirements.
+
+Formula admission has independent inclusive ceilings. The ordinary CLI uses at
+most 65,536 atoms and 262,144 formula roots, further reduced by `--max-atoms` and
+`--max-ground-rules`. Raising either option above that profile's ceiling does not
+raise the formula ceiling. Formula nodes are bounded by 1,048,576, distinct
+source values by 1,024, and possible-support construction by 1,024 complete
+rounds. A round that establishes no change is included; this is not a direct
+recursion-depth measure. Exhaustion refuses admission and cannot establish
+completed support or unsatisfiability.
+
+`--stats` reports both requested grounding limits and formula profile ceilings.
+The CLI has no independent source-value or support-round option. Library callers
+can configure these fields through
+[`FormulaLimits`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula.rs),
+with the same checked refusal contracts. Relational lazy execution has its own
+source-work and derived-atom limits; these formula limits do not describe it.
+
 ## Rules, terms, and bindings
 
 | Form | Implemented scope | Remaining boundary |
@@ -502,6 +530,18 @@ Reached undefined or overflowing scalar operations produce located refusals.
 The formula source API does not emulate clingo's warning-and-drop behavior for
 such operations. A syntactically false condition is not permission to skip
 required source validation.
+
+For body arithmetic, a complete possible-positive binding is the validation
+boundary. A false scalar filter does not hide another required body expression,
+including a scoped aggregate guard. An incomplete positive join with no complete
+extension creates no ground-row obligation. Row-dependent head atom arguments
+are a later stage: `d(0;1). p((X+1)**31):-d(X),X=0.` evaluates the head only for
+`X=0`. The same distinction applies to local choice elements. Negative gates and
+aggregate truth remain formulas and do not prune that stage. Closed-term source
+validation and aggregate-head tuple contribution checks retain their own scopes.
+The [arithmetic validation contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/arithmetic_validation.rs)
+check defined complete families, incomplete joins, required failures and explicit
+clingo differences.
 
 There is also a conservative **zetesis extrema guard**: numeric values
 `-2147483648` and `2147483647` are refused when reached as `#min`/`#max` bounds or

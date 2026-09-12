@@ -106,7 +106,7 @@ Precisely, an instance is enabled when its positive antecedents are a subset of
 `X[w]`, its true-gate atoms are a subset of `S[w]`, and its false-gate atoms are
 disjoint from `S[w]`. If `G_P` is the admitted program's gate carrier, then
 `GateProjection(X) = X ∩ G_P`. The separate
-[`Candidates`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/candidate.rs)
+[`Candidates`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/candidates.rs)
 generator owes complete coverage of the relevant seeds over that carrier.
 
 All chunks in one round read the same snapshots. Chunk results can be reduced

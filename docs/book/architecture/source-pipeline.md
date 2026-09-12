@@ -1,0 +1,107 @@
+# Source preparation and grounding modules
+
+`zetesis-themelios` has two materialization boundaries. Relational admission
+returns templates for lazy or eager normal-rule execution. Formula preparation
+returns scoped instructions; grounding consumes them to construct a finite
+Ferraris theory. Neither boundary searches for answer sets.
+
+This chapter maps the implementation for readers extending the source language.
+The [source API guide](../rust/source.md) describes the public entry points;
+[grounding](grounding.md) explains their mathematical contracts.
+
+## Follow the owned objects
+
+```text
+original source catalog
+  → parsed and raised themelios program
+  → bounded normalization and scope analysis
+  → prepared rules, objective observations and dependency plans
+  → completed possible-positive support
+  → complete bindings and original formula instances
+  → validated theory + atom catalog + objectives + source metadata
+```
+
+The arrows describe dependencies, not independent copies of every intermediate
+object. Source identities and parsed origins remain available after preparation.
+The source and formula work counters continue across preparation and grounding.
+An analysis projection records its own basis; its classifications do not prove
+properties of source constructs that the projection erased.
+
+Possible support owns one atom catalog. A completed snapshot lends immutable
+relations and column indexes to joins; it does not grant those atoms truth in an
+answer set. Final grounding owns a separate emitted-atom catalog because the
+theory's dense universe is a different object from the possible-support bound.
+Objective queries borrow completed support and own bounded transient formula
+scratch. Their atoms and roots cannot become program producers.
+
+## Locate the operation
+
+The names below are modules under
+[`crates/zetesis-themelios/src`](https://github.com/GregoryGelfond/zetesis/tree/main/crates/zetesis-themelios/src).
+An `_ir` suffix denotes source lowering or scope checks; a `_plan` suffix
+denotes a checked schedule over existing instructions. Execution consumers retain
+those instructions rather than interpreting the plan as new program semantics.
+
+| Responsibility | Modules | Boundary |
+| --- | --- | --- |
+| Source catalog and includes | `bundle`, `bundle_admission` | Original files, paths, source identities and located failures |
+| Diagnostic and strict-profile checks | `profile`, `diagnostic`, `source_diagnostics` | Typed refusals and source views; no recovered partial program |
+| Relational templates | `compile`, `extended`, `expansion`, `fact_expansion` | Closed values, bounded constants/arithmetic/fact expansion and template admission |
+| Classical negation | `coherence` | Distinct signed predicates and consistency constraints |
+| Semantic value conversion | `structural_value`, `scalar_arithmetic`, `formula_value` | Typed closed values and checked arithmetic; no atom support |
+| Formula preparation | `formula`, `formula::preparation`, `formula_ir` | Public owned preparation, scoped rule/objective IR and cumulative budgets |
+| Source occurrences and alternatives | `formula_choice_source`, `formula_pool` | Original Boolean choice occurrences and bounded pool alternatives |
+| Upstream analysis | `formula_analysis`, `formula_conditional_projection` | Bounded pool-free input and an explicit analysis basis |
+| Value and pattern lowering | `formula_value_ir`, `formula_pattern_ir`, `formula_projection_ir` | Evaluated positions, structural captures and anonymous negative projection |
+| Scalar bindings | `formula_binding_ir`, `formula_binding_guard`, `formula_binding_plan` | Safe producers, finite envelopes and dependency order; original guards remain |
+| Aggregate bindings | `formula_aggregate_ir`, `formula_assignment_ir`, `formula_assignment_plan` | Element scopes, assignment applicability and required/produced inputs |
+| Binding execution | `formula_binding_cursor`, `formula_assignment` | Bounded scalar/range and aggregate proposals over complete relational rows |
+| Head lowering | `formula_head_ir`, `formula_choice_ir`, `formula_head_aggregate` | Signed head activity, independent permission and aggregate measure |
+| Conditional lowering | `formula_conditional_ir`, `formula_consequent_ir`, `formula_conditional_head_ir` | Outer/local scopes and the admitted conditional-head profile |
+| Complete joins and possible support | `formula_support`, `formula_pattern` | Transactional whole-tuple matching, snapshots, indexes and support completion |
+| Formula emission | `formula_ground`, `formula_guard`, `formula_conditional` | Original implications, aggregate conditions and universal instances |
+| Optional formula factoring | `formula_factor` | Qualified existential components with the complete-join path as fallback |
+| Optional count certificates | `formula_count_plan` | Capture, derivation and emitted correspondence to the original theory |
+| Objective source preparation | `formula_weak`, `formula_ir::objective_scope`, `formula_objective_dependencies` | Scoped weak bodies, per-objective eligibility precision and original-model queries |
+| Objective materialization | `formula_ground::objectives`, `formula_ground::scoped_body` | Retained objective templates and bounded body validation without producer support |
+| Observation and metadata | `metadata`, `observation` | Source directives and views of a supplied full model |
+| Objective bounds | `objective_bound` | Optional score bounds with their own admission and work limits |
+| Measurement | `grounding_observer` | Injected phase/work observations, separate from semantic completion |
+| Public composition | `lib` | Exports, strict admission and retained source evidence |
+
+Some private modules use a `#[path]` declaration: for example,
+`formula_ir::objective_scope` is stored in `formula_objective_scope.rs`.
+The owning module declaration determines Rust visibility. Filename proximity does
+not grant access or establish dependency direction.
+
+## Keep the obligations separate
+
+A binding plan proves readiness of inputs, not the truth of an aggregate or a
+negative literal. A possible-support row proves that grounding must consider an
+atom, not that the atom belongs to a candidate. An objective eligibility carrier
+retains possible contribution keys; its original-model query still decides
+whether a contribution is active. Formula emission and final theory validation
+preserve these distinctions before any reduct check begins.
+
+Required body evaluation and contribution selection are separate operations.
+Pruning a false comparison must not hide required arithmetic on a complete
+positive binding. Computations introduced solely for a head have their own
+scope: a discarded body row must not acquire a head value or emit an atom.
+The existing expression evaluator and binding schedule serve these scopes; their
+placement determines when evaluation is required.
+
+`formula_ground::scoped_body` shares the original body-lowering operation between
+objective query construction and validation of discarded rule rows. The caller
+selects the applicable scratch ceilings and retains cumulative source work.
+Discarding the resulting scratch does not discard errors or charged work.
+
+Compiler-internal assignment tests live under `formula_ir` because they construct
+both valid and invalid private IR. Public source tests cannot reach states that
+scope checking rejects first. These tests complement source admission and
+answer-set tests; they do not replace them or justify making private constructors
+public.
+
+When adding a construct, identify its source scope, readiness rule, complete-row
+validation, possible-support contribution and original formula separately.
+Then identify its source locations, bounded scratch and retained output. A change
+in one stage must not silently transfer an obligation to the next.

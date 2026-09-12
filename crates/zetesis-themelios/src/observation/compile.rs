@@ -38,6 +38,7 @@ struct Compiler<'a> {
 impl Compiler<'_> {
     fn error(&self, kind: ErrorKind) -> Error {
         Error {
+            source: None,
             kind,
             location: Some(self.location),
             statistics: Statistics::default(),

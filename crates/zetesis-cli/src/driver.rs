@@ -152,7 +152,6 @@ impl fmt::Display for RunError {
             self,
             Self::Admission(_)
                 | Self::Expansion(_)
-                | Self::BundleLoad(_)
                 | Self::BundleAdmission(_)
                 | Self::FormulaAdmission(_)
                 | Self::FormulaBundleAdmission(_)
@@ -160,14 +159,14 @@ impl fmt::Display for RunError {
             f.write_str("source admission: ")?;
         }
         match self {
-            Self::Input(error) => error.fmt(f),
+            Self::Input(error) => write!(f, "standard input ('-'): {error}"),
             Self::MixedStandardInput => f.write_str(
                 "standard input ('-') must be the only input; mixed or repeated stdin roots are unsupported",
             ),
             Self::Admission(error) => error.fmt(f),
             Self::Batch(error) => error.fmt(f),
             Self::CompletionPool(error) => write!(f, "completion worker pool: {error}"),
-            Self::BundleLoad(error) => error.fmt(f),
+            Self::BundleLoad(error) => write!(f, "source loading: {error}"),
             Self::BundleAdmission(error) => error.fmt(f),
             Self::Expansion(error) => error.fmt(f),
             Self::BackendUnavailable => f.write_str(
@@ -175,16 +174,18 @@ impl fmt::Display for RunError {
             ),
             Self::UnsupportedCombination { backend, grounder } => write!(
                 f,
-                "unsupported backend/grounding profile: {backend:?} with {}",
+                "unsupported backend/grounding profile: {} with {}",
+                backend.label(),
                 grounder.label()
             ),
             Self::UnsupportedOracle { backend, grounder } => write!(
                 f,
-                "the countermodel oracle requires --grounder eager or auto; requested {backend:?} with {}",
+                "the countermodel oracle requires --grounder eager or auto; requested {} with {}",
+                backend.label(),
                 grounder.label()
             ),
             Self::PreparedInput { profile, oracle, grounder } => write!(f,
-                "prepared {profile:?} cannot honor oracle {oracle:?} with grounder {grounder:?}"),
+                "prepared {profile:?} cannot honor oracle {} with grounder {}", oracle.label(), grounder.label()),
             Self::UnsupportedSourceBatching => f.write_str("shared source batching requires the relational closure route with lazy/auto grounding and cpu/auto backend"),
             Self::SharedCpu(cause) => cause.fmt(f),
             Self::Formula(error) => error.fmt(f),

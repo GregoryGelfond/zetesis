@@ -61,6 +61,13 @@ Verified incumbents may still carry fully evaluated costs. Exit codes are:
 
 These are zetesis exit codes, not clingo's codes.
 
+The process explicitly flushes standard output before returning. A failed flush
+returns exit 2, including after an otherwise complete or interrupted search, and
+does not replace an earlier failure. Redirected output uses a fixed
+8 KiB staging buffer; terminal output bypasses that buffer so answers remain
+prompt. This process policy does not change the library's record acknowledgement:
+acceptance by a caller-supplied writer promises neither flushing nor durability.
+
 `--json` streams one schema-1 document without ANSI styling. Full semantic atoms,
 shown atom indices, shown terms, costs and terminal outcomes remain distinct.
 `--max-json-record-bytes` bounds each model and terminal record, with an 8 MiB
@@ -155,6 +162,10 @@ retention have independent ceilings listed by `--help-all`. A limit never means
 a smaller admitted program or proved inconsistency. Full models are counted
 before `#show`; observation failure cannot publish a complete Answer record.
 A retained incumbent remains unproved when search coverage is incomplete.
+Runtime observation diagnostics resolve the failing directive against the loaded
+original source, including included files. The returned typed error retains that
+one source for later rendering; changed disk contents cannot replace its excerpt.
+See the [diagnostic and publication regressions](tests/observation_diagnostics.rs).
 
 ## Compose the command adapter
 

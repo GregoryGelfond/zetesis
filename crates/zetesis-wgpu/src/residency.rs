@@ -55,7 +55,7 @@ impl ResidentGraph {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         pipeline: &wgpu::ComputePipeline,
-        packed: &PackedSeeds,
+        packed: &PackedSeeds<'_>,
         plan: &BatchPlan,
         timeout: Duration,
     ) -> Result<Vec<GpuCheck>, GpuError> {
@@ -66,6 +66,7 @@ impl ResidentGraph {
             .transport
             .as_ref()
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing batch transport"))?;
+        queue.write_buffer(&transport.params, 0, bytemuck::cast_slice(&packed.params));
         queue.write_buffer(&transport.seeds, 0, bytemuck::cast_slice(&packed.seeds));
         let submission = runtime::submit(
             device,
@@ -82,13 +83,14 @@ impl ResidentGraph {
             },
         );
         runtime::read(device, &transport.readback, submission, timeout, |words| {
-            packing::decode(words, plan)
+            packing::decode(words, plan, packed)
         })
     }
 }
 
 struct Transport {
     world_count: u32,
+    params: wgpu::Buffer,
     seeds: wgpu::Buffer,
     result: wgpu::Buffer,
     readback: wgpu::Buffer,
@@ -100,16 +102,16 @@ impl Transport {
         device: &wgpu::Device,
         pipeline: &wgpu::ComputePipeline,
         graph: &ResidentGraph,
-        packed: &PackedSeeds,
+        packed: &PackedSeeds<'_>,
         plan: &BatchPlan,
     ) -> Self {
-        // The group retains the parameter buffer, whose values are fixed for
-        // this program and exact world count. Candidate bits alone are rewritten.
+        // Dimensions remain fixed for this transport shape; every dispatch
+        // rewrites its checked epoch as well as the candidate bits.
         let params = initialized(
             device,
             "parameters",
             &packed.params,
-            wgpu::BufferUsages::UNIFORM,
+            wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         );
         let seeds = buffer(
             device,
@@ -143,6 +145,7 @@ impl Transport {
         });
         Self {
             world_count: plan.world_count,
+            params,
             seeds,
             result,
             readback,

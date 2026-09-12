@@ -66,7 +66,11 @@ impl Work<'_> {
         }
         Ok(left.len().cmp(&right.len()))
     }
-    fn compare(&mut self, left: &Value, right: &Value) -> Result<Ordering, Error> {
+    // Canonical storage order for identity tests and deduplicated contribution
+    // keys. Equality agrees with logical-value identity; ordering is not the ASP
+    // term-order relation used by source comparisons. Each caller either tests
+    // equality or uses the same order to insert and find complete keys.
+    fn compare_identity(&mut self, left: &Value, right: &Value) -> Result<Ordering, Error> {
         self.tick()?;
         if matches!(left, Value::Structured(_)) || matches!(right, Value::Structured(_)) {
             for value in [left, right] {
@@ -155,7 +159,7 @@ impl Work<'_> {
             }
             let mut equal = true;
             for (left, right) in query.values().iter().zip(atom.values()) {
-                if self.compare(left, right)? != Ordering::Equal {
+                if self.compare_identity(left, right)? != Ordering::Equal {
                     equal = false;
                     break;
                 }
@@ -334,13 +338,13 @@ impl Evaluator<'_> {
             self.work.tick()?;
             match term {
                 Term::Constant(constant) => {
-                    if self.work.compare(constant, value)? != Ordering::Equal {
+                    if self.work.compare_identity(constant, value)? != Ordering::Equal {
                         return Ok(false);
                     }
                 }
                 Term::Variable(variable) => {
                     if let Some(previous) = binding[*variable] {
-                        if self.work.compare(previous, value)? != Ordering::Equal {
+                        if self.work.compare_identity(previous, value)? != Ordering::Equal {
                             return Ok(false);
                         }
                     } else {
@@ -368,7 +372,7 @@ impl Evaluator<'_> {
             let (left, right) = filter.terms();
             let left = self.work.resolve(left, binding)?;
             let right = self.work.resolve(right, binding)?;
-            let equal = self.work.compare(left, right)? == Ordering::Equal;
+            let equal = self.work.compare_identity(left, right)? == Ordering::Equal;
             if equal != matches!(filter, Filter::Eq(..)) {
                 return Ok(());
             }
@@ -403,7 +407,7 @@ impl Evaluator<'_> {
             return Ok(prefix);
         }
         for (left, right) in key.tuple.iter().zip(tuple) {
-            let order = self.work.compare(left, right)?;
+            let order = self.work.compare_identity(left, right)?;
             if order != Ordering::Equal {
                 return Ok(order);
             }

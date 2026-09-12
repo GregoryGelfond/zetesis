@@ -46,6 +46,53 @@ fn solve(source: &str, options: &Options) -> (Report, Vec<u8>, String) {
 }
 
 #[test]
+fn statistics_distinguish_formula_profile_limits() {
+    for (atoms, roots, expected_atoms, expected_roots) in
+        [(1_000_000, 1_000_000, 65_536, 262_144), (11, 13, 11, 13)]
+    {
+        let mut configured = options(&["--stats", "--oracle", "countermodel"]);
+        configured.max_atoms = atoms;
+        configured.max_ground_rules = roots;
+        let (_, _, diagnostics) = solve("a.", &configured);
+        assert!(
+            diagnostics.contains(&format!("requested grounding limits: atoms={atoms};")),
+            "{diagnostics}"
+        );
+        assert!(diagnostics.contains(&format!(
+            "formula profile ceilings: atoms={expected_atoms}; roots={expected_roots}; nodes=1048576; source values=1024; support rounds=1024"
+        )), "{diagnostics}");
+    }
+}
+
+#[test]
+fn requested_statistics_use_accepted_policy_spelling() {
+    for backend in ["auto", "cpu"] {
+        for oracle in ["auto", "closure", "countermodel"] {
+            let configured = Options::try_parse_from([
+                "zetesis",
+                "--stats",
+                "--workers",
+                "1",
+                "--models",
+                "0",
+                "--backend",
+                backend,
+                "--oracle",
+                oracle,
+            ])
+            .unwrap();
+            let (_, _, diagnostics) = solve("a.", &configured);
+            assert!(
+                diagnostics.contains(&format!(
+                    "requested: backend={backend}; oracle={oracle}; grounder=auto"
+                )),
+                "{diagnostics}"
+            );
+        }
+    }
+}
+
+#[test]
 fn solver_statistics_are_never_silently_discarded_by_the_device_command() {
     let file = Options::try_parse_from(["zetesis", "--stats", "devices"]).unwrap();
     assert!(file.stats);

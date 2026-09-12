@@ -4,14 +4,15 @@ use std::cell::Cell;
 use std::fmt::Write;
 
 use themelios_base::span::Location;
+use themelios_program::term::EvalError;
 
 use zetesis_core::Value;
 use zetesis_cpu::Control;
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{
-    AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
-    GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork, admit_formula,
-    admit_formula_with_grounding_observer,
+    AdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
+    FormulaResource, GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork,
+    admit_formula, admit_formula_with_grounding_observer,
 };
 
 const JOIN_RULE: &str = "r(X,Z):-p(X,Y),q(Y,Z).";
@@ -323,18 +324,29 @@ fn duplicate_support_heads_do_not_remove_alternative_final_reduct_witnesses() {
 }
 
 #[test]
-fn false_bound_filters_do_not_start_an_unneeded_value_generator() {
-    let input = admit_formula(
-        "a.b.p(N):-N=#sum{2147483647:a;1:b},1=2.".to_owned(),
+fn false_filters_preserve_required_body_assignment_errors() {
+    let source = "a.b.p(N):-N=#sum{2147483647:a;1:b},1=2.";
+    // The empty positive join has one row. The authored body assignment must
+    // supply logical scalar N, unlike head-only generated terms that wait for
+    // body selection. Clingo's successful {a,b} record remains a difference.
+    let error = admit_formula(
+        source.to_owned(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
         FormulaLimits::default(),
     )
-    .expect("constant false body has no generator input row");
-    let mut search =
-        StableModels::new(input.theory(), Limits::default(), Control::default()).expect("theory");
-    let model = search.next().expect("one model").expect("verified model");
-    assert_eq!(model.atoms().count(), 2);
-    assert!(search.next().is_none());
-    assert!(search.exhausted());
+    .expect_err("2147483648 cannot inhabit the required i32 assignment");
+    let FormulaFailure::Expansion(ExpansionFailure::Evaluation {
+        error: EvalError::Overflow,
+        location,
+    }) = error
+    else {
+        panic!("expected located assignment overflow: {error:?}");
+    };
+    assert_eq!(location.source, themelios_base::source::SourceId::new(0));
+    assert_eq!(location.span.start().get(), 4);
+    assert_eq!(
+        usize::try_from(location.span.end().get()).unwrap(),
+        source.len()
+    );
 }

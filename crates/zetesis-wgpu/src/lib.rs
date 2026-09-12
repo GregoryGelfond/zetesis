@@ -74,7 +74,7 @@ pub const MAX_ATOMS: usize = 4096;
 /// Invocations sharing ownership of one frozen candidate.
 pub const WORKGROUP_SIZE: u32 = 64;
 const SHADER: &str = include_str!("oracle.wgsl");
-const UNIFORM_BYTES: u64 = 16;
+const UNIFORM_BYTES: u64 = 32;
 const WORKGROUP_BYTES: u32 = 524;
 
 /// Adapter admission policy. Defaults to requiring a physical GPU category.
@@ -104,6 +104,7 @@ pub struct GpuLimits {
     pub max_batch_bytes: u64,
     /// Maximum host wait for the submitted GPU work. A timeout invalidates the
     /// shared device context and returns an error, never a candidate rejection.
+    /// Must be positive for a nonempty batch; empty batches perform no wait.
     pub timeout: Duration,
 }
 
@@ -248,6 +249,7 @@ pub struct GpuOracle {
     runtime: Runtime,
     resident: Option<ResidentGraph>,
     last_batch_stats: Option<GpuBatchStats>,
+    epoch: u32,
 }
 
 impl GpuOracle {
@@ -312,6 +314,7 @@ impl GpuOracle {
             runtime,
             resident: None,
             last_batch_stats: None,
+            epoch: 0,
         }
     }
 
@@ -341,6 +344,7 @@ impl GpuOracle {
 
     /// Release this oracle's retained graph and transport handles. Driver
     /// retirement may occur later; this does not cancel submitted GPU work.
+    /// Submission identities are not reset.
     pub fn clear_residency(&mut self) {
         self.resident = None;
         self.last_batch_stats = None;
@@ -351,12 +355,21 @@ impl GpuOracle {
     /// One immutable Program instance remains resident between calls; changing
     /// Program identity replaces it. Transport is reused for equal batch sizes
     /// and replaced for a changed size. Completed reads are unmapped before reuse.
+    /// Every returned record must identify its submission and input position,
+    /// carry a nonzero completion marker, and agree with the seed projection.
+    /// Per candidate, host validation visits the closure words and gate atoms;
+    /// the original gate IDs are borrowed without allocating another mask.
+    /// An empty batch validates device health and graph admission, then returns
+    /// without checking dispatch limits, allocating transport or advancing the
+    /// submission epoch. It leaves existing residency intact.
     ///
     /// # Errors
     /// Reports seed identity, capacity, allocation, device, timeout, validation,
     /// or readback failures. A failing dispatch returns no partial batch.
     /// Device/readback failures invalidate the entire context; retry requires a
-    /// fresh context. Capacity, seed and Busy refusals leave it reusable.
+    /// fresh context. Capacity, seed and Busy refusals leave the context reusable.
+    /// The checked 32-bit submission sequence never wraps; exhausting it requires
+    /// a new oracle, even after clearing residency.
     pub fn check_batch(
         &mut self,
         program: &GroundProgram,
@@ -380,16 +393,18 @@ impl GpuOracle {
             .as_ref()
             .or_else(|| self.resident.as_ref().map(|resident| &resident.plan))
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing graph plan"))?;
+        if seeds.is_empty() {
+            return Ok(Vec::new());
+        }
+        let epoch = packing::next_epoch(self.epoch)?;
         let plan = BatchPlan::for_graph(
             graph,
             seeds.len(),
             limits,
             self.runtime.limits(),
             fresh_graph.is_some(),
+            epoch,
         )?;
-        if seeds.is_empty() {
-            return Ok(Vec::new());
-        }
         // Refuse foreign seeds before replacing resident resources or packing.
         if seeds
             .iter()
@@ -429,6 +444,9 @@ impl GpuOracle {
         if let Some((graph, packed)) = fresh_graph.zip(packed_graph) {
             self.resident = Some(ResidentGraph::new(self.runtime.device(), graph, &packed));
         }
+        // Never reuse an identity after a dispatch attempt, including one whose
+        // readback fails. Clearing residency does not reset this sequence.
+        self.epoch = epoch.get();
         let outcome = self
             .resident
             .as_mut()
@@ -492,6 +510,37 @@ fn check_adapter_limits(limits: &wgpu::Limits) -> Result<(), GpuError> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn static_parameters_match_the_uniform_layout() {
+        let module = naga::front::wgsl::parse_str(super::SHADER).expect("WGSL parses");
+        let (_, params) = module
+            .types
+            .iter()
+            .find(|(_, value)| value.name.as_deref() == Some("Params"))
+            .expect("static parameter type");
+        let naga::TypeInner::Struct { members, span } = &params.inner else {
+            panic!("parameters are a uniform struct");
+        };
+        assert_eq!(u64::from(*span), super::UNIFORM_BYTES);
+        let fields = members
+            .iter()
+            .map(|member| (member.name.as_deref(), member.offset))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            fields,
+            [
+                (Some("atom_count"), 0),
+                (Some("word_count"), 4),
+                (Some("rule_count"), 8),
+                (Some("world_count"), 12),
+                (Some("epoch"), 16),
+                (Some("reserved0"), 20),
+                (Some("reserved1"), 24),
+                (Some("reserved2"), 28),
+            ]
+        );
+    }
+
     #[test]
     fn wgsl_validates_without_optional_shader_capabilities() {
         let module = naga::front::wgsl::parse_str(super::SHADER).expect("WGSL parses");

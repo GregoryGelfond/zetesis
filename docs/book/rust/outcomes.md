@@ -12,6 +12,13 @@ search has completed, and what an external consumer received.
 | `WorldView` | All full answers of the original subject were captured after unrestricted exhaustion | Successful external publication |
 | Published record | The sink accepted one whole record | Flush, durability or complete search |
 
+The CLI owns its standard-output buffer and explicitly flushes it before
+returning an exit code, including for `devices`. A failed flush returns exit 2;
+any original failure and later output failures remain separate diagnostics.
+Redirected output has a fixed 8 KiB staging buffer, while terminal output
+bypasses staging to preserve prompt answers. Library callers retain ownership
+of flushing and durability for their supplied writers.
+
 `SemanticOutcome::unsatisfiable()` requires exhausted coverage and zero verified
 models. A zero display count, an empty consumer vector, or `completion() == None`
 cannot establish inconsistency. A requested model limit and an interrupted

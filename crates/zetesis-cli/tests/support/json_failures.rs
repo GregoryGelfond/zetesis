@@ -7,6 +7,41 @@ use clap::Parser;
 use std::io::{self, Write};
 
 #[test]
+fn legacy_metadata_cannot_establish_optimality() {
+    let options = Options::parse_from([
+        "zetesis",
+        "--json",
+        "--backend",
+        "cpu",
+        "--models",
+        "0",
+        "--max-json-record-bytes",
+        "1000",
+    ]);
+    let source = format!("p(\"{}\"). #minimize{{0@1,k:p(X)}}.", "x".repeat(1500));
+    let failure = crate::run_detailed_with_diagnostics(
+        source,
+        &options,
+        &mut Vec::new(),
+        &mut io::sink(),
+        &zetesis_cpu::Control::default(),
+    )
+    .unwrap_err();
+    let partial = failure.partial_report.as_ref().unwrap();
+    assert_eq!(partial.completion, Some(crate::Completion::Exhausted));
+    assert!(partial.optimization.is_some());
+    // The compatibility conversion retains public counters, but discards
+    // the session's immutable semantic outcome and its optimality evidence.
+    let failure = crate::PublicationFailure::from(failure);
+    assert!(failure.semantic().is_none());
+    let record = super::summary(&Err(failure), 4096).unwrap();
+    let mut document = b"{\"models\":[".to_vec();
+    document.extend(record);
+    let value: serde_json::Value = serde_json::from_slice(&document).unwrap();
+    assert_eq!(value["outcome"]["optimization"]["optimal"], false);
+}
+
+#[test]
 fn input_failure_survives_a_broken_json_prefix() {
     let mut writer = BoundedWriter::new(3);
     let error = input_failure(

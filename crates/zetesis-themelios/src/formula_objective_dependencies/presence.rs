@@ -176,7 +176,7 @@ pub(crate) fn check<'a>(
             while let Some(binding) = outer.next(limits, budget, counters, rule.location)? {
                 if mixed(
                     aggregate,
-                    &binding,
+                    rule.body_binding(&binding),
                     support,
                     limits,
                     budget,

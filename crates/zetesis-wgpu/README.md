@@ -46,6 +46,17 @@ no lazy tuple discovery. Lazy execution instead admits bounded source instances
 against immutable world snapshots. Source rounds and their coverage barriers
 remain part of correctness, even when instances are shared across candidates.
 
+Static readback contains one complete record per submitted seed, in input order.
+Each record carries the checked nonzero submission epoch, world ordinal, verdict
+and nonzero completion marker before its closure words. The host rejects missing,
+stale, duplicate, reordered or malformed records and independently checks that
+the gate-projection verdict agrees with the closure and original seed. Any error
+refuses the entire batch. Framing identifies a completed record; rule closure and
+constraint evaluation still rely on the shader and device execution contract.
+An empty batch checks context health and graph admission, then returns without
+transport allocation, dispatch limits or an epoch increment. Clearing residency
+does not reset epochs; exhausting their 32-bit sequence requires a new oracle.
+
 Adapter, allocation, limit, cancellation, timeout, validation and device failures
 remain failures or incomplete work. They are never converted into UNSAT results.
 Resident plans and transport buffers retain explicit identity and capacity

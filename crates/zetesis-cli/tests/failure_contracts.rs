@@ -347,7 +347,7 @@ fn lazy_countermodel_requests_are_refused_before_parsing() {
         message.contains("the countermodel oracle requires --grounder eager or auto"),
         "{message}"
     );
-    assert!(message.contains("Metal"), "{message}");
+    assert!(message.contains("requested metal with lazy"), "{message}");
     assert!(message.contains("lazy"), "{message}");
     assert!(error.source().is_none());
     assert!(output.is_empty());

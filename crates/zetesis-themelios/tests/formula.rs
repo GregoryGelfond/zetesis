@@ -249,6 +249,24 @@ fn unimplemented_source_profiles_are_refused() {
 }
 
 #[test]
+fn limit_diagnostics_report_required_counts() {
+    let error = admit_formula(
+        "a. b.".to_owned(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits {
+            theory: zetesis_ferraris::AdmissionLimits {
+                max_atoms: 1,
+                ..zetesis_ferraris::AdmissionLimits::default()
+            },
+            ..FormulaLimits::default()
+        },
+    )
+    .unwrap_err();
+    assert_eq!(error.to_string(), "formula Atoms limit 1; required 2");
+}
+
+#[test]
 fn each_formula_resource_refuses_without_returning_a_partial_theory() {
     let cases = [
         (

@@ -1,12 +1,23 @@
 //! Checked host packing for the WGSL ABI. Immutable graph dimensions are
 //! validated once per resident program; batch transport is bounded separately.
 
+use std::num::NonZeroU32;
+
 use zetesis_core::{GroundProgram, Program, Seed};
 
 use crate::{GpuCheck, GpuError, GpuErrorKind, GpuLimits, MAX_ATOMS, UNIFORM_BYTES};
 
 const RULE_WORDS: usize = 8;
 const WORD_BYTES: u64 = 4;
+const RECEIPT_WORDS: usize = 4;
+const COMPLETION_MARKER: u32 = 0x5352_4331;
+
+pub(crate) fn next_epoch(previous: u32) -> Result<NonZeroU32, GpuError> {
+    previous
+        .checked_add(1)
+        .and_then(NonZeroU32::new)
+        .ok_or_else(|| GpuError::new(GpuErrorKind::Capacity, "static submission epoch exhausted"))
+}
 
 pub(crate) struct GraphPlan {
     program: Program,
@@ -81,6 +92,7 @@ impl GraphPlan {
 }
 
 pub(crate) struct BatchPlan {
+    pub(crate) epoch: NonZeroU32,
     pub(crate) atom_count: u32,
     pub(crate) word_count: usize,
     pub(crate) rule_count: u32,
@@ -107,6 +119,7 @@ impl BatchPlan {
             budget,
             device,
             true,
+            NonZeroU32::MIN,
         )
     }
 
@@ -116,6 +129,7 @@ impl BatchPlan {
         budget: GpuLimits,
         device: &wgpu::Limits,
         upload_graph: bool,
+        epoch: NonZeroU32,
     ) -> Result<Self, GpuError> {
         capacity("candidates", worlds, budget.max_candidates)?;
         let candidate_count = address("candidate count", worlds)?;
@@ -133,8 +147,12 @@ impl BatchPlan {
         }
         let word_count = graph.word_count;
         let seed_words = multiply("seed array", word_count, worlds)?.max(1);
-        let result_words =
-            multiply("result array", add("result stride", word_count, 1)?, worlds)?.max(1);
+        let result_words = multiply(
+            "result array",
+            add("result stride", word_count, RECEIPT_WORDS)?,
+            worlds,
+        )?
+        .max(1);
         // WGSL addresses arrays and products with u32 arithmetic.
         for (name, words) in [("seed array", seed_words), ("result array", result_words)] {
             address(name, words)?;
@@ -148,7 +166,7 @@ impl BatchPlan {
         {
             return Err(GpuError::new(
                 GpuErrorKind::Capacity,
-                "device cannot bind the 16-byte parameter buffer",
+                "device cannot bind the 32-byte parameter buffer",
             ));
         }
         let transport_bytes = [UNIFORM_BYTES, seed_bytes, result_bytes, result_bytes]
@@ -166,6 +184,7 @@ impl BatchPlan {
             ));
         }
         Ok(Self {
+            epoch,
             atom_count: graph.atom_count,
             word_count,
             rule_count: graph.rule_count,
@@ -258,14 +277,17 @@ impl PackedGraph {
     }
 }
 
-pub(crate) struct PackedSeeds {
-    pub(crate) params: [u32; 4],
+pub(crate) struct PackedSeeds<'program> {
+    pub(crate) params: [u32; 8],
     pub(crate) seeds: Vec<u32>,
+    // Borrowed for the synchronous call, like the original GroundProgram.
+    // This permits an independent projection check without a second mask allocation.
+    gate_atoms: &'program [u32],
 }
 
-impl PackedSeeds {
+impl<'program> PackedSeeds<'program> {
     pub(crate) fn new(
-        program: &GroundProgram,
+        program: &'program GroundProgram,
         seeds: &[Seed],
         plan: &BatchPlan,
     ) -> Result<Self, GpuError> {
@@ -284,13 +306,22 @@ impl PackedSeeds {
                 address("closure word count", plan.word_count)?,
                 plan.rule_count,
                 plan.world_count,
+                plan.epoch.get(),
+                0,
+                0,
+                0,
             ],
             seeds: seed_words,
+            gate_atoms: program.gate_atom_ids(),
         })
     }
 }
 
-pub(crate) fn decode(words: &[u32], plan: &BatchPlan) -> Result<Vec<GpuCheck>, GpuError> {
+pub(crate) fn decode(
+    words: &[u32],
+    plan: &BatchPlan,
+    packed: &PackedSeeds<'_>,
+) -> Result<Vec<GpuCheck>, GpuError> {
     if words.len() != plan.result_words {
         return Err(GpuError::new(
             GpuErrorKind::Readback,
@@ -300,16 +331,41 @@ pub(crate) fn decode(words: &[u32], plan: &BatchPlan) -> Result<Vec<GpuCheck>, G
     let candidates = usize::try_from(plan.world_count)
         .map_err(|error| GpuError::new(GpuErrorKind::Readback, error.to_string()))?;
     let mut results = reserved(candidates)?;
-    for record in words.chunks_exact(plan.word_count + 1).take(candidates) {
-        let status = record[0];
+    for (world, record) in words
+        .chunks_exact(plan.word_count + RECEIPT_WORDS)
+        .take(candidates)
+        .enumerate()
+    {
+        if record[0] != plan.epoch.get()
+            || usize::try_from(record[1]).ok() != Some(world)
+            || record[3] != COMPLETION_MARKER
+        {
+            return Err(GpuError::new(
+                GpuErrorKind::Readback,
+                "static result submission, world or completion identity differs",
+            ));
+        }
+        let status = record[2];
         if status & !3 != 0 {
             return Err(GpuError::new(
                 GpuErrorKind::Readback,
                 "device returned an unknown verdict bit",
             ));
         }
-        let closure = &record[1..];
+        let closure = &record[RECEIPT_WORDS..];
         validate_words(closure, plan.atom_count, plan.word_count)?;
+        let seed = &packed.seeds[world * plan.word_count..][..plan.word_count];
+        let mismatch = packed.gate_atoms.iter().any(|&atom| {
+            let word = (atom / 32) as usize;
+            let mask = 1 << (atom % 32);
+            closure[word] & mask != seed[word] & mask
+        });
+        if mismatch != (status & 2 != 0) {
+            return Err(GpuError::new(
+                GpuErrorKind::Readback,
+                "static gate-projection verdict disagrees with closure and seed",
+            ));
+        }
         let mut closure_words = reserved(plan.word_count)?;
         closure_words.extend_from_slice(closure);
         results.push(GpuCheck {
@@ -418,8 +474,9 @@ fn reserved<T>(capacity: usize) -> Result<Vec<T>, GpuError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{BatchPlan, GraphPlan, PackedGraph, PackedSeeds, decode, validate_words};
+    use super::{BatchPlan, GraphPlan, PackedGraph, PackedSeeds};
     use crate::{GpuErrorKind, GpuLimits};
+    use std::num::NonZeroU32;
     use zetesis_core::{
         AdmissionLimits, AtomPattern, GroundProgram, Predicate, Program, Seed, StaticLimits,
         Template,
@@ -460,7 +517,7 @@ mod tests {
         let graph_plan = GraphPlan::new(&graph, &wgpu::Limits::default()).expect("graph fits");
         let packed = PackedGraph::new(&graph, &graph_plan).expect("pack graph");
         let batch = PackedSeeds::new(&graph, &[empty, selected], &plan).expect("pack seeds");
-        assert_eq!(batch.params, [3, 1, 3, 2]);
+        assert_eq!(batch.params, [3, 1, 3, 2, 1, 0, 0, 0]);
         assert_eq!(
             packed.rules,
             [
@@ -537,8 +594,10 @@ mod tests {
         let device = wgpu::Limits::default();
         let resident = GraphPlan::new(&graph, &device).expect("resident plan");
         let limits = GpuLimits::default();
-        let cold = BatchPlan::for_graph(&resident, 2, limits, &device, true).expect("cold plan");
-        let hot = BatchPlan::for_graph(&resident, 2, limits, &device, false).expect("hot plan");
+        let cold = BatchPlan::for_graph(&resident, 2, limits, &device, true, NonZeroU32::MIN)
+            .expect("cold plan");
+        let hot = BatchPlan::for_graph(&resident, 2, limits, &device, false, NonZeroU32::MIN)
+            .expect("hot plan");
         assert_eq!(
             cold.accounted_bytes - hot.accounted_bytes,
             resident.resident_bytes
@@ -549,9 +608,9 @@ mod tests {
             max_batch_bytes: hot.accounted_bytes,
             ..limits
         };
-        assert!(BatchPlan::for_graph(&resident, 2, exact, &device, false).is_ok());
+        assert!(BatchPlan::for_graph(&resident, 2, exact, &device, false, NonZeroU32::MIN).is_ok());
         assert!(matches!(
-            BatchPlan::for_graph(&resident, 2, exact, &device, true),
+            BatchPlan::for_graph(&resident, 2, exact, &device, true, NonZeroU32::MIN),
             Err(error) if error.kind() == GpuErrorKind::Capacity
         ));
         let too_small = GpuLimits {
@@ -559,11 +618,11 @@ mod tests {
             ..limits
         };
         assert!(matches!(
-            BatchPlan::for_graph(&resident, 2, too_small, &device, false),
+            BatchPlan::for_graph(&resident, 2, too_small, &device, false, NonZeroU32::MIN),
             Err(error) if error.kind() == GpuErrorKind::Capacity
         ));
-        let smaller =
-            BatchPlan::for_graph(&resident, 1, limits, &device, false).expect("smaller plan");
+        let smaller = BatchPlan::for_graph(&resident, 1, limits, &device, false, NonZeroU32::MIN)
+            .expect("smaller plan");
         assert!(smaller.transport_bytes < hot.transport_bytes);
         assert!(smaller.accounted_bytes < hot.accounted_bytes);
     }
@@ -586,58 +645,12 @@ mod tests {
             matches!(BatchPlan::new(&graph, 1, GpuLimits::default(), &small_binding), Err(error) if error.kind() == GpuErrorKind::Capacity)
         );
     }
-
-    #[test]
-    fn readback_refuses_nonzero_padding_and_unknown_status() {
-        assert_eq!(
-            validate_words(&[2], 1, 1).unwrap_err().kind(),
-            GpuErrorKind::Readback
-        );
-        let plan = BatchPlan {
-            atom_count: 1,
-            word_count: 1,
-            rule_count: 0,
-            world_count: 1,
-            seed_words: 1,
-            seed_bytes: 4,
-            transport_bytes: 0,
-            accounted_bytes: 0,
-            result_bytes: 8,
-            result_words: 2,
-        };
-        assert_eq!(
-            decode(&[4, 0], &plan).unwrap_err().kind(),
-            GpuErrorKind::Readback
-        );
-        assert_eq!(
-            decode(&[0], &plan).unwrap_err().kind(),
-            GpuErrorKind::Readback
-        );
-    }
-
-    #[test]
-    fn rejection_reasons_are_independent_and_zero_atom_worlds_are_valid() {
-        let plan = BatchPlan {
-            atom_count: 0,
-            word_count: 0,
-            rule_count: 0,
-            world_count: 4,
-            seed_words: 1,
-            seed_bytes: 4,
-            transport_bytes: 0,
-            accounted_bytes: 0,
-            result_bytes: 16,
-            result_words: 4,
-        };
-        let checks = decode(&[0, 1, 2, 3], &plan).unwrap();
-        assert!(checks[0].accepted());
-        assert!(checks[1].constraint_violated() && !checks[1].seed_mismatch());
-        assert!(!checks[2].constraint_violated() && checks[2].seed_mismatch());
-        assert!(checks[3].constraint_violated() && checks[3].seed_mismatch());
-        assert!(checks.iter().all(|check| check.closure_words().is_empty()));
-    }
 }
 
 #[cfg(test)]
 #[path = "../tests/packing/budgets.rs"]
 mod budget_contract_tests;
+
+#[cfg(test)]
+#[path = "../tests/packing/readback.rs"]
+mod readback_contract_tests;

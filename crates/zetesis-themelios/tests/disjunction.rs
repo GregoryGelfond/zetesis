@@ -307,6 +307,7 @@ fn excluded_heads_remain_located_refusals() {
                         | "default-negated-head"
                         | "conditional-empty-head"
                         | "pooled-head"
+                        | "infinite-head"
                 )
         })
     {
@@ -326,7 +327,6 @@ fn excluded_heads_remain_located_refusals() {
                 "NegatedHead" => ProfileFeature::NegatedHead,
                 "StrongNegation" => ProfileFeature::StrongNegation,
                 "PooledArguments" => ProfileFeature::PooledArguments,
-                "Symbol" => ProfileFeature::Symbol,
                 "generated/interval disjunction head" | "generated disjunction head" => {
                     ProfileFeature::Term
                 }
@@ -514,4 +514,27 @@ fn disjunctive_producers_preserve_scored_answers() {
     for case in sources {
         objective_dependencies::check(case["source"].as_str().unwrap());
     }
+}
+
+#[test]
+fn extremal_head_preserves_the_recorded_complete_family() {
+    let cases = cases();
+    let case = cases
+        .iter()
+        .find(|case| case["name"] == "infinite-head")
+        .unwrap();
+    // Keep the historical refusal label and raw clingo capture unchanged.
+    let admitted = input(case["source"].as_str().unwrap()).unwrap();
+    let mut search =
+        StableModels::new(admitted.theory(), Limits::default(), Control::default()).unwrap();
+    let found: Models = search
+        .by_ref()
+        .map(|model| projected(&admitted, &model.unwrap()))
+        .collect();
+    assert!(search.exhausted());
+    assert_eq!(found, expected(&case["expected_stable_models"]));
+    assert_eq!(
+        found,
+        expected(&case["reference"][0]["normalized"]["models"])
+    );
 }

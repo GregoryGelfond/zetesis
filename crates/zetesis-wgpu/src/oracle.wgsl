@@ -8,6 +8,10 @@ struct Params {
     word_count: u32,
     rule_count: u32,
     world_count: u32,
+    epoch: u32,
+    reserved0: u32,
+    reserved1: u32,
+    reserved2: u32,
 }
 
 struct Rule {
@@ -109,10 +113,13 @@ fn check(@builtin(workgroup_id) group: vec3<u32>,
         }
     }
     workgroupBarrier();
-    let base = world * (params.word_count + 1u);
+    let base = world * (params.word_count + 4u);
     for (var word = lane; word < params.word_count; word += 64u) {
-        results[base + 1u + word] = atomicLoad(&known[word]);
+        results[base + 4u + word] = atomicLoad(&known[word]);
     }
+    // Publish completion only after every lane has stored its closure words.
+    storageBarrier();
+    workgroupBarrier();
     if (lane == 0u) {
         var status = atomicLoad(&violated); // bit 0: a constraint holds
         for (var word = 0u; word < params.word_count; word++) {
@@ -120,6 +127,9 @@ fn check(@builtin(workgroup_id) group: vec3<u32>,
                 status |= 2u; // bit 1: the gate-carrier projection differs
             }
         }
-        results[base] = status; // zero is exact acceptance
+        results[base] = params.epoch;
+        results[base + 1u] = world;
+        results[base + 2u] = status; // zero denotes exact acceptance in a complete record
+        results[base + 3u] = 0x53524331u; // nonzero static completion marker
     }
 }

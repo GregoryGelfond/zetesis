@@ -208,14 +208,8 @@ pub(crate) fn build(
                             rule.location,
                         )?;
                         for element in &group.elements {
-                            let mut local = Join::new(
-                                &element.condition,
-                                &binding,
-                                element.variables,
-                                &support,
-                                budget,
-                                rule.location,
-                            )?;
+                            let mut local =
+                                Join::element(element, &binding, &support, budget, rule.location)?;
                             while let Some(binding) =
                                 local.next(limits, budget, counters, rule.location)?
                             {
@@ -282,13 +276,14 @@ fn derive(
     Ok(())
 }
 
-/// Outcome of all ordinary comparisons on one partial binding. Deferred scalar
-/// errors and unbound arguments cannot certify the final immutable binding.
-#[derive(Clone, Copy, PartialEq, Eq)]
+/// Validation evidence for one partial positive binding. A false comparison
+/// can prune only when every scalar check is defined. An arithmetic failure is
+/// retained until the positive join has a complete extension; an incomplete
+/// prefix alone does not require evaluating a ground source instance.
 enum Comparisons {
-    Rejected,
     Deferred,
-    Verified,
+    Failed(ExpansionFailure),
+    Verified(bool),
 }
 
 // The same whole-argument index serves flat atoms and structural captures.
@@ -316,6 +311,8 @@ pub(crate) struct Join<'a> {
     comparisons: Comparisons,
     evaluation: Evaluation,
     pending: Option<crate::formula_binding_cursor::Cursor<'a>>,
+    pending_head: Option<crate::formula_binding_cursor::Cursor<'a>>,
+    head_slots: std::ops::Range<usize>,
     patterns: Vec<PositivePattern<'a>>,
     support: &'a Support<'a>,
     values: Vec<Option<Value>>,
@@ -328,6 +325,14 @@ pub(crate) struct Join<'a> {
     empty_yielded: bool,
     finished: bool,
 }
+/// One complete body binding and its scalar selection result. Selected rule
+/// rows also contain their evaluated head suffix; rejected rows contain only
+/// the genuine body frame needed by scoped source validation.
+pub(crate) struct Row {
+    pub values: Vec<Value>,
+    pub passes: bool,
+}
+
 impl<'a> Join<'a> {
     pub(super) fn rule(
         rule: &'a crate::formula_ir::RuleIr,
@@ -343,7 +348,34 @@ impl<'a> Join<'a> {
             rule.location,
         )?;
         join.bindings = rule.bindings.as_ref();
+        join.stage_head(rule.body_variables..rule.variables);
         Ok(join)
+    }
+
+    pub(super) fn element(
+        element: &'a crate::formula_ir::Element,
+        prefix: &[Value],
+        support: &'a Support<'a>,
+        budget: &mut Budget,
+        location: Location,
+    ) -> Result<Self, FormulaFailure> {
+        let mut join = Self::new(
+            &element.condition,
+            prefix,
+            element.variables,
+            support,
+            budget,
+            location,
+        )?;
+        join.stage_head(element.body_variables..element.variables);
+        Ok(join)
+    }
+
+    fn stage_head(&mut self, slots: std::ops::Range<usize>) {
+        self.values.truncate(slots.start);
+        self.generated_slots.truncate(slots.start);
+        self.generated = self.generated_slots.iter().any(|generated| *generated);
+        self.head_slots = slots;
     }
 
     pub(crate) fn objective(
@@ -426,6 +458,8 @@ impl<'a> Join<'a> {
                 .iter()
                 .any(|literal| crate::formula_binding_cursor::target(literal).is_some()),
             pending: None,
+            pending_head: None,
+            head_slots: variables..variables,
             comparisons: Comparisons::Deferred,
             evaluation: Evaluation::default(),
             patterns,
@@ -448,7 +482,17 @@ impl<'a> Join<'a> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<Vec<Value>>, FormulaFailure> {
-        self.next_inner(None, limits, budget, counters, location)
+        self.next_selected(None, limits, budget, counters, location)
+    }
+    /// Return every complete positive row for validation before selection.
+    pub(crate) fn next_row(
+        &mut self,
+        limits: &FormulaLimits,
+        budget: &mut Budget,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<Option<Row>, FormulaFailure> {
+        self.next_staged(None, true, limits, budget, counters, location)
     }
     fn next_support(
         &mut self,
@@ -459,9 +503,9 @@ impl<'a> Join<'a> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<Vec<Value>>, FormulaFailure> {
-        self.next_inner(Some((head, delta)), limits, budget, counters, location)
+        self.next_selected(Some((head, delta)), limits, budget, counters, location)
     }
-    fn next_inner(
+    fn next_selected(
         &mut self,
         projected: Option<(&AtomPattern, &BTreeSet<Atom>)>,
         limits: &FormulaLimits,
@@ -469,42 +513,114 @@ impl<'a> Join<'a> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<Vec<Value>>, FormulaFailure> {
-        if !self.generated {
-            while let Some(binding) =
-                self.next_base(projected, limits, budget, counters, location)?
+        while let Some(row) =
+            self.next_staged(projected, false, limits, budget, counters, location)?
+        {
+            if row.passes {
+                return Ok(Some(row.values));
+            }
+        }
+        Ok(None)
+    }
+    /// Body data and scalar/range filters complete before head-only generation.
+    /// Negative gates and aggregate truth remain formulas, never row selection.
+    fn next_staged(
+        &mut self,
+        projected: Option<(&AtomPattern, &BTreeSet<Atom>)>,
+        retain_rejected: bool,
+        limits: &FormulaLimits,
+        budget: &mut Budget,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<Option<Row>, FormulaFailure> {
+        loop {
+            if let Some(pending) = &mut self.pending_head
+                && let Some(values) =
+                    pending.next(&mut self.evaluation, limits, budget, counters, location)?
             {
-                if self.filters(
-                    &binding,
-                    self.comparisons,
-                    limits,
-                    budget,
-                    counters,
-                    location,
-                )? {
-                    return Ok(Some(binding));
-                }
+                return Ok(Some(Row {
+                    values,
+                    passes: true,
+                }));
+            }
+            self.pending_head = None;
+            let Some(row) = self.next_inner(
+                projected,
+                retain_rejected,
+                limits,
+                budget,
+                counters,
+                location,
+            )?
+            else {
+                return Ok(None);
+            };
+            if !row.passes || self.head_slots.is_empty() {
+                return Ok(Some(row));
+            }
+            self.pending_head = Some(crate::formula_binding_cursor::Cursor::new(
+                self.literals,
+                row.values,
+                self.support,
+                self.bindings,
+                self.head_slots.clone(),
+            ));
+        }
+    }
+    fn next_inner(
+        &mut self,
+        projected: Option<(&AtomPattern, &BTreeSet<Atom>)>,
+        retain_rejected: bool,
+        limits: &FormulaLimits,
+        budget: &mut Budget,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<Option<Row>, FormulaFailure> {
+        if !self.generated {
+            if let Some(binding) = self.next_base(
+                projected,
+                retain_rejected,
+                limits,
+                budget,
+                counters,
+                location,
+            )? {
+                let comparisons = std::mem::replace(&mut self.comparisons, Comparisons::Deferred);
+                let passes =
+                    self.filters(&binding, comparisons, limits, budget, counters, location)?;
+                return Ok(Some(Row {
+                    values: binding,
+                    passes,
+                }));
             }
             return Ok(None);
         }
         loop {
-            while let Some(pending) = &mut self.pending {
-                let Some(binding) =
+            if let Some(pending) = &mut self.pending
+                && let Some(binding) =
                     pending.next(&mut self.evaluation, limits, budget, counters, location)?
-                else {
-                    break;
-                };
-                if self.filters(
+            {
+                let passes = self.filters(
                     &binding,
                     Comparisons::Deferred,
                     limits,
                     budget,
                     counters,
                     location,
-                )? {
-                    return Ok(Some(binding));
-                }
+                )?;
+                return Ok(Some(Row {
+                    values: binding,
+                    passes,
+                }));
             }
-            let Some(binding) = self.next_base(projected, limits, budget, counters, location)?
+            let Some(binding) = self.next_base(
+                projected,
+                retain_rejected,
+                limits,
+                budget,
+                counters,
+                location,
+            )?
             else {
                 return Ok(None);
             };
@@ -513,12 +629,14 @@ impl<'a> Join<'a> {
                 binding,
                 self.support,
                 self.bindings,
+                0..self.head_slots.start,
             ));
         }
     }
     fn next_base(
         &mut self,
         projected: Option<(&AtomPattern, &BTreeSet<Atom>)>,
+        retain_rejected: bool,
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
@@ -544,7 +662,7 @@ impl<'a> Join<'a> {
                     return Ok(None);
                 }
                 self.empty_yielded = true;
-                if !self.filter_prefix(limits, budget, counters, location)? {
+                if !self.filter_prefix(limits, budget, counters, location)? && !retain_rejected {
                     continue;
                 }
                 if let Some(binding) = self.complete(limits, budget, counters, location)? {
@@ -587,7 +705,9 @@ impl<'a> Join<'a> {
             self.positions[self.depth] += 1;
             counters.record(Event::JoinRow);
             let matches = self.match_row(pattern, atom, limits, budget, counters, location)?;
-            if matches && self.filter_prefix(limits, budget, counters, location)? {
+            if matches
+                && (self.filter_prefix(limits, budget, counters, location)? || retain_rejected)
+            {
                 self.depth += 1;
             } else {
                 self.undo();
@@ -672,7 +792,7 @@ impl<'a> Join<'a> {
             counters,
             location,
         )?;
-        Ok(self.comparisons != Comparisons::Rejected)
+        Ok(!matches!(self.comparisons, Comparisons::Verified(false)))
     }
     fn undo(&mut self) {
         for variable in self.changes[self.depth].drain(..) {
@@ -717,7 +837,7 @@ impl<'a> Join<'a> {
         for term in head.terms() {
             counters.work(limits, location)?;
             if let zetesis_core::Term::Variable(variable) = term
-                && self.values[*variable].is_none()
+                && self.values.get(*variable).is_none_or(Option::is_none)
             {
                 return Ok(false);
             }
@@ -776,35 +896,52 @@ fn partial_filters(
     counters: &mut Counters,
     location: Location,
 ) -> Result<Comparisons, FormulaFailure> {
-    let mut result = Comparisons::Verified;
+    let mut deferred = false;
+    let mut passes = true;
     for literal in literals {
+        if crate::formula_binding_cursor::target(literal)
+            .is_some_and(|target| target >= assignment.len())
+        {
+            continue;
+        }
         if let Some((left, relation, right)) = comparison(literal) {
             if !bound(left, assignment, limits, counters, location)?
                 || !bound(right, assignment, limits, counters, location)?
             {
-                result = Comparisons::Deferred;
+                deferred = true;
                 continue;
             }
-            let Some(left) = partial_value(
-                left, assignment, evaluation, limits, budget, counters, location,
-            )?
-            else {
-                result = Comparisons::Deferred;
-                continue;
-            };
-            let Some(right) = partial_value(
-                right, assignment, evaluation, limits, budget, counters, location,
-            )?
-            else {
-                result = Comparisons::Deferred;
-                continue;
-            };
-            if !compare(&left, relation, &right) {
-                return Ok(Comparisons::Rejected);
+            let values = (|| {
+                let left = partial_value(
+                    left, assignment, evaluation, limits, budget, counters, location,
+                )?;
+                let right = partial_value(
+                    right, assignment, evaluation, limits, budget, counters, location,
+                )?;
+                Ok((left, right))
+            })();
+            match values {
+                Ok((left, right)) => passes &= compare(&left, relation, &right),
+                Err(FormulaFailure::Expansion(error @ ExpansionFailure::Evaluation { .. })) => {
+                    return Ok(Comparisons::Failed(error));
+                }
+                Err(error) => return Err(error),
             }
+        } else if !matches!(
+            literal,
+            LiteralIr::Atom(..) | LiteralIr::PatternAtom(_) | LiteralIr::ProjectedAtom(..)
+        ) {
+            // Tuple/whole guards, range checks and generated values are validated
+            // by their complete-row operations. An ordinary comparison cannot
+            // certify that these independent checks have succeeded.
+            deferred = true;
         }
     }
-    Ok(result)
+    Ok(if deferred {
+        Comparisons::Deferred
+    } else {
+        Comparisons::Verified(passes)
+    })
 }
 
 /// Captured arguments reuse comparison evaluation, never binding inference.
@@ -824,21 +961,15 @@ fn partial_value(
     budget: &mut Budget,
     counters: &mut Counters,
     location: Location,
-) -> Result<Option<Value>, FormulaFailure> {
-    match evaluation.expression(
+) -> Result<Value, FormulaFailure> {
+    evaluation.expression(
         expression,
         |variable| assignment[variable].as_ref().expect("ready expression"),
         limits,
         budget,
         counters,
         location,
-    ) {
-        Ok(value) => Ok(Some(value)),
-        // An invalid prefix can have no complete relational extension. Only
-        // final-row evaluation may turn scalar undefinedness into a refusal.
-        Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })) => Ok(None),
-        Err(error) => Err(error),
-    }
+    )
 }
 
 fn bound(
@@ -870,10 +1001,21 @@ impl Join<'_> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<bool, FormulaFailure> {
-        let mut passes = true;
+        let (verified, mut passes) = match comparisons {
+            Comparisons::Verified(passes) => (true, passes),
+            Comparisons::Deferred => (false, true),
+            Comparisons::Failed(error) => return Err(error.into()),
+        };
+        // Falsehood does not discharge another expression's validation duty.
+        // These complete-row checks deliberately continue after a false filter.
         for literal in self.literals {
+            if crate::formula_binding_cursor::target(literal)
+                .is_some_and(|target| target >= assignment.len())
+            {
+                continue;
+            }
             if let Some((left, relation, right)) = comparison(literal)
-                && comparisons != Comparisons::Verified
+                && !verified
             {
                 let left = self.evaluation.expression(
                     left,
@@ -894,23 +1036,35 @@ impl Join<'_> {
                 passes &= compare(&left, relation, &right);
             } else if let LiteralIr::TupleCompare(left, relation, right) = literal {
                 let mut equal = left.len() == right.len();
-                for (left, right) in left.iter().zip(right) {
-                    let left = self.evaluation.expression(
-                        left,
-                        |variable| &assignment[variable],
-                        limits,
-                        budget,
-                        counters,
-                        location,
-                    )?;
-                    let right = self.evaluation.expression(
-                        right,
-                        |variable| &assignment[variable],
-                        limits,
-                        budget,
-                        counters,
-                        location,
-                    )?;
+                // Unequal arities determine truth, not whether an existing
+                // component's arithmetic must be validated.
+                for index in 0..left.len().max(right.len()) {
+                    let left = left
+                        .get(index)
+                        .map(|value| {
+                            self.evaluation.expression(
+                                value,
+                                |variable| &assignment[variable],
+                                limits,
+                                budget,
+                                counters,
+                                location,
+                            )
+                        })
+                        .transpose()?;
+                    let right = right
+                        .get(index)
+                        .map(|value| {
+                            self.evaluation.expression(
+                                value,
+                                |variable| &assignment[variable],
+                                limits,
+                                budget,
+                                counters,
+                                location,
+                            )
+                        })
+                        .transpose()?;
                     equal &= left == right;
                 }
                 passes &= equal == (*relation == Relation::Eq);

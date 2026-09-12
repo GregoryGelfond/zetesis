@@ -57,7 +57,7 @@ claims into the original conclusion. Here is the proof directly included from
 the Lean module:
 
 ```lean
-{{#include ../../../proofs/Zetesis/CertifiedExecution.lean:66:98}}
+{{#include ../../../proofs/Zetesis/CertifiedExecution.lean:completed_membership_exact}}
 ```
 
 The explicit types on local claims let a reader skip tactical details without
