@@ -173,7 +173,8 @@ nor filename filters change. Unlisted GPU paths and Vulkan still require their
 own physical qualification.
 Run `scripts/check.sh book` for the checked manual. It requires mdBook 0.5.4;
 Lean uses the toolchain pinned under `proofs`. External comparisons require
-clingo 5.8.2 on `PATH`. Tests should exercise semantics and failure boundaries,
+clingo 5.8.2 on `PATH` and its absolute executable path in `CLINGO`, as described
+in the tool setup guide. Tests should exercise semantics and failure boundaries,
 including property and adversarial cases; do not mirror the implementation or
 weaken gates to accommodate a feature.
 

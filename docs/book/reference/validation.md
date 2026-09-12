@@ -51,7 +51,15 @@ elan toolchain install leanprover/lean4:v4.33.1
 
 The proof gate enters `proofs` before invoking Lake, so the checked-in toolchain
 selection applies. External oracle checks additionally require **clingo 5.8.2**
-as `clingo` on `PATH`; setting `CLINGO` alone does not configure every test.
+as `clingo` on `PATH` and its absolute executable path in `CLINGO`. Some test
+helpers use the explicit path; others resolve `clingo` through `PATH`. Configure
+both to select the same installation:
+
+```sh
+export CLINGO=/absolute/path/to/clingo
+export PATH="$(dirname "$CLINGO"):$PATH"
+```
+
 The comparison commands also accept explicit executable paths.
 
 Confirm the tools selected by your shell before running the gates:
