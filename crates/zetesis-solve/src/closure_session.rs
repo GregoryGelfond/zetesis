@@ -4,7 +4,7 @@ use crate::execution_observation::ExecutionSink;
 use std::sync::Arc;
 
 use zetesis_core::{GroundProgram, Model, Program};
-use zetesis_cpu::{CandidateLimits, Candidates, Control, Stop};
+use zetesis_cpu::{CandidateLimits, CandidateRestrictionLimits, Candidates, Control, Stop};
 
 use crate::engine::Engine;
 use crate::phase_timing::{Recorder, SolvePhase};
@@ -44,11 +44,16 @@ impl<'a> ClosureSession<'a> {
             Err(stop) => Err(stop),
         };
         let candidates = phases.measure(SolvePhase::CandidateSetup, || {
-            Candidates::new(
+            Candidates::restricted(
                 program,
                 CandidateLimits {
                     max_candidates: config.max_candidates,
                     max_carrier_atoms: config.max_carrier_atoms,
+                },
+                CandidateRestrictionLimits {
+                    max_work: config.max_search_work,
+                    max_atoms: config.max_atoms,
+                    max_bytes: config.max_candidate_bytes,
                 },
                 control.clone(),
             )
@@ -178,6 +183,7 @@ impl<'a> ClosureSession<'a> {
             optimization: None,
             checked: self.checked,
             gate_atoms: self.candidates.discovered_atoms(),
+            candidate_statistics: Some(self.candidates.statistics()),
             countermodel_statistics: None,
             formula_execution: None,
             shared_execution: self

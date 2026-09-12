@@ -22,7 +22,7 @@ pub struct SolveConfig {
     pub stats: bool,
     /// Maximum yielded models or retained optimum ties; zero requests all.
     pub models: usize,
-    /// Cumulative formula encoding and search work.
+    /// Cumulative candidate restriction or formula encoding and search work.
     pub max_search_work: u64,
     /// Cumulative formula branch decisions.
     pub max_search_decisions: u64,
@@ -54,6 +54,9 @@ pub struct SolveConfig {
     pub max_candidates: u64,
     /// Maximum incrementally retained gate atoms.
     pub max_carrier_atoms: usize,
+    /// Logical candidate restriction payload during source preparation.
+    /// This excludes allocator slack and source relation/tree metadata.
+    pub max_candidate_bytes: usize,
     /// Maximum charged CPU oracle work per candidate, or shared host source
     /// work per lazy GPU batch. Shared CPU rounds count record visits plus
     /// antecedent tests per world; independent joins and device units differ.
@@ -61,7 +64,8 @@ pub struct SolveConfig {
     /// Collective source work per shared CPU batch, distinct from per-world work.
     pub max_source_work: u64,
     /// Maximum derived independent CPU atoms, demanded shared CPU/GPU batch
-    /// catalog atoms or eager atoms. Shared catalogs are collective, not per world.
+    /// catalog atoms, eager atoms, or copied candidate restriction atom occurrences.
+    /// Shared catalogs and candidate preparation are collective, not per world.
     pub max_atoms: usize,
     /// Maximum substitutions in explicit static lowering.
     pub max_substitutions: usize,
@@ -99,6 +103,7 @@ impl SolveConfig {
         max_completion_scratch_bytes: 268_435_456,
         max_candidates: 1_000_000,
         max_carrier_atoms: 4_096,
+        max_candidate_bytes: 67_108_864,
         max_work: 10_000_000,
         max_source_work: 10_000_000,
         max_atoms: 1_000_000,

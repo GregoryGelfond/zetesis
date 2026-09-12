@@ -269,7 +269,7 @@ fn scan_inner<'a, E>(
     Ok(())
 }
 
-fn copy_atom(
+pub(super) fn copy_atom(
     pattern: &AtomPattern,
     assignment: &[Option<&Value>],
     remaining_atoms: &mut usize,

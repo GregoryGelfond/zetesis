@@ -303,6 +303,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             optimization: self.incumbents.metadata().cloned(),
             checked: statistics.map_or(0, |s| s.candidates),
             gate_atoms: self.input.gate_atoms,
+            candidate_statistics: None,
             countermodel_statistics: statistics,
             lazy_execution: None,
             shared_execution: None,

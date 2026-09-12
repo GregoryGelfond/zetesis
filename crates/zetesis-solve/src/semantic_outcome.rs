@@ -30,6 +30,7 @@ pub struct SemanticOutcome {
     pub(crate) optimization: Option<Optimization>,
     pub(crate) checked: u64,
     pub(crate) gate_atoms: usize,
+    pub(crate) candidate_statistics: Option<zetesis_cpu::CandidateStatistics>,
     pub(crate) countermodel_statistics: Option<zetesis_sat::Statistics>,
     pub(crate) formula_execution: Option<crate::FormulaExecutionStatistics>,
     pub(crate) lazy_execution: Option<crate::LazyExecutionStatistics>,
@@ -54,6 +55,7 @@ impl SemanticOutcome {
             optimization: None,
             checked: 0,
             gate_atoms: 0,
+            candidate_statistics: None,
             countermodel_statistics: None,
             formula_execution: None,
             lazy_execution: None,
@@ -86,6 +88,13 @@ impl SemanticOutcome {
     #[must_use]
     pub const fn discovered_gate_atoms(&self) -> usize {
         self.gate_atoms
+    }
+
+    /// Source candidate restriction accounting, including incomplete preparation.
+    /// Absent for formula input or an interruption before closure construction.
+    #[must_use]
+    pub const fn candidate_statistics(&self) -> Option<zetesis_cpu::CandidateStatistics> {
+        self.candidate_statistics
     }
 
     /// Formula candidate/reduct accounting, when that stream was initialized.

@@ -563,6 +563,7 @@ impl<'a> Session<'a> {
                     optimization: None,
                     checked: 0,
                     gate_atoms: 0,
+                    candidate_statistics: None,
                     countermodel_statistics: None,
                     formula_execution: None,
                     lazy_execution: None,

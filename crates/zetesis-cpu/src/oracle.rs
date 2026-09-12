@@ -9,6 +9,7 @@ use zetesis_core::{
 use crate::{Control, Stop};
 
 mod window;
+pub(crate) mod restrictions;
 pub mod source;
 pub(crate) mod worlds;
 #[cfg(test)]

@@ -4,6 +4,7 @@ use std::iter::FusedIterator;
 
 use zetesis_core::{Atom, AtomIter, Program, Seed};
 
+use crate::oracle::restrictions::{Conflict, Restrictions};
 use crate::{Control, Stop};
 
 /// Explicit limits for complete seed enumeration. Zero is a real ceiling.
@@ -24,10 +25,63 @@ impl Default for CandidateLimits {
     }
 }
 
+/// Bounds for optional source-certified candidate restriction preparation and
+/// traversal. They are cumulative across the entire candidate iterator.
+#[derive(Clone, Copy, Debug)]
+pub struct CandidateRestrictionLimits {
+    /// Source joins, checked copies and premise comparisons across all seeds.
+    pub max_work: u64,
+    /// Fact and forbidden-conjunction atom occurrences copied during preparation.
+    pub max_atoms: usize,
+    /// Logical copied atom, template and value payload during preparation.
+    /// Allocator slack, tree/index metadata and caller-owned source are excluded.
+    pub max_bytes: usize,
+}
+
+impl Default for CandidateRestrictionLimits {
+    fn default() -> Self {
+        Self {
+            max_work: 100_000_000,
+            max_atoms: 1_000_000,
+            max_bytes: 64 * 1024 * 1024,
+        }
+    }
+}
+
+/// Work performed by the optional necessary-condition filter. The original
+/// powerset constructor leaves all fields zero.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CandidateStatistics {
+    /// Construction and traversal operations, retained after interruption.
+    pub restriction_work: u64,
+    /// Fact and forbidden-conjunction atom occurrences in completed preparation.
+    /// Zero when preparation failed; `restriction_work` retains failed work.
+    pub restriction_atoms: usize,
+    /// Copied fact and conjunction payload in completed preparation.
+    /// Temporary templates and allocator/index overhead are not included.
+    pub restriction_bytes: usize,
+    /// Peak copied payload during completed preparation, including its temporary
+    /// template. Zero when preparation failed.
+    pub restriction_peak_bytes: usize,
+    /// Positive gate conjunctions obtained from covered fact-side bindings.
+    pub restriction_conjunctions: usize,
+    /// Certified impossible binary intervals skipped, not individual seeds.
+    pub conflicts: u64,
+}
+
+enum RestrictionState {
+    Disabled,
+    Pending(CandidateRestrictionLimits),
+    Prepared {
+        limits: CandidateRestrictionLimits,
+        plan: Restrictions,
+    },
+}
+
 /// Retained termination of the gate-seed enumerator, independent of membership.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CandidateTermination {
-    /// Every seed in the complete gate carrier was returned.
+    /// Every seed was returned or excluded by a certified necessary condition.
     Exhausted,
     /// Enumeration stopped before proving complete seed coverage.
     Stopped(Stop),
@@ -46,6 +100,8 @@ pub struct Candidates<'a> {
     emitted: u64,
     started: bool,
     termination: Option<CandidateTermination>,
+    restrictions: RestrictionState,
+    statistics: CandidateStatistics,
 }
 
 impl<'a> Candidates<'a> {
@@ -62,7 +118,42 @@ impl<'a> Candidates<'a> {
             emitted: 0,
             started: false,
             termination: None,
+            restrictions: RestrictionState::Disabled,
+            statistics: CandidateStatistics::default(),
         }
+    }
+
+    /// Enumerate a necessary superset of answer-set gate projections using
+    /// positive constraints witnessed by actual unconditional facts. Creation
+    /// does not expand the carrier; restriction preparation starts on first pull.
+    ///
+    /// A constraint is eligible when it has no negative gate and its nongate
+    /// positive patterns bind every variable. The shared source visitor joins
+    /// those patterns with unconditional facts; remaining positive gate atoms
+    /// form forbidden conjunctions. Constraints outside this grammar remain for
+    /// the complete closure oracle. No possible support is treated as a fact.
+    ///
+    /// A violated conjunction permits skipping the entire binary interval up to
+    /// the next clearing of its least selected bit: all its premises stay true
+    /// throughout that interval. Candidate limits count returned seeds; separate
+    /// restriction limits bound preparation and skipped-interval checking. Every
+    /// returned seed still needs original closure and gate-agreement checking.
+    #[must_use]
+    pub fn restricted(
+        program: &'a Program,
+        limits: CandidateLimits,
+        restrictions: CandidateRestrictionLimits,
+        control: Control,
+    ) -> Self {
+        let mut candidates = Self::new(program, limits, control);
+        candidates.restrictions = RestrictionState::Pending(restrictions);
+        candidates
+    }
+
+    /// Accounted necessary-condition work and copied payload through this pull.
+    #[must_use]
+    pub const fn statistics(&self) -> CandidateStatistics {
+        self.statistics
     }
 
     /// Carrier atoms successfully retained so far.
@@ -81,12 +172,16 @@ impl<'a> Candidates<'a> {
 
     fn next_seed(&mut self) -> Result<Option<Seed>, Stop> {
         self.control.poll()?;
+        self.prepare_restrictions()?;
         if self.started {
             if !self.advance()? {
                 return Ok(None);
             }
         } else {
             self.started = true;
+        }
+        if !self.seek_permitted()? {
+            return Ok(None);
         }
         if self.emitted >= self.limits.max_candidates {
             return Err(Stop::CandidateLimit);
@@ -105,8 +200,54 @@ impl<'a> Candidates<'a> {
         Ok(Some(seed))
     }
 
+    fn prepare_restrictions(&mut self) -> Result<(), Stop> {
+        if let RestrictionState::Pending(limits) = self.restrictions {
+            let attempt = Restrictions::compile(self.program, limits, &self.control);
+            self.statistics.restriction_work = attempt.work;
+            let plan = attempt.result?;
+            self.statistics.restriction_atoms = plan.atoms;
+            self.statistics.restriction_bytes = plan.bytes;
+            self.statistics.restriction_peak_bytes = plan.peak_bytes;
+            self.statistics.restriction_conjunctions = plan.conjunctions();
+            self.restrictions = RestrictionState::Prepared { limits, plan };
+        }
+        Ok(())
+    }
+
+    fn seek_permitted(&mut self) -> Result<bool, Stop> {
+        loop {
+            let RestrictionState::Prepared { limits, plan } = &self.restrictions else {
+                return Ok(true);
+            };
+            let remaining = limits.max_work - self.statistics.restriction_work;
+            let (result, work) = plan.conflict(&self.atoms, &self.bits, remaining, &self.control);
+            self.statistics.restriction_work += work;
+            let Some(conflict) = result? else {
+                return Ok(true);
+            };
+            // Each conflict consumed at least one bounded work operation.
+            self.statistics.conflicts += 1;
+            match conflict {
+                Conflict::Unconditional => return Ok(false),
+                Conflict::Selected(first) => {
+                    for bit in &mut self.bits[..=first] {
+                        self.control.poll()?;
+                        *bit = false;
+                    }
+                    if !self.advance_from(first + 1)? {
+                        return Ok(false);
+                    }
+                }
+            }
+        }
+    }
+
     fn advance(&mut self) -> Result<bool, Stop> {
-        for bit in &mut self.bits {
+        self.advance_from(0)
+    }
+
+    fn advance_from(&mut self, carry: usize) -> Result<bool, Stop> {
+        for bit in &mut self.bits[carry..] {
             self.control.poll()?;
             if !*bit {
                 *bit = true;

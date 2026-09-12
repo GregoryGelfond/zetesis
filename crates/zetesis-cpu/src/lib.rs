@@ -13,7 +13,10 @@ mod verified;
 pub mod lazy;
 
 pub use batch::{BatchError, BatchOracle};
-pub use candidates::{CandidateLimits, CandidateTermination, Candidates};
+pub use candidates::{
+    CandidateLimits, CandidateRestrictionLimits, CandidateStatistics, CandidateTermination,
+    Candidates,
+};
 pub use control::{Control, Stop};
 pub use oracle::source;
 pub use oracle::{Check, Limits, Statistics, check};
