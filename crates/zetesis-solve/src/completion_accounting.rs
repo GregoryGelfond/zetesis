@@ -10,7 +10,7 @@ pub struct CompletionAccounting {
     pub effective_workers: usize,
     /// Largest minimum requested envelope selected before allocation.
     pub requested_scratch_bytes: u64,
-    /// Peak retained capacities plus the conservative transient envelope.
+    /// Peak retained query capacities plus conservative transient/result storage.
     /// May exceed the ceiling when reservation is refused before candidate work.
     /// Allocator/table control overhead, stacks and device memory are excluded.
     pub peak_scratch_bytes: u64,

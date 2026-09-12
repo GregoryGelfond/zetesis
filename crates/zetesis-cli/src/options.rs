@@ -152,7 +152,7 @@ pub struct Options {
     /// Exact formula completion workers; one retains the scalar CPU cursor.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.completion_workers, hide_short_help = true)]
     pub completion_workers: NonZeroUsize,
-    /// Maximum retained and transient completion scratch bytes, excluding the
+    /// Maximum query and transient/result scratch bytes, excluding the
     /// scalar cursor, allocator/table overhead, thread stacks and GPU storage.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_completion_scratch_bytes, hide_short_help = true)]
     pub max_completion_scratch_bytes: u64,

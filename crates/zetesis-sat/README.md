@@ -140,7 +140,7 @@ capacity can exceed the minimum request. Its ceiling is checked before candidate
 work begins; a refusal can therefore report a peak above the limit with zero
 entered candidates. Local success is not batch publication.
 
-The accounting uses retained vector capacities and reported map entry capacity,
+The accounting uses retained query-vector capacities and reported map entry capacity,
 plus a conservative allowance for transient and result storage. Hash-table
 bucket/control overhead, allocator metadata, Rayon scheduling storage, thread
 stacks, immutable original theory and the separate proposal/candidate cursor are

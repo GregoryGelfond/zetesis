@@ -105,3 +105,5 @@ import Zetesis.GateRestrictions
 import Zetesis.PackedQueryLiterals
 import Zetesis.RelationExtension
 import Zetesis.WorkCharge
+import Zetesis.DeltaJoins
+import Zetesis.WorkPermits

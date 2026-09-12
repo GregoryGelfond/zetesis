@@ -458,7 +458,7 @@ fn formula(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
         )?;
         writeln!(
             sink,
-            "  formula completion: entered={}; residuals entered={}; completed before commit={}; failed={}; peak requested scratch bytes={}; peak retained and transient scratch bytes={}; scratch limit={}; counters overflowed={}",
+            "  formula completion: entered={}; residuals entered={}; completed before commit={}; failed={}; peak requested scratch bytes={}; peak query and transient/result scratch bytes={}; scratch limit={}; counters overflowed={}",
             execution.completion.entered,
             execution.completion.residuals,
             execution.completion.completed,

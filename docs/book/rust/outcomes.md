@@ -175,8 +175,8 @@ original theory and its frozen reduct.
 `CompletionAccounting` reports requested workers and the greatest concurrency
 selected at preflight. This selection alone does not mean a candidate entered
 execution. `requested_scratch_bytes` records the greatest minimum envelope;
-`peak_scratch_bytes` records retained vector and map entry capacities plus the
-conservative transient allowance. Reservation can exceed the minimum request.
+`peak_scratch_bytes` records retained query-vector and map entry capacities plus
+the conservative transient/result allowance. Reservation can exceed the minimum request.
 If the resulting capacity exceeds `max_completion_scratch_bytes`, the attempt
 refuses before candidate work and can report a peak above the ceiling with zero
 entered slots. Both byte counters exclude allocator and hash-table control
