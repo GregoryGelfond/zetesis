@@ -16,6 +16,7 @@ use zetesis_core::{Atom, AtomPattern, Value};
 
 use crate::expansion::Budget;
 use crate::formula::ceiling;
+use crate::formula_binding::Binding;
 use crate::formula_ir::{Expression, HeadIr, LiteralIr, Operation, Prepared, value_bytes};
 use crate::grounding_observer::{Event, Work};
 use crate::{ExpansionFailure, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
@@ -243,7 +244,7 @@ pub(crate) fn build(
 
 fn derive(
     pattern: &AtomPattern,
-    binding: &[Value],
+    binding: &Binding,
     support: &Support,
     delta: &mut BTreeSet<Atom>,
     limits: &FormulaLimits,
@@ -254,16 +255,14 @@ fn derive(
         + pattern
             .terms()
             .iter()
-            .map(|term| value_bytes(term.resolve(binding).expect("safe variable assigned")))
-            .sum::<u128>();
+            .map(|term| binding.resolve(term, location).map(value_bytes))
+            .sum::<Result<u128, _>>()?;
     budget.charge(
         ExpansionResource::ScalarBytes,
         bytes.saturating_mul(3),
         location,
     )?;
-    let atom = pattern
-        .instantiate(binding)
-        .expect("safe variable assigned");
+    let atom = binding.instantiate(pattern, location)?;
     if !support.contains(&atom) && !delta.contains(&atom) {
         ceiling(
             FormulaResource::Atoms,
@@ -301,6 +300,14 @@ impl PositivePattern<'_> {
     }
 }
 
+/// Why an unfilled slot can or cannot remain absent in the current scope.
+#[derive(Clone, Copy)]
+enum Slot {
+    Relational,
+    Generated,
+    Excluded,
+}
+
 /// The cursor owns its current assignment, undo trails and bounded expression
 /// storage. Negative gates never restrict this upper relation; the emitted
 /// formulas still retain them.
@@ -316,7 +323,7 @@ pub(crate) struct Join<'a> {
     patterns: Vec<PositivePattern<'a>>,
     support: &'a Support<'a>,
     values: Vec<Option<Value>>,
-    generated_slots: Vec<bool>,
+    slots: Vec<Slot>,
     positions: Vec<usize>,
     probes: Vec<Option<&'a [usize]>>,
     probed: Vec<bool>,
@@ -329,7 +336,7 @@ pub(crate) struct Join<'a> {
 /// rows also contain their evaluated head suffix; rejected rows contain only
 /// the genuine body frame needed by scoped source validation.
 pub(crate) struct Row {
-    pub values: Vec<Value>,
+    pub values: Binding<'static>,
     pub passes: bool,
 }
 
@@ -341,7 +348,7 @@ impl<'a> Join<'a> {
     ) -> Result<Self, FormulaFailure> {
         let mut join = Self::new(
             &rule.body,
-            &[],
+            &Binding::default(),
             rule.variables,
             support,
             budget,
@@ -354,7 +361,7 @@ impl<'a> Join<'a> {
 
     pub(super) fn element(
         element: &'a crate::formula_ir::Element,
-        prefix: &[Value],
+        prefix: &Binding,
         support: &'a Support<'a>,
         budget: &mut Budget,
         location: Location,
@@ -373,8 +380,11 @@ impl<'a> Join<'a> {
 
     fn stage_head(&mut self, slots: std::ops::Range<usize>) {
         self.values.truncate(slots.start);
-        self.generated_slots.truncate(slots.start);
-        self.generated = self.generated_slots.iter().any(|generated| *generated);
+        self.slots.truncate(slots.start);
+        self.generated = self
+            .slots
+            .iter()
+            .any(|slot| matches!(slot, Slot::Generated));
         self.head_slots = slots;
     }
 
@@ -385,7 +395,7 @@ impl<'a> Join<'a> {
     ) -> Result<Self, FormulaFailure> {
         let mut join = Self::new(
             objective.condition.literals(),
-            &[],
+            &Binding::default(),
             objective.variables,
             support,
             budget,
@@ -406,22 +416,29 @@ impl<'a> Join<'a> {
         budget: &mut Budget,
         location: Location,
     ) -> Result<Self, FormulaFailure> {
-        let mut join = Self::new(literals, &[], variables, support, budget, location)?;
+        let mut join = Self::new(
+            literals,
+            &Binding::default(),
+            variables,
+            support,
+            budget,
+            location,
+        )?;
         for (slot, fixed) in join.values.iter_mut().zip(fixed) {
             if let Some(value) = fixed {
                 *slot = Some(copy(value, budget, location)?);
             }
         }
-        for (variable, placeholder) in join.generated_slots.iter_mut().enumerate() {
+        for (variable, slot) in join.slots.iter_mut().enumerate() {
             if !used.contains(&variable) {
-                *placeholder = true;
+                *slot = Slot::Excluded;
             }
         }
         Ok(join)
     }
     pub fn new(
         literals: &'a [LiteralIr],
-        prefix: &[Value],
+        prefix: &Binding,
         variables: usize,
         support: &'a Support<'a>,
         budget: &mut Budget,
@@ -438,18 +455,39 @@ impl<'a> Join<'a> {
                 _ => None,
             })
             .collect();
+        for pattern in &patterns {
+            for term in pattern.atom().terms() {
+                budget.charge(ExpansionResource::TermWork, 1, location)?;
+                if let zetesis_core::Term::Variable(variable) = term
+                    && prefix.slots().get(*variable).is_some_and(Option::is_none)
+                {
+                    return Err(FormulaFailure::UnsafeVariable {
+                        variable: *variable,
+                        location,
+                    });
+                }
+            }
+        }
         patterns.sort_by_key(|pattern| support.row_count(pattern.atom().predicate()));
         let count = patterns.len();
         let mut values = vec![None; variables];
-        let mut generated_slots = vec![false; variables];
+        let mut slots = vec![Slot::Relational; variables];
         for target in literals
             .iter()
             .filter_map(crate::formula_binding_cursor::target)
         {
-            generated_slots[target] = true;
+            slots[target] = Slot::Generated;
         }
-        for (slot, value) in values.iter_mut().zip(prefix) {
-            *slot = Some(copy(value, budget, location)?);
+        for (index, (slot, value)) in values.iter_mut().zip(prefix.slots()).enumerate() {
+            *slot = value
+                .as_ref()
+                .map(|value| copy(value, budget, location))
+                .transpose()?;
+            if value.is_none() {
+                // An enclosing generator's unavailable output is not a local
+                // binding obligation. Any actual read still fails explicitly.
+                slots[index] = Slot::Excluded;
+            }
         }
         Ok(Self {
             bindings: None,
@@ -465,7 +503,7 @@ impl<'a> Join<'a> {
             patterns,
             support,
             values,
-            generated_slots,
+            slots,
             positions: vec![0; count],
             probes: vec![None; count],
             probed: vec![false; count],
@@ -481,7 +519,7 @@ impl<'a> Join<'a> {
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
-    ) -> Result<Option<Vec<Value>>, FormulaFailure> {
+    ) -> Result<Option<Binding<'static>>, FormulaFailure> {
         self.next_selected(None, limits, budget, counters, location)
     }
     /// Return every complete positive row for validation before selection.
@@ -502,7 +540,7 @@ impl<'a> Join<'a> {
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
-    ) -> Result<Option<Vec<Value>>, FormulaFailure> {
+    ) -> Result<Option<Binding<'static>>, FormulaFailure> {
         self.next_selected(Some((head, delta)), limits, budget, counters, location)
     }
     fn next_selected(
@@ -512,7 +550,7 @@ impl<'a> Join<'a> {
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
-    ) -> Result<Option<Vec<Value>>, FormulaFailure> {
+    ) -> Result<Option<Binding<'static>>, FormulaFailure> {
         while let Some(row) =
             self.next_staged(projected, false, limits, budget, counters, location)?
         {
@@ -641,7 +679,7 @@ impl<'a> Join<'a> {
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
-    ) -> Result<Option<Vec<Value>>, FormulaFailure> {
+    ) -> Result<Option<Binding<'static>>, FormulaFailure> {
         // This certificate belongs to the next returned binding snapshot, even
         // though completing that snapshot undoes the last mutable join row.
         self.comparisons = Comparisons::Deferred;
@@ -867,21 +905,14 @@ impl<'a> Join<'a> {
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
-    ) -> Result<Option<Vec<Value>>, FormulaFailure> {
+    ) -> Result<Option<Binding<'static>>, FormulaFailure> {
         counters.substitution(limits, location)?;
-        let values = self
-            .values
-            .iter()
-            .enumerate()
-            .map(|(index, value)| {
-                if let Some(value) = value {
-                    copy(value, budget, location)
-                } else {
-                    assert!(self.generated_slots[index], "positive binders cover scope");
-                    Ok(Value::Number(0))
-                }
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        for (variable, (value, slot)) in self.values.iter().zip(&self.slots).enumerate() {
+            if value.is_none() && matches!(slot, Slot::Relational) {
+                return Err(FormulaFailure::UnsafeVariable { variable, location });
+            }
+        }
+        let values = Binding::copy_slots(&self.values, budget, location)?;
         counters.record(Event::BindingSnapshot);
         Ok(Some(values))
     }
@@ -964,7 +995,11 @@ fn partial_value(
 ) -> Result<Value, FormulaFailure> {
     evaluation.expression(
         expression,
-        |variable| assignment[variable].as_ref().expect("ready expression"),
+        |variable| {
+            assignment[variable]
+                .as_ref()
+                .ok_or(FormulaFailure::UnsafeVariable { variable, location })
+        },
         limits,
         budget,
         counters,
@@ -994,7 +1029,7 @@ fn bound(
 impl Join<'_> {
     fn filters(
         &mut self,
-        assignment: &[Value],
+        assignment: &Binding,
         comparisons: Comparisons,
         limits: &FormulaLimits,
         budget: &mut Budget,
@@ -1019,7 +1054,7 @@ impl Join<'_> {
             {
                 let left = self.evaluation.expression(
                     left,
-                    |variable| &assignment[variable],
+                    |variable| assignment.read(variable, location),
                     limits,
                     budget,
                     counters,
@@ -1027,7 +1062,7 @@ impl Join<'_> {
                 )?;
                 let right = self.evaluation.expression(
                     right,
-                    |variable| &assignment[variable],
+                    |variable| assignment.read(variable, location),
                     limits,
                     budget,
                     counters,
@@ -1044,7 +1079,7 @@ impl Join<'_> {
                         .map(|value| {
                             self.evaluation.expression(
                                 value,
-                                |variable| &assignment[variable],
+                                |variable| assignment.read(variable, location),
                                 limits,
                                 budget,
                                 counters,
@@ -1057,7 +1092,7 @@ impl Join<'_> {
                         .map(|value| {
                             self.evaluation.expression(
                                 value,
-                                |variable| &assignment[variable],
+                                |variable| assignment.read(variable, location),
                                 limits,
                                 budget,
                                 counters,
@@ -1079,7 +1114,7 @@ impl Join<'_> {
             {
                 let lower = self.evaluation.expression(
                     lower,
-                    |variable| &assignment[variable],
+                    |variable| assignment.read(variable, location),
                     limits,
                     budget,
                     counters,
@@ -1087,7 +1122,7 @@ impl Join<'_> {
                 )?;
                 let upper = self.evaluation.expression(
                     upper,
-                    |variable| &assignment[variable],
+                    |variable| assignment.read(variable, location),
                     limits,
                     budget,
                     counters,
@@ -1097,7 +1132,7 @@ impl Join<'_> {
                     passes = false;
                     continue;
                 };
-                passes &= matches!(&assignment[*target], Value::Number(value) if *value >= lower && *value <= upper);
+                passes &= matches!(assignment.read(*target, location)?, Value::Number(value) if *value >= lower && *value <= upper);
             }
         }
         Ok(passes)
@@ -1105,7 +1140,7 @@ impl Join<'_> {
 }
 pub(crate) fn expression(
     expression: &Expression,
-    assignment: &[Value],
+    assignment: &Binding,
     limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
@@ -1113,7 +1148,7 @@ pub(crate) fn expression(
 ) -> Result<Value, FormulaFailure> {
     Evaluation::default().expression(
         expression,
-        |variable| &assignment[variable],
+        |variable| assignment.read(variable, location),
         limits,
         budget,
         counters,

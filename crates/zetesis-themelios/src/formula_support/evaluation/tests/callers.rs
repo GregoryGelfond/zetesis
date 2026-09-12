@@ -6,6 +6,7 @@ use zetesis_core::Value;
 
 use super::location;
 use crate::expansion::Budget;
+use crate::formula_binding::{Binding, complete};
 use crate::formula_ir::{Expression, LiteralIr, Operation};
 use crate::formula_support::{Comparisons, Counters, Join, Support};
 use crate::{ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource};
@@ -39,7 +40,7 @@ fn final_filters_use_the_join_workspace() {
     let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
     let mut join = Join::new(
         &literals,
-        &[Value::Number(7)],
+        &complete([Value::Number(7)]),
         1,
         &support,
         &mut budget,
@@ -54,7 +55,7 @@ fn final_filters_use_the_join_workspace() {
             location(),
         )
         .unwrap();
-    assert_eq!(result, Some(vec![Value::Number(7)]));
+    assert_eq!(result, Some(complete([Value::Number(7)])));
     assert!(join.evaluation.values.is_empty());
     assert!(join.evaluation.values.capacity() >= 2);
 }
@@ -76,7 +77,15 @@ fn binding_generators_use_the_join_workspace() {
     let support = Support::default();
     let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
     let mut counters = Counters::default();
-    let mut join = Join::new(&literals, &[], 2, &support, &mut budget, location()).unwrap();
+    let mut join = Join::new(
+        &literals,
+        &Binding::default(),
+        2,
+        &support,
+        &mut budget,
+        location(),
+    )
+    .unwrap();
     for value in 0..=2 {
         assert_eq!(
             join.next(
@@ -86,7 +95,7 @@ fn binding_generators_use_the_join_workspace() {
                 location(),
             )
             .unwrap(),
-            Some(vec![Value::Number(value), Value::Number(value + 1)])
+            Some(complete([Value::Number(value), Value::Number(value + 1)]))
         );
         assert!(join.evaluation.values.is_empty());
         assert!(join.evaluation.values.capacity() >= 2);
@@ -115,7 +124,7 @@ fn range_endpoints_use_the_join_workspace() {
     let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
     let mut join = Join::new(
         &literals,
-        &[Value::Number(2)],
+        &complete([Value::Number(2)]),
         2,
         &support,
         &mut budget,
@@ -130,7 +139,7 @@ fn range_endpoints_use_the_join_workspace() {
             location(),
         )
         .unwrap(),
-        Some(vec![Value::Number(2), Value::Number(3)])
+        Some(complete([Value::Number(2), Value::Number(3)]))
     );
     assert!(join.evaluation.values.is_empty());
     assert!(join.evaluation.values.capacity() >= 2);
@@ -154,7 +163,15 @@ fn false_filters_do_not_hide_later_arithmetic_errors() {
     ];
     let support = Support::default();
     let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
-    let mut join = Join::new(&literals, &[], 0, &support, &mut budget, location()).unwrap();
+    let mut join = Join::new(
+        &literals,
+        &Binding::default(),
+        0,
+        &support,
+        &mut budget,
+        location(),
+    )
+    .unwrap();
     assert!(matches!(
         join.next(
             &FormulaLimits::default(),
@@ -173,9 +190,17 @@ fn stopped_filters_release_live_workspace_values() {
     let literals = [LiteralIr::Compare(increment(0), Relation::Eq, increment(0))];
     let support = Support::default();
     let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
-    let mut join = Join::new(&literals, &[], 1, &support, &mut budget, location()).unwrap();
+    let mut join = Join::new(
+        &literals,
+        &Binding::default(),
+        1,
+        &support,
+        &mut budget,
+        location(),
+    )
+    .unwrap();
     let failure = join.filters(
-        &[Value::Number(3)],
+        &complete([Value::Number(3)]),
         Comparisons::Deferred,
         &FormulaLimits {
             max_work: 5,
@@ -198,7 +223,7 @@ fn stopped_filters_release_live_workspace_values() {
     // This exercises a fresh filter call, not resumption of a stopped Join.
     assert!(
         join.filters(
-            &[Value::Number(9)],
+            &complete([Value::Number(9)]),
             Comparisons::Deferred,
             &FormulaLimits::default(),
             &mut budget,
@@ -208,4 +233,61 @@ fn stopped_filters_release_live_workspace_values() {
         .unwrap()
     );
     assert!(join.evaluation.values.is_empty());
+}
+
+#[test]
+fn generator_reads_refuse_absent_inputs() {
+    // Deliberately bypass the compiler's dependency plan: the evaluator must
+    // reject the absent input rather than treating it as numeric zero.
+    let literals = [
+        LiteralIr::Bind {
+            target: 0,
+            value: increment(1),
+        },
+        LiteralIr::Bind {
+            target: 1,
+            value: number(8),
+        },
+    ];
+    let support = Support::default();
+    let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
+    let mut join = Join::new(
+        &literals,
+        &Binding::default(),
+        2,
+        &support,
+        &mut budget,
+        location(),
+    )
+    .unwrap();
+    assert!(
+        matches!(join.next(&FormulaLimits::default(), &mut budget, &mut Counters::default(), location()), Err(FormulaFailure::UnsafeVariable { variable: 1, location: found }) if found == location())
+    );
+}
+
+#[test]
+fn component_rows_preserve_excluded_slots() {
+    let literals = [LiteralIr::Compare(number(1), Relation::Eq, number(1))];
+    let support = Support::default();
+    let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
+    let mut join = Join::component(
+        &literals,
+        2,
+        &std::collections::BTreeSet::from([0]),
+        &[Some(Value::Number(0)), None],
+        &support,
+        &mut budget,
+        location(),
+    )
+    .unwrap();
+    let binding = join
+        .next(
+            &FormulaLimits::default(),
+            &mut budget,
+            &mut Counters::default(),
+            location(),
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(binding.slots(), &[Some(Value::Number(0)), None]);
 }

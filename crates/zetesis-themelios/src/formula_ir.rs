@@ -133,8 +133,11 @@ pub(crate) struct RuleIr {
 }
 impl RuleIr {
     /// Body-local frames never receive the synthetic head-value suffix.
-    pub(super) fn body_binding<'a>(&self, binding: &'a [Value]) -> &'a [Value] {
-        &binding[..self.body_variables]
+    pub(super) fn body_binding<'a>(
+        &self,
+        binding: &'a crate::formula_binding::Binding<'_>,
+    ) -> crate::formula_binding::Binding<'a> {
+        binding.prefix(self.body_variables)
     }
 }
 pub(crate) enum HeadIr {
@@ -200,8 +203,11 @@ pub(crate) struct Element {
     pub variables: usize,
 }
 impl Element {
-    pub(super) fn body_binding<'a>(&self, binding: &'a [Value]) -> &'a [Value] {
-        &binding[..self.body_variables]
+    pub(super) fn body_binding<'a>(
+        &self,
+        binding: &'a crate::formula_binding::Binding<'_>,
+    ) -> crate::formula_binding::Binding<'a> {
+        binding.prefix(self.body_variables)
     }
 }
 /// Complete tuples have set identity. Ordinary atoms use their sign and grounded atom;

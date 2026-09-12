@@ -426,7 +426,10 @@ mod tests {
             for input in -4..=4 {
                 let result = expression(
                     &expression_plan,
-                    &[Value::Number(ignored), Value::Number(input)],
+                    &crate::formula_binding::complete([
+                        Value::Number(ignored),
+                        Value::Number(input),
+                    ]),
                     &FormulaLimits::default(),
                     &mut Budget::new(ExpansionLimits::default(), 100),
                     &mut Counters::default(),

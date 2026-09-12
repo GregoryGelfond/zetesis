@@ -27,7 +27,7 @@ fn evaluate(
     let mut counters = Counters::default();
     let result = expression(
         &Expression { nodes },
-        &[],
+        &crate::formula_binding::Binding::default(),
         &FormulaLimits {
             max_work: work,
             ..Default::default()

@@ -1,8 +1,9 @@
 //! Closed original-model queries are retained only for eligible objective rows.
 //! Source producer analysis does not construct these nodes or consume their cap.
 
+use crate::formula_binding::Binding;
+
 use themelios_program::program::DefaultNegation;
-use zetesis_core::Value;
 use zetesis_objective::{Condition, ConditionNode};
 
 use super::Context;
@@ -11,7 +12,7 @@ use crate::formula_ir::LiteralIr;
 
 pub(crate) fn condition(
     literals: &[LiteralIr],
-    binding: &[Value],
+    binding: &Binding,
     context: &mut Context<'_>,
 ) -> Result<Condition, FormulaFailure> {
     let mut query = Query { nodes: Vec::new() };

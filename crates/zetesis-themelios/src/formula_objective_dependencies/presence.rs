@@ -22,6 +22,7 @@ use zetesis_core::{Predicate, Term, Value};
 
 use crate::expansion::Budget;
 use crate::formula::ceiling;
+use crate::formula_binding::Binding;
 use crate::formula_ir::{AggregateIr, AggregateKey, Prepared};
 use crate::formula_support::{Counters, Join, Support};
 use crate::{FormulaFailure, FormulaLimits, FormulaResource};
@@ -56,7 +57,7 @@ impl Presence<'_> {
     pub(crate) fn eligible(
         &self,
         objective: &ObjectiveIr,
-        binding: &[Value],
+        binding: &Binding,
         limits: &FormulaLimits,
         counters: &mut Counters,
     ) -> Result<bool, FormulaFailure> {
@@ -73,7 +74,7 @@ impl Presence<'_> {
                     };
                     if !carrier
                         .values
-                        .contains(term.resolve(binding).expect("safe objective row"))
+                        .contains(binding.resolve(term, objective.location)?)
                     {
                         return Ok(false);
                     }
@@ -176,7 +177,7 @@ pub(crate) fn check<'a>(
             while let Some(binding) = outer.next(limits, budget, counters, rule.location)? {
                 if mixed(
                     aggregate,
-                    rule.body_binding(&binding),
+                    &rule.body_binding(&binding),
                     support,
                     limits,
                     budget,
@@ -278,7 +279,7 @@ fn certify_priorities<'a>(
 /// work and copied values remain charged through the existing finite budgets.
 fn mixed(
     aggregate: &AggregateIr,
-    binding: &[Value],
+    binding: &Binding,
     support: &Support,
     limits: &FormulaLimits,
     budget: &mut Budget,
@@ -302,10 +303,7 @@ fn mixed(
         )?;
         while let Some(row) = local.next(limits, budget, counters, location)? {
             counters.work(limits, location)?;
-            if matches!(
-                first.resolve(&row).expect("safe bound tuple"),
-                Value::Number(_)
-            ) {
+            if matches!(row.resolve(first, location)?, Value::Number(_)) {
                 numeric = true;
             } else {
                 nonnumeric = true;

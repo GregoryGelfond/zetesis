@@ -10,6 +10,7 @@ use zetesis_core::Value;
 use crate::diagnostic::unsupported;
 use crate::expansion::Budget;
 use crate::formula::ceiling;
+use crate::formula_binding::Binding;
 use crate::formula_ir::{AggregateIr, AggregateKey, value_bytes};
 use crate::formula_support::{Counters, Join, Support};
 use crate::{
@@ -19,7 +20,7 @@ use crate::{
 
 pub(crate) fn values(
     aggregate: &AggregateIr,
-    assignment: &[Value],
+    assignment: &Binding,
     support: &Support,
     limits: &FormulaLimits,
     budget: &mut Budget,
@@ -43,7 +44,7 @@ pub(crate) fn values(
             let mut tuple = Vec::new();
             for term in terms {
                 counters.work(limits, location)?;
-                let value = term.resolve(&binding).expect("safe aggregate key assigned");
+                let value = binding.resolve(term, location)?;
                 budget.charge(ExpansionResource::ScalarBytes, value_bytes(value), location)?;
                 tuple.push(value.clone());
             }

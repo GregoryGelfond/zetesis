@@ -41,7 +41,7 @@ impl Evaluation {
     pub(crate) fn expression<'a>(
         &mut self,
         expression: &Expression,
-        variable: impl Fn(usize) -> &'a Value,
+        variable: impl Fn(usize) -> Result<&'a Value, FormulaFailure>,
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
@@ -60,7 +60,7 @@ impl Evaluation {
                     constructor.evaluate(values, limits, budget, counters, location)?
                 }
                 Operation::Constant(ref value) => copy(value, budget, location)?,
-                Operation::Variable(index) => copy(variable(index), budget, location)?,
+                Operation::Variable(index) => copy(variable(index)?, budget, location)?,
                 Operation::Unary(operator, argument) => scalar_value(
                     crate::scalar_arithmetic::unary(
                         operator,

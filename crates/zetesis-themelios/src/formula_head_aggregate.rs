@@ -15,6 +15,7 @@ use zetesis_core::{Atom, Term, Value};
 use crate::diagnostic::unsupported;
 use crate::expansion::Budget;
 use crate::formula::ceiling;
+use crate::formula_binding::Binding;
 use crate::formula_ir::{
     ChoiceIr, Compiler, Element, HeadElementKey, HeadLiteral, HeadMeasure, HeadOperand, LiteralIr,
     Variables, value_bytes,
@@ -103,7 +104,7 @@ impl Compiler<'_> {
 /// Signed or Boolean elements never certify the stronger unsigned atom-only contract.
 pub(super) fn validate_group(
     group: &ChoiceIr,
-    assignment: &[Value],
+    assignment: &Binding,
     support: &Support,
     limits: &FormulaLimits,
     budget: &mut Budget,
@@ -146,9 +147,7 @@ pub(super) fn validate_group(
             let mut tuple = Vec::new();
             for term in terms {
                 counters.work(limits, location)?;
-                let value = term
-                    .resolve(&binding)
-                    .expect("safe aggregate tuple assigned");
+                let value = binding.resolve(term, location)?;
                 budget.charge(
                     ExpansionResource::ScalarBytes,
                     2 * (std::mem::size_of::<Value>() as u128 + value_bytes(value)),
@@ -192,7 +191,7 @@ pub(super) fn validate_group(
 /// have no atom identity, and their tuple still passes the complete validation.
 fn head_identity(
     head: &HeadLiteral,
-    binding: &[Value],
+    binding: &Binding,
     budget: &mut Budget,
     location: Location,
 ) -> Result<HeadLiteral<Atom>, FormulaFailure> {
@@ -210,10 +209,10 @@ fn head_identity(
             .terms()
             .iter()
             .map(|term| {
-                let value = term.resolve(binding).expect("safe aggregate head assigned");
-                std::mem::size_of::<Value>() as u128 + value_bytes(value)
+                let value = binding.resolve(term, location)?;
+                Ok(std::mem::size_of::<Value>() as u128 + value_bytes(value))
             })
-            .sum::<u128>();
+            .sum::<Result<u128, FormulaFailure>>()?;
     budget.charge(
         ExpansionResource::ScalarBytes,
         atom_bytes.saturating_mul(2),
@@ -221,10 +220,7 @@ fn head_identity(
     )?;
     Ok(HeadLiteral {
         negation: head.negation,
-        operand: HeadOperand::Atom(
-            atom.instantiate(binding)
-                .expect("safe aggregate head assigned"),
-        ),
+        operand: HeadOperand::Atom(binding.instantiate(atom, location)?),
     })
 }
 
@@ -313,7 +309,7 @@ mod tests {
                 guards: vec![],
                 elements,
             },
-            &[],
+            &crate::formula_binding::Binding::default(),
             &Support::default(),
             &FormulaLimits::default(),
             &mut budget,

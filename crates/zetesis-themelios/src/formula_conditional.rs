@@ -1,8 +1,9 @@
 //! Finite universal conditionals retain each original condition implication.
 
+use crate::formula_binding::Binding;
+
 use themelios_base::span::Location;
 use themelios_program::program::DefaultNegation;
-use zetesis_core::Value;
 use zetesis_ferraris::Node;
 
 use crate::FormulaFailure;
@@ -14,7 +15,7 @@ impl Builder<'_> {
     pub(super) fn conditional(
         &mut self,
         conditional: &ConditionalIr,
-        assignment: &[Value],
+        assignment: &Binding,
         support: &Support,
         location: Location,
     ) -> Result<usize, FormulaFailure> {

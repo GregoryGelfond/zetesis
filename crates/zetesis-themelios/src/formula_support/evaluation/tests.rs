@@ -26,7 +26,7 @@ fn evaluate(
 ) -> Result<Value, FormulaFailure> {
     evaluation.expression(
         &Expression { nodes },
-        |variable| &assignment[variable],
+        |variable| Ok(&assignment[variable]),
         &FormulaLimits::default(),
         &mut Budget::new(ExpansionLimits::default(), usize::MAX),
         &mut Counters::default(),
@@ -210,7 +210,7 @@ fn reuse_charges_each_operand_copy() {
             evaluation
                 .expression(
                     &expression,
-                    |_| &value,
+                    |_| Ok(&value),
                     &FormulaLimits::default(),
                     &mut budget,
                     &mut counters,
@@ -222,7 +222,7 @@ fn reuse_charges_each_operand_copy() {
     }
     let failure = evaluation.expression(
         &expression,
-        |_| &value,
+        |_| Ok(&value),
         &FormulaLimits::default(),
         &mut budget,
         &mut counters,

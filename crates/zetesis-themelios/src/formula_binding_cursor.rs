@@ -7,6 +7,7 @@ use zetesis_core::Value;
 
 use crate::expansion::Budget;
 use crate::formula::ceiling;
+use crate::formula_binding::Binding;
 use crate::formula_ir::LiteralIr;
 use crate::formula_support::{Counters, Evaluation, Support, copy};
 use crate::{FormulaFailure, FormulaLimits, FormulaResource};
@@ -21,7 +22,7 @@ enum State {
 pub(super) struct Cursor<'a> {
     generators: Vec<&'a LiteralIr>,
     states: Vec<State>,
-    values: Vec<Value>,
+    values: Binding<'static>,
     support: &'a Support<'a>,
     depth: usize,
     finished: bool,
@@ -44,7 +45,7 @@ pub(super) fn target(literal: &LiteralIr) -> Option<usize> {
 impl<'a> Cursor<'a> {
     pub fn new(
         literals: &'a [LiteralIr],
-        values: Vec<Value>,
+        values: Binding<'static>,
         support: &'a Support<'a>,
         plan: Option<&'a crate::formula_assignment_plan::Plan>,
         targets: Range<usize>,
@@ -98,7 +99,7 @@ impl<'a> Cursor<'a> {
         budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
-    ) -> Result<Option<Vec<Value>>, FormulaFailure> {
+    ) -> Result<Option<Binding<'static>>, FormulaFailure> {
         while !self.finished {
             counters.work(limits, location)?;
             if self.depth == self.generators.len() {
@@ -113,12 +114,12 @@ impl<'a> Cursor<'a> {
                     self.depth -= 1;
                 }
                 counters.substitution(limits, location)?;
-                return self
-                    .values
-                    .iter()
-                    .map(|value| copy(value, budget, location))
-                    .collect::<Result<Vec<_>, _>>()
-                    .map(Some);
+                for generator in &self.generators {
+                    counters.work(limits, location)?;
+                    self.values
+                        .read(target(generator).expect("generator target"), location)?;
+                }
+                return self.values.copied(budget, location).map(Some);
             }
             if matches!(self.states[self.depth], State::Fresh) {
                 self.states[self.depth] =
@@ -145,16 +146,12 @@ impl<'a> Cursor<'a> {
             if let Some(value) = value {
                 counters.generated(&value, limits, budget, location)?;
                 let target = target(self.generators[self.depth]).expect("generator target");
-                if target == self.values.len() {
-                    // Head targets form a compiler-owned suffix. Its values are
-                    // appended only when evaluated; rejected bodies never own
-                    // fabricated head values or expose them to scoped validation.
-                    self.values.push(value);
-                } else {
-                    self.values[target] = value;
-                }
+                self.values.extend_scope(self.variables, budget, location)?;
+                self.values.set(target, value, location)?;
                 self.depth += 1;
             } else {
+                self.values
+                    .clear(target(self.generators[self.depth]).expect("generator target"));
                 self.states[self.depth] = State::Fresh;
                 if self.depth == 0 {
                     self.finished = true;
@@ -177,7 +174,7 @@ impl<'a> Cursor<'a> {
         match self.generators[self.depth] {
             LiteralIr::Bind { value, .. } => Ok(State::Scalar(Some(evaluation.expression(
                 value,
-                |variable| &self.values[variable],
+                |variable| self.values.read(variable, location),
                 limits,
                 budget,
                 counters,
@@ -186,7 +183,7 @@ impl<'a> Cursor<'a> {
             LiteralIr::Range { lower, upper, .. } => {
                 let lower = evaluation.expression(
                     lower,
-                    |variable| &self.values[variable],
+                    |variable| self.values.read(variable, location),
                     limits,
                     budget,
                     counters,
@@ -194,7 +191,7 @@ impl<'a> Cursor<'a> {
                 )?;
                 let upper = evaluation.expression(
                     upper,
-                    |variable| &self.values[variable],
+                    |variable| self.values.read(variable, location),
                     limits,
                     budget,
                     counters,

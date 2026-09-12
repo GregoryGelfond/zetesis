@@ -164,7 +164,7 @@ fn scoped_initialization_retains_spent_work() {
         assert!(matches!(
             scoped_body::validate_with_purpose(
                 &[],
-                &[],
+                &crate::formula_binding::Binding::default(),
                 &Support::default(),
                 &mut context,
                 purpose

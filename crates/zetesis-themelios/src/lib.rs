@@ -63,6 +63,7 @@ mod formula_binding_ir;
 mod formula_choice_ir;
 mod formula_head_ir;
 mod formula_binding_cursor;
+mod formula_binding;
 mod formula_projection_ir;
 mod formula_pattern;
 mod formula_pattern_ir;

@@ -9,6 +9,7 @@ use zetesis_core::{AtomPattern, Term, Value};
 use zetesis_ferraris::Node;
 
 use crate::FormulaFailure;
+use crate::formula_binding::Binding;
 use crate::formula_ground::{Builder, FALSUM, VERUM};
 use crate::formula_ir::{HeadIr, LiteralIr, RuleIr};
 use crate::formula_support::{Join, Support, copy};
@@ -115,14 +116,7 @@ fn emit(
         unreachable!("only normal rules have a component plan");
     };
     let head = if let Some(head) = head {
-        let mut assignment = Vec::with_capacity(rule.variables);
-        for slot in fixed {
-            builder.work(rule.location)?;
-            assignment.push(match slot {
-                Some(value) => copy(value, builder.budget, rule.location)?,
-                None => Value::Number(0), // Only head variables are read here.
-            });
-        }
+        let assignment = Binding::copy_slots(fixed, builder.budget, rule.location)?;
         builder.atom(head, &assignment, rule.location)?
     } else {
         FALSUM

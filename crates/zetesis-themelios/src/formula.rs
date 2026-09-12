@@ -251,7 +251,7 @@ pub enum FormulaFailure {
         /// Original rule or source span.
         location: Location,
     },
-    /// A variable has no positive ordinary-atom binder in its scope.
+    /// A required variable lacks a value or a positive binder in its scope.
     UnsafeVariable {
         /// Dense variable index in the rule or local element scope.
         variable: usize,

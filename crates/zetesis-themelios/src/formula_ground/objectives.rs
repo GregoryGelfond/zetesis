@@ -5,6 +5,8 @@
 //! always come from one binding. Fixed priorities retain the lifted evaluator;
 //! resolved priorities retain at most one bounded template per eligible row.
 
+use crate::formula_binding::Binding;
+
 use themelios_base::span::Location;
 use zetesis_core::{AtomPattern, Term, Value};
 use zetesis_objective::{AdmissionError, ObjectiveProgram, ObjectiveTemplate, WeightPolarity};
@@ -194,7 +196,7 @@ impl Preparation<'_> {
     fn weight(
         &mut self,
         objective: &ObjectiveIr,
-        binding: &[Value],
+        binding: &Binding,
     ) -> Result<Option<i32>, FormulaFailure> {
         let value = self.field(&objective.weight, binding, objective.location)?;
         let Value::Number(weight) = value else {
@@ -212,7 +214,7 @@ impl Preparation<'_> {
     fn specialize(
         &mut self,
         objective: &ObjectiveIr,
-        binding: &[Value],
+        binding: &Binding,
         weight: i32,
         priority: i32,
         body: Option<ValidatedBody>,
@@ -273,16 +275,14 @@ impl Preparation<'_> {
     fn field(
         &mut self,
         field: &ObjectiveField,
-        binding: &[Value],
+        binding: &Binding,
         location: Location,
     ) -> Result<Value, FormulaFailure> {
         self.counters.work(self.limits, location)?;
         match field {
-            ObjectiveField::Term(term) => formula_support::copy(
-                term.resolve(binding).expect("safe objective field"),
-                self.budget,
-                location,
-            ),
+            ObjectiveField::Term(term) => {
+                formula_support::copy(binding.resolve(term, location)?, self.budget, location)
+            }
             ObjectiveField::Expression(expression) => formula_support::expression(
                 expression,
                 binding,
@@ -297,14 +297,14 @@ impl Preparation<'_> {
     fn terms(
         &mut self,
         source: &[Term],
-        binding: &[Value],
+        binding: &Binding,
         location: Location,
     ) -> Result<Vec<Term>, FormulaFailure> {
         let mut result = reserved(source.len(), location)?;
         for term in source {
             self.counters.work(self.limits, location)?;
             result.push(Term::Constant(formula_support::copy(
-                term.resolve(binding).expect("safe objective field"),
+                binding.resolve(term, location)?,
                 self.budget,
                 location,
             )?));

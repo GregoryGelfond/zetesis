@@ -93,6 +93,21 @@ In particular, a false final filter does not hide an arithmetic error in a later
 final filter. The [caller regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/evaluation/tests/callers.rs)
 check these actual consumers as well as their values and failure boundaries.
 
+Formula bindings retain source variable identities in optional slots. A pending
+producer or an unrelated component variable is absent; numeric zero remains an
+ordinary value. Body-prefix views borrow only the original body scope, excluding
+head-only generated slots. Every scalar and atom reader checks availability and
+returns a located failure for a missing required input. Local joins cannot bind
+an absent outer input. Generator backtracking clears exhausted outputs before an
+earlier input changes. Owning frame capacities, including optional cells, are
+charged separately from copied value payloads.
+
+The [binding implementation](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_binding.rs)
+and [scope laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/BindingScopes.lean)
+state these distinct responsibilities. The laws prove restriction and checked
+read properties for abstract partial assignments; concrete source compilation,
+arithmetic error order and Rust execution remain correspondence obligations.
+
 Formula construction has an explicit ownership boundary. Source instantiation
 consumes the source IR and owns the completed support catalog and its snapshot
 while it emits formulas and activates objectives. A consuming builder then adds

@@ -82,7 +82,7 @@ fn evaluate(
     )?;
     let mut join = Join::new(
         literals,
-        prefix,
+        &crate::formula_binding::complete(prefix.iter().cloned()),
         variables,
         &support,
         &mut budget,
@@ -137,7 +137,13 @@ fn evaluate(
     }
     let mut bindings = Vec::new();
     while let Some(binding) = join.next(limits, &mut budget, &mut counters, location())? {
-        bindings.push(binding);
+        bindings.push(
+            binding
+                .slots()
+                .iter()
+                .map(|slot| slot.clone().expect("complete scope"))
+                .collect(),
+        );
     }
     assert!(join.finished, "only complete cursor exhaustion is success");
     Ok(bindings)

@@ -6,6 +6,8 @@
 //! arithmetic remains a located failure, including under negation or a false
 //! neighboring comparison; no intermediate truth result can conceal that failure.
 
+use crate::formula_binding::Binding;
+
 use themelios_base::span::Location;
 use themelios_program::program::{Comparison, DefaultNegation, Relation};
 use themelios_program::term::Term;
@@ -57,7 +59,7 @@ impl Guard {
 
     pub(super) fn evaluate(
         &self,
-        assignment: &[Value],
+        assignment: &Binding,
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,

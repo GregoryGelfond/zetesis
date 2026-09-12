@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use themelios_base::span::Location;
 use themelios_program::program::DefaultNegation;
 use themelios_program::symbol::Signature;
-use zetesis_core::{Atom, AtomPattern, Value};
+use zetesis_core::{Atom, AtomPattern};
 pub(crate) mod query;
 mod cyclic;
 mod possible;
@@ -22,6 +22,7 @@ pub(crate) use query::condition as model_condition;
 use super::signature;
 use crate::expansion::Budget;
 use crate::formula::ceiling;
+use crate::formula_binding::Binding;
 use crate::formula_ir::{HeadIr, LiteralIr, Prepared, RuleIr};
 use crate::formula_support::{self, CompletedSupport, Counters, Join, Support};
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
@@ -83,7 +84,7 @@ impl Context<'_> {
         self.counters.work(self.limits, self.location)
     }
 
-    fn atom(&mut self, pattern: &AtomPattern, binding: &[Value]) -> Result<Atom, FormulaFailure> {
+    fn atom(&mut self, pattern: &AtomPattern, binding: &Binding) -> Result<Atom, FormulaFailure> {
         self.work()?;
         let mut values = Vec::new();
         values
@@ -92,8 +93,7 @@ impl Context<'_> {
         for term in pattern.terms() {
             self.work()?;
             values.push(formula_support::copy(
-                term.resolve(binding)
-                    .expect("admitted complete source binding"),
+                binding.resolve(term, self.location)?,
                 self.budget,
                 self.location,
             )?);
@@ -113,7 +113,7 @@ impl Context<'_> {
         }
     }
 
-    fn scalar(&mut self, literal: &LiteralIr, binding: &[Value]) -> Result<bool, FormulaFailure> {
+    fn scalar(&mut self, literal: &LiteralIr, binding: &Binding) -> Result<bool, FormulaFailure> {
         match literal {
             LiteralIr::Compare(left, relation, right) => {
                 let left = formula_support::expression(
@@ -341,7 +341,7 @@ impl SourceEligibility {
             context.counters,
             rule.location,
         )? {
-            let body = self.activity(&rule.body, rule.body_binding(&binding), context)?;
+            let body = self.activity(&rule.body, &rule.body_binding(&binding), context)?;
             match &rule.head {
                 HeadIr::Normal(Some(head)) => {
                     self.retain(head, &binding, body, temporary, context)?;
@@ -385,7 +385,7 @@ impl SourceEligibility {
                         )? {
                             let eligible = self.activity(
                                 &element.condition,
-                                element.body_binding(&row),
+                                &element.body_binding(&row),
                                 context,
                             )?;
                             self.retain(
@@ -407,7 +407,7 @@ impl SourceEligibility {
     fn retain(
         &mut self,
         pattern: &AtomPattern,
-        binding: &[Value],
+        binding: &Binding,
         activity: Activity,
         temporary: usize,
         context: &mut Context<'_>,
@@ -431,7 +431,7 @@ impl SourceEligibility {
     pub(crate) fn activity(
         &self,
         literals: &[LiteralIr],
-        binding: &[Value],
+        binding: &Binding,
         context: &mut Context<'_>,
     ) -> Result<Activity, FormulaFailure> {
         let mut result = Activity::Required;

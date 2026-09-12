@@ -8,7 +8,9 @@
 //! nodes consume the retained query ceiling. No roots, producers, coherence or
 //! support-guard completion from scratch reach the original program.
 
-use super::{Atom, Builder, Node, Purpose, Value};
+use crate::formula_binding::Binding;
+
+use super::{Atom, Builder, Node, Purpose};
 use crate::formula_ir::LiteralIr;
 use crate::formula_objective_dependencies::eligibility::Context;
 use crate::formula_objective_dependencies::eligibility::query::Query;
@@ -24,7 +26,7 @@ pub(super) struct ValidatedBody {
 
 pub(super) fn validate(
     literals: &[LiteralIr],
-    binding: &[Value],
+    binding: &Binding,
     support: &Support<'_>,
     context: &mut Context<'_>,
 ) -> Result<ValidatedBody, FormulaFailure> {
@@ -33,7 +35,7 @@ pub(super) fn validate(
 
 pub(super) fn validate_with_purpose(
     literals: &[LiteralIr],
-    binding: &[Value],
+    binding: &Binding,
     support: &Support<'_>,
     context: &mut Context<'_>,
     purpose: Purpose,

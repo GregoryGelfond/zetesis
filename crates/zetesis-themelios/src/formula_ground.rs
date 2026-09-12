@@ -20,6 +20,7 @@ use zetesis_ferraris::{
 
 use crate::expansion::Budget;
 use crate::formula::{Compiled, ceiling};
+use crate::formula_binding::Binding;
 use crate::formula_ir::{
     AggregateGuard, AggregateIr, AggregateKey, ChoiceIr, HeadElementKey, HeadIr, HeadLiteral,
     HeadMeasure, HeadOperand, LiteralIr, Prepared, Projection, RuleIr, value_bytes,
@@ -195,7 +196,7 @@ pub(super) struct Builder<'a> {
     origins: Vec<Vec<Location>>,
     pub(super) counters: Counters,
     origin_count: usize,
-    aggregate_cache: BTreeMap<(usize, Vec<Value>), CachedAggregate>,
+    aggregate_cache: BTreeMap<AggregateContext, CachedAggregate>,
     cached_elements: usize,
     cached_key_bytes: u128,
     cached_roots: usize,
@@ -208,6 +209,14 @@ enum Purpose {
     Objective,
     /// Discarded source-body validation, bounded by the existing theory ceilings.
     Validation,
+}
+
+/// Original aggregate identity and its scoped outer assignment. Absence is
+/// retained in the key; it cannot alias an ordinary numeric zero.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+struct AggregateContext {
+    aggregate: usize,
+    outer: Vec<Option<Value>>,
 }
 
 struct CachedAggregate {
@@ -435,16 +444,13 @@ impl Builder<'_> {
     pub(super) fn atom(
         &mut self,
         pattern: &AtomPattern,
-        assignment: &[Value],
+        assignment: &Binding,
         location: Location,
     ) -> Result<usize, FormulaFailure> {
         self.work(location)?;
         let mut bytes = pattern.predicate().name().len() as u128;
         for term in pattern.terms() {
-            bytes += value_bytes(
-                term.resolve(assignment)
-                    .expect("all scoped variables assigned"),
-            );
+            bytes += value_bytes(assignment.resolve(term, location)?);
         }
         // Conservative symbolic allowance for lookup and retained atom/index
         // storage. This cumulative admission charge is not live heap occupancy.
@@ -453,9 +459,7 @@ impl Builder<'_> {
             bytes.saturating_mul(3),
             location,
         )?;
-        let atom = pattern
-            .instantiate(assignment)
-            .expect("all scoped variables assigned");
+        let atom = assignment.instantiate(pattern, location)?;
         self.counters.record(Event::AtomLookup);
         let required = self.catalog.len() as u128 + 1;
         let (atom_resource, atom_limit) = self.atom_bound();
@@ -487,7 +491,7 @@ impl Builder<'_> {
     fn validate_body(
         &mut self,
         literals: &[LiteralIr],
-        binding: &[Value],
+        binding: &Binding,
         support: &Support<'_>,
         location: Location,
     ) -> Result<(), FormulaFailure> {
@@ -509,7 +513,7 @@ impl Builder<'_> {
     pub(super) fn body(
         &mut self,
         literals: &[LiteralIr],
-        assignment: &[Value],
+        assignment: &Binding,
         location: Location,
         support: &Support,
     ) -> Result<usize, FormulaFailure> {
@@ -547,7 +551,7 @@ impl Builder<'_> {
     pub(super) fn project(
         &mut self,
         projection: &Projection,
-        assignment: &[Value],
+        assignment: &Binding,
         support: &Support,
         location: Location,
     ) -> Result<usize, FormulaFailure> {
@@ -563,7 +567,7 @@ impl Builder<'_> {
             } => {
                 let mut rows = Join::new(
                     bindings,
-                    &assignment[..*inputs],
+                    &assignment.prefix(*inputs),
                     *variables,
                     support,
                     self.budget,
@@ -586,7 +590,7 @@ impl Builder<'_> {
         &mut self,
         predicate: &zetesis_core::Predicate,
         terms: &[Option<zetesis_core::Term>],
-        assignment: &[Value],
+        assignment: &Binding,
         support: &Support,
         location: Location,
     ) -> Result<usize, FormulaFailure> {
@@ -598,10 +602,7 @@ impl Builder<'_> {
                 let value = atom.value(column).expect("checked projection arity");
                 self.work(location)?;
                 if let Some(term) = term {
-                    matches &= term
-                        .resolve(assignment)
-                        .expect("named projection arguments are safe")
-                        == value;
+                    matches &= assignment.resolve(term, location)? == value;
                 }
             }
             if matches {
@@ -621,7 +622,7 @@ impl Builder<'_> {
                         .collect(),
                 )
                 .expect("projection retains the source atom arity");
-                let atom = self.atom(&pattern, &[], location)?;
+                let atom = self.atom(&pattern, &Binding::default(), location)?;
                 result = self.or(result, atom, location)?;
             }
         }
@@ -630,13 +631,13 @@ impl Builder<'_> {
     fn rule(
         &mut self,
         rule: &RuleIr,
-        assignment: &[Value],
+        assignment: &Binding,
         support: &Support,
     ) -> Result<(), FormulaFailure> {
         self.work(rule.location)?;
         let body = self.body(
             &rule.body,
-            rule.body_binding(assignment),
+            &rule.body_binding(assignment),
             rule.location,
             support,
         )?;
@@ -734,7 +735,7 @@ impl Builder<'_> {
         rule: &RuleIr,
         group: &ChoiceIr,
         body: usize,
-        assignment: &[Value],
+        assignment: &Binding,
         support: &Support,
     ) -> Result<(), FormulaFailure> {
         let ChoiceIr {
@@ -828,7 +829,7 @@ impl Builder<'_> {
     fn head_literal(
         &mut self,
         head: &HeadLiteral,
-        assignment: &[Value],
+        assignment: &Binding,
         location: Location,
     ) -> Result<(usize, Option<usize>), FormulaFailure> {
         let (mut literal, atom) = match &head.operand {
@@ -850,7 +851,7 @@ impl Builder<'_> {
     fn head_group(
         &mut self,
         group: &ChoiceIr,
-        assignment: &[Value],
+        assignment: &Binding,
         support: &Support,
         rule: &RuleIr,
     ) -> Result<HeadGroup, FormulaFailure> {
@@ -864,7 +865,7 @@ impl Builder<'_> {
             {
                 let condition = self.body(
                     &element.condition,
-                    element.body_binding(&binding),
+                    &element.body_binding(&binding),
                     rule.location,
                     support,
                 )?;
@@ -945,13 +946,13 @@ impl Builder<'_> {
     fn head_tuple(
         &mut self,
         terms: &[zetesis_core::Term],
-        assignment: &[Value],
+        assignment: &Binding,
         location: Location,
     ) -> Result<Vec<Value>, FormulaFailure> {
         let mut tuple = Vec::new();
         for term in terms {
             self.work(location)?;
-            let value = term.resolve(assignment).expect("safe head tuple assigned");
+            let value = assignment.resolve(term, location)?;
             self.budget.charge(
                 ExpansionResource::ScalarBytes,
                 size_of::<Value>() as u128 + value_bytes(value),
@@ -1064,7 +1065,7 @@ impl Builder<'_> {
     fn aggregate(
         &mut self,
         aggregate: &AggregateIr,
-        assignment: &[Value],
+        assignment: &Binding,
         support: &Support,
         location: Location,
     ) -> Result<usize, FormulaFailure> {
@@ -1090,7 +1091,7 @@ impl Builder<'_> {
     fn cached_aggregate_elements(
         &mut self,
         aggregate: &AggregateIr,
-        assignment: &[Value],
+        assignment: &Binding,
         support: &Support,
         location: Location,
     ) -> Result<GroundAggregate, FormulaFailure> {
@@ -1137,7 +1138,7 @@ impl Builder<'_> {
         &mut self,
         aggregate: &AggregateIr,
         target: usize,
-        assignment: &[Value],
+        assignment: &Binding,
         support: &Support,
         location: Location,
     ) -> Result<usize, FormulaFailure> {
@@ -1160,8 +1161,9 @@ impl Builder<'_> {
                 .roots = Some(Arc::clone(&roots));
             roots
         };
+        let target_value = assignment.read(target, location)?;
         let index = roots
-            .binary_search_by(|(value, _)| value.cmp(&assignment[target]))
+            .binary_search_by(|(value, _)| value.cmp(target_value))
             .expect("the complete final-U tuple set covers every assignment proposal");
         Ok(roots[index].1)
     }
@@ -1247,15 +1249,19 @@ impl Builder<'_> {
         &mut self,
         id: usize,
         target: usize,
-        assignment: &[Value],
+        assignment: &Binding,
         location: Location,
-    ) -> Result<((usize, Vec<Value>), u128), FormulaFailure> {
+    ) -> Result<(AggregateContext, u128), FormulaFailure> {
         let bytes = std::mem::size_of::<usize>() as u128
             + assignment
+                .slots()
                 .iter()
                 .enumerate()
                 .filter(|(index, _)| *index != target)
-                .map(|(_, value)| std::mem::size_of::<Value>() as u128 + value_bytes(value))
+                .map(|(_, value)| {
+                    std::mem::size_of::<Option<Value>>() as u128
+                        + value.as_ref().map_or(0, value_bytes)
+                })
                 .sum::<u128>();
         ceiling(
             FormulaResource::AggregateCacheKeys,
@@ -1264,20 +1270,29 @@ impl Builder<'_> {
             location,
         )?;
         let mut outer = Vec::new();
-        for (index, value) in assignment.iter().enumerate() {
+        for (index, value) in assignment.slots().iter().enumerate() {
             self.work(location)?;
             if index != target {
-                self.budget
-                    .charge(ExpansionResource::ScalarBytes, value_bytes(value), location)?;
+                self.budget.charge(
+                    ExpansionResource::ScalarBytes,
+                    value.as_ref().map_or(0, value_bytes),
+                    location,
+                )?;
                 outer.push(value.clone());
             }
         }
-        Ok(((id, outer), bytes))
+        Ok((
+            AggregateContext {
+                aggregate: id,
+                outer,
+            },
+            bytes,
+        ))
     }
     fn aggregate_elements(
         &mut self,
         aggregate: &AggregateIr,
-        assignment: &[Value],
+        assignment: &Binding,
         support: &Support,
         location: Location,
     ) -> Result<GroundAggregate, FormulaFailure> {
@@ -1354,7 +1369,7 @@ impl Builder<'_> {
     fn aggregate_key(
         &mut self,
         key: &AggregateKey,
-        assignment: &[Value],
+        assignment: &Binding,
         location: Location,
     ) -> Result<GroundKey, FormulaFailure> {
         match key {
@@ -1362,9 +1377,7 @@ impl Builder<'_> {
                 let mut values = Vec::new();
                 for term in terms {
                     self.work(location)?;
-                    let value = term
-                        .resolve(assignment)
-                        .expect("safe aggregate variable assigned");
+                    let value = assignment.resolve(term, location)?;
                     self.budget.charge(
                         ExpansionResource::ScalarBytes,
                         value_bytes(value),
@@ -1379,23 +1392,14 @@ impl Builder<'_> {
                 let bytes: u128 = pattern
                     .terms()
                     .iter()
-                    .map(|term| {
-                        value_bytes(
-                            term.resolve(assignment)
-                                .expect("safe aggregate variable assigned"),
-                        )
-                    })
-                    .sum();
+                    .map(|term| assignment.resolve(term, location).map(value_bytes))
+                    .sum::<Result<u128, _>>()?;
                 self.budget.charge(
                     ExpansionResource::ScalarBytes,
                     bytes + pattern.predicate().name().len() as u128,
                     location,
                 )?;
-                Ok(GroundKey::Atom(
-                    pattern
-                        .instantiate(assignment)
-                        .expect("safe aggregate variable assigned"),
-                ))
+                Ok(GroundKey::Atom(assignment.instantiate(pattern, location)?))
             }
         }
     }
@@ -1436,7 +1440,7 @@ impl Builder<'_> {
         &mut self,
         elements: &GroundAggregate,
         guards: &[AggregateGuard],
-        assignment: &[Value],
+        assignment: &Binding,
         kind: Option<AggregateExtremum>,
         location: Location,
     ) -> Result<usize, FormulaFailure> {
@@ -1446,7 +1450,7 @@ impl Builder<'_> {
         &mut self,
         elements: &GroundAggregate,
         guards: &[AggregateGuard],
-        assignment: &[Value],
+        assignment: &Binding,
         kind: Option<AggregateExtremum>,
         location: Location,
         mut capture: Option<&mut crate::formula_count_plan::Bounds>,
