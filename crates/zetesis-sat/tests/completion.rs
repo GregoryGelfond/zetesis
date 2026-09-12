@@ -37,6 +37,23 @@ fn executor(workers: usize) -> CompletionExecutor {
     CompletionExecutor::new(NonZeroUsize::new(workers).unwrap()).unwrap()
 }
 
+fn retained_query_bytes(theory: &Theory, candidates: usize) -> u64 {
+    let required =
+        CompletionExecutor::scratch_requirements(theory, Limits::default(), candidates).unwrap();
+    let mut search = StableModels::new(theory, Limits::default(), Control::default()).unwrap();
+    let mut executor = executor(1);
+    search
+        .next_batch_with_completion(batch(candidates), &mut executor, residual)
+        .unwrap();
+    let actual = executor.last_statistics().unwrap();
+    assert_eq!(
+        actual.requested_scratch_bytes,
+        required.result_bytes + required.query_bytes
+    );
+    assert!(actual.peak_scratch_bytes >= actual.requested_scratch_bytes);
+    actual.peak_scratch_bytes - required.result_bytes
+}
+
 fn batch(count: usize) -> BatchLimits {
     BatchLimits {
         max_candidates: NonZeroUsize::new(count).unwrap(),
@@ -314,7 +331,7 @@ fn checker_retry_restriction_and_failed_certificate_preserve_the_owned_batch() {
 }
 
 #[test]
-fn cancellation_at_completion_is_joined_without_publishing_or_mutating_other_controls() {
+fn cancellation_before_workspace_reservation_keeps_pending_candidates() {
     let control = Control::default();
     let mut search = StableModels::new(&choices(), Limits::default(), control.clone()).unwrap();
     let mut pool = executor(4);
@@ -328,7 +345,8 @@ fn cancellation_at_completion_is_joined_without_publishing_or_mutating_other_con
     ));
     assert_eq!(search.batch_statistics().pending, 3);
     assert_eq!(search.statistics().stable_models, 0);
-    assert_eq!(pool.last_statistics().unwrap().failed, 3);
+    assert_eq!(pool.last_statistics().unwrap().candidates, 0);
+    assert_eq!(pool.last_statistics().unwrap().failed, 0);
     assert_eq!(pool.last_statistics().unwrap().completed, 0);
     // The same pool is reusable after the caller's cancelled solve.
     assert_eq!(collect(&choices(), 3, &mut pool).0.len(), 8);
@@ -396,7 +414,7 @@ fn scratch_admission_precedes_results_and_is_retryable_without_new_proposals() {
         assert_eq!(search.statistics(), before);
         let mut admitted = CompletionExecutor::with_scratch_limit(
             NonZeroUsize::new(workers).unwrap(),
-            required.result_bytes + required.query_bytes,
+            required.result_bytes + retained_query_bytes(&t, 3),
         )
         .unwrap();
         let found = search
@@ -411,7 +429,7 @@ fn scratch_admission_precedes_results_and_is_retryable_without_new_proposals() {
         assert_eq!((progress.workers, progress.effective_workers), (workers, 1));
         assert_eq!(
             progress.peak_scratch_bytes,
-            required.result_bytes + required.query_bytes
+            required.result_bytes + retained_query_bytes(&t, 3)
         );
         assert_eq!(
             (progress.residual_completed, progress.residual_failed),
@@ -422,13 +440,62 @@ fn scratch_admission_precedes_results_and_is_retryable_without_new_proposals() {
 }
 
 #[test]
+fn retained_capacity_is_admitted_before_candidate_work() {
+    let theory = choices();
+    let requested =
+        CompletionExecutor::scratch_requirements(&theory, Limits::default(), 3).unwrap();
+    let actual = requested.result_bytes + retained_query_bytes(&theory, 3);
+    // Ten alias entries require a larger reported HashMap capacity on the
+    // pinned implementation. This exercises real retained capacity, not ZSTs.
+    assert!(actual > requested.result_bytes + requested.query_bytes);
+    let mut search = StableModels::new(&theory, Limits::default(), Control::default()).unwrap();
+    let _ = search.next_batch(batch(3), |_, _| {
+        Err::<Vec<BatchVerdict>, _>("retain proposals")
+    });
+    let before = search.statistics();
+    let mut refused =
+        CompletionExecutor::with_scratch_limit(NonZeroUsize::new(1).unwrap(), actual - 1).unwrap();
+    assert!(matches!(
+        search.next_batch_with_completion(batch(3), &mut refused, residual),
+        Err(BatchError::Limits(Incomplete::CompletionScratch))
+    ));
+    let progress = refused.last_statistics().unwrap();
+    assert_eq!(
+        progress.requested_scratch_bytes,
+        requested.result_bytes + requested.query_bytes
+    );
+    assert_eq!(progress.peak_scratch_bytes, actual);
+    assert_eq!(
+        (progress.candidates, progress.completed, progress.failed),
+        (0, 0, 0)
+    );
+    assert_eq!(search.statistics(), before);
+    assert_eq!(search.batch_statistics().pending, 3);
+    let mut exact =
+        CompletionExecutor::with_scratch_limit(NonZeroUsize::new(1).unwrap(), actual).unwrap();
+    assert_eq!(
+        search
+            .next_batch_with_completion(batch(3), &mut exact, residual)
+            .unwrap()
+            .len(),
+        3
+    );
+    assert_eq!(exact.last_statistics().unwrap().peak_scratch_bytes, actual);
+    assert_eq!(
+        search.statistics().candidate_queries,
+        before.candidate_queries
+    );
+    assert_eq!(search.batch_statistics().pending, 0);
+}
+
+#[test]
 fn fixed_scratch_envelopes_cap_concurrency_and_release_between_irregular_calls() {
     let t = choices();
     for workers in [1, 2, 4] {
         for admitted in [1, 2, 4] {
             let requirements =
                 CompletionExecutor::scratch_requirements(&t, Limits::default(), 3).unwrap();
-            let ceiling = requirements.result_bytes + requirements.query_bytes * admitted;
+            let ceiling = requirements.result_bytes + retained_query_bytes(&t, 3) * admitted;
             let mut pool = CompletionExecutor::with_scratch_limit(
                 NonZeroUsize::new(workers).unwrap(),
                 ceiling,
@@ -476,20 +543,22 @@ fn certificate_only_completion_needs_result_storage_but_no_query_workspace() {
 fn one_workspace_parallel_failure_joins_all_residual_slots_and_accounts_each() {
     let t = choices();
     let required = CompletionExecutor::scratch_requirements(&t, Limits::default(), 3).unwrap();
-    let control = Control::default();
-    let mut search = StableModels::new(&t, Limits::default(), control.clone()).unwrap();
+    let mut probe = StableModels::new(&t, Limits::default(), Control::default()).unwrap();
+    let _ = probe.next_batch(batch(3), |_, _| {
+        Err::<Vec<BatchVerdict>, _>("retain proposals")
+    });
+    let mut limits = Limits::default();
+    limits.search.max_work = probe.statistics().search.work;
+    let mut search = StableModels::new(&t, limits, Control::default()).unwrap();
     let mut pool = CompletionExecutor::with_scratch_limit(
         NonZeroUsize::new(4).unwrap(),
-        required.result_bytes + required.query_bytes,
+        required.result_bytes + retained_query_bytes(&t, 3),
     )
     .unwrap();
-    let result = search.next_batch_with_completion(batch(3), &mut pool, |theory, candidates| {
-        control.cancel();
-        residual(theory, candidates)
-    });
+    let result = search.next_batch_with_completion(batch(3), &mut pool, residual);
     assert!(matches!(
         result,
-        Err(BatchError::Search(Incomplete::Cancelled))
+        Err(BatchError::Search(Incomplete::WorkLimit))
     ));
     let progress = pool.last_statistics().unwrap();
     assert_eq!(

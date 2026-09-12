@@ -1,7 +1,7 @@
 use zetesis_ferraris::{Interpretation, Theory, TightVerdict, models, models_reduct};
 
 use crate::encoding;
-use crate::search::{Budget, Cursor, Quota, increment, query};
+use crate::search::{Budget, Cursor, Quota, increment};
 use crate::timing::{self, Phase};
 use crate::{AdmissionLimits, Cnf, Control, Incomplete, SearchLimits, SearchStatistics, Solve};
 
@@ -20,6 +20,9 @@ pub use certified::CertifiedStatistics;
 #[path = "candidate_support.rs"]
 mod candidate_support;
 pub use candidate_support::{SupportStatistics, SupportStatus};
+
+#[path = "reduct_query.rs"]
+mod reduct_query;
 
 /// Whole-operation ceilings for a membership check or stable-model enumeration.
 #[derive(Clone, Copy, Debug)]
@@ -123,7 +126,14 @@ pub fn check(
         statistics: SearchStatistics::default(),
     };
     let mut statistics = Statistics::default();
-    match membership(theory, candidate, limits, &mut budget, &mut statistics) {
+    match membership(
+        theory,
+        candidate,
+        limits,
+        &mut budget,
+        &mut statistics,
+        &mut reduct_query::Workspace::default(),
+    ) {
         Ok(result) => result,
         Err(error) => Check::Inconclusive(error),
     }
@@ -135,6 +145,7 @@ fn membership(
     limits: Limits,
     budget: &mut Budget<'_, impl Quota>,
     statistics: &mut Statistics,
+    workspace: &mut reduct_query::Workspace,
 ) -> Result<Check, Incomplete> {
     let started = timing::start(statistics.phase_timings.as_ref());
     let original = (|| {
@@ -153,7 +164,7 @@ fn membership(
         return Ok(Check::NotModel);
     }
     let started = timing::start(statistics.phase_timings.as_ref());
-    let result = reduct_membership(theory, candidate, limits, budget, statistics);
+    let result = reduct_membership(theory, candidate, limits, budget, statistics, workspace);
     timing::finish(&mut statistics.phase_timings, Phase::Reduct, started);
     result
 }
@@ -164,10 +175,11 @@ fn reduct_membership(
     limits: Limits,
     budget: &mut Budget<'_, impl Quota>,
     statistics: &mut Statistics,
+    workspace: &mut reduct_query::Workspace,
 ) -> Result<Check, Incomplete> {
-    let reduct = encoding::encode(theory, Some(candidate), limits.admission, budget)?;
+    let (reduct, search) = workspace.encode(theory, candidate, limits.admission, budget)?;
     increment(&mut statistics.countermodel_queries)?;
-    match query(&reduct, budget) {
+    match search.query(reduct, budget) {
         Solve::Unsat => Ok(Check::Stable),
         Solve::Inconclusive(error) => Err(error),
         Solve::Sat(assignment) => {
@@ -218,6 +230,7 @@ pub struct StableModels {
     pending_error: Option<Incomplete>,
     batch: batch::State,
     certification: Option<certified::Certification>,
+    reduct_workspace: reduct_query::Workspace,
 }
 impl StableModels {
     /// Encode the original theory once, retaining its immutable instance identity.
@@ -256,6 +269,7 @@ impl StableModels {
             pending_error: None,
             batch: batch::State::default(),
             certification: None,
+            reduct_workspace: reduct_query::Workspace::default(),
         })
     }
     /// Enable coarse host timing from this point onward. Repeated calls retain
@@ -344,6 +358,7 @@ impl StableModels {
                 theory: &self.theory,
                 limits: self.limits,
                 certificate: self.certification.as_ref(),
+                workspace: &mut self.reduct_workspace,
             },
             &mut self.candidate_cnf,
             &mut self.candidate_cursor,
@@ -386,11 +401,11 @@ impl Iterator for StableModels {
 }
 impl std::iter::FusedIterator for StableModels {}
 
-#[derive(Clone, Copy)]
 struct Membership<'a> {
     theory: &'a Theory,
     limits: Limits,
     certificate: Option<&'a certified::Certification>,
+    workspace: &'a mut reduct_query::Workspace,
 }
 
 fn advance(
@@ -405,6 +420,7 @@ fn advance(
         theory,
         limits,
         certificate,
+        workspace,
     } = membership_input;
     loop {
         let started = timing::start(statistics.phase_timings.as_ref());
@@ -437,11 +453,11 @@ fn advance(
                 TightVerdict::Stable => Check::Stable,
                 TightVerdict::NotModel { .. } => Check::NotModel,
                 TightVerdict::Residual { .. } => {
-                    membership(theory, &candidate, limits, budget, statistics)?
+                    membership(theory, &candidate, limits, budget, statistics, workspace)?
                 }
             }
         } else {
-            membership(theory, &candidate, limits, budget, statistics)?
+            membership(theory, &candidate, limits, budget, statistics, workspace)?
         };
         if matches!(result, Check::NotModel | Check::Inconclusive(_)) {
             return Err(Incomplete::InvalidWitness);

@@ -1,50 +1,81 @@
 //! A bounded permutation of unassigned variables; clauses remain unchanged.
 
-use crate::search::{Budget, Quota, increment, storage};
+use crate::search::{Budget, Quota, increment, reserve};
 use crate::{Clause, Incomplete};
 
-pub(crate) fn variables<'a>(
-    clauses: impl Iterator<Item = Clause<'a>>,
-    values: &[Option<bool>],
-    budget: &mut Budget<'_, impl Quota>,
-) -> Result<Vec<usize>, Incomplete> {
-    let mut scores = storage(values.len())?;
-    let mut unassigned = 0;
-    for value in values {
-        budget.tick()?;
-        scores.push(0);
-        unassigned += usize::from(value.is_none());
-    }
-    for clause in clauses {
-        let mut satisfied = false;
-        for literal in clause.iter() {
-            budget.tick()?;
-            if values[literal.variable()] == Some(literal.positive()) {
-                satisfied = true;
-                break;
-            }
-        }
-        if satisfied {
-            continue;
-        }
-        for literal in clause.iter() {
-            budget.tick()?;
-            if values[literal.variable()].is_none() {
-                increment(&mut scores[literal.variable()])?;
-            }
-        }
-    }
-    sort(&scores, values, unassigned, budget)
+#[derive(Debug, Default)]
+pub(crate) struct Workspace {
+    scores: Vec<u64>,
+    buffer: Vec<usize>,
 }
 
-fn sort(
+impl Workspace {
+    pub(crate) fn clear(&mut self) {
+        self.scores.clear();
+        self.buffer.clear();
+    }
+
+    pub(crate) fn reserve(&mut self, count: usize) -> Result<(), Incomplete> {
+        reserve(&mut self.scores, count)?;
+        reserve(&mut self.buffer, count)
+    }
+
+    pub(crate) fn retained_bytes(&self) -> u128 {
+        self.scores.capacity() as u128 * std::mem::size_of::<u64>() as u128
+            + self.buffer.capacity() as u128 * std::mem::size_of::<usize>() as u128
+    }
+
+    pub(crate) fn variables<'a>(
+        &mut self,
+        order: &mut Vec<usize>,
+        clauses: impl Iterator<Item = Clause<'a>>,
+        values: &[Option<bool>],
+        budget: &mut Budget<'_, impl Quota>,
+    ) -> Result<(), Incomplete> {
+        self.scores.clear();
+        reserve(&mut self.scores, values.len())?;
+        let scores = &mut self.scores;
+        let mut unassigned = 0;
+        for value in values {
+            budget.tick()?;
+            scores.push(0);
+            unassigned += usize::from(value.is_none());
+        }
+        for clause in clauses {
+            let mut satisfied = false;
+            for literal in clause.iter() {
+                budget.tick()?;
+                if values[literal.variable()] == Some(literal.positive()) {
+                    satisfied = true;
+                    break;
+                }
+            }
+            if satisfied {
+                continue;
+            }
+            for literal in clause.iter() {
+                budget.tick()?;
+                if values[literal.variable()].is_none() {
+                    increment(&mut scores[literal.variable()])?;
+                }
+            }
+        }
+        sort_into(scores, values, unassigned, order, &mut self.buffer, budget)
+    }
+}
+
+fn sort_into(
     scores: &[u64],
     values: &[Option<bool>],
     count: usize,
+    order: &mut Vec<usize>,
+    buffer: &mut Vec<usize>,
     budget: &mut Budget<'_, impl Quota>,
-) -> Result<Vec<usize>, Incomplete> {
-    let mut order = storage(count)?;
-    let mut buffer = storage(count)?;
+) -> Result<(), Incomplete> {
+    order.clear();
+    buffer.clear();
+    reserve(order, count)?;
+    reserve(buffer, count)?;
     // This runs after root propagation/probing and before the first decision.
     // Every decision's trail start follows these assignments, so backtracking
     // never clears them. A strengthened query constructs a new cursor/order.
@@ -79,9 +110,32 @@ fn sort(
             }
             start = end;
         }
-        std::mem::swap(&mut order, &mut buffer);
+        std::mem::swap(order, buffer);
         width = width.saturating_mul(2);
     }
+    Ok(())
+}
+
+#[cfg(test)]
+fn variables<'a>(
+    clauses: impl Iterator<Item = Clause<'a>>,
+    values: &[Option<bool>],
+    budget: &mut Budget<'_, impl Quota>,
+) -> Result<Vec<usize>, Incomplete> {
+    let mut order = Vec::new();
+    Workspace::default().variables(&mut order, clauses, values, budget)?;
+    Ok(order)
+}
+
+#[cfg(test)]
+fn sort(
+    scores: &[u64],
+    values: &[Option<bool>],
+    count: usize,
+    budget: &mut Budget<'_, impl Quota>,
+) -> Result<Vec<usize>, Incomplete> {
+    let mut order = Vec::new();
+    sort_into(scores, values, count, &mut order, &mut Vec::new(), budget)?;
     Ok(order)
 }
 

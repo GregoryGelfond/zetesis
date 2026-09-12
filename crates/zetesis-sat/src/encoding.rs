@@ -16,11 +16,12 @@ fn clause<const N: usize>(
 }
 
 fn frozen(
+    values: &mut Vec<bool>,
     theory: &Theory,
     candidate: &Interpretation,
     budget: &mut Budget<'_, impl Quota>,
-) -> Result<Vec<bool>, Incomplete> {
-    let mut values = storage(theory.nodes().len())?;
+) -> Result<(), Incomplete> {
+    reserve(values, theory.nodes().len())?;
     for node in theory.nodes() {
         budget.tick()?;
         values.push(match *node {
@@ -31,7 +32,7 @@ fn frozen(
             Node::Implies(a, b) => !values[a] || values[b],
         });
     }
-    Ok(values)
+    Ok(())
 }
 
 pub(crate) fn encode<Q: Quota>(
@@ -40,47 +41,133 @@ pub(crate) fn encode<Q: Quota>(
     limits: AdmissionLimits,
     budget: &mut Budget<'_, Q>,
 ) -> Result<Cnf, Incomplete> {
-    budget.tick()?;
-    let atoms = theory.atom_count();
-    let mut cnf = Cnf::empty(atoms, limits)?;
-    if Q::BOUNDED_STORAGE {
-        let clauses = theory
-            .nodes()
-            .len()
-            .checked_mul(3)
-            .and_then(|n| n.checked_add(theory.roots().len()))
-            .and_then(|n| n.checked_add(atoms))
-            .and_then(|n| n.checked_add(1))
-            .ok_or(Incomplete::CounterOverflow)?;
-        let literals = theory
-            .nodes()
-            .len()
-            .checked_mul(7)
-            .and_then(|n| n.checked_add(theory.roots().len()))
-            .and_then(|n| atoms.checked_mul(2).and_then(|atoms| n.checked_add(atoms)))
-            .ok_or(Incomplete::CounterOverflow)?;
-        cnf.reserve(clauses, literals)?;
+    let mut workspace = Workspace::default();
+    workspace.encode(theory, candidate, limits, budget)?;
+    Ok(workspace.cnf.expect("completed encoding owns its CNF"))
+}
+
+/// Allocation ownership only: no candidate-dependent encoding survives reset.
+#[derive(Debug, Default)]
+pub(crate) struct Workspace {
+    cnf: Option<Cnf>,
+    mask: Vec<bool>,
+    strict: Vec<Literal>,
+    nodes: Vec<Encoded>,
+    gates: HashMap<(usize, usize), Literal>,
+}
+
+impl Workspace {
+    fn clear(&mut self) {
+        self.mask.clear();
+        self.strict.clear();
+        self.nodes.clear();
+        self.gates.clear();
     }
-    let mask = candidate
-        .map(|candidate| frozen(theory, candidate, budget))
-        .transpose()?;
-    append_nodes(&mut cnf, theory, mask.as_deref(), budget)?;
-    if let Some(candidate) = candidate {
-        let mut strict = storage(atoms)?;
-        for atom in 0..atoms {
-            budget.tick()?;
-            let negative = Literal::new(atom, false);
-            if candidate.contains(atom) {
-                strict.push(negative);
-            } else {
-                clause(&mut cnf, [negative], budget)?;
-            }
+
+    pub(crate) fn reserve(
+        &mut self,
+        theory: &Theory,
+        limits: AdmissionLimits,
+    ) -> Result<(), Incomplete> {
+        let cnf = self
+            .cnf
+            .get_or_insert(Cnf::empty(theory.atom_count(), limits)?);
+        cnf.reset(theory.atom_count(), limits)?;
+        let dimensions = Dimensions::new(theory, limits)?;
+        cnf.reserve(dimensions.clauses, dimensions.literals)?;
+        reserve(&mut self.mask, theory.nodes().len())?;
+        reserve(&mut self.nodes, theory.nodes().len())?;
+        reserve(&mut self.strict, theory.atom_count())?;
+        self.gates
+            .try_reserve(theory.nodes().len().saturating_sub(self.gates.len()))
+            .map_err(|_| Incomplete::Allocation)?;
+        Ok(())
+    }
+
+    pub(crate) fn retained_bytes(&self) -> u128 {
+        use std::mem::size_of;
+        size_of::<Self>() as u128
+            + self.cnf.as_ref().map_or(0, Cnf::retained_bytes)
+            + self.mask.capacity() as u128 * size_of::<bool>() as u128
+            + self.strict.capacity() as u128 * size_of::<Literal>() as u128
+            + self.nodes.capacity() as u128 * size_of::<Encoded>() as u128
+            + self.gates.capacity() as u128 * size_of::<((usize, usize), Literal)>() as u128
+    }
+
+    pub(crate) fn encode<Q: Quota>(
+        &mut self,
+        theory: &Theory,
+        candidate: Option<&Interpretation>,
+        limits: AdmissionLimits,
+        budget: &mut Budget<'_, Q>,
+    ) -> Result<&Cnf, Incomplete> {
+        // The entry operation polls before clearing the previous query. The
+        // bounded table clear is an encoding reset, not a logical gate reuse.
+        budget.tick()?;
+        self.clear();
+        if Q::BOUNDED_STORAGE {
+            self.reserve(theory, limits)?;
         }
-        // J⊂M: atoms outside M are false; at least one member of M is false.
-        // For M=∅ this is the empty clause, correctly refuting a proper subset.
-        cnf.append(strict)?;
+        let cnf = self
+            .cnf
+            .get_or_insert(Cnf::empty(theory.atom_count(), limits)?);
+        cnf.reset(theory.atom_count(), limits)?;
+        if let Some(candidate) = candidate {
+            frozen(&mut self.mask, theory, candidate, budget)?;
+        }
+        append_nodes(
+            cnf,
+            theory,
+            candidate.map(|_| self.mask.as_slice()),
+            &mut self.nodes,
+            &mut self.gates,
+            budget,
+        )?;
+        if let Some(candidate) = candidate {
+            reserve(&mut self.strict, theory.atom_count())?;
+            for atom in 0..theory.atom_count() {
+                budget.tick()?;
+                let negative = Literal::new(atom, false);
+                if candidate.contains(atom) {
+                    self.strict.push(negative);
+                } else {
+                    clause(cnf, [negative], budget)?;
+                }
+            }
+            // J⊂M: atoms outside M are false; one member of M must be false.
+            // M=∅ retains an empty clause, refuting any proper subset.
+            cnf.append_slice(&mut self.strict)?;
+        }
+        Ok(cnf)
     }
-    Ok(cnf)
+}
+
+pub(crate) struct Dimensions {
+    pub(crate) variables: usize,
+    pub(crate) clauses: usize,
+    pub(crate) literals: usize,
+}
+
+impl Dimensions {
+    pub(crate) fn new(theory: &Theory, limits: AdmissionLimits) -> Result<Self, Incomplete> {
+        let atoms = theory.atom_count() as u128;
+        let nodes = theory.nodes().len() as u128;
+        let roots = theory.roots().len() as u128;
+        let narrow = |count: u128, limit: usize| {
+            usize::try_from(count.min(limit as u128)).map_err(|_| Incomplete::CounterOverflow)
+        };
+        Ok(Self {
+            variables: narrow(atoms + nodes, limits.max_variables)?,
+            clauses: narrow(3 * nodes + roots + atoms + 1, limits.max_clauses)?,
+            literals: narrow(7 * nodes + roots + 2 * atoms, limits.max_literals)?,
+        })
+    }
+}
+
+fn reserve<T>(values: &mut Vec<T>, count: usize) -> Result<(), Incomplete> {
+    values
+        .try_reserve_exact(count.saturating_sub(values.len()))
+        .map_err(|_| Incomplete::Allocation)
 }
 
 /// Extend only the classical outer query; semantic atom identities stay fixed
@@ -91,9 +178,11 @@ pub(crate) fn restrict(
     budget: &mut Budget<'_>,
 ) -> Result<(), Incomplete> {
     let checkpoint = cnf.checkpoint();
+    let mut nodes = Vec::new();
+    let mut gates = HashMap::new();
     let result = budget
         .tick()
-        .and_then(|()| append_nodes(cnf, theory, None, budget));
+        .and_then(|()| append_nodes(cnf, theory, None, &mut nodes, &mut gates, budget));
     if result.is_err() {
         cnf.rollback(checkpoint);
     }
@@ -104,10 +193,11 @@ fn append_nodes<Q: Quota>(
     cnf: &mut Cnf,
     theory: &Theory,
     mask: Option<&[bool]>,
+    nodes: &mut Vec<Encoded>,
+    gates: &mut HashMap<(usize, usize), Literal>,
     budget: &mut Budget<'_, Q>,
 ) -> Result<(), Incomplete> {
-    let mut nodes = storage(theory.nodes().len())?;
-    let mut gates = HashMap::new();
+    reserve(nodes, theory.nodes().len())?;
     if Q::BOUNDED_STORAGE {
         gates
             .try_reserve(theory.nodes().len())
@@ -123,10 +213,10 @@ fn append_nodes<Q: Quota>(
             match *node {
                 Node::False => Encoded::Constant(false),
                 Node::Atom(atom) => Encoded::Literal(Literal::new(atom, true)),
-                Node::And(a, b) => gate(cnf, &mut gates, false, nodes[a], nodes[b], budget)?,
-                Node::Or(a, b) => gate(cnf, &mut gates, true, nodes[a], nodes[b], budget)?,
+                Node::And(a, b) => gate(cnf, gates, false, nodes[a], nodes[b], budget)?,
+                Node::Or(a, b) => gate(cnf, gates, true, nodes[a], nodes[b], budget)?,
                 Node::Implies(a, b) => {
-                    gate(cnf, &mut gates, true, nodes[a].negated(), nodes[b], budget)?
+                    gate(cnf, gates, true, nodes[a].negated(), nodes[b], budget)?
                 }
             }
         };
@@ -143,7 +233,7 @@ fn append_nodes<Q: Quota>(
     Ok(())
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum Encoded {
     Constant(bool),
     Literal(Literal),
@@ -230,16 +320,19 @@ pub(crate) fn interpretation(
 
 use std::collections::HashMap;
 
+#[cfg(test)]
+#[path = "../tests/support/encoding_workspace.rs"]
+mod workspace_tests;
+
 pub(crate) fn scratch_bytes(atoms: u128, nodes: u128, roots: u128, clauses: u128) -> u128 {
     use std::mem::size_of;
     // Frozen values, node aliases, explicitly reserved alias-map entries,
     // retained clause capacities and the largest in-flight submitted clause.
-    size_of::<Cnf>() as u128
-        + size_of::<HashMap<(usize, usize), Literal>>() as u128
+    size_of::<Workspace>() as u128
         + nodes
             * (size_of::<bool>() + size_of::<Encoded>() + size_of::<((usize, usize), Literal)>())
                 as u128
         + clauses * size_of::<usize>() as u128
         + (7 * nodes + roots + 2 * atoms) * size_of::<usize>() as u128
-        + atoms.max(3) * size_of::<Literal>() as u128
+        + (atoms + 3) * size_of::<Literal>() as u128
 }

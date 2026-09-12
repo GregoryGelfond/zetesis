@@ -328,6 +328,10 @@ impl StableModels {
         verdicts: &[BatchVerdict],
         completion: &mut CompletionExecutor,
     ) -> Result<Vec<Interpretation>, Incomplete> {
+        // Completion owns every resident query workspace in this attempt.
+        // Scalar scratch carries no semantic state and must not remain as an
+        // additional unaccounted workspace when switching execution modes.
+        self.reduct_workspace = super::reduct_query::Workspace::default();
         let mut accepted = Vec::new();
         let mut budget = Budget {
             quota: crate::search::LocalQuota,

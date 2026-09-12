@@ -4,6 +4,10 @@ mod quota;
 mod shared_budget;
 mod watch_node;
 
+#[cfg(test)]
+#[path = "../tests/support/search_workspace.rs"]
+mod workspace_tests;
+
 use watch_node::WatchNode;
 
 pub(crate) use quota::{BoundedQuota, LocalQuota, Quota};
@@ -118,17 +122,25 @@ pub(crate) fn storage<T>(count: usize) -> Result<Vec<T>, Incomplete> {
     Ok(result)
 }
 
+pub(crate) fn reserve<T>(values: &mut Vec<T>, count: usize) -> Result<(), Incomplete> {
+    values
+        .try_reserve_exact(count.saturating_sub(values.len()))
+        .map_err(|_| Incomplete::Allocation)
+}
+
 fn filled<T: Clone>(
+    result: &mut Vec<T>,
     count: usize,
     value: T,
     budget: &mut Budget<'_, impl Quota>,
-) -> Result<Vec<T>, Incomplete> {
-    let mut result = storage(count)?;
+) -> Result<(), Incomplete> {
+    result.clear();
+    reserve(result, count)?;
     for _ in 0..count {
         budget.tick()?;
         result.push(value.clone());
     }
-    Ok(result)
+    Ok(())
 }
 
 /// Search a finite CNF with deterministic false-first branching and no recursion.
@@ -170,7 +182,7 @@ struct Decision {
     tried_true: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct State {
     base_clauses: usize,
     values: Vec<Option<bool>>,
@@ -185,24 +197,52 @@ struct State {
     // neither allocates nor grows historical per-literal list capacities.
     heads: Vec<Option<WatchNode>>,
     next: Vec<Option<WatchNode>>,
+    ordering: crate::ordering::Workspace,
 }
 
 impl State {
     fn new(cnf: &Cnf, budget: &mut Budget<'_, impl Quota>) -> Result<Self, Incomplete> {
+        let mut state = Self::default();
+        state.reset(cnf, budget)?;
+        Ok(state)
+    }
+
+    fn reserve(&mut self, variables: usize, clauses: usize) -> Result<(), Incomplete> {
+        reserve(&mut self.values, variables)?;
+        reserve(&mut self.trail, variables)?;
+        reserve(&mut self.decisions, variables)?;
+        reserve(&mut self.order, variables)?;
+        reserve(&mut self.ranks, variables)?;
+        reserve(&mut self.positions, clauses)?;
+        reserve(
+            &mut self.heads,
+            variables
+                .checked_mul(2)
+                .ok_or(Incomplete::CounterOverflow)?,
+        )?;
+        reserve(
+            &mut self.next,
+            clauses.checked_mul(2).ok_or(Incomplete::CounterOverflow)?,
+        )?;
+        self.ordering.reserve(variables)
+    }
+
+    fn reset(&mut self, cnf: &Cnf, budget: &mut Budget<'_, impl Quota>) -> Result<(), Incomplete> {
         budget.tick()?;
-        Ok(Self {
-            base_clauses: cnf.clauses().len(),
-            values: filled(cnf.variables(), None, budget)?,
-            trail: storage(cnf.variables())?,
-            propagation_head: 0,
-            next_position: 0,
-            order: Vec::new(),
-            ranks: Vec::new(),
-            decisions: storage(cnf.variables())?,
-            positions: filled(cnf.clauses().len(), [0, 0], budget)?,
-            heads: filled(cnf.variables() * 2, None, budget)?,
-            next: filled(cnf.clauses().len() * 2, None, budget)?,
-        })
+        self.base_clauses = cnf.clauses().len();
+        self.trail.clear();
+        self.decisions.clear();
+        self.order.clear();
+        self.ranks.clear();
+        self.ordering.clear();
+        self.propagation_head = 0;
+        self.next_position = 0;
+        filled(&mut self.values, cnf.variables(), None, budget)?;
+        reserve(&mut self.trail, cnf.variables())?;
+        reserve(&mut self.decisions, cnf.variables())?;
+        filled(&mut self.positions, cnf.clauses().len(), [0, 0], budget)?;
+        filled(&mut self.heads, cnf.variables() * 2, None, budget)?;
+        filled(&mut self.next, cnf.clauses().len() * 2, None, budget)
     }
 
     fn assign(&mut self, literal: Literal) -> bool {
@@ -351,12 +391,13 @@ impl State {
         cnf: &Cnf,
         budget: &mut Budget<'_, impl Quota>,
     ) -> Result<(), Incomplete> {
-        self.order = crate::ordering::variables(
+        self.ordering.variables(
+            &mut self.order,
             cnf.clauses().take(self.base_clauses),
             &self.values,
             budget,
         )?;
-        self.ranks = filled(self.values.len(), 0, budget)?;
+        filled(&mut self.ranks, self.values.len(), 0, budget)?;
         for (position, &variable) in self.order.iter().enumerate() {
             budget.tick()?;
             self.ranks[variable] = position;
@@ -436,6 +477,14 @@ fn search(
     budget: &mut Budget<'_, impl Quota>,
 ) -> Result<Option<Assignment>, Incomplete> {
     let mut state = State::new(cnf, budget)?;
+    search_initialized(&mut state, cnf, budget)
+}
+
+fn search_initialized(
+    state: &mut State,
+    cnf: &Cnf,
+    budget: &mut Budget<'_, impl Quota>,
+) -> Result<Option<Assignment>, Incomplete> {
     if !state.initialize(cnf, budget)? || !state.propagate(cnf, budget)? {
         increment(&mut budget.statistics.conflicts)?;
         return Ok(None);
@@ -454,6 +503,43 @@ fn search(
     }
 }
 
+/// Reusable allocations with fresh watch/assignment/decision state per query.
+#[derive(Debug, Default)]
+pub(crate) struct Workspace(State);
+
+impl Workspace {
+    pub(crate) fn reserve(&mut self, variables: usize, clauses: usize) -> Result<(), Incomplete> {
+        self.0.reserve(variables, clauses)
+    }
+
+    pub(crate) fn retained_bytes(&self) -> u128 {
+        use std::mem::size_of;
+        let state = &self.0;
+        size_of::<Self>() as u128
+            + state.values.capacity() as u128 * size_of::<Option<bool>>() as u128
+            + state.trail.capacity() as u128 * size_of::<Literal>() as u128
+            + state.decisions.capacity() as u128 * size_of::<Decision>() as u128
+            + (state.order.capacity() as u128 + state.ranks.capacity() as u128)
+                * size_of::<usize>() as u128
+            + state.positions.capacity() as u128 * size_of::<[usize; 2]>() as u128
+            + (state.heads.capacity() as u128 + state.next.capacity() as u128)
+                * size_of::<Option<WatchNode>>() as u128
+            + state.ordering.retained_bytes()
+    }
+
+    pub(crate) fn query(&mut self, cnf: &Cnf, budget: &mut Budget<'_, impl Quota>) -> Solve {
+        match self
+            .0
+            .reset(cnf, budget)
+            .and_then(|()| search_initialized(&mut self.0, cnf, budget))
+        {
+            Ok(Some(assignment)) => Solve::Sat(assignment),
+            Ok(None) => Solve::Unsat,
+            Err(error) => Solve::Inconclusive(error),
+        }
+    }
+}
+
 /// Requested vector slots for one search state and its temporary ordering/output.
 /// This includes retained capacity even when fewer variables receive assignments.
 pub(crate) fn scratch_bytes(variables: u128, clauses: u128) -> u128 {
@@ -463,7 +549,7 @@ pub(crate) fn scratch_bytes(variables: u128, clauses: u128) -> u128 {
             * (size_of::<Option<bool>>()
                 + size_of::<Literal>()
                 + size_of::<Decision>()
-                + 4 * size_of::<usize>()
+                + 3 * size_of::<usize>()
                 + size_of::<u64>()
                 + 2 * size_of::<Option<WatchNode>>()
                 + size_of::<bool>()) as u128

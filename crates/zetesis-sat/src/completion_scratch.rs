@@ -5,11 +5,13 @@ use std::mem::size_of;
 use zetesis_ferraris::{Interpretation, Theory};
 
 use super::Outcome;
-use crate::{Incomplete, Limits};
+use crate::{Incomplete, Limits, Literal};
 
 /// Conservative authored logical storage, independent of scheduling.
 /// Values count requested typed slots, including reserved unused capacity.
-/// Hash-table bucket/control overhead and allocator rounding are not counted.
+/// Final admission replaces the reusable workspace portion with its actual
+/// vector capacities and reported map entry capacity. Hash-table bucket/control
+/// overhead and allocator metadata remain excluded from both values.
 /// Original shared theory and retained proposal/candidate cursor storage belong
 /// to their existing admission/pending limits and are not completion scratch.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -18,6 +20,18 @@ pub struct CompletionScratch {
     pub query_bytes: u64,
     /// Full ordered results, accepted flags, and returned interpretation slots.
     pub result_bytes: u64,
+}
+
+pub(super) fn transient(theory: &Theory, limits: Limits) -> Result<u128, Incomplete> {
+    let variables = crate::encoding::Dimensions::new(theory, limits.admission)?.variables as u128;
+    let atoms = theory.atom_count() as u128;
+    let nodes = theory.nodes().len() as u128;
+    Ok(3 * size_of::<Literal>() as u128
+        + variables * size_of::<bool>() as u128
+        + 2 * nodes * size_of::<bool>() as u128
+        + atoms * size_of::<usize>() as u128
+        + atoms.div_ceil(64) * size_of::<u64>() as u128
+        + size_of::<Interpretation>() as u128)
 }
 
 impl CompletionScratch {

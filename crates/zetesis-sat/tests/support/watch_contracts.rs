@@ -129,7 +129,7 @@ fn scratch_reservation_counts_the_stored_link_type() {
             * (size_of::<Option<bool>>()
                 + size_of::<Literal>()
                 + size_of::<Decision>()
-                + 4 * size_of::<usize>()
+                + 3 * size_of::<usize>()
                 + size_of::<u64>()
                 + size_of::<bool>())
         + clauses * size_of::<[usize; 2]>();

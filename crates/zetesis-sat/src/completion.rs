@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use rayon::prelude::*;
 use zetesis_ferraris::{Interpretation, Theory};
 
-use super::{BatchVerdict, Check, Limits, Statistics, membership};
+use super::{BatchVerdict, Check, Limits, Statistics, membership, reduct_query};
 use crate::search::{BoundedQuota, Budget, LocalQuota, Quota, SharedBudget, storage};
 
 #[path = "completion_scratch.rs"]
@@ -20,10 +20,15 @@ pub use scratch::CompletionScratch;
 pub struct CompletionStatistics {
     /// Configured maximum simultaneous exact queries (one for scalar execution).
     pub workers: usize,
-    /// Maximum query concurrency admitted for this attempt (zero without residuals).
+    /// Maximum query concurrency selected at preflight (zero without residuals).
+    /// Candidate work starts only after the retained storage is also admitted.
     pub effective_workers: usize,
-    /// Conservative logical bytes admitted for this attempt, including unused slots.
-    /// Allocator overhead, thread stacks, and device allocations are excluded.
+    /// Minimum requested conservative envelope selected before allocation.
+    pub requested_scratch_bytes: u64,
+    /// Retained vector capacities and reported map entry capacity plus the
+    /// conservative transient envelope. May exceed the ceiling on a post-
+    /// reservation scratch refusal; no candidate work has then started.
+    /// Allocator/table control overhead, stacks and device memory are excluded.
     pub peak_scratch_bytes: u64,
     /// Candidate slots actually entered, including supplied certificates.
     pub candidates: usize,
@@ -55,8 +60,9 @@ pub struct CompletionStatistics {
 /// need not perform the same subset of work under different schedules.
 ///
 /// Completion admits all ordered result slots and a conservative query envelope
-/// before allocating scratch. Concurrency shrinks to fit the caller's logical
-/// byte ceiling; a batch that cannot fit one needed workspace remains pending.
+/// before allocating scratch. Concurrency shrinks to fit that requested
+/// envelope; actual retained capacities are checked before any candidate work.
+/// Allocation slack can still refuse a batch, which remains pending.
 /// Slots reserved but unused remain charged until the joined attempt returns.
 /// Scratch is released between calls. This is not an RSS, allocator-overhead,
 /// thread-stack, original-theory, candidate-cursor or GPU-memory limit.
@@ -177,14 +183,50 @@ impl CompletionExecutor {
             let admission =
                 requirements.admit(self.workers().min(residuals), self.max_scratch_bytes)?;
             progress.effective_workers = admission.0;
-            progress.peak_scratch_bytes = admission.1;
+            progress.requested_scratch_bytes = admission.1;
             accepted
                 .try_reserve_exact(input.candidates.len())
                 .map_err(|_| Incomplete::Allocation)?;
-            if let Some(pool) = &self.pool {
-                parallel(pool, input, budget, statistics, accepted, &mut progress)
+            let mut workspaces = storage(admission.0)?;
+            let transient = scratch::transient(input.theory, input.limits)?;
+            let mut peak = u128::from(requirements.result_bytes)
+                + workspaces.capacity().saturating_sub(admission.0) as u128
+                    * std::mem::size_of::<reduct_query::Workspace>() as u128;
+            for _ in 0..admission.0 {
+                budget.control.poll()?;
+                let mut workspace = reduct_query::Workspace::default();
+                workspace.reserve(input.theory, input.limits.admission)?;
+                peak += workspace.retained_bytes() + transient;
+                progress.peak_scratch_bytes =
+                    u64::try_from(peak).map_err(|_| Incomplete::CounterOverflow)?;
+                if progress.peak_scratch_bytes > self.max_scratch_bytes {
+                    return Err(Incomplete::CompletionScratch);
+                }
+                workspaces.push(workspace);
+            }
+            progress.peak_scratch_bytes =
+                u64::try_from(peak).map_err(|_| Incomplete::CounterOverflow)?;
+            if let Some(pool) = &self.pool
+                && !workspaces.is_empty()
+            {
+                parallel(
+                    pool,
+                    input,
+                    budget,
+                    statistics,
+                    accepted,
+                    &mut progress,
+                    &mut workspaces,
+                )
             } else {
-                scalar(input, budget, statistics, accepted, &mut progress)
+                scalar(
+                    input,
+                    budget,
+                    statistics,
+                    accepted,
+                    &mut progress,
+                    &mut workspaces,
+                )
             }
         })();
         progress.elapsed = started.map(|start| start.elapsed());
@@ -216,13 +258,14 @@ fn classify(
     limits: Limits,
     budget: &mut Budget<'_, impl Quota>,
     statistics: &mut Statistics,
+    workspace: &mut reduct_query::Workspace,
 ) -> Result<bool, Incomplete> {
     budget.control.poll()?;
     match verdict {
         BatchVerdict::NoProperSubset => Ok(true),
         BatchVerdict::NotModel => Err(Incomplete::InvalidWitness),
         BatchVerdict::Residual => {
-            match membership(theory, candidate, limits, budget, statistics)? {
+            match membership(theory, candidate, limits, budget, statistics, workspace)? {
                 Check::Stable => Ok(true),
                 Check::NonMinimal(_) => Ok(false),
                 Check::NotModel | Check::Inconclusive(_) => Err(Incomplete::InvalidWitness),
@@ -237,6 +280,7 @@ fn scalar(
     statistics: &mut Statistics,
     accepted: &mut Vec<bool>,
     progress: &mut CompletionStatistics,
+    workspaces: &mut [reduct_query::Workspace],
 ) -> Result<(), Incomplete> {
     progress.worker_original_validation = None;
     progress.worker_reduct = None;
@@ -246,6 +290,8 @@ fn scalar(
         control: budget.control,
         statistics: budget.statistics,
     };
+    let mut unused = reduct_query::Workspace::default();
+    let workspace = workspaces.first_mut().unwrap_or(&mut unused);
     let result = (|| {
         for (candidate, &verdict) in input.candidates.iter().zip(input.verdicts) {
             // Retain the existing scalar counters, work order and failure boundary.
@@ -256,6 +302,7 @@ fn scalar(
                 input.limits,
                 &mut bounded,
                 statistics,
+                workspace,
             );
             entered(progress, verdict, &result);
             accepted.push(result?);
@@ -273,6 +320,7 @@ fn parallel(
     statistics: &mut Statistics,
     accepted: &mut Vec<bool>,
     progress: &mut CompletionStatistics,
+    workspaces: &mut [reduct_query::Workspace],
 ) -> Result<(), Incomplete> {
     let mut outcomes = storage(input.candidates.len())?;
     outcomes.resize_with(input.candidates.len(), || None);
@@ -283,8 +331,9 @@ fn parallel(
     pool.install(|| {
         outcomes
             .par_chunks_mut(chunk_size)
+            .zip(workspaces.par_iter_mut())
             .enumerate()
-            .for_each(|(chunk, slots)| {
+            .for_each(|(chunk, (slots, workspace))| {
                 for (offset, slot) in slots.iter_mut().enumerate() {
                     *slot = Some(run(
                         input,
@@ -292,6 +341,7 @@ fn parallel(
                         &shared,
                         control,
                         timed,
+                        workspace,
                     ));
                 }
             });
@@ -323,6 +373,7 @@ fn run(
     shared: &SharedBudget,
     control: &Control,
     timed: bool,
+    workspace: &mut reduct_query::Workspace,
 ) -> Outcome {
     let mut budget = Budget {
         quota: BoundedQuota(shared),
@@ -341,6 +392,7 @@ fn run(
         input.limits,
         &mut budget,
         &mut statistics,
+        workspace,
     );
     statistics.search = budget.statistics;
     Outcome { result, statistics }

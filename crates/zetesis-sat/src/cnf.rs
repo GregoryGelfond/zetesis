@@ -266,6 +266,27 @@ impl Cnf {
             .try_reserve_exact(literals.min(self.limits.max_literals))
             .map_err(|_| AdmissionError::Allocation)
     }
+
+    pub(crate) fn reset(
+        &mut self,
+        variables: usize,
+        limits: AdmissionLimits,
+    ) -> Result<(), AdmissionError> {
+        bound(Resource::Variables, variables, limits.max_variables)?;
+        variables.checked_mul(2).ok_or(AdmissionError::Overflow)?;
+        self.variables = variables;
+        self.literals.clear();
+        self.ends.clear();
+        self.submitted_clauses = 0;
+        self.submitted_literals = 0;
+        self.limits = limits;
+        Ok(())
+    }
+
+    pub(crate) fn retained_bytes(&self) -> u128 {
+        (self.literals.capacity() as u128 + self.ends.capacity() as u128)
+            * std::mem::size_of::<usize>() as u128
+    }
     /// Declared variables, including variables absent from all clauses.
     #[must_use]
     pub const fn variables(&self) -> usize {
