@@ -4,7 +4,7 @@ use super::Engine;
 use crate::execution_observation::{Ignore, Observer};
 use crate::{Backend, ExecutionObservation, ExecutionObserver, Grounder, SolveConfig};
 use std::{convert::Infallible, num::NonZeroUsize, time::Instant};
-use zetesis_core::Seed;
+use zetesis_core::SeedSelection;
 use zetesis_cpu::{Control, Stop};
 use zetesis_themelios::{AdmissionOptions, admit};
 
@@ -71,7 +71,7 @@ fn retired_device_work_excludes_cpu_queue_entries() {
 fn stopped_seeds_never_enter_oracle_execution() {
     let admitted = admit("p.".into(), AdmissionOptions::default()).unwrap();
     let program = admitted.program();
-    let seed = Seed::new(program, []).unwrap();
+    let seed = SeedSelection::new(program, []).unwrap();
     for grounder in [Grounder::Lazy, Grounder::Eager] {
         let config = SolveConfig {
             backend: Backend::Cpu,

@@ -121,7 +121,7 @@ impl<'a> ClosureSession<'a> {
             let mut seeds = Vec::new();
             let generation = phases.start(SolvePhase::CandidateGeneration);
             for _ in 0..count {
-                match self.candidates.next() {
+                match self.candidates.next_selection() {
                     Some(Ok(seed)) => seeds.push(seed),
                     Some(Err(stop)) => {
                         self.pending_stop = Some(stop);

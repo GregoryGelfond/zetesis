@@ -4,7 +4,8 @@ use crate::ExecutionObservation as Event;
 use crate::execution_observation::ExecutionSink;
 use std::sync::Arc;
 
-use zetesis_core::{GroundProgram, Model, Program, Seed, StaticLimits};
+use rayon::prelude::*;
+use zetesis_core::{GroundProgram, Model, Program, SeedSelection, StaticLimits};
 use zetesis_cpu::{BatchOracle, Control, Limits, Stop};
 
 use crate::phase_timing::{Recorder, SolvePhase};
@@ -159,7 +160,7 @@ impl Engine {
         &mut self,
         options: &SolveConfig,
         program: &Program,
-        seeds: &[Seed],
+        seeds: &[SeedSelection],
         observations: &mut impl ExecutionSink,
         control: &Control,
         phases: &Recorder,
@@ -257,6 +258,53 @@ enum Executor {
 struct LazyGpu {
     oracle: zetesis_wgpu::GpuLazyOracle,
     statistics: crate::LazyExecutionStatistics,
+}
+
+#[cfg(feature = "gpu")]
+impl LazyGpu {
+    /// Record the complete attempt before interpreting its bounded result.
+    fn check(
+        &mut self,
+        options: &SolveConfig,
+        program: &Program,
+        seeds: &[SeedSelection],
+        control: &Control,
+    ) -> Result<Vec<Result<Option<Model>, Stop>>, SolveError> {
+        let bytes = usize::try_from(options.max_batch_bytes / 2).unwrap_or(usize::MAX);
+        let source_limits = zetesis_cpu::lazy::Limits {
+            max_candidates: options.batch_size.get(),
+            max_atoms: options.max_atoms,
+            max_source_work: options.max_work,
+            max_rounds: u64::try_from(options.max_atoms)
+                .unwrap_or(u64::MAX)
+                .saturating_add(1),
+            max_host_bytes: bytes,
+            ..Default::default()
+        };
+        let device_limits = zetesis_wgpu::GpuLimits {
+            max_candidates: options.batch_size.get(),
+            max_batch_bytes: options.max_batch_bytes / 2,
+            ..Default::default()
+        };
+        let result = self.oracle.check_batch_views(
+            program,
+            seeds.iter().map(SeedSelection::view),
+            source_limits,
+            device_limits,
+            control,
+        );
+        let progress = match &result {
+            Ok(batch) => batch.progress,
+            Err(failure) => failure.progress,
+        };
+        self.statistics.record(
+            seeds.len(),
+            result.is_ok(),
+            progress,
+            &self.oracle.statistics(),
+        )?;
+        crate::lazy_execution::batch_results(result)
+    }
 }
 
 impl Executor {
@@ -412,7 +460,7 @@ impl Executor {
         &mut self,
         options: &SolveConfig,
         program: &Program,
-        seeds: &[Seed],
+        seeds: &[SeedSelection],
         control: &Control,
     ) -> Result<Vec<Result<Option<Model>, Stop>>, SolveError> {
         let limits = Limits {
@@ -431,9 +479,9 @@ impl Executor {
                     max_host_bytes: usize::try_from(options.max_batch_bytes).unwrap_or(usize::MAX),
                     ..Default::default()
                 };
-                let result = oracle.check_shared(
+                let result = oracle.check_shared_views(
                     program,
-                    seeds,
+                    seeds.iter().map(SeedSelection::view),
                     zetesis_cpu::lazy::shared::Limits {
                         source,
                         max_world_work: options.max_work,
@@ -444,35 +492,14 @@ impl Executor {
                 crate::shared_execution::batch_results(result, statistics)
             }
             #[cfg(feature = "gpu")]
-            Self::LazyGpu(executor) => {
-                let LazyGpu { oracle, statistics } = executor.as_mut();
-                let bytes = usize::try_from(options.max_batch_bytes / 2).unwrap_or(usize::MAX);
-                let source_limits = zetesis_cpu::lazy::Limits {
-                    max_candidates: options.batch_size.get(),
-                    max_atoms: options.max_atoms,
-                    max_source_work: options.max_work,
-                    max_rounds: u64::try_from(options.max_atoms)
-                        .unwrap_or(u64::MAX)
-                        .saturating_add(1),
-                    max_host_bytes: bytes,
-                    ..Default::default()
-                };
-                let device_limits = zetesis_wgpu::GpuLimits {
-                    max_candidates: options.batch_size.get(),
-                    max_batch_bytes: options.max_batch_bytes / 2,
-                    ..Default::default()
-                };
-                let result =
-                    oracle.check_batch(program, seeds, source_limits, device_limits, control);
-                let progress = match &result {
-                    Ok(batch) => batch.progress,
-                    Err(failure) => failure.progress,
-                };
-                statistics.record(seeds.len(), result.is_ok(), progress, &oracle.statistics())?;
-                crate::lazy_execution::batch_results(result)
-            }
+            Self::LazyGpu(executor) => executor.check(options, program, seeds, control),
             Self::Cpu(oracle) => Ok(oracle
-                .check_batch(program, seeds, limits, control)
+                .check_batch_views(
+                    program,
+                    seeds.par_iter().map(SeedSelection::view),
+                    limits,
+                    control,
+                )
                 .map_err(SolveError::Batch)?
                 .into_iter()
                 .map(|result| {
@@ -483,7 +510,12 @@ impl Executor {
                 })
                 .collect()),
             Self::StaticCpu { oracle, ground } => oracle
-                .check_static_batch(ground, seeds, limits, control)
+                .check_static_batch_views(
+                    ground,
+                    seeds.par_iter().map(SeedSelection::view),
+                    limits,
+                    control,
+                )
                 .map_err(SolveError::Batch)?
                 .into_iter()
                 .map(|result| match result {
@@ -499,7 +531,7 @@ impl Executor {
                     ..Default::default()
                 };
                 let checks = oracle
-                    .check_batch(ground, seeds, limits)
+                    .check_batch_views(ground, seeds.iter().map(SeedSelection::view), limits)
                     .map_err(SolveError::Gpu)?;
                 if let Err(error) = control.poll() {
                     return Ok(vec![Err(error)]);

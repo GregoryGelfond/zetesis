@@ -51,6 +51,13 @@ starts empty, derives consequences, checks constraints, then compares the
 result's gate projection with the seed. The dense graph and source-driven
 oracles implement this same acceptance question.
 
+Ordinary sessions retain shared atom selections across each candidate batch.
+CPU and GPU checkers borrow their true atoms through `SeedView`; an owned `Seed`
+uses the same checking implementation. Eager device packing writes into the
+admitted batch buffer without constructing a temporary word vector for each
+seed. These ownership and transport choices do not change the frozen gates or
+the least-consequence check. Returned answer sets still own their interpretations.
+
 For finite general formulas, the candidate must first satisfy the original
 theory. A frozen truth mask then permits repeated evaluations of its reduct
 without constructing a separate formula tree. Finding a proper-subset model

@@ -77,7 +77,7 @@ fn delayed_context(context: &GpuContext, grounder: Grounder) {
     let control = Control::default();
     let mut candidates =
         Candidates::new(owner.program(), CandidateLimits::default(), control.clone());
-    let first = candidates.next().unwrap().unwrap();
+    let first = candidates.next_selection().unwrap().unwrap();
     engine
         .check(
             &config,
@@ -90,7 +90,7 @@ fn delayed_context(context: &GpuContext, grounder: Grounder) {
         .unwrap();
     assert!(!engine.executor.is_gpu());
     assert!(!engine.attempted_gpu);
-    let batch = candidates
+    let batch = std::iter::from_fn(|| candidates.next_selection())
         .take(super::AUTO_GPU_MIN_BATCH)
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
