@@ -49,7 +49,7 @@ fn compare_query(cnf: &Cnf, limits: SearchLimits, spent: SearchStatistics) -> Se
     assert_eq!(joined, local.statistics);
     if let Outcome::Sat(values) = expected {
         assert_eq!(values.len(), cnf.variables());
-        assert!(cnf.clauses().iter().all(|clause| {
+        assert!(cnf.clauses().all(|clause| {
             clause
                 .iter()
                 .any(|literal| values[literal.variable()] == literal.positive())
@@ -248,7 +248,7 @@ fn frozen_encoding_limits_and_clauses_match_before_search() {
                 match (expected, actual) {
                     (Ok(a), Ok(b)) => {
                         assert_eq!(a.variables(), b.variables());
-                        assert_eq!(a.clauses(), b.clauses());
+                        assert!(a.clauses().eq(b.clauses()));
                     }
                     (Err(a), Err(b)) => assert_eq!(a, b),
                     pair => panic!("different quota result at {bits}/{max_work}: {pair:?}"),

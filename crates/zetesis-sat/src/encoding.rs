@@ -3,17 +3,15 @@ use zetesis_ferraris::{Interpretation, Node, Theory};
 use crate::search::{Budget, Quota, storage};
 use crate::{AdmissionLimits, Assignment, Cnf, Incomplete, Literal};
 
-fn clause(
+fn clause<const N: usize>(
     cnf: &mut Cnf,
-    literals: &[Literal],
+    mut literals: [Literal; N],
     budget: &mut Budget<'_, impl Quota>,
 ) -> Result<(), Incomplete> {
-    let mut owned = storage(literals.len())?;
-    for literal in literals {
+    for _ in &literals {
         budget.tick()?;
-        owned.push(*literal);
     }
-    cnf.append(owned)?;
+    cnf.append_slice(&mut literals)?;
     Ok(())
 }
 
@@ -54,7 +52,14 @@ pub(crate) fn encode<Q: Quota>(
             .and_then(|n| n.checked_add(atoms))
             .and_then(|n| n.checked_add(1))
             .ok_or(Incomplete::CounterOverflow)?;
-        cnf.reserve_clauses(clauses)?;
+        let literals = theory
+            .nodes()
+            .len()
+            .checked_mul(7)
+            .and_then(|n| n.checked_add(theory.roots().len()))
+            .and_then(|n| atoms.checked_mul(2).and_then(|atoms| n.checked_add(atoms)))
+            .ok_or(Incomplete::CounterOverflow)?;
+        cnf.reserve(clauses, literals)?;
     }
     let mask = candidate
         .map(|candidate| frozen(theory, candidate, budget))
@@ -68,7 +73,7 @@ pub(crate) fn encode<Q: Quota>(
             if candidate.contains(atom) {
                 strict.push(negative);
             } else {
-                clause(&mut cnf, &[negative], budget)?;
+                clause(&mut cnf, [negative], budget)?;
             }
         }
         // J⊂M: atoms outside M are false; at least one member of M is false.
@@ -131,8 +136,8 @@ fn append_nodes<Q: Quota>(
         budget.tick()?;
         match nodes[*root] {
             Encoded::Constant(true) => (),
-            Encoded::Constant(false) => clause(cnf, &[], budget)?,
-            Encoded::Literal(literal) => clause(cnf, &[literal], budget)?,
+            Encoded::Constant(false) => clause(cnf, [], budget)?,
+            Encoded::Literal(literal) => clause(cnf, [literal], budget)?,
         }
     }
     Ok(())
@@ -197,9 +202,9 @@ fn gate(
     }
     gates.try_reserve(1).map_err(|_| Incomplete::Allocation)?;
     let output = cnf.fresh()?;
-    clause(cnf, &[output.negated(), left], budget)?;
-    clause(cnf, &[output.negated(), right], budget)?;
-    clause(cnf, &[output, left.negated(), right.negated()], budget)?;
+    clause(cnf, [output.negated(), left], budget)?;
+    clause(cnf, [output.negated(), right], budget)?;
+    clause(cnf, [output, left.negated(), right.negated()], budget)?;
     gates.insert(key, output);
     Ok(Encoded::Literal(if disjunction {
         output.negated()
@@ -234,6 +239,7 @@ pub(crate) fn scratch_bytes(atoms: u128, nodes: u128, roots: u128, clauses: u128
         + nodes
             * (size_of::<bool>() + size_of::<Encoded>() + size_of::<((usize, usize), Literal)>())
                 as u128
-        + clauses * size_of::<Vec<Literal>>() as u128
-        + (7 * nodes + roots + 2 * atoms + atoms.max(3)) * size_of::<Literal>() as u128
+        + clauses * size_of::<usize>() as u128
+        + (7 * nodes + roots + 2 * atoms) * size_of::<usize>() as u128
+        + atoms.max(3) * size_of::<Literal>() as u128
 }

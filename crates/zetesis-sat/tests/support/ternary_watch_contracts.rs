@@ -46,7 +46,8 @@ fn ternary_replacement_matches_the_complete_scan() {
                     }
                     // This reference uses explicit occurrence exclusion and
                     // signed literal truth, without computing a complement.
-                    let expected = cnf.clauses()[0]
+                    let expected = cnf
+                        .clause_at(0)
                         .iter()
                         .enumerate()
                         .find(|(position, literal)| {

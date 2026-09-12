@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 mod cnf;
+mod clauses;
 mod error;
 mod search;
 mod ordering;
@@ -19,6 +20,7 @@ pub use zetesis_ferraris::partition;
 
 pub use checked::{CheckedInterpretation, StableInterpretation, check_interpretation};
 
+pub use clauses::{Clause, Clauses};
 pub use cnf::{AdmissionError, AdmissionLimits, Assignment, Cnf, Literal, Resource};
 pub use error::Incomplete;
 pub use ferraris::{

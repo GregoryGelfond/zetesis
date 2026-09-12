@@ -138,11 +138,7 @@ fn profile_finite_candidate_prefixes() {
         let mut cnf =
             encoding::encode(theory, None, AdmissionLimits::default(), &mut budget).unwrap();
         let clauses = cnf.clauses().len();
-        let binary = cnf
-            .clauses()
-            .iter()
-            .filter(|clause| clause.len() == 2)
-            .count();
+        let binary = cnf.clauses().filter(|clause| clause.len() == 2).count();
         reset();
         let mut cursor = Cursor::projected(theory.atom_count());
         let mut candidates = 0;

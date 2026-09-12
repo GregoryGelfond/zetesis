@@ -38,6 +38,7 @@ fn partial_assignments_match_independent_unassigned_frequency_order() {
                 .count();
             (std::cmp::Reverse(occurrences), variable)
         });
+        let cnf = crate::Cnf::new(4, clauses, crate::AdmissionLimits::default()).unwrap();
         let mut budget = Budget {
             quota: crate::search::LocalQuota,
             limits: SearchLimits::default(),
@@ -45,7 +46,7 @@ fn partial_assignments_match_independent_unassigned_frequency_order() {
             statistics: SearchStatistics::default(),
         };
         assert_eq!(
-            super::variables(&clauses, &values, &mut budget).unwrap(),
+            super::variables(cnf.clauses(), &values, &mut budget).unwrap(),
             expected
         );
         let work = budget.statistics.work;
@@ -59,7 +60,7 @@ fn partial_assignments_match_independent_unassigned_frequency_order() {
                 control: &control,
                 statistics: SearchStatistics::default(),
             };
-            let result = super::variables(&clauses, &values, &mut budget);
+            let result = super::variables(cnf.clauses(), &values, &mut budget);
             if ceiling == work {
                 assert_eq!(result.unwrap(), expected);
             } else {
@@ -82,7 +83,7 @@ fn all_root_assigned_variables_need_no_merge_work_and_still_poll_control() {
             statistics: SearchStatistics::default(),
         };
         assert!(
-            super::variables(&[], &values, &mut budget)
+            super::variables(std::iter::empty(), &values, &mut budget)
                 .unwrap()
                 .is_empty()
         );
@@ -97,7 +98,7 @@ fn all_root_assigned_variables_need_no_merge_work_and_still_poll_control() {
         statistics: SearchStatistics::default(),
     };
     assert_eq!(
-        super::variables(&[], &[Some(true)], &mut budget),
+        super::variables(std::iter::empty(), &[Some(true)], &mut budget),
         Err(Incomplete::Cancelled)
     );
     assert_eq!(budget.statistics.work, 0);

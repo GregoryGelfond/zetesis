@@ -160,10 +160,10 @@ fn permitted(
     assignment: &Assignment,
     budget: &mut Budget<'_>,
 ) -> Result<bool, Incomplete> {
-    for clause in &cnf.clauses()[base_clauses..] {
+    for clause in cnf.clauses().skip(base_clauses) {
         budget.tick()?;
         let mut satisfied = false;
-        for literal in clause {
+        for literal in clause.iter() {
             budget.tick()?;
             if assignment
                 .value(literal.variable())

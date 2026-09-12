@@ -1,10 +1,10 @@
 //! A bounded permutation of unassigned variables; clauses remain unchanged.
 
 use crate::search::{Budget, Quota, increment, storage};
-use crate::{Incomplete, Literal};
+use crate::{Clause, Incomplete};
 
-pub(crate) fn variables(
-    clauses: &[Vec<Literal>],
+pub(crate) fn variables<'a>(
+    clauses: impl Iterator<Item = Clause<'a>>,
     values: &[Option<bool>],
     budget: &mut Budget<'_, impl Quota>,
 ) -> Result<Vec<usize>, Incomplete> {
@@ -17,7 +17,7 @@ pub(crate) fn variables(
     }
     for clause in clauses {
         let mut satisfied = false;
-        for literal in clause {
+        for literal in clause.iter() {
             budget.tick()?;
             if values[literal.variable()] == Some(literal.positive()) {
                 satisfied = true;
@@ -27,7 +27,7 @@ pub(crate) fn variables(
         if satisfied {
             continue;
         }
-        for literal in clause {
+        for literal in clause.iter() {
             budget.tick()?;
             if values[literal.variable()].is_none() {
                 increment(&mut scores[literal.variable()])?;

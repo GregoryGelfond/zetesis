@@ -1,5 +1,7 @@
 use std::fmt;
 
+use crate::{Clause, Clauses};
+
 /// A signed variable reference; variable indices are zero based.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Literal {
@@ -131,13 +133,47 @@ pub(crate) fn bound(
 
 /// Finite classical CNF. Duplicate literals are coalesced and tautological
 /// clauses discarded; an empty clause remains an explicit contradiction.
+/// Admitted references occupy one word each in a single arena, with one end
+/// offset per clause. Borrowed views decode public literals without allocating.
+/// Admission bounds submitted shape; allocator capacity is not a byte ceiling.
 #[derive(Debug)]
 pub struct Cnf {
     variables: usize,
-    clauses: Vec<Vec<Literal>>,
+    // Admission checks 2 * variables before packing any reference. End offsets
+    // are monotone; repeated offsets retain distinct empty clauses.
+    literals: Vec<usize>,
+    ends: Vec<usize>,
     submitted_clauses: usize,
     submitted_literals: usize,
     limits: AdmissionLimits,
+}
+
+#[cfg(test)]
+mod arena_tests {
+    use super::*;
+
+    #[test]
+    fn rollback_retains_one_arena_without_old_clause_contents() {
+        let mut cnf = Cnf::new(
+            6,
+            vec![vec![Literal::new(0, false)], vec![]],
+            AdmissionLimits::default(),
+        )
+        .unwrap();
+        let checkpoint = cnf.checkpoint();
+        cnf.append(vec![Literal::new(5, true), Literal::new(2, false)])
+            .unwrap();
+        assert_eq!(cnf.literals, [0, 4, 11]);
+        assert_eq!(cnf.ends, [1, 1, 3]);
+        let capacities = (cnf.literals.capacity(), cnf.ends.capacity());
+        cnf.rollback(checkpoint);
+        assert_eq!(cnf.literals, [0]);
+        assert_eq!(cnf.ends, [1, 1]);
+        assert_eq!((cnf.literals.capacity(), cnf.ends.capacity()), capacities);
+        cnf.append(vec![Literal::new(1, true)]).unwrap();
+        assert_eq!(cnf.literals, [0, 3]);
+        assert_eq!(cnf.ends, [1, 1, 2]);
+    }
 }
 
 /// Only append-only encoding uses this logical checkpoint; existing clauses
@@ -176,14 +212,16 @@ impl Cnf {
     pub(crate) fn checkpoint(&self) -> Checkpoint {
         Checkpoint {
             variables: self.variables,
-            clauses: self.clauses.len(),
+            clauses: self.ends.len(),
             submitted_clauses: self.submitted_clauses,
             submitted_literals: self.submitted_literals,
         }
     }
     pub(crate) fn rollback(&mut self, checkpoint: Checkpoint) {
         self.variables = checkpoint.variables;
-        self.clauses.truncate(checkpoint.clauses);
+        self.ends.truncate(checkpoint.clauses);
+        self.literals
+            .truncate(self.ends.last().copied().unwrap_or(0));
         self.submitted_clauses = checkpoint.submitted_clauses;
         self.submitted_literals = checkpoint.submitted_literals;
     }
@@ -209,15 +247,23 @@ impl Cnf {
         variables.checked_mul(2).ok_or(AdmissionError::Overflow)?;
         Ok(Self {
             variables,
-            clauses: Vec::new(),
+            literals: Vec::new(),
+            ends: Vec::new(),
             submitted_clauses: 0,
             submitted_literals: 0,
             limits,
         })
     }
-    pub(crate) fn reserve_clauses(&mut self, count: usize) -> Result<(), AdmissionError> {
-        self.clauses
-            .try_reserve_exact(count.min(self.limits.max_clauses))
+    pub(crate) fn reserve(
+        &mut self,
+        clauses: usize,
+        literals: usize,
+    ) -> Result<(), AdmissionError> {
+        self.ends
+            .try_reserve_exact(clauses.min(self.limits.max_clauses))
+            .map_err(|_| AdmissionError::Allocation)?;
+        self.literals
+            .try_reserve_exact(literals.min(self.limits.max_literals))
             .map_err(|_| AdmissionError::Allocation)
     }
     /// Declared variables, including variables absent from all clauses.
@@ -238,12 +284,33 @@ impl Cnf {
     }
     /// Canonical clauses; clause order follows the input after tautology removal.
     #[must_use]
-    pub fn clauses(&self) -> &[Vec<Literal>] {
-        &self.clauses
+    pub fn clauses(&self) -> Clauses<'_> {
+        Clauses {
+            literals: &self.literals,
+            ends: &self.ends,
+            start: 0,
+        }
     }
+
+    /// Canonical clause at a zero-based position, or `None` outside this CNF.
+    #[must_use]
+    pub fn clause(&self, index: usize) -> Option<Clause<'_>> {
+        let end = *self.ends.get(index)?;
+        let start = if index == 0 { 0 } else { self.ends[index - 1] };
+        Some(Clause(&self.literals[start..end]))
+    }
+
+    pub(crate) fn clause_at(&self, index: usize) -> Clause<'_> {
+        self.clause(index).expect("admitted clause index")
+    }
+
     pub(crate) fn append(&mut self, mut clause: Vec<Literal>) -> Result<(), AdmissionError> {
+        self.append_slice(&mut clause)
+    }
+
+    pub(crate) fn append_slice(&mut self, clause: &mut [Literal]) -> Result<(), AdmissionError> {
         let (clauses, literals) = self.submission(clause.len())?;
-        for literal in &clause {
+        for literal in clause.iter() {
             if literal.variable >= self.variables {
                 return Err(AdmissionError::Variable {
                     variable: literal.variable,
@@ -252,15 +319,27 @@ impl Cnf {
             }
         }
         clause.sort_unstable();
-        clause.dedup();
-        let tautology = clause
-            .windows(2)
-            .any(|pair| pair[0].variable == pair[1].variable);
+        let tautology = clause.windows(2).any(|pair| {
+            pair[0].variable == pair[1].variable && pair[0].positive != pair[1].positive
+        });
         if !tautology {
-            self.clauses
+            self.ends
                 .try_reserve(1)
                 .map_err(|_| AdmissionError::Allocation)?;
-            self.clauses.push(clause);
+            let count = clause
+                .iter()
+                .enumerate()
+                .filter(|(index, literal)| *index == 0 || clause[*index - 1] != **literal)
+                .count();
+            self.literals
+                .try_reserve(count)
+                .map_err(|_| AdmissionError::Allocation)?;
+            for (index, literal) in clause.iter().enumerate() {
+                if index == 0 || clause[index - 1] != *literal {
+                    self.literals.push(literal.index());
+                }
+            }
+            self.ends.push(self.literals.len());
         }
         self.submitted_clauses = clauses;
         self.submitted_literals = literals;

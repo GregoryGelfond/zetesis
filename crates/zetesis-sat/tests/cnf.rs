@@ -44,7 +44,10 @@ fn assert_truth_table_agreement(variables: usize, clauses: &[Vec<Literal>]) {
     for interpretation in 0..(1usize << variables) {
         assert_eq!(
             satisfies(clauses, interpretation),
-            satisfies(cnf.clauses(), interpretation),
+            cnf.clauses().all(|clause| clause
+                .iter()
+                .any(|entry| (interpretation & (1usize << entry.variable()) != 0)
+                    == entry.positive())),
             "admission changed truth at interpretation {interpretation}: {clauses:?}"
         );
     }
@@ -211,6 +214,72 @@ fn literal_accessors_preserve_variable_and_polarity() {
             assert_eq!(entry.negated().positive(), !positive);
             assert_eq!(entry.negated().negated().positive(), positive);
         }
+    }
+}
+
+#[test]
+fn borrowed_clauses_preserve_empty_positions_and_canonical_order() {
+    let cnf = formula(
+        3,
+        vec![
+            vec![],
+            vec![literal(2, true), literal(0, false), literal(2, true)],
+            vec![literal(1, false), literal(1, true)],
+            vec![],
+            vec![literal(1, true)],
+        ],
+    );
+    let expected = [
+        vec![],
+        vec![literal(0, false), literal(2, true)],
+        vec![],
+        vec![literal(1, true)],
+    ];
+    let mut clauses = cnf.clauses();
+    assert_eq!(clauses.len(), expected.len());
+    for (index, expected) in expected.iter().enumerate() {
+        assert_eq!(clauses.size_hint(), (4 - index, Some(4 - index)));
+        let clause = clauses.next().unwrap();
+        assert_eq!(Some(clause), cnf.clause(index));
+        assert_eq!(clause.len(), expected.len());
+        assert_eq!(clause.is_empty(), expected.is_empty());
+        assert!(clause.iter().eq(expected.iter().copied()));
+        assert_eq!(clause.get(expected.len()), None);
+        assert_eq!(clause.get(usize::MAX), None);
+        for (position, &literal) in expected.iter().enumerate() {
+            assert_eq!(clause.get(position), Some(literal));
+        }
+    }
+    assert!(clauses.is_empty());
+    assert_eq!(clauses.next(), None);
+    assert_eq!(clauses.next(), None);
+    assert_eq!(cnf.clause(4), None);
+    assert_eq!(cnf.clause(usize::MAX), None);
+}
+
+#[test]
+fn packing_preserves_the_largest_admitted_variable() {
+    let variables = usize::MAX / 2;
+    let limits = AdmissionLimits {
+        max_variables: variables,
+        max_clauses: 2,
+        max_literals: 2,
+    };
+    let expected = [literal(variables - 1, false), literal(variables - 1, true)];
+    let cnf = Cnf::new(variables, expected.map(|entry| vec![entry]).into(), limits).unwrap();
+    assert!(
+        cnf.clauses()
+            .map(|clause| clause.get(0).unwrap())
+            .eq(expected)
+    );
+    for invalid in [variables, usize::MAX] {
+        assert_eq!(
+            Cnf::new(variables, vec![vec![literal(invalid, true)]], limits).unwrap_err(),
+            zetesis_sat::AdmissionError::Variable {
+                variable: invalid,
+                variables
+            }
+        );
     }
 }
 

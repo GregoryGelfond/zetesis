@@ -27,14 +27,14 @@ fn registry(state: &State, cnf: &Cnf) -> Vec<Vec<usize>> {
             seen[index] = true;
             let clause = index / 2;
             let position = state.positions[clause][index % 2];
-            assert_eq!(cnf.clauses()[clause][position].index(), literal);
+            assert_eq!(cnf.clause_at(clause).at(position).index(), literal);
             list.push(index);
             cursor = state.next[index];
         }
         lists.push(list);
     }
     for (index, present) in seen.into_iter().enumerate() {
-        assert_eq!(present, cnf.clauses()[index / 2].len() >= 2);
+        assert_eq!(present, cnf.clause_at(index / 2).len() >= 2);
     }
     lists
 }

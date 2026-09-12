@@ -124,7 +124,10 @@ mod tests {
         let mut complete = budget(&control);
         let mut cnf = encoding::encode(&theory, None, limits.admission, &mut complete).unwrap();
         let before = complete.statistics.work;
-        let clauses = cnf.clauses().to_vec();
+        let clauses: Vec<Vec<_>> = cnf
+            .clauses()
+            .map(|clause| clause.iter().collect())
+            .collect();
         let variables = cnf.variables();
         let statistics = restrict(&mut cnf, &theory, limits, &mut complete).unwrap();
         assert_eq!(statistics.status, SupportStatus::Applied);
@@ -146,7 +149,11 @@ mod tests {
             );
             assert_eq!(interrupted.statistics.work, max_work);
             assert_eq!(cnf.variables(), variables);
-            assert_eq!(cnf.clauses(), clauses);
+            assert!(
+                cnf.clauses()
+                    .map(|clause| clause.iter().collect::<Vec<_>>())
+                    .eq(clauses.iter().cloned())
+            );
         }
     }
 

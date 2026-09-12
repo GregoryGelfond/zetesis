@@ -49,7 +49,7 @@ fn models(cnf: &Cnf) -> BTreeSet<Vec<bool>> {
                 .collect::<Vec<_>>()
         })
         .filter(|values| {
-            cnf.clauses().iter().all(|clause| {
+            cnf.clauses().all(|clause| {
                 clause
                     .iter()
                     .any(|literal| values[literal.variable()] == literal.positive())

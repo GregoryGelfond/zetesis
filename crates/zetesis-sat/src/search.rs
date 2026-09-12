@@ -231,10 +231,10 @@ impl State {
     ) -> Result<bool, Incomplete> {
         for clause in 0..self.base_clauses {
             budget.tick()?;
-            match cnf.clauses()[clause].len() {
+            match cnf.clause_at(clause).len() {
                 0 => return Ok(false),
                 1 => {
-                    let literal = cnf.clauses()[clause][0];
+                    let literal = cnf.clause_at(clause).at(0);
                     if self.value(literal).is_none() {
                         increment(&mut budget.statistics.propagations)?;
                     }
@@ -248,8 +248,8 @@ impl State {
                     // Thus both node indices and their successors fit usize.
                     let first = WatchNode::new(clause * 2)?;
                     let second = WatchNode::new(clause * 2 + 1)?;
-                    self.link(first, cnf.clauses()[clause][0]);
-                    self.link(second, cnf.clauses()[clause][1]);
+                    self.link(first, cnf.clause_at(clause).at(0));
+                    self.link(second, cnf.clause_at(clause).at(1));
                 }
             }
         }
@@ -275,7 +275,7 @@ impl State {
                 let clause = node.index() / 2;
                 let slot = node.index() % 2;
                 let other_position = self.positions[clause][1 - slot];
-                let other = cnf.clauses()[clause][other_position];
+                let other = cnf.clause_at(clause).at(other_position);
                 if self.value(other) != Some(true) {
                     if let Some(position) = self.replacement(cnf, clause, slot, budget)? {
                         if let Some(prior) = previous {
@@ -284,7 +284,7 @@ impl State {
                             self.heads[false_literal.index()] = following;
                         }
                         self.positions[clause][slot] = position;
-                        self.link(node, cnf.clauses()[clause][position]);
+                        self.link(node, cnf.clause_at(clause).at(position));
                         cursor = following;
                         continue;
                     }
@@ -311,14 +311,14 @@ impl State {
         budget: &mut Budget<'_, impl Quota>,
     ) -> Result<Option<usize>, Incomplete> {
         #[cfg(test)]
-        propagation_profile::replacement_attempt(cnf.clauses()[clause].len());
+        propagation_profile::replacement_attempt(cnf.clause_at(clause).len());
         // Two distinct watches cover every position of a binary clause. The
         // calling watch visit has already polled control and charged its work;
         // there is no replacement position to examine or watch to relocate.
-        if cnf.clauses()[clause].len() == 2 {
+        if cnf.clause_at(clause).len() == 2 {
             return Ok(None);
         }
-        if cnf.clauses()[clause].len() == 3 {
+        if cnf.clause_at(clause).len() == 3 {
             const POSITION_SUM: usize = 3;
             budget.tick()?;
             // Valid, distinct watches occupy two of positions 0, 1 and 2.
@@ -328,17 +328,17 @@ impl State {
             let position = POSITION_SUM - first - second;
             #[cfg(test)]
             propagation_profile::ternary_inspection([first, second], |position| {
-                self.value(cnf.clauses()[clause][position]) != Some(false)
+                self.value(cnf.clause_at(clause).at(position)) != Some(false)
             });
             return Ok(
-                (self.value(cnf.clauses()[clause][position]) != Some(false)).then_some(position)
+                (self.value(cnf.clause_at(clause).at(position)) != Some(false)).then_some(position),
             );
         }
-        for position in 0..cnf.clauses()[clause].len() {
+        for position in 0..cnf.clause_at(clause).len() {
             budget.tick()?;
             if position != self.positions[clause][slot]
                 && position != self.positions[clause][1 - slot]
-                && self.value(cnf.clauses()[clause][position]) != Some(false)
+                && self.value(cnf.clause_at(clause).at(position)) != Some(false)
             {
                 return Ok(Some(position));
             }
@@ -351,8 +351,11 @@ impl State {
         cnf: &Cnf,
         budget: &mut Budget<'_, impl Quota>,
     ) -> Result<(), Incomplete> {
-        self.order =
-            crate::ordering::variables(&cnf.clauses()[..self.base_clauses], &self.values, budget)?;
+        self.order = crate::ordering::variables(
+            cnf.clauses().take(self.base_clauses),
+            &self.values,
+            budget,
+        )?;
         self.ranks = filled(self.values.len(), 0, budget)?;
         for (position, &variable) in self.order.iter().enumerate() {
             budget.tick()?;
@@ -411,9 +414,9 @@ impl State {
             assignment.push(value.ok_or(Incomplete::InvalidWitness)?);
         }
         // Validate the completed witness against clauses, independently of watches.
-        for clause in &cnf.clauses()[..self.base_clauses] {
+        for clause in cnf.clauses().take(self.base_clauses) {
             let mut satisfied = false;
-            for literal in clause {
+            for literal in clause.iter() {
                 budget.tick()?;
                 if assignment[literal.variable()] == literal.positive() {
                     satisfied = true;
