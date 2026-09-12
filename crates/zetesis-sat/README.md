@@ -126,9 +126,10 @@ validation. Unused reserved slots remain charged. Each worker reuses its reserve
 encoding and search vectors within a joined batch. Every query recomputes the
 candidate's frozen truth values, reduct equations and strict-subset condition,
 then resets search state. Only allocation capacity survives between queries.
-The executor releases these workspaces after the batch; the scalar enumerator
-retains one workspace until enumeration ends or batched execution begins. The
-caller owns returned model storage after a successful batch.
+The executor releases these workspaces after the batch. The scalar enumerator
+retains one workspace until its owner is dropped or batched completion begins;
+logical exhaustion alone does not release its allocations. The caller owns
+returned model storage after a successful batch.
 
 All result slots plus at most the requested number of query envelopes are
 admitted together. The scratch ceiling may reduce query concurrency to one.

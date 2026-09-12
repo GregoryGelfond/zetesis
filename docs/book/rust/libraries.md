@@ -16,6 +16,7 @@ construction and standalone analysis APIs belong to its own manual.
 | Share optional host instrumentation across admission and solving | `SolveMeasurements` |
 | All original answers, streamed or completely collected | `Session::enumerate`, `WorldView::collect`, checked `AnswerSet` |
 | Finite relational templates and atoms | `zetesis_core::{Program, Template, Atom, Seed}` |
+| Checked borrowed atom identity | `AtomPattern::key`, `BindingView`, `AtomKey` |
 | Bounded typed column views and equality selection | `zetesis_core::relation::{Relation, Query, Selection, Mask}` |
 | Explicit complete relational graph | `zetesis_core::GroundProgram::compile` |
 | Normal reduct membership | `zetesis_cpu::{check, check_static, BatchOracle}` |
@@ -89,6 +90,18 @@ The formula owner keeps the theory, atom indexing, objective program and
 observations together. Do not build a session by independently pairing a theory
 with an atom table from another admission.
 
+`AtomPattern::key` provides a checked, borrowed atom identity over a
+`BindingView`. Complete values, partial owned slots and partial borrowed slots
+use the same lookup boundary. Unreferenced variables may remain absent; a missing
+referenced variable returns `InstantiationError`. The key preserves signed
+predicate identity, argument order and typed structural values. Its storage
+ordering and hash operations agree with an owned `Atom`. `AtomKey::get` borrows
+an existing member of an ordered atom set, and `Catalog::lookup_key` supplies the
+same checked work receipt as owned-atom lookup. Neither operation copies an atom.
+`AtomKey::to_atom` materializes a new atom by cloning its predicate and resolved
+values. These operations establish identity without certifying support or
+answer-set membership.
+
 `relation::Relation` borrows one immutable atom source with a dictionary and
 aligned equality-ID columns. `from_atoms` and `from_catalog` own that layout.
 For growing relations, `relation::Catalog` owns the unique typed atoms and the
@@ -156,15 +169,3 @@ session boundaries are useful without pretending those interfaces are present.
 Generate the [local Rust API reference](../../doc/zetesis_solve/index.html) as
 described in [Building the documentation](../building.md). Public signatures and
 their per-operation cost and error contracts are authoritative.
-
-`AtomPattern::key` provides a checked, borrowed atom identity over a
-`BindingView`. Complete values, partial owned slots and partial borrowed slots
-use the same lookup boundary. Unreferenced variables may remain absent; a missing
-referenced variable returns `InstantiationError`. The key preserves signed
-predicate identity, argument order and typed structural values. Its storage
-ordering and hash operations agree with an owned `Atom`. `AtomKey::get` borrows
-an existing member of an ordered atom set, and `Catalog::lookup_key` supplies the
-same checked work receipt as owned-atom lookup. Neither operation copies an atom;
-`AtomKey::to_atom` explicitly transfers the identity into a new owner. These
-operations establish identity only, without certifying support or answer-set
-membership.

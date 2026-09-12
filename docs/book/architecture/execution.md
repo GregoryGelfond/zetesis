@@ -82,7 +82,7 @@ state these necessary conditions. Source binding coverage and the executable
 certificate constructors retain separate refinement obligations.
 
 Exact projection exclusions have one owner across candidate restrictions. The
-outer cursor retains an index of previously checked semantic interpretations;
+outer cursor retains an index of previously proposed semantic interpretations;
 strengthening the candidate query rebuilds its traversal while preserving that
 index. Original and restriction clauses alone enter the watch lists. A completed
 assignment is independently checked against those clauses and looked up in the

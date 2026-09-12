@@ -43,12 +43,19 @@ certificates can discharge membership under their own validated premises;
 residual cases still use the general check. Neither route treats a classical
 candidate as an answer set merely because the outer query returned it.
 
-After a completed membership decision, an exact block excludes that semantic
-interpretation from future candidates, whether it was stable or nonminimal.
+Scalar iteration installs an exact block after a completed membership decision,
+excluding that semantic interpretation from future candidates, whether it was
+stable or nonminimal.
 An inconclusive membership check terminates the iterator without blocking the
 candidate and continuing. If block storage fails after stability was established,
 the proved model is returned first and the pending failure follows on the next
 call. Exhaustion is never inferred from that failure.
+
+Batched iteration installs exact exclusions as proposals enter its pending
+owner, before membership checking. An exclusion records proposal identity, not
+stability. Checker, shape and scratch failures retain that owner for permitted
+retries; exact-search and delayed blocking failures follow the terminal contract.
+No failure establishes exhaustion.
 
 Candidate restrictions deliberately narrow the search region. Exhaustion means
 that region has been covered; an optimizer must separately justify any claim

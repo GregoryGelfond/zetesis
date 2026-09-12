@@ -5,7 +5,19 @@ use std::iter::FusedIterator;
 use crate::Literal;
 
 /// One canonical clause, borrowed from its CNF. Empty clauses remain visible.
-/// Iteration decodes admitted references without allocating a literal copy.
+/// Iteration decodes [`Literal`] values without heap allocation.
+///
+/// ```
+/// use zetesis_sat::{AdmissionLimits, Cnf, Literal};
+/// let atom = Literal::new(0, true);
+/// let query = Cnf::new(1, vec![vec![atom, atom], vec![]], AdmissionLimits::default())?;
+/// let first = query.clause(0).expect("first clause");
+/// assert_eq!(first.len(), 1); // Duplicate occurrences coalesce during admission.
+/// assert_eq!(first.get(0), Some(atom));
+/// assert!(query.clause(1).expect("empty clause").is_empty());
+/// assert!(query.clause(2).is_none());
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Clause<'a>(pub(crate) &'a [usize]);
 
