@@ -670,15 +670,22 @@ status. A newer source remains unqualified until its own checks complete.
 
 | Population | Covered / instrumented lines | Coverage |
 | --- | ---: | ---: |
-| Workspace, all features, portable tests plus 49 physical Metal tests | 51,117 / 54,358 | 94.04% |
-| CPU-only solver library and CLI, separate instrumentation | 4,671 / 5,016 | 93.12% |
+| Workspace, all features, portable tests plus 51 physical Metal tests | 51,558 / 54,784 | 94.11% |
+| CPU-only solver library and CLI, separate instrumentation | 4,748 / 5,087 | 93.34% |
 
 This snapshot was qualified on 11 September 2026 for
-[`74c0627f`](https://github.com/GregoryGelfond/zetesis/tree/74c0627f3aab89ae466a1a33cc61e352264b8af1),
+[`b7d8772d`](https://github.com/GregoryGelfond/zetesis/tree/b7d8772d56fb41a54125acfb6399c383d28006d7),
 using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS 26.6.2 with Apple M4 Pro
 Metal. Both populations passed their independent 91% floor. The workspace
-combines its portable and physical profiles; the CPU-only population remains
-separate. Each of the four tight-oracle physical tests exercises both Atomic
+combines portable profiles with physical profiles from 51 tests in 16 groups; the
+CPU-only population remains separate. Before physical profile import, the
+portable-only workspace report covered 49,214 of 54,784 lines (89.8328%), below
+the workspace floor. Two separately executed CLI device-failure checks also
+passed; their profiles are excluded from both coverage populations.
+
+The static closure comparison checked 41 candidate executions against an
+independent ordered-set reference, including reused epochs and the 4,096-atom
+boundary. Each of the four tight-oracle physical tests exercises both Atomic
 and Grouped support construction. The relation tests cover typed equality masks,
 prepared-view refusals and matched scalar/Rayon/Metal measurement results.
 The shared-context tests cover formula execution while relation columns remain
@@ -701,9 +708,8 @@ Vulkan and other untested devices are outside this measurement.
 
 Reproduce this recorded snapshot from the linked source revision with
 `scripts/check.sh coverage --metal` using the
-[verification tools](#prepare-verification-tools). That revision selected 49
-physical tests; the current 51-test selection requires a fresh qualification
-before replacing these recorded measurements. Retain the generated JSON and
+[verification tools](#prepare-verification-tools). The linked revision selects
+51 physical tests in 16 groups. Retain the generated JSON and
 HTML reports under `target/coverage/workspace` and `target/coverage/cli-cpu`.
 Update the badge and this table together only after qualification completes.
 Line coverage identifies executed Rust lines; it does not establish assertion
