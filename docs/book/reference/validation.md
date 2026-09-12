@@ -209,7 +209,7 @@ performance trend.
 ### Performance evidence
 
 The [current comparison](performance.md) reports CPU time, child peak RSS and
-complete Metal solves for source `15e0f77b`. The historical measurements below
+complete Metal solves for source `6bebb980`. The historical measurements below
 retain their original source and execution scopes.
 
 The measurements below apply to their explicitly named revisions. No timing or
@@ -682,18 +682,19 @@ status. A newer source remains unqualified until its own checks complete.
 
 | Population | Covered / instrumented lines | Coverage |
 | --- | ---: | ---: |
-| Workspace, all features, portable tests plus 51 physical Metal tests | 55,170 / 58,544 | 94.24% |
-| CPU-only solver library and CLI, separate instrumentation | 4,831 / 5,175 | 93.35% |
+| Workspace, all features, portable tests plus 55 physical Metal tests | 57,172 / 60,627 | 94.30% |
+| CPU-only solver library and CLI, separate instrumentation | 4,847 / 5,147 | 94.17% |
 
 This snapshot was qualified on 12 September 2026 for
-[`15e0f77b`](https://github.com/GregoryGelfond/zetesis/tree/15e0f77b2c7b7a1ab0608857265cebf33ec747b7),
+[`6bebb980`](https://github.com/GregoryGelfond/zetesis/tree/6bebb980f9c102dbb7f943076d7cde92374841ce),
 using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS 26.6.2 with Apple M4 Pro
 Metal. Both populations passed their independent 91% floor. The workspace
-combines portable profiles with 16 physical profiles from 51 tests in 16 groups; the
-CPU-only population remains separate. Before physical profile import, the
-portable-only workspace report covered 52,755 of 58,544 lines (90.1117%), below
-the workspace floor. Two separately executed CLI device-failure checks also
-passed; their profiles are excluded from both coverage populations.
+combines 2,067 portable profiles with 16 physical profiles from 55 tests in
+16 groups; the 267-profile CPU-only population remains separate. Before physical
+profile import, the portable-only workspace report covered 54,657 of 60,627
+lines (90.1529%), below the workspace floor. A separate explicit-GPU
+device-failure check also passed; its profile and the 17 test-listing profiles
+are excluded from both coverage populations.
 
 The static closure comparison checked 53 candidate executions against an
 independent ordered-set reference. Owned seeds, indexed selections and manual
@@ -703,8 +704,11 @@ and Grouped support construction. The relation tests cover typed equality masks,
 prepared-view refusals and matched scalar/Rayon/Metal measurement results.
 The shared-context tests cover formula execution while relation columns remain
 prepared, non-destructive contention refusal and failure propagation to peers.
-Ordinary-session tests check exact context identity across eager/lazy closure,
-delayed automatic selection and formula setup. Repeated sessions preserve
+They check reuse after healthy, settled preparation cancellation, as well as
+caller control during static and formula execution. Ordinary-session tests
+check exact context identity across explicit GPU eager/lazy closure and formula
+setup. Automatic execution remains on CPU, including when the caller supplies
+GPU resources. Repeated sessions preserve
 independent subjects, budgets, costs and outcomes while sharing the device;
 policy and observer refusals preserve later reuse.
 Compiled-profile tests check exact pipeline identity across fresh formula oracles
@@ -712,8 +716,10 @@ and ordinary library sessions, including device health and contention boundaries
 Builder collection tests use caller-owned resources and retain incomplete results
 without claiming a complete `WorldView`. The independent CPU population covers
 both the composed solver and its CLI consumer after their crate separation.
-The automatic-selection regression checks that actual Metal use preserves
-lazy grounding for an admitted relational program.
+Explicit lazy execution checks preserve source grounding, immutable-upload reuse
+and complete candidate accounting. Formula checks exercise dependency-level
+original truth, packed auxiliary domains, strict-subset reduction and actual
+submission receipts under finite device limits.
 Combined language-consumer tests preserve complete answer-set families, scored
 observations and all optimum ties across aggregate heads, objectives and output
 queries. They require actual GPU work and exact accounting of CPU residuals.
@@ -722,7 +728,7 @@ Vulkan and other untested devices are outside this measurement.
 Reproduce this recorded snapshot from the linked source revision with
 `scripts/check.sh coverage --metal` using the
 [verification tools](#prepare-verification-tools). The linked revision selects
-51 physical tests in 16 groups. Retain the generated JSON and
+55 physical tests in 16 groups. Retain the generated JSON and
 HTML reports under `target/coverage/workspace` and `target/coverage/cli-cpu`.
 Update the badge and this table together only after qualification completes.
 Line coverage identifies executed Rust lines; it does not establish assertion

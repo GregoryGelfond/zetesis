@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 ![Rust 1.97+](https://img.shields.io/badge/rust-1.97%2B-orange?style=flat-square)
-[![Line coverage: 94.24% (CPU + Metal)](https://img.shields.io/badge/coverage-94.24%25%20%28CPU%20%2B%20Metal%29-brightgreen?style=flat-square)](docs/book/reference/validation.md#coverage)
+[![Line coverage: 94.30% (CPU + Metal)](https://img.shields.io/badge/coverage-94.30%25%20%28CPU%20%2B%20Metal%29-brightgreen?style=flat-square)](docs/book/reference/validation.md#coverage)
 
 ζήτησις, *inquiry/search* — candidate-directed answer-set solving through the reduct.
 
@@ -229,12 +229,16 @@ The [validation chapter](docs/book/reference/validation.md) explains which
 claims the corpus, proof and physical execution checks can establish.
 The [current performance comparison](docs/book/reference/performance.md) records
 CPU and Metal solves against the prior implementation and clingo, including all
-six N=8 queens encodings and separate child peak-RSS measurements. The current
-CPU implementation uses less peak RSS on all nine selected examples and improves
-several solve times; a queens-3 regression remains in the JSON/statistics profile.
-Metal task allocation improves, while the matched CPU path remains faster on
-every measured case. Results retain explicit lazy refusals and distinguish full
-native model agreement from clingo's observable output. Earlier N=10 comparisons
+six N=8 queens encodings and separate child peak-RSS measurements. Ordinary CPU
+task allocation uses about 46% less peak RSS and 6% less time; queens-6 is about
+14% faster. Other CPU changes are mixed. Eager Metal times decrease across all
+measured inputs, including about 18% for SEND and 8% for task allocation.
+The matched CPU path remains faster on these inputs and uses a different
+certified membership procedure. Results retain explicit lazy refusals and
+distinguish full native model agreement from clingo's observable output.
+The optional [finite-table projection library](docs/book/rust/finite-tables.md)
+has separate scalar/Rayon measurements; ordinary grounding does not select it.
+Earlier N=10 comparisons
 and isolated GPU measurements remain in the
 [historical performance evidence](docs/book/reference/validation.md#performance-evidence).
 

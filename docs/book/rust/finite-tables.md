@@ -89,6 +89,10 @@ memory. See the [experiment contract](https://github.com/GregoryGelfond/zetesis/
 for finite populations and report limits. This experiment establishes neither
 source-grounding completeness nor ordinary solver acceleration.
 
+The [measured comparison](../reference/performance.md#optional-finite-table-experiment)
+reports the current fixture timings, preparation costs and retained-capacity
+limitations.
+
 ## Preservation argument
 
 A selected row belongs to every variable's union of permitted supports, hence
