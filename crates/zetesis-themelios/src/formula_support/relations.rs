@@ -5,7 +5,7 @@ use std::mem::size_of;
 
 use themelios_base::span::Location;
 use zetesis_core::relation::{Catalog, CatalogFailure, Failure, Limits, Relation, Resource, Row};
-use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value};
+use zetesis_core::{Atom, AtomKey, AtomPattern, Predicate, Term, Value};
 
 use super::Counters;
 use crate::formula::ceiling;
@@ -249,25 +249,24 @@ impl Support<'_> {
         self.rows.get(predicate)?.relation.row(position)
     }
 
-    pub(super) fn contains(&self, atom: &Atom) -> bool {
-        self.rows.get(atom.predicate()).is_some_and(|rows| {
-            let mut start = 0;
-            let mut end = rows.relation.row_count();
-            while start < end {
-                let middle = start + (end - start) / 2;
-                match rows
-                    .catalog
-                    .ordered_row(middle)
-                    .expect("bounded sorted row")
-                    .cmp(atom)
-                {
-                    std::cmp::Ordering::Less => start = middle + 1,
-                    std::cmp::Ordering::Equal => return true,
-                    std::cmp::Ordering::Greater => end = middle,
-                }
-            }
-            false
-        })
+    pub(super) fn contains(
+        &self,
+        key: &AtomKey<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<bool, FormulaFailure> {
+        let Some(rows) = self.rows.get(key.predicate()) else {
+            return Ok(false);
+        };
+        let owner_bytes = rows.catalog.retained_bytes();
+        let mut checked = relation_limits(limits, counters, key.predicate(), owner_bytes);
+        checked.max_values = usize::MAX;
+        let receipt = rows.catalog.lookup_key(key, checked).map_err(|error| {
+            catalog_failure(error, limits, counters, self.bytes - owner_bytes, location)
+        })?;
+        counters.charge_work(receipt.storage.construction_work, limits, location)?;
+        Ok(receipt.row.is_some())
     }
 
     pub(super) fn probe(

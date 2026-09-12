@@ -7,7 +7,7 @@ use std::hash::{BuildHasher, BuildHasherDefault, Hasher};
 use proptest::prelude::*;
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Location, Span};
-use zetesis_core::{Atom, Predicate, Sign, Value, ValueLimits, ValueNode};
+use zetesis_core::{Atom, AtomPattern, Predicate, Sign, Term, Value, ValueLimits, ValueNode};
 
 use super::{Catalog, Entry};
 use crate::{AtomAllocation, FormulaFailure};
@@ -37,8 +37,13 @@ fn number(value: i32) -> Atom {
     atom("p", Sign::Positive, vec![Value::Number(value)])
 }
 
-fn intern<S: BuildHasher>(catalog: &mut Catalog<S>, atom: Atom) -> usize {
-    match catalog.entry(atom) {
+fn intern<S: BuildHasher>(catalog: &mut Catalog<S>, atom: &Atom) -> usize {
+    let pattern = AtomPattern::new(
+        atom.predicate().clone(),
+        atom.values().iter().cloned().map(Term::Constant).collect(),
+    )
+    .unwrap();
+    match catalog.entry(pattern.key(&[] as &[Value]).unwrap()) {
         Entry::Occupied(id) => id,
         Entry::Vacant(entry) => entry.insert().unwrap(),
     }
@@ -62,7 +67,7 @@ fn hash_collisions_preserve_complete_atom_identity() {
     ];
     let mut catalog = CollidingCatalog::default();
     for (id, atom) in atoms.iter().enumerate() {
-        assert_eq!(intern(&mut catalog, atom.clone()), id);
+        assert_eq!(intern(&mut catalog, atom), id);
     }
     for (id, atom) in atoms.iter().enumerate() {
         assert_eq!(catalog.find(atom), Some(id));
@@ -77,9 +82,13 @@ fn hash_collisions_preserve_complete_atom_identity() {
 #[test]
 fn duplicate_atoms_reuse_the_first_id() {
     let mut catalog = CollidingCatalog::default();
-    assert_eq!(intern(&mut catalog, number(2)), 0);
-    assert_eq!(intern(&mut catalog, number(1)), 1);
-    assert!(matches!(catalog.entry(number(2)), Entry::Occupied(0)));
+    assert_eq!(intern(&mut catalog, &number(2)), 0);
+    assert_eq!(intern(&mut catalog, &number(1)), 1);
+    let pattern = AtomPattern::new(number(2).predicate().clone(), vec![Term::Variable(0)]).unwrap();
+    assert!(matches!(
+        catalog.entry(pattern.key(&[Value::Number(2)][..]).unwrap()),
+        Entry::Occupied(0)
+    ));
     assert_eq!(catalog.into_atoms(), [number(2), number(1)]);
 }
 
@@ -88,7 +97,7 @@ fn table_growth_preserves_first_occurrence_order() {
     let atoms: Vec<_> = (0..257).rev().map(number).collect();
     let mut catalog = Catalog::<std::collections::hash_map::RandomState>::default();
     for (id, atom) in atoms.iter().enumerate() {
-        assert_eq!(intern(&mut catalog, atom.clone()), id);
+        assert_eq!(intern(&mut catalog, atom), id);
     }
     for (id, atom) in atoms.iter().enumerate().rev() {
         assert_eq!(catalog.find(atom), Some(id));
@@ -99,14 +108,14 @@ fn table_growth_preserves_first_occurrence_order() {
 #[test]
 fn refused_reservation_preserves_existing_membership() {
     let mut catalog = CollidingCatalog::default();
-    assert_eq!(intern(&mut catalog, number(4)), 0);
+    assert_eq!(intern(&mut catalog, &number(4)), 0);
     assert!(matches!(
         catalog.reserve(usize::MAX),
         Err(AtomAllocation::Atoms(_))
     ));
     assert_eq!(catalog.find(&number(4)), Some(0));
     assert_eq!(catalog.find(&number(5)), None);
-    assert_eq!(intern(&mut catalog, number(5)), 1);
+    assert_eq!(intern(&mut catalog, &number(5)), 1);
     assert_eq!(catalog.into_atoms(), [number(4), number(5)]);
 }
 
@@ -176,7 +185,7 @@ proptest! {
                 ordered.push(atom.clone());
                 next
             });
-            prop_assert_eq!(intern(&mut catalog, atom.clone()), id);
+            prop_assert_eq!(intern(&mut catalog, &atom), id);
             prop_assert_eq!(catalog.find(&atom), Some(id));
         }
         prop_assert_eq!(catalog.into_atoms(), ordered);

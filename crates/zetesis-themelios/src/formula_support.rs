@@ -6,6 +6,8 @@ mod relations;
 #[cfg(test)]
 mod columnar;
 #[cfg(test)]
+mod membership;
+#[cfg(test)]
 mod postings;
 
 use std::collections::BTreeSet;
@@ -199,35 +201,36 @@ fn derive_rule(
     budget: &mut Budget,
     counters: &mut Counters,
 ) -> Result<(), FormulaFailure> {
+    let mut derivation = Derivation {
+        support,
+        delta,
+        limits,
+        budget,
+        counters,
+    };
     while let Some(binding) = match &rule.head {
-        HeadIr::Normal(Some(head)) => {
-            outer.next_support(head, delta, limits, budget, counters, rule.location)?
-        }
-        _ => outer.next(limits, budget, counters, rule.location)?,
+        HeadIr::Normal(Some(head)) => outer.next_support(
+            head,
+            derivation.delta,
+            limits,
+            derivation.budget,
+            derivation.counters,
+            rule.location,
+        )?,
+        _ => outer.next(
+            limits,
+            derivation.budget,
+            derivation.counters,
+            rule.location,
+        )?,
     } {
         match &rule.head {
-            HeadIr::Normal(Some(head)) => derive(
-                head,
-                &binding,
-                support,
-                delta,
-                limits,
-                budget,
-                rule.location,
-            )?,
+            HeadIr::Normal(Some(head)) => derivation.head(head, &binding, rule.location)?,
             HeadIr::Disjunction(heads) => {
                 // Only positive occurrences can produce possible atoms.
                 // Neither default-negation mode supplies support.
                 for head in heads.iter().filter_map(|head| head.positive_atom()) {
-                    derive(
-                        head,
-                        &binding,
-                        support,
-                        delta,
-                        limits,
-                        budget,
-                        rule.location,
-                    )?;
+                    derivation.head(head, &binding, rule.location)?;
                 }
             }
             HeadIr::Choice(group) => {
@@ -236,24 +239,26 @@ fn derive_rule(
                     &binding,
                     support,
                     limits,
-                    budget,
-                    counters,
+                    derivation.budget,
+                    derivation.counters,
                     rule.location,
                 )?;
                 for element in &group.elements {
-                    let mut local =
-                        Join::element(element, &binding, support, budget, rule.location)?;
-                    while let Some(binding) = local.next(limits, budget, counters, rule.location)? {
+                    let mut local = Join::element(
+                        element,
+                        &binding,
+                        support,
+                        derivation.budget,
+                        rule.location,
+                    )?;
+                    while let Some(binding) = local.next(
+                        limits,
+                        derivation.budget,
+                        derivation.counters,
+                        rule.location,
+                    )? {
                         if let Some(head) = element.head.positive_atom() {
-                            derive(
-                                head,
-                                &binding,
-                                support,
-                                delta,
-                                limits,
-                                budget,
-                                rule.location,
-                            )?;
+                            derivation.head(head, &binding, rule.location)?;
                         }
                     }
                 }
@@ -264,37 +269,56 @@ fn derive_rule(
     Ok(())
 }
 
-fn derive(
-    pattern: &AtomPattern,
-    binding: &Binding,
-    support: &Support,
-    delta: &mut BTreeSet<Atom>,
-    limits: &FormulaLimits,
-    budget: &mut Budget,
-    location: Location,
-) -> Result<(), FormulaFailure> {
-    let bytes = pattern.predicate().name().len() as u128
-        + pattern
-            .terms()
-            .iter()
-            .map(|term| binding.resolve(term, location).map(value_bytes))
-            .sum::<Result<u128, _>>()?;
-    budget.charge(
-        ExpansionResource::ScalarBytes,
-        bytes.saturating_mul(3),
-        location,
-    )?;
-    let atom = binding.instantiate(pattern, location)?;
-    if !support.contains(&atom) && !delta.contains(&atom) {
-        ceiling(
-            FormulaResource::Atoms,
-            support.len() as u128 + delta.len() as u128 + 1,
-            limits.theory.max_atoms as u128,
+/// A support round publishes newly derived heads after complete checked binding.
+/// Existing support and the current delta share one borrowed atom identity.
+struct Derivation<'a, 'source> {
+    support: &'a Support<'source>,
+    delta: &'a mut BTreeSet<Atom>,
+    limits: &'a FormulaLimits,
+    budget: &'a mut Budget,
+    counters: &'a mut Counters,
+}
+
+impl Derivation<'_, '_> {
+    fn head(
+        &mut self,
+        pattern: &AtomPattern,
+        binding: &Binding,
+        location: Location,
+    ) -> Result<(), FormulaFailure> {
+        let bytes = pattern.predicate().name().len() as u128
+            + pattern
+                .terms()
+                .iter()
+                .map(|term| binding.resolve(term, location).map(value_bytes))
+                .sum::<Result<u128, _>>()?;
+        // Preserve the cumulative admission allowance; it is not live occupancy.
+        self.budget.charge(
+            ExpansionResource::ScalarBytes,
+            bytes.saturating_mul(3),
             location,
         )?;
-        delta.insert(atom);
+        let key = pattern
+            .key(binding.slots())
+            .map_err(|error| FormulaFailure::UnsafeVariable {
+                variable: error.variable,
+                location,
+            })?;
+        if !self
+            .support
+            .contains(&key, self.limits, self.counters, location)?
+            && key.get(self.delta).is_none()
+        {
+            ceiling(
+                FormulaResource::Atoms,
+                self.support.len() as u128 + self.delta.len() as u128 + 1,
+                self.limits.theory.max_atoms as u128,
+                location,
+            )?;
+            self.delta.insert(key.to_atom());
+        }
+        Ok(())
     }
-    Ok(())
 }
 
 /// Validation evidence for one partial positive binding. A false comparison
@@ -726,7 +750,7 @@ impl<'a> Join<'a> {
         }
         loop {
             counters.work(limits, location)?;
-            if self.skip_derived(projected, limits, budget, counters, location)? {
+            if self.skip_derived(projected, limits, counters, location)? {
                 if self.finished {
                     return Ok(None);
                 }
@@ -887,11 +911,10 @@ impl<'a> Join<'a> {
         &mut self,
         projected: Option<(&AtomPattern, &BTreeSet<Atom>)>,
         limits: &FormulaLimits,
-        budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
     ) -> Result<bool, FormulaFailure> {
-        if !self.already_derived(projected, limits, budget, counters, location)? {
+        if !self.already_derived(projected, limits, counters, location)? {
             return Ok(false);
         }
         if self.depth == 0 {
@@ -910,7 +933,6 @@ impl<'a> Join<'a> {
         &self,
         projected: Option<(&AtomPattern, &BTreeSet<Atom>)>,
         limits: &FormulaLimits,
-        budget: &mut Budget,
         counters: &mut Counters,
         location: Location,
     ) -> Result<bool, FormulaFailure> {
@@ -925,24 +947,14 @@ impl<'a> Join<'a> {
                 return Ok(false);
             }
         }
-        budget.charge(
-            ExpansionResource::ScalarBytes,
-            head.predicate().name().len() as u128,
-            location,
-        )?;
-        let mut values = Vec::new();
-        for term in head.terms() {
-            let value = match term {
-                zetesis_core::Term::Constant(value) => value,
-                zetesis_core::Term::Variable(variable) => self.values[*variable]
-                    .as_ref()
-                    .expect("head variables ready"),
-            };
-            values.push(copy(value, budget, location)?);
-        }
-        let atom = Atom::new(head.predicate().clone(), values).expect("validated head arity");
+        let key =
+            head.key(self.values.as_slice())
+                .map_err(|error| FormulaFailure::UnsafeVariable {
+                    variable: error.variable,
+                    location,
+                })?;
         counters.work(limits, location)?;
-        Ok(self.support.contains(&atom) || delta.contains(&atom))
+        Ok(self.support.contains(&key, limits, counters, location)? || key.get(delta).is_some())
     }
     fn complete(
         &self,

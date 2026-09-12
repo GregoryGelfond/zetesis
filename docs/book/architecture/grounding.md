@@ -138,6 +138,14 @@ original activation and equality conditions. Structured positive witnesses can
 bind local variables before dependent arithmetic is checked. Positive-witness
 matching does not invert arithmetic or introduce a global guessed value universe.
 
+A checked `AtomKey` borrows a pattern and its current binding. Support and delta
+membership use that full typed identity without making a temporary atom. Formula
+interning uses the same key and materializes values only for a new dense ID.
+Missing required inputs still produce a located failure; an incomplete head
+prefix defers the membership check. Membership does not discharge authored-body
+validation. Existing support, current delta and formula atoms retain distinct
+roles even though they share the identity operation.
+
 ### Completed possible support
 
 Formula grounding grows possible support by complete rounds. Each round uses an

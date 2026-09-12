@@ -124,12 +124,13 @@ impl Binding<'_> {
         pattern: &AtomPattern,
         location: Location,
     ) -> Result<Atom, FormulaFailure> {
-        let values = pattern
-            .terms()
-            .iter()
-            .map(|term| self.resolve(term, location).cloned())
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(Atom::new(pattern.predicate().clone(), values).expect("checked pattern arity"))
+        pattern
+            .key(self.slots())
+            .map(zetesis_core::AtomKey::to_atom)
+            .map_err(|error| FormulaFailure::UnsafeVariable {
+                variable: error.variable,
+                location,
+            })
     }
 
     pub(crate) fn copied(

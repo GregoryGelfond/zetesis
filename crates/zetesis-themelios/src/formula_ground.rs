@@ -459,11 +459,17 @@ impl Builder<'_> {
             bytes.saturating_mul(3),
             location,
         )?;
-        let atom = assignment.instantiate(pattern, location)?;
+        let key =
+            pattern
+                .key(assignment.slots())
+                .map_err(|error| FormulaFailure::UnsafeVariable {
+                    variable: error.variable,
+                    location,
+                })?;
         self.counters.record(Event::AtomLookup);
         let required = self.catalog.len() as u128 + 1;
         let (atom_resource, atom_limit) = self.atom_bound();
-        let index = match self.catalog.entry(atom) {
+        let index = match self.catalog.entry(key) {
             atoms::Entry::Occupied(index) => index,
             atoms::Entry::Vacant(entry) => {
                 ceiling(atom_resource, required, atom_limit as u128, location)?;

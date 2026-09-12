@@ -30,6 +30,22 @@ fn atom(values: &[i32]) -> Atom {
     .unwrap()
 }
 
+fn contains(support: &Support<'_>, atom: &Atom) -> bool {
+    let pattern = AtomPattern::new(
+        atom.predicate().clone(),
+        atom.values().iter().cloned().map(Term::Constant).collect(),
+    )
+    .unwrap();
+    support
+        .contains(
+            &pattern.key(&[] as &[Value]).unwrap(),
+            &FormulaLimits::default(),
+            &mut Counters::default(),
+            location(),
+        )
+        .unwrap()
+}
+
 #[test]
 fn membership_preserves_append_order() {
     let mut catalog = SupportCatalog::default();
@@ -45,9 +61,9 @@ fn membership_preserves_append_order() {
             )
             .unwrap();
         for value in [1, 2, 3] {
-            assert!(support.contains(&atom(&[value])));
+            assert!(contains(&support, &atom(&[value])));
         }
-        assert!(!support.contains(&atom(&[0])));
+        assert!(!contains(&support, &atom(&[0])));
         let rows: Vec<_> = support
             .rows(atom(&[0]).predicate())
             .map(|row| (row.source_index(), row.value(0).unwrap().clone()))
@@ -122,8 +138,8 @@ fn nullary_membership_retains_predicate_sign() {
             location(),
         )
         .unwrap();
-    assert!(support.contains(&negative));
-    assert!(!support.contains(&positive));
+    assert!(contains(&support, &negative));
+    assert!(!contains(&support, &positive));
     let row = support.row(negative.predicate(), 0).unwrap();
     assert_eq!(row.predicate(), negative.predicate());
     assert_eq!(row.value(0), None);
@@ -409,4 +425,46 @@ fn relation_refusal_retains_the_source_location() {
         panic!("typed relation refusal");
     };
     assert_eq!(found, location());
+}
+
+#[test]
+fn membership_preserves_cumulative_work_limits() {
+    let mut catalog = SupportCatalog::default();
+    insert(&mut catalog, atom(&[3]));
+    let limits = FormulaLimits::default();
+    let support = catalog
+        .snapshot(&limits, &mut Counters::default(), location())
+        .unwrap();
+    let pattern =
+        AtomPattern::new(atom(&[3]).predicate().clone(), vec![Term::Variable(0)]).unwrap();
+    let values = [Some(Value::Number(3))];
+    let key = pattern.key(values.as_slice()).unwrap();
+    let initial = 7;
+    let fresh = || Counters {
+        work: initial,
+        ..Counters::default()
+    };
+    let mut counters = fresh();
+    assert!(
+        support
+            .contains(&key, &limits, &mut counters, location())
+            .unwrap()
+    );
+    assert!(counters.work > initial);
+    let exact = FormulaLimits {
+        max_work: counters.work,
+        ..limits
+    };
+    assert!(
+        support
+            .contains(&key, &exact, &mut fresh(), location())
+            .unwrap()
+    );
+    let short = FormulaLimits {
+        max_work: counters.work - 1,
+        ..exact
+    };
+    assert!(
+        matches!(support.contains(&key, &short, &mut fresh(), location()), Err(FormulaFailure::Limit { resource: FormulaResource::Work, observed, limit, location: found }) if observed == u128::from(counters.work) && limit == u128::from(counters.work - 1) && found == location())
+    );
 }

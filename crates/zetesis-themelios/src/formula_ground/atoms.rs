@@ -3,6 +3,8 @@
 //! Full typed equality decides identity even when every hash collides. The table
 //! is never enumerated to emit atoms: first insertion fixes each dense ID, and
 //! consuming the catalog transfers that sequence without cloning its contents.
+//! Lookup borrows a checked substitution; only a vacant entry materializes an
+//! atom after reservations. Repeated occurrences copy no typed payload.
 //! Lookup is expected constant table work plus atom hashing/equality; a collision
 //! chain can inspect every atom. Growth can rehash existing atoms. Randomized
 //! hashing changes neither IDs nor emission order.
@@ -15,7 +17,7 @@ use std::collections::hash_map::RandomState;
 use std::hash::BuildHasher;
 
 use hashbrown::HashTable;
-use zetesis_core::Atom;
+use zetesis_core::{Atom, AtomKey};
 
 use crate::AtomAllocation;
 
@@ -26,14 +28,14 @@ pub(super) struct Catalog<S = RandomState> {
     hasher: S,
 }
 
-pub(super) enum Entry<'a, S> {
+pub(super) enum Entry<'a, 'key, S> {
     Occupied(usize),
-    Vacant(Vacant<'a, S>),
+    Vacant(Vacant<'a, 'key, S>),
 }
 
-pub(super) struct Vacant<'a, S> {
+pub(super) struct Vacant<'a, 'key, S> {
     catalog: &'a mut Catalog<S>,
-    atom: Atom,
+    key: AtomKey<'key>,
     hash: u64,
 }
 
@@ -52,13 +54,16 @@ impl<S: BuildHasher> Catalog<S> {
             .copied()
     }
 
-    pub(super) fn entry(&mut self, atom: Atom) -> Entry<'_, S> {
-        let hash = self.hasher.hash_one(&atom);
-        match self.index.find(hash, |&id| self.atoms[id] == atom) {
+    pub(super) fn entry<'key>(&mut self, key: AtomKey<'key>) -> Entry<'_, 'key, S> {
+        let hash = self.hasher.hash_one(key);
+        match self
+            .index
+            .find(hash, |&id| key.compare(&self.atoms[id]).is_eq())
+        {
             Some(&id) => Entry::Occupied(id),
             None => Entry::Vacant(Vacant {
                 catalog: self,
-                atom,
+                key,
                 hash,
             }),
         }
@@ -78,13 +83,13 @@ impl<S: BuildHasher> Catalog<S> {
     }
 }
 
-impl<S: BuildHasher> Vacant<'_, S> {
+impl<S: BuildHasher> Vacant<'_, '_, S> {
     /// Publish the new ID only after both reservations and updates complete.
     /// A refused reservation may retain capacity, but changes no atom membership.
     pub(super) fn insert(self) -> Result<usize, AtomAllocation> {
         self.catalog.reserve(1)?;
         let id = self.catalog.atoms.len();
-        self.catalog.atoms.push(self.atom);
+        self.catalog.atoms.push(self.key.to_atom());
         self.catalog
             .index
             .insert_unique(self.hash, id, |&existing| {
