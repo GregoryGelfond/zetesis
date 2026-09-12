@@ -10,6 +10,8 @@ pub(super) struct Plan {
     pub(super) dimensions: [u32; DIMENSION_WORDS],
     pub(super) result_words: usize,
     pub(super) result_bytes: u64,
+    /// Full active input bytes for conservative host admission. A submission's
+    /// upload decision can omit valid retained snapshot/seed prefixes.
     pub(super) uploaded_bytes: u64,
     pub(super) epoch: NonZeroU32,
     pub(super) capacity: Capacity,
@@ -56,6 +58,7 @@ pub(super) enum Allowance {
 /// active prefix, and retained results always have the exact active shape.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct Selection {
+    pub(super) uploads: super::upload::Uploads,
     pub(super) capacity: Capacity,
     pub(super) transition: Transition,
     pub(super) retention: Retention,
@@ -76,6 +79,7 @@ impl Selection {
     pub(super) fn new(previous: Option<Capacity>, plan: &Plan, maximum: u64) -> Self {
         let Some(previous) = previous else {
             return Self {
+                uploads: super::upload::Uploads::ALL,
                 capacity: plan.capacity,
                 transition: Transition::Initial,
                 retention: Retention {
@@ -99,6 +103,7 @@ impl Selection {
             plan.capacity
         };
         Self {
+            uploads: super::upload::Uploads::ALL,
             capacity,
             transition: previous.assess(plan, maximum),
             retention: Retention {

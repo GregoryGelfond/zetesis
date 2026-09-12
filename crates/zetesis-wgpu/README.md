@@ -79,6 +79,15 @@ epoch; the source catalog's address range is checked on the host. Every returned
 world record must match the plan's epoch and ordinal. Retained buffers do not
 retain an earlier chunk's output or reset the oracle's submission sequence.
 
+Within one lazy batch, retained seed buffers need another upload only when their
+layout or buffer changes. Snapshot buffers also need a write when the immutable
+source round changes. The source coordinator provides a batch-local round index;
+it is not a globally unique cache key. Every public batch owns a fresh transport,
+and failed readback discards it. Offsets, records and the epoch uniform are still
+written each dispatch; every active output is cleared. Statistics count actual
+requested upload bytes, while admission retains the conservative allowance for
+all active host inputs. This does not measure physical bus traffic or wall time.
+
 Adapter, allocation, limit, cancellation, timeout, validation and device failures
 remain failures or incomplete work. They are never converted into UNSAT results.
 Resident plans and transport buffers retain explicit identity and capacity

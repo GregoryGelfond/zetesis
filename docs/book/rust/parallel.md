@@ -156,3 +156,19 @@ evaluator. They preserve the source-selection, final coverage, cancellation and
 failure contracts of the owned-seed methods. View construction does not trigger
 GPU discovery or static grounding. Lazy batch atom IDs remain independent of
 any compiled graph's dense IDs.
+
+Lazy device upload reuse follows the coordinator's immutable inputs.
+`Chunk::round_index()` is local to its invoking batch; seeds are frozen for that
+batch and snapshots for that round. The private batch-owned transport combines
+this index with word width, world count and actual buffer retention. Growth or
+replacement forces fresh writes. No pointer, global index or copied host mask
+serves as a cache key. The upload receipt is installed after queue submission;
+an interrupted read invalidates the context and discards that transport. Each
+new public batch starts fresh, even when its round numbers and layout match.
+
+Actual upload-byte statistics omit those reused prefixes; the byte ceiling
+continues to include the conservative full active-input host allowance and all
+retained device capacity. Logical source work and device instance counts are
+unchanged. The immutable-round law remains the correctness premise; host metadata
+and GPU buffer ownership/queue order must implement it, and physical behavior
+requires qualification. Dispatch/readback remains synchronous at this boundary.

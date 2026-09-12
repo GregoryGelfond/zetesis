@@ -241,6 +241,7 @@ impl<E: std::error::Error + 'static> std::error::Error for Failure<E> {
 /// A backend evaluates each record against one world's snapshot and frozen seed,
 /// emits only newly true heads, and sets its constraint word to zero or one.
 pub struct Chunk<'a> {
+    round_index: u64,
     words: usize,
     worlds: usize,
     catalog_atoms: usize,
@@ -251,6 +252,15 @@ pub struct Chunk<'a> {
 }
 
 impl Chunk<'_> {
+    /// Zero-based immutable-round index within this invoking batch only. It is
+    /// not a globally unique identity: a new batch starts at zero. Snapshots
+    /// remain unchanged within this round except for zero-filled width growth;
+    /// seeds remain frozen throughout the batch. A cache must own its batch
+    /// boundary and include the current layout when reusing either input.
+    #[must_use]
+    pub const fn round_index(&self) -> u64 {
+        self.round_index
+    }
     /// Current bitset width per world, grown only as catalog IDs are demanded.
     #[must_use]
     pub const fn words(&self) -> usize {
@@ -921,6 +931,7 @@ impl State {
         }
         control.poll()?;
         let chunk = Chunk {
+            round_index: progress.rounds,
             words: self.words,
             worlds,
             catalog_atoms: self.atoms.len(),

@@ -767,3 +767,89 @@ fn qualify_cancelled_replacement(backend: GpuBackendPreference) {
     assert!(cancelled_replacement);
     assert!(matches!(failure.cause, lazy::Cause::Execution(_)));
 }
+
+fn qualify_immutable_uploads(backend: GpuBackendPreference) {
+    let mut oracle = oracle(backend);
+    let fact = |name: &str| {
+        Template::new(
+            Some(AtomPattern::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap()),
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        )
+    };
+    let program = Program::new(vec![fact("a"), fact("b")], AdmissionLimits::default()).unwrap();
+    let seeds = [Seed::new(&program, []).unwrap()];
+    for selection in [lazy::SourceSelection::Union, lazy::SourceSelection::Worlds] {
+        // A fresh public batch must upload again, even on the same oracle and
+        // with identical layout/round numbers. Four chunks span two rounds.
+        let mut cached = None;
+        oracle.statistics = LazyGpuStatistics::default();
+        let mut sizes = Vec::new();
+        let batch = lazy::check_with_source(
+            &program,
+            &seeds,
+            lazy::Limits {
+                max_chunk_rules: 1,
+                ..Default::default()
+            },
+            selection,
+            &Control::default(),
+            |chunk| {
+                let before = oracle.statistics.uploaded_bytes;
+                let actual = oracle.execute(
+                    chunk,
+                    GpuLimits::default(),
+                    &Control::default(),
+                    &mut cached,
+                )?;
+                assert_eq!(actual, lazy::evaluate(chunk).unwrap());
+                sizes.push(oracle.statistics.uploaded_bytes - before);
+                Ok::<_, crate::GpuError>(actual)
+            },
+        )
+        .unwrap();
+        assert_eq!(sizes, [44, 36, 40, 36]);
+        assert_eq!(oracle.statistics.uploaded_bytes, 156);
+        assert_eq!(oracle.statistics.dispatches, 4);
+        assert_eq!(batch.progress.rounds, 2);
+        assert_eq!(
+            batch.checks[0]
+                .closure()
+                .atoms()
+                .iter()
+                .map(|atom| atom.predicate().name())
+                .collect::<Vec<_>>(),
+            ["a", "b"]
+        );
+        // Actual public entry owns and resets its transport; it has a default
+        // larger chunk, so two rounds upload both facts together: 64 then60.
+        let public = oracle
+            .check_batch_with_source(
+                &program,
+                &seeds,
+                lazy::Limits::default(),
+                GpuLimits::default(),
+                selection,
+                &Control::default(),
+            )
+            .unwrap();
+        assert_eq!(public.checks[0].closure(), batch.checks[0].closure());
+        assert_eq!(oracle.statistics.uploaded_bytes, 124);
+        assert_eq!(oracle.statistics.transport_allocations, 1);
+    }
+    println!("lazy upload bytes per split chunk=[44,36,40,36]; total=156; public batch reset=124");
+}
+
+#[test]
+#[ignore = "requires actual Metal; checks immutable input upload reuse"]
+fn metal_lazy_uploads_reuse_only_current_batch_inputs() {
+    qualify_immutable_uploads(GpuBackendPreference::Metal);
+}
+
+#[test]
+#[ignore = "requires actual Vulkan; checks immutable input upload reuse"]
+fn vulkan_lazy_uploads_reuse_only_current_batch_inputs() {
+    qualify_immutable_uploads(GpuBackendPreference::Vulkan);
+}

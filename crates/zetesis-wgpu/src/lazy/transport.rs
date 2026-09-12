@@ -1,4 +1,5 @@
-//! Batch-owned buffers: reuse capacity, replace every active input and delta.
+//! Batch-owned buffers: preserve valid immutable prefixes, replace source chunks
+//! and clear every active output before dispatch.
 
 use zetesis_cpu::lazy;
 
@@ -8,6 +9,7 @@ use super::plan::{Retention, Selection};
 use super::{Capacity, Plan, UNIFORM_BYTES};
 
 pub(super) struct Transport {
+    pub(super) upload: Option<super::upload::Receipt>,
     pub(super) capacity: Capacity,
     buffers: Buffers<wgpu::Buffer>,
     group: wgpu::BindGroup,
@@ -139,6 +141,7 @@ impl Transport {
                 ],
             });
         Self {
+            upload: None,
             capacity,
             buffers,
             group,
@@ -163,24 +166,33 @@ impl Transport {
     }
 
     pub(super) fn submit(
-        &self,
+        &mut self,
         runtime: &Runtime,
         chunk: &lazy::Chunk<'_>,
         plan: &Plan,
+        uploads: super::upload::Uploads,
     ) -> wgpu::SubmissionIndex {
         let dimensions = plan.params();
         runtime
             .queue()
             .write_buffer(&self.buffers.uniform, 0, bytemuck::cast_slice(&dimensions));
-        for (buffer, words) in self.buffers.inputs.iter().zip([
-            chunk.offsets(),
-            chunk.records(),
-            chunk.snapshots(),
-            chunk.seeds(),
-        ]) {
-            runtime
-                .queue()
-                .write_buffer(buffer, 0, bytemuck::cast_slice(words));
+        for ((buffer, words), required) in self
+            .buffers
+            .inputs
+            .iter()
+            .zip([
+                chunk.offsets(),
+                chunk.records(),
+                chunk.snapshots(),
+                chunk.seeds(),
+            ])
+            .zip([true, true, uploads.snapshots, uploads.seeds])
+        {
+            if required {
+                runtime
+                    .queue()
+                    .write_buffer(buffer, 0, bytemuck::cast_slice(words));
+            }
         }
         let mut encoder =
             runtime
@@ -208,7 +220,9 @@ impl Transport {
             0,
             plan.result_bytes,
         );
-        runtime.queue().submit(Some(encoder.finish()))
+        let submission = runtime.queue().submit(Some(encoder.finish()));
+        self.upload = Some(chunk.into());
+        submission
     }
 }
 

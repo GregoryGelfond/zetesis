@@ -4,7 +4,8 @@
 //! kernel independently checks each world's positives and frozen gates and
 //! derives its head delta. No completed CPU closure or complete ground graph is
 //! uploaded. One batch reuses bounded transport capacity across chunks/rounds;
-//! every active input and output is refreshed before each dispatch. Automatic
+//! immutable input prefixes are reused only within their batch/round and layout.
+//! Every active output is cleared before dispatch. Automatic
 //! performance selection remains a separate policy.
 
 use std::borrow::Cow;
@@ -19,6 +20,7 @@ use crate::{GpuError, GpuErrorKind, GpuInfo, GpuLimits, GpuOptions, GpuSelection
 mod plan;
 mod transport;
 mod statistics;
+mod upload;
 
 pub use statistics::{LazyBufferUsage, LazyTransportReplacements, LazyTransportUsage};
 
@@ -138,6 +140,10 @@ impl GpuLazyOracle {
     /// matching result buffers can survive. Input slack is released when needed
     /// to preserve admission of the exact shape. All buffers are dropped on each
     /// batch exit; driver-private deferred retirement is not counted.
+    /// Frozen seeds are uploaded once per retained layout; snapshots once per
+    /// retained layout and immutable source round. Replaced input buffers need
+    /// fresh writes. Chunk records, offsets, uniform and cleared output remain
+    /// per dispatch. Round indices have meaning only in this batch-owned scope.
     ///
     /// # Errors
     /// Returns no completed check on interrupted source coverage, capacity,
@@ -314,10 +320,15 @@ impl GpuLazyOracle {
         cached: &mut Option<Transport>,
     ) -> Result<Vec<u32>, GpuError> {
         let device = self.runtime.device();
-        let selection = Selection::new(
+        let mut selection = Selection::new(
             cached.as_ref().map(|transport| transport.capacity),
             plan,
             limits.max_batch_bytes,
+        );
+        selection.uploads = upload::Uploads::needed(
+            cached.as_ref().and_then(|transport| transport.upload),
+            chunk.into(),
+            selection.retention,
         );
         let counters = self.statistics.submitted(plan, selection)?;
         if !selection.transition.is_reuse() {
@@ -326,10 +337,10 @@ impl GpuLazyOracle {
                 |previous| previous.replace(&self.runtime, selection),
             ));
         }
-        let transport = cached.as_ref().ok_or_else(|| {
+        let transport = cached.as_mut().ok_or_else(|| {
             GpuError::new(GpuErrorKind::Device, "lazy transport is not initialized")
         })?;
-        let submission = transport.submit(&self.runtime, chunk, plan);
+        let submission = transport.submit(&self.runtime, chunk, plan, selection.uploads);
         self.statistics = counters;
         let start = std::time::Instant::now();
         let result = runtime::read_polled(
@@ -374,7 +385,7 @@ impl LazyGpuStatistics {
                 .ok_or_else(capacity)?,
             uploaded_bytes: self
                 .uploaded_bytes
-                .checked_add(plan.uploaded_bytes)
+                .checked_add(selection.uploads.bytes(plan)?)
                 .ok_or_else(capacity)?,
             transport_allocations: self
                 .transport_allocations
