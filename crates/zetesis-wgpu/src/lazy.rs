@@ -10,7 +10,7 @@
 use std::borrow::Cow;
 use std::time::Duration;
 
-use zetesis_core::{Program, Seed};
+use zetesis_core::{Program, Seed, SeedView};
 use zetesis_cpu::{Control, lazy};
 
 use crate::runtime::{self, DeviceProfile, ErrorScopes, Runtime};
@@ -187,6 +187,57 @@ impl GpuLazyOracle {
         selection: lazy::SourceSelection,
         control: &Control,
     ) -> Result<lazy::Batch, lazy::Failure<GpuError>> {
+        self.check_batch_with_source_views(
+            program,
+            seeds.iter().map(Seed::view),
+            source_limits,
+            limits,
+            selection,
+            control,
+        )
+    }
+
+    /// Check borrowed candidate occurrences through the same lazy source rounds.
+    /// No owned seed or intermediate view vector is materialized. The iterator
+    /// preserves exact input order and must be replayable for source admission
+    /// and final seed/closure agreement. Device work starts only for emitted
+    /// source chunks; constructing a view does not compile a static graph.
+    ///
+    /// # Errors
+    /// Preserves [`Self::check_batch`]'s failure and incomplete-coverage contract.
+    pub fn check_batch_views<'seed>(
+        &mut self,
+        program: &Program,
+        seeds: impl ExactSizeIterator<Item = SeedView<'seed>> + Clone,
+        source_limits: lazy::Limits,
+        limits: GpuLimits,
+        control: &Control,
+    ) -> Result<lazy::Batch, lazy::Failure<GpuError>> {
+        self.check_batch_with_source_views(
+            program,
+            seeds,
+            source_limits,
+            limits,
+            lazy::SourceSelection::Union,
+            control,
+        )
+    }
+
+    /// Check borrowed candidate occurrences using explicit host source selection.
+    /// The implementation and device protocol are shared with
+    /// [`Self::check_batch_with_source`]; views change input ownership only.
+    ///
+    /// # Errors
+    /// Preserves [`Self::check_batch_with_source`]'s failure and coverage contract.
+    pub fn check_batch_with_source_views<'seed>(
+        &mut self,
+        program: &Program,
+        seeds: impl ExactSizeIterator<Item = SeedView<'seed>> + Clone,
+        source_limits: lazy::Limits,
+        limits: GpuLimits,
+        selection: lazy::SourceSelection,
+        control: &Control,
+    ) -> Result<lazy::Batch, lazy::Failure<GpuError>> {
         self.statistics = LazyGpuStatistics::default();
         let context = self.runtime.context.clone();
         let _lease = context.lease().map_err(|error| lazy::Failure {
@@ -202,10 +253,14 @@ impl GpuLazyOracle {
             progress: lazy::Progress::default(),
         })?;
         let mut transport = None;
-        let result =
-            lazy::check_with_source(program, seeds, source_limits, selection, control, |chunk| {
-                self.execute(chunk, limits, control, &mut transport)
-            });
+        let result = lazy::check_with_source_views(
+            program,
+            seeds,
+            source_limits,
+            selection,
+            control,
+            |chunk| self.execute(chunk, limits, control, &mut transport),
+        );
         if matches!(
             &result,
             Err(lazy::Failure {

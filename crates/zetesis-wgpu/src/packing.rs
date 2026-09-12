@@ -3,7 +3,7 @@
 
 use std::num::NonZeroU32;
 
-use zetesis_core::{GroundProgram, Program, Seed};
+use zetesis_core::{GroundProgram, Program, SeedView};
 
 use crate::{GpuCheck, GpuError, GpuErrorKind, GpuLimits, MAX_ATOMS, UNIFORM_BYTES};
 
@@ -226,7 +226,6 @@ fn accounted_bytes(
         transport_bytes,
         UNIFORM_BYTES,
         seed_bytes,
-        bytes(graph.word_count)?,
         returned_words,
         result_metadata,
     ]
@@ -286,20 +285,31 @@ pub(crate) struct PackedSeeds<'program> {
 }
 
 impl<'program> PackedSeeds<'program> {
-    pub(crate) fn new(
+    pub(crate) fn new<'seed>(
         program: &'program GroundProgram,
-        seeds: &[Seed],
+        seeds: impl ExactSizeIterator<Item = SeedView<'seed>>,
         plan: &BatchPlan,
     ) -> Result<Self, GpuError> {
         let mut seed_words = reserved(plan.seed_words)?;
-        for seed in seeds {
-            let words = program
-                .seed_words(seed)
-                .map_err(|error| GpuError::new(GpuErrorKind::Seed, error.to_string()))?;
-            validate_words(&words, plan.atom_count, plan.word_count)?;
-            seed_words.extend_from_slice(&words);
-        }
         seed_words.resize(plan.seed_words, 0);
+        let expected = plan.world_count as usize;
+        let mut packed = 0;
+        for (world, seed) in seeds.enumerate() {
+            if world >= expected {
+                return Err(seed_count_error());
+            }
+            let start = world * plan.word_count;
+            let words = &mut seed_words[start..][..plan.word_count];
+            program
+                .seed_words_into(seed, words)
+                .map_err(|error| GpuError::new(GpuErrorKind::Seed, error.to_string()))?;
+            validate_words(words, plan.atom_count, plan.word_count)?;
+            packed += 1;
+        }
+        if packed != expected {
+            return Err(seed_count_error());
+        }
+
         Ok(Self {
             params: [
                 plan.atom_count,
@@ -315,6 +325,13 @@ impl<'program> PackedSeeds<'program> {
             gate_atoms: program.gate_atom_ids(),
         })
     }
+}
+
+fn seed_count_error() -> GpuError {
+    GpuError::new(
+        GpuErrorKind::Seed,
+        "candidate count disagrees with admitted batch",
+    )
 }
 
 pub(crate) fn decode(
@@ -516,7 +533,8 @@ mod tests {
             .expect("fits");
         let graph_plan = GraphPlan::new(&graph, &wgpu::Limits::default()).expect("graph fits");
         let packed = PackedGraph::new(&graph, &graph_plan).expect("pack graph");
-        let batch = PackedSeeds::new(&graph, &[empty, selected], &plan).expect("pack seeds");
+        let batch = PackedSeeds::new(&graph, [empty, selected].iter().map(Seed::view), &plan)
+            .expect("pack seeds");
         assert_eq!(batch.params, [3, 1, 3, 2, 1, 0, 0, 0]);
         assert_eq!(
             packed.rules,
@@ -567,7 +585,7 @@ mod tests {
         let other = fixture();
         let foreign = Seed::new(other.program(), []).expect("other program seed");
         assert!(
-            matches!(PackedSeeds::new(&graph, &[foreign], &plan), Err(error) if error.kind() == GpuErrorKind::Seed)
+            matches!(PackedSeeds::new(&graph, [foreign].iter().map(Seed::view), &plan), Err(error) if error.kind() == GpuErrorKind::Seed)
         );
     }
 
@@ -654,3 +672,7 @@ mod budget_contract_tests;
 #[cfg(test)]
 #[path = "../tests/packing/readback.rs"]
 mod readback_contract_tests;
+
+#[cfg(test)]
+#[path = "../tests/packing/seeds.rs"]
+mod seed_contract_tests;

@@ -63,8 +63,8 @@ fn assert_same_plan_and_semantics(
         Seed::new(program.program(), []).unwrap(),
         Seed::new(program.program(), [program.atoms()[0].clone()]).unwrap(),
     ];
-    let before = PackedSeeds::new(program, &seeds, baseline).unwrap();
-    let after = PackedSeeds::new(program, &seeds, retried).unwrap();
+    let before = PackedSeeds::new(program, seeds.iter().map(Seed::view), baseline).unwrap();
+    let after = PackedSeeds::new(program, seeds.iter().map(Seed::view), retried).unwrap();
     assert_eq!(before.params, after.params);
     assert_eq!(before.seeds, after.seeds);
     assert_eq!(after.params, [2, 1, 3, 2, 1, 0, 0, 0]);

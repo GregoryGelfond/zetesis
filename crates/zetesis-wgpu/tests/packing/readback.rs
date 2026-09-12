@@ -95,7 +95,7 @@ fn complete_records_preserve_every_rejection_reason() {
     let graph = fixture();
     let seeds = seeds(&graph);
     let plan = plan(&graph, seeds.len());
-    let packed = PackedSeeds::new(&graph, &seeds, &plan).unwrap();
+    let packed = PackedSeeds::new(&graph, seeds.iter().map(Seed::view), &plan).unwrap();
     let records = reply(&graph, &seeds, &plan);
     let checks = decode(&records, &plan, &packed).unwrap();
     assert_matches_cpu(&graph, &seeds, &checks);
@@ -113,7 +113,7 @@ fn zero_atom_worlds_still_require_complete_records() {
     ] {
         let seeds = [Seed::new(graph.program(), []).unwrap()];
         let plan = plan(&graph, seeds.len());
-        let packed = PackedSeeds::new(&graph, &seeds, &plan).unwrap();
+        let packed = PackedSeeds::new(&graph, seeds.iter().map(Seed::view), &plan).unwrap();
         let records = reply(&graph, &seeds, &plan);
         assert_eq!(records.len(), 4);
         assert_matches_cpu(&graph, &seeds, &decode(&records, &plan, &packed).unwrap());
@@ -136,7 +136,7 @@ fn an_unwritten_record_is_never_logical_acceptance() {
     )]);
     let seeds = [Seed::new(graph.program(), []).unwrap()];
     let plan = plan(&graph, 1);
-    let packed = PackedSeeds::new(&graph, &seeds, &plan).unwrap();
+    let packed = PackedSeeds::new(&graph, seeds.iter().map(Seed::view), &plan).unwrap();
     let records = reply(&graph, &seeds, &plan);
     assert_matches_cpu(&graph, &seeds, &decode(&records, &plan, &packed).unwrap());
     assert_eq!(
@@ -152,7 +152,7 @@ fn one_missing_record_refuses_the_entire_batch() {
     let graph = fixture();
     let seeds = seeds(&graph);
     let plan = plan(&graph, seeds.len());
-    let packed = PackedSeeds::new(&graph, &seeds, &plan).unwrap();
+    let packed = PackedSeeds::new(&graph, seeds.iter().map(Seed::view), &plan).unwrap();
     let complete = reply(&graph, &seeds, &plan);
     let stride = 4 + graph.word_count();
     for world in 0..seeds.len() {
@@ -170,7 +170,7 @@ fn every_record_requires_the_current_epoch() {
     let graph = fixture();
     let seeds = seeds(&graph);
     let plan = plan(&graph, seeds.len());
-    let packed = PackedSeeds::new(&graph, &seeds, &plan).unwrap();
+    let packed = PackedSeeds::new(&graph, seeds.iter().map(Seed::view), &plan).unwrap();
     let complete = reply(&graph, &seeds, &plan);
     let stride = 4 + graph.word_count();
     for world in 0..seeds.len() {
@@ -190,7 +190,7 @@ fn every_record_requires_the_completion_marker() {
     let graph = fixture();
     let seeds = seeds(&graph);
     let plan = plan(&graph, seeds.len());
-    let packed = PackedSeeds::new(&graph, &seeds, &plan).unwrap();
+    let packed = PackedSeeds::new(&graph, seeds.iter().map(Seed::view), &plan).unwrap();
     let complete = reply(&graph, &seeds, &plan);
     let stride = 4 + graph.word_count();
     for world in 0..seeds.len() {
@@ -210,7 +210,7 @@ fn records_cannot_be_reordered() {
     let graph = fixture();
     let seeds = seeds(&graph);
     let plan = plan(&graph, seeds.len());
-    let packed = PackedSeeds::new(&graph, &seeds, &plan).unwrap();
+    let packed = PackedSeeds::new(&graph, seeds.iter().map(Seed::view), &plan).unwrap();
     let complete = reply(&graph, &seeds, &plan);
     let stride = 4 + graph.word_count();
     for world in 1..seeds.len() {
@@ -230,7 +230,7 @@ fn a_duplicate_record_cannot_replace_another_world() {
     let graph = fixture();
     let seeds = seeds(&graph);
     let plan = plan(&graph, seeds.len());
-    let packed = PackedSeeds::new(&graph, &seeds, &plan).unwrap();
+    let packed = PackedSeeds::new(&graph, seeds.iter().map(Seed::view), &plan).unwrap();
     let complete = reply(&graph, &seeds, &plan);
     let stride = 4 + graph.word_count();
     for world in 1..seeds.len() {
@@ -248,7 +248,7 @@ fn readback_requires_the_exact_dispatched_shape() {
     let graph = fixture();
     let seeds = seeds(&graph);
     let plan = plan(&graph, seeds.len());
-    let packed = PackedSeeds::new(&graph, &seeds, &plan).unwrap();
+    let packed = PackedSeeds::new(&graph, seeds.iter().map(Seed::view), &plan).unwrap();
     let complete = reply(&graph, &seeds, &plan);
     for length in 0..complete.len() {
         assert_eq!(
@@ -271,7 +271,7 @@ fn unused_closure_tail_bits_are_refused() {
     let graph = fixture();
     let seeds = seeds(&graph);
     let plan = plan(&graph, seeds.len());
-    let packed = PackedSeeds::new(&graph, &seeds, &plan).unwrap();
+    let packed = PackedSeeds::new(&graph, seeds.iter().map(Seed::view), &plan).unwrap();
     let complete = reply(&graph, &seeds, &plan);
     let stride = 4 + graph.word_count();
     for world in 0..seeds.len() {
@@ -291,7 +291,7 @@ fn unknown_verdict_bits_are_refused() {
     let graph = fixture();
     let seeds = seeds(&graph);
     let plan = plan(&graph, seeds.len());
-    let packed = PackedSeeds::new(&graph, &seeds, &plan).unwrap();
+    let packed = PackedSeeds::new(&graph, seeds.iter().map(Seed::view), &plan).unwrap();
     let complete = reply(&graph, &seeds, &plan);
     let stride = 4 + graph.word_count();
     for bit in 2..32 {
@@ -310,7 +310,7 @@ fn gate_projection_is_checked_against_the_original_seed() {
     let graph = fixture();
     let seeds = seeds(&graph);
     let plan = plan(&graph, seeds.len());
-    let packed = PackedSeeds::new(&graph, &seeds, &plan).unwrap();
+    let packed = PackedSeeds::new(&graph, seeds.iter().map(Seed::view), &plan).unwrap();
     let complete = reply(&graph, &seeds, &plan);
     let stride = 4 + graph.word_count();
     for world in 0..seeds.len() {

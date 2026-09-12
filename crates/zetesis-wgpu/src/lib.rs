@@ -32,7 +32,7 @@ mod relation;
 use std::fmt;
 use std::time::Duration;
 
-use zetesis_core::{GroundProgram, Seed};
+use zetesis_core::{GroundProgram, Seed, SeedView};
 
 use packing::{BatchPlan, GraphPlan, PackedGraph, PackedSeeds};
 use residency::ResidentGraph;
@@ -376,6 +376,24 @@ impl GpuOracle {
         seeds: &[Seed],
         limits: GpuLimits,
     ) -> Result<Vec<GpuCheck>, GpuError> {
+        self.check_batch_views(program, seeds.iter().map(Seed::view), limits)
+    }
+
+    /// Check the same static candidate occurrences through borrowed seed views.
+    /// The cloneable exact-size iterator preserves input order across admission
+    /// and packing. Wrapping owned seeds or shared selections allocates no view
+    /// vector and copies no atom payload. No source grounding occurs here.
+    /// Residency, submission identity and independent projection validation are
+    /// the same as [`Self::check_batch`].
+    ///
+    /// # Errors
+    /// Preserves [`Self::check_batch`]'s identity, capacity and device failures.
+    pub fn check_batch_views<'seed>(
+        &mut self,
+        program: &GroundProgram,
+        seeds: impl ExactSizeIterator<Item = SeedView<'seed>> + Clone,
+        limits: GpuLimits,
+    ) -> Result<Vec<GpuCheck>, GpuError> {
         self.last_batch_stats = None;
         let context = self.runtime.context.clone();
         let _lease = context.lease()?;
@@ -393,13 +411,14 @@ impl GpuOracle {
             .as_ref()
             .or_else(|| self.resident.as_ref().map(|resident| &resident.plan))
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing graph plan"))?;
-        if seeds.is_empty() {
+        let candidate_count = seeds.len();
+        if candidate_count == 0 {
             return Ok(Vec::new());
         }
         let epoch = packing::next_epoch(self.epoch)?;
         let plan = BatchPlan::for_graph(
             graph,
-            seeds.len(),
+            candidate_count,
             limits,
             self.runtime.limits(),
             fresh_graph.is_some(),
@@ -407,7 +426,7 @@ impl GpuOracle {
         )?;
         // Refuse foreign seeds before replacing resident resources or packing.
         if seeds
-            .iter()
+            .clone()
             .any(|seed| !program.program().same_instance(seed.program()))
         {
             return Err(GpuError::new(

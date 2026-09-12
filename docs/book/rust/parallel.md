@@ -84,3 +84,21 @@ protocol. The required adapter and resource validation remain runtime concerns.
 Its explicit source-selection wrapper does not change ordinary CLI defaults.
 The [execution chapter](../architecture/execution.md) explains why per-world
 isolation and whole-round commits are semantic requirements.
+
+## Borrowed GPU candidate inputs
+
+`GpuOracle::check_batch_views` accepts a cloneable exact-size iterator of `SeedView`
+values for an already compiled `GroundProgram`. An owned batch maps `Seed::view`;
+a shared batch maps `SeedSelection::view`. The existing `check_batch` method
+uses this same implementation. Views retain the original program identity and
+complete true set without copying atom payloads or allocating a view vector.
+Packing writes directly into each candidate's slice of one checked host mask
+buffer, preserving occurrence order and zero tail bits. The batch byte allowance
+includes that buffer; it no longer needs a separate per-candidate word scratch.
+
+`GpuLazyOracle::check_batch_views` and `check_batch_with_source_views` supply the same views
+to the CPU library's lazy round coordinator and use the existing device chunk
+evaluator. They preserve the source-selection, final coverage, cancellation and
+failure contracts of the owned-seed methods. View construction does not trigger
+GPU discovery or static grounding. Lazy batch atom IDs remain independent of
+any compiled graph's dense IDs.

@@ -1,10 +1,12 @@
 //! Explicit physical API qualification for lazy source-owned round snapshots.
 #[path = "support/physical.rs"]
 mod physical;
+#[path = "support/seed_views.rs"]
+mod seed_views;
 
 use zetesis_core::{
-    AdmissionLimits, Atom, AtomPattern, GroundProgram, Predicate, Program, Seed, StaticLimits,
-    Template, Term, Value,
+    AdmissionLimits, Atom, AtomPattern, GroundProgram, Predicate, Program, Seed, SeedSelection,
+    StaticLimits, Template, Term, Value,
 };
 use zetesis_cpu::{Control, Limits, check, lazy};
 use zetesis_wgpu::{GpuLazyOracle, GpuLimits, GpuOptions};
@@ -322,13 +324,14 @@ fn qualify_source_selections_preserve_each_frozen_closure(backend: physical::Bac
             .unwrap()
         })
         .collect();
+    let selections = seed_views::selections(&seeds);
     let mut oracle = oracle(backend);
     for chunk in [1, 7] {
         for selection in [lazy::SourceSelection::Union, lazy::SourceSelection::Worlds] {
             let batch = oracle
-                .check_batch_with_source(
+                .check_batch_with_source_views(
                     &program,
-                    &seeds,
+                    selections.iter().map(SeedSelection::view),
                     lazy::Limits {
                         max_chunk_rules: chunk,
                         ..Default::default()

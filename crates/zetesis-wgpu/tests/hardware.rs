@@ -7,11 +7,14 @@
 
 #[path = "support/physical.rs"]
 mod physical;
+#[path = "support/seed_views.rs"]
+mod seed_views;
 
 use std::collections::BTreeSet;
 
 use zetesis_core::{
-    AdmissionLimits, AtomPattern, GroundProgram, Predicate, Program, Seed, StaticLimits, Template,
+    AdmissionLimits, AtomPattern, GroundProgram, Predicate, Program, Seed, SeedSelection,
+    StaticLimits, Template,
 };
 use zetesis_wgpu::{GpuCheck, GpuLimits, GpuOptions, GpuOracle};
 
@@ -147,8 +150,13 @@ fn compare(oracle: &mut GpuOracle, graph: &GroundProgram) -> usize {
     // The next epoch uses reversed candidate order and the same immutable
     // program. Any leaked candidate latches or stale lane mapping is visible.
     let reversed: Vec<_> = candidates.into_iter().rev().collect();
+    let selections = seed_views::selections(&reversed);
     let repeated = oracle
-        .check_batch(graph, &reversed, GpuLimits::default())
+        .check_batch_views(
+            graph,
+            selections.iter().map(SeedSelection::view),
+            GpuLimits::default(),
+        )
         .expect("subsequent epoch succeeds");
     assert_closures(graph, &reversed, &repeated);
     assert!(checks.iter().rev().eq(repeated.iter()));
