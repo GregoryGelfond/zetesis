@@ -33,6 +33,13 @@ assert!(models.exhausted());
 outside its declared universe. `solve_with_statistics` additionally returns
 work, decision, propagation and conflict counts.
 
+Admitted clauses share one packed literal arena. `Cnf::clauses()` returns an
+ordered exact-size iterator of borrowed `Clause` values; `Cnf::clause(index)`
+provides checked random access. A clause exposes `len`, `is_empty`, `get` and
+literal iteration. These views preserve empty clauses and canonical literal
+order without allocating. Public input `Literal` values retain their full
+index range until admission; packing introduces no additional admitted bound.
+
 `check(&Theory, &Interpretation, Limits, &Control)` returns
 `Check::Stable`, `Check::NotModel`, `Check::NonMinimal(witness)` or
 `Check::Inconclusive(reason)`. `Check::accepted()` is true only for `Stable`.

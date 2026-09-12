@@ -61,6 +61,26 @@ Its Boolean search representation does not redefine ASP as classical
 satisfiability: auxiliary encoding variables do not participate in answer-set
 identity or minimality.
 
+Both paths can restrict candidate generation by necessary conditions. A normal
+source constraint supplies a forbidden positive gate conjunction when its
+remaining antecedents are witnessed by actual unconditional facts. The binary
+seed cursor can skip a whole interval while those gate bits remain true.
+Possible support alone cannot supply that witness. Ineligible constraints stay
+with the full closure check.
+
+For a theory whose complete asserted-head grammar is ordinary disjunction,
+every true atom in an answer set must have an original producer whose body is
+true and whose other head atoms are false. Otherwise removing that atom leaves
+a proper-subset model of the reduct. The resulting support condition restricts
+only outer proposals; independent producers can still support several atoms in
+one disjunctive head. Choices and other rich asserted heads decline this
+certificate. The original theory and frozen reduct are unchanged.
+
+The [gate restriction laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/GateRestrictions.lean)
+and [disjunctive support laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DisjunctiveSupport.lean)
+state these necessary conditions. Source binding coverage and the executable
+certificate constructors retain separate refinement obligations.
+
 Exact projection exclusions have one owner across candidate restrictions. The
 outer cursor retains an index of previously checked semantic interpretations;
 strengthening the candidate query rebuilds its traversal while preserving that
@@ -70,6 +90,15 @@ exclusion index before becoming another candidate. The original theory and its
 reduct remain separate from both operations. The
 [projection contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/docs/candidate-pruning.md)
 states its transactional insertion and logical admission units.
+
+Admitted classical queries use a single packed literal arena and clause-end
+offsets. A literal occupies one machine word; repeated offsets preserve empty
+clauses. Public `Literal` values remain lossless inputs until range admission.
+`Cnf::clauses()` yields ordered borrowed `Clause` views, and `Cnf::clause(index)`
+provides checked access. Decoding allocates nothing and preserves variable,
+polarity and canonical order. This is a query representation change, with
+[separate arithmetic laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/PackedQueryLiterals.lean);
+it does not replace the formula reduct or establish a process-memory bound.
 
 Local search operations can specialize while preserving the candidate sequence
 of completed search. In a three-literal clause, two distinct watched positions

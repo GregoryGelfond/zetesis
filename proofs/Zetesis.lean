@@ -99,3 +99,7 @@ import Zetesis.ColumnRelations
 import Zetesis.DomainContraction
 import Zetesis.Observations
 import Zetesis.SourceSupport
+import Zetesis.BindingScopes
+import Zetesis.DisjunctiveSupport
+import Zetesis.GateRestrictions
+import Zetesis.PackedQueryLiterals
