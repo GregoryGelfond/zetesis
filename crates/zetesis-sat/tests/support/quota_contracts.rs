@@ -31,7 +31,7 @@ fn compare_query(cnf: &Cnf, limits: SearchLimits, spent: SearchStatistics) -> Se
     let expected = outcome(query(cnf, &mut local));
     let shared = SharedBudget::new(limits, spent);
     let mut worker = Budget {
-        quota: &shared,
+        quota: shared.lease(&control),
         limits,
         control: &control,
         statistics: SearchStatistics::default(),
@@ -43,6 +43,7 @@ fn compare_query(cnf: &Cnf, limits: SearchLimits, spent: SearchStatistics) -> Se
         local.statistics.decisions - spent.decisions
     );
     let mut joined = worker.statistics;
+    drop(worker.quota);
     shared.record(&mut joined);
     joined.propagations += spent.propagations;
     joined.conflicts += spent.conflicts;
@@ -126,7 +127,7 @@ fn failed_decision_reserves_work_first_and_cancellation_precedes_either_quota() 
     };
     let shared = SharedBudget::new(limits, SearchStatistics::default());
     let mut worker = Budget {
-        quota: &shared,
+        quota: shared.lease(&control),
         limits,
         control: &control,
         statistics: SearchStatistics::default(),
@@ -146,6 +147,7 @@ fn failed_decision_reserves_work_first_and_cancellation_precedes_either_quota() 
     assert_eq!(local.decide(), Err(Incomplete::Cancelled));
     assert_eq!(worker.decide(), Err(Incomplete::Cancelled));
     let mut joined = SearchStatistics::default();
+    drop(worker.quota);
     shared.record(&mut joined);
     assert_eq!(joined, local.statistics);
     assert_eq!(joined, worker.statistics);
@@ -173,7 +175,7 @@ fn the_last_representable_local_or_shared_charge_never_wraps() {
         statistics: spent,
     };
     let mut worker = Budget {
-        quota: &shared,
+        quota: shared.lease(&control),
         limits,
         control: &control,
         statistics: SearchStatistics::default(),
@@ -185,6 +187,7 @@ fn the_last_representable_local_or_shared_charge_never_wraps() {
     assert_eq!(local.decide(), Err(Incomplete::WorkLimit));
     assert_eq!(worker.decide(), Err(Incomplete::WorkLimit));
     let mut joined = worker.statistics;
+    drop(worker.quota);
     shared.record(&mut joined);
     assert_eq!(joined, local.statistics);
     assert_eq!(joined.work, u64::MAX);
@@ -228,7 +231,7 @@ fn frozen_encoding_limits_and_clauses_match_before_search() {
                 };
                 let shared = SharedBudget::new(limits, SearchStatistics::default());
                 let mut worker = Budget {
-                    quota: &shared,
+                    quota: shared.lease(&control),
                     limits,
                     control: &control,
                     statistics: SearchStatistics::default(),
@@ -255,6 +258,7 @@ fn frozen_encoding_limits_and_clauses_match_before_search() {
                 }
                 assert_eq!(local.statistics, worker.statistics);
                 let mut joined = SearchStatistics::default();
+                drop(worker.quota);
                 shared.record(&mut joined);
                 assert_eq!(joined, local.statistics);
             }

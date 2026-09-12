@@ -58,6 +58,11 @@ pub struct CompletionStatistics {
 /// work and decision ceilings. All jobs join before accounting or publication.
 /// Completed output order is independent of scheduling; a resource-limited run
 /// need not perform the same subset of work under different schedules.
+/// Shared work permits are granted to each query in bounded groups; unused
+/// permits return on every query exit and joined accounting records only work
+/// actually charged. A temporarily empty pool waits for outstanding grants,
+/// polling cooperative control between bounded timed waits. Decision permits
+/// remain individually shared. Neither policy gives a hard response deadline.
 ///
 /// Completion admits all ordered result slots and a conservative query envelope
 /// before allocating scratch. Concurrency shrinks to fit that requested
@@ -376,7 +381,7 @@ fn run(
     workspace: &mut reduct_query::Workspace,
 ) -> Outcome {
     let mut budget = Budget {
-        quota: BoundedQuota(shared),
+        quota: BoundedQuota(shared.lease(control)),
         limits: input.limits.search,
         control,
         statistics: crate::SearchStatistics::default(),

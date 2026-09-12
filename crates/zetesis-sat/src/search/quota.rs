@@ -1,6 +1,6 @@
 //! Statically selected quota ownership for local and joined parallel queries.
 
-use super::SharedBudget;
+use super::shared_budget::WorkLease;
 use crate::Incomplete;
 
 /// Reservations precede the operation's local counter increment. This policy
@@ -49,7 +49,7 @@ impl<Q: Quota> Quota for BoundedQuota<Q> {
 
 // Worker counters start at zero and measure deltas; the shared budget is seeded
 // with previously spent work and owns the cumulative reservation authority.
-impl Quota for &SharedBudget {
+impl Quota for WorkLease<'_> {
     fn work(&self, _spent: u64, _ceiling: u64) -> Result<(), Incomplete> {
         self.tick()
     }
