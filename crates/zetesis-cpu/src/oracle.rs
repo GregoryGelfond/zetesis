@@ -9,6 +9,8 @@ use zetesis_core::{
 use crate::{Control, Stop};
 
 mod window;
+mod relations;
+use relations::{Catalogs, Relational};
 pub(crate) mod restrictions;
 pub mod source;
 pub(crate) mod worlds;
@@ -46,6 +48,9 @@ pub struct Statistics {
     pub rounds: u64,
     /// Charged operations, as described by [`Limits::max_work`].
     pub work: u64,
+    /// Subset of work spent constructing, extending and probing retained typed
+    /// catalogs. Source joins and final interpretation assembly are separate.
+    pub catalog_work: u64,
     /// Fully matched enabled/filter-valid bindings visited across all rounds.
     pub bindings: u64,
     /// Distinct atoms in the final least consequence closure.
@@ -207,9 +212,9 @@ pub fn check(
         mask_bytes: 0,
     };
     let completed = least_closure(program, seed, &mut work)?;
-    let seed_mismatch = !gate_agreement(program, seed, &completed.atoms, &mut work)?;
-    work.statistics.derived_atoms = completed.atoms.len();
-    let closure = Model::new(completed.atoms);
+    let seed_mismatch = !gate_agreement(program, seed, completed.atoms.atoms(), &mut work)?;
+    work.statistics.derived_atoms = completed.atoms.atoms().len();
+    let closure = completed.atoms;
     control.poll()?;
     Ok(Check {
         program: program.clone(),
@@ -223,7 +228,7 @@ pub fn check(
 // Construction establishes a complete no-delta source scan, not constraint
 // satisfaction or agreement with the seed. Those are separate acceptance facts.
 struct CompletedClosure {
-    atoms: BTreeSet<Atom>,
+    atoms: Model,
     constraint_violated: bool,
 }
 
@@ -239,21 +244,16 @@ fn least_closure(
     seed: &Seed,
     work: &mut Work<'_>,
 ) -> Result<CompletedClosure, Stop> {
-    let mut closure: BTreeSet<Atom> = BTreeSet::new();
+    let mut closure = Catalogs::default();
     let mut constraint_violated = false;
     loop {
         work.tick()?;
-        let mut relations = Relations::new();
-        for atom in &closure {
-            work.tick()?;
-            relations.entry(atom.predicate()).or_default().push(atom);
-        }
         let mut delta = BTreeSet::new();
         for template in program.templates() {
             work.tick()?;
             visit(
                 template,
-                &relations,
+                &closure,
                 Some(seed),
                 None,
                 work,
@@ -261,7 +261,7 @@ fn least_closure(
                     work.tick()?;
                     if let Some(head) = template.head() {
                         let atom = instantiate(head, assignment)?.ok_or(Stop::InvalidProgram)?;
-                        if !closure.contains(&atom) && !delta.contains(&atom) {
+                        if !closure.contains(&atom, work)? && !delta.contains(&atom) {
                             if closure
                                 .len()
                                 .checked_add(delta.len())
@@ -283,10 +283,12 @@ fn least_closure(
         if delta.is_empty() {
             break;
         }
-        closure.extend(delta);
+        for atom in delta {
+            closure.insert(atom, work)?;
+        }
     }
     Ok(CompletedClosure {
-        atoms: closure,
+        atoms: closure.into_model(),
         constraint_violated,
     })
 }
@@ -318,7 +320,7 @@ fn gate_agreement(
 
 fn visit<'source, E: From<Stop>>(
     template: &Template,
-    relations: &Relations<'source>,
+    relations: &'source impl Relational,
     seed: Option<&Seed>,
     mut membership: Option<&mut worlds::Join<'_>>,
     work: &mut Work<'_>,
@@ -359,9 +361,7 @@ fn visit<'source, E: From<Stop>>(
             continue;
         }
         let pattern = &template.positive()[depth];
-        let tuples = relations
-            .get(pattern.predicate())
-            .map_or(&[][..], Vec::as_slice);
+        let tuples = relations.rows(pattern.predicate());
         let cursor = &mut cursors[depth];
         if cursor.is_none() {
             *cursor = Some(window::matching_prefix(pattern, tuples, &assignment, work)?);
@@ -375,7 +375,7 @@ fn visit<'source, E: From<Stop>>(
             clear(&mut assignment, &mut undo[depth]);
             continue;
         };
-        let atom = tuples[index];
+        let atom = tuples.get(index).ok_or(Stop::InvalidProgram)?;
         if bind(pattern, atom, &mut assignment, &mut undo[depth], work)?
             && guards(template, &assignment, seed, work)?
             && match membership.as_mut() {

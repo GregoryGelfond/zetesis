@@ -171,7 +171,10 @@ fn violated_constraints_preserve_complete_closure() {
     let mut work = work(&control, Limits::default().max_work);
     let completed = least_closure(&program, &seed, &mut work).unwrap();
     assert!(completed.constraint_violated);
-    assert_eq!(completed.atoms, BTreeSet::from([atom("a"), atom("b")]));
+    assert_eq!(
+        completed.atoms.atoms(),
+        &BTreeSet::from([atom("a"), atom("b")])
+    );
     assert_eq!(work.statistics.rounds, 3);
 }
 

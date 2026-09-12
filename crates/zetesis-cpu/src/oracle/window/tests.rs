@@ -48,7 +48,7 @@ fn lookup(
 ) -> Result<(Range<usize>, u64), Stop> {
     let control = Control::default();
     let mut work = Work::source(&control, limit);
-    let range = matching_prefix(pattern, rows, assignment, &mut work)?;
+    let range = matching_prefix(pattern, Rows::Borrowed(rows), assignment, &mut work)?;
     Ok((range, work.statistics.work))
 }
 

@@ -103,3 +103,4 @@ import Zetesis.BindingScopes
 import Zetesis.DisjunctiveSupport
 import Zetesis.GateRestrictions
 import Zetesis.PackedQueryLiterals
+import Zetesis.RelationExtension

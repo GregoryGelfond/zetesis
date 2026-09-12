@@ -267,8 +267,12 @@ fn gates_prune_after_their_arguments_are_bound_before_a_cartesian_join() {
         check(&program, &seed, Limits::default(), &Control::default()).expect("complete check");
     assert!(result.accepted());
     assert_eq!(result.closure().atoms().len(), 129);
+    // Compare non-catalog work with the unpruned Cartesian row population.
+    // This includes joins, rounds, gates and emission. Catalog construction
+    // and comparisons now have their own charged schedule.
+    let non_catalog_work = result.statistics().work - result.statistics().catalog_work;
     assert!(
-        result.statistics().work < 4_096,
+        non_catalog_work < u64::try_from(size * size).unwrap(),
         "{:?}",
         result.statistics()
     );

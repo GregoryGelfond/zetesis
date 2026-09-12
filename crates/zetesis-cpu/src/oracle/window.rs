@@ -9,6 +9,7 @@ use std::{cmp::Ordering, ops::Range};
 
 use zetesis_core::{Atom, AtomPattern, Value};
 
+use super::relations::Rows;
 use super::{Work, resolve};
 use crate::Stop;
 
@@ -21,11 +22,11 @@ use crate::Stop;
 /// for each returned row.
 pub(super) fn matching_prefix(
     pattern: &AtomPattern,
-    rows: &[&Atom],
+    rows: Rows<'_>,
     assignment: &[Option<&Value>],
     work: &mut Work<'_>,
 ) -> Result<Range<usize>, Stop> {
-    if rows.is_empty() {
+    if rows.len() == 0 {
         return Ok(0..0);
     }
     let mut length = 0;
@@ -39,8 +40,15 @@ pub(super) fn matching_prefix(
     if length == 0 {
         return Ok(0..rows.len());
     }
-    let compare =
-        |index, work: &mut Work<'_>| compare_prefix(pattern, rows[index], assignment, length, work);
+    let compare = |index, work: &mut Work<'_>| {
+        compare_prefix(
+            pattern,
+            rows.get(index).ok_or(Stop::InvalidProgram)?,
+            assignment,
+            length,
+            work,
+        )
+    };
     let start = boundary(0..rows.len(), compare, Ordering::is_lt, work)?;
     let end = boundary(start..rows.len(), compare, Ordering::is_le, work)?;
     Ok(start..end)

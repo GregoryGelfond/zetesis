@@ -92,6 +92,19 @@ snapshot from being invalidated while those references are live; identity and
 join tests check the concrete behavior. This does not establish source-join
 coverage or a Lean-to-Rust refinement.
 
+The scalar lazy closure retains one typed `Catalog` for each predicate. Every
+round borrows their existing ordered rows; new consequences remain separate
+until that round's complete template scan finishes. Catalogs are consumed once
+to assemble the final interpretation. This preserves the synchronous
+least-closure argument while removing per-round relation reconstruction.
+`RelationExtension` states preservation of old row reconstruction and equality
+selection when row references and dictionary meanings survive extension.
+Concrete insertion rollback, borrowed access order and catalog work accounting
+remain executable obligations. `catalog_work` is a subtotal of oracle work;
+subtracting it leaves the other charged source operations, not a runtime estimate.
+Control is polled around each bounded catalog operation. Final `Model`
+canonicalization retains its separate comparison and allocation contract.
+
 ## Representation and source laws
 
 [`ColumnRelations`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ColumnRelations.lean)
