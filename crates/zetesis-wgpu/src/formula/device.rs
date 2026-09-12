@@ -1,6 +1,7 @@
 //! Device ownership and health for the separate finite-formula profile.
 
-use super::packing::{Graph, Plan};
+use super::packing::Plan;
+use super::preparation::{Preparation, PreparedGraph};
 use super::transport::Resident;
 use super::{FormulaBatchStats, FormulaCheck, FormulaLimits, GateProjection, GpuFormulaProfile};
 use crate::runtime::ErrorScopes;
@@ -18,6 +19,13 @@ pub struct GpuFormulaOracle {
     epoch: u32,
     last: Option<FormulaBatchStats>,
     last_submission_candidates: Option<usize>,
+}
+
+struct PreparedCall {
+    fresh: Option<PreparedGraph>,
+    plan: Plan,
+    seeds: Vec<u32>,
+    stats: FormulaBatchStats,
 }
 impl GpuFormulaOracle {
     /// Require Metal and the requested physical-device policy.
@@ -186,13 +194,21 @@ impl GpuFormulaOracle {
     /// subset query. Results retain input order and no partial batch is returned.
     /// Clones of one Theory reuse its graph; independent equal theories do not.
     /// Exact candidate-count transport is replaced when that count changes.
+    /// A cold subject is prepared in O(nodes + roots + levels) host work, outside
+    /// the per-candidate device-work limit. Its upload buffers are released after
+    /// device copies are created. Pure chains retain serial truth; other DAGs
+    /// distribute independent nodes by dependency level. Narrow levels can incur
+    /// synchronization cost without useful parallelism; no crossover is assumed.
     ///
     /// # Errors
     /// Refuses foreign interpretations, insufficient setup/work/storage limits,
     /// u32 address overflow, allocation, device/poll, validation or readback
     /// failures. Execution/readback failures invalidate the entire context.
-    /// Shape, input and Busy refusals leave it reusable. A propagation limit is an
-    /// explicit residual, never a proof of stability.
+    /// Minimum shape, input and Busy refusals preserve residency. Later cold
+    /// preparation refusal releases the old resident handles and leaves a
+    /// healthy, cold context without advancing its epoch. Driver retirement is
+    /// excluded from authored byte limits. A propagation limit is an explicit
+    /// residual, never a proof of stability.
     pub fn propagate_batch(
         &mut self,
         theory: &Theory,
@@ -231,69 +247,16 @@ impl GpuFormulaOracle {
         let epoch = self.epoch.checked_add(1).ok_or_else(|| {
             GpuError::new(GpuErrorKind::Capacity, "formula epoch counter exhausted")
         })?;
-        let fresh = if self
-            .resident
-            .as_ref()
-            .is_some_and(|resident| resident.graph.theory.same_instance(theory))
-        {
-            None
-        } else {
-            Some(Graph::new(theory, self.profile.runtime.limits())?)
-        };
-        let graph = fresh
-            .as_ref()
-            .or_else(|| self.resident.as_ref().map(|resident| &resident.graph))
-            .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing formula graph"))?;
-        let plan = Plan::new(
-            graph,
-            candidates.len(),
-            limits,
-            self.profile.runtime.limits(),
-            fresh.is_some(),
-            epoch,
-        )?;
-        if candidates
-            .iter()
-            .any(|candidate| !theory.same_instance(candidate.theory()))
-        {
-            return Err(GpuError::new(
-                GpuErrorKind::Seed,
-                "candidate belongs to another Theory",
-            ));
-        }
-        let stats = FormulaBatchStats {
-            theory_uploaded: fresh.is_some(),
-            transport_allocated: fresh.is_some()
-                || self
-                    .resident
-                    .as_ref()
-                    .is_none_or(|resident| !resident.matches(&plan)),
-            resident_theory_bytes: graph.bytes,
-            resident_transport_bytes: plan.transport,
-            accounted_bytes: plan.accounted,
-        };
-        if fresh.is_some() {
-            self.resident = None;
-        } else if stats.transport_allocated
-            && let Some(resident) = self.resident.as_mut()
-        {
-            resident.transport = None;
-        }
-        let graph = fresh
-            .as_ref()
-            .or_else(|| self.resident.as_ref().map(|resident| &resident.graph))
-            .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing formula packing graph"))?;
-        let seeds = plan.pack(graph, candidates)?;
-        let packed = fresh.as_ref().map(Graph::pack).transpose()?;
+        let PreparedCall {
+            fresh,
+            plan,
+            seeds,
+            stats,
+        } = self.prepare(theory, candidates, limits, control, epoch)?;
         control.poll().map_err(GpuError::interrupted)?;
         let scopes = ErrorScopes::new(self.profile.runtime.device());
-        if let Some((graph, (nodes, roots))) = fresh.zip(packed) {
-            self.resident = Some(Resident::new(
-                self.profile.runtime.device(),
-                graph,
-                &nodes,
-                &roots,
-            ));
+        if let Some(prepared) = fresh {
+            self.resident = Some(Resident::new(self.profile.runtime.device(), prepared));
         }
         self.epoch = epoch;
         let outcome = self
@@ -316,6 +279,96 @@ impl GpuFormulaOracle {
         }
         result
     }
+
+    // All cold staging is owned and admitted before device effects. Minimum
+    // shape/identity refusals preserve residency; later cold failures leave a
+    // healthy context without a resident subject or a committed epoch.
+    fn prepare(
+        &mut self,
+        theory: &Theory,
+        candidates: &[Interpretation],
+        limits: FormulaLimits,
+        control: &Control,
+        epoch: u32,
+    ) -> Result<PreparedCall, GpuError> {
+        let (fresh, plan) = if self
+            .resident
+            .as_ref()
+            .is_some_and(|resident| resident.graph.shape.theory.same_instance(theory))
+        {
+            let resident = self.resident.as_ref().ok_or_else(|| {
+                GpuError::new(GpuErrorKind::Device, "missing admitted formula resident")
+            })?;
+            let plan = Plan::new(
+                &resident.graph,
+                candidates.len(),
+                limits,
+                self.profile.runtime.limits(),
+                false,
+                epoch,
+            )?;
+            identities(theory, candidates)?;
+            (None, plan)
+        } else {
+            let preparation = Preparation::new(
+                theory,
+                candidates.len(),
+                limits,
+                self.profile.runtime.limits(),
+                epoch,
+            )?;
+            identities(theory, candidates)?;
+            self.resident = None;
+            let (prepared, plan) = preparation.finish(self.profile.runtime.limits(), control)?;
+            (Some(prepared), plan)
+        };
+        let graph = fresh
+            .as_ref()
+            .map(|prepared| &prepared.graph)
+            .or_else(|| self.resident.as_ref().map(|resident| &resident.graph))
+            .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing formula graph"))?;
+        let stats = FormulaBatchStats {
+            theory_uploaded: fresh.is_some(),
+            transport_allocated: fresh.is_some()
+                || self
+                    .resident
+                    .as_ref()
+                    .is_none_or(|resident| !resident.matches(&plan)),
+            resident_theory_bytes: graph.schedule.bytes,
+            resident_transport_bytes: plan.transport,
+            accounted_bytes: plan.accounted,
+        };
+        if stats.transport_allocated
+            && let Some(resident) = self.resident.as_mut()
+        {
+            resident.transport = None;
+        }
+        let graph = fresh
+            .as_ref()
+            .map(|prepared| &prepared.graph)
+            .or_else(|| self.resident.as_ref().map(|resident| &resident.graph))
+            .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing formula packing graph"))?;
+        let seeds = plan.pack(graph, candidates)?;
+        Ok(PreparedCall {
+            fresh,
+            plan,
+            seeds,
+            stats,
+        })
+    }
+}
+
+fn identities(theory: &Theory, candidates: &[Interpretation]) -> Result<(), GpuError> {
+    if candidates
+        .iter()
+        .any(|candidate| !theory.same_instance(candidate.theory()))
+    {
+        return Err(GpuError::new(
+            GpuErrorKind::Seed,
+            "candidate belongs to another Theory",
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(test)]

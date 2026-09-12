@@ -2,6 +2,7 @@
 
 mod device;
 mod packing;
+mod preparation;
 mod projection;
 mod profile;
 mod transport;
@@ -18,14 +19,21 @@ pub struct FormulaLimits {
     /// Maximum candidate worlds, additionally bounded by device dispatch limits.
     pub max_candidates: usize,
     /// Conservative authored graph, transport, host packing and result bytes.
+    /// Cold preparation first admits a minimum envelope, then the complete
+    /// schedule and actual retained node/root upload-vector element capacities.
+    /// These staging buffers coexist with device copies during upload and are
+    /// released afterward. Seed/result host allowances remain requested sizes.
     /// Caller-owned inputs, allocator overhead and driver-private allocations
     /// or deferred retirement are excluded; this is not an RSS bound.
     pub max_batch_bytes: u64,
     /// Maximum complete propagation sweeps per candidate. Zero still checks
     /// original truth, then returns an explicit round-limit residual.
     pub max_rounds: u32,
-    /// Maximum charged work per candidate. Setup costs `2*nodes+atoms+roots`
-    /// for two node walks, semantic-atom initialization and root visits;
+    /// Maximum charged device work per candidate. Setup costs
+    /// `2*nodes+atoms+roots+levels` for two node walks, semantic-atom
+    /// initialization, root visits and dependency-level synchronization.
+    /// Pure chains and empty graphs select serial truth and charge zero levels;
+    /// other DAGs charge their number of occupied dependency levels.
     /// leaf nodes are visited but need no separate domain initialization store.
     /// A sweep reserves `9*nodes+atoms+65` units, including eight possible gate
     /// truth-table rows per node, 64 lane-summary merges and one strict-subset
@@ -108,6 +116,7 @@ pub struct FormulaBatchStats {
     /// Whether this call allocated its exact candidate-count transport shape.
     pub transport_allocated: bool,
     /// Requested immutable node and root buffer bytes, including padding.
+    /// The root buffer also holds the dependency schedule when levels are used.
     pub resident_theory_bytes: u64,
     /// Requested parameters, candidates, masks, domains, results and readback.
     pub resident_transport_bytes: u64,

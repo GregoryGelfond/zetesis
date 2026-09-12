@@ -3,7 +3,7 @@
 struct Params {
     atoms: u32, nodes: u32, roots: u32, variables: u32,
     words: u32, worlds: u32, max_rounds: u32, max_work: u32,
-    setup_work: u32, sweep_work: u32, epoch: u32, reserved: u32,
+    setup_work: u32, sweep_work: u32, epoch: u32, levels: u32,
 }
 struct Node { tag: u32, left: u32, right: u32, output: u32, }
 @group(0) @binding(0) var<uniform> params: Params;
@@ -27,6 +27,16 @@ fn operation(tag: u32, left: bool, right: bool) -> bool {
     if (tag == 2u) { return left && right; }
     if (tag == 3u) { return left || right; }
     return !left || right;
+}
+fn original(world: u32, mask_base: u32, index: u32) {
+    let node = nodes[index];
+    var value = false;
+    if (node.tag == 1u) { value = contains(world, node.left); }
+    if (node.tag >= 2u) {
+        value = operation(node.tag, frozen[mask_base + node.left] != 0u,
+            frozen[mask_base + node.right] != 0u);
+    }
+    frozen[mask_base + index] = select(0u, 1u, value);
 }
 fn narrow(index: u32, allowed: u32) {
     let previous = atomicAnd(&domains[index], allowed);
@@ -69,19 +79,25 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
     let world = group.x;
     let mask_base = world * params.nodes;
     let base = world * params.variables;
-    // Original truth is computed once before ANY frozen simplification. The
-    // remaining lanes cooperate on all subsequent domain propagation sweeps.
-    if (lane == 0u) {
-        atomicStore(&bad_root, 0u);
-        for (var index = 0u; index < params.nodes; index++) {
-            let node = nodes[index];
-            var value = false;
-            if (node.tag == 1u) { value = contains(world, node.left); }
-            if (node.tag >= 2u) {
-                value = operation(node.tag, frozen[mask_base + node.left] != 0u,
-                    frozen[mask_base + node.right] != 0u);
+    // Original truth precedes every frozen simplification. Pure chains retain
+    // serial order; other DAGs visit each original node in its dependency level.
+    if (lane == 0u) { atomicStore(&bad_root, 0u); }
+    if (params.levels == 0u) {
+        if (lane == 0u) {
+            for (var index = 0u; index < params.nodes; index++) {
+                original(world, mask_base, index);
             }
-            frozen[mask_base + index] = select(0u, 1u, value);
+        }
+    } else {
+        let order = params.roots + params.levels + 1u;
+        for (var level = 0u; level < params.levels; level++) {
+            let start = roots[params.roots + level];
+            let end = roots[params.roots + level + 1u];
+            for (var offset = start + lane; offset < end; offset += 64u) {
+                original(world, mask_base, roots[order + offset]);
+            }
+            storageBarrier();
+            workgroupBarrier();
         }
     }
     storageBarrier();

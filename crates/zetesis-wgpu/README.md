@@ -59,7 +59,22 @@ count refutes the query or a unique eligible atom is required to be false.
 Auxiliary nodes never witness strict removal. This uses 24 bytes of workgroup
 storage; a sweep reserves `9*nodes+atoms+65` policy work units, including 64
 summary merges and one application. These units are not GPU instruction counts.
-Original truth is still evaluated in topological order before propagation.
+Original truth is evaluated before propagation. A cold graph groups original
+node IDs by dependency level; nodes in a level run in parallel and a barrier
+precedes dependent reads. Pure chains retain serial evaluation because they
+contain no independent node work. Other narrow levels may still pay more in
+synchronization than they gain in parallel work. Setup charges
+`2*nodes+atoms+roots+levels` policy units, with zero level units on the serial path.
+
+Preparation uses O(nodes + roots + levels) host work. Temporary depth words in
+the node upload buffer become dense output positions before any upload; one
+root buffer contains original roots, level offsets and ordered node IDs. Actual
+retained capacities of both staging vectors are admitted together with device
+copies, then released after upload. Minimum-budget and input refusals preserve
+residency; later cold preparation failure leaves a healthy context requiring a
+fresh upload. No incomplete graph, new epoch or submission is published. Driver
+retirement, allocator bookkeeping and the existing requested seed/result host
+allowance are separate from these measured staging capacities.
 
 `FormulaVerdict::Residual` requires the exact host completion path. Candidate
 ordering, original theory identity and the frozen candidate are preserved across

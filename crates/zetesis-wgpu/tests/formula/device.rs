@@ -74,6 +74,102 @@ fn busy_preserves_state(backend: GpuBackendPreference) {
     let stats = oracle.last_batch_stats().unwrap();
     assert!(!stats.theory_uploaded);
     assert!(!stats.transport_allocated);
+    cold_preparation_refusals(&mut oracle, &theory, &candidates);
+}
+
+fn cold_preparation_refusals(
+    oracle: &mut GpuFormulaOracle,
+    old: &Theory,
+    candidates: &[Interpretation],
+) {
+    use zetesis_ferraris::{AdmissionLimits, Node};
+    let next = Theory::new(
+        1,
+        vec![Node::Atom(0), Node::Atom(0), Node::And(0, 1)],
+        vec![2],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
+    let inputs = [Interpretation::new(&next, [0]).unwrap()];
+    let epoch = oracle.epoch;
+    let error = oracle
+        .propagate_batch(
+            &next,
+            &inputs,
+            FormulaLimits {
+                max_batch_bytes: 0,
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+    assert_eq!(error.kind(), GpuErrorKind::Capacity);
+    assert!(
+        oracle
+            .resident
+            .as_ref()
+            .unwrap()
+            .graph
+            .shape
+            .theory
+            .same_instance(old)
+    );
+    assert_eq!(
+        oracle
+            .propagate_batch(&next, candidates, FormulaLimits::default())
+            .unwrap_err()
+            .kind(),
+        GpuErrorKind::Seed
+    );
+    assert!(
+        oracle
+            .resident
+            .as_ref()
+            .unwrap()
+            .graph
+            .shape
+            .theory
+            .same_instance(old)
+    );
+    // Minimum setup8 passes; the two-level setup10 refuses after cold packing.
+    let error = oracle
+        .propagate_batch(
+            &next,
+            &inputs,
+            FormulaLimits {
+                max_work_per_candidate: 9,
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+    assert_eq!(error.kind(), GpuErrorKind::Capacity);
+    assert!(oracle.resident.is_none());
+    assert_eq!(oracle.epoch, epoch);
+    assert!(oracle.last_batch_stats().is_none());
+    assert_eq!(oracle.last_submission_candidates(), None);
+    oracle.context().check_health().unwrap();
+    oracle
+        .propagate_batch(old, candidates, FormulaLimits::default())
+        .unwrap();
+    assert!(oracle.last_batch_stats().unwrap().theory_uploaded);
+    let cancelled = Control::default();
+    cancelled.cancel();
+    let epoch = oracle.epoch;
+    // Directly enter the host preparation phase, after the public pre-poll.
+    let error = oracle
+        .prepare(
+            &next,
+            &inputs,
+            FormulaLimits::default(),
+            &cancelled,
+            epoch + 1,
+        )
+        .err()
+        .unwrap();
+    assert_eq!(error.interruption(), Some(zetesis_cpu::Stop::Cancelled));
+    assert!(oracle.resident.is_none());
+    assert_eq!(oracle.epoch, epoch);
+    oracle.context().check_health().unwrap();
+    println!("formula minimum/identity preserve residency; late preparation leaves healthy-cold");
 }
 
 #[test]

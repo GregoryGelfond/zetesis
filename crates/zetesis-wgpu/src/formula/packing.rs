@@ -8,10 +8,10 @@ pub(super) const PARAM_BYTES: u64 = 48;
 pub(super) const RESULT_WORDS: usize = 6;
 pub(super) const MAGIC: u32 = 0x4652_5031;
 
-fn capacity(detail: &str) -> GpuError {
+pub(super) fn capacity(detail: &str) -> GpuError {
     GpuError::new(GpuErrorKind::Capacity, detail)
 }
-fn address(value: usize) -> Result<u32, GpuError> {
+pub(super) fn address(value: usize) -> Result<u32, GpuError> {
     u32::try_from(value).map_err(|_| capacity("formula dimension exceeds u32"))
 }
 fn mul(a: u64, b: u64) -> Result<u64, GpuError> {
@@ -40,7 +40,7 @@ pub(super) fn vector<T>(length: usize) -> Result<Vec<T>, GpuError> {
     Ok(out)
 }
 
-pub(super) struct Graph {
+pub(super) struct Shape {
     pub(super) theory: Theory,
     pub(super) atoms: u32,
     pub(super) nodes: u32,
@@ -48,12 +48,10 @@ pub(super) struct Graph {
     pub(super) variables: u32,
     pub(super) words: u32,
     pub(super) node_bytes: u64,
-    pub(super) root_bytes: u64,
-    pub(super) bytes: u64,
     pub(super) setup_work: u32,
     pub(super) sweep_work: u32,
 }
-impl Graph {
+impl Shape {
     pub(super) fn new(theory: &Theory, device: &wgpu::Limits) -> Result<Self, GpuError> {
         let atoms = address(theory.atom_count())?;
         let nodes = address(theory.nodes().len())?;
@@ -77,9 +75,7 @@ impl Graph {
         }
         let words = atoms.div_ceil(32);
         let node_bytes = mul(u64::from(nodes.max(1)), 16)?;
-        let root_bytes = mul(u64::from(roots.max(1)), 4)?;
         buffer(node_bytes, device)?;
-        buffer(root_bytes, device)?;
         let setup_work = nodes
             .checked_mul(2)
             .and_then(|n| n.checked_add(atoms))
@@ -98,50 +94,54 @@ impl Graph {
             variables,
             words,
             node_bytes,
-            root_bytes,
-            bytes: sum(&[node_bytes, root_bytes])?,
             setup_work,
             sweep_work,
         })
     }
-    pub(super) fn pack(&self) -> Result<(Vec<u32>, Vec<u32>), GpuError> {
-        let mut nodes = vector(
-            usize::try_from(self.node_bytes / 4)
-                .map_err(|_| capacity("node length exceeds host"))?,
-        )?;
-        // Original node indices remain topological references. Only non-Atom
-        // nodes need auxiliary domain slots; every leaf aliases its semantic atom.
-        let mut output = self.atoms;
-        for node in self.theory.nodes() {
-            let words = match *node {
-                Node::False => [0, 0, 0, output],
-                Node::Atom(atom) => [1, address(atom)?, 0, address(atom)?],
-                Node::And(a, b) => [2, address(a)?, address(b)?, output],
-                Node::Or(a, b) => [3, address(a)?, address(b)?, output],
-                Node::Implies(a, b) => [4, address(a)?, address(b)?, output],
-            };
-            nodes.extend(words);
-            if !matches!(node, Node::Atom(_)) {
-                output = output
-                    .checked_add(1)
-                    .ok_or_else(|| capacity("formula output address overflow"))?;
+}
+
+/// Checked wire layout. Zero levels deliberately selects the serial evaluator;
+/// positive levels address a complete dependency schedule after the root prefix.
+pub(super) struct Schedule {
+    pub(super) levels: u32,
+    pub(super) root_bytes: u64,
+    pub(super) bytes: u64,
+    pub(super) setup_work: u32,
+}
+impl Schedule {
+    pub(super) fn new(shape: &Shape, levels: u32, device: &wgpu::Limits) -> Result<Self, GpuError> {
+        let root_words = if levels == 0 {
+            shape.roots.max(1)
+        } else {
+            if levels > shape.nodes {
+                return Err(capacity("formula levels exceed node count"));
             }
-        }
-        if nodes.is_empty() {
-            nodes.extend([0; 4]);
-        }
-        let mut roots = vector(
-            usize::try_from(self.root_bytes / 4)
-                .map_err(|_| capacity("root length exceeds host"))?,
-        )?;
-        for root in self.theory.roots() {
-            roots.push(address(*root)?);
-        }
-        if roots.is_empty() {
-            roots.push(0);
-        }
-        Ok((nodes, roots))
+            shape
+                .roots
+                .checked_add(levels)
+                .and_then(|n| n.checked_add(1))
+                .and_then(|n| n.checked_add(shape.nodes))
+                .filter(|n| *n <= u32::MAX - 64)
+                .ok_or_else(|| capacity("formula schedule addresses overflow"))?
+        };
+        let root_bytes = mul(u64::from(root_words), 4)?;
+        buffer(root_bytes, device)?;
+        Ok(Self {
+            levels,
+            root_bytes,
+            bytes: sum(&[shape.node_bytes, root_bytes])?,
+            setup_work: shape
+                .setup_work
+                .checked_add(levels)
+                .ok_or_else(|| capacity("formula level work overflows"))?,
+        })
     }
+}
+
+/// Final shape and schedule only; temporary depth words never belong to Graph.
+pub(super) struct Graph {
+    pub(super) shape: Shape,
+    pub(super) schedule: Schedule,
 }
 
 pub(super) struct Plan {
@@ -167,11 +167,30 @@ impl Plan {
         fresh: bool,
         epoch: u32,
     ) -> Result<Self, GpuError> {
+        Self::layout(
+            &graph.shape,
+            &graph.schedule,
+            worlds,
+            limits,
+            device,
+            fresh,
+            epoch,
+        )
+    }
+    pub(super) fn layout(
+        shape: &Shape,
+        schedule: &Schedule,
+        worlds: usize,
+        limits: FormulaLimits,
+        device: &wgpu::Limits,
+        fresh: bool,
+        epoch: u32,
+    ) -> Result<Self, GpuError> {
         let count = address(worlds)?;
         if worlds > limits.max_candidates || count > device.max_compute_workgroups_per_dimension {
             return Err(capacity("formula batch exceeds candidate/dispatch ceiling"));
         }
-        if limits.max_work_per_candidate < graph.setup_work || epoch == 0 {
+        if limits.max_work_per_candidate < schedule.setup_work || epoch == 0 {
             return Err(capacity("mandatory formula setup or epoch exceeds limits"));
         }
         let array = |length: u32| -> Result<u64, GpuError> {
@@ -181,9 +200,9 @@ impl Plan {
             }
             mul(elements.max(1), 4)
         };
-        let seeds = array(graph.words)?;
-        let masks = array(graph.nodes)?;
-        let domains = array(graph.variables)?;
+        let seeds = array(shape.words)?;
+        let masks = array(shape.nodes)?;
+        let domains = array(shape.variables)?;
         let results = mul(u64::from(count.max(1)), 24)?;
         if u64::from(count) * 6 > u64::from(u32::MAX) {
             return Err(capacity("formula result offset exceeds u32"));
@@ -197,12 +216,12 @@ impl Plan {
         let transport = sum(&[PARAM_BYTES, seeds, masks, domains, results, results])?;
         let host_results = mul(u64::from(count), std::mem::size_of::<FormulaCheck>() as u64)?;
         let accounted = sum(&[
-            graph.bytes,
+            schedule.bytes,
             transport,
             PARAM_BYTES,
             seeds,
             host_results,
-            if fresh { graph.bytes } else { 0 },
+            if fresh { schedule.bytes } else { 0 },
         ])?;
         if worlds != 0 && accounted > limits.max_batch_bytes {
             return Err(capacity("formula batch exceeds authored byte ceiling"));
@@ -215,27 +234,49 @@ impl Plan {
             results,
             transport,
             accounted,
-            setup: graph.setup_work,
-            sweep: graph.sweep_work,
+            setup: schedule.setup_work,
+            sweep: shape.sweep_work,
             max_rounds: limits.max_rounds,
             max_work: limits.max_work_per_candidate,
             epoch,
         })
     }
+    // Replace the requested cold upload staging with its actual retained element
+    // capacities. No work or device effect uses a vector before this admission.
+    pub(super) fn staging(
+        &mut self,
+        requested: u64,
+        nodes: u64,
+        roots: u64,
+        ceiling: u64,
+    ) -> Result<(), GpuError> {
+        self.accounted = self
+            .accounted
+            .checked_sub(requested)
+            .and_then(|n| n.checked_add(nodes))
+            .and_then(|n| n.checked_add(roots))
+            .ok_or_else(|| capacity("formula staging capacity sum overflows"))?;
+        if self.accounted > ceiling {
+            return Err(capacity(
+                "formula staging capacity exceeds authored byte ceiling",
+            ));
+        }
+        Ok(())
+    }
     pub(super) fn params(&self, graph: &Graph) -> [u32; 12] {
         [
-            graph.atoms,
-            graph.nodes,
-            graph.roots,
-            graph.variables,
-            graph.words,
+            graph.shape.atoms,
+            graph.shape.nodes,
+            graph.shape.roots,
+            graph.shape.variables,
+            graph.shape.words,
             self.worlds,
             self.max_rounds,
             self.max_work,
             self.setup,
             self.sweep,
             self.epoch,
-            0,
+            graph.schedule.levels,
         ]
     }
     pub(super) fn pack(
@@ -253,14 +294,14 @@ impl Plan {
         let mut words = vector(length)?;
         words.resize(length, 0u32);
         for (world, candidate) in candidates.iter().enumerate() {
-            if !graph.theory.same_instance(candidate.theory()) {
+            if !graph.shape.theory.same_instance(candidate.theory()) {
                 return Err(GpuError::new(
                     GpuErrorKind::Seed,
                     "candidate belongs to another Theory",
                 ));
             }
             for atom in candidate.atoms() {
-                words[world * graph.words as usize + atom / 32] |= 1 << (atom % 32);
+                words[world * graph.shape.words as usize + atom / 32] |= 1 << (atom % 32);
             }
         }
         Ok(words)

@@ -40,6 +40,22 @@ fn candidates(theory: &Theory) -> Vec<Interpretation> {
         })
         .collect()
 }
+
+fn setup_work(theory: &Theory) -> u32 {
+    // Independent dependency depths over the original nodes; no production
+    // schedule or packed output positions are consulted for this work receipt.
+    let mut depths = Vec::<usize>::new();
+    for node in theory.nodes() {
+        depths.push(match *node {
+            Node::False | Node::Atom(_) => 0,
+            Node::And(a, b) | Node::Or(a, b) | Node::Implies(a, b) => 1 + depths[a].max(depths[b]),
+        });
+    }
+    let levels = depths.iter().max().map_or(0, |depth| depth + 1);
+    let barriers = if levels == depths.len() { 0 } else { levels };
+    u32::try_from(2 * depths.len() + theory.atom_count() + theory.roots().len() + barriers).unwrap()
+}
+
 fn compare(oracle: &mut GpuFormulaOracle, theory: &Theory) -> (usize, usize) {
     let inputs = candidates(theory);
     let checks = oracle
@@ -75,9 +91,7 @@ fn compare(oracle: &mut GpuFormulaOracle, theory: &Theory) -> (usize, usize) {
             }
             FormulaVerdict::NotModel => {}
         }
-        let setup =
-            u32::try_from(2 * theory.nodes().len() + theory.atom_count() + theory.roots().len())
-                .unwrap();
+        let setup = setup_work(theory);
         let sweep = u32::try_from(9 * theory.nodes().len() + theory.atom_count() + 65).unwrap();
         assert_eq!(
             result.statistics().work,
@@ -99,10 +113,10 @@ fn compare(oracle: &mut GpuFormulaOracle, theory: &Theory) -> (usize, usize) {
     );
     let hot = *oracle.last_batch_stats().unwrap();
     assert!(!hot.theory_uploaded && !hot.transport_allocated);
-    assert_eq!(
-        cold.accounted_bytes - hot.accounted_bytes,
-        hot.resident_theory_bytes
-    );
+    // Cold admission includes actual retained host upload capacity. Legal
+    // allocator slack can exceed the requested device graph size; exact actual
+    // capacities are independently checked through the pure allocator seam.
+    assert!(cold.accounted_bytes - hot.accounted_bytes >= hot.resident_theory_bytes);
     (refutations, residuals)
 }
 
@@ -206,6 +220,11 @@ fn qualify_frozen_queries(backend: physical::Backend, projection: GateProjection
         totals.0 += count.0;
         totals.1 += count.1;
     }
+    for graph in scheduled_theories() {
+        let count = compare(&mut oracle, &graph);
+        totals.0 += count.0;
+        totals.1 += count.1;
+    }
     // Every connective, repeated children and nested/default-negated children;
     // the third semantic atom is deliberately absent from every formula.
     for operator in 0..3 {
@@ -233,6 +252,30 @@ fn qualify_frozen_queries(backend: physical::Backend, projection: GateProjection
     assert!(totals.0 > 0 && totals.1 > 0);
     println!("completed refutations={} residuals={}", totals.0, totals.1);
     qualify_subset_strides(&mut oracle);
+}
+
+fn scheduled_theories() -> [Theory; 2] {
+    let mut chain = vec![Node::Atom(0)];
+    chain.extend((1..128).map(|index| Node::And(index - 1, index - 1)));
+    [
+        theory(1, chain, vec![127]),
+        theory(
+            2,
+            vec![
+                Node::Atom(0),
+                Node::And(0, 0),
+                Node::Atom(1),
+                Node::Or(1, 2),
+                Node::False,
+                Node::Implies(3, 4),
+                Node::Atom(0),
+                Node::And(2, 6),
+            ],
+            // a-or-b gives original models, exact refutations and a residual;
+            // the unused deeper nodes still exercise scheduled frozen truth.
+            vec![3],
+        ),
+    ]
 }
 
 fn qualify_subset_strides(oracle: &mut GpuFormulaOracle) {
@@ -270,9 +313,9 @@ fn qualify_subset_strides(oracle: &mut GpuFormulaOracle) {
             );
         }
         // Authored constants: 133 nodes, 131 atoms, 131-|available| facts.
-        // Setup visits nodes twice, atoms once and roots once. Each sweep
+        // Setup visits nodes twice, atoms once, roots once and one level. Each sweep
         // reserves 9 per node, one per atom, 64 summaries and one application.
-        let setup = 528 - u32::try_from(available.len()).unwrap();
+        let setup = 529 - u32::try_from(available.len()).unwrap();
         let sweep = 1393;
         let expected = match available.len() {
             0 => FormulaVerdict::NoProperSubset,

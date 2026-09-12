@@ -2,6 +2,7 @@
 
 use super::FormulaCheck;
 use super::packing::{self, Graph, PARAM_BYTES, Plan};
+use super::preparation::PreparedGraph;
 use crate::runtime::{self, Dispatch, buffer, entry, initialized};
 use crate::{GpuError, GpuErrorKind};
 use std::time::Duration;
@@ -13,11 +14,21 @@ pub(super) struct Resident {
     pub(super) transport: Option<Transport>,
 }
 impl Resident {
-    pub(super) fn new(device: &wgpu::Device, graph: Graph, nodes: &[u32], roots: &[u32]) -> Self {
+    pub(super) fn new(device: &wgpu::Device, prepared: PreparedGraph) -> Self {
         Self {
-            graph,
-            nodes: initialized(device, "formula nodes", nodes, wgpu::BufferUsages::STORAGE),
-            roots: initialized(device, "formula roots", roots, wgpu::BufferUsages::STORAGE),
+            graph: prepared.graph,
+            nodes: initialized(
+                device,
+                "formula nodes",
+                &prepared.nodes,
+                wgpu::BufferUsages::STORAGE,
+            ),
+            roots: initialized(
+                device,
+                "formula roots",
+                &prepared.roots,
+                wgpu::BufferUsages::STORAGE,
+            ),
             transport: None,
         }
     }

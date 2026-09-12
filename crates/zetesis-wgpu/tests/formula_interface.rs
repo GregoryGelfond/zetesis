@@ -77,7 +77,7 @@ fn formula_parameters_keep_the_packed_word_layout() {
         "setup_work",
         "sweep_work",
         "epoch",
-        "reserved",
+        "levels",
     ];
     assert_eq!(members.len(), fields.len());
     for (index, (member, name)) in members.iter().zip(fields).enumerate() {
