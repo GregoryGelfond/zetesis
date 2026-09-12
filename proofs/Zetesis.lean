@@ -104,3 +104,4 @@ import Zetesis.DisjunctiveSupport
 import Zetesis.GateRestrictions
 import Zetesis.PackedQueryLiterals
 import Zetesis.RelationExtension
+import Zetesis.WorkCharge

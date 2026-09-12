@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, btree_map::Entry};
 
 use zetesis_core::{
     Atom, Model, Predicate,
-    relation::{Catalog, CatalogFailure, Failure, Limits, Resource},
+    relation::{Catalog, CatalogFailure, Failure, Insertion, Limits, Resource},
 };
 
 use super::{Relations, Work};
@@ -90,11 +90,16 @@ impl Catalogs {
             }
         };
         let insertion = completed(catalog.insert(atom, limits(work)), work)?;
-        account(work, insertion.storage.construction_work)?;
+        self.publish(insertion, work)
+    }
+
+    fn publish(&mut self, insertion: Insertion, work: &mut Work<'_>) -> Result<(), Stop> {
+        // The catalog has published its tuple. Keep the enclosing count coherent
+        // before accounting observes a cancellation or deadline.
         if insertion.inserted {
             self.atoms += 1;
         }
-        Ok(())
+        account(work, insertion.storage.construction_work)
     }
 
     pub(super) fn into_model(self) -> Model {
@@ -201,5 +206,28 @@ mod tests {
         let original = &catalogs.relations[&predicate].atoms()[0];
         let row = catalogs.rows(&predicate).get(0).unwrap();
         assert!(std::ptr::eq(original, row));
+    }
+
+    #[test]
+    fn cancelled_receipt_preserves_catalog_count() {
+        let control = Control::default();
+        let mut work = Work::source(&control, u64::MAX);
+        work.limits.max_derived_atoms = 1;
+        let mut catalogs = Catalogs::default();
+        let tuple = atom(Value::Number(1));
+        let predicate = tuple.predicate().clone();
+        let mut catalog = Catalog::new(predicate.clone(), limits(&work)).unwrap();
+        let receipt = catalog.insert(tuple, limits(&work)).unwrap();
+        catalogs.relations.insert(predicate, catalog);
+        control.cancel();
+        assert_eq!(catalogs.publish(receipt, &mut work), Err(Stop::Cancelled));
+        assert_eq!(
+            catalogs.len(),
+            catalogs
+                .relations
+                .values()
+                .map(|catalog| catalog.atoms().len())
+                .sum::<usize>()
+        );
     }
 }

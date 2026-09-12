@@ -105,6 +105,13 @@ subtracting it leaves the other charged source operations, not a runtime estimat
 Control is polled around each bounded catalog operation. Final `Model`
 canonicalization retains its separate comparison and allocation contract.
 
+Payload bookkeeping charges a whole amount before the corresponding comparison
+or copy. `WorkCharge` equates the completed work prefix with repeated unit
+charging under unchanged control, including exact quota exhaustion. A positive
+charge polls control once; a zero charge remains a no-op. There is no promise to
+observe asynchronous cancellation between bookkeeping units. Rust word bounds
+and the placement of control checks remain concrete implementation obligations.
+
 ## Representation and source laws
 
 [`ColumnRelations`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ColumnRelations.lean)

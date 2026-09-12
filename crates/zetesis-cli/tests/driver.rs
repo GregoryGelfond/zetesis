@@ -47,7 +47,8 @@ fn choices_and_constraints_have_three_models() {
         "node(a). node(b). {selected(X)} :- node(X). :- selected(a), selected(b).",
         &["--models", "0"],
     );
-    assert_eq!((report.models, report.checked), (3, 4));
+    // The witnessed positive constraint skips the impossible two-selection seed.
+    assert_eq!((report.models, report.checked), (3, 3));
     assert_eq!(report.completion, Completion::Exhausted);
 }
 
