@@ -156,6 +156,8 @@ fn scratch_refusal_and_model_limits_report_pending_and_queued_coverage() {
             (0, 2)
         );
         assert_eq!(execution.completion.residual_completed, 3);
+        assert!(execution.completion.requested_scratch_bytes > 0);
+        assert!(execution.completion.peak_scratch_bytes > 0);
     }
 }
 

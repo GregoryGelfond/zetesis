@@ -171,3 +171,15 @@ including a rolled-back encoding. A shape refusal retains general search;
 cancellation, work exhaustion and allocation failure remain explicit stops.
 Every proposed interpretation still needs membership checking against the
 original theory and its frozen reduct.
+
+`CompletionAccounting` reports requested workers and the greatest concurrency
+selected at preflight. This selection alone does not mean a candidate entered
+execution. `requested_scratch_bytes` records the greatest minimum envelope;
+`peak_scratch_bytes` records retained vector and map entry capacities plus the
+conservative transient allowance. Reservation can exceed the minimum request.
+If the resulting capacity exceeds `max_completion_scratch_bytes`, the attempt
+refuses before candidate work and can report a peak above the ceiling with zero
+entered slots. Both byte counters exclude allocator and hash-table control
+overhead, thread stacks, the original theory, the candidate cursor and GPU
+storage. Neither counter measures RSS. These fields are preserved in failed
+attempts and in the CLI's JSON completion statistics.

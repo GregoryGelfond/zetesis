@@ -48,7 +48,8 @@ pub struct SolveConfig {
     pub workers: NonZeroUsize,
     /// Formula exact-completion worker count.
     pub completion_workers: NonZeroUsize,
-    /// Logical completion scratch bytes, excluding thread stacks and allocator overhead.
+    /// Retained capacities and transient completion scratch bytes, excluding
+    /// thread stacks, allocator/table overhead, scalar cursor and GPU storage.
     pub max_completion_scratch_bytes: u64,
     /// Maximum candidate seeds or formula candidates.
     pub max_candidates: u64,

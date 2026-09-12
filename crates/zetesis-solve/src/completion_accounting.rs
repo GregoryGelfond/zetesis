@@ -5,9 +5,14 @@
 pub struct CompletionAccounting {
     /// Requested upper bound on simultaneous exact query workspaces.
     pub requested_workers: usize,
-    /// Largest admitted query concurrency so far; zero before residual entry.
+    /// Largest query concurrency selected at preflight; zero without residuals.
+    /// Retained storage must also be admitted before candidate work begins.
     pub effective_workers: usize,
-    /// Peak admitted logical scratch bytes across attempts, never RSS.
+    /// Largest minimum requested envelope selected before allocation.
+    pub requested_scratch_bytes: u64,
+    /// Peak retained capacities plus the conservative transient envelope.
+    /// May exceed the ceiling when reservation is refused before candidate work.
+    /// Allocator/table control overhead, stacks and device memory are excluded.
     pub peak_scratch_bytes: u64,
     /// Candidate slots actually entered, including certificates and retries.
     pub entered: u64,
@@ -43,6 +48,9 @@ impl CompletionAccounting {
         merge(&mut self.worker_reduct, progress.worker_reduct);
         self.requested_workers = progress.workers;
         self.effective_workers = self.effective_workers.max(progress.effective_workers);
+        self.requested_scratch_bytes = self
+            .requested_scratch_bytes
+            .max(progress.requested_scratch_bytes);
         self.peak_scratch_bytes = self.peak_scratch_bytes.max(progress.peak_scratch_bytes);
         for (target, value) in [
             (&mut self.entered, progress.candidates),
@@ -99,6 +107,7 @@ mod tests {
         let progress = CompletionStatistics {
             workers: 4,
             effective_workers: 2,
+            requested_scratch_bytes: 800,
             peak_scratch_bytes: 900,
             candidates: 3,
             residuals: 2,
@@ -145,5 +154,20 @@ mod tests {
         });
         assert!(accounting.worker_original.unwrap().overflowed);
         assert_eq!(accounting.peak_scratch_bytes, 900);
+    }
+
+    #[test]
+    fn scratch_accounting_preserves_the_largest_attempt() {
+        let mut accounting = CompletionAccounting::default();
+        for (requested, retained) in [(800, 900), (600, 700), (1000, 1100)] {
+            accounting.record(CompletionStatistics {
+                requested_scratch_bytes: requested,
+                peak_scratch_bytes: retained,
+                ..Default::default()
+            });
+        }
+        assert_eq!(accounting.requested_scratch_bytes, 1000);
+        assert_eq!(accounting.peak_scratch_bytes, 1100);
+        assert_eq!(accounting.entered, 0);
     }
 }

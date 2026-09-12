@@ -721,6 +721,7 @@ fn execution_statistics(
     let stats = &stats.completion;
     out.text(&stats.requested_workers.to_string())?;
     out.number_field("effective_workers", stats.effective_workers)?;
+    out.number_field("requested_scratch_bytes", stats.requested_scratch_bytes)?;
     out.number_field("peak_scratch_bytes", stats.peak_scratch_bytes)?;
     out.number_field("entered", stats.entered)?;
     out.number_field("residuals", stats.residuals)?;

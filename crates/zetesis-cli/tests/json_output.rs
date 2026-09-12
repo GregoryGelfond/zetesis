@@ -145,6 +145,30 @@ fn support_statistics_identify_the_outer_restriction() {
 }
 
 #[test]
+fn completion_statistics_distinguish_requested_storage() {
+    let (report, value) = solve(
+        "{a;b}.",
+        &options(&[
+            "--stats",
+            "--oracle",
+            "countermodel",
+            "--completion-workers",
+            "2",
+        ]),
+    );
+    let measured = report.unwrap().formula_execution.unwrap().completion;
+    let stats = &value["statistics"]["execution"]["completion"];
+    assert!(measured.requested_scratch_bytes > 0);
+    assert!(measured.peak_scratch_bytes > 0);
+    assert_eq!(
+        stats["requested_scratch_bytes"],
+        measured.requested_scratch_bytes
+    );
+    assert_eq!(stats["peak_scratch_bytes"], measured.peak_scratch_bytes);
+    assert_eq!(stats["entered"], 4);
+}
+
+#[test]
 fn candidate_statistics_preserve_restriction_accounting() {
     let (report, value) = solve(
         "{a}. {b}. :- a,b.",

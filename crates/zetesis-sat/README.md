@@ -113,16 +113,19 @@ including completed-but-uncommitted slots and failures. When timing is enabled,
 coordinator elapsed time and summed worker intervals are separate. Parallel
 worker intervals are not added to the scalar `SearchPhaseTimings` recorder.
 `CompletionExecutor::with_scratch_limit(workers, bytes)` sets a cumulative live
-logical completion-scratch ceiling; `new` and `default` use 256 MiB. Before any
+completion-scratch ceiling; `new` and `default` use 256 MiB. Before any
 completion-owned result/query allocation, `scratch_requirements` computes a
 conservative envelope from original atom/node/root counts and CNF limits.
 It includes all ordered outcome slots, accepted flags, output interpretation
 slots, CNF clause/literal capacity, frozen/node buffers, reserved alias-map
 entries, search state and ordering arrays, assignments and independent witness
-validation. Unused reserved slots remain charged. Bounded encoding reserves its
-clause registry and alias-map entry allowance before filling them. Query vectors
-are dropped before the next query in a worker; no workspace is retained between
-calls. The caller owns returned model storage after a successful batch.
+validation. Unused reserved slots remain charged. Each worker reuses its reserved
+encoding and search vectors within a joined batch. Every query recomputes the
+candidate's frozen truth values, reduct equations and strict-subset condition,
+then resets search state. Only allocation capacity survives between queries.
+The executor releases these workspaces after the batch; the scalar enumerator
+retains one workspace until enumeration ends or batched execution begins. The
+caller owns returned model storage after a successful batch.
 
 All result slots plus at most the requested number of query envelopes are
 admitted together. The scratch ceiling may reduce query concurrency to one.
@@ -131,14 +134,17 @@ If results plus one required query cannot fit, `BatchError::Limits` carries
 an executor with a sufficient allowance. Certificate-only batches need result
 storage but no query workspace. Work/decision or semantic failures still follow
 the existing terminal-search contract. `last_statistics` distinguishes requested
-workers, admitted maximum concurrency, peak logical bytes, and residuals entered,
-completed locally or failed. Local success is not batch publication.
+workers, preflight concurrency, requested minimum bytes, observed capacity plus
+transient bytes, and residuals entered, completed locally or failed. Reserved
+capacity can exceed the minimum request. Its ceiling is checked before candidate
+work begins; a refusal can therefore report a peak above the limit with zero
+entered candidates. Local success is not batch publication.
 
-This is deliberately a **logical authored-storage** contract: requested typed
-slots are charged, including retained unused slots, but allocator rounding,
-hash-table bucket/control overhead, Rayon scheduling storage, thread stacks,
-immutable original theory, and the separate proposal/candidate cursor are not
-counted. It does not bound RSS or GPU memory. `max_pending_bytes` retains its
+The accounting uses retained vector capacities and reported map entry capacity,
+plus a conservative allowance for transient and result storage. Hash-table
+bucket/control overhead, allocator metadata, Rayon scheduling storage, thread
+stacks, immutable original theory and the separate proposal/candidate cursor are
+excluded. It does not bound RSS or GPU memory. `max_pending_bytes` retains its
 independent pending-interpretation contract. No benchmark or device speedup is
 established by these portable completion tests.
 

@@ -453,16 +453,17 @@ fn formula(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
         };
         writeln!(
             sink,
-            "  effective execution: backend={backend}; oracle={oracle}; grounder=eager; CPU completion requested workers={}; peak effective workers={}; adapter={}",
+            "  effective execution: backend={backend}; oracle={oracle}; grounder=eager; CPU completion requested workers={}; peak preflight workers={}; adapter={}",
             options.completion_workers, execution.completion.effective_workers, execution.adapter
         )?;
         writeln!(
             sink,
-            "  formula completion: entered={}; residuals entered={}; completed before commit={}; failed={}; peak admitted logical scratch bytes={}; scratch limit={}; counters overflowed={}",
+            "  formula completion: entered={}; residuals entered={}; completed before commit={}; failed={}; peak requested scratch bytes={}; peak retained and transient scratch bytes={}; scratch limit={}; counters overflowed={}",
             execution.completion.entered,
             execution.completion.residuals,
             execution.completion.completed,
             execution.completion.failed,
+            execution.completion.requested_scratch_bytes,
             execution.completion.peak_scratch_bytes,
             options.max_completion_scratch_bytes,
             execution.completion.overflowed
