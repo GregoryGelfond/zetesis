@@ -173,6 +173,14 @@ evidence of candidate execution or membership.
 
 ## Representation and source laws
 
+Source scalar validation and construction share a bounded symbol walk and the
+core borrowed node's text/spelling measures. The validation consumer retains
+logical bounds without constructing an output value; actual capacity admission
+belongs to construction. This changes storage work, not the value's mathematical
+identity or the requirement to validate inactive authored expressions. The Rust
+borrowed-view correspondence, traversal and capacity checks remain executable
+obligations; no Lean source-to-value refinement is claimed by this separation.
+
 [`ColumnRelations`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ColumnRelations.lean)
 relates complete typed tuples to aligned equality-ID columns. Dictionary round
 trips and exact cell encoding imply reconstruction; equality selection returns

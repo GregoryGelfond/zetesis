@@ -1,80 +1,139 @@
 //! One bounded bridge between upstream closed symbols and core flat values.
 
 use themelios_program::symbol::{Name, Sign, Symbol};
-use zetesis_core::{Value, ValueError, ValueLimits, ValueNode, ValueResource};
+use zetesis_core::{Value, ValueError, ValueLimits, ValueNode, ValueNodeRef, ValueResource};
 
 pub(crate) fn from_symbol(symbol: &Symbol) -> Result<Value, ValueError> {
-    let limits = ValueLimits::default();
+    traverse(symbol, ValueLimits::default(), Construction::default())
+}
+
+/// Check the logical value without constructing nodes or rendering output.
+/// Actual node capacity and construction/render scratch remain the construction
+/// sink's responsibility. Both sinks use this same typed Symbol walk.
+pub(crate) fn validate_symbol(symbol: &Symbol) -> Result<(), ValueError> {
+    traverse(symbol, ValueLimits::default(), Validation::default())
+}
+
+trait Sink {
+    type Output;
+    fn node(&mut self, node: ValueNodeRef<'_>) -> Result<(), ValueError>;
+    fn finish(self, bytes: u128, limits: ValueLimits) -> Result<Self::Output, ValueError>;
+}
+
+#[derive(Default)]
+struct Construction {
+    nodes: Vec<ValueNode>,
+}
+
+impl Sink for Construction {
+    type Output = Value;
+
+    fn node(&mut self, node: ValueNodeRef<'_>) -> Result<(), ValueError> {
+        self.nodes
+            .try_reserve_exact(1)
+            .map_err(|_| ValueError::Allocation)?;
+        self.nodes.push(node.into_owned());
+        Ok(())
+    }
+
+    fn finish(self, _bytes: u128, limits: ValueLimits) -> Result<Value, ValueError> {
+        // Keep actual capacity, validation frames, rendering and final ownership
+        // checks at the existing independent core constructor.
+        Value::from_nodes(self.nodes, limits)
+    }
+}
+
+#[derive(Default)]
+struct Validation {
+    spelling_bytes: u128,
+}
+
+impl Sink for Validation {
+    type Output = ();
+
+    fn node(&mut self, node: ValueNodeRef<'_>) -> Result<(), ValueError> {
+        self.spelling_bytes += node.rendered_bytes();
+        Ok(())
+    }
+
+    fn finish(self, bytes: u128, limits: ValueLimits) -> Result<(), ValueError> {
+        check(
+            ValueResource::Bytes,
+            bytes + self.spelling_bytes,
+            limits.max_bytes,
+        )
+    }
+}
+
+fn check(resource: ValueResource, observed: u128, limit: usize) -> Result<(), ValueError> {
+    if observed > limit as u128 {
+        Err(ValueError::Limit {
+            resource,
+            observed,
+            limit,
+        })
+    } else {
+        Ok(())
+    }
+}
+
+/// `pending` contains the untouched subtrees in reverse visit order; `nodes`
+/// counts the completed preorder prefix. Each typed Symbol is visited once,
+/// independently of the sink. Work is O(nodes + text), with O(frontier) borrowed
+/// traversal storage in addition to the chosen sink's owned output.
+fn traverse<S: Sink>(
+    symbol: &Symbol,
+    limits: ValueLimits,
+    mut sink: S,
+) -> Result<S::Output, ValueError> {
     let mut pending = vec![(symbol, 1usize)];
-    let mut nodes = Vec::new();
+    let mut nodes = 0_u128;
     let mut bytes = 0_u128;
     while let Some((symbol, depth)) = pending.pop() {
         for (resource, observed, limit) in [
-            (
-                ValueResource::Nodes,
-                nodes.len() as u128 + 1,
-                limits.max_nodes,
-            ),
+            (ValueResource::Nodes, nodes + 1, limits.max_nodes),
             (ValueResource::Depth, depth as u128, limits.max_depth),
         ] {
-            if observed > limit as u128 {
-                return Err(ValueError::Limit {
-                    resource,
-                    observed,
-                    limit,
-                });
-            }
+            check(resource, observed, limit)?;
         }
-        let text = match symbol {
-            Symbol::String(text) => text.len(),
-            Symbol::Function { name, .. } => name.as_str().len(),
-            _ => 0,
-        };
-        bytes += std::mem::size_of::<ValueNode>() as u128 + text as u128;
-        if bytes > limits.max_bytes as u128 {
-            return Err(ValueError::Limit {
-                resource: ValueResource::Bytes,
-                observed: bytes,
-                limit: limits.max_bytes,
-            });
-        }
+        let node = view(symbol);
+        bytes += std::mem::size_of::<ValueNode>() as u128 + node.text_bytes() as u128;
+        check(ValueResource::Bytes, bytes, limits.max_bytes)?;
         let children = symbol.arguments();
-        if nodes.len() as u128 + pending.len() as u128 + children.len() as u128 + 1
-            > limits.max_nodes as u128
-        {
-            return Err(ValueError::Limit {
-                resource: ValueResource::Nodes,
-                observed: nodes.len() as u128 + pending.len() as u128 + children.len() as u128 + 1,
-                limit: limits.max_nodes,
-            });
-        }
+        check(
+            ValueResource::Nodes,
+            nodes + pending.len() as u128 + children.len() as u128 + 1,
+            limits.max_nodes,
+        )?;
         pending
             .try_reserve(children.len())
             .map_err(|_| ValueError::Allocation)?;
         pending.extend(children.iter().rev().map(|child| (child, depth + 1)));
-        nodes
-            .try_reserve_exact(1)
-            .map_err(|_| ValueError::Allocation)?;
-        nodes.push(match symbol {
-            Symbol::Infimum => ValueNode::Infimum,
-            Symbol::Supremum => ValueNode::Supremum,
-            Symbol::Number(n) => ValueNode::Number(*n),
-            Symbol::String(s) => ValueNode::String(s.clone()),
-            Symbol::Function {
-                name,
-                arguments,
-                sign,
-            } => ValueNode::Function {
-                name: name.as_str().into(),
-                arity: arguments.len(),
-                sign: crate::coherence::core_sign(*sign),
-            },
-            Symbol::Tuple(arguments) => ValueNode::Tuple {
-                arity: arguments.len(),
-            },
-        });
+        sink.node(node)?;
+        nodes += 1;
     }
-    Value::from_nodes(nodes, limits)
+    sink.finish(bytes, limits)
+}
+
+fn view(symbol: &Symbol) -> ValueNodeRef<'_> {
+    match symbol {
+        Symbol::Infimum => ValueNodeRef::Infimum,
+        Symbol::Supremum => ValueNodeRef::Supremum,
+        Symbol::Number(number) => ValueNodeRef::Number(*number),
+        Symbol::String(text) => ValueNodeRef::String(text),
+        Symbol::Function {
+            name,
+            arguments,
+            sign,
+        } => ValueNodeRef::Function {
+            name: name.as_str(),
+            arity: arguments.len(),
+            sign: crate::coherence::core_sign(*sign),
+        },
+        Symbol::Tuple(arguments) => ValueNodeRef::Tuple {
+            arity: arguments.len(),
+        },
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -132,20 +191,13 @@ pub(crate) fn symbol_bytes(symbol: &Symbol) -> u128 {
     {
         symbol
             .subsymbols()
-            .map(|node| {
-                std::mem::size_of::<ValueNode>() as u128
-                    + match node {
-                        Symbol::String(text) => text.len() as u128,
-                        Symbol::Function { name, .. } => name.as_str().len() as u128,
-                        _ => 0,
-                    }
-            })
+            .map(|node| std::mem::size_of::<ValueNode>() as u128 + view(node).text_bytes() as u128)
             .sum()
     } else {
-        match symbol {
-            Symbol::String(text) => text.len() as u128,
-            Symbol::Function { name, .. } => name.as_str().len() as u128,
-            _ => 0,
-        }
+        view(symbol).text_bytes() as u128
     }
 }
+
+#[cfg(test)]
+#[path = "structural_value_tests.rs"]
+mod tests;

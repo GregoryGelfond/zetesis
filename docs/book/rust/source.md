@@ -148,3 +148,25 @@ therefore promises neither cheap grounding nor lazy formula execution.
 
 See [source grounding](../architecture/grounding.md) for binding and coverage
 invariants and [completion and resources](outcomes.md) for result accounting.
+
+## Validate values before materializing them
+
+Source normalization, fact sizing and head preflight use a shared checked symbol
+walk. A validation consumer checks the value without building an owned core
+value or rendering its spelling. A construction consumer creates the flat node
+owner and enters the existing independent core constructor.
+
+[`ValueNode::view()`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/structured.rs)
+returns a borrowed `ValueNodeRef`. Its text and canonical-spelling measures are
+shared by source validation and owned construction. The view owns no payload;
+it retains node kind, constructor sign and arity, and borrows exact text. It is
+not a certificate that the surrounding preorder sequence forms a valid value.
+
+Validation retains logical node/depth bounds and the byte bound for node cells,
+referenced text and canonical spelling. Construction additionally admits its
+actual node capacity, validation/render frame capacity and rendered-string
+capacity. Validation does not charge storage for an output that is never built;
+passing it does not guarantee that later materialization fits its actual storage
+budget. NUL strings, invalid arithmetic and overflowing arithmetic remain
+refusals even in an inactive rule or unused constant. Complete authored-body
+validation still runs after an earlier false filter.

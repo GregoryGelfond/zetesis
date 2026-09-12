@@ -113,7 +113,7 @@ fn size(term: &SourceTerm, location: Location) -> Result<u128, ExpansionFailure>
                     size.saturating_add(u128::try_from(width).expect("nonnegative interval width"));
             }
             SourceTerm::Symbolic(symbol) => {
-                compile::scalar(symbol, location)?;
+                compile::validate_scalar(symbol, location)?;
                 size = size.saturating_add(1);
             }
             SourceTerm::Variable(variable) => {

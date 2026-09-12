@@ -260,7 +260,7 @@ impl Compiler<'_> {
                     let bytes = crate::structural_value::symbol_bytes(symbol);
                     self.budget
                         .charge(ExpansionResource::ScalarBytes, bytes, self.location)?;
-                    crate::compile::scalar(symbol, self.location)?;
+                    crate::compile::validate_scalar(symbol, self.location)?;
                 }
                 Term::UnaryOperation { .. }
                 | Term::BinaryOperation { .. }

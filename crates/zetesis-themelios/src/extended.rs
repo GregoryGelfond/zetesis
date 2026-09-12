@@ -398,7 +398,7 @@ pub(crate) fn normalize_node(
                             Ok(value)
                         }
                     })?;
-            compile::scalar(&resolved, location)?;
+            compile::validate_scalar(&resolved, location)?;
             Ok(Term::Symbolic(resolved))
         }
         Term::Symbolic(symbol) => {
@@ -410,7 +410,7 @@ pub(crate) fn normalize_node(
                 )?;
                 Ok(Term::Symbolic(value.clone()))
             } else {
-                compile::scalar(symbol, location)?;
+                compile::validate_scalar(symbol, location)?;
                 budget.charge(
                     ExpansionResource::ScalarBytes,
                     symbol_bytes(symbol),
@@ -458,14 +458,14 @@ pub(crate) fn normalize_node(
             let symbol = term
                 .evaluate()
                 .map_err(|error| ExpansionFailure::Evaluation { error, location })?;
-            compile::scalar(&symbol, location)?;
+            compile::validate_scalar(&symbol, location)?;
             Ok(Term::Symbolic(symbol))
         }
         Term::UnaryOperation { .. } | Term::BinaryOperation { .. } | Term::Absolute(_) => {
             let symbol = term
                 .evaluate()
                 .map_err(|error| ExpansionFailure::Evaluation { error, location })?;
-            compile::scalar(&symbol, location)?;
+            compile::validate_scalar(&symbol, location)?;
             Ok(Term::Symbolic(symbol))
         }
         _ => Err(unsupported(ProfileFeature::Term, location).into()),

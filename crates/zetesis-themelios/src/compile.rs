@@ -284,35 +284,70 @@ fn term(
 }
 
 pub(crate) fn scalar(source: &Symbol, location: Location) -> Result<Value, AdmissionFailure> {
+    Ok(match classify(source, location)? {
+        Scalar::Number(number) => Value::Number(number),
+        Scalar::String(text) => Value::String(text.into()),
+        Scalar::Symbol(name) => Value::Symbol(name.into()),
+        Scalar::Structural(symbol) => crate::structural_value::from_symbol(symbol)
+            .map_err(|error| value_failure(error, location))?,
+        Scalar::Infimum => Value::Infimum,
+        Scalar::Supremum => Value::Supremum,
+    })
+}
+
+/// Validate a source scalar without manufacturing an owned core value. NUL and
+/// typed structure checks are shared with conversion. Logical node/depth/text
+/// bounds remain active; actual construction capacity is checked only when a
+/// value is constructed. No authored arithmetic evaluation is skipped.
+pub(crate) fn validate_scalar(source: &Symbol, location: Location) -> Result<(), AdmissionFailure> {
+    if let Scalar::Structural(symbol) = classify(source, location)? {
+        crate::structural_value::validate_symbol(symbol)
+            .map_err(|error| value_failure(error, location))?;
+    }
+    Ok(())
+}
+
+enum Scalar<'a> {
+    Number(i32),
+    String(&'a str),
+    Symbol(&'a str),
+    Structural(&'a Symbol),
+    Infimum,
+    Supremum,
+}
+
+fn classify(source: &Symbol, location: Location) -> Result<Scalar<'_>, AdmissionFailure> {
     match source {
-        Symbol::Number(number) => Ok(Value::Number(*number)),
+        Symbol::Number(number) => Ok(Scalar::Number(*number)),
         Symbol::String(text) => {
             // clingo's string symbol cannot preserve an embedded NUL; refuse
             // this otherwise parseable value instead of silently truncating it.
             if text.contains('\0') {
                 return Err(unsupported(ProfileFeature::NulString, location));
             }
-            Ok(Value::String(text.clone()))
+            Ok(Scalar::String(text))
         }
         Symbol::Function {
             arguments,
             sign: Sign::Positive,
             name,
-        } if arguments.is_empty() => Ok(Value::Symbol(name.as_str().to_owned())),
+        } if arguments.is_empty() => Ok(Scalar::Symbol(name.as_str())),
         Symbol::Function { .. } | Symbol::Tuple(_) => {
             for child in source.subsymbols() {
                 if matches!(child, Symbol::String(text) if text.contains('\0')) {
                     return Err(unsupported(ProfileFeature::NulString, location));
                 }
             }
-            crate::structural_value::from_symbol(source).map_err(|error| {
-                AdmissionFailure::Construction {
-                    error: zetesis_core::ConstructionError::Value(error),
-                    location,
-                }
-            })
+            Ok(Scalar::Structural(source))
         }
-        Symbol::Infimum => Ok(Value::Infimum),
-        Symbol::Supremum => Ok(Value::Supremum),
+        Symbol::Infimum => Ok(Scalar::Infimum),
+        Symbol::Supremum => Ok(Scalar::Supremum),
+    }
+}
+
+fn value_failure(error: zetesis_core::ValueError, location: Location) -> AdmissionFailure {
+    AdmissionFailure::Construction {
+        error: zetesis_core::ConstructionError::Value(error),
+        location,
     }
 }

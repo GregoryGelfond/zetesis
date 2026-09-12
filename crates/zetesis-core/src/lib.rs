@@ -44,4 +44,6 @@ pub use program::{AdmissionError, AdmissionLimits, AdmissionResource, Program};
 pub use template::{AtomPattern, Filter, InstantiationError, Template, Term};
 pub use value::{Atom, ConstructionError, Predicate, Sign, Value};
 
-pub use structured::{StructuralValue, ValueError, ValueLimits, ValueNode, ValueResource};
+pub use structured::{
+    StructuralValue, ValueError, ValueLimits, ValueNode, ValueNodeRef, ValueResource,
+};

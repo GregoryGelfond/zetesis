@@ -4,6 +4,9 @@ use std::{cmp::Ordering, fmt};
 
 use crate::{Sign, Value};
 
+mod view;
+pub use view::ValueNodeRef;
+
 /// One preorder node of a closed value. Child nodes immediately follow a head.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ValueNode {
@@ -280,40 +283,31 @@ impl Value {
 }
 
 impl ValueNode {
-    fn text_bytes(&self) -> usize {
+    /// Borrow the complete node description in constant time, without copying
+    /// text. The view remains valid only while this node is borrowed; it does
+    /// not validate any surrounding tree.
+    #[must_use]
+    pub fn view(&self) -> ValueNodeRef<'_> {
         match self {
-            Self::String(text) | Self::Symbol(text) | Self::Function { name: text, .. } => {
-                text.len()
-            }
-            _ => 0,
+            Self::Infimum => ValueNodeRef::Infimum,
+            Self::Number(number) => ValueNodeRef::Number(*number),
+            Self::String(text) => ValueNodeRef::String(text),
+            Self::Symbol(name) => ValueNodeRef::Symbol(name),
+            Self::Function { name, sign, arity } => ValueNodeRef::Function {
+                name,
+                sign: *sign,
+                arity: *arity,
+            },
+            Self::Tuple { arity } => ValueNodeRef::Tuple { arity: *arity },
+            Self::Supremum => ValueNodeRef::Supremum,
         }
     }
+
+    fn text_bytes(&self) -> usize {
+        self.view().text_bytes()
+    }
     fn rendered_bytes(&self) -> u128 {
-        match self {
-            Self::Infimum | Self::Supremum => 4,
-            Self::Number(n) => {
-                u128::from(n.unsigned_abs().checked_ilog10().unwrap_or(0) + 1) + u128::from(*n < 0)
-            }
-            Self::String(s) => {
-                2 + s.len() as u128
-                    + s.bytes()
-                        .filter(|c| matches!(c, b'"' | b'\\' | b'\n'))
-                        .count() as u128
-            }
-            Self::Symbol(s) => s.len() as u128,
-            Self::Function { name, sign, arity } => {
-                name.len() as u128
-                    + u128::from(*sign == Sign::Negative)
-                    + if *arity == 0 { 0 } else { *arity as u128 + 1 }
-            }
-            Self::Tuple { arity } => {
-                if *arity == 0 {
-                    2
-                } else {
-                    *arity as u128 + 1 + u128::from(*arity == 1)
-                }
-            }
-        }
+        self.view().rendered_bytes()
     }
     fn canonical_bytes(&self) -> usize {
         match self {
