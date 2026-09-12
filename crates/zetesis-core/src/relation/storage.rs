@@ -4,7 +4,9 @@ use std::{cmp::Ordering, mem::size_of};
 
 use crate::{Predicate, Value};
 
-use super::{Failure, Limits, Relation, Resource, Source, Storage, Work, ceiling};
+use super::{
+    Cell, Failure, Layout, LayoutOwner, Limits, Relation, Resource, Source, Storage, Work, ceiling,
+};
 
 pub(super) fn build<'source>(
     predicate: &'source Predicate,
@@ -37,31 +39,44 @@ pub(super) fn build<'source>(
     let mut values = work.reserve(cells)?;
     for row in 0..source.len() {
         let atom = source.atom(row).ok_or(Failure::CatalogIndex)?;
-        for value in atom.values() {
+        for column in 0..atom.values().len() {
             work.tick(1)?;
-            values.push(value);
+            values.push(Cell { row, column });
         }
     }
-    sort(&mut values, &mut work)?;
-    let dictionary = dictionary(&values, &mut work)?;
+    sort(&mut values, &source, &mut work)?;
+    let dictionary = dictionary(&values, &source, &mut work)?;
     work.release(values);
-    let mut columns = work.reserve(cells)?;
-    work.tick(cells as u128)?;
-    columns.resize(cells, 0);
+    let mut ordered = work.reserve(dictionary.len())?;
+    for id in 0..dictionary.len() {
+        work.tick(1)?;
+        ordered.push(u32::try_from(id).map_err(|_| Failure::Overflow)?);
+    }
+    let mut columns = work.reserve(predicate.arity())?;
+    for _ in 0..predicate.arity() {
+        let mut column = work.reserve(source.len())?;
+        work.tick(source.len() as u128)?;
+        column.resize(source.len(), 0);
+        columns.push(column);
+    }
+    let mut layout = Layout {
+        dictionary,
+        ordered,
+        columns,
+    };
     for row in 0..source.len() {
         let atom = source.atom(row).ok_or(Failure::CatalogIndex)?;
         for (column, value) in atom.values().iter().enumerate() {
-            let index = lookup(&dictionary, value, &mut work)?.ok_or(Failure::Dictionary)?;
-            let id = u32::try_from(index).map_err(|_| Failure::Overflow)?;
+            let id =
+                lookup(&layout, &source, value, &mut work)?.map_err(|_| Failure::Dictionary)?;
             work.tick(1)?;
-            columns[column * source.len() + row] = id;
+            layout.columns[column][row] = id;
         }
     }
     Ok(Relation {
         predicate,
         source,
-        dictionary,
-        columns,
+        layout: LayoutOwner::Owned(layout),
         storage: Storage {
             retained_bytes: work.live,
             peak_construction_bytes: work.peak,
@@ -93,7 +108,7 @@ fn validate(predicate: &Predicate, source: &Source<'_>, work: &mut Work) -> Resu
 /// Width doubles after each complete pass. Before a pass, adjacent runs of at
 /// most width are ordered; merging preserves every reference exactly once.
 /// A failed comparison discards all construction buffers and publishes no view.
-fn sort(values: &mut Vec<&Value>, work: &mut Work) -> Result<(), Failure> {
+fn sort(values: &mut Vec<Cell>, source: &Source<'_>, work: &mut Work) -> Result<(), Failure> {
     if values.len() < 2 {
         return Ok(());
     }
@@ -106,7 +121,7 @@ fn sort(values: &mut Vec<&Value>, work: &mut Work) -> Result<(), Failure> {
         while start < values.len() {
             let middle = start.saturating_add(width).min(values.len());
             let end = middle.saturating_add(width).min(values.len());
-            merge(values, &mut scratch, start, middle, end, work)?;
+            merge(values, &mut scratch, start, middle, end, source, work)?;
             start = end;
         }
         std::mem::swap(values, &mut scratch);
@@ -116,12 +131,13 @@ fn sort(values: &mut Vec<&Value>, work: &mut Work) -> Result<(), Failure> {
     Ok(())
 }
 
-fn merge<'source>(
-    source: &[&'source Value],
-    target: &mut [&'source Value],
+fn merge(
+    cells: &[Cell],
+    target: &mut [Cell],
     start: usize,
     middle: usize,
     end: usize,
+    source: &Source<'_>,
     work: &mut Work,
 ) -> Result<(), Failure> {
     let mut left = start;
@@ -129,12 +145,14 @@ fn merge<'source>(
     for destination in &mut target[start..end] {
         work.tick(1)?;
         let take_left = left < middle
-            && (right == end || work.compare(source[left], source[right])? != Ordering::Greater);
+            && (right == end
+                || work.compare(cells[left].value(source)?, cells[right].value(source)?)?
+                    != Ordering::Greater);
         if take_left {
-            *destination = source[left];
+            *destination = cells[left];
             left += 1;
         } else {
-            *destination = source[right];
+            *destination = cells[right];
             right += 1;
         }
     }
@@ -144,14 +162,11 @@ fn merge<'source>(
 /// The sorted reference stream supplies one dictionary entry per typed value.
 /// A second pass fills a compact reserved vector, so duplicate argument cells
 /// do not remain as retained dictionary capacity.
-fn dictionary<'source>(
-    values: &[&'source Value],
-    work: &mut Work,
-) -> Result<Vec<&'source Value>, Failure> {
+fn dictionary(values: &[Cell], source: &Source<'_>, work: &mut Work) -> Result<Vec<Cell>, Failure> {
     let mut distinct = 0_usize;
     let mut previous = None;
     for &value in values {
-        if differs(previous, value, work)? {
+        if differs(previous, value, source, work)? {
             distinct += 1;
         }
         previous = Some(value);
@@ -164,7 +179,7 @@ fn dictionary<'source>(
     let mut dictionary = work.reserve(distinct)?;
     previous = None;
     for &value in values {
-        if differs(previous, value, work)? {
+        if differs(previous, value, source, work)? {
             work.tick(1)?;
             dictionary.push(value);
         }
@@ -173,29 +188,37 @@ fn dictionary<'source>(
     Ok(dictionary)
 }
 
-fn differs(previous: Option<&Value>, value: &Value, work: &mut Work) -> Result<bool, Failure> {
+fn differs(
+    previous: Option<Cell>,
+    value: Cell,
+    source: &Source<'_>,
+    work: &mut Work,
+) -> Result<bool, Failure> {
     if let Some(previous) = previous {
-        Ok(work.compare(previous, value)? != Ordering::Equal)
+        Ok(work.compare(previous.value(source)?, value.value(source)?)? != Ordering::Equal)
     } else {
         work.tick(1)?;
         Ok(true)
     }
 }
 
+/// Found equality ID, or the insertion position in the ordered-ID vector.
 pub(super) fn lookup(
-    dictionary: &[&Value],
+    layout: &Layout,
+    source: &Source<'_>,
     value: &Value,
     work: &mut Work,
-) -> Result<Option<usize>, Failure> {
+) -> Result<Result<u32, usize>, Failure> {
     let mut start = 0;
-    let mut end = dictionary.len();
+    let mut end = layout.ordered.len();
     while start < end {
         let middle = start + (end - start) / 2;
-        match work.compare(dictionary[middle], value)? {
+        let id = layout.ordered[middle];
+        match work.compare(layout.dictionary[id as usize].value(source)?, value)? {
             Ordering::Less => start = middle + 1,
-            Ordering::Equal => return Ok(Some(middle)),
+            Ordering::Equal => return Ok(Ok(id)),
             Ordering::Greater => end = middle,
         }
     }
-    Ok(None)
+    Ok(Err(start))
 }

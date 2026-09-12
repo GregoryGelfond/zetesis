@@ -183,8 +183,8 @@ impl<'source> Relation<'source> {
             if column >= self.predicate.arity() {
                 return Err(Failure::Column);
             }
-            if let Some(index) = storage::lookup(&self.dictionary, value, &mut work)? {
-                let value_id = u32::try_from(index).map_err(|_| Failure::Overflow)?;
+            if let Ok(index) = storage::lookup(&self.layout, &self.source, value, &mut work)? {
+                let value_id = index;
                 work.tick(1)?;
                 resolved.push(Equality { column, value_id });
             } else {
@@ -440,7 +440,7 @@ impl<'source> Relation<'source> {
     ) -> Result<bool, Failure> {
         for equality in &query.equalities {
             work.tick(1)?;
-            let id = self.columns[equality.column * self.row_count() + position];
+            let id = self.layout.columns[equality.column][position];
             if id != equality.value_id {
                 return Ok(false);
             }

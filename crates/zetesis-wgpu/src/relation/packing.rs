@@ -72,7 +72,11 @@ pub(super) fn column_bytes(
         return Err(capacity("relation padded row address exceeds u32"));
     }
     let count = cells(rows, columns)?;
-    if usize::try_from(count).ok() != Some(relation.columns().len()) {
+    if relation.columns().len() != relation.predicate().arity()
+        || relation
+            .columns()
+            .any(|column| column.len() != relation.row_count())
+    {
         return Err(capacity("relation columns disagree with row/arity shape"));
     }
     let bytes = u64::from(count.max(1)) * 4;

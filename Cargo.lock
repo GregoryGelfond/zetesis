@@ -1957,6 +1957,9 @@ dependencies = [
 [[package]]
 name = "zetesis-core"
 version = "0.1.0"
+dependencies = [
+ "proptest",
+]
 
 [[package]]
 name = "zetesis-cpu"

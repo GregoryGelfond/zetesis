@@ -89,14 +89,36 @@ The formula owner keeps the theory, atom indexing, objective program and
 observations together. Do not build a session by independently pairing a theory
 with an atom table from another admission.
 
-`relation::Relation` borrows one immutable atom source and owns a dictionary and
-aligned equality-ID columns. A `Query`, `Selection` or `Mask` borrows that exact owner;
+`relation::Relation` borrows one immutable atom source with a dictionary and
+aligned equality-ID columns. `from_atoms` and `from_catalog` own that layout.
+For growing relations, `relation::Catalog` owns the unique typed atoms and the
+same layout, extending both through checked `insert` operations. Its `view`
+borrows the existing columns without allocation or reconstruction. Rust prevents
+append while a view remains borrowed. Existing row and equality IDs survive
+insertion; `into_atoms` transfers the tuples in insertion order.
+
+A `Query`, `Selection` or `Mask` borrows its exact immutable relation object;
 equal contents in another relation do not make the objects interchangeable.
 `Row::source_index` preserves the original catalog position, while selection
 positions are local to the relation. Eager formula support uses this view for
 typed lookup and row access between catalog-growth rounds. Bounded primitive
 experiments use the same representation. It is not an alternative source parser
 or a complete grounder.
+
+`Catalog::construction`, `insert` and `lookup` report operation work and actual
+retained capacity. Failed operations return `CatalogFailure` with completed work
+and any capacity retained before refusal. They publish no new tuple or equality
+ID. Nested atom payload storage remains the source caller's separate charge.
+A catalog view reports only its own object; callers retaining the catalog must
+also account for `Catalog::retained_bytes` once. Sorted membership and dictionary
+indexes can still require linear ID shifts on insertion.
+
+`Relation::columns()` yields an exact-size iterator of argument-column slices;
+`column(i)` borrows one slice. Each slice has the relation's row count. This
+replaces the earlier flat packed slice: consumers should iterate columns in
+argument order instead of computing offsets into one host allocation. Device
+preparation copies these columns directly into one checked mapped GPU buffer,
+without a temporary packed host vector.
 
 `Relation::select` returns ordered positions; `Relation::select_mask` applies
 the same equality predicate directly into packed original-row membership.

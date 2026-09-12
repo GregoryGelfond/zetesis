@@ -9,10 +9,12 @@
 //! ordering meaning. Typed row access decodes the same dictionary used by CPU
 //! selection and device views.
 //!
-//! The source remains borrowed. Columns and dictionary references are owned;
-//! no complete atom or logical payload is cloned. The caller retains the
-//! authoritative source catalog and must remove superseded tuple owners when
-//! adopting this view. Eager formula support uses columns for typed lookup and
+//! The source remains borrowed. Columns and dictionary representatives are
+//! either owned by this view or borrowed from an appendable [`Catalog`]; no
+//! complete atom or logical payload is cloned. A catalog mediates every append
+//! and owns its typed tuples once. Other callers retain their authoritative
+//! source and must remove superseded tuple owners when adopting this view.
+//! Eager formula support uses columns for typed lookup and
 //! row access; device consumers use the same representation for equality masks.
 //! Structured-value clones already share their payload through `Arc`.
 //!
@@ -26,6 +28,9 @@ use crate::{Atom, Predicate, Value};
 
 mod storage;
 mod selection;
+mod catalog;
+
+pub use catalog::{Catalog, CatalogFailure, Insertion, Lookup};
 
 pub use selection::{Equality, Mask, Query, Selection};
 
@@ -130,10 +135,11 @@ impl fmt::Display for Failure {
 
 impl std::error::Error for Failure {}
 
-/// Capacity and work observed while constructing one immutable view.
+/// Capacity and work observed during one relation or catalog operation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Storage {
-    /// Relation object, dictionary-reference capacity and column-ID capacity.
+    /// Operation owner's object and retained vector capacities. A borrowed
+    /// catalog view excludes the catalog's separately reported owner capacity.
     pub retained_bytes: usize,
     /// Largest operation-scoped live capacity, including temporary sort buffers.
     pub peak_construction_bytes: usize,
@@ -150,16 +156,54 @@ pub struct Storage {
 
 /// One immutable execution view of a signed predicate relation.
 ///
-/// The dictionary borrows whole typed source values; columns own equality IDs.
+/// The dictionary refers to whole typed source values; columns hold equality IDs.
+/// Borrowed-source construction owns the layout. A catalog view borrows it.
 /// Local row positions preserve input occurrence order. Catalog indices remain
 /// separately accessible through [`Row::source_index`]. Identity is this live
 /// owner, not its address retained after destruction, contents or dimensions.
 pub struct Relation<'source> {
     predicate: &'source Predicate,
     source: Source<'source>,
-    dictionary: Vec<&'source Value>,
-    columns: Vec<u32>,
+    layout: LayoutOwner<'source>,
     storage: Storage,
+}
+
+/// One equality layout shared by borrowed-source construction and owned catalogs.
+/// Dictionary representatives are source positions, never duplicated values.
+struct Layout {
+    dictionary: Vec<Cell>,
+    ordered: Vec<u32>,
+    columns: Vec<Vec<u32>>,
+}
+
+#[derive(Clone, Copy)]
+struct Cell {
+    row: usize,
+    column: usize,
+}
+
+impl Cell {
+    fn value<'source>(self, source: &Source<'source>) -> Result<&'source Value, Failure> {
+        source
+            .atom(self.row)
+            .and_then(|atom| atom.values().get(self.column))
+            .ok_or(Failure::CatalogIndex)
+    }
+}
+
+enum LayoutOwner<'source> {
+    Owned(Layout),
+    Borrowed(&'source Layout),
+}
+
+impl std::ops::Deref for LayoutOwner<'_> {
+    type Target = Layout;
+    fn deref(&self) -> &Layout {
+        match self {
+            Self::Owned(layout) => layout,
+            Self::Borrowed(layout) => layout,
+        }
+    }
 }
 
 enum Source<'source> {
@@ -258,17 +302,17 @@ impl<'source> Relation<'source> {
         if column >= self.predicate.arity() {
             return None;
         }
-        let start = column * self.row_count();
-        Some(&self.columns[start..start + self.row_count()])
+        self.layout.columns.get(column).map(Vec::as_slice)
     }
 
-    /// Borrow the column-major ID cells used by [`Self::column`].
+    /// Borrow columns in original argument order without packing or allocation.
     ///
-    /// Shape is arity times row count, including an explicit zero-cell nullary
-    /// relation. No dictionary re-interning is needed for a device copy.
+    /// Exactly arity slices are returned, each containing `row_count` IDs.
+    /// Nullary relations yield no slices. A device consumer may copy these
+    /// slices consecutively into its admitted column-major upload buffer.
     #[must_use]
-    pub fn columns(&self) -> &[u32] {
-        &self.columns
+    pub fn columns(&self) -> impl ExactSizeIterator<Item = &[u32]> {
+        self.layout.columns.iter().map(Vec::as_slice)
     }
 
     /// Access a typed row occurrence without allocating or cloning an atom.
@@ -303,7 +347,7 @@ impl<'source> Relation<'source> {
         )?;
         ceiling(
             Resource::Values,
-            self.dictionary.len() as u128,
+            self.layout.dictionary.len() as u128,
             limits.max_values as u128,
         )?;
         Work::new(
@@ -351,7 +395,12 @@ impl<'source> Row<'_, 'source> {
     #[must_use]
     pub fn value(&self, column: usize) -> Option<&'source Value> {
         let id = *self.relation.column(column)?.get(self.position)?;
-        self.relation.dictionary.get(id as usize).copied()
+        self.relation
+            .layout
+            .dictionary
+            .get(id as usize)?
+            .value(&self.relation.source)
+            .ok()
     }
 }
 
@@ -410,6 +459,33 @@ impl Work {
         self.live = usize::try_from(actual).map_err(|_| Failure::Overflow)?;
         self.peak = self.peak.max(self.live);
         Ok(values)
+    }
+
+    fn grow<T>(&mut self, values: &mut Vec<T>, additional: usize) -> Result<(), Failure> {
+        let needed = values
+            .len()
+            .checked_add(additional)
+            .ok_or(Failure::Overflow)?;
+        if needed <= values.capacity() {
+            return Ok(());
+        }
+        let previous = values.capacity();
+        let proposed = needed.max(previous.saturating_mul(2));
+        ceiling(
+            Resource::Bytes,
+            self.live as u128 + (proposed - previous) as u128 * size_of::<T>() as u128,
+            self.limits.max_bytes as u128,
+        )?;
+        self.tick(values.len() as u128)?;
+        values
+            .try_reserve_exact(proposed - values.len())
+            .map_err(|_| Failure::Allocation)?;
+        let actual =
+            self.live as u128 + (values.capacity() - previous) as u128 * size_of::<T>() as u128;
+        ceiling(Resource::Bytes, actual, self.limits.max_bytes as u128)?;
+        self.live = usize::try_from(actual).map_err(|_| Failure::Overflow)?;
+        self.peak = self.peak.max(self.live);
+        Ok(())
     }
 
     fn release<T>(&mut self, values: Vec<T>) {

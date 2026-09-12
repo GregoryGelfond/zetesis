@@ -2,7 +2,7 @@ use super::{
     PARAM_BYTES, ROWS_PER_GROUP, RelationGpuActivity, RelationGpuError, RelationGpuLimits,
     RelationGpuMasks, RelationGpuStats, SHADER, capacity, packing, poll,
 };
-use crate::{GpuError, GpuInfo, GpuOptions, GpuSelection, runtime};
+use crate::{GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection, runtime};
 use zetesis_core::relation::{Failure, Query, Relation};
 use zetesis_cpu::Control;
 
@@ -98,18 +98,10 @@ impl GpuRelationExecutor {
             return Err(capacity("relation upload exceeds authored byte ceiling").into());
         }
         let scopes = runtime::ErrorScopes::new(self.runtime.device());
-        let cells = if relation.columns().is_empty() {
-            &[0]
-        } else {
-            relation.columns()
-        };
-        let columns = runtime::initialized(
-            self.runtime.device(),
-            "zetesis immutable relation columns",
-            cells,
-            wgpu::BufferUsages::STORAGE,
-        );
-        self.runtime.complete(scopes, poll(control))?;
+        let columns = upload_columns(self.runtime.device(), relation, bytes, control);
+        self.runtime
+            .complete(scopes, columns.as_ref().map(|_| ()).map_err(Clone::clone))?;
+        let columns = columns?;
         Ok(PreparedGpuRelation {
             executor: self,
             relation,
@@ -369,4 +361,48 @@ fn adapter_limits(limits: &wgpu::Limits) -> Result<(), GpuError> {
         }
     }
     Ok(())
+}
+
+/// Copy ordered columns directly into the mapped upload buffer. No temporary
+/// packed host vector or duplicated logical tuple owner is retained.
+fn upload_columns(
+    device: &wgpu::Device,
+    relation: &Relation<'_>,
+    bytes: u64,
+    control: &Control,
+) -> Result<wgpu::Buffer, GpuError> {
+    let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("zetesis immutable relation columns"),
+        size: bytes,
+        usage: wgpu::BufferUsages::STORAGE,
+        mapped_at_creation: true,
+    });
+    let copied = (|| {
+        let mut mapped = buffer
+            .slice(..)
+            .get_mapped_range_mut()
+            .map_err(|error| GpuError::new(GpuErrorKind::Validation, error.to_string()))?;
+        if relation.row_count() == 0 || relation.predicate().arity() == 0 {
+            mapped.copy_from_slice(bytemuck::bytes_of(&0_u32));
+        } else {
+            let mut offset = 0_usize;
+            for source in relation.columns() {
+                poll(control)?;
+                let source = bytemuck::cast_slice(source);
+                let end = offset
+                    .checked_add(source.len())
+                    .filter(|&end| end <= mapped.len())
+                    .ok_or_else(|| capacity("relation column exceeds mapped upload"))?;
+                mapped.slice(offset..end).copy_from_slice(source);
+                offset = end;
+            }
+            if offset != mapped.len() {
+                return Err(capacity("relation columns do not fill mapped upload"));
+            }
+        }
+        poll(control)
+    })();
+    buffer.unmap();
+    copied?;
+    Ok(buffer)
 }

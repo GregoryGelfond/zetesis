@@ -146,8 +146,8 @@ fn nullary_row_count_remains_explicit() {
     let source = atoms(&signature, vec![vec![]]);
     let singleton = Relation::from_atoms(&signature, &source, Limits::default()).unwrap();
     let empty = Relation::from_atoms(&signature, &[], Limits::default()).unwrap();
-    assert!(singleton.columns().is_empty());
-    assert!(empty.columns().is_empty());
+    assert_eq!(singleton.columns().len(), 0);
+    assert!(empty.columns().all(<[u32]>::is_empty));
     assert_eq!(singleton.row_count(), 1);
     assert_eq!(empty.row_count(), 0);
 }
