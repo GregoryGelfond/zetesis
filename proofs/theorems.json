@@ -295,6 +295,26 @@
     "line": 224
   },
   {
+    "name": "Zetesis.AtomKeys.missing_blocks_tuple",
+    "file": "Zetesis/AtomKeys.lean",
+    "line": 45
+  },
+  {
+    "name": "Zetesis.AtomKeys.tuple_agrees",
+    "file": "Zetesis/AtomKeys.lean",
+    "line": 55
+  },
+  {
+    "name": "Zetesis.AtomKeys.key_identity",
+    "file": "Zetesis/AtomKeys.lean",
+    "line": 70
+  },
+  {
+    "name": "Zetesis.AtomKeys.membership_identity",
+    "file": "Zetesis/AtomKeys.lean",
+    "line": 81
+  },
+  {
     "name": "Zetesis.BatchAccounting.initial_covers",
     "file": "Zetesis/BatchAccounting.lean",
     "line": 49
@@ -388,6 +408,36 @@
     "name": "Zetesis.BinaryWatch.replacement_absent",
     "file": "Zetesis/BinaryWatch.lean",
     "line": 45
+  },
+  {
+    "name": "Zetesis.BindingScopes.restrict_inside",
+    "file": "Zetesis/BindingScopes.lean",
+    "line": 36
+  },
+  {
+    "name": "Zetesis.BindingScopes.restrict_outside",
+    "file": "Zetesis/BindingScopes.lean",
+    "line": 41
+  },
+  {
+    "name": "Zetesis.BindingScopes.absent_is_not_value",
+    "file": "Zetesis/BindingScopes.lean",
+    "line": 46
+  },
+  {
+    "name": "Zetesis.BindingScopes.absent_blocks_read",
+    "file": "Zetesis/BindingScopes.lean",
+    "line": 51
+  },
+  {
+    "name": "Zetesis.BindingScopes.readAll_agrees",
+    "file": "Zetesis/BindingScopes.lean",
+    "line": 61
+  },
+  {
+    "name": "Zetesis.BindingScopes.readAll_restrict",
+    "file": "Zetesis/BindingScopes.lean",
+    "line": 75
   },
   {
     "name": "Zetesis.BooleanHeadElements.operand_original",
@@ -1480,6 +1530,46 @@
     "line": 398
   },
   {
+    "name": "Zetesis.DeltaJoins.first_true",
+    "file": "Zetesis/DeltaJoins.lean",
+    "line": 33
+  },
+  {
+    "name": "Zetesis.DeltaJoins.partition_complete",
+    "file": "Zetesis/DeltaJoins.lean",
+    "line": 58
+  },
+  {
+    "name": "Zetesis.DeltaJoins.partition_disjoint",
+    "file": "Zetesis/DeltaJoins.lean",
+    "line": 77
+  },
+  {
+    "name": "Zetesis.DisjunctiveSupport.head_satisfies",
+    "file": "Zetesis/DisjunctiveSupport.lean",
+    "line": 67
+  },
+  {
+    "name": "Zetesis.DisjunctiveSupport.head_reduct",
+    "file": "Zetesis/DisjunctiveSupport.lean",
+    "line": 83
+  },
+  {
+    "name": "Zetesis.DisjunctiveSupport.other_head",
+    "file": "Zetesis/DisjunctiveSupport.lean",
+    "line": 105
+  },
+  {
+    "name": "Zetesis.DisjunctiveSupport.producer_removal",
+    "file": "Zetesis/DisjunctiveSupport.lean",
+    "line": 128
+  },
+  {
+    "name": "Zetesis.DisjunctiveSupport.answer_set_supported",
+    "file": "Zetesis/DisjunctiveSupport.lean",
+    "line": 151
+  },
+  {
     "name": "Zetesis.DomainContraction.singleton_filter_preserves",
     "file": "Zetesis/DomainContraction.lean",
     "line": 97
@@ -2225,6 +2315,16 @@
     "line": 123
   },
   {
+    "name": "Zetesis.GatePositions.atoms_exact",
+    "file": "Zetesis/GatePositions.lean",
+    "line": 32
+  },
+  {
+    "name": "Zetesis.GatePositions.retained_position_exact",
+    "file": "Zetesis/GatePositions.lean",
+    "line": 42
+  },
+  {
     "name": "Zetesis.GateProjection.bitwise_support_exact",
     "file": "Zetesis/GateProjection.lean",
     "line": 78
@@ -2238,6 +2338,26 @@
     "name": "Zetesis.GateProjection.aliased_intersection_exact",
     "file": "Zetesis/GateProjection.lean",
     "line": 109
+  },
+  {
+    "name": "Zetesis.GateRestrictions.fact_in_model",
+    "file": "Zetesis/GateRestrictions.lean",
+    "line": 29
+  },
+  {
+    "name": "Zetesis.GateRestrictions.answer_set_avoids",
+    "file": "Zetesis/GateRestrictions.lean",
+    "line": 53
+  },
+  {
+    "name": "Zetesis.GateRestrictions.upward_rejection",
+    "file": "Zetesis/GateRestrictions.lean",
+    "line": 72
+  },
+  {
+    "name": "Zetesis.GateRestrictions.suffix_region_rejected",
+    "file": "Zetesis/GateRestrictions.lean",
+    "line": 84
   },
   {
     "name": "Zetesis.GroundGuards.constant_original",
@@ -3495,6 +3615,26 @@
     "line": 78
   },
   {
+    "name": "Zetesis.PackedQueryLiterals.decode_encode",
+    "file": "Zetesis/PackedQueryLiterals.lean",
+    "line": 30
+  },
+  {
+    "name": "Zetesis.PackedQueryLiterals.encode_injective",
+    "file": "Zetesis/PackedQueryLiterals.lean",
+    "line": 37
+  },
+  {
+    "name": "Zetesis.PackedQueryLiterals.encode_lt",
+    "file": "Zetesis/PackedQueryLiterals.lean",
+    "line": 44
+  },
+  {
+    "name": "Zetesis.PackedQueryLiterals.packed_truth",
+    "file": "Zetesis/PackedQueryLiterals.lean",
+    "line": 52
+  },
+  {
     "name": "Zetesis.PartitionCapacities.count_append",
     "file": "Zetesis/PartitionCapacities.lean",
     "line": 35
@@ -3870,6 +4010,16 @@
     "line": 385
   },
   {
+    "name": "Zetesis.RelationExtension.reconstruction_preserved",
+    "file": "Zetesis/RelationExtension.lean",
+    "line": 27
+  },
+  {
+    "name": "Zetesis.RelationExtension.acceptance_preserved",
+    "file": "Zetesis/RelationExtension.lean",
+    "line": 46
+  },
+  {
     "name": "Zetesis.RuleFactorization.false_reduct",
     "file": "Zetesis/RuleFactorization.lean",
     "line": 33
@@ -4068,6 +4218,11 @@
     "name": "Zetesis.accepted_sample_does_not_exhaust_region",
     "file": "Zetesis/Search.lean",
     "line": 295
+  },
+  {
+    "name": "Zetesis.SeedSelections.materialization_exact",
+    "file": "Zetesis/SeedSelections.lean",
+    "line": 35
   },
   {
     "name": "Zetesis.Semantics.body_mono",
@@ -5248,6 +5403,46 @@
     "name": "Zetesis.WeightedHeadActivity.stable_in_context",
     "file": "Zetesis/WeightedHeadActivity.lean",
     "line": 102
+  },
+  {
+    "name": "Zetesis.WorkCharge.repeated_eq_charge",
+    "file": "Zetesis/WorkCharge.lean",
+    "line": 43
+  },
+  {
+    "name": "Zetesis.WorkCharge.exhausted_records_limit",
+    "file": "Zetesis/WorkCharge.lean",
+    "line": 64
+  },
+  {
+    "name": "Zetesis.WorkCharge.accepted_within_limit",
+    "file": "Zetesis/WorkCharge.lean",
+    "line": 70
+  },
+  {
+    "name": "Zetesis.WorkPermits.grant_conserves",
+    "file": "Zetesis/WorkPermits.lean",
+    "line": 43
+  },
+  {
+    "name": "Zetesis.WorkPermits.settle_conserves",
+    "file": "Zetesis/WorkPermits.lean",
+    "line": 52
+  },
+  {
+    "name": "Zetesis.WorkPermits.consumed_within_limit",
+    "file": "Zetesis/WorkPermits.lean",
+    "line": 61
+  },
+  {
+    "name": "Zetesis.WorkPermits.settled_exhaustion",
+    "file": "Zetesis/WorkPermits.lean",
+    "line": 69
+  },
+  {
+    "name": "Zetesis.WorkPermits.unused_return_enables_work",
+    "file": "Zetesis/WorkPermits.lean",
+    "line": 76
   },
   {
     "name": "Zetesis.WorldMasks.membership_exact",
