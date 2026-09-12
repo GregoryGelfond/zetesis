@@ -223,11 +223,16 @@ fn producer_origins_preserve_atom_associations() {
         .record_head_origins(1, &rule(vec![origin(3)]))
         .unwrap();
     assert_eq!(
-        builder.producer_origins[0],
+        builder.metadata.origins(0).collect::<Vec<_>>(),
         [location(), origin(2), origin(8)]
     );
-    assert_eq!(builder.producer_origins[1], [location(), origin(3)]);
-    let expected = builder.producer_origins.clone();
+    assert_eq!(
+        builder.metadata.origins(1).collect::<Vec<_>>(),
+        [location(), origin(3)]
+    );
+    let expected = (0..2)
+        .map(|atom| builder.metadata.origins(atom).collect::<Vec<_>>())
+        .collect::<Vec<_>>();
     builder.support_guards().unwrap();
     assert_eq!(builder.origins, expected);
 }
@@ -268,7 +273,7 @@ fn origin_insertion_obeys_the_work_ceiling() {
         location: next,
         origins: vec![next],
     };
-    // Full length/capacity one means one growth copy plus one appended location.
+    // One tail comparison plus one published location; spare arena capacity requires no relocation.
     limits.max_work = 2;
     let mut builder = Builder::empty(
         &limits,
@@ -277,7 +282,10 @@ fn origin_insertion_obeys_the_work_ceiling() {
         Purpose::Theory,
         None,
     );
-    builder.producer_origins.push(vec![location()]);
+    builder
+        .metadata
+        .atom(location(), &mut builder.counters, builder.limits)
+        .unwrap();
     builder.record_head_origins(0, &rule).unwrap();
     assert_eq!(builder.counters.work, 2);
     let short = FormulaLimits {
@@ -292,9 +300,104 @@ fn origin_insertion_obeys_the_work_ceiling() {
         Purpose::Theory,
         None,
     );
-    refused.producer_origins.push(vec![location()]);
+    refused
+        .metadata
+        .atom(location(), &mut refused.counters, refused.limits)
+        .unwrap();
     assert!(
         matches!(refused.record_head_origins(0, &rule), Err(FormulaFailure::Limit { resource: FormulaResource::Work, observed: 2, limit: 1, location: found }) if found == next)
     );
-    assert_eq!(refused.producer_origins[0], [location()]);
+    assert_eq!(
+        refused.metadata.origins(0).collect::<Vec<_>>(),
+        [location()]
+    );
+}
+
+#[test]
+fn guard_evidence_admission_precedes_copy_work() {
+    for resource in [FormulaResource::Roots, FormulaResource::Origins] {
+        let mut limits = FormulaLimits::default();
+        match resource {
+            FormulaResource::Roots => limits.theory.max_roots = 0,
+            FormulaResource::Origins => limits.max_origin_locations = 0,
+            _ => unreachable!("the two emitted-evidence bounds"),
+        }
+        let mut budget = Budget::new(ExpansionLimits::default(), 0);
+        let mut builder = Builder::empty(
+            &limits,
+            &mut budget,
+            Counters::default(),
+            Purpose::Theory,
+            None,
+        );
+        builder.initialize(location()).unwrap();
+        let pattern =
+            AtomPattern::new(zetesis_core::Predicate::new("p", 0).unwrap(), vec![]).unwrap();
+        builder
+            .atom(&pattern, &Binding::default(), location())
+            .unwrap();
+        let before = builder.counters.work;
+        assert!(
+            matches!(builder.support_guards(), Err(FormulaFailure::Limit { resource: found, .. }) if found == resource)
+        );
+        // One atom lookup and three implication nodes, with no origin-copy work.
+        assert_eq!(builder.counters.work - before, 4);
+        assert!(builder.roots.is_empty());
+        assert!(builder.origins.is_empty());
+        assert_eq!(builder.origin_count, 0);
+    }
+}
+
+#[test]
+fn interleaved_producers_retain_the_support_fold() {
+    let limits = FormulaLimits::default();
+    let mut budget = Budget::new(ExpansionLimits::default(), 0);
+    let mut builder = Builder::empty(
+        &limits,
+        &mut budget,
+        Counters::default(),
+        Purpose::Theory,
+        None,
+    );
+    builder.initialize(location()).unwrap();
+    let mut nodes = Vec::new();
+    for name in ["p", "q", "x", "y", "z"] {
+        let pattern =
+            AtomPattern::new(zetesis_core::Predicate::new(name, 0).unwrap(), vec![]).unwrap();
+        nodes.push(
+            builder
+                .atom(&pattern, &Binding::default(), location())
+                .unwrap(),
+        );
+    }
+    let rule = RuleIr {
+        head: HeadIr::Normal(None),
+        body: vec![],
+        body_variables: 0,
+        bindings: None,
+        variables: 0,
+        location: location(),
+        origins: vec![location()],
+    };
+    for (head, body) in [
+        (nodes[0], nodes[2]),
+        (nodes[1], nodes[4]),
+        (nodes[0], nodes[3]),
+        (nodes[0], nodes[2]),
+    ] {
+        builder.producer(head, body, &rule).unwrap();
+    }
+    let before = builder.nodes.len();
+    builder.support_guards().unwrap();
+    assert_eq!(builder.nodes[before], Node::Or(nodes[2], nodes[3]));
+    assert_eq!(builder.nodes[before + 1], Node::Or(before, nodes[2]));
+    assert_eq!(
+        builder.nodes[before + 2],
+        Node::Implies(nodes[0], before + 1)
+    );
+    assert_eq!(
+        builder.roots.len(),
+        5,
+        "every atom retains its necessary guard"
+    );
 }

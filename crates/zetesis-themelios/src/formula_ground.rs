@@ -4,6 +4,7 @@ mod objectives;
 mod scoped_body;
 mod atoms;
 mod nodes;
+mod metadata;
 #[cfg(test)]
 mod constants;
 
@@ -189,11 +190,7 @@ pub(super) struct Builder<'a> {
     pub(super) limits: &'a FormulaLimits,
     pub(super) budget: &'a mut Budget,
     catalog: atoms::Catalog,
-    producers: Vec<Vec<usize>>,
-    // Each atom retains sorted unique source locations; completed guards
-    // transfer these vectors directly to root provenance.
-    producer_origins: Vec<Vec<Location>>,
-    atom_locations: Vec<Location>,
+    metadata: metadata::Metadata,
     nodes: Vec<Node>,
     node_indices: nodes::Index,
     roots: Vec<usize>,
@@ -253,9 +250,7 @@ impl Builder<'_> {
             limits,
             budget,
             catalog: atoms::Catalog::default(),
-            producers: Vec::new(),
-            producer_origins: Vec::new(),
-            atom_locations: Vec::new(),
+            metadata: metadata::Metadata::default(),
             nodes: Vec::new(),
             node_indices: nodes::Index::new(),
             roots: Vec::new(),
@@ -327,7 +322,7 @@ impl Builder<'_> {
             if atom.predicate().sign() != zetesis_core::Sign::Negative {
                 continue;
             }
-            let location = self.atom_locations[index];
+            let location = self.metadata.location(index);
             let bytes = atom.predicate().name().len() as u128
                 + atom.values().iter().map(value_bytes).sum::<u128>();
             self.budget
@@ -344,7 +339,7 @@ impl Builder<'_> {
                 let negative = self.node(Node::Atom(index), location)?;
                 let both = self.and(positive, negative, location)?;
                 let constraint = self.neg(both, location)?;
-                let origins = [location, self.atom_locations[other]];
+                let origins = [location, self.metadata.location(other)];
                 let evidence = if origins[0] == origins[1] {
                     &origins[..1]
                 } else {
@@ -423,24 +418,32 @@ impl Builder<'_> {
         evidence: Cow<'_, [Location]>,
         location: Location,
     ) -> Result<(), FormulaFailure> {
+        self.admit_root(evidence.len(), location)?;
+        self.publish_root(formula, evidence.into_owned());
+        Ok(())
+    }
+    fn admit_root(&self, origin_count: usize, location: Location) -> Result<(), FormulaFailure> {
         ceiling(
             FormulaResource::Roots,
             self.roots.len() as u128 + 1,
             self.limits.theory.max_roots as u128,
             location,
         )?;
-        let origins = self.origin_count as u128 + evidence.len() as u128;
+        let origins = self.origin_count as u128 + origin_count as u128;
         ceiling(
             FormulaResource::Origins,
             origins,
             self.limits.max_origin_locations as u128,
             location,
         )?;
+        Ok(())
+    }
+    /// Publish only after root/evidence admission and successful evidence preparation.
+    fn publish_root(&mut self, formula: usize, evidence: Vec<Location>) {
         self.origin_count += evidence.len();
         self.roots.push(formula);
-        self.origins.push(evidence.into_owned());
+        self.origins.push(evidence);
         self.counters.record(Event::Root);
-        Ok(())
     }
     pub(super) fn atom(
         &mut self,
@@ -481,12 +484,11 @@ impl Builder<'_> {
                 let index = entry
                     .insert()
                     .map_err(|error| FormulaFailure::AtomAllocation { error, location })?;
-                if matches!(self.purpose, Purpose::Theory) {
-                    self.producers.push(Vec::new());
-                    self.producer_origins.push(vec![location]);
-                    self.atom_locations.push(location);
-                }
                 self.counters.record(Event::AtomInserted);
+                if matches!(self.purpose, Purpose::Theory) {
+                    self.metadata
+                        .atom(location, &mut self.counters, self.limits)?;
+                }
                 index
             }
         };
@@ -700,7 +702,13 @@ impl Builder<'_> {
         let Node::Atom(atom) = self.nodes[head] else {
             unreachable!("head is an atom");
         };
-        self.producers[atom].push(antecedent);
+        self.metadata.producer(
+            atom,
+            antecedent,
+            &mut self.counters,
+            self.limits,
+            rule.location,
+        )?;
         self.record_head_origins(atom, rule)
     }
     fn head_origins(&mut self, head: usize, rule: &RuleIr) -> Result<(), FormulaFailure> {
@@ -711,38 +719,29 @@ impl Builder<'_> {
     }
     fn record_head_origins(&mut self, atom: usize, rule: &RuleIr) -> Result<(), FormulaFailure> {
         for &location in &rule.origins {
-            if let Err(position) = self.producer_origins[atom].binary_search(&location) {
-                self.budget
-                    .charge(ExpansionResource::Origins, 1, location)?;
-                let origins = &self.producer_origins[atom];
-                let growth_copy = if origins.len() == origins.capacity() {
-                    origins.len()
-                } else {
-                    0
-                };
-                self.counters.charge_work(
-                    (origins.len() - position) as u128 + 1 + growth_copy as u128,
-                    self.limits,
-                    location,
-                )?;
-                self.producer_origins[atom].insert(position, location);
-            }
+            self.metadata
+                .origin(atom, location, self.budget, &mut self.counters, self.limits)?;
         }
         Ok(())
     }
     fn support_guards(&mut self) -> Result<(), FormulaFailure> {
+        // The completed owner can be borrowed independently while formulas grow.
+        // No producer sequence is copied or folded before this semantic phase.
+        let metadata = std::mem::take(&mut self.metadata);
         for atom in 0..self.catalog.len() {
-            let location = self.atom_locations[atom];
+            let location = metadata.location(atom);
             let mut supported = FALSUM;
-            for antecedent in std::mem::take(&mut self.producers[atom]) {
+            for antecedent in metadata.producers(atom) {
+                self.work(location)?;
                 supported = self.or(supported, antecedent, location)?;
             }
             let head = self.node(Node::Atom(atom), location)?;
             let necessary = self.node(Node::Implies(head, supported), location)?;
             let negative = self.neg(necessary, location)?;
             let guard = self.neg(negative, location)?;
-            let origins = std::mem::take(&mut self.producer_origins[atom]);
-            self.root_at(guard, Cow::Owned(origins), location)?;
+            self.admit_root(metadata.origins(atom).len(), location)?;
+            let origins = metadata.copy_origins(atom, &mut self.counters, self.limits)?;
+            self.publish_root(guard, origins);
         }
         Ok(())
     }

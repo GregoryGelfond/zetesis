@@ -209,11 +209,24 @@ participates in formula construction. Complete-key equality preserves node ident
 Completed formula theories always include double-negated necessary support
 guards. These guards strengthen candidate checks while preserving reduct subset
 freedom; they are mathematically redundant, not a selectable construction option.
-Each atom's producer locations remain sorted and deduplicated, and its completed
-guard transfers those locations into root provenance. This preserves the
-association between authored sources and emitted formulas without a tree-to-vector
-conversion or another provenance copy. Per-atom producer collections remain;
-their storage is distinct from the node index and the root provenance owner.
+Construction uses one
+[`Metadata` owner](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/metadata.rs)
+with flat atom headers and shared append arenas. Each header identifies its
+producer sequence, ordered source locations and first atom occurrence. Producer
+links preserve insertion order and repetitions. Origin links preserve full source
+identity and span order, with duplicates removed when encountered. Necessary
+support formulas still fold the complete producer sequence at the final support
+stage; collecting metadata creates no formula nodes early.
+
+This removes each atom's intermediate heap buffers. It adds a link word per
+entry, and origin insertion can still inspect all locations associated with an
+atom. The final public `formula_origins()` view owns a vector per root. Once root
+and origin limits admit a guard, its ordered locations are copied directly into
+that final vector. The shared arena remains live during this output assembly;
+lower peak memory or faster solving does not follow from allocation count alone.
+Grounding work includes shared arena relocation, origin comparisons and inserts,
+producer traversal, and the final evidence traversal and copy. Allocation failure
+and either origin ceiling remain located admission failures, never UNSAT.
 
 
 ### Relation rows and vector operations

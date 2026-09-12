@@ -68,8 +68,14 @@ pub struct FormulaLimits {
     /// Total outer and local substitutions, including ones rejected by filters.
     pub max_substitutions: u64,
     /// Total grounding expression, relation-view and formula construction work.
+    /// Includes shared metadata relocation, origin search/insertion, producer
+    /// traversal and final root-evidence traversal/copy. Fixed atom and producer
+    /// publication remains part of their existing construction work ticks.
     /// A checked bulk charge may exceed the ceiling by more than one; the
     /// refusal reports the cumulative amount requested before that operation.
+    /// Origin classification first scans its already-admitted chain, then
+    /// charges comparisons before insertion. First-occurrence origin admission
+    /// retains precedence if both origin and work allowances are exhausted.
     pub max_work: u64,
     /// Complete rounds constructing the possible-positive support relation.
     pub max_support_rounds: u64,
@@ -212,6 +218,13 @@ impl std::error::Error for AtomAllocation {
 /// A located refusal of finite formula source admission; never semantic UNSAT.
 #[derive(Debug)]
 pub enum FormulaFailure {
+    /// Formula construction metadata or final root evidence could not reserve capacity.
+    MetadataAllocation {
+        /// Original reservation error, independent of configured resource limits.
+        error: std::collections::TryReserveError,
+        /// Source occurrence whose construction required storage.
+        location: Location,
+    },
     /// Formula atom or lookup-index capacity could not be allocated.
     AtomAllocation {
         /// Original reservation error, independent of configured resource limits.
@@ -332,7 +345,8 @@ impl FormulaFailure {
                     )
                 })
                 .collect(),
-            Self::AtomAllocation { location, .. }
+            Self::MetadataAllocation { location, .. }
+            | Self::AtomAllocation { location, .. }
             | Self::SupportRelation { location, .. }
             | Self::ChoiceSource { location }
             | Self::Limit { location, .. }
@@ -353,6 +367,9 @@ impl FormulaFailure {
 impl fmt::Display for FormulaFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::MetadataAllocation { error, .. } => {
+                write!(f, "formula metadata storage: {error}")
+            }
             Self::AtomAllocation { error, .. } => error.fmt(f),
             Self::SupportRelation { error, .. } => error.fmt(f),
             Self::ChoiceSource { .. } => {
@@ -391,6 +408,7 @@ impl fmt::Display for FormulaFailure {
 impl std::error::Error for FormulaFailure {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::MetadataAllocation { error, .. } => Some(error),
             Self::AtomAllocation { error, .. } => Some(error),
             Self::SupportRelation { error, .. } => Some(error),
             Self::Expansion(error) => Some(error),
