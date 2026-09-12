@@ -273,6 +273,7 @@ fn stages(out: &mut Buffer, timings: Option<&crate::StageTimings>) -> Result<(),
 fn error_kind(error: &RunError) -> &'static str {
     match error {
         RunError::Input(_) => "input",
+        RunError::TimeLimitRange { .. } => "time_limit_range",
         RunError::Observation(_) => "observation",
         RunError::JsonRecord(_) => "json_record",
         RunError::ObservationOutputLimit { .. } => "observation_output_limit",

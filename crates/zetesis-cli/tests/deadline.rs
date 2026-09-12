@@ -90,7 +90,10 @@ fn unrepresentable_process_deadlines_are_refused() {
         diagnostics.contains("time limit exceeds the platform clock range"),
         "{diagnostics}"
     );
+    assert!(diagnostics.contains("--time-limit 18446744073709551615"));
+    assert!(!diagnostics.contains("standard input"));
     let document: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(document["outcome"]["error"]["kind"], "time_limit_range");
     assert!(document["models"].as_array().unwrap().is_empty());
 }
 

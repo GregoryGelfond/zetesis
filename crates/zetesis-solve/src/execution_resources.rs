@@ -9,11 +9,10 @@
 /// still owns fresh resident subjects, epochs, search state, budgets, pending
 /// answers, counters and incumbents. CPU worker pools remain session-owned.
 ///
-/// Resources do not select a solving policy: CPU and automatic formula execution
-/// ignore the supplied device. Automatic relational execution considers it only
-/// at the existing delayed GPU-attempt boundary. A device attempt uses this exact
-/// context or fails; it never discovers a replacement. The session's existing
-/// automatic CPU selection remains separate from resource ownership.
+/// Resources do not select a solving policy: CPU and automatic execution ignore
+/// the supplied device. An explicit device request uses this exact context or
+/// fails; it never discovers a replacement. Resource ownership does not override
+/// the session's selected backend.
 ///
 /// Context operations are serialized through nonblocking leases. Busy refuses
 /// an overlapping operation without poisoning the owner; device invalidation is

@@ -59,6 +59,11 @@ pub struct Report {
 pub enum RunError {
     /// Reading a bounded standard-input source failed before semantic admission.
     Input(io::Error),
+    /// The requested process deadline cannot be represented by the host clock.
+    TimeLimitRange {
+        /// Requested whole seconds, retained without an I/O attribution.
+        seconds: u64,
+    },
     /// A complete observation could not be evaluated or rendered.
     Observation(zetesis_themelios::observation::Error),
     /// A bounded JSON model or terminal record could not be constructed.
@@ -162,6 +167,7 @@ impl fmt::Display for RunError {
         }
         match self {
             Self::Input(error) => write!(f, "standard input ('-'): {error}"),
+            Self::TimeLimitRange { seconds } => write!(f, "--time-limit {seconds}: time limit exceeds the platform clock range"),
             Self::MixedStandardInput => f.write_str(
                 "standard input ('-') must be the only input; mixed or repeated stdin roots are unsupported",
             ),
@@ -265,7 +271,7 @@ impl std::error::Error for RunError {
             Self::PublicationStopped(error) => Some(error),
             Self::Observation(error) => Some(error),
             Self::JsonRecord(error) => Some(error),
-            Self::ObservationOutputLimit { .. } => None,
+            Self::ObservationOutputLimit { .. } | Self::TimeLimitRange { .. } => None,
             Self::MixedStandardInput
             | Self::BackendUnavailable
             | Self::UnsupportedCombination { .. }

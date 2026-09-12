@@ -129,10 +129,12 @@ execution observations. The solver retains no event queue; any collection or
 side effects belong to the observer. Successful observation does not establish
 membership, coverage or publication.
 
-Automatic hardware policy emits `ExecutionObservation::AutomaticCpu` and keeps
-that route throughout the session. Earlier deferred-discovery and CPU-retry
-variants are no longer produced or part of the enum. An explicit GPU request
-can produce device observations; supplying resources alone does not select it.
+Automatic hardware policy keeps CPU execution throughout the session. Independent
+relational checking in a GPU-enabled build records `AutomaticCpu`; shared source
+rounds record `SharedCpu`, and a CPU-only build records `DeviceNotCompiled`.
+Formula preparation records `CpuFormula`. Earlier deferred-discovery and CPU-retry
+variants are no longer part of the enum. An explicit GPU request can produce
+device observations; supplying resources alone does not select it.
 
 An observer error stops the relevant operation and is retained separately from
 device errors. Some formula

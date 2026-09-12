@@ -117,12 +117,7 @@ fn process_control(seconds: Option<u64>, start: Instant) -> Result<zetesis_cpu::
     };
     let deadline = start
         .checked_add(Duration::from_secs(seconds))
-        .ok_or_else(|| {
-            RunError::Input(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "time limit exceeds the platform clock range",
-            ))
-        })?;
+        .ok_or(RunError::TimeLimitRange { seconds })?;
     Ok(zetesis_cpu::Control::with_deadline(deadline))
 }
 

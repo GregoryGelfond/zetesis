@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             )
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let relation = Relation::from_atoms(&pair, &atoms, Default::default())?;
+    let relation = Relation::from_atoms(&pair, &atoms, zetesis_core::relation::Limits::default())?;
     let control = Control::default();
     let table = Table::prepare(&relation, &[0, 1], Limits::default(), &control)?;
     let departures = [Value::Number(1), Value::Number(2)];
