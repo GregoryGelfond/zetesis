@@ -83,7 +83,11 @@ context, then uses those columns again.
 
 Device failure invalidates every primitive sharing that context. A new primitive
 on the same invalidated context cannot repair it. Checked preflight capacity
-refusals leave the context reusable. Lazy batch entry polls control and then
+refusals leave the context reusable. Relation preparation submits no queue work;
+it releases its mapped host access before settling scopes. A cancellation or
+deadline at that stage leaves a healthy context reusable only after every scope
+and device-health check succeeds. An interrupted submitted operation may still
+be live and invalidates the context. Lazy batch entry polls control and then
 checks shared health before source traversal, including a batch that would offer
 no device chunks. Failure retains incomplete accounting.
 

@@ -1,6 +1,7 @@
 //! Shared real-device lifecycle for the distinct static and formula profiles.
 //! Profile capability checks, shader identity and result decoding remain explicit.
 
+use crate::context::Effects;
 use crate::{GpuContext, GpuError, GpuErrorKind, GpuOptions, GpuSelection};
 use std::sync::mpsc;
 use std::time::Duration;
@@ -68,7 +69,7 @@ impl Runtime {
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             cache: None,
         });
-        context.complete(scopes.finish().await, Ok(()))?;
+        context.complete(scopes.finish().await, Ok(()), Effects::MayBeLive)?;
         Ok(Self {
             context: context.clone(),
             pipeline,
@@ -97,8 +98,26 @@ impl Runtime {
         scopes: ErrorScopes,
         outcome: Result<T, GpuError>,
     ) -> Result<T, GpuError> {
-        self.context
-            .complete(pollster::block_on(scopes.finish()), outcome)
+        self.context.complete(
+            pollster::block_on(scopes.finish()),
+            outcome,
+            Effects::MayBeLive,
+        )
+    }
+
+    /// For operations that submitted no queue work and released mapped access.
+    /// Scopes are fully drained and health checked before a caller interruption
+    /// may leave the context reusable. Other failures retain strict invalidation.
+    pub(crate) fn complete_unsubmitted<T>(
+        &self,
+        scopes: ErrorScopes,
+        outcome: Result<T, GpuError>,
+    ) -> Result<T, GpuError> {
+        self.context.complete(
+            pollster::block_on(scopes.finish()),
+            outcome,
+            Effects::NoSubmission,
+        )
     }
 }
 

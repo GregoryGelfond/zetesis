@@ -83,25 +83,35 @@ impl GpuRelationExecutor {
     /// # Errors
     /// Refuses cancellation, invalidated device health, exceeded host/device
     /// capacities, allocation and upload errors before returning a prepared view.
+    /// Cancellation during mapped host copying unmaps and releases the incomplete
+    /// buffer before scope settlement. If those scopes and device health succeed,
+    /// the context remains reusable: preparation submits no queue work.
     pub fn prepare<'device, 'owner, 'source>(
         &'device mut self,
         relation: &'owner Relation<'source>,
         limits: RelationGpuLimits,
         control: &Control,
     ) -> Result<PreparedGpuRelation<'device, 'owner, 'source>, RelationGpuError> {
+        self.prepare_with(relation, limits, || poll(control))
+    }
+
+    fn prepare_with<'device, 'owner, 'source>(
+        &'device mut self,
+        relation: &'owner Relation<'source>,
+        limits: RelationGpuLimits,
+        mut control: impl FnMut() -> Result<(), GpuError>,
+    ) -> Result<PreparedGpuRelation<'device, 'owner, 'source>, RelationGpuError> {
         let context = self.runtime.context.clone();
         let _lease = context.lease()?;
-        poll(control)?;
+        control()?;
         self.runtime.check_health()?;
         let bytes = packing::column_bytes(relation, self.runtime.limits())?;
         if bytes > limits.max_bytes {
             return Err(capacity("relation upload exceeds authored byte ceiling").into());
         }
         let scopes = runtime::ErrorScopes::new(self.runtime.device());
-        let columns = upload_columns(self.runtime.device(), relation, bytes, control);
-        self.runtime
-            .complete(scopes, columns.as_ref().map(|_| ()).map_err(Clone::clone))?;
-        let columns = columns?;
+        let columns = upload_columns(self.runtime.device(), relation, bytes, &mut control);
+        let columns = self.runtime.complete_unsubmitted(scopes, columns)?;
         Ok(PreparedGpuRelation {
             executor: self,
             relation,
@@ -369,7 +379,7 @@ fn upload_columns(
     device: &wgpu::Device,
     relation: &Relation<'_>,
     bytes: u64,
-    control: &Control,
+    mut control: impl FnMut() -> Result<(), GpuError>,
 ) -> Result<wgpu::Buffer, GpuError> {
     let buffer = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("zetesis immutable relation columns"),
@@ -387,7 +397,7 @@ fn upload_columns(
         } else {
             let mut offset = 0_usize;
             for source in relation.columns() {
-                poll(control)?;
+                control()?;
                 let source = bytemuck::cast_slice(source);
                 let end = offset
                     .checked_add(source.len())
@@ -400,9 +410,13 @@ fn upload_columns(
                 return Err(capacity("relation columns do not fill mapped upload"));
             }
         }
-        poll(control)
+        control()
     })();
     buffer.unmap();
     copied?;
     Ok(buffer)
 }
+
+#[cfg(test)]
+#[path = "../../tests/relation/preparation.rs"]
+mod preparation_tests;

@@ -19,6 +19,10 @@ use std::sync::{
 /// invalidates every primitive using this context. No asynchronous submission
 /// handle is exposed. Checked input/capacity refusals before device
 /// execution leave it reusable. A fresh context is required after invalidation.
+/// Relation preparation submits no queue work: cancellation after its mapped
+/// host access is released leaves the context reusable only if scope settlement
+/// and device health checks both succeed. Interrupted submitted work remains
+/// uncertain and invalidates the context.
 /// Per-primitive byte limits retain their documented scope; they do not sum other
 /// live primitives, device infrastructure or deferred driver retirement.
 #[derive(Clone)]
@@ -32,6 +36,15 @@ struct Resources {
     info: GpuInfo,
     limits: wgpu::Limits,
     lifecycle: Lifecycle,
+}
+
+/// Effect information at scope settlement, never inferred from an error kind.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Effects {
+    /// No queue work was submitted and all mapped host access has been released.
+    NoSubmission,
+    /// A submission may remain live, including after an interrupted wait.
+    MayBeLive,
 }
 
 impl GpuContext {
@@ -139,8 +152,11 @@ impl GpuContext {
         &self,
         validation: Result<(), GpuError>,
         outcome: Result<T, GpuError>,
+        effects: Effects,
     ) -> Result<T, GpuError> {
-        self.resources.lifecycle.complete(validation, outcome)
+        self.resources
+            .lifecycle
+            .complete(validation, outcome, effects)
     }
 }
 
@@ -177,11 +193,12 @@ impl Lifecycle {
         &self,
         validation: Result<(), GpuError>,
         outcome: Result<T, GpuError>,
+        effects: Effects,
     ) -> Result<T, GpuError> {
         self.faults
             .lock()
             .map_err(|_| poisoned())?
-            .complete(validation, outcome)
+            .complete(validation, outcome, effects)
     }
 }
 
@@ -241,10 +258,20 @@ impl Faults {
         &mut self,
         validation: Result<(), GpuError>,
         outcome: Result<T, GpuError>,
+        effects: Effects,
     ) -> Result<T, GpuError> {
         let health = self.check();
+        let settled_interruption = effects == Effects::NoSubmission
+            && validation.is_ok()
+            && health.is_ok()
+            && outcome.as_ref().is_err_and(|error| {
+                matches!(
+                    error.interruption,
+                    Some(zetesis_cpu::Stop::Cancelled | zetesis_cpu::Stop::Deadline)
+                )
+            });
         let result = validation.and(health).and(outcome);
-        if result.is_err() {
+        if result.is_err() && !settled_interruption {
             self.invalidated = true;
         }
         result

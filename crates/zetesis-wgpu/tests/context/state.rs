@@ -42,7 +42,7 @@ fn observed_fault_permanently_invalidates_context() {
             .detail()
             .contains("earlier execution failure")
     );
-    assert!(faults.complete(Ok(()), Ok(42)).is_err());
+    assert!(faults.complete(Ok(()), Ok(42), Effects::MayBeLive).is_err());
 }
 
 #[test]
@@ -64,7 +64,7 @@ fn completion_respects_failure_precedence() {
                 } else {
                     Ok(42)
                 };
-                let result = faults.complete(validation_result, outcome);
+                let result = faults.complete(validation_result, outcome, Effects::MayBeLive);
                 let expected = if validation {
                     Some(GpuErrorKind::Validation)
                 } else if callback {
@@ -99,6 +99,7 @@ fn cancellation_never_hides_a_scope_failure() {
         .complete::<()>(
             Err(error(GpuErrorKind::Validation, "scope")),
             Err(GpuError::interrupted(zetesis_cpu::Stop::Cancelled)),
+            Effects::MayBeLive,
         )
         .unwrap_err();
     assert_eq!(error.kind(), GpuErrorKind::Validation);
@@ -113,6 +114,7 @@ fn cancellation_never_hides_a_device_fault() {
         .complete::<()>(
             Ok(()),
             Err(GpuError::interrupted(zetesis_cpu::Stop::Cancelled)),
+            Effects::MayBeLive,
         )
         .unwrap_err();
     assert_eq!(error.interruption, None);
@@ -126,10 +128,64 @@ fn cancellation_survives_successful_scope_completion() {
         .complete::<()>(
             Ok(()),
             Err(GpuError::interrupted(zetesis_cpu::Stop::Cancelled)),
+            Effects::MayBeLive,
         )
         .unwrap_err();
     assert_eq!(error.interruption, Some(zetesis_cpu::Stop::Cancelled));
     assert!(faults.invalidated);
+}
+
+#[test]
+fn only_settled_unsubmitted_interruption_preserves_context_health() {
+    for effects in [Effects::NoSubmission, Effects::MayBeLive] {
+        for stop in [zetesis_cpu::Stop::Cancelled, zetesis_cpu::Stop::Deadline] {
+            for scope_failed in [false, true] {
+                for device_failed in [false, true] {
+                    let (sender, mut faults) = state();
+                    if device_failed {
+                        sender.try_send("device callback".into()).unwrap();
+                    }
+                    let validation = if scope_failed {
+                        Err(error(GpuErrorKind::Validation, "scope failure"))
+                    } else {
+                        Ok(())
+                    };
+                    let failure = faults
+                        .complete::<()>(validation, Err(GpuError::interrupted(stop)), effects)
+                        .unwrap_err();
+                    if scope_failed {
+                        assert_eq!(failure.kind(), GpuErrorKind::Validation);
+                    } else if device_failed {
+                        assert_eq!(failure.kind(), GpuErrorKind::Device);
+                    } else {
+                        assert_eq!(failure.interruption, Some(stop));
+                    }
+                    let reusable =
+                        effects == Effects::NoSubmission && !scope_failed && !device_failed;
+                    assert_eq!(faults.check().is_ok(), reusable);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn unsubmitted_completion_does_not_exempt_other_failures() {
+    for failure in [
+        error(GpuErrorKind::Allocation, "allocation"),
+        error(GpuErrorKind::Capacity, "unexpected copy shape"),
+        error(GpuErrorKind::Readback, "unexpected output"),
+        GpuError::interrupted(zetesis_cpu::Stop::WorkLimit),
+    ] {
+        let (_, mut faults) = state();
+        let expected = failure.clone();
+        let actual = faults
+            .complete::<()>(Ok(()), Err(failure), Effects::NoSubmission)
+            .unwrap_err();
+        assert_eq!(actual.kind(), expected.kind());
+        assert_eq!(actual.detail(), expected.detail());
+        assert!(faults.check().is_err());
+    }
 }
 
 #[test]
@@ -160,7 +216,12 @@ fn completed_preflight_releases_a_healthy_context() {
     };
     assert_eq!(refuse().unwrap_err().kind(), GpuErrorKind::Capacity);
     let _lease = lifecycle.lease().unwrap();
-    assert_eq!(lifecycle.complete(Ok(()), Ok(42)).unwrap(), 42);
+    assert_eq!(
+        lifecycle
+            .complete(Ok(()), Ok(42), Effects::MayBeLive)
+            .unwrap(),
+        42
+    );
 }
 
 #[test]
@@ -171,7 +232,11 @@ fn execution_failure_invalidates_every_context_client() {
     {
         let _lease = lifecycle.lease().unwrap();
         let failure = lifecycle
-            .complete::<()>(Ok(()), Err(error(GpuErrorKind::Readback, "invalid epoch")))
+            .complete::<()>(
+                Ok(()),
+                Err(error(GpuErrorKind::Readback, "invalid epoch")),
+                Effects::MayBeLive,
+            )
             .unwrap_err();
         assert_eq!(failure.kind(), GpuErrorKind::Readback);
     }
@@ -204,7 +269,10 @@ fn poisoned_health_is_never_recovered() {
     lifecycle.invalidate();
     assert_eq!(lifecycle.check().unwrap_err().kind(), GpuErrorKind::Device);
     assert_eq!(
-        lifecycle.complete(Ok(()), Ok(42)).unwrap_err().kind(),
+        lifecycle
+            .complete(Ok(()), Ok(42), Effects::MayBeLive)
+            .unwrap_err()
+            .kind(),
         GpuErrorKind::Device
     );
 }
@@ -239,5 +307,8 @@ fn independent_lifecycles_do_not_share_invalidation() {
     first.invalidate();
     assert_eq!(first.check().unwrap_err().kind(), GpuErrorKind::Device);
     let _lease = second.lease().unwrap();
-    assert_eq!(second.complete(Ok(()), Ok(42)).unwrap(), 42);
+    assert_eq!(
+        second.complete(Ok(()), Ok(42), Effects::MayBeLive).unwrap(),
+        42
+    );
 }

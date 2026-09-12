@@ -78,6 +78,12 @@ contracts. Statistics distinguish submitted work from completely validated
 results; payload accounting is not a measurement of process RSS or physical bus
 traffic. Read each operation's rustdoc before reusing residency after a failure.
 
+Relation preparation releases mapped host access without submitting queue work.
+Cancellation or deadline expiry during that copy returns no prepared view but
+leaves the context reusable after successful scope and device-health settlement.
+Scope/device failures retain priority and invalidate it. Cancellation during a
+submitted operation remains uncertain and invalidates the shared context.
+
 ## Native numeric aggregates
 
 Aggregate preparation coalesces complete tuple identities and retains original
