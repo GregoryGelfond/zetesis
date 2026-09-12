@@ -4525,6 +4525,31 @@
     "line": 78
   },
   {
+    "name": "Zetesis.SourceContributions.chain_unique",
+    "file": "Zetesis/SourceContributions.lean",
+    "line": 43
+  },
+  {
+    "name": "Zetesis.SourceContributions.chain_preserved",
+    "file": "Zetesis/SourceContributions.lean",
+    "line": 61
+  },
+  {
+    "name": "Zetesis.SourceContributions.contributions_append",
+    "file": "Zetesis/SourceContributions.lean",
+    "line": 85
+  },
+  {
+    "name": "Zetesis.SourceContributions.record_same",
+    "file": "Zetesis/SourceContributions.lean",
+    "line": 93
+  },
+  {
+    "name": "Zetesis.SourceContributions.record_other",
+    "file": "Zetesis/SourceContributions.lean",
+    "line": 102
+  },
+  {
     "name": "Zetesis.SourceMeasures.selection_iff_sublist",
     "file": "Zetesis/SourceMeasures.lean",
     "line": 42

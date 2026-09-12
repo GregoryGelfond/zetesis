@@ -27,6 +27,18 @@ full typed equality, including collisions. The dictionary laws below express
 the lookup contract abstractly; they do not prove hash-table construction or
 fallible Rust allocation.
 
+`SourceContributions.chain_unique` identifies the ordered observations of a
+finite chain in shared storage. `chain_preserved` shows that changing other
+entries leaves those observations unchanged. The append-log laws retain each
+atom's producer order, including duplicate occurrences, and isolate contributions
+to distinct atoms. The formula grounder's shared metadata must additionally
+establish valid owner-local links, exact iterator lengths, sorted unique source
+locations and correspondence between producer chains and the append log.
+Those Rust mutation, allocation and accounting obligations are not proved by
+the abstract chain laws. Preserved producer and origin sequences are consumed
+at the same support-guard construction phase; the original theory and reduct
+remain the semantic authorities.
+
 Device context identity, logical subject identity and submission identity remain
 separate. Sharing a context changes resource and failure ownership, not a
 candidate's frozen reduct. A busy refusal starts no device query. Context-wide

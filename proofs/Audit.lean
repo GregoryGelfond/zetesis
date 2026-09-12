@@ -905,6 +905,11 @@ import Zetesis
 #print axioms Zetesis.SingletonHeads.double_negative_singleton_reduct
 #print axioms Zetesis.SingletonHeads.negative_singleton_has_no_producer
 #print axioms Zetesis.SingletonHeads.double_negative_singleton_has_no_producer
+#print axioms Zetesis.SourceContributions.chain_unique
+#print axioms Zetesis.SourceContributions.chain_preserved
+#print axioms Zetesis.SourceContributions.contributions_append
+#print axioms Zetesis.SourceContributions.record_same
+#print axioms Zetesis.SourceContributions.record_other
 #print axioms Zetesis.SourceMeasures.selection_iff_sublist
 #print axioms Zetesis.SourceMeasures.carrier_membership
 #print axioms Zetesis.SourceMeasures.actual_value_covered
