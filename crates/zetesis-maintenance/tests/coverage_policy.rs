@@ -278,7 +278,7 @@ fn physical_metadata_keeps_floor_populations_separate() {
         record["floor_profiles"],
         serde_json::json!(["workspace", "cli-cpu"])
     );
-    assert_eq!(record["expected_physical_tests"], 54);
+    assert_eq!(record["expected_physical_tests"], 55);
     assert_eq!(record["physical_test_groups"].as_array().unwrap().len(), 16);
     assert_eq!(
         record["project_added_filename_filters"],
@@ -304,7 +304,7 @@ fn physical_metadata_retains_the_reviewed_schedule() {
     assert_eq!(
         identities,
         serde_json::json!([
-            ["wgpu-lib", "lib", "workspace libraries", 13],
+            ["wgpu-lib", "lib", "workspace libraries", 14],
             ["tight", "test", "hardware_tight", 4],
             ["formula", "test", "hardware_formula", 2],
             ["aggregate", "test", "hardware_aggregate", 3],
@@ -331,7 +331,7 @@ fn physical_metadata_retains_the_reviewed_schedule() {
     ]);
     assert_eq!(groups[14]["tests"], language_tests);
     let tests = record["physical_tests"].as_array().unwrap();
-    assert_eq!(tests.len(), 54);
+    assert_eq!(tests.len(), 55);
     let static_tests = serde_json::json!([
         "metal_constructor_executes_resident_batches_without_fallback",
         "metal_static_oracle_matches_independent_closures"
@@ -343,7 +343,7 @@ fn physical_metadata_retains_the_reviewed_schedule() {
         .collect();
     assert_eq!(tests.iter().collect::<Vec<_>>(), grouped_tests);
     let scope = record["physical_scope"].as_str().unwrap();
-    assert!(scope.starts_with("54 exact Metal tests: "));
+    assert!(scope.starts_with("55 exact Metal tests: "));
     assert!(scope.contains("static constructor and complete closure/reference checks"));
     assert!(
         scope.contains(

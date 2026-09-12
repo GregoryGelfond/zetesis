@@ -156,7 +156,7 @@ Their checks remain separate from the workspace coverage population. Run
 `scripts/check.sh oracle` for the relevant external
 clingo comparisons, `scripts/check.sh coverage` for both independent 91% line
 coverage floors, and `scripts/check.sh proofs` when proof sources or records change.
-Local `scripts/check.sh coverage --metal` adds 54 exact physical tests within
+Local `scripts/check.sh coverage --metal` adds 55 exact physical tests within
 workspace coverage: static constructor and complete closure/reference checks,
 native aggregate reduction and measurement, lazy transport
 and source closure, typed relation masks and measurement, tight and formula
