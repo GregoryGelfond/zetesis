@@ -74,6 +74,14 @@ pub struct Options {
     /// JSON is always plain.
     #[arg(long, value_enum, default_value_t)]
     pub color: crate::ColorMode,
+    /// Cooperative process deadline after input loading, in whole seconds.
+    ///
+    /// Zero requests an immediate stop. No deadline is imposed when omitted.
+    /// Checked work boundaries observe the deadline; blocking source I/O,
+    /// frontend operations and a running GPU kernel cannot be preempted.
+    /// Library callers supply their own Control instead of this process option.
+    #[arg(long, value_name = "SECONDS")]
+    pub time_limit: Option<u64>,
     /// Maximum JSON bytes per model record or terminal outcome; not an all-model buffer.
     #[arg(long, default_value_t = 8_388_608, hide_short_help = true)]
     pub max_json_record_bytes: usize,

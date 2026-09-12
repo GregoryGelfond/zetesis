@@ -101,6 +101,8 @@ themelios diagnostics with source locations and excerpts.
 Without objectives the default requests one answer set. Use `--models 0` for
 exhaustive enumeration. The [CLI reference](crates/zetesis-cli/README.md) documents
 stream contracts, diagnostics and exit codes.
+`--time-limit 60` requests a cooperative 60-second deadline after input loading;
+an expired deadline reports incomplete search. Omit it for no wall deadline.
 
 ## Grounding and execution
 

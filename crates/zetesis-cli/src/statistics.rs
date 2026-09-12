@@ -66,6 +66,12 @@ pub(crate) fn write_detailed(
 }
 
 fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
+    if let Some(seconds) = o.time_limit {
+        writeln!(
+            sink,
+            "  requested process time limit: {seconds} s (cooperative; begins after input loading)"
+        )?;
+    }
     if o.source_batching != crate::SourceBatching::Independent {
         writeln!(
             sink,

@@ -33,6 +33,14 @@ interrupted search can return incumbents whose optimality remains unproved.
 The model limit bounds displayed ties. Equal displays can represent distinct
 full answer sets.
 
+`--time-limit SECONDS` requests a cooperative deadline after input loading.
+Whole nonnegative seconds are accepted; zero requests an immediate stop and
+omission imposes no deadline. Search polls the same `Control` used by library
+consumers. An observed deadline produces partial coverage and exit 3; it is not
+a hard process timeout for source I/O, frontend work or a running device kernel.
+`--stats` includes the requested duration. Library callers supply their own
+control; this process option does not override it.
+
 Every accepted answer must satisfy the original program and its reduct
 acceptance criterion. For example, `a :- a.` has only the empty answer set.
 Classical satisfaction alone does not establish stability.

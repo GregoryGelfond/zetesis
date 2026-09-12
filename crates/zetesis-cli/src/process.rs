@@ -3,6 +3,7 @@ use crate::{Command, Completion, Options, Report, RunError, RunFailure, devices}
 use clap::Parser;
 use std::io::{self, BufWriter, IsTerminal, Read, Write};
 use std::process::ExitCode;
+use std::time::{Duration, Instant};
 use zetesis_themelios::{BundleLimits, SourceBundle};
 
 /// Process adapter. Exit 0 means a completed request, 2 an input/backend/output
@@ -84,7 +85,9 @@ fn run_input(
     output: &mut impl Write,
     diagnostics: &mut Diagnostics<impl Write>,
 ) -> Result<Report, RunFailure> {
-    let input = match load_input(options) {
+    let (input, control) = match load_input(options).and_then(|input| {
+        process_control(options.time_limit, Instant::now()).map(|control| (input, control))
+    }) {
         Ok(input) => input,
         Err(error) => {
             let failure = error.into();
@@ -95,7 +98,6 @@ fn run_input(
             });
         }
     };
-    let control = zetesis_cpu::Control::default();
     let result = match input {
         Input::Source(source) => {
             crate::driver::run_source_with_writer(source, options, output, diagnostics, &control)
@@ -107,6 +109,21 @@ fn run_input(
     result
         .map(crate::PublicationReport::into_report)
         .map_err(crate::PublicationFailure::into_legacy)
+}
+
+fn process_control(seconds: Option<u64>, start: Instant) -> Result<zetesis_cpu::Control, RunError> {
+    let Some(seconds) = seconds else {
+        return Ok(zetesis_cpu::Control::default());
+    };
+    let deadline = start
+        .checked_add(Duration::from_secs(seconds))
+        .ok_or_else(|| {
+            RunError::Input(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "time limit exceeds the platform clock range",
+            ))
+        })?;
+    Ok(zetesis_cpu::Control::with_deadline(deadline))
 }
 
 enum Input {
