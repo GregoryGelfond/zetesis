@@ -131,11 +131,16 @@ semantic guarantees, scheduling and the work that remains on the host.
 The tight GPU library offers atomic-OR and grouped-word support construction;
 both have physical Metal checks. Atomic remains its default. These are reusable
 membership primitives, and ordinary solving does not automatically select them.
-Eager formula grounding uses typed column snapshots over one possible-atom
-catalog. The same relation library supplies CPU/Rayon/GPU equality-selection
+Eager formula grounding retains typed predicate catalogs and lookup postings
+across support rounds. Eligible positive producers join combinations containing
+new tuples; complete authored-body validation remains separate. The same
+relation library supplies CPU/Rayon/GPU equality-selection
 primitives with checked row reconstruction. It preserves logical values and row
 identity. The eager support consumer currently runs on the host; GPU equality
 selection is a separate library capability.
+Candidate restrictions use necessary conditions witnessed by facts or ordinary
+disjunctive support. They leave the original program and reduct unchanged;
+every retained proposal still requires exact membership checking.
 The [primitive measurements](crates/zetesis-experiments/README.md) describe the
 operation boundaries and reproducible commands.
 

@@ -97,9 +97,12 @@ another value above one) opts into reusable batched completion. GPU formula
 batches use this same executor for exact residual checks.
 
 Each worker receives only the immutable original theory, its matching candidate,
-and limits. Search work and decisions are reserved atomically against the
-enumeration's cumulative allowance before the charged operation. No worker gets
-a fresh full-run quota. A private statically selected quota policy keeps scalar
+and limits. A query leases at most 64 work permits from the enumeration's shared
+allowance, then consumes them locally before charged operations. Settlement
+records consumed permits and returns unused ones on completion or failure.
+Waiting workers cannot declare exhaustion while a grant can still return work.
+Decisions retain individual atomic reservations. No worker gets a fresh full-run
+quota. A private statically selected quota policy keeps scalar
 queries free of shared-pointer checks while reusing the same encoding and search
 operations for parallel completion. Every job joins before counters are merged and before
 any result is committed. Failure retains the entire pending batch, even if
