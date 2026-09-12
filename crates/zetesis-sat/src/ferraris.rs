@@ -17,6 +17,10 @@ pub use completion::{CompletionExecutor, CompletionScratch, CompletionStatistics
 mod certified;
 pub use certified::CertifiedStatistics;
 
+#[path = "candidate_support.rs"]
+mod candidate_support;
+pub use candidate_support::{SupportStatistics, SupportStatus};
+
 /// Whole-operation ceilings for a membership check or stable-model enumeration.
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {
@@ -90,6 +94,9 @@ pub struct Statistics {
     pub phase_timings: Option<crate::SearchPhaseTimings>,
     /// Optional complete-theory certificate attempt and checks.
     pub certified: Option<CertifiedStatistics>,
+    /// Initial necessary disjunctive support restriction on outer candidates.
+    /// Standalone membership checks do not construct this optional restriction.
+    pub support: Option<SupportStatistics>,
 }
 
 fn verification(limits: Limits) -> zetesis_ferraris::Limits {
@@ -214,6 +221,12 @@ pub struct StableModels {
 }
 impl StableModels {
     /// Encode the original theory once, retaining its immutable instance identity.
+    /// Try a complete ordinary disjunctive support restriction on the outer CNF.
+    /// Rich asserted heads and optional formula/CNF shape limits retain general
+    /// candidate search. Construction and failed encoding work stay charged.
+    /// The optional formula bounds map SAT variables to atoms, literal units to
+    /// nodes and clause units to roots; final encoding uses remaining CNF limits.
+    /// Original-model and frozen-reduct checks always use the original theory.
     ///
     /// # Errors
     /// Refuses encoding admission, work limits, cancellation or allocation.
@@ -224,9 +237,11 @@ impl StableModels {
             control: &control,
             statistics: SearchStatistics::default(),
         };
-        let candidate_cnf = encoding::encode(theory, None, limits.admission, &mut budget)?;
+        let mut candidate_cnf = encoding::encode(theory, None, limits.admission, &mut budget)?;
+        let support = candidate_support::restrict(&mut candidate_cnf, theory, limits, &mut budget)?;
         let statistics = Statistics {
             search: budget.statistics,
+            support: Some(support),
             ..Default::default()
         };
         Ok(Self {
