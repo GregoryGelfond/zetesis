@@ -92,15 +92,11 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
             }
             Event::ExactCompletion { workers, max_scratch_bytes } => writeln!(self,
                 "Exact completion: requested workers={workers}; bounded logical scratch bytes={max_scratch_bytes}"),
-            Event::DeferredDevice { minimum_batch, grounder } => self.metadata(Label::Auto,
-                format_args!("GPU discovery deferred; the first seed stays CPU. Later batches of at least {minimum_batch} candidates may use a physical GPU with {} grounding (provisional heuristic).", grounder.label())),
+            Event::AutomaticCpu => self.metadata(Label::Auto,
+                format_args!("CPU selected; no measured GPU crossover for this execution profile.")),
             Event::SharedCpu => self.metadata(Label::Auto, format_args!("explicit shared source batching selects CPU without device discovery.")),
             Event::DeviceNotCompiled => self.metadata(Label::Auto,
                 format_args!("GPU support was not compiled; using CPU without device discovery.")),
-            Event::DeviceUnavailable { grounder, cause } => self.metadata(Label::Auto,
-                format_args!("retaining {} CPU; GPU unavailable: {cause}", grounder.label())),
-            Event::DeviceRetry { grounder, cause } => self.metadata(Label::Auto,
-                format_args!("GPU batch failed; retrying on {} CPU: {cause}", grounder.label())),
             #[cfg(feature = "gpu")]
             Event::LazyDeviceGrounding { requested } => self.metadata(Label::Grounding,
                 format_args!("requested={}, effective=lazy (host source joins; per-world device consequences; no complete ground-rule store)", requested.label())),

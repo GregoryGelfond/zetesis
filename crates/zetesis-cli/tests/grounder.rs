@@ -111,7 +111,7 @@ fn lazy_ignores_static_lowering_caps() {
     assert_eq!((report.models, report.checked), (64, 64));
     assert_eq!(models(&output).len(), 64);
     #[cfg(feature = "gpu")]
-    assert!(diagnostics.contains("GPU discovery deferred"));
+    assert!(diagnostics.contains("no measured GPU crossover"));
     #[cfg(not(feature = "gpu"))]
     assert!(diagnostics.contains("GPU support was not compiled"));
     assert!(diagnostics.contains("requested=lazy, effective=lazy"));
@@ -236,7 +236,7 @@ fn both_cpu_modes_keep_work_and_candidate_stops_incomplete() {
 }
 
 #[test]
-fn eager_auto_keeps_eager_cpu_after_gpu_failure_or_in_cpu_only_build() {
+fn eager_automatic_execution_retains_cpu() {
     let (report, output, diagnostics) = solve(
         "{a}. {b}. {c}. {d}. {e}. {f}.",
         &[
@@ -253,10 +253,7 @@ fn eager_auto_keeps_eager_cpu_after_gpu_failure_or_in_cpu_only_build() {
     assert_eq!(models(&output).len(), 64);
     assert!(!diagnostics.contains("effective=lazy"));
     #[cfg(feature = "gpu")]
-    assert!(
-        diagnostics.contains("retaining eager CPU; GPU unavailable:")
-            || diagnostics.contains("GPU batch failed; retrying on eager CPU:")
-    );
+    assert!(diagnostics.contains("no measured GPU crossover"));
     #[cfg(not(feature = "gpu"))]
     assert!(diagnostics.contains("GPU support was not compiled"));
 }

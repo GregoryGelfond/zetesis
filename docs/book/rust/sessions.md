@@ -129,8 +129,13 @@ execution observations. The solver retains no event queue; any collection or
 side effects belong to the observer. Successful observation does not establish
 membership, coverage or publication.
 
+Automatic hardware policy emits `ExecutionObservation::AutomaticCpu` and keeps
+that route throughout the session. Earlier deferred-discovery and CPU-retry
+variants are no longer produced or part of the enum. An explicit GPU request
+can produce device observations; supplying resources alone does not select it.
+
 An observer error stops the relevant operation and is retained separately from
-device errors, so it cannot request automatic backend fallback. Some formula
+device errors. Some formula
 initialization failures are retained in a session and delivered by its first
 pull. After a failed pull, later pulls return `None`; the failure retains the
 original cause and any established semantic evidence. `SolveFailure::subject`

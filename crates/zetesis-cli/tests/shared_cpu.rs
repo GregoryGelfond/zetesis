@@ -74,7 +74,7 @@ fn explicit_shared_policy_pins_auto_to_cpu() {
     );
     assert!(json["statistics"]["lazy_execution"].is_null());
     assert!(diagnostics.contains("explicit shared source batching selects CPU"));
-    assert!(!diagnostics.contains("GPU discovery deferred"));
+    assert!(!diagnostics.contains("no measured GPU crossover"));
     assert!(diagnostics.contains("source and world work reported separately"));
 }
 

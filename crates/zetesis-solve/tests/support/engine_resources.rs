@@ -29,7 +29,7 @@ fn supplied_context(backend: Backend, expected_api: &str) {
         )
         .unwrap();
         require_context(&engine, &context, grounder);
-        delayed_context(&context, grounder);
+        automatic_cpu(&context, grounder);
     }
 }
 
@@ -48,7 +48,7 @@ fn require_context(engine: &Engine, expected: &GpuContext, grounder: Grounder) {
     assert!(expected.same_instance(actual));
 }
 
-fn delayed_context(context: &GpuContext, grounder: Grounder) {
+fn automatic_cpu(context: &GpuContext, grounder: Grounder) {
     let owner = zetesis_themelios::admit(
         "a :- not b. b :- not a. c :- not d. d :- not c. e :- not f. f :- not e.".into(),
         zetesis_themelios::AdmissionOptions::default(),
@@ -79,35 +79,19 @@ fn delayed_context(context: &GpuContext, grounder: Grounder) {
         Candidates::new(owner.program(), CandidateLimits::default(), control.clone());
     let first = candidates.next_selection().unwrap().unwrap();
     engine
-        .check(
-            &config,
-            owner.program(),
-            &[first],
-            &mut observations,
-            &control,
-            &phases,
-        )
+        .check(&config, owner.program(), &[first], &control, &phases)
         .unwrap();
     assert!(!engine.executor.is_gpu());
-    assert!(!engine.attempted_gpu);
     let batch = std::iter::from_fn(|| candidates.next_selection())
-        .take(super::AUTO_GPU_MIN_BATCH)
+        .take(32)
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
-    assert_eq!(batch.len(), super::AUTO_GPU_MIN_BATCH);
+    assert_eq!(batch.len(), 32);
     engine
-        .check(
-            &config,
-            owner.program(),
-            &batch,
-            &mut observations,
-            &control,
-            &phases,
-        )
+        .check(&config, owner.program(), &batch, &control, &phases)
         .unwrap();
-    assert!(engine.attempted_gpu);
-    require_context(&engine, context, grounder);
-    assert!(engine.resources.gpu_context().is_none());
+    assert!(!engine.executor.is_gpu());
+    assert!(engine.lazy_statistics(32).is_none());
 }
 
 #[test]

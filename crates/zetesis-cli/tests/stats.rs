@@ -242,16 +242,11 @@ fn cancellation_and_source_refusal_have_unavailable_execution_not_zero_work() {
 }
 
 #[test]
-fn automatic_execution_is_identified_only_as_precisely_as_collected_evidence() {
+fn automatic_execution_reports_cpu() {
     let options = Options::try_parse_from(["zetesis", "--stats", "--workers", "1"]).unwrap();
     let (_, _, text) = solve("p.", &options);
-    if cfg!(feature = "gpu") {
-        assert!(text.contains("backend=untracked (CPU/GPU/mixed possible)"));
-        assert!(text.contains("auto selection: may change between batches"));
-    } else {
-        assert!(text.contains("backend=cpu; oracle=closure; grounder=lazy"));
-        assert!(text.contains("GPU compiled=false"));
-    }
+    assert!(text.contains("backend=cpu; oracle=closure; grounder=lazy"));
+    assert!(!text.contains("backend=untracked"));
 }
 
 #[test]

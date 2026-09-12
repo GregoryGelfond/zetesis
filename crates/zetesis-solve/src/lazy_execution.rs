@@ -102,9 +102,9 @@ impl LazyTransportReplacements {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "gpu"))]
 #[path = "../tests/support/lazy_accounting.rs"]
-pub(crate) mod tests;
+mod tests;
 
 #[cfg(feature = "gpu")]
 impl LazyExecutionStatistics {

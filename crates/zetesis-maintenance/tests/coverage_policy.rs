@@ -200,7 +200,7 @@ fn metal_selection_refuses_vulkan_substitution() {
             "vulkan_collection_refuses_a_foreign_context",
         ),
         (
-            "metal_collection_observer_failure_retains_a_prefix",
+            "metal_automatic_collection_retains_cpu_execution",
             "vulkan_collection_observer_failure_retains_a_prefix",
         ),
         (

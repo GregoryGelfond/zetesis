@@ -13,7 +13,7 @@
 /// ignore the supplied device. Automatic relational execution considers it only
 /// at the existing delayed GPU-attempt boundary. A device attempt uses this exact
 /// context or fails; it never discovers a replacement. The session's existing
-/// automatic CPU fallback policy remains separate from resource ownership.
+/// automatic CPU selection remains separate from resource ownership.
 ///
 /// Context operations are serialized through nonblocking leases. Busy refuses
 /// an overlapping operation without poisoning the owner; device invalidation is

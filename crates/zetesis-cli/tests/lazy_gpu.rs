@@ -86,15 +86,12 @@ mod physical {
     const WORLDS: &str = "a:-not b. b:-not a. x:-a. y:-b. cross:-x,y. :-cross.";
 
     #[test]
-    #[ignore = "requires physical Metal through automatic lazy selection"]
-    fn automatic_metal_keeps_lazy_grounding() {
+    #[ignore = "requires physical Metal with automatic materialization"]
+    fn metal_automatic_grounder_keeps_source_joins() {
         let source = "{a}. {b}. {c}. {d}. {e}. {f}.";
         let (_, expected, _) = solve(source, &["--backend", "cpu", "--json"]);
-        for (backend, grounder) in [
-            (zetesis_cli::Backend::Auto, zetesis_cli::Grounder::Auto),
-            (zetesis_cli::Backend::Auto, zetesis_cli::Grounder::Lazy),
-            (zetesis_cli::Backend::Metal, zetesis_cli::Grounder::Auto),
-        ] {
+        for grounder in [zetesis_cli::Grounder::Auto, zetesis_cli::Grounder::Lazy] {
+            let backend = zetesis_cli::Backend::Metal;
             let mut selected = options(&["--stats", "--json"]);
             selected.backend = backend;
             selected.grounder = grounder;

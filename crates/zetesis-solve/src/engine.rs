@@ -1,4 +1,4 @@
-//! Independent materialization selection and provisional hardware scheduling.
+//! Independent materialization selection and explicit hardware execution.
 
 use crate::ExecutionObservation as Event;
 use crate::execution_observation::ExecutionSink;
@@ -12,9 +12,6 @@ use crate::phase_timing::{Recorder, SolvePhase};
 use crate::{
     Backend, ExecutionResources, Grounder, Oracle, SolveConfig, SolveError, SourceBatching,
 };
-
-/// An initial scheduling heuristic, not a measured performance crossover.
-pub(crate) const AUTO_GPU_MIN_BATCH: usize = Backend::AUTO_GPU_MIN_BATCH;
 
 pub(crate) fn validate_combination(options: &SolveConfig) -> Result<(), SolveError> {
     if options.source_batching != SourceBatching::Independent
@@ -44,12 +41,6 @@ pub(crate) fn validate_countermodel(options: &SolveConfig) -> Result<(), SolveEr
 
 pub(crate) struct Engine {
     executor: Executor,
-    automatic: bool,
-    attempted_gpu: bool,
-    // Retain only resources needed by the deferred automatic device attempt.
-    resources: ExecutionResources,
-    // Retain attempted device work if automatic execution resumes on CPU.
-    retired_lazy_statistics: Option<crate::LazyExecutionStatistics>,
 }
 
 impl Engine {
@@ -63,14 +54,14 @@ impl Engine {
         &self,
         queued_results: usize,
     ) -> Option<crate::LazyExecutionStatistics> {
-        let (statistics, owns_queue) = match &self.executor {
+        let statistics: Option<&crate::LazyExecutionStatistics> = match &self.executor {
             #[cfg(feature = "gpu")]
-            Executor::LazyGpu(executor) => (Some(&executor.statistics), true),
-            _ => (self.retired_lazy_statistics.as_ref(), false),
+            Executor::LazyGpu(executor) => Some(&executor.statistics),
+            _ => None,
         };
         statistics.map(|statistics| {
             let mut statistics = statistics.clone();
-            statistics.queued_results = if owns_queue { queued_results } else { 0 };
+            statistics.queued_results = queued_results;
             statistics
         })
     }
@@ -107,10 +98,7 @@ impl Engine {
                     if options.source_batching != SourceBatching::Independent {
                         observations.record(Event::SharedCpu)?;
                     } else if cfg!(feature = "gpu") {
-                        observations.record(Event::DeferredDevice {
-                            minimum_batch: AUTO_GPU_MIN_BATCH,
-                            grounder: grounding_mode(options),
-                        })?;
+                        observations.record(Event::AutomaticCpu)?;
                     } else {
                         observations.record(Event::DeviceNotCompiled)?;
                     }
@@ -119,41 +107,7 @@ impl Engine {
             }
             _ => Executor::gpu(options, program, cached, resources, observations, phases)?,
         };
-        let automatic = options.backend == Backend::Auto
-            && options.source_batching == SourceBatching::Independent
-            && cfg!(feature = "gpu");
-        Ok(Self {
-            executor,
-            automatic,
-            attempted_gpu: false,
-            resources: if automatic {
-                resources.clone()
-            } else {
-                ExecutionResources::default()
-            },
-            retired_lazy_statistics: None,
-        })
-    }
-
-    // Accept a prepared executor only after all its observations succeeded.
-    // External observation failures are terminal, never device unavailability.
-    fn finish_device_attempt(
-        &mut self,
-        attempt: Result<Executor, SolveError>,
-        options: &SolveConfig,
-        observations: &mut impl ExecutionSink,
-    ) -> Result<(), SolveError> {
-        match attempt {
-            Ok(gpu) => self.executor = gpu,
-            Err(error @ SolveError::ExecutionObservation(_)) => {
-                return Err(error);
-            }
-            Err(error) => observations.record(Event::DeviceUnavailable {
-                grounder: grounding_mode(options),
-                cause: &error,
-            })?,
-        }
-        Ok(())
+        Ok(Self { executor })
     }
 
     pub(crate) fn check(
@@ -161,7 +115,6 @@ impl Engine {
         options: &SolveConfig,
         program: &Program,
         seeds: &[SeedSelection],
-        observations: &mut impl ExecutionSink,
         control: &Control,
         phases: &Recorder,
     ) -> Result<Vec<Result<Option<Model>, Stop>>, SolveError> {
@@ -171,65 +124,14 @@ impl Engine {
         if let Err(error) = control.poll() {
             return Ok(vec![Err(error)]);
         }
-        if should_probe_gpu(self.automatic, self.attempted_gpu, seeds.len()) {
-            self.attempted_gpu = true;
-            let resources = std::mem::take(&mut self.resources);
-            let attempt = phases.measure(SolvePhase::ExecutionSetup, || {
-                Executor::gpu(
-                    options,
-                    program,
-                    self.executor.ground(),
-                    &resources,
-                    observations,
-                    phases,
-                )
-            });
-            self.finish_device_attempt(attempt, options, observations)?;
-        }
         let phase = if self.executor.is_gpu() {
             SolvePhase::GpuHostOracle
         } else {
             SolvePhase::ClosureMembership
         };
-        match phases.measure(phase, || {
+        phases.measure(phase, || {
             self.executor.check(options, program, seeds, control)
-        }) {
-            Err(error @ SolveError::LazyStatisticsOverflow) => Err(error),
-            Err(error) if self.automatic && self.executor.is_gpu() => {
-                // No failed-batch result has been published. Eager retains the
-                // same graph; lazy execution retries these same source seeds.
-                self.retired_lazy_statistics = self.lazy_statistics(0);
-                observations.record(Event::DeviceRetry {
-                    grounder: grounding_mode(options),
-                    cause: &error,
-                })?;
-                self.executor = phases.measure(SolvePhase::ExecutionSetup, || {
-                    Executor::cpu(
-                        options,
-                        program,
-                        self.executor.ground(),
-                        observations,
-                        phases,
-                    )
-                })?;
-                phases.measure(SolvePhase::ClosureMembership, || {
-                    self.executor.check(options, program, seeds, control)
-                })
-            }
-            result => result,
-        }
-    }
-}
-
-fn should_probe_gpu(automatic: bool, attempted: bool, candidates: usize) -> bool {
-    automatic && !attempted && candidates >= AUTO_GPU_MIN_BATCH
-}
-
-fn grounding_mode(options: &SolveConfig) -> Grounder {
-    if options.grounder == Grounder::Eager {
-        Grounder::Eager
-    } else {
-        Grounder::Lazy
+        })
     }
 }
 
@@ -355,6 +257,7 @@ impl Executor {
         }
     }
 
+    #[cfg(test)]
     fn ground(&self) -> Option<Arc<GroundProgram>> {
         match self {
             Self::Cpu(_) | Self::SharedCpu { .. } => None,
@@ -423,7 +326,7 @@ impl Executor {
         }
 
         // Validate or discover hardware before new static materialization.
-        // Eager CPU attempts already own a graph, shared without expansion.
+        // Caller-supplied compiled graphs are reused without expansion.
         let oracle = match context {
             Some(context) => GpuOracle::from_context(context),
             None => GpuOracle::new_selected(GpuOptions::default(), selection(options.backend)),
@@ -636,17 +539,6 @@ mod resource_tests;
 
 #[cfg(test)]
 mod tests {
-    use super::{AUTO_GPU_MIN_BATCH, should_probe_gpu};
-
-    #[test]
-    fn auto_probes_only_once_and_after_the_lazy_first_seed() {
-        assert!(!should_probe_gpu(true, false, 1));
-        assert!(!should_probe_gpu(true, false, AUTO_GPU_MIN_BATCH - 1));
-        assert!(should_probe_gpu(true, false, AUTO_GPU_MIN_BATCH));
-        assert!(!should_probe_gpu(true, true, AUTO_GPU_MIN_BATCH));
-        assert!(!should_probe_gpu(false, false, AUTO_GPU_MIN_BATCH));
-    }
-
     #[cfg(feature = "gpu")]
     #[test]
     fn explicit_api_and_vendor_requests_are_preserved() {

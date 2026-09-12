@@ -672,12 +672,7 @@ impl<'a> Session<'a> {
         let solving = self.phases.stage(crate::SolveStage::Solving);
         let next = match &mut self.state {
             State::Closure(state) => state
-                .next(
-                    &self.config,
-                    observations,
-                    &self.control,
-                    self.phases.recorder(),
-                )
+                .next(&self.config, &self.control, self.phases.recorder())
                 .map(|result| result.map(|model| (model, None))),
             State::Formula(state) => state.next(
                 &self.config,

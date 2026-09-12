@@ -112,18 +112,16 @@ zetesis examples/network-repair.lp --backend metal --grounder eager --models 0
 zetesis devices
 ```
 
-Automatic selection uses the admitted program profile and available execution
-capabilities. Explicit choices remain useful for reproducible comparisons.
-Normal relational programs default to lazy source joins, including when
-automatic selection moves later batches from CPU to Metal. Explicit eager
-grounding remains available on either backend.
+Normal relational programs default to lazy source joins and parallel CPU
+execution. Automatic hardware selection currently retains CPU: the measured
+workloads do not establish a GPU crossover that justifies an automatic switch.
+Explicit eager grounding remains available on either backend.
 General formulas use eager source grounding, with host candidate search,
 optional GPU propagation and exact CPU completion of unresolved reduct queries.
-For CLI invocations that select GPU execution, adapter discovery and initialization
-happen automatically during the solve, including on the first run after installation.
-`zetesis devices` is an optional inventory.
-Automatic selection may keep small workloads on the CPU; `--backend metal`
-requests Metal explicitly.
+Use `--backend metal` to request Metal explicitly. Adapter discovery and
+initialization happen during the solve, including on the first run after
+installation. `zetesis devices` is an optional inventory; no qualification step
+is required to use the solver.
 
 Metal has physical regression coverage on Apple M4 Pro. Vulkan is implemented
 but needs physical qualification on each claimed platform. Full GPU residency,

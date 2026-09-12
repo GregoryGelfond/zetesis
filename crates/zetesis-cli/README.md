@@ -116,15 +116,14 @@ For relational closure:
 
 | Grounder | CPU | Automatic hardware | Explicit GPU |
 |---|---|---|---|
-| `auto` | Lazy source joins | Lazy CPU first; possible later lazy GPU batches | Host source joins with per-world GPU consequences |
-| `lazy` | Candidate-specific source joins | Lazy CPU first; possible later lazy GPU batches | Host source joins with per-world GPU consequences |
-| `eager` | Packed static closure | Static graph retained across GPU attempts and CPU fallback | Static lowering |
+| `auto` | Lazy source joins | Lazy CPU source joins | Host source joins with per-world GPU consequences |
+| `lazy` | Candidate-specific source joins | Lazy CPU source joins | Host source joins with per-world GPU consequences |
+| `eager` | Packed static closure | Packed static CPU closure | Static lowering |
 
-The automatic closure policy may attempt a GPU after the first seed when a batch
-contains at least 32 candidates. This is a provisional heuristic, not a measured
-performance crossover. Automatic failure can retry unreported work on CPU;
-explicit hardware requests never silently fall back. Static GPU closure admits
-at most 4,096 atoms.
+Automatic hardware selection retains CPU until measurements establish a GPU
+crossover for a supported execution profile. An explicit GPU request prepares
+its device during session setup and never silently falls back to CPU. Static
+GPU closure admits at most 4,096 atoms.
 
 General formula execution requires eager admission. Automatic backend selection
 uses CPU; explicit GPU selection batches propagation and completes residual

@@ -465,7 +465,7 @@ fn cpu_only_auto_eager_routing_reports_its_compiled_capability() {
     assert!(
         diagnostics.contains("GPU support was not compiled; using CPU without device discovery")
     );
-    assert!(!diagnostics.contains("GPU discovery deferred"));
+    assert!(!diagnostics.contains("no measured GPU crossover"));
 }
 
 #[test]
@@ -510,7 +510,7 @@ fn tiny_automatic_lazy_run_uses_cpu() {
     assert_eq!(report.models, 1);
     let diagnostics = String::from_utf8(diagnostics).unwrap();
     #[cfg(feature = "gpu")]
-    assert!(diagnostics.contains("GPU discovery deferred"));
+    assert!(diagnostics.contains("no measured GPU crossover"));
     #[cfg(not(feature = "gpu"))]
     assert!(diagnostics.contains("GPU support was not compiled"));
     assert!(diagnostics.contains("Backend: cpu"));

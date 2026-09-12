@@ -198,24 +198,22 @@ qualification for each claimed backend; an observed driver fault is not presumed
 
 For admitted relational programs, automatic materialization selects lazy source
 grounding on both CPU and GPU. Hardware changes do not require a complete ground
-rule store. Explicit eager grounding retains its compiled graph, including when
-automatic device execution falls back to CPU. General formulas still require
-eager grounding.
+rule store. Explicit eager grounding retains its compiled graph. General
+formulas still require eager grounding.
 
-The automatic relational scheduler starts on CPU and may attempt GPU execution when a later
-candidate batch contains at least 32 candidates. This is a provisional scheduling
-heuristic, not a measured crossover. Explicit lazy grounding permits the same
-automatic attempt. An explicit GPU backend prepares its executor during session
-setup. Default resources discover a device at the selected attempt boundary;
+Automatic hardware selection retains CPU throughout the solve. Existing
+measurements do not establish a device crossover for an automatic policy; batch
+size alone is insufficient evidence. Explicit shared CPU source batching also
+remains a CPU policy. An explicit GPU backend prepares its executor during
+session setup. Default resources discover a device at that boundary;
 caller-supplied [ExecutionResources](../rust/sessions.md#share-execution-resources)
 reuse their exact context after policy and capability checks, without discovering
-a replacement. Explicit shared CPU source batching remains a CPU policy.
+a replacement. Supplying a context does not override automatic CPU selection.
 
-If automatic device execution fails before publishing a batch, the engine can
-retry those same seeds on CPU. It retains the failed lazy device attempt's work
-record. A source limit or cancellation remains an incomplete result rather than
-a reason to exceed that bound. Device statistics count device attempts; they do
-not include seeds checked only by the CPU.
+An explicit device failure is returned without a hidden CPU retry. A source
+limit or cancellation remains an incomplete result. Device statistics count
+actual device attempts and never include seeds checked only by the CPU. This
+policy leaves device scheduling separate from the reduct membership contract.
 
 ## Immutable rounds and commit boundaries
 

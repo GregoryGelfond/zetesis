@@ -2,7 +2,7 @@
 
 use crate::{Backend, LazyExecutionStatistics};
 
-pub(crate) fn fixture() -> LazyExecutionStatistics {
+fn fixture() -> LazyExecutionStatistics {
     LazyExecutionStatistics {
         requested_backend: Backend::Metal,
         adapter: "FORMAT FIXTURE: no physical execution".into(),
@@ -65,7 +65,6 @@ pub(crate) fn fixture() -> LazyExecutionStatistics {
     }
 }
 
-#[cfg(feature = "gpu")]
 #[test]
 fn completed_batches_count_duplicate_candidate_occurrences() {
     let mut stats = fixture();
@@ -82,7 +81,6 @@ fn completed_batches_count_duplicate_candidate_occurrences() {
     assert_eq!(stats.stopped_candidates, 3);
 }
 
-#[cfg(feature = "gpu")]
 #[test]
 fn failed_batches_retain_submitted_work() {
     let mut stats = fixture();
@@ -136,7 +134,6 @@ fn failed_batches_retain_submitted_work() {
     assert_eq!(stats.host_wait.as_nanos(), 132);
 }
 
-#[cfg(feature = "gpu")]
 #[test]
 fn transport_peak_is_the_largest_attempted_batch() {
     let mut stats = fixture();
@@ -156,7 +153,6 @@ fn transport_peak_is_the_largest_attempted_batch() {
     }
 }
 
-#[cfg(feature = "gpu")]
 #[test]
 fn replacement_overflow_preserves_the_previous_record() {
     type Field = fn(&mut zetesis_wgpu::LazyTransportReplacements) -> &mut u64;
@@ -193,7 +189,6 @@ fn replacement_overflow_preserves_the_previous_record() {
     }
 }
 
-#[cfg(feature = "gpu")]
 #[test]
 fn failed_batches_retain_replacement_reasons() {
     let mut stats = fixture();
@@ -232,7 +227,6 @@ fn failed_batches_retain_replacement_reasons() {
     );
 }
 
-#[cfg(feature = "gpu")]
 #[test]
 fn transport_overflow_preserves_the_previous_record() {
     for (allocations, reuses) in [(u64::MAX, 0), (0, u64::MAX)] {
@@ -255,7 +249,6 @@ fn transport_overflow_preserves_the_previous_record() {
     }
 }
 
-#[cfg(feature = "gpu")]
 #[test]
 fn binding_overflow_preserves_the_previous_record() {
     type Field = fn(&mut zetesis_wgpu::LazyTransportUsage) -> &mut zetesis_wgpu::LazyBufferUsage;
@@ -286,7 +279,6 @@ fn binding_overflow_preserves_the_previous_record() {
     }
 }
 
-#[cfg(feature = "gpu")]
 #[test]
 fn release_overflow_preserves_the_previous_record() {
     for overflow in [false, true] {
@@ -311,7 +303,6 @@ fn release_overflow_preserves_the_previous_record() {
     }
 }
 
-#[cfg(feature = "gpu")]
 #[test]
 fn failed_batches_retain_binding_observations() {
     let mut stats = fixture();
@@ -391,7 +382,6 @@ fn failed_batches_retain_binding_observations() {
     );
 }
 
-#[cfg(feature = "gpu")]
 #[test]
 fn counter_overflow_preserves_the_previous_record() {
     let mut stats = fixture();
@@ -412,7 +402,6 @@ fn counter_overflow_preserves_the_previous_record() {
     assert_eq!(stats, before);
 }
 
-#[cfg(feature = "gpu")]
 #[test]
 fn duration_overflow_preserves_the_previous_record() {
     let mut stats = fixture();
@@ -433,7 +422,6 @@ fn duration_overflow_preserves_the_previous_record() {
     assert_eq!(stats, before);
 }
 
-#[cfg(feature = "gpu")]
 mod classification {
     use std::error::Error;
     use zetesis_core::{

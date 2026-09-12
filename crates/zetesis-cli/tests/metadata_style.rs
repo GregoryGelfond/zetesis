@@ -67,7 +67,7 @@ fn diagnostics(mode: ColorMode, json: bool) -> (Vec<u8>, String) {
 #[test]
 fn plain_metadata_describes_the_execution_policy() {
     let automatic = if cfg!(feature = "gpu") {
-        "GPU discovery deferred; the first seed stays CPU. Later batches of at least 32 candidates may use a physical GPU with lazy grounding (provisional heuristic)."
+        "CPU selected; no measured GPU crossover for this execution profile."
     } else {
         "GPU support was not compiled; using CPU without device discovery."
     };

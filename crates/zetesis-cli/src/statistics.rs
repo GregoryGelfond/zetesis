@@ -559,22 +559,12 @@ fn closure(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
         "lazy"
     };
     let cpu = report.shared_execution.is_some()
-        || options.backend == Backend::Cpu
-        || (options.backend == Backend::Auto && !cfg!(feature = "gpu"));
+        || matches!(options.backend, Backend::Auto | Backend::Cpu);
     if cpu {
         writeln!(
             sink,
             "  effective execution: backend=cpu; oracle=closure; grounder={grounder}; workers={}",
             options.workers
-        )?;
-    } else if options.backend == Backend::Auto {
-        writeln!(
-            sink,
-            "  effective execution: oracle=closure; backend=untracked (CPU/GPU/mixed possible); grounder={grounder}"
-        )?;
-        writeln!(
-            sink,
-            "  auto selection: may change between batches; see backend diagnostics for actual adapter and fallback events"
         )?;
     } else {
         writeln!(

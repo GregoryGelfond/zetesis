@@ -4,7 +4,8 @@
 /// General formulas use GPU propagation with exact native CPU residual search.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Backend {
-    /// CPU formula search; closure may use GPU batches of 32 or more after its first seed.
+    /// Retain CPU execution until a measured device crossover is established.
+    /// Explicit GPU requests remain independent of this scheduling policy.
     #[default]
     Auto,
     /// Source joins or static closure scans on an owned Rayon pool.
@@ -24,10 +25,6 @@ pub enum Backend {
 }
 
 impl Backend {
-    /// Provisional minimum population for a delayed automatic GPU attempt.
-    /// This scheduling heuristic is not a measured performance crossover.
-    pub const AUTO_GPU_MIN_BATCH: usize = 32;
-
     /// Stable spelling for configuration and machine-readable execution reports.
     #[must_use]
     pub const fn label(self) -> &'static str {
@@ -51,7 +48,7 @@ pub enum Grounder {
     #[default]
     Auto,
     /// Require source joins without materializing a complete ground rule store.
-    /// Explicit GPU requests use immutable relational rounds; Auto may discover a device after the first seed.
+    /// Explicit GPU requests use immutable relational rounds; Auto retains CPU.
     Lazy,
     /// Materialize a bounded static program before checking on CPU or GPU.
     Eager,

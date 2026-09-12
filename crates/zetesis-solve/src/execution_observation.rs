@@ -51,33 +51,13 @@ pub enum ExecutionObservation<'a> {
         /// Logical scratch ceiling, not process RSS.
         max_scratch_bytes: u64,
     },
-    /// An automatic device attempt is deferred until a later batch.
-    ///
-    /// The attempt uses a supplied context, or discovers a device when none was supplied.
-    DeferredDevice {
-        /// Minimum candidate population for the device attempt.
-        minimum_batch: usize,
-        /// Effective relational grounding policy.
-        grounder: Grounder,
-    },
+    /// Automatic execution retains CPU because no measured device crossover
+    /// has been established for the current policy.
+    AutomaticCpu,
     /// Explicit shared source rounds select CPU execution.
     SharedCpu,
     /// This binary has no compiled device support.
     DeviceNotCompiled,
-    /// A device preparation failed; CPU remains selected if observation succeeds.
-    DeviceUnavailable {
-        /// Effective relational grounding policy.
-        grounder: Grounder,
-        /// Preparation failure; this observation does not replace the cause.
-        cause: &'a SolveError,
-    },
-    /// A failed device batch will be retried on CPU if observation succeeds.
-    DeviceRetry {
-        /// Effective relational grounding policy.
-        grounder: Grounder,
-        /// Original device failure.
-        cause: &'a SolveError,
-    },
     /// Host source joins will supply device consequence rounds.
     #[cfg(feature = "gpu")]
     LazyDeviceGrounding {

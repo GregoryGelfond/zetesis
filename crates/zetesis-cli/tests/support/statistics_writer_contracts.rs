@@ -101,11 +101,7 @@ fn every_completed_cpu_statistics_prefix_is_fallible_without_losing_bytes() {
     assert_eq!(report.completion, Completion::Exhausted);
     let text = every_prefix(&options, &outcome);
     assert!(text.contains("grounder=eager"));
-    if cfg!(feature = "gpu") {
-        assert!(text.contains("backend=untracked (CPU/GPU/mixed possible)"));
-    } else {
-        assert!(text.contains("backend=cpu; oracle=closure; grounder=eager"));
-    }
+    assert!(text.contains("backend=cpu; oracle=closure; grounder=eager"));
 }
 
 #[test]

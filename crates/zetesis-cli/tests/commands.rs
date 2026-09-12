@@ -54,7 +54,7 @@ fn tiny_auto_run_keeps_lazy_first_seed_and_separates_diagnostics() {
     assert!(diagnostics.contains("Backend: cpu"));
     assert!(!diagnostics.contains("Answer:"));
     #[cfg(feature = "gpu")]
-    assert!(diagnostics.contains("GPU discovery deferred"));
+    assert!(diagnostics.contains("no measured GPU crossover"));
     #[cfg(not(feature = "gpu"))]
     assert!(diagnostics.contains("without device discovery"));
 }
@@ -186,12 +186,11 @@ fn cpu_only_devices_and_explicit_gpu_refusal_are_truthful() {
 
 #[cfg(feature = "gpu")]
 #[test]
-fn automatic_device_failure_preserves_complete_models() {
+fn automatic_execution_ignores_device_transport_limits() {
     let mut models = Vec::new();
     let mut diagnostics = Vec::new();
-    // Eager grounding isolates the transport budget from lazy host source work.
-    // Without a GPU, discovery fails; with one, static dispatch refuses zero
-    // bytes. Both device failures must preserve this complete candidate family.
+    // Device transport has no producer on this automatic CPU route. A zero
+    // transport ceiling cannot truncate the family or trigger discovery.
     let report = run_with_diagnostics(
         "{a}. {b}. {c}. {d}. {e}. {f}.".into(),
         &options(&[
@@ -230,13 +229,9 @@ fn automatic_device_failure_preserves_complete_models() {
         .collect();
     assert_eq!(answers, expected);
     let diagnostics = String::from_utf8(diagnostics).unwrap();
-    assert!(
-        diagnostics.contains("retaining eager CPU; GPU unavailable:")
-            || diagnostics.contains("GPU batch failed; retrying on eager CPU:")
-    );
-    // Explicit hardware qualification retains this view to distinguish the
-    // zero-byte transport refusal from the portable discovery-failure branch.
-    println!("automatic device diagnostics:\n{diagnostics}");
+    assert!(diagnostics.contains("no measured GPU crossover"));
+    assert!(diagnostics.contains("Backend: cpu"));
+    assert!(!diagnostics.contains("Backend: gpu"));
 }
 
 #[cfg(feature = "gpu")]

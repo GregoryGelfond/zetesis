@@ -77,7 +77,6 @@ impl<'a> ClosureSession<'a> {
     pub(crate) fn next(
         &mut self,
         config: &SolveConfig,
-        observations: &mut impl ExecutionSink,
         control: &Control,
         phases: &Recorder,
     ) -> Option<Result<Model, SolveError>> {
@@ -135,9 +134,7 @@ impl<'a> ClosureSession<'a> {
             }
             drop(generation);
             let results = match &mut self.engine {
-                Ok(engine) => {
-                    engine.check(config, self.program, &seeds, observations, control, phases)
-                }
+                Ok(engine) => engine.check(config, self.program, &seeds, control, phases),
                 Err(_) if seeds.is_empty() => Ok(Vec::new()),
                 Err(stop) => Ok(vec![Err(*stop)]),
             };

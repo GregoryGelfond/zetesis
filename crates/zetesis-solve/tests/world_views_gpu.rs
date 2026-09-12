@@ -216,24 +216,20 @@ fn metal_collection_refuses_a_foreign_context() {
 }
 
 #[derive(Default)]
-struct RefuseDeferredDevice {
+struct AutomaticExecution {
     cpu_closures: usize,
-    deferred: usize,
-    refusals: usize,
+    automatic_cpu: usize,
 }
 
-impl ExecutionObserver for RefuseDeferredDevice {
+impl ExecutionObserver for AutomaticExecution {
     type Error = io::Error;
 
     fn observe(&mut self, observation: ExecutionObservation<'_>) -> Result<(), Self::Error> {
-        assert_eq!(self.refusals, 0, "a refusal must stop subsequent callbacks");
         match observation {
             ExecutionObservation::CpuClosure { .. } => self.cpu_closures += 1,
-            ExecutionObservation::DeferredDevice { .. } => self.deferred += 1,
-            ExecutionObservation::DeviceClosure { adapter, .. } => {
-                assert_eq!(adapter.backend, AdapterBackend::Metal);
-                self.refusals += 1;
-                return Err(io::Error::other("deferred collection observer refused"));
+            ExecutionObservation::AutomaticCpu => self.automatic_cpu += 1,
+            ExecutionObservation::DeviceClosure { .. } => {
+                panic!("automatic execution must retain its selected CPU route");
             }
             _ => {}
         }
@@ -242,54 +238,42 @@ impl ExecutionObserver for RefuseDeferredDevice {
 }
 
 #[test]
-fn deferred_collection_fixture_starts_with_empty_answer() {
+#[ignore = "requires actual Metal resources to verify automatic policy retains CPU"]
+fn metal_automatic_collection_retains_cpu_execution() {
     let owner = choices();
+    let mut observer = AutomaticExecution::default();
     let world_view = Session::builder(
-        PreparedInput::admitted(&owner),
-        lazy_config(Backend::Cpu),
-        Control::default(),
-    )
-    .collect(WorldViewLimits::default())
-    .unwrap();
-    assert!(
-        world_view.answer_sets()[0]
-            .interpretation()
-            .atoms()
-            .is_empty()
-    );
-}
-
-#[test]
-#[ignore = "requires actual Metal; a deferred observation fails after retaining the first answer"]
-fn metal_collection_observer_failure_retains_a_prefix() {
-    let owner = choices();
-    let mut observer = RefuseDeferredDevice::default();
-    let failure = Session::builder(
         PreparedInput::admitted(&owner),
         lazy_config(Backend::Auto),
         Control::default(),
     )
     .resources(&resources())
     .collect_observed(WorldViewLimits::default(), &mut observer)
-    .unwrap_err();
+    .unwrap();
     assert_eq!(observer.cpu_closures, 1);
-    assert_eq!(observer.deferred, 1);
-    assert_eq!(observer.refusals, 1);
-    let WorldViewError::Solve(solve) = failure.cause() else {
-        panic!("the deferred observer must stop collection: {failure:?}");
-    };
-    let SolveError::ExecutionObservation(cause) = solve.cause.as_ref() else {
-        panic!("the external failure must not request CPU fallback: {failure:?}");
-    };
-    assert!(cause.downcast_ref::<io::Error>().is_some());
-    assert_eq!(cause.to_string(), "deferred collection observer refused");
-    assert_eq!(failure.answer_sets().len(), 1);
-    let answer = &failure.answer_sets()[0];
-    assert!(answer.interpretation().atoms().is_empty());
-    assert!(answer.subject().same_instance(failure.subject()));
-    let outcome = failure.outcome().unwrap();
-    assert_eq!(outcome.verified_models(), 1);
-    assert_eq!(outcome.completion(), None);
-    assert_eq!(outcome.selection(), Some(AnswerSelection::All));
-    assert!(!outcome.unsatisfiable());
+    assert_eq!(observer.automatic_cpu, 1);
+    let actual: BTreeSet<Vec<String>> = world_view
+        .answer_sets()
+        .iter()
+        .map(|answer| {
+            answer
+                .interpretation()
+                .atoms()
+                .iter()
+                .map(|atom| atom.predicate().name().to_owned())
+                .collect()
+        })
+        .collect();
+    let expected = (0_u8..64)
+        .map(|mask| {
+            ["a", "b", "c", "d", "e", "f"]
+                .into_iter()
+                .enumerate()
+                .filter(|(index, _)| mask & (1 << index) != 0)
+                .map(|(_, atom)| atom.to_owned())
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert_eq!(actual, expected);
+    assert_eq!(world_view.answer_sets().len(), 64);
 }

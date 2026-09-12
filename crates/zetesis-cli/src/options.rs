@@ -282,21 +282,52 @@ fn policy_parser<T: Clone + Send + Sync + 'static, const N: usize>(
 
 fn backend_parser() -> impl TypedValueParser<Value = Backend> {
     policy_parser([
-        (Backend::Auto, PossibleValue::new(Backend::Auto.label()).help("CPU formula search; closure may use GPU batches of 32 or more after its first seed.")),
-        (Backend::Cpu, PossibleValue::new(Backend::Cpu.label()).help("Source joins or static closure scans on an owned Rayon pool.")),
-        (Backend::Gpu, PossibleValue::new(Backend::Gpu.label()).help("Exact integer GPU batches, including explicit lazy relational execution.")),
-        (Backend::Metal, PossibleValue::new(Backend::Metal.label()).help("Require a physical GPU using Metal.")),
-        (Backend::Vulkan, PossibleValue::new(Backend::Vulkan.label()).help("Require a physical GPU using Vulkan.")),
-        (Backend::Dx12, PossibleValue::new(Backend::Dx12.label()).help("Require a physical GPU using DirectX 12.")),
-        (Backend::Gl, PossibleValue::new(Backend::Gl.label()).help("Require a physical GPU using OpenGL or OpenGL ES.")),
-        (Backend::Nvidia, PossibleValue::new(Backend::Nvidia.label()).help("Require an NVIDIA GPU through a compiled graphics API; this is not CUDA.")),
+        (
+            Backend::Auto,
+            PossibleValue::new(Backend::Auto.label())
+                .help("CPU execution until a measured GPU crossover supports automatic selection."),
+        ),
+        (
+            Backend::Cpu,
+            PossibleValue::new(Backend::Cpu.label())
+                .help("Source joins or static closure scans on an owned Rayon pool."),
+        ),
+        (
+            Backend::Gpu,
+            PossibleValue::new(Backend::Gpu.label())
+                .help("Exact integer GPU batches, including explicit lazy relational execution."),
+        ),
+        (
+            Backend::Metal,
+            PossibleValue::new(Backend::Metal.label()).help("Require a physical GPU using Metal."),
+        ),
+        (
+            Backend::Vulkan,
+            PossibleValue::new(Backend::Vulkan.label())
+                .help("Require a physical GPU using Vulkan."),
+        ),
+        (
+            Backend::Dx12,
+            PossibleValue::new(Backend::Dx12.label())
+                .help("Require a physical GPU using DirectX 12."),
+        ),
+        (
+            Backend::Gl,
+            PossibleValue::new(Backend::Gl.label())
+                .help("Require a physical GPU using OpenGL or OpenGL ES."),
+        ),
+        (
+            Backend::Nvidia,
+            PossibleValue::new(Backend::Nvidia.label())
+                .help("Require an NVIDIA GPU through a compiled graphics API; this is not CUDA."),
+        ),
     ])
 }
 
 fn grounder_parser() -> impl TypedValueParser<Value = Grounder> {
     policy_parser([
         (Grounder::Auto, PossibleValue::new(Grounder::Auto.label()).help("Prefer lazy source grounding where admitted, independently of hardware.")),
-        (Grounder::Lazy, PossibleValue::new(Grounder::Lazy.label()).help("Require source joins without materializing a complete ground rule store. Explicit GPU requests use immutable relational rounds; Auto may discover a device after the first seed.")),
+        (Grounder::Lazy, PossibleValue::new(Grounder::Lazy.label()).help("Require source joins without materializing a complete ground rule store. Explicit GPU requests use immutable relational rounds; Auto hardware selection retains CPU.")),
         (Grounder::Eager, PossibleValue::new(Grounder::Eager.label()).help("Materialize a bounded static program before checking on CPU or GPU.")),
     ])
 }
