@@ -88,7 +88,7 @@ impl Graph {
         let sweep_work = nodes
             .checked_mul(9)
             .and_then(|n| n.checked_add(atoms))
-            .and_then(|n| n.checked_add(1))
+            .and_then(|n| n.checked_add(65))
             .ok_or_else(|| capacity("formula sweep work overflows"))?;
         Ok(Self {
             theory: theory.clone(),

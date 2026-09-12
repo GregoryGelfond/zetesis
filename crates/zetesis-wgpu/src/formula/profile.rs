@@ -136,7 +136,7 @@ pub(super) fn check_limits(limits: &wgpu::Limits) -> Result<(), GpuError> {
         ("workgroup width", 64, limits.max_compute_workgroup_size_x),
         (
             "workgroup storage",
-            16,
+            24,
             limits.max_compute_workgroup_storage_size,
         ),
         (

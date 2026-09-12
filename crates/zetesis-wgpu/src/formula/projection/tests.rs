@@ -37,6 +37,21 @@ fn projection_variants_preserve_the_device_interface() {
         )
         .validate(&module)
         .expect("portable shader validation");
+        assert_eq!(module.entry_points.len(), 1);
+        assert_eq!(module.entry_points[0].workgroup_size, [64, 1, 1]);
+        let mut workgroup_bytes = 0;
+        for (_, variable) in module.global_variables.iter() {
+            if variable.space == naga::AddressSpace::WorkGroup {
+                let (naga::TypeInner::Atomic(scalar) | naga::TypeInner::Scalar(scalar)) =
+                    module.types[variable.ty].inner
+                else {
+                    panic!("formula workgroup storage consists only of scalar words");
+                };
+                assert_eq!(scalar.width, 4);
+                workgroup_bytes += u32::from(scalar.width);
+            }
+        }
+        assert_eq!(workgroup_bytes, 24);
         let bindings: Vec<_> = module
             .global_variables
             .iter()

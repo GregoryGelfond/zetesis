@@ -17,6 +17,8 @@ var<workgroup> changed: atomic<u32>;
 var<workgroup> conflict: atomic<u32>;
 var<workgroup> bad_root: atomic<u32>;
 var<workgroup> stage: u32;
+var<workgroup> subset_count: atomic<u32>;
+var<workgroup> subset_last: atomic<u32>;
 
 fn contains(world: u32, atom: u32) -> bool {
     return (seeds[world * params.words + atom / 32u] & (1u << (atom % 32u))) != 0u;
@@ -123,6 +125,8 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
         if (lane == 0u) {
             atomicStore(&changed, 0u);
             atomicStore(&conflict, 0u);
+            atomicStore(&subset_count, 0u);
+            atomicStore(&subset_last, 0u);
         }
         workgroupBarrier();
         for (var index = lane; index < params.nodes; index += 64u) {
@@ -133,19 +137,25 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
         }
         storageBarrier();
         workgroupBarrier();
-        if (lane == 0u) {
-            // J is already constrained to M. The strict-subset clause requires
-            // at least one M-true semantic atom (never a gate) to become false.
-            var available = 0u;
-            var last = 0u;
-            for (var atom = 0u; atom < params.atoms; atom++) {
-                if (contains(world, atom) && (atomicLoad(&domains[base + atom]) & 1u) != 0u) {
-                    available += 1u;
-                    last = atom;
-                }
+        // J is already constrained to M. Only M-true semantic atoms, never
+        // auxiliary gates, can witness a strict subset. All 64 lanes merge a
+        // summary, including empty final strides. The last index is used only
+        // when exactly one atom remains available across the entire group.
+        var available = 0u;
+        var last = 0u;
+        for (var atom = lane; atom < params.atoms; atom += 64u) {
+            if (contains(world, atom) && (atomicLoad(&domains[base + atom]) & 1u) != 0u) {
+                available += 1u;
+                last = atom;
             }
-            if (available == 0u) { atomicStore(&conflict, 1u); }
-            if (available == 1u) { narrow(base + last, 1u); }
+        }
+        atomicAdd(&subset_count, available);
+        atomicMax(&subset_last, last);
+        workgroupBarrier();
+        if (lane == 0u) {
+            let total = atomicLoad(&subset_count);
+            if (total == 0u) { atomicStore(&conflict, 1u); }
+            if (total == 1u) { narrow(base + atomicLoad(&subset_last), 1u); }
         }
         storageBarrier();
         workgroupBarrier();

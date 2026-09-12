@@ -5,7 +5,9 @@
 mod physical;
 
 use zetesis_cpu::Control;
-use zetesis_ferraris::{AdmissionLimits, Interpretation, Limits, Node, Theory, Verdict, check};
+use zetesis_ferraris::{
+    AdmissionLimits, FrozenReduct, Interpretation, Limits, Node, Theory, Verdict, check,
+};
 use zetesis_wgpu::{
     FormulaLimits, FormulaVerdict, GateProjection, GpuErrorKind, GpuFormulaOracle, GpuOptions,
     ResidualReason,
@@ -76,7 +78,7 @@ fn compare(oracle: &mut GpuFormulaOracle, theory: &Theory) -> (usize, usize) {
         let setup =
             u32::try_from(2 * theory.nodes().len() + theory.atom_count() + theory.roots().len())
                 .unwrap();
-        let sweep = u32::try_from(9 * theory.nodes().len() + theory.atom_count() + 1).unwrap();
+        let sweep = u32::try_from(9 * theory.nodes().len() + theory.atom_count() + 65).unwrap();
         assert_eq!(
             result.statistics().work,
             setup + result.statistics().rounds * sweep
@@ -230,6 +232,78 @@ fn qualify_frozen_queries(backend: physical::Backend, projection: GateProjection
     }
     assert!(totals.0 > 0 && totals.1 > 0);
     println!("completed refutations={} residuals={}", totals.0, totals.1);
+    qualify_subset_strides(&mut oracle);
+}
+
+fn qualify_subset_strides(oracle: &mut GpuFormulaOracle) {
+    // Three strides, including a partial final stride, distinguish semantic
+    // positions 0, 64 and 130. Duplicate leaves and False are not extra atoms.
+    for available in [
+        vec![],
+        vec![0],
+        vec![64],
+        vec![130],
+        vec![0, 64],
+        vec![64, 130],
+        vec![0, 64, 130],
+        (0..131).collect(),
+    ] {
+        let mut nodes = vec![Node::False];
+        nodes.extend((0..131).map(Node::Atom));
+        nodes.push(Node::Atom(130));
+        let roots = (0..131)
+            .filter(|atom| !available.contains(atom))
+            .map(|atom| atom + 1)
+            .collect();
+        let graph = theory(131, nodes, roots);
+        let candidate = Interpretation::new(&graph, 0..131).unwrap();
+        if let Some(omitted) = available.first() {
+            // An independently evaluated proper-subset witness satisfies every
+            // asserted fact. No enumeration of 2^131 subsets is needed.
+            let witness = Interpretation::new(&graph, (0..131).filter(|a| a != omitted)).unwrap();
+            let reduct =
+                FrozenReduct::new(&candidate, Limits::default(), &Control::default()).unwrap();
+            assert!(
+                reduct
+                    .is_satisfied_by(&witness, Limits::default(), &Control::default())
+                    .unwrap()
+            );
+        }
+        // Authored constants: 133 nodes, 131 atoms, 131-|available| facts.
+        // Setup visits nodes twice, atoms once and roots once. Each sweep
+        // reserves 9 per node, one per atom, 64 summaries and one application.
+        let setup = 528 - u32::try_from(available.len()).unwrap();
+        let sweep = 1393;
+        let expected = match available.len() {
+            0 => FormulaVerdict::NoProperSubset,
+            1 => FormulaVerdict::Residual(ResidualReason::RoundLimit),
+            _ => FormulaVerdict::Residual(ResidualReason::FixedPoint),
+        };
+        for (work, verdict, rounds) in [
+            (
+                setup + sweep - 1,
+                FormulaVerdict::Residual(ResidualReason::WorkLimit),
+                0,
+            ),
+            (setup + sweep, expected, 1),
+        ] {
+            let results = oracle
+                .propagate_batch(
+                    &graph,
+                    std::slice::from_ref(&candidate),
+                    FormulaLimits {
+                        max_rounds: 1,
+                        max_work_per_candidate: work,
+                        ..FormulaLimits::default()
+                    },
+                )
+                .unwrap();
+            assert_eq!(results[0].verdict(), verdict, "available={available:?}");
+            assert_eq!(results[0].statistics().rounds, rounds);
+            assert_eq!(results[0].statistics().work, setup + rounds * sweep);
+        }
+    }
+    println!("strict-subset strides=3 final-stride=3 zero/unique/multiple=8 exact/below=16");
 }
 
 #[test]

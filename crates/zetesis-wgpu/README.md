@@ -53,6 +53,14 @@ Frozen truth still has one value per original node. This removes four requested
 domain bytes per leaf per candidate (subject to the required empty-buffer
 padding), without changing original satisfaction or the frozen query.
 
+All 64 lanes scan distinct semantic-atom positions for the strict-subset
+condition. Their counts and last eligible positions are merged before a zero
+count refutes the query or a unique eligible atom is required to be false.
+Auxiliary nodes never witness strict removal. This uses 24 bytes of workgroup
+storage; a sweep reserves `9*nodes+atoms+65` policy work units, including 64
+summary merges and one application. These units are not GPU instruction counts.
+Original truth is still evaluated in topological order before propagation.
+
 `FormulaVerdict::Residual` requires the exact host completion path. Candidate
 ordering, original theory identity and the frozen candidate are preserved across
 that boundary. Device results cannot silently change the subject being checked.

@@ -27,8 +27,10 @@ pub struct FormulaLimits {
     /// Maximum charged work per candidate. Setup costs `2*nodes+atoms+roots`
     /// for two node walks, semantic-atom initialization and root visits;
     /// leaf nodes are visited but need no separate domain initialization store.
-    /// a sweep reserves `9*nodes+atoms+1` units, including eight possible gate
-    /// truth-table rows per node. Inactive nodes still consume their allowance.
+    /// A sweep reserves `9*nodes+atoms+65` units, including eight possible gate
+    /// truth-table rows per node, 64 lane-summary merges and one strict-subset
+    /// projection. These are policy units, not raw GPU instructions.
+    /// Inactive nodes still consume their allowance.
     /// A budget below mandatory setup is refused before dispatch.
     pub max_work_per_candidate: u32,
     /// Maximum host wait for submitted work; not GPU preemption or a deadline

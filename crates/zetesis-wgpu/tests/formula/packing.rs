@@ -34,12 +34,12 @@ fn packed_nodes_preserve_topology_shared_atom_ids_and_original_operators() {
         ]
     );
     assert_eq!(roots, vec![5]);
-    assert_eq!((graph.setup_work, graph.sweep_work), (15, 57));
+    assert_eq!((graph.setup_work, graph.sweep_work), (15, 121));
     let limits = FormulaLimits::default();
     let plan = plan(&graph, limits, true);
     assert_eq!(
         plan.params(&graph),
-        [2, 6, 1, 6, 1, 2, 64, 100_000_000, 15, 57, 7, 0]
+        [2, 6, 1, 6, 1, 2, 64, 100_000_000, 15, 121, 7, 0]
     );
     let a = Interpretation::new(&graph.theory, [0]).unwrap();
     let b = Interpretation::new(&graph.theory, [1]).unwrap();
@@ -164,14 +164,14 @@ fn device_limits_zero_atoms_and_word_boundaries_have_explicit_layouts() {
 fn result_records_validate_epoch_world_status_and_exact_charged_work() {
     let graph = Graph::new(&theory(), &device()).unwrap();
     let plan = plan(&graph, FormulaLimits::default(), false);
-    let valid = [7, 0, 1, 0, 15, MAGIC, 7, 1, 2, 1, 72, MAGIC];
+    let valid = [7, 0, 1, 0, 15, MAGIC, 7, 1, 2, 1, 136, MAGIC];
     let checks = decode(&valid, &plan).unwrap();
     assert_eq!(checks[0].verdict(), FormulaVerdict::NotModel);
     assert_eq!(checks[1].verdict(), FormulaVerdict::NoProperSubset);
     assert_eq!(
         checks[1].statistics(),
         FormulaStatistics {
-            work: 72,
+            work: 136,
             rounds: 1
         }
     );
@@ -184,7 +184,7 @@ fn result_records_validate_epoch_world_status_and_exact_charged_work() {
         (5, 0),
         (8, 2),
         (9, 0),
-        (10, 71),
+        (10, 135),
     ] {
         let mut invalid = valid;
         invalid[index] = value;
@@ -219,9 +219,31 @@ fn result_records_validate_epoch_world_status_and_exact_charged_work() {
     }
     let fixed = Plan::new(&graph, 1, FormulaLimits::default(), &device(), false, 1).unwrap();
     assert_eq!(
-        decode(&[1, 0, 3, 1, 72, MAGIC], &fixed).unwrap()[0].verdict(),
+        decode(&[1, 0, 3, 1, 136, MAGIC], &fixed).unwrap()[0].verdict(),
         FormulaVerdict::Residual(ResidualReason::FixedPoint)
     );
+}
+
+#[test]
+fn summary_merge_work_is_required_before_a_complete_sweep() {
+    let graph = Graph::new(&theory(), &device()).unwrap();
+    // Six nodes, two atoms and one root: setup=15, sweep=54+2+64+1=121.
+    for (work, full_sweep) in [(135, false), (136, true)] {
+        let plan = Plan::new(
+            &graph,
+            1,
+            FormulaLimits {
+                max_work_per_candidate: work,
+                ..Default::default()
+            },
+            &device(),
+            false,
+            1,
+        )
+        .unwrap();
+        assert_eq!(decode(&[1, 0, 2, 1, 136, MAGIC], &plan).is_ok(), full_sweep);
+        assert_eq!(decode(&[1, 0, 5, 0, 15, MAGIC], &plan).is_ok(), !full_sweep);
+    }
 }
 
 #[test]
@@ -253,7 +275,7 @@ fn dense_outputs_preserve_leaf_aliases_and_original_children() {
     assert_eq!(roots, [6]);
     // Each original node is still visited twice during setup. Omitting leaf
     // stores does not omit the visit or duplicate semantic-atom initialization.
-    assert_eq!((graph.setup_work, graph.sweep_work), (17, 66));
+    assert_eq!((graph.setup_work, graph.sweep_work), (17, 130));
 }
 
 #[test]
