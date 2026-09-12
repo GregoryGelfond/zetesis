@@ -208,6 +208,10 @@ performance trend.
 
 ### Performance evidence
 
+The [current comparison](performance.md) reports CPU time, child peak RSS and
+complete Metal solves for source `15e0f77b`. The historical measurements below
+retain their original source and execution scopes.
+
 The measurements below apply to their explicitly named revisions. No timing or
 peak-RSS measurements were collected for
 [`74c0627f`](https://github.com/GregoryGelfond/zetesis/tree/74c0627f3aab89ae466a1a33cc61e352264b8af1).
@@ -678,21 +682,22 @@ status. A newer source remains unqualified until its own checks complete.
 
 | Population | Covered / instrumented lines | Coverage |
 | --- | ---: | ---: |
-| Workspace, all features, portable tests plus 51 physical Metal tests | 51,751 / 54,980 | 94.13% |
-| CPU-only solver library and CLI, separate instrumentation | 4,748 / 5,087 | 93.34% |
+| Workspace, all features, portable tests plus 51 physical Metal tests | 55,170 / 58,544 | 94.24% |
+| CPU-only solver library and CLI, separate instrumentation | 4,831 / 5,175 | 93.35% |
 
 This snapshot was qualified on 12 September 2026 for
-[`39b79489`](https://github.com/GregoryGelfond/zetesis/tree/39b79489f23998a3faded2c459cea67c162c062b),
+[`15e0f77b`](https://github.com/GregoryGelfond/zetesis/tree/15e0f77b2c7b7a1ab0608857265cebf33ec747b7),
 using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS 26.6.2 with Apple M4 Pro
 Metal. Both populations passed their independent 91% floor. The workspace
-combines portable profiles with physical profiles from 51 tests in 16 groups; the
+combines portable profiles with 16 physical profiles from 51 tests in 16 groups; the
 CPU-only population remains separate. Before physical profile import, the
-portable-only workspace report covered 49,429 of 54,980 lines (89.9036%), below
+portable-only workspace report covered 52,755 of 58,544 lines (90.1117%), below
 the workspace floor. Two separately executed CLI device-failure checks also
 passed; their profiles are excluded from both coverage populations.
 
-The static closure comparison checked 41 candidate executions against an
-independent ordered-set reference, including reused epochs and the 4,096-atom
+The static closure comparison checked 53 candidate executions against an
+independent ordered-set reference. Owned seeds, indexed selections and manual
+selections share that reference, including reused epochs and the 4,096-atom
 boundary. Each of the four tight-oracle physical tests exercises both Atomic
 and Grouped support construction. The relation tests cover typed equality masks,
 prepared-view refusals and matched scalar/Rayon/Metal measurement results.

@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 ![Rust 1.97+](https://img.shields.io/badge/rust-1.97%2B-orange?style=flat-square)
-[![Line coverage: 94.13% (CPU + Metal)](https://img.shields.io/badge/coverage-94.13%25%20%28CPU%20%2B%20Metal%29-brightgreen?style=flat-square)](docs/book/reference/validation.md#coverage)
+[![Line coverage: 94.24% (CPU + Metal)](https://img.shields.io/badge/coverage-94.24%25%20%28CPU%20%2B%20Metal%29-brightgreen?style=flat-square)](docs/book/reference/validation.md#coverage)
 
 ζήτησις, *inquiry/search* — candidate-directed answer-set solving through the reduct.
 
@@ -227,13 +227,16 @@ answer multisets, model counts, objective costs and optimum ties. Reproduce comp
 end-to-end solves from kernel measurements when comparing performance.
 The [validation chapter](docs/book/reference/validation.md) explains which
 claims the corpus, proof and physical execution checks can establish.
-Its [performance evidence](docs/book/reference/validation.md#performance-evidence)
-records nine-case CPU/eager comparisons with clingo, side-by-side child peak-RSS
-comparisons, and bounded N=8/N=10 queens comparisons. Results retain failed and
-unavailable cases alongside complete native-model agreement. The columnar
-integration has not demonstrated a broad latency or RSS reduction. Matched
-Metal solves and separate GPU primitive measurements retain their own scopes
-and recorded hardware.
+The [current performance comparison](docs/book/reference/performance.md) records
+CPU and Metal solves against the prior implementation and clingo, including all
+six N=8 queens encodings and separate child peak-RSS measurements. The current
+CPU implementation uses less peak RSS on all nine selected examples and improves
+several solve times; a queens-3 regression remains in the JSON/statistics profile.
+Metal task allocation improves, while the matched CPU path remains faster on
+every measured case. Results retain explicit lazy refusals and distinguish full
+native model agreement from clingo's observable output. Earlier N=10 comparisons
+and isolated GPU measurements remain in the
+[historical performance evidence](docs/book/reference/validation.md#performance-evidence).
 
 See [Contributing](CONTRIBUTING.md) for development and verification requirements,
 and [build the book](docs/book/building.md) to read the complete manual locally.

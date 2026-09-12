@@ -2,7 +2,7 @@
 
 Native, bounded Boolean search for finite Ferraris theories. This library uses
 no external SAT engine or clingo at runtime. It complements the existing
-exhaustive formula reference and the S0 Horn closure implementation.
+exhaustive formula reference and the normal-rule least-closure checker.
 
 ```rust
 use zetesis_ferraris::{AdmissionLimits, Node, Theory};
