@@ -9,7 +9,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use zetesis_core::{Atom, Model, Program, Seed};
+use zetesis_core::{Atom, Model, Program, Seed, SeedView};
 
 use crate::oracle::{Work, worlds};
 use crate::{Control, Stop, source};
@@ -383,7 +383,31 @@ pub fn check_with<E>(
     control: &Control,
     execute: impl FnMut(&Chunk<'_>) -> Result<Vec<u32>, E>,
 ) -> Result<Batch, Failure<E>> {
-    check_with_source(
+    check_with_views(
+        program,
+        seeds.iter().map(Seed::view),
+        limits,
+        control,
+        execute,
+    )
+}
+
+/// Check borrowed candidate views with the same immutable-round protocol as
+/// [`check_with`]. Cloning the iterator must preserve its length, order and
+/// candidate identities. The views borrow their true atoms; this boundary
+/// creates no owned seed or temporary view vector. Demanded catalog copies and
+/// result materialization retain their existing bounded ownership.
+///
+/// # Errors
+/// Returns the same failures and retained progress as [`check_with`].
+pub fn check_with_views<'seed, E>(
+    program: &Program,
+    seeds: impl ExactSizeIterator<Item = SeedView<'seed>> + Clone,
+    limits: Limits,
+    control: &Control,
+    execute: impl FnMut(&Chunk<'_>) -> Result<Vec<u32>, E>,
+) -> Result<Batch, Failure<E>> {
+    check_with_source_views(
         program,
         seeds,
         limits,
@@ -410,6 +434,31 @@ pub fn check_with<E>(
 pub fn check_with_source<E>(
     program: &Program,
     seeds: &[Seed],
+    limits: Limits,
+    selection: SourceSelection,
+    control: &Control,
+    execute: impl FnMut(&Chunk<'_>) -> Result<Vec<u32>, E>,
+) -> Result<Batch, Failure<E>> {
+    check_with_source_views(
+        program,
+        seeds.iter().map(Seed::view),
+        limits,
+        selection,
+        control,
+        execute,
+    )
+}
+
+/// Check borrowed candidates under the selected source traversal. The iterator
+/// contract and allocation boundary are those of [`check_with_views`]; source
+/// work, complete-world coverage and failure progress are unchanged from
+/// [`check_with_source`].
+///
+/// # Errors
+/// Returns no complete checks after any source, resource or evaluator failure.
+pub fn check_with_source_views<'seed, E>(
+    program: &Program,
+    seeds: impl ExactSizeIterator<Item = SeedView<'seed>> + Clone,
     limits: Limits,
     selection: SourceSelection,
     control: &Control,
@@ -445,9 +494,9 @@ struct State {
     records: Vec<u32>,
 }
 
-fn run<E>(
+fn run<'seed, E>(
     program: &Program,
-    seeds: &[Seed],
+    seeds: impl ExactSizeIterator<Item = SeedView<'seed>> + Clone,
     limits: Limits,
     selection: SourceSelection,
     control: &Control,
@@ -456,16 +505,16 @@ fn run<E>(
 ) -> Result<Vec<Check>, Cause<E>> {
     control.poll()?;
     if seeds
-        .iter()
+        .clone()
         .any(|seed| !seed.program().same_instance(program))
     {
         return Err(Stop::WrongProgram.into());
     }
-    if seeds.is_empty() {
+    if seeds.len() == 0 {
         return Ok(Vec::new());
     }
     let mut state = State::new(seeds.len(), limits)?;
-    for (world, seed) in seeds.iter().enumerate() {
+    for (world, seed) in seeds.clone().enumerate() {
         for atom in seed.atoms() {
             control.poll()?;
             let id = state.intern(atom, limits)?;
@@ -596,17 +645,17 @@ impl State {
         }
     }
 
-    fn conclusions(
+    fn conclusions<'seed>(
         &self,
         program: &Program,
-        seeds: &[Seed],
+        seeds: impl ExactSizeIterator<Item = SeedView<'seed>>,
         control: &Control,
     ) -> Result<Vec<Check>, Stop> {
         let mut checks = Vec::new();
         checks
             .try_reserve_exact(seeds.len())
             .map_err(|_| Stop::Allocation)?;
-        for (world, seed) in seeds.iter().enumerate() {
+        for (world, seed) in seeds.enumerate() {
             control.poll()?;
             let words = &self.snapshots[world * self.words..][..self.words];
             let closure = Model::new(
@@ -620,7 +669,7 @@ impl State {
                 .atoms()
                 .iter()
                 .any(|atom| program.contains_gate_atom(atom) && !seed.contains(atom))
-                || seed.atoms().iter().any(|atom| !closure.contains(atom));
+                || seed.atoms().any(|atom| !closure.contains(atom));
             checks.push(Check {
                 program: program.clone(),
                 closure,

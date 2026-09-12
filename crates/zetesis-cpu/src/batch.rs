@@ -5,9 +5,9 @@ use std::num::NonZeroUsize;
 use std::sync::{Mutex, TryLockError};
 
 use rayon::prelude::*;
-use zetesis_core::{GroundProgram, Program, Seed};
+use zetesis_core::{GroundProgram, Program, Seed, SeedView};
 
-use crate::{Check, Control, Limits, StaticCheck, Stop, check, check_static};
+use crate::{Check, Control, Limits, StaticCheck, Stop, check_static_view, check_view};
 
 /// A fixed worker pool with an explicit maximum admitted batch size. Each
 /// invocation is synchronous; no unbounded background submission queue exists.
@@ -48,6 +48,24 @@ impl BatchOracle {
         limits: Limits,
         control: &Control,
     ) -> Result<Vec<Result<Check, Stop>>, BatchError> {
+        self.check_batch_views(program, seeds.par_iter().map(Seed::view), limits, control)
+    }
+
+    /// Check indexed candidate views on this owned pool, preserving input order.
+    /// A slice's `par_iter().map(Seed::view)` or
+    /// `par_iter().map(SeedSelection::view)` borrows its owners without a
+    /// temporary view vector or seed materialization. Limits and admission are
+    /// identical to [`Self::check_batch`].
+    ///
+    /// # Errors
+    /// Refuses over-capacity or occupied submissions before oracle work.
+    pub fn check_batch_views<'seed>(
+        &self,
+        program: &Program,
+        seeds: impl IndexedParallelIterator<Item = SeedView<'seed>>,
+        limits: Limits,
+        control: &Control,
+    ) -> Result<Vec<Result<Check, Stop>>, BatchError> {
         if seeds.len() > self.max_candidates {
             return Err(BatchError::Capacity {
                 limit: self.max_candidates,
@@ -60,8 +78,7 @@ impl BatchOracle {
         })?;
         Ok(self.pool.install(|| {
             seeds
-                .par_iter()
-                .map(|seed| check(program, seed, limits, control))
+                .map(|seed| check_view(program, seed, limits, control))
                 .collect()
         }))
     }
@@ -79,6 +96,31 @@ impl BatchOracle {
         &self,
         program: &Program,
         seeds: &[Seed],
+        limits: crate::lazy::shared::Limits,
+        selection: crate::lazy::SourceSelection,
+        control: &Control,
+    ) -> Result<crate::lazy::shared::Batch, crate::lazy::shared::Error> {
+        self.check_shared_views(
+            program,
+            seeds.iter().map(Seed::view),
+            limits,
+            selection,
+            control,
+        )
+    }
+
+    /// Share source traversal over borrowed candidate views. Cloned iterators
+    /// must preserve length, order and identities, as in
+    /// [`crate::lazy::check_with_views`]. This allocates no temporary seed/view
+    /// collection and shares the admission slot of [`Self::check_shared`].
+    ///
+    /// # Errors
+    /// Returns the same admission or incomplete-batch failures and progress as
+    /// [`Self::check_shared`].
+    pub fn check_shared_views<'seed>(
+        &self,
+        program: &Program,
+        seeds: impl ExactSizeIterator<Item = SeedView<'seed>> + Clone,
         limits: crate::lazy::shared::Limits,
         selection: crate::lazy::SourceSelection,
         control: &Control,
@@ -113,6 +155,22 @@ impl BatchOracle {
         limits: Limits,
         control: &Control,
     ) -> Result<Vec<Result<StaticCheck, Stop>>, BatchError> {
+        self.check_static_batch_views(graph, seeds.par_iter().map(Seed::view), limits, control)
+    }
+
+    /// Check indexed borrowed candidates against the explicit static graph.
+    /// Ordered collection and the owned execution pool are unchanged from
+    /// [`Self::check_static_batch`]; no seed payload is materialized.
+    ///
+    /// # Errors
+    /// Refuses over-capacity or occupied submissions before oracle work.
+    pub fn check_static_batch_views<'seed>(
+        &self,
+        graph: &GroundProgram,
+        seeds: impl IndexedParallelIterator<Item = SeedView<'seed>>,
+        limits: Limits,
+        control: &Control,
+    ) -> Result<Vec<Result<StaticCheck, Stop>>, BatchError> {
         if seeds.len() > self.max_candidates {
             return Err(BatchError::Capacity {
                 limit: self.max_candidates,
@@ -125,8 +183,7 @@ impl BatchOracle {
         })?;
         Ok(self.pool.install(|| {
             seeds
-                .par_iter()
-                .map(|seed| check_static(graph, seed, limits, control))
+                .map(|seed| check_static_view(graph, seed, limits, control))
                 .collect()
         }))
     }

@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use zetesis_core::{
-    Atom, AtomPattern, Filter, Model, Predicate, Program, Seed, Template, Term, Value,
+    Atom, AtomPattern, Filter, Model, Predicate, Program, Seed, SeedView, Template, Term, Value,
 };
 
 use crate::{Control, Stop};
@@ -213,6 +213,21 @@ pub fn check(
     limits: Limits,
     control: &Control,
 ) -> Result<Check, Stop> {
+    check_view(program, seed.view(), limits, control)
+}
+
+/// Check a borrowed owned seed or shared selection without copying its true
+/// atoms. This is the same reduct computation, identity validation and operation
+/// accounting as [`check`]; derived consequences still own their output payload.
+///
+/// # Errors
+/// Returns the same typed stops as [`check`], without accepting partial results.
+pub fn check_view(
+    program: &Program,
+    seed: SeedView<'_>,
+    limits: Limits,
+    control: &Control,
+) -> Result<Check, Stop> {
     control.poll()?;
     if !program.same_instance(seed.program()) {
         return Err(Stop::WrongProgram);
@@ -264,7 +279,7 @@ struct CompletedClosure {
 // Each growing round adds an atom, so the derived-atom ceiling bounds growth.
 fn least_closure(
     program: &Program,
-    seed: &Seed,
+    seed: SeedView<'_>,
     work: &mut Work<'_>,
 ) -> Result<CompletedClosure, Stop> {
     let mut closure = Catalogs::default();
@@ -322,7 +337,7 @@ fn least_closure(
 // Positive-only atoms do not belong to this comparison's projected carrier.
 fn gate_agreement(
     program: &Program,
-    seed: &Seed,
+    seed: SeedView<'_>,
     closure: &BTreeSet<Atom>,
     work: &mut Work<'_>,
 ) -> Result<bool, Stop> {
@@ -345,7 +360,7 @@ fn gate_agreement(
 fn visit<'source, E: From<Stop>>(
     template: &Template,
     relations: &'source impl Relational,
-    seed: Option<&Seed>,
+    seed: Option<SeedView<'_>>,
     mut membership: Option<&mut worlds::Join<'_>>,
     work: &mut Work<'_>,
     mut emit: impl FnMut(&[Option<&'source Value>], &mut Work<'_>) -> Result<(), E>,
@@ -462,7 +477,7 @@ fn resolve<'a>(term: &'a Term, assignment: &[Option<&'a Value>]) -> Option<&'a V
 fn guards(
     template: &Template,
     assignment: &[Option<&Value>],
-    seed: Option<&Seed>,
+    seed: Option<SeedView<'_>>,
     work: &mut Work<'_>,
 ) -> Result<bool, Stop> {
     for filter in template.filters() {
@@ -487,7 +502,7 @@ fn guards(
             // An absent referenced slot defers this gate until a later join
             // supplies it. A complete key borrows the exact seed lookup tuple.
             if let Ok(key) = pattern.key(assignment)
-                && key.get(seed.atoms()).is_some() != required
+                && seed.contains_key(&key) != required
             {
                 return Ok(false);
             }

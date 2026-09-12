@@ -18,6 +18,15 @@ into rejected candidates. There is no unbounded waiting queue: a busy pool
 refuses another simultaneous batch. The static variant accepts an already
 compiled graph and does not compile one implicitly.
 
+The scalar `check_view` and `check_static_view` operations borrow either an owned
+`Seed` or a `SeedSelection`. Their batch counterparts, `check_batch_views` and
+`check_static_batch_views`, accept indexed Rayon iterators such as
+`selections.par_iter().map(SeedSelection::view)`. The oracle runs them on its
+owned pool and collects in input order. These doors share the existing checker
+and budgets; they create neither a seed tree nor a temporary view vector.
+The owned-seed methods delegate through views. Derived closures retain their
+existing output allocation and ownership contracts.
+
 Calling `Check::into_stable_interpretation` on an accepted native check transfers
 its closure into an instance-bound receipt without copying atoms. Rejection
 returns the original check intact. The receipt's `into_interpretation` explicitly discards its program
@@ -42,6 +51,13 @@ alone cannot establish that semantic contract.
 membership masks to skip prefixes enabled in no current world. Every evaluator
 still checks each world's positives and gates. Membership is rebuilt for each
 immutable round; neither policy changes candidate-carrier discovery.
+
+`check_with_views`, `check_with_source_views` and
+`BatchOracle::check_shared_views` accept exact-size, cloneable iterators of
+borrowed seeds. Each clone must preserve occurrence order, length and program
+identity. This lets owned seeds and shared selections use the same source and
+world evaluator without materializing input trees. Demanded catalog atoms and
+completed closures still own their payloads under the existing host budget.
 
 The catalog grows on demand. Its atom IDs, frozen seeds, snapshots and pending
 deltas must survive changes in packed-word width. The protocol charges catalog,

@@ -1,6 +1,6 @@
 //! Packed integer closure scans over an explicitly compiled static graph.
 
-use zetesis_core::{AtomId, GroundProgram, GroundRule, Interpretation, Program, Seed};
+use zetesis_core::{AtomId, GroundProgram, GroundRule, Interpretation, Program, Seed, SeedView};
 
 use crate::{Control, Limits, Stop};
 
@@ -193,6 +193,22 @@ fn enabled(rule: &GroundRule, frozen: &[u32], work: &mut Work<'_>) -> Result<boo
 pub fn check_static(
     graph: &GroundProgram,
     seed: &Seed,
+    limits: Limits,
+    control: &Control,
+) -> Result<StaticCheck, Stop> {
+    check_static_view(graph, seed.view(), limits, control)
+}
+
+/// Check an owned or shared selection through the same static reduct checker.
+/// The view borrows its true atoms; no seed payload or tree is materialized.
+/// Packing still resolves each selected atom in the supplied graph, with the
+/// same work charges and program identity check as [`check_static`].
+///
+/// # Errors
+/// Returns the same typed stops as [`check_static`], without partial results.
+pub fn check_static_view(
+    graph: &GroundProgram,
+    seed: SeedView<'_>,
     limits: Limits,
     control: &Control,
 ) -> Result<StaticCheck, Stop> {

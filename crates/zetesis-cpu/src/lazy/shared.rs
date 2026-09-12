@@ -8,7 +8,7 @@
 use std::fmt;
 
 use rayon::prelude::*;
-use zetesis_core::{Program, Seed};
+use zetesis_core::{Program, SeedView};
 
 use super::{Chunk, EvaluationStep, Progress, SourceSelection};
 use crate::{BatchError, Control, Stop};
@@ -107,10 +107,10 @@ pub enum Error {
     Incomplete(Failure),
 }
 
-pub(crate) fn check(
+pub(crate) fn check<'seed>(
     pool: &rayon::ThreadPool,
     program: &Program,
-    seeds: &[Seed],
+    seeds: impl ExactSizeIterator<Item = SeedView<'seed>> + Clone,
     limits: Limits,
     selection: SourceSelection,
     control: &Control,
@@ -127,17 +127,17 @@ pub(crate) fn check(
     }
 }
 
-fn run(
+fn run<'seed>(
     pool: &rayon::ThreadPool,
     program: &Program,
-    seeds: &[Seed],
+    seeds: impl ExactSizeIterator<Item = SeedView<'seed>> + Clone,
     limits: Limits,
     control: &Control,
     statistics: &mut Statistics,
 ) -> Result<Vec<super::Check>, Cause> {
     control.poll().map_err(Cause::Source)?;
     if seeds
-        .iter()
+        .clone()
         .any(|seed| !seed.program().same_instance(program))
     {
         return Err(Cause::Source(Stop::WrongProgram));
@@ -157,7 +157,7 @@ fn run(
     statistics
         .worlds
         .resize(seeds.len(), WorldProgress::default());
-    let result = super::check_with_source(
+    let result = super::check_with_source_views(
         program,
         seeds,
         source_limits,

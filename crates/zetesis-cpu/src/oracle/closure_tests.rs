@@ -82,7 +82,7 @@ fn gate_agreement_requires_every_derived_gate_atom() {
     let seed = Seed::new(&program, []).unwrap();
     let closure = BTreeSet::from([atom("a")]);
     let control = Control::default();
-    assert!(!gate_agreement(&program, &seed, &closure, &mut work(&control, 1)).unwrap());
+    assert!(!gate_agreement(&program, seed.view(), &closure, &mut work(&control, 1)).unwrap());
 }
 
 #[test]
@@ -90,7 +90,15 @@ fn gate_agreement_requires_every_seed_atom() {
     let program = choices();
     let seed = Seed::new(&program, [atom("a")]).unwrap();
     let control = Control::default();
-    assert!(!gate_agreement(&program, &seed, &BTreeSet::new(), &mut work(&control, 1)).unwrap());
+    assert!(
+        !gate_agreement(
+            &program,
+            seed.view(),
+            &BTreeSet::new(),
+            &mut work(&control, 1)
+        )
+        .unwrap()
+    );
 }
 
 #[test]
@@ -109,7 +117,7 @@ fn gate_agreement_ignores_positive_only_atoms() {
     let seed = Seed::new(&program, []).unwrap();
     let closure = BTreeSet::from([atom("a")]);
     let control = Control::default();
-    assert!(gate_agreement(&program, &seed, &closure, &mut work(&control, 1)).unwrap());
+    assert!(gate_agreement(&program, seed.view(), &closure, &mut work(&control, 1)).unwrap());
 }
 
 #[test]
@@ -119,11 +127,11 @@ fn gate_mismatch_does_not_truncate_charged_scans() {
     let closure = BTreeSet::from([atom("b")]);
     let control = Control::default();
     assert_eq!(
-        gate_agreement(&program, &seed, &closure, &mut work(&control, 1)),
+        gate_agreement(&program, seed.view(), &closure, &mut work(&control, 1)),
         Err(Stop::WorkLimit)
     );
     let mut exact = work(&control, 2);
-    assert!(!gate_agreement(&program, &seed, &closure, &mut exact).unwrap());
+    assert!(!gate_agreement(&program, seed.view(), &closure, &mut exact).unwrap());
     assert_eq!(exact.statistics.work, 2);
 }
 
@@ -157,7 +165,7 @@ fn completed_closure_checks_final_round_constraints() {
     let seed = Seed::new(&program, []).unwrap();
     let control = Control::default();
     let mut work = work(&control, Limits::default().max_work);
-    let completed = least_closure(&program, &seed, &mut work).unwrap();
+    let completed = least_closure(&program, seed.view(), &mut work).unwrap();
     // b is derived in round two; this constraint first holds in the final scan.
     assert!(completed.constraint_violated);
     assert_eq!(work.statistics.rounds, 3);
@@ -169,7 +177,7 @@ fn violated_constraints_preserve_complete_closure() {
     let seed = Seed::new(&program, []).unwrap();
     let control = Control::default();
     let mut work = work(&control, Limits::default().max_work);
-    let completed = least_closure(&program, &seed, &mut work).unwrap();
+    let completed = least_closure(&program, seed.view(), &mut work).unwrap();
     assert!(completed.constraint_violated);
     assert_eq!(
         completed.atoms.atoms(),
@@ -186,7 +194,7 @@ fn growing_closure_stops_before_exceeding_atom_limit() {
     let mut work = work(&control, Limits::default().max_work);
     work.limits.max_derived_atoms = 1;
     assert!(matches!(
-        least_closure(&program, &seed, &mut work),
+        least_closure(&program, seed.view(), &mut work),
         Err(Stop::DerivedAtomLimit)
     ));
     assert_eq!(work.statistics.rounds, 1);
