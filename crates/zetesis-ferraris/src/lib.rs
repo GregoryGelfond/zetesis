@@ -16,6 +16,7 @@ mod normal;
 mod aggregate;
 mod tight;
 mod checked;
+mod support;
 pub mod partition;
 
 pub use checked::{CheckedInterpretation, StableInterpretation, check_interpretation};
@@ -37,3 +38,5 @@ pub use tight::{
     TightAttempt, TightCheck, TightCheckLimits, TightError, TightPlan, TightPlanLimits,
     TightPlanStatistics, TightProducer, TightProducerKind, TightResource, TightVerdict,
 };
+
+pub use support::{SupportAttempt, SupportError, SupportLimits, support_restriction};
