@@ -32,6 +32,7 @@ impl Control {
     ///
     /// # Errors
     /// Returns cancellation first, otherwise an expired deadline.
+    #[inline]
     pub fn poll(&self) -> Result<(), Stop> {
         if self.cancelled.load(Ordering::Relaxed) {
             Err(Stop::Cancelled)

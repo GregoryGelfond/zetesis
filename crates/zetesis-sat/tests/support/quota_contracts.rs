@@ -156,6 +156,39 @@ fn failed_decision_reserves_work_first_and_cancellation_precedes_either_quota() 
 }
 
 #[test]
+fn cancellation_precedes_an_expired_deadline_and_exhausted_quotas() {
+    let control = Control::with_deadline(std::time::Instant::now());
+    let limits = SearchLimits {
+        max_work: 0,
+        max_decisions: 0,
+    };
+    let mut local = Budget {
+        quota: LocalQuota,
+        limits,
+        control: &control,
+        statistics: SearchStatistics::default(),
+    };
+    let shared = SharedBudget::new(limits, SearchStatistics::default());
+    let mut worker = Budget {
+        quota: shared.lease(&control),
+        limits,
+        control: &control,
+        statistics: SearchStatistics::default(),
+    };
+    assert_eq!(local.tick(), Err(Incomplete::Deadline));
+    assert_eq!(worker.tick(), Err(Incomplete::Deadline));
+    control.clone().cancel();
+    assert_eq!(local.decide(), Err(Incomplete::Cancelled));
+    assert_eq!(worker.decide(), Err(Incomplete::Cancelled));
+    assert_eq!(local.statistics, SearchStatistics::default());
+    assert_eq!(worker.statistics, local.statistics);
+    drop(worker.quota);
+    let mut joined = SearchStatistics::default();
+    shared.record(&mut joined);
+    assert_eq!(joined, SearchStatistics::default());
+}
+
+#[test]
 fn the_last_representable_local_or_shared_charge_never_wraps() {
     let control = Control::default();
     let limits = SearchLimits {
