@@ -170,3 +170,18 @@ passing it does not guarantee that later materialization fits its actual storage
 budget. NUL strings, invalid arithmetic and overflowing arithmetic remain
 refusals even in an inactive rule or unused constant. Complete authored-body
 validation still runs after an earlier false filter.
+
+## Diagnostic ownership
+
+Typed refusals retain source identity and original error data. Their `Display`
+implementations write to the caller's formatter and propagate its failure.
+Constant-cycle messages stream the retained names in dependency order without
+first joining them into another owned string. A caller can impose a byte ceiling
+through its formatting sink; formatting stops at the first refused write.
+
+The themelios human diagnostic API returns an owned rendering for each diagnostic.
+zetesis keeps that canonical view. Source indexing, typed diagnostic messages and
+that rendering can require temporary storage before the caller receives text;
+the sink's byte ceiling does not bound those upstream allocations. Constructing
+an owned diagnostic view remains distinct from streaming an already-retained
+constant chain.

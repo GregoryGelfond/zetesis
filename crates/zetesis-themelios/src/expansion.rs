@@ -198,7 +198,14 @@ impl fmt::Display for ExpansionFailure {
                 f.write_str("source expansion admits only unannotated constant definitions")
             }
             Self::ConstantCycle { names, .. } => {
-                write!(f, "constant dependency cycle: {}", names.join(" -> "))
+                f.write_str("constant dependency cycle: ")?;
+                for (index, name) in names.iter().enumerate() {
+                    if index != 0 {
+                        f.write_str(" -> ")?;
+                    }
+                    f.write_str(name)?;
+                }
+                Ok(())
             }
             Self::Evaluation { error, .. } => {
                 write!(f, "source scalar evaluation refused: {error}")
