@@ -135,9 +135,13 @@ fn compile(
             facts.push(atom);
         }
     }
-    // Canonical ordering is required by the existing source join's prefix
-    // windows. Only actual unconditional facts enter this snapshot.
+    // Canonical ordering is required by the source join's prefix windows. Only
+    // actual unconditional facts enter this snapshot. Model::new's ordering,
+    // deduplication and allocation are not metered by restriction_work; copied
+    // input size is bounded above, and this existing operation is indivisible.
+    work.control.poll()?;
     let facts = Model::new(facts);
+    work.control.poll()?;
     let mut relations = Relations::new();
     for atom in facts.atoms() {
         work.tick()?;
@@ -163,9 +167,7 @@ fn compile(
                     available_bytes = available_bytes
                         .checked_sub(size_of::<Vec<Atom>>())
                         .ok_or(Stop::Allocation)?;
-                    for _ in 0..size_of::<Vec<Atom>>() {
-                        work.tick()?;
-                    }
+                    work.charge(size_of::<Vec<Atom>>())?;
                     let mut conjunction = Vec::new();
                     conjunction
                         .try_reserve_exact(template.gate_true().len())
@@ -250,9 +252,7 @@ fn lift(
     if bytes > max_bytes {
         return Err(Stop::Allocation);
     }
-    for _ in 0..bytes {
-        work.tick()?;
-    }
+    work.charge(bytes)?;
     let mut positive = Vec::new();
     let mut gates = Vec::new();
     positive
@@ -310,14 +310,10 @@ fn term_payload(term: &Term) -> usize {
 }
 
 fn charge_atom(atom: &Atom, work: &mut Work<'_>) -> Result<(), Stop> {
-    for _ in 0..atom.predicate().name().len() {
-        work.tick()?;
-    }
+    work.charge(atom.predicate().name().len())?;
     for value in atom.values() {
         work.tick()?;
-        for _ in 0..value.payload_bytes() {
-            work.tick()?;
-        }
+        work.charge(value.payload_bytes())?;
     }
     Ok(())
 }

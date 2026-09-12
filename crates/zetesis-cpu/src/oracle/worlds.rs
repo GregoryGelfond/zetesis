@@ -240,9 +240,7 @@ impl Join<'_> {
             let middle = start + (end - start) / 2;
             let actual = self.atoms[middle].predicate();
             for name in [actual.name(), predicate.name()] {
-                for _ in 0..name.len() {
-                    work.tick()?;
-                }
+                work.charge(name.len())?;
             }
             if actual < predicate {
                 start = middle + 1;

@@ -288,8 +288,6 @@ pub(super) fn copy_atom(
             .ok_or(Stop::Allocation)?;
     }
     *remaining_bytes = remaining_bytes.checked_sub(bytes).ok_or(Stop::Allocation)?;
-    for _ in 0..bytes {
-        work.tick()?;
-    }
+    work.charge(bytes)?;
     instantiate(pattern, assignment)?.ok_or(Stop::InvalidProgram)
 }

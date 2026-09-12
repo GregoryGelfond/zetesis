@@ -85,9 +85,7 @@ fn compare_prefix(
         work.tick()?;
         let expected = resolve(term, assignment).ok_or(Stop::InvalidProgram)?;
         for compared in [value, expected] {
-            for _ in 0..compared.payload_bytes() {
-                work.tick()?;
-            }
+            work.charge(compared.payload_bytes())?;
         }
         let order = value.cmp(expected);
         if !order.is_eq() {

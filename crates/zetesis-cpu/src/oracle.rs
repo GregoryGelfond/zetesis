@@ -17,6 +17,9 @@ pub(crate) mod worlds;
 #[cfg(test)]
 #[path = "oracle/closure_tests.rs"]
 mod closure_tests;
+#[cfg(test)]
+#[path = "oracle/work_tests.rs"]
+mod work_tests;
 
 /// Exact checking budgets, applied before the next charged operation/insertion.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -133,12 +136,29 @@ pub(crate) struct Work<'a> {
 
 impl Work<'_> {
     fn tick(&mut self) -> Result<(), Stop> {
-        self.control.poll()?;
-        if self.statistics.work >= self.limits.max_work {
-            return Err(Stop::WorkLimit);
+        self.charge(1)
+    }
+
+    /// Charge bookkeeping units before one indivisible operation, without
+    /// iterating over its payload. With unchanged control, a refusal records
+    /// the same admitted prefix as repeated ticks. Control is polled before any
+    /// nonzero charge; zero preserves the old empty-loop behavior and neither
+    /// polls nor changes work. No real operation happens between these units.
+    fn charge(&mut self, amount: usize) -> Result<(), Stop> {
+        if amount == 0 {
+            return Ok(());
         }
-        self.statistics.work += 1;
-        Ok(())
+        self.control.poll()?;
+        let remaining = self.limits.max_work.saturating_sub(self.statistics.work);
+        if let Ok(amount) = u64::try_from(amount)
+            && amount <= remaining
+        {
+            self.statistics.work += amount;
+            Ok(())
+        } else {
+            self.statistics.work += remaining;
+            Err(Stop::WorkLimit)
+        }
     }
 
     pub(crate) fn source(control: &Control, max_work: u64) -> Work<'_> {
@@ -417,9 +437,7 @@ fn bind<'source>(
 
 fn structural_work(value: &Value, work: &mut Work<'_>) -> Result<(), Stop> {
     if let Value::Structured(value) = value {
-        for _ in 0..value.payload_bytes() {
-            work.tick()?;
-        }
+        work.charge(value.payload_bytes())?;
     }
     Ok(())
 }
