@@ -25,8 +25,8 @@ pub struct CompletionStatistics {
     pub effective_workers: usize,
     /// Minimum requested conservative envelope selected before allocation.
     pub requested_scratch_bytes: u64,
-    /// Retained vector capacities and reported map entry capacity plus the
-    /// conservative transient envelope. May exceed the ceiling on a post-
+    /// Retained query-vector capacities and reported map entry capacity plus
+    /// conservative transient/result storage. May exceed the ceiling on a post-
     /// reservation scratch refusal; no candidate work has then started.
     /// Allocator/table control overhead, stacks and device memory are excluded.
     /// Saturates at `u64::MAX` if the envelope is unrepresentable. Such an
