@@ -14,6 +14,11 @@ The maintained full index is
 | Can a stored mask evaluate a reduct? | `Ferraris.masked_eval_iff_reduct` in `FerrarisMask` | Mask agrees with original truth at every formula; arbitrary tested interpretation |
 | Can joins be decomposed? | `Lifted.composition_exact` | Binding, filtering, gates and projection denote the supplied template |
 | When may equality columns prefilter full matches? | `ColumnRelations.full_matches_preserved` | Exact dictionary/columns, supplied rows and a total matcher entailing the equalities |
+| Can relation storage grow without changing old queries? | `RelationExtension.acceptance_preserved` | Existing rows and dictionary meanings survive extension |
+| Do incremental positive joins cover every new combination once? | `DeltaJoins.partition_complete`, `partition_disjoint` | Source occurrence identities and old prefixes of the current row domains |
+| May a scope omit unrelated binding slots? | `BindingScopes.readAll_restrict` | Every requested slot belongs to the retained scope; absence is explicit |
+| Can impossible gate regions be skipped? | `GateRestrictions.answer_set_avoids`, `suffix_region_rejected` | Constraint premises witnessed by unconditional facts and the supplied carrier |
+| Must an ordinary disjunctive answer set have head support? | `DisjunctiveSupport.answer_set_supported` | Complete ordinary producer grammar; unchanged original theory |
 | When may candidate domains be narrowed? | `DomainContraction.compatible_contraction` | Unchanged theory, fixed assignment interpretation and activation, recognized constraints and a sound filter |
 | When does completed source support cover an answer set? | `SourceSupport.stable_inside_closed`, `completed_activity_covers` | Completed producer closure and an explicit original-model/reduct projection premise; no termination or realizability conclusion |
 | When is a lazy closure complete? | `LiftedBridge.completed_lazy_stage_exact` | Sound stages, conceptual grounding, final enabled-instance coverage and closure |
@@ -22,6 +27,9 @@ The maintained full index is
 | Is reused join storage semantically harmless? | `JoinFrames.retained_frames_irrelevant` | Root reset and child overwrites follow the defined schedule |
 | Can a class certificate replace a subset query? | `TightPlans.ranked_support_stable` | Complete original producers, rank, original-model truth and support |
 | Can certificates and residual checks compose? | `CertifiedExecution.completed_membership_exact` | Sound verdict, exact residual answer and completed result |
+| Does packed query storage preserve literal truth? | `PackedQueryLiterals.packed_truth` | Defined encode/decode operations; machine bounds remain separate |
+| Can payload work be charged as one amount? | `WorkCharge.repeated_eq_charge` | Unchanged control during the compared bookkeeping operations |
+| Can workers reserve work without counting it as spent? | `WorkPermits.grant_conserves`, `settle_conserves` | Grants are covered, settlement partitions used and unused permits |
 | Does batched enumeration cover the requested family? | `BatchAccounting.completed_results_exact` | Candidate coverage, sound committed classification and exhaustion |
 | Does no output mean inconsistency? | `Outcomes.empty_delivery_can_hide_a_valid_model` | Counterexample: absence of delivery is insufficient |
 | When does a collection represent a world view? | `WorldViews.completed_capture_represents_world_view` | Original answer coverage, exact completed classification and complete capture |

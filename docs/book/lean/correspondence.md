@@ -112,6 +112,24 @@ charge polls control once; a zero charge remains a no-op. There is no promise to
 observe asynchronous cancellation between bookkeeping units. Rust word bounds
 and the placement of control checks remain concrete implementation obligations.
 
+Eager support joins partition new tuple combinations by their first new source
+occurrence. `DeltaJoins.partition_complete` proves coverage and
+`partition_disjoint` proves uniqueness. Source occurrence identity survives
+execution-order changes and repeated predicates. The Rust certificate must
+select only the eligible positive producer grammar; posting slices must denote
+the specified old/new intervals. Rich producers and final authored-body
+validation retain separate complete scans. These laws establish the partition,
+not the source evaluator or termination of value generation.
+
+Parallel exact queries lease bounded work allowances from one shared owner.
+`WorkPermits` partitions the allowance into spent, available and outstanding
+permits. Granting preserves that total; settlement records consumed work and
+returns the unused part. Empty availability is not exhaustion while a grant
+remains outstanding. The Rust implementation must additionally preserve this
+invariant under word arithmetic, locking, unwinding and cancellation. A joined
+batch records spent operations only after all leases settle; a lease is not
+evidence of candidate execution or membership.
+
 ## Representation and source laws
 
 [`ColumnRelations`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ColumnRelations.lean)
