@@ -4526,6 +4526,31 @@
       "name": "Zetesis.SingletonHeads.double_negative_singleton_has_no_producer"
     },
     {
+      "file": "Zetesis/SourceContributions.lean",
+      "line": 43,
+      "name": "Zetesis.SourceContributions.chain_unique"
+    },
+    {
+      "file": "Zetesis/SourceContributions.lean",
+      "line": 61,
+      "name": "Zetesis.SourceContributions.chain_preserved"
+    },
+    {
+      "file": "Zetesis/SourceContributions.lean",
+      "line": 85,
+      "name": "Zetesis.SourceContributions.contributions_append"
+    },
+    {
+      "file": "Zetesis/SourceContributions.lean",
+      "line": 93,
+      "name": "Zetesis.SourceContributions.record_same"
+    },
+    {
+      "file": "Zetesis/SourceContributions.lean",
+      "line": 102,
+      "name": "Zetesis.SourceContributions.record_other"
+    },
+    {
       "file": "Zetesis/SourceMeasures.lean",
       "line": 42,
       "name": "Zetesis.SourceMeasures.selection_iff_sublist"
@@ -5621,6 +5646,7 @@
     "Zetesis/SignedHeadElements.lean",
     "Zetesis/SignedObjectiveBounds.lean",
     "Zetesis/SingletonHeads.lean",
+    "Zetesis/SourceContributions.lean",
     "Zetesis/SourceMeasures.lean",
     "Zetesis/SourceSupport.lean",
     "Zetesis/StrongNegation.lean",
@@ -5641,8 +5667,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "2c0df699695692c08b425a365e908bf28e7e89e236b5fc33c6998d6f5daadafa",
-    "Zetesis.lean": "661220bb134b8ad5b8feea520d122bf69bcb42dbda2e5615e0a674df5c3dcc84",
+    "Audit.lean": "244c46646ef935edf78b6fac53703d5b7b61e8cf8fe833a1c9f02f47ae1efa2e",
+    "Zetesis.lean": "e84221887950c35b8340cbadf778a9ce8c539ed8e73c977712fbba11b439af5e",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
     "Zetesis/AggregateConsumers.lean": "41aded89dbfaa79833ed3b336030ef4b08afa5be8e7029060416c2f8de59ef97",
@@ -5737,6 +5763,7 @@
     "Zetesis/SignedHeadElements.lean": "a4ef203522d79935f0696bf93bd04efa477a17fde6858c3ebf63ba7d216bb3e8",
     "Zetesis/SignedObjectiveBounds.lean": "9a196ef4647a4999a96373134d80c92ecd940d4c3ee7dc7c173545a2a4816045",
     "Zetesis/SingletonHeads.lean": "a07c6c50041c0771175b98fa6d9d2d56ecb4c9c29ad09205acf44f44fcabe147",
+    "Zetesis/SourceContributions.lean": "be9baa860c0caafeaba1068e269b8cec5531cce91a5dd694232e98847ee394df",
     "Zetesis/SourceMeasures.lean": "87fb4bc2f98c01f2ae73a468554f751a9e2c3ab915b2eb62563e096e887fa154",
     "Zetesis/SourceSupport.lean": "f420bed34a77a7df297bc3df8464aa5c77e0df64cd9c2efeb4bb211289c51121",
     "Zetesis/StrongNegation.lean": "4f99901e0dfc2e777d12110aca36c2c3be4964f5cbcf88d0a3d87b355a5730c6",

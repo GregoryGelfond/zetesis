@@ -951,6 +951,11 @@
 'Zetesis.SingletonHeads.double_negative_singleton_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.SingletonHeads.negative_singleton_has_no_producer' depends on axioms: [propext, Quot.sound]
 'Zetesis.SingletonHeads.double_negative_singleton_has_no_producer' depends on axioms: [propext, Quot.sound]
+'Zetesis.SourceContributions.chain_unique' does not depend on any axioms
+'Zetesis.SourceContributions.chain_preserved' depends on axioms: [propext]
+'Zetesis.SourceContributions.contributions_append' depends on axioms: [propext]
+'Zetesis.SourceContributions.record_same' depends on axioms: [propext]
+'Zetesis.SourceContributions.record_other' depends on axioms: [propext]
 'Zetesis.SourceMeasures.selection_iff_sublist' depends on axioms: [propext, Quot.sound]
 'Zetesis.SourceMeasures.carrier_membership' depends on axioms: [propext, Quot.sound]
 'Zetesis.SourceMeasures.actual_value_covered' depends on axioms: [propext, Quot.sound]
