@@ -678,16 +678,16 @@ status. A newer source remains unqualified until its own checks complete.
 
 | Population | Covered / instrumented lines | Coverage |
 | --- | ---: | ---: |
-| Workspace, all features, portable tests plus 51 physical Metal tests | 51,558 / 54,784 | 94.11% |
+| Workspace, all features, portable tests plus 51 physical Metal tests | 51,751 / 54,980 | 94.13% |
 | CPU-only solver library and CLI, separate instrumentation | 4,748 / 5,087 | 93.34% |
 
-This snapshot was qualified on 11 September 2026 for
-[`b7d8772d`](https://github.com/GregoryGelfond/zetesis/tree/b7d8772d56fb41a54125acfb6399c383d28006d7),
+This snapshot was qualified on 12 September 2026 for
+[`39b79489`](https://github.com/GregoryGelfond/zetesis/tree/39b79489f23998a3faded2c459cea67c162c062b),
 using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS 26.6.2 with Apple M4 Pro
 Metal. Both populations passed their independent 91% floor. The workspace
 combines portable profiles with physical profiles from 51 tests in 16 groups; the
 CPU-only population remains separate. Before physical profile import, the
-portable-only workspace report covered 49,214 of 54,784 lines (89.8328%), below
+portable-only workspace report covered 49,429 of 54,980 lines (89.9036%), below
 the workspace floor. Two separately executed CLI device-failure checks also
 passed; their profiles are excluded from both coverage populations.
 
