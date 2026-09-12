@@ -224,49 +224,44 @@ mod tests {
     #[test]
     fn refused_growth_preserves_the_original_buffer() {
         let control = Control::default();
-        let mut work = Work::new(
-            Limits {
-                max_bytes: 20,
-                ..Limits::default()
-            },
-            &control,
-            0,
-            0,
-        )
-        .unwrap();
+        let mut work = Work::new(Limits::default(), &control, 0, 0).unwrap();
         let mut values = work.reserve::<u32>(2).unwrap();
-        values.extend([1, 2]);
         let capacity = values.capacity();
+        values.resize(capacity, 7);
+        let proposed = (capacity + 1).max(2 * capacity);
+        let required = (capacity + proposed) * size_of::<u32>();
+        work.limits.max_bytes = required - 1;
         let cause = work.grow(&mut values, 1).unwrap_err();
         assert_eq!(
             cause,
             Cause::Limit {
                 resource: Resource::Bytes,
-                observed: 24,
-                limit: 20
+                observed: required as u128,
+                limit: (required - 1) as u128
             }
         );
-        assert_eq!(values, [1, 2]);
+        assert_eq!(values.len(), capacity);
+        assert!(values.iter().all(|value| *value == 7));
         assert_eq!(values.capacity(), capacity);
     }
 
     #[test]
     fn growth_accounts_for_coexisting_buffers() {
         let control = Control::default();
-        let mut work = Work::new(
-            Limits {
-                max_bytes: 24,
-                ..Limits::default()
-            },
-            &control,
-            0,
-            0,
-        )
-        .unwrap();
+        let mut work = Work::new(Limits::default(), &control, 0, 0).unwrap();
         let mut values = work.reserve::<u32>(2).unwrap();
-        values.extend([1, 2]);
+        let initial = values.capacity();
+        values.resize(initial, 7);
         work.grow(&mut values, 1).unwrap();
-        assert_eq!(work.statistics(0).peak_bytes, 24);
-        assert_eq!(work.statistics(0).retained_bytes, 16);
+        let final_capacity = values.capacity();
+        assert!(final_capacity > initial);
+        assert_eq!(
+            work.statistics(0).peak_bytes,
+            (initial + final_capacity) * size_of::<u32>()
+        );
+        assert_eq!(
+            work.statistics(0).retained_bytes,
+            final_capacity * size_of::<u32>()
+        );
     }
 }

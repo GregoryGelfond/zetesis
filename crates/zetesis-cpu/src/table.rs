@@ -271,8 +271,12 @@ impl<'owner, 'source> Table<'owner, 'source> {
     ///
     /// Each domain is a finite list of whole typed values; duplicates have set
     /// meaning and absent values have no support. Every call recomputes from the
-    /// immutable base, including after domain widening. Work is O(sum of domain
-    /// sizes times (log V plus W), plus allowed-entry-count times W and V).
+    /// immutable base, including after domain widening. For K variables, D
+    /// supplied domain values, V indexed entries, A allowed entries and W row
+    /// words, work is O(K + (K+1)*W + V + D*(1+log(V+1)+W) + A*W), plus typed
+    /// comparison payload costs. The base-mask copy remains even for a nullary
+    /// relation; each variable clears and intersects W words even if its domain
+    /// is empty.
     ///
     /// # Errors
     /// Refuses a wrong domain count, finite limits, allocation failure or
