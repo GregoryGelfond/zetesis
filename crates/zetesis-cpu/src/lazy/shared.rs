@@ -136,12 +136,7 @@ fn run<'seed>(
     statistics: &mut Statistics,
 ) -> Result<Vec<super::Check>, Cause> {
     control.poll().map_err(Cause::Source)?;
-    if seeds
-        .clone()
-        .any(|seed| !seed.program().same_instance(program))
-    {
-        return Err(Cause::Source(Stop::WrongProgram));
-    }
+    super::validate_seeds(program, seeds.clone(), seeds.len()).map_err(Cause::Source)?;
     if seeds.len() > limits.source.max_candidates {
         return Err(Cause::Source(Stop::CarrierLimit));
     }

@@ -399,7 +399,9 @@ pub fn check_with<E>(
 /// result materialization retain their existing bounded ownership.
 ///
 /// # Errors
-/// Returns the same failures and retained progress as [`check_with`].
+/// Returns the same failures and retained progress as [`check_with`]. Actual
+/// occurrence counts inconsistent with the claimed size refuse as
+/// [`Stop::InvalidProgram`] before an out-of-range world write or publication.
 pub fn check_with_views<'seed, E>(
     program: &Program,
     seeds: impl ExactSizeIterator<Item = SeedView<'seed>> + Clone,
@@ -494,6 +496,30 @@ struct State {
     records: Vec<u32>,
 }
 
+// Clone equivalence remains the caller's iterator contract. Check every actual
+// length before indexed world writes so a bad ExactSizeIterator cannot overrun
+// or silently omit an admitted occurrence.
+fn validate_seeds<'seed>(
+    program: &Program,
+    seeds: impl Iterator<Item = SeedView<'seed>>,
+    expected: usize,
+) -> Result<(), Stop> {
+    let mut count = 0;
+    for seed in seeds {
+        if !seed.program().same_instance(program) {
+            return Err(Stop::WrongProgram);
+        }
+        if count >= expected {
+            return Err(Stop::InvalidProgram);
+        }
+        count += 1;
+    }
+    if count != expected {
+        return Err(Stop::InvalidProgram);
+    }
+    Ok(())
+}
+
 fn run<'seed, E>(
     program: &Program,
     seeds: impl ExactSizeIterator<Item = SeedView<'seed>> + Clone,
@@ -504,17 +530,18 @@ fn run<'seed, E>(
     execute: &mut impl FnMut(&Chunk<'_>) -> Result<Vec<u32>, E>,
 ) -> Result<Vec<Check>, Cause<E>> {
     control.poll()?;
-    if seeds
-        .clone()
-        .any(|seed| !seed.program().same_instance(program))
-    {
-        return Err(Stop::WrongProgram.into());
-    }
-    if seeds.len() == 0 {
+    let candidates = seeds.len();
+    validate_seeds(program, seeds.clone(), candidates)?;
+    if candidates == 0 {
         return Ok(Vec::new());
     }
-    let mut state = State::new(seeds.len(), limits)?;
+    let mut state = State::new(candidates, limits)?;
+    let mut packed = 0;
     for (world, seed) in seeds.clone().enumerate() {
+        if world >= candidates {
+            return Err(Stop::InvalidProgram.into());
+        }
+        packed += 1;
         for atom in seed.atoms() {
             control.poll()?;
             let id = state.intern(atom, limits)?;
@@ -524,6 +551,9 @@ fn run<'seed, E>(
                 id as usize,
             );
         }
+    }
+    if packed != candidates {
+        return Err(Stop::InvalidProgram.into());
     }
     loop {
         progress.catalog_atoms = state.atoms.len();
@@ -545,7 +575,7 @@ fn run<'seed, E>(
             }
         };
         progress.record_source(source_statistics);
-        state.flush(seeds.len(), control, progress, execute)?;
+        state.flush(candidates, control, progress, execute)?;
         control.poll()?;
         progress.rounds += 1;
         let mut grew = false;
@@ -653,10 +683,13 @@ impl State {
     ) -> Result<Vec<Check>, Stop> {
         let mut checks = Vec::new();
         checks
-            .try_reserve_exact(seeds.len())
+            .try_reserve_exact(self.violated.len())
             .map_err(|_| Stop::Allocation)?;
         for (world, seed) in seeds.enumerate() {
             control.poll()?;
+            if world >= self.violated.len() {
+                return Err(Stop::InvalidProgram);
+            }
             let words = &self.snapshots[world * self.words..][..self.words];
             let closure = Model::new(
                 self.atoms
@@ -676,6 +709,9 @@ impl State {
                 constraint_violated: self.violated[world],
                 seed_mismatch: mismatch,
             });
+        }
+        if checks.len() != self.violated.len() {
+            return Err(Stop::InvalidProgram);
         }
         control.poll()?;
         Ok(checks)
