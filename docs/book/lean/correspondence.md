@@ -355,6 +355,13 @@ order and multiplicity even when displays coincide. The world-view corollary
 requires an already established `WorldViews.Represents` premise; output does
 not prove membership or enumeration coverage.
 
+`Observations.necessary_filter_preserves_terms` permits discarding rows that
+cannot enable a completed query. Predicate equality supplies such a necessary
+condition for an atom pattern. Rust locates that predicate's contiguous range in
+the canonically ordered model, then matches complete tuples. Correct binary
+bounds, cursor restoration, source-alternative identity and error ordering remain
+implementation obligations; the theorem does not verify that Rust code.
+
 The [observation reading](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/observations.md)
 relates these laws to scoped queries, complete tuple keys and the Rust compiler
 and evaluator. Source safety, anonymous projection, checked arithmetic,

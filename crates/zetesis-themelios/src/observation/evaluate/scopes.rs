@@ -2,9 +2,8 @@
 
 use themelios_program::program::AggregateFunction;
 
-use super::{Bound, Error, ErrorKind, EvaluationError, Metric, Symbol, Work, visit};
+use super::{Bound, Error, ErrorKind, EvaluationError, Metric, ModelRows, Symbol, Work, visit};
 use crate::observation::{AggregateQuery, Resource};
-use zetesis_core::Atom;
 
 pub(super) enum Value {
     Integer(i128),
@@ -124,7 +123,7 @@ fn reduce(
 }
 pub(super) fn aggregate(
     query: &AggregateQuery,
-    atoms: &[&Atom],
+    atoms: &ModelRows<'_>,
     outer: &[Option<Bound<'_>>],
     work: &mut Work<'_>,
 ) -> Result<(Value, Metric), Error> {

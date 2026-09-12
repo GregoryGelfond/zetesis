@@ -83,6 +83,24 @@ need none. Human and JSON encoders apply their own budgets through this callback
 Interrupted lookup returns no selection decision and leaves the policy intact.
 This bounds lookup work without a separate index or duplicated signature store.
 
+Term queries borrow the supplied model in canonical atom order. Equal signed
+predicates form contiguous ranges, so two binary bounds locate a relation
+without copying its atoms. Each query prepares its alternative ranges once and
+reuses them across enclosing bindings. The cursor retains source-alternative
+order and canonical row order; repeated variables still match one complete
+tuple. Fixed and generated atom conditions use the same predicate bounds.
+
+For `A` model atoms and `K` relational alternatives, preparation retains `A`
+atom references and `K` ranges, with `O(A + K log A)` work apart from predicate
+name comparisons. Nested queries prepare their ranges when entered. Tuple
+matching examines the product of the relevant relation sizes, rather than the
+whole-model product. Cartesian products within those relations remain possible.
+Bindings, constructed terms and output sorting incur their own measured work.
+These bounds describe operations and storage; they are not a wall-time claim.
+The implementation is in
+[`observation::evaluate::rows`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/observation/evaluate/rows.rs)
+and the [query cursor](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/observation/evaluate/query.rs).
+
 Observation limits separately bound work, completed bindings, constructed
 symbols, local owned payload and output. The local byte budget counts semantic
 nodes and text; it excludes borrowed model values and allocator overhead.

@@ -69,6 +69,29 @@ theorem same_rows_preserve_terms (first second : List B)
   · rintro ⟨row, present, active, generated⟩
     exact ⟨row, (same row).mpr present, active, generated⟩
 
+/-- Removing rows that cannot enable a query preserves its completed terms.
+    Soundness forgets the filter. Completeness uses the necessary condition to
+    retain every enabled witness. Predicate equality is one such condition for
+    an atom pattern; complete tuple matching still decides whether it enables
+    the query. This law does not justify suppressing expression failures or
+    establish the concrete binary bounds and cursors used by Rust. -/
+theorem necessary_filter_preserves_terms (rows : List B)
+    (keep : B → Bool) (enabled : B → Prop) (values : B → List V)
+    (necessary : ∀ row ∈ rows, enabled row → keep row = true) (value : V) :
+    Emits (rows.filter keep) enabled values value ↔ Emits rows enabled values value := by
+  have sound : Emits (rows.filter keep) enabled values value →
+      Emits rows enabled values value := by
+    rintro ⟨row, present, active, generated⟩
+    have original : row ∈ rows := (List.mem_filter.mp present).1
+    exact ⟨row, original, active, generated⟩
+  have complete : Emits rows enabled values value →
+      Emits (rows.filter keep) enabled values value := by
+    rintro ⟨row, present, active, generated⟩
+    have retained : keep row = true := necessary row present active
+    have selected : row ∈ rows.filter keep := List.mem_filter.mpr ⟨present, retained⟩
+    exact ⟨row, selected, active, generated⟩
+  exact ⟨sound, complete⟩
+
 /-- Two equality edges share one chosen middle value. Choosing that value from
     a finite family and retaining the surrounding guard is equivalent to equal
     endpoints whose common value belongs to that family and satisfies the guard.

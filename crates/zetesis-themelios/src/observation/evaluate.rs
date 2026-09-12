@@ -3,11 +3,13 @@
 mod scopes;
 mod patterns;
 mod query;
+mod rows;
 mod values;
 
 use std::cmp::Ordering;
 
 use query::visit;
+use rows::ModelRows;
 
 use themelios_base::span::Location;
 use themelios_program::symbol::{Name, Sign};
@@ -548,7 +550,7 @@ fn test_pattern(
 }
 fn condition(
     condition: &Condition,
-    atoms: &[&Atom],
+    atoms: &ModelRows<'_>,
     binding: &[Option<Bound<'_>>],
     work: &mut Work<'_>,
 ) -> Result<bool, Error> {
@@ -556,8 +558,10 @@ fn condition(
     match condition {
         Condition::Atom(negation, alternatives) => {
             for alternative in alternatives {
+                let range = atoms.predicate(&alternative.pattern.predicate, work)?;
                 let test = |binding: &[Option<Bound<'_>>], work: &mut Work<'_>| {
-                    for &atom in atoms {
+                    for row in range.clone() {
+                        let atom = atoms.get(row);
                         if test_pattern(&alternative.pattern, atom, binding, work)? {
                             return Ok(*negation != DefaultNegation::Not);
                         }
@@ -586,7 +590,8 @@ fn condition(
                 unreachable!("a generated atom key is an owned symbol")
             };
             let mut present = false;
-            for &atom in atoms {
+            for row in atoms.symbol(value, work)? {
+                let atom = atoms.get(row);
                 if patterns::atom_value(value, atom, work)? {
                     present = true;
                     break;
@@ -635,7 +640,7 @@ fn condition(
 }
 fn conditions(
     query: &Query,
-    atoms: &[&Atom],
+    atoms: &ModelRows<'_>,
     binding: &[Option<Bound<'_>>],
     work: &mut Work<'_>,
 ) -> Result<bool, Error> {
@@ -687,7 +692,7 @@ type Visitor<'a> = dyn FnMut(&[Option<Bound<'_>>], &mut Work<'_>) -> Result<bool
 
 fn complete<'a>(
     query: &Query,
-    atoms: &[&'a Atom],
+    atoms: &ModelRows<'a>,
     binding: &mut [Option<Bound<'a>>],
     work: &mut Work<'_>,
     visitor: &mut Visitor<'_>,
@@ -715,9 +720,7 @@ pub(super) fn terms(
     if program.is_empty() {
         return Ok(Vec::new());
     }
-    work.step(model.atoms().len() as u128)?;
-    let mut atoms = work.reserve(model.atoms().len())?;
-    atoms.extend(model.atoms());
+    let atoms = ModelRows::new(model, work)?;
     let mut result = Vec::new();
     let mut bytes = 0;
     for directive in &program.directives {
