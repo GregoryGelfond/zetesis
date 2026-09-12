@@ -12,7 +12,7 @@ fn location() -> Location {
 }
 
 fn insert(catalog: &mut SupportCatalog, atom: Atom) {
-    catalog
+    *catalog = std::mem::take(catalog)
         .insert(
             atom,
             &FormulaLimits::default(),
@@ -77,6 +77,32 @@ fn membership_preserves_append_order() {
         support.row(atom(&[3]).predicate(), 0).unwrap().value(0),
         Some(&Value::Number(3))
     );
+}
+
+#[test]
+fn snapshots_reuse_columns_without_row_work() {
+    let mut catalog = SupportCatalog::default();
+    for value in 0..64 {
+        insert(&mut catalog, atom(&[value]));
+    }
+    let mut counters = Counters::default();
+    let first = catalog
+        .snapshot(&FormulaLimits::default(), &mut counters, location())
+        .unwrap();
+    let first_work = counters.work;
+    let second = catalog
+        .snapshot(&FormulaLimits::default(), &mut counters, location())
+        .unwrap();
+    assert_eq!(first_work, 1);
+    assert_eq!(counters.work, 2);
+    let predicate = atom(&[0]);
+    let left = &first.rows[predicate.predicate()];
+    let right = &second.rows[predicate.predicate()];
+    assert!(std::ptr::eq(left.columns, right.columns));
+    assert!(std::ptr::eq(
+        left.relation.column(0).unwrap(),
+        right.relation.column(0).unwrap()
+    ));
 }
 
 #[test]
@@ -211,7 +237,7 @@ fn column_lookup_retains_whole_typed_keys() {
 }
 
 #[test]
-fn snapshot_bytes_include_construction_scratch() {
+fn snapshot_bytes_include_the_borrowed_owner() {
     let mut catalog = SupportCatalog::default();
     for values in [[2, 1], [1, 2], [2, 2]] {
         insert(&mut catalog, atom(&values));
@@ -223,14 +249,7 @@ fn snapshot_bytes_include_construction_scratch() {
             location(),
         )
         .unwrap();
-    let relation = &support.rows.values().next().unwrap().relation;
-    let construction =
-        catalog.index_bytes + size_of::<Support<'_>>() + size_of::<RelationRows<'_>>()
-            - size_of::<Relation<'_>>()
-            + size_of::<&Predicate>()
-            + relation.storage().peak_construction_bytes;
-    let postings = support.bytes + size_of::<BTreeMap<u32, Vec<usize>>>();
-    let exact = postings.max(construction);
+    let exact = support.bytes;
     drop(support);
     let limits = FormulaLimits {
         max_support_bytes: exact,

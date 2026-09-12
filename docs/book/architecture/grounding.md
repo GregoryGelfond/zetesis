@@ -146,6 +146,30 @@ and collects new positive head atoms. Aggregate and conditional truth remains in
 the emitted formulas; it does not prune possible producers. A proposed aggregate
 assignment value retains its original equality.
 
+Ordinary positive atom heads with positive flat witnesses and pure scalar checks
+or generators use [delta joins](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/delta.rs).
+Each new tuple combination has one first source occurrence that selects a newly
+appended row. Earlier occurrences select old rows; later occurrences select all
+current rows. This partitions the combinations even when one predicate occurs
+several times or cardinality planning changes execution order:
+
+```text
+for pivot in PositiveSourceOccurrences(rule):
+    inputs = MapOccurrences(rule, occurrence =>
+        oldRows       if occurrence < pivot
+        newRows       if occurrence = pivot
+        currentRows   if occurrence > pivot)
+    proposals = Union(proposals, JoinAndEvaluate(rule, inputs))
+```
+
+An ordinary producer without positive inputs runs once. Aggregate, conditional,
+negative, structural and nonnormal producers retain full-round traversal. Every
+selected input still passes the same typed tuple matcher and scalar evaluator.
+An empty proposal set establishes completion only after every required variant
+and conservative producer has finished. Final formula emission visits all
+complete authored-body bindings, including those with false scalar filters;
+support membership cannot conceal a required arithmetic error.
+
 The [support builder](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support.rs)
 returns `CompletedCatalog` only after an entire round adds no atom. Its
 `CompletedSupport` view borrows the same authoritative catalog used by final
@@ -176,11 +200,13 @@ A relation row is one complete typed tuple. Formula support's
 [`SupportCatalog`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/relations.rs)
 owns each possible atom once, with append-only, predicate-local row identities.
 A sorted index of those identities supports membership checks without another
-atom collection. Between growth rounds, an immutable snapshot borrows the
-catalog and encodes its argument columns through the core relation's typed
-equality dictionary. Each column has a `BTreeMap<u32, Vec<usize>>` from its
-dictionary IDs to original row positions. IDs have meaning only in that
-snapshot; their numeric order is not ASP term order.
+atom collection. The core relation owner retains its typed equality dictionary
+and argument columns across growth rounds. Each column has a
+`BTreeMap<u32, Vec<usize>>` from dictionary IDs to original row positions;
+insertion extends only the new row's postings. An immutable snapshot borrows
+these existing columns and postings. Row and equality IDs survive append, while
+queries remain bound to one particular immutable view. Numeric ID order is not
+ASP term order.
 
 For a positive witness, the selector resolves known whole-column equalities and
 chooses the shortest posting list. Equal-length lists retain the first known
@@ -201,15 +227,17 @@ for tests and does not replace production selection. Its counters measure
 selectivity; integer comparisons and complete tuple probes have different costs.
 
 The catalog cannot grow while its snapshot is borrowed. Once a round finishes,
-the snapshot drops before new atoms are appended; subsequent rounds rebuild
-columns and postings. The completed final snapshot supplies formula emission
-and objective eligibility. Membership insertion shifts sorted row IDs, not atoms. Column construction, typed lookup,
-posting construction and those shifts consume the grounding work budget.
-`FormulaLimits::max_support_bytes` bounds authored snapshot, membership-index and
-query capacity, including construction scratch. Source atoms, allocator/tree
-overhead and unrelated grounding state retain separate bounds; this limit does
-not measure total memory or RSS. Rebuilding is an explicit cost of this ownership
-boundary.
+the snapshot drops before new atoms are appended. A failed tuple or posting
+extension returns no usable support owner. The completed final snapshot supplies
+formula emission and objective eligibility. Membership insertion shifts sorted
+row IDs, not atoms. Typed comparisons, ID shifts, append copies and posting
+construction consume the grounding work budget. Snapshot construction visits
+predicates without revisiting their rows.
+`FormulaLimits::max_support_bytes` bounds the catalog's atom-vector cells,
+equality layout, postings, borrowed snapshot objects and query capacity,
+including construction scratch. Nested atom payloads, allocator/tree overhead
+and unrelated grounding state retain separate bounds; this limit does not
+measure total memory or RSS.
 
 The command-line equivalent is the advanced `--max-support-bytes` option,
 shown by `--help-all` and recorded by `--stats`. It defaults to 128 MiB and

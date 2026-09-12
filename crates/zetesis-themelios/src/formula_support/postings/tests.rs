@@ -21,7 +21,7 @@ fn relation(rows: Vec<Vec<Value>>) -> SupportCatalog {
     let mut counters = Counters::default();
     for row in rows {
         let atom = Atom::new(Predicate::new("row", row.len()).unwrap(), row).unwrap();
-        support
+        support = support
             .insert(atom, &FormulaLimits::default(), &mut counters, location())
             .unwrap();
     }

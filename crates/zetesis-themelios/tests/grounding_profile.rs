@@ -138,6 +138,55 @@ fn support_counts_describe_completed_rounds() {
 }
 
 #[test]
+fn recursive_support_appends_each_posting_once() {
+    for bound in [16, 100, 200, 400] {
+        let observer = Observer::default();
+        let admitted = compile(
+            &format!("p(0). p(X+1):-p(X),X<{bound}."),
+            &FormulaLimits {
+                max_work: 1_048_576,
+                ..Default::default()
+            },
+            Some(&observer),
+        )
+        .unwrap();
+        assert_eq!(admitted.atoms().len(), bound + 1);
+        let records = observer.records.borrow();
+        let support = records
+            .iter()
+            .find(|record| record.phase == GroundingPhase::SupportCompletion)
+            .unwrap();
+        assert_eq!(
+            support.work.support_index_entries,
+            Some(u64::try_from(bound + 1).unwrap())
+        );
+    }
+}
+
+#[test]
+fn recursive_support_visits_only_new_positive_rows() {
+    for bound in [16, 100, 200, 400] {
+        let observer = Observer::default();
+        compile(
+            &format!("p(0). p(X+1):-p(X),X<{bound}."),
+            &FormulaLimits {
+                max_work: 1_048_576,
+                ..Default::default()
+            },
+            Some(&observer),
+        )
+        .unwrap();
+        let records = observer.records.borrow();
+        let support = records
+            .iter()
+            .find(|record| record.phase == GroundingPhase::SupportCompletion)
+            .unwrap();
+        assert_eq!(support.work.join_rows, Some(bound + 1));
+        assert_eq!(support.work.support_rounds, Some(bound + 2));
+    }
+}
+
+#[test]
 fn arithmetic_counts_describe_the_joined_rule() {
     let observer = Observer::default();
     compile(

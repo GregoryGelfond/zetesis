@@ -1,11 +1,10 @@
 //! One atom owner and immutable column views between support-growth rounds.
 
-use std::cmp::Ordering;
 use std::collections::{BTreeMap, btree_map::Entry};
 use std::mem::size_of;
 
 use themelios_base::span::Location;
-use zetesis_core::relation::{Failure, Limits, Relation, Resource, Row};
+use zetesis_core::relation::{Catalog, CatalogFailure, Failure, Limits, Relation, Resource, Row};
 use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value};
 
 use super::Counters;
@@ -16,13 +15,13 @@ use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 #[cfg(test)]
 mod tests;
 
-#[derive(Default)]
 struct CatalogRows {
-    atoms: Vec<Atom>,
-    ordered: Vec<usize>,
+    catalog: Catalog,
+    columns: Vec<BTreeMap<u32, Vec<usize>>>,
+    old_rows: usize,
 }
 
-/// The sole owner of possible atoms. Row IDs survive vector reallocation.
+/// The sole owner of possible atoms and appendable equality postings.
 #[derive(Default)]
 pub(crate) struct SupportCatalog {
     rows: BTreeMap<Predicate, CatalogRows>,
@@ -32,52 +31,97 @@ pub(crate) struct SupportCatalog {
 }
 
 impl SupportCatalog {
+    /// Publish the complete owner only after both tuple and posting extension.
+    /// A failed operation consumes its in-progress owner, so a partial index can
+    /// never be reused by another support round.
     pub(super) fn insert(
-        &mut self,
+        mut self,
         atom: Atom,
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: Location,
-    ) -> Result<(), FormulaFailure> {
-        ceiling(
-            FormulaResource::SupportIndexEntries,
-            self.entries as u128 + atom.values().len() as u128,
-            limits.max_support_index_entries as u128,
-            location,
-        )?;
-        let is_new = !self.rows.contains_key(atom.predicate());
+    ) -> Result<Self, FormulaFailure> {
         let mut memory = Memory::new(self.index_bytes, limits, location);
-        if is_new {
-            memory.add(size_of::<Vec<usize>>())?;
-        }
-        let rows = self.rows.entry(atom.predicate().clone()).or_default();
-        let Err(insertion) = rows
-            .ordered
-            .binary_search_by(|&row| rows.atoms[row].cmp(&atom))
-        else {
-            return Ok(());
+        let source = match self.rows.entry(atom.predicate().clone()) {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => {
+                memory.add(
+                    size_of::<CatalogRows>() - size_of::<Catalog>() + size_of::<Predicate>(),
+                )?;
+                let catalog = Catalog::new(
+                    entry.key().clone(),
+                    relation_limits(limits, counters, entry.key(), memory.remaining()?),
+                )
+                .map_err(|error| {
+                    catalog_failure(error, limits, counters, memory.bytes, location)
+                })?;
+                counters.charge_work(catalog.construction().construction_work, limits, location)?;
+                memory.add(catalog.retained_bytes())?;
+                let mut columns = Vec::new();
+                memory.reserve(&mut columns, entry.key().arity())?;
+                for _ in 0..entry.key().arity() {
+                    counters.work(limits, location)?;
+                    columns.push(BTreeMap::new());
+                }
+                entry.insert(CatalogRows {
+                    catalog,
+                    columns,
+                    old_rows: 0,
+                })
+            }
         };
-        memory.reserve(&mut rows.ordered, 1)?;
-        rows.atoms
-            .try_reserve(1)
-            .map_err(|_| failure(Failure::Allocation, location))?;
-        // Insertion shifts only row identifiers; the authoritative append order
-        // and all prior local row positions remain unchanged.
-        counters.charge_work(
-            (rows.ordered.len() - insertion + 1) as u128,
+        let old_bytes = source.catalog.retained_bytes();
+        let outer_bytes = memory.bytes - old_bytes;
+        let mut append_limits = relation_limits(
             limits,
-            location,
-        )?;
-        rows.ordered.insert(insertion, rows.atoms.len());
-        self.entries += atom.values().len();
-        rows.atoms.push(atom);
-        self.atoms += 1;
+            counters,
+            source.catalog.predicate(),
+            old_bytes + memory.remaining()?,
+        );
+        // Formula admission bounds retained column/row associations below.
+        // A local dictionary-value ceiling is a different resource and must
+        // not preempt that cumulative, duplicate-aware diagnostic.
+        append_limits.max_values = usize::MAX;
+        let receipt = source
+            .catalog
+            .insert(atom, append_limits)
+            .map_err(|error| catalog_failure(error, limits, counters, outer_bytes, location))?;
+        counters.charge_work(receipt.storage.construction_work, limits, location)?;
+        memory.release(old_bytes);
+        memory.add(receipt.storage.retained_bytes)?;
+        if receipt.inserted {
+            let arity = source.catalog.predicate().arity();
+            ceiling(
+                FormulaResource::SupportIndexEntries,
+                self.entries as u128 + arity as u128,
+                limits.max_support_index_entries as u128,
+                location,
+            )?;
+            source.append_postings(receipt.row, &mut memory, counters)?;
+            self.entries += arity;
+            self.atoms += 1;
+            counters.record(Event::SupportAtom);
+        }
         self.index_bytes = memory.bytes;
-        counters.record(Event::SupportAtom);
+        Ok(self)
+    }
+
+    /// Freeze the boundary before appending this completed round's new atoms.
+    pub(super) fn advance(
+        &mut self,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<(), FormulaFailure> {
+        for rows in self.rows.values_mut() {
+            counters.work(limits, location)?;
+            rows.old_rows = rows.catalog.atoms().len();
+        }
         Ok(())
     }
 
     /// Snapshot borrows prevent catalog growth until every join has ended.
+    /// Existing dictionary, columns and postings are reused without a row scan.
     pub(crate) fn snapshot(
         &self,
         limits: &FormulaLimits,
@@ -88,56 +132,17 @@ impl SupportCatalog {
         memory.add(size_of::<Support<'_>>())?;
         let mut rows = BTreeMap::new();
         for (predicate, source) in &self.rows {
-            // The relation's own accounting includes its object. Other row
-            // metadata is charged here and transferred into the table entry;
-            // there is no separately reserved destination Relation object.
-            memory.add(
-                size_of::<RelationRows<'_>>() - size_of::<Relation<'_>>() + size_of::<&Predicate>(),
-            )?;
-            let relation = Relation::from_atoms(
-                predicate,
-                &source.atoms,
-                relation_limits(limits, counters, predicate, memory.remaining()?),
-            )
-            .map_err(|error| relation_failure(error, limits, counters, memory.bytes, location))?;
-            counters.charge_work(relation.storage().construction_work, limits, location)?;
-            memory.add(relation.storage().retained_bytes)?;
-            let mut columns = Vec::new();
-            memory.reserve(&mut columns, predicate.arity())?;
-            for column in 0..predicate.arity() {
-                // Reserved column slots coexist with this local map header
-                // until the completed map moves into its slot.
-                memory.add(size_of::<BTreeMap<u32, Vec<usize>>>())?;
-                let mut postings = BTreeMap::<u32, Vec<usize>>::new();
-                for (row, &id) in relation
-                    .column(column)
-                    .expect("checked column")
-                    .iter()
-                    .enumerate()
-                {
-                    counters.work(limits, location)?;
-                    let posting = match postings.entry(id) {
-                        Entry::Occupied(entry) => entry.into_mut(),
-                        Entry::Vacant(entry) => {
-                            memory.add(size_of::<(u32, Vec<usize>)>())?;
-                            entry.insert(Vec::new())
-                        }
-                    };
-                    memory.reserve(posting, 1)?;
-                    posting.push(row);
-                    counters.record(Event::SupportIndexEntry);
-                }
-                columns.push(postings);
-                memory.release(size_of::<BTreeMap<u32, Vec<usize>>>());
-            }
+            counters.work(limits, location)?;
+            memory.add(size_of::<RelationRows<'_>>() + size_of::<&Predicate>())?;
             rows.insert(
                 predicate,
                 RelationRows {
-                    relation,
-                    columns,
-                    ordered: &source.ordered,
+                    relation: source.catalog.view(),
+                    columns: &source.columns,
+                    catalog: &source.catalog,
+                    old_rows: source.old_rows,
                     #[cfg(test)]
-                    atoms: &source.atoms,
+                    atoms: source.catalog.atoms(),
                 },
             );
         }
@@ -146,6 +151,53 @@ impl SupportCatalog {
             atoms: self.atoms,
             bytes: memory.bytes,
         })
+    }
+}
+
+impl CatalogRows {
+    fn append_postings(
+        &mut self,
+        row: usize,
+        memory: &mut Memory<'_>,
+        counters: &mut Counters,
+    ) -> Result<(), FormulaFailure> {
+        let view = self.catalog.view();
+        memory.add(size_of::<Relation<'_>>())?;
+        for (column, postings) in self.columns.iter_mut().enumerate() {
+            counters.work(memory.limits, memory.location)?;
+            let id = view.column(column).expect("checked column")[row];
+            let posting = match postings.entry(id) {
+                Entry::Occupied(entry) => entry.into_mut(),
+                Entry::Vacant(entry) => {
+                    memory.add(size_of::<(u32, Vec<usize>)>())?;
+                    entry.insert(Vec::new())
+                }
+            };
+            if posting.len() == posting.capacity() {
+                counters.charge_work(posting.len() as u128, memory.limits, memory.location)?;
+            }
+            memory.reserve(posting, 1)?;
+            posting.push(row);
+            counters.record(Event::SupportIndexEntry);
+        }
+        memory.release(size_of::<Relation<'_>>());
+        Ok(())
+    }
+}
+
+/// Preserve cumulative work on a failed append, including completed charged
+/// comparisons before the failed admission. Build failure consumes this owner.
+fn catalog_failure(
+    error: CatalogFailure,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    outer_bytes: usize,
+    location: Location,
+) -> FormulaFailure {
+    let failure = relation_failure(error.error, limits, counters, outer_bytes, location);
+    match counters.charge_work(error.work, limits, location) {
+        Ok(()) => failure,
+        Err(charge) => charge,
     }
 }
 
@@ -160,8 +212,9 @@ pub(crate) struct Support<'source> {
 
 pub(super) struct RelationRows<'source> {
     pub(super) relation: Relation<'source>,
-    pub(super) columns: Vec<BTreeMap<u32, Vec<usize>>>,
-    ordered: &'source [usize],
+    pub(super) columns: &'source [BTreeMap<u32, Vec<usize>>],
+    catalog: &'source Catalog,
+    old_rows: usize,
     #[cfg(test)]
     pub(super) atoms: &'source [Atom],
 }
@@ -174,6 +227,10 @@ impl Support<'_> {
 
     pub(super) fn len(&self) -> usize {
         self.atoms
+    }
+
+    pub(super) fn old_rows(&self, predicate: &Predicate) -> usize {
+        self.rows.get(predicate).map_or(0, |rows| rows.old_rows)
     }
 
     pub(super) fn row_count(&self, predicate: &Predicate) -> usize {
@@ -194,18 +251,22 @@ impl Support<'_> {
 
     pub(super) fn contains(&self, atom: &Atom) -> bool {
         self.rows.get(atom.predicate()).is_some_and(|rows| {
-            rows.ordered
-                .binary_search_by(|&position| {
-                    let row = rows.relation.row(position).expect("catalog row index");
-                    for (column, value) in atom.values().iter().enumerate() {
-                        let order = row.value(column).expect("checked arity").cmp(value);
-                        if order != Ordering::Equal {
-                            return order;
-                        }
-                    }
-                    Ordering::Equal
-                })
-                .is_ok()
+            let mut start = 0;
+            let mut end = rows.relation.row_count();
+            while start < end {
+                let middle = start + (end - start) / 2;
+                match rows
+                    .catalog
+                    .ordered_row(middle)
+                    .expect("bounded sorted row")
+                    .cmp(atom)
+                {
+                    std::cmp::Ordering::Less => start = middle + 1,
+                    std::cmp::Ordering::Equal => return true,
+                    std::cmp::Ordering::Greater => end = middle,
+                }
+            }
+            false
         })
     }
 
@@ -343,8 +404,8 @@ fn relation_failure(
     )
 }
 
-/// Authored snapshot/index capacity. Source atoms and allocator/tree overhead
-/// retain separate bounds; this is not a total grounder-memory measurement.
+/// Authored catalog/snapshot/index capacity. Nested atom payloads and
+/// allocator/tree overhead retain separate bounds; this is not total RSS.
 struct Memory<'limits> {
     bytes: usize,
     limits: &'limits FormulaLimits,

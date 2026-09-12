@@ -101,11 +101,11 @@ fn materialization_checks_dynamic_arithmetic() {
 
 #[test]
 fn grounding_resumes_the_expansion_budget() {
-    // This fixture charges 7 selected payload bytes during preparation and 18
-    // during grounding. Columns borrow index values instead of copying them.
-    // Resetting the budget at ground() would wrongly admit 24.
+    // This fixture charges 7 selected payload bytes during preparation and 16
+    // during grounding. A zero-input producer runs once during support discovery.
+    // Resetting the budget at ground() would wrongly admit 22.
     let source = "p(\"x\").";
-    let exact_bytes = 25;
+    let exact_bytes = 23;
     let expansion = ExpansionLimits {
         max_scalar_bytes: exact_bytes - 1,
         ..ExpansionLimits::default()

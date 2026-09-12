@@ -35,7 +35,7 @@ fn support(rows: Vec<Vec<Value>>) -> SupportCatalog {
     let mut support = SupportCatalog::default();
     for values in rows {
         let atom = Atom::new(Predicate::new("row", values.len()).unwrap(), values).unwrap();
-        support
+        support = support
             .insert(
                 atom,
                 &FormulaLimits::default(),
@@ -120,8 +120,7 @@ fn evaluate(
     match route {
         Route::Indexed => {}
         Route::Scan => {
-            join.probes[0] = Some(all.positions());
-            join.probed[0] = true;
+            join.probes[0] = Some(super::delta::Rows::Posting(all.positions()));
         }
         Route::Columns => {
             // Contiguous source mapping is checked by construction. No new
@@ -131,8 +130,7 @@ fn evaluate(
                     relation.row(position).unwrap().source_index() == position
                 })
             );
-            join.probes[0] = Some(selected.positions());
-            join.probed[0] = true;
+            join.probes[0] = Some(super::delta::Rows::Posting(selected.positions()));
         }
     }
     let mut bindings = Vec::new();

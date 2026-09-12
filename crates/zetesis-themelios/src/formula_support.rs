@@ -1,6 +1,7 @@
 //! A finite support upper bound and complete iterative relational joins.
 
 mod evaluation;
+mod delta;
 mod relations;
 #[cfg(test)]
 mod columnar;
@@ -166,80 +167,101 @@ pub(crate) fn build(
             if matches!(rule.head, HeadIr::Normal(None)) {
                 continue;
             }
-            let mut outer = Join::rule(rule, &support, budget)?;
-            while let Some(binding) = match &rule.head {
-                HeadIr::Normal(Some(head)) => {
-                    outer.next_support(head, &delta, limits, budget, counters, rule.location)?
-                }
-                _ => outer.next(limits, budget, counters, rule.location)?,
-            } {
-                match &rule.head {
-                    HeadIr::Normal(Some(head)) => derive(
-                        head,
-                        &binding,
-                        &support,
-                        &mut delta,
-                        limits,
-                        budget,
-                        rule.location,
-                    )?,
-                    HeadIr::Disjunction(heads) => {
-                        // Only positive occurrences can produce possible atoms.
-                        // Neither default-negation mode supplies support.
-                        for head in heads.iter().filter_map(|head| head.positive_atom()) {
-                            derive(
-                                head,
-                                &binding,
-                                &support,
-                                &mut delta,
-                                limits,
-                                budget,
-                                rule.location,
-                            )?;
-                        }
-                    }
-                    HeadIr::Choice(group) => {
-                        crate::formula_head_aggregate::validate_group(
-                            group,
-                            &binding,
-                            &support,
-                            limits,
-                            budget,
-                            counters,
-                            rule.location,
-                        )?;
-                        for element in &group.elements {
-                            let mut local =
-                                Join::element(element, &binding, &support, budget, rule.location)?;
-                            while let Some(binding) =
-                                local.next(limits, budget, counters, rule.location)?
-                            {
-                                if let Some(head) = element.head.positive_atom() {
-                                    derive(
-                                        head,
-                                        &binding,
-                                        &support,
-                                        &mut delta,
-                                        limits,
-                                        budget,
-                                        rule.location,
-                                    )?;
-                                }
-                            }
-                        }
-                    }
-                    HeadIr::Normal(None) => unreachable!("constraints never produce support"),
-                }
+            let mut variants = delta::variants(rule, &support, rounds == 1, limits, counters)?;
+            while let Some(variant) = variants.next(limits, counters)? {
+                let mut outer = Join::rule(rule, &support, budget)?;
+                outer.delta = match variant {
+                    delta::Variant::Full => None,
+                    delta::Variant::Delta(pivot) => Some(pivot),
+                };
+                derive_rule(
+                    rule, &mut outer, &support, &mut delta, limits, budget, counters,
+                )?;
             }
         }
         drop(support);
         if delta.is_empty() {
             return Ok(CompletedCatalog { catalog });
         }
+        catalog.advance(limits, counters, fallback)?;
         for atom in delta {
-            catalog.insert(atom, limits, counters, fallback)?;
+            catalog = catalog.insert(atom, limits, counters, fallback)?;
         }
     }
+}
+
+fn derive_rule(
+    rule: &crate::formula_ir::RuleIr,
+    outer: &mut Join<'_>,
+    support: &Support<'_>,
+    delta: &mut BTreeSet<Atom>,
+    limits: &FormulaLimits,
+    budget: &mut Budget,
+    counters: &mut Counters,
+) -> Result<(), FormulaFailure> {
+    while let Some(binding) = match &rule.head {
+        HeadIr::Normal(Some(head)) => {
+            outer.next_support(head, delta, limits, budget, counters, rule.location)?
+        }
+        _ => outer.next(limits, budget, counters, rule.location)?,
+    } {
+        match &rule.head {
+            HeadIr::Normal(Some(head)) => derive(
+                head,
+                &binding,
+                support,
+                delta,
+                limits,
+                budget,
+                rule.location,
+            )?,
+            HeadIr::Disjunction(heads) => {
+                // Only positive occurrences can produce possible atoms.
+                // Neither default-negation mode supplies support.
+                for head in heads.iter().filter_map(|head| head.positive_atom()) {
+                    derive(
+                        head,
+                        &binding,
+                        support,
+                        delta,
+                        limits,
+                        budget,
+                        rule.location,
+                    )?;
+                }
+            }
+            HeadIr::Choice(group) => {
+                crate::formula_head_aggregate::validate_group(
+                    group,
+                    &binding,
+                    support,
+                    limits,
+                    budget,
+                    counters,
+                    rule.location,
+                )?;
+                for element in &group.elements {
+                    let mut local =
+                        Join::element(element, &binding, support, budget, rule.location)?;
+                    while let Some(binding) = local.next(limits, budget, counters, rule.location)? {
+                        if let Some(head) = element.head.positive_atom() {
+                            derive(
+                                head,
+                                &binding,
+                                support,
+                                delta,
+                                limits,
+                                budget,
+                                rule.location,
+                            )?;
+                        }
+                    }
+                }
+            }
+            HeadIr::Normal(None) => unreachable!("constraints never produce support"),
+        }
+    }
+    Ok(())
 }
 
 fn derive(
@@ -300,6 +322,18 @@ impl PositivePattern<'_> {
     }
 }
 
+/// Source occurrence identity survives cardinality-based join reordering.
+#[derive(Clone, Copy)]
+struct PatternOccurrence<'a> {
+    pattern: PositivePattern<'a>,
+    source: usize,
+}
+impl PatternOccurrence<'_> {
+    fn atom(&self) -> &AtomPattern {
+        self.pattern.atom()
+    }
+}
+
 /// Why an unfilled slot can or cannot remain absent in the current scope.
 #[derive(Clone, Copy)]
 enum Slot {
@@ -320,13 +354,13 @@ pub(crate) struct Join<'a> {
     pending: Option<crate::formula_binding_cursor::Cursor<'a>>,
     pending_head: Option<crate::formula_binding_cursor::Cursor<'a>>,
     head_slots: std::ops::Range<usize>,
-    patterns: Vec<PositivePattern<'a>>,
+    patterns: Vec<PatternOccurrence<'a>>,
+    delta: Option<usize>,
     support: &'a Support<'a>,
     values: Vec<Option<Value>>,
     slots: Vec<Slot>,
     positions: Vec<usize>,
-    probes: Vec<Option<&'a [usize]>>,
-    probed: Vec<bool>,
+    probes: Vec<Option<delta::Rows<'a>>>,
     changes: Vec<Vec<usize>>,
     depth: usize,
     empty_yielded: bool,
@@ -449,10 +483,14 @@ impl<'a> Join<'a> {
         // cannot prune possible heads. Only ordinary positive atoms join here.
         let mut patterns: Vec<_> = literals
             .iter()
-            .filter_map(|literal| match literal {
-                LiteralIr::Atom(DefaultNegation::None, atom) => Some(PositivePattern::Flat(atom)),
-                LiteralIr::PatternAtom(pattern) => Some(PositivePattern::Structural(pattern)),
-                _ => None,
+            .enumerate()
+            .filter_map(|(source, literal)| {
+                let pattern = match literal {
+                    LiteralIr::Atom(DefaultNegation::None, atom) => PositivePattern::Flat(atom),
+                    LiteralIr::PatternAtom(pattern) => PositivePattern::Structural(pattern),
+                    _ => return None,
+                };
+                Some(PatternOccurrence { pattern, source })
             })
             .collect();
         for pattern in &patterns {
@@ -501,12 +539,12 @@ impl<'a> Join<'a> {
             comparisons: Comparisons::Deferred,
             evaluation: Evaluation::default(),
             patterns,
+            delta: None,
             support,
             values,
             slots,
             positions: vec![0; count],
             probes: vec![None; count],
-            probed: vec![false; count],
             changes: vec![Vec::new(); count],
             depth: 0,
             empty_yielded: false,
@@ -718,19 +756,26 @@ impl<'a> Join<'a> {
                 continue;
             }
             let pattern = self.patterns[self.depth];
-            if !self.probed[self.depth] {
-                self.probes[self.depth] =
+            if self.probes[self.depth].is_none() {
+                let posting =
                     self.support
                         .probe(pattern.atom(), &self.values, limits, counters, location)?;
-                self.probed[self.depth] = true;
+                let total = self.support.row_count(pattern.atom().predicate());
+                self.probes[self.depth] = Some(if self.delta.is_some() {
+                    let old = self.support.old_rows(pattern.atom().predicate());
+                    let range = delta::interval(self.delta, pattern.source, old, total);
+                    delta::Rows::within(posting, range, limits, counters, location)?
+                } else {
+                    delta::Rows::all(posting, total)
+                });
             }
             let position = self.positions[self.depth];
-            let row =
-                self.probes[self.depth].map_or(Some(position), |rows| rows.get(position).copied());
+            let row = self.probes[self.depth]
+                .as_ref()
+                .and_then(|rows| rows.get(position));
             let atom = row.and_then(|row| self.support.row(pattern.atom().predicate(), row));
             let Some(atom) = atom else {
                 self.positions[self.depth] = 0;
-                self.probed[self.depth] = false;
                 self.probes[self.depth] = None;
                 if self.depth == 0 {
                     self.finished = true;
@@ -742,7 +787,8 @@ impl<'a> Join<'a> {
             };
             self.positions[self.depth] += 1;
             counters.record(Event::JoinRow);
-            let matches = self.match_row(pattern, atom, limits, budget, counters, location)?;
+            let matches =
+                self.match_row(pattern.pattern, atom, limits, budget, counters, location)?;
             if matches
                 && (self.filter_prefix(limits, budget, counters, location)? || retain_rejected)
             {
@@ -853,7 +899,6 @@ impl<'a> Join<'a> {
         } else {
             if self.depth < self.patterns.len() {
                 self.positions[self.depth] = 0;
-                self.probed[self.depth] = false;
                 self.probes[self.depth] = None;
             }
             self.depth -= 1;

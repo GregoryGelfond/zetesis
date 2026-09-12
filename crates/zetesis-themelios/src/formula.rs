@@ -48,8 +48,9 @@ pub struct FormulaLimits {
     pub max_disjunction_elements: usize,
     /// Retained row identifiers across bound-column support indexes.
     pub max_support_index_entries: usize,
-    /// Live authored support snapshot, membership-index and query capacity.
-    /// Source atoms, allocator/tree overhead and other grounding state retain
+    /// Live support atom-vector cells, equality layout, postings, snapshot
+    /// objects and query capacity, including operation scratch. Nested atom
+    /// payloads, allocator/tree overhead and other grounding state retain
     /// separate bounds. This is not a total grounder-memory ceiling.
     pub max_support_bytes: usize,
     /// Distinct aggregate/outer-binding entries retained during final grounding.
