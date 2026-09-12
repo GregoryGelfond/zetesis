@@ -153,7 +153,7 @@ fn profile_finite_candidate_prefixes() {
                     candidates += 1;
                     let candidate =
                         encoding::interpretation(theory, &assignment, &mut budget).unwrap();
-                    if let Err(error) = encoding::block(&mut cnf, &candidate, &mut budget) {
+                    if let Err(error) = cursor.exclude(&mut cnf, &candidate, &mut budget) {
                         end = End::Incomplete(error);
                         break;
                     }

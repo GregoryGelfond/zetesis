@@ -286,7 +286,11 @@ impl StableModels {
                 Ok(Some(candidate)) => {
                     // The interpretation is retained even if its exact block cannot fit.
                     let started = timing::start(self.statistics.phase_timings.as_ref());
-                    let block = encoding::block(&mut self.candidate_cnf, &candidate, &mut budget);
+                    let block = self.candidate_cursor.exclude(
+                        &mut self.candidate_cnf,
+                        &candidate,
+                        &mut budget,
+                    );
                     timing::finish(
                         &mut self.statistics.phase_timings,
                         Phase::Candidates,

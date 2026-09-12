@@ -22,12 +22,13 @@ const CHOICES: &str = "1 { p(1..4) } 2.";
 
 fn choice_work() -> u64 {
     // The frozen generic trace takes 2294 operations. Compare that entire
-    // trace before subtracting the independently replayed elided positions.
+    // trace before subtracting elided watch positions and the exact exclusion
+    // cost reduction for its ten distinct four-atom projections.
     assert_eq!(
         trace(CHOICES, true, SearchLimits::default()),
         include_str!("../fixtures/watch-traces/exact.txt")
     );
-    2294 - reference_statistics(SearchStatistics::default()).work
+    2294 - reference_statistics(SearchStatistics::default(), 4, 10).work
 }
 
 #[test]
@@ -78,7 +79,11 @@ fn report_queens_watch_storage() {
 // Historical fixtures scan both watched positions in every binary replacement
 // attempt, and a prefix of the three positions in every ternary attempt.
 // Restore omitted positions under that cost map; solver statistics stay intact.
-fn reference_statistics(mut actual: SearchStatistics) -> SearchStatistics {
+fn reference_statistics(
+    mut actual: SearchStatistics,
+    width: usize,
+    excluded: u64,
+) -> SearchStatistics {
     let profile = super::propagation_profile::snapshot();
     let omitted = profile
         .binary_attempts
@@ -86,6 +91,20 @@ fn reference_statistics(mut actual: SearchStatistics) -> SearchStatistics {
         .and_then(|binary| binary.checked_add(profile.ternary_elided_positions))
         .unwrap();
     actual.work = actual.work.checked_add(omitted).unwrap();
+    // The old block path copied W literals, then checked a clause and W
+    // indices and traversed W bits: 3W+1. Direct transactional insertion costs
+    // W+3 for every new nonempty key (prefix visits + suffix writes partition
+    // its W bits, plus admission, entry and leaf). Empty keys cost 2 vs 1.
+    // Dedicated exclusion tests assert these counts independently. This map
+    // changes only historical trace comparison, never solver statistics.
+    actual.work = if width == 0 {
+        actual.work.checked_sub(excluded).unwrap()
+    } else {
+        actual
+            .work
+            .checked_add((u64::try_from(width).unwrap() * 2 - 2) * excluded)
+            .unwrap()
+    };
     actual
 }
 
@@ -107,12 +126,12 @@ fn trace(source: &str, refined: bool, limits: SearchLimits) -> String {
         statistics: SearchStatistics::default(),
     };
     let mut cnf = encoding::encode(theory, None, AdmissionLimits::default(), &mut charged).unwrap();
-    let mut cursor = if refined {
-        Cursor::refined(theory.atom_count())
-    } else {
-        Cursor::projected(theory.atom_count())
-    };
+    let mut cursor = Cursor::projected(theory.atom_count());
+    if refined {
+        cursor.restart();
+    }
     let mut record = String::new();
+    let mut excluded = 0;
     writeln!(
         record,
         "atoms={} nodes={} roots={} variables={} clauses={}",
@@ -134,24 +153,25 @@ fn trace(source: &str, refined: bool, limits: SearchLimits) -> String {
                     record,
                     "model {:?}; {:?}",
                     candidate.atoms().collect::<Vec<_>>(),
-                    reference_statistics(charged.statistics)
+                    reference_statistics(charged.statistics, theory.atom_count(), excluded)
                 )
                 .unwrap();
-                if let Err(error) = encoding::block(&mut cnf, &candidate, &mut charged) {
+                if let Err(error) = cursor.exclude(&mut cnf, &candidate, &mut charged) {
                     writeln!(
                         record,
                         "block {error:?}; {:?}",
-                        reference_statistics(charged.statistics)
+                        reference_statistics(charged.statistics, theory.atom_count(), excluded)
                     )
                     .unwrap();
                     return record;
                 }
+                excluded += 1;
             }
             terminal => {
                 writeln!(
                     record,
                     "{terminal:?}; {:?}",
-                    reference_statistics(charged.statistics)
+                    reference_statistics(charged.statistics, theory.atom_count(), excluded)
                 )
                 .unwrap();
                 return record;

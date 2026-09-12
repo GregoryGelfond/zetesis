@@ -223,19 +223,6 @@ pub(crate) fn interpretation(
     Interpretation::new(theory, selected).map_err(|_| Incomplete::Allocation)
 }
 
-pub(crate) fn block(
-    cnf: &mut Cnf,
-    candidate: &Interpretation,
-    budget: &mut Budget<'_>,
-) -> Result<(), Incomplete> {
-    let mut clause = storage(candidate.theory().atom_count())?;
-    for atom in 0..candidate.theory().atom_count() {
-        budget.tick()?;
-        clause.push(Literal::new(atom, !candidate.contains(atom)));
-    }
-    cnf.append(clause)?;
-    Ok(())
-}
 use std::collections::HashMap;
 
 pub(crate) fn scratch_bytes(atoms: u128, nodes: u128, roots: u128, clauses: u128) -> u128 {

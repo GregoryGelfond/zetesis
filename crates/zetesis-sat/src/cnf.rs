@@ -37,9 +37,12 @@ impl Literal {
 pub struct AdmissionLimits {
     /// Maximum variables, including Tseitin variables on the formula path.
     pub max_variables: usize,
-    /// Maximum clauses, including later candidate blocking clauses.
+    /// Maximum submitted clauses, including logical candidate exclusions.
+    /// Stable-model enumeration retains exclusions in a separate exact index,
+    /// without materializing their equivalent blocking clauses.
     pub max_clauses: usize,
-    /// Maximum literal occurrences across clauses.
+    /// Maximum submitted literal occurrences, including the semantic width of
+    /// each logical candidate exclusion. This is not an allocated-byte limit.
     pub max_literals: usize,
 }
 impl Default for AdmissionLimits {
@@ -147,6 +150,29 @@ pub(crate) struct Checkpoint {
     submitted_literals: usize,
 }
 impl Cnf {
+    /// Charge the logical blocking clause without retaining a second history.
+    /// The caller rolls back this admission if exact-index insertion fails.
+    pub(crate) fn admit_exclusion(&mut self, width: usize) -> Result<(), AdmissionError> {
+        let (clauses, literals) = self.submission(width)?;
+        self.submitted_clauses = clauses;
+        self.submitted_literals = literals;
+        Ok(())
+    }
+
+    fn submission(&self, width: usize) -> Result<(usize, usize), AdmissionError> {
+        let clauses = self
+            .submitted_clauses
+            .checked_add(1)
+            .ok_or(AdmissionError::Overflow)?;
+        let literals = self
+            .submitted_literals
+            .checked_add(width)
+            .ok_or(AdmissionError::Overflow)?;
+        bound(Resource::Clauses, clauses, self.limits.max_clauses)?;
+        clauses.checked_mul(2).ok_or(AdmissionError::Overflow)?;
+        bound(Resource::Literals, literals, self.limits.max_literals)?;
+        Ok((clauses, literals))
+    }
     pub(crate) fn checkpoint(&self) -> Checkpoint {
         Checkpoint {
             variables: self.variables,
@@ -216,17 +242,7 @@ impl Cnf {
         &self.clauses
     }
     pub(crate) fn append(&mut self, mut clause: Vec<Literal>) -> Result<(), AdmissionError> {
-        let clauses = self
-            .submitted_clauses
-            .checked_add(1)
-            .ok_or(AdmissionError::Overflow)?;
-        let literals = self
-            .submitted_literals
-            .checked_add(clause.len())
-            .ok_or(AdmissionError::Overflow)?;
-        bound(Resource::Clauses, clauses, self.limits.max_clauses)?;
-        clauses.checked_mul(2).ok_or(AdmissionError::Overflow)?;
-        bound(Resource::Literals, literals, self.limits.max_literals)?;
+        let (clauses, literals) = self.submission(clause.len())?;
         for literal in &clause {
             if literal.variable >= self.variables {
                 return Err(AdmissionError::Variable {

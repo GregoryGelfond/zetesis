@@ -20,7 +20,9 @@ pub use certified::CertifiedStatistics;
 /// Whole-operation ceilings for a membership check or stable-model enumeration.
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {
-    /// Each candidate/reduct CNF, including accumulated candidate blocking clauses.
+    /// Each candidate/reduct CNF and accumulated logical candidate exclusions.
+    /// Exclusions consume one clause unit and their semantic width in literal
+    /// units, but are retained only in the exact projection index.
     pub admission: AdmissionLimits,
     /// Cumulative encoding, certificate and search work/decisions across a run.
     pub search: SearchLimits,
@@ -190,7 +192,7 @@ fn reduct_membership(
 
 /// Native all-model search over classical candidates with exact semantic blocking.
 /// SAT assignments include Tseitin variables, but returned interpretations and
-/// blocking clauses contain only the original theory's atom universe.
+/// exact exclusions contain only the original theory's atom universe.
 ///
 /// Work and candidate limits are cumulative. An incomplete result is emitted
 /// once and terminates the iterator without marking it exhausted. If blocking
@@ -255,8 +257,10 @@ impl StableModels {
     }
 
     /// Append a classical candidate-only constraint and restart the outer cursor.
-    /// All original clauses, earlier restrictions and exact semantic blocks stay
-    /// present. The original theory and frozen-reduct acceptance are unchanged.
+    /// Original clauses and earlier restrictions stay in the CNF. The separate
+    /// exact projection index retains every earlier exclusion without turning
+    /// it into watched CNF storage. Original theory and reduct acceptance stay
+    /// unchanged.
     ///
     /// The restriction must use the original semantic atom count and index
     /// meanings. Its separate immutable instance is expected. Restrictions
@@ -295,7 +299,7 @@ impl StableModels {
         let result = encoding::restrict(&mut self.candidate_cnf, restriction, &mut budget);
         self.statistics.search = budget.statistics;
         if result.is_ok() {
-            self.candidate_cursor = Cursor::refined(self.theory.atom_count());
+            self.candidate_cursor.restart();
             self.statistics.candidate_restrictions = count;
         }
         result
@@ -428,7 +432,7 @@ fn advance(
             return Err(Incomplete::InvalidWitness);
         }
         let started = timing::start(statistics.phase_timings.as_ref());
-        let blocking = encoding::block(cnf, &candidate, budget);
+        let blocking = cursor.exclude(cnf, &candidate, budget);
         timing::finish(&mut statistics.phase_timings, Phase::Candidates, started);
         if matches!(result, Check::Stable) {
             increment(&mut statistics.stable_models)?;
