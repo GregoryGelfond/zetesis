@@ -103,6 +103,15 @@ gate with a missing slot. Emitted source instances still own their values.
 membership. Rust comparison/hash equivalence, index construction and binding
 lifetimes remain implementation obligations.
 
+`SeedSelections.materialization_exact` shows that ordering and coalescing the
+atom denotations of shared handles preserves their exact true set. Distinct
+handles may denote the same atom. The Rust `SeedSelection` owns canonical shared
+handles, while `SeedView` borrows either those handles or an owned `Seed` without
+materialization. Arc lifetime safety, program-instance validation, canonical
+comparison and the executable candidate cursor remain separate correspondence
+obligations. This interpretation law does not establish answer-set membership
+or complete candidate coverage.
+
 The scalar lazy closure retains one typed `Catalog` for each predicate. Every
 round borrows their existing ordered rows; new consequences remain separate
 until that round's complete template scan finishes. Catalogs are consumed once

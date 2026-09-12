@@ -16,6 +16,7 @@ construction and standalone analysis APIs belong to its own manual.
 | Share optional host instrumentation across admission and solving | `SolveMeasurements` |
 | All original answers, streamed or completely collected | `Session::enumerate`, `WorldView::collect`, checked `AnswerSet` |
 | Finite relational templates and atoms | `zetesis_core::{Program, Template, Atom, Seed}` |
+| Shared candidate ownership and borrowed checking | `zetesis_core::{SeedSelection, SeedView}`, `Candidates::next_selection` |
 | Checked borrowed atom identity | `AtomPattern::key`, `BindingView`, `AtomKey` |
 | Bounded typed column views and equality selection | `zetesis_core::relation::{Relation, Query, Selection, Mask}` |
 | Explicit complete relational graph | `zetesis_core::GroundProgram::compile` |
@@ -101,6 +102,21 @@ same checked work receipt as owned-atom lookup. Neither operation copies an atom
 `AtomKey::to_atom` materializes a new atom by cloning its predicate and resolved
 values. These operations establish identity without certifying support or
 answer-set membership.
+
+`SeedSelection` retains shared immutable handles to its true atoms. Construction
+validates their gate-carrier membership and canonicalizes the selected handles;
+it does not copy atom payloads. `SeedSelection::view` and `Seed::view` supply the
+same borrowed true-membership interface. Missing atoms are false. Both owners
+retain the original `Program` instance, and neither establishes answer-set
+membership. `SeedSelection::to_seed` explicitly clones the atoms into an owned
+tree for consumers requiring the existing `Seed::atoms` contract.
+
+`Candidates::next_selection` and its owned-seed iterator share one enumeration
+cursor. Mixing their pulls continues that cursor; it cannot restart enumeration.
+Returned selections remain valid across later pulls or after the cursor is
+dropped. Each discovered atom needs one shared allocation; each selection still
+needs its handle vector, carrier validation and canonicalization. These are
+ownership guarantees, not a total-memory bound.
 
 `relation::Relation` borrows one immutable atom source with a dictionary and
 aligned equality-ID columns. `from_atoms` and `from_catalog` own that layout.
