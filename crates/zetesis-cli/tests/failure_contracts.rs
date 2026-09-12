@@ -322,6 +322,22 @@ fn lower_layer_failures_preserve_typed_causes_at_the_public_cli_boundary() {
 }
 
 #[test]
+fn model_retention_failures_preserve_the_typed_cause() {
+    let catalog = zetesis_core::AtomCatalog::new(Vec::new());
+    let cause = zetesis_core::Model::from_positions(&catalog, [0]).unwrap_err();
+    let expected = cause.to_string();
+    let error = RunError::from(zetesis_solve::SolveError::Model(cause));
+    assert_eq!(error.to_string(), expected);
+    assert!(
+        error
+            .source()
+            .unwrap()
+            .downcast_ref::<zetesis_core::ModelError>()
+            .is_some()
+    );
+}
+
+#[test]
 fn lazy_countermodel_requests_are_refused_before_parsing() {
     let mut options = options(&["--oracle", "countermodel", "--grounder", "lazy"]);
     options.backend = zetesis_cli::Backend::Metal;

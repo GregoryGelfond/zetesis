@@ -7,7 +7,7 @@ use themelios_base::diagnostic::Diagnostic;
 use themelios_base::source::Source;
 use themelios_base::span::Location;
 use themelios_program::program::{Program as SourceProgram, Statement};
-use zetesis_core::Atom;
+use zetesis_core::{Atom, AtomCatalog};
 use zetesis_ferraris::Theory;
 
 use crate::{
@@ -462,6 +462,12 @@ impl AdmittedFormula {
     /// Semantic atom identities in exactly the theory's dense index order.
     #[must_use]
     pub fn atoms(&self) -> &[Atom] {
+        self.compiled.atoms.atoms()
+    }
+    /// Shared dense atom owner; selected interpretations retain its payloads
+    /// after this source owner is dropped. No atom copying occurs when cloned.
+    #[must_use]
+    pub fn atom_catalog(&self) -> &AtomCatalog {
         &self.compiled.atoms
     }
     /// Parsed origins per emitted theory root, preserving merged source evidence.
@@ -540,6 +546,11 @@ impl AdmittedFormulaBundle {
     /// Semantic atom identities in theory index order.
     #[must_use]
     pub fn atoms(&self) -> &[Atom] {
+        self.compiled.atoms.atoms()
+    }
+    /// Shared dense atom owner used by retained interpretations.
+    #[must_use]
+    pub fn atom_catalog(&self) -> &AtomCatalog {
         &self.compiled.atoms
     }
     /// Parsed origins per theory root, resolvable in the retained catalog.
@@ -625,7 +636,7 @@ pub(crate) struct Compiled {
     pub analyzed: SourceProgram,
     pub theory: Theory,
     pub count_plan: crate::formula_count_plan::Outcome,
-    pub atoms: Vec<Atom>,
+    pub atoms: AtomCatalog,
     pub origins: Vec<Vec<Location>>,
     pub objectives: zetesis_objective::ObjectiveProgram,
     pub objective_origins: Vec<Vec<Location>>,

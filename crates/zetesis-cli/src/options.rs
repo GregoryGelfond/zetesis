@@ -148,7 +148,7 @@ pub struct Options {
     /// Maximum atoms across retained incumbent models, before display selection.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_optimal_atoms, hide_short_help = true)]
     pub max_optimal_atoms: usize,
-    /// Maximum retained model payload bytes, excluding allocator overhead.
+    /// Maximum retained canonical bytes, counting the whole atom catalog per model.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_optimal_bytes, hide_short_help = true)]
     pub max_optimal_bytes: usize,
     /// Maximum batched formula candidates; closure batches follow its first seed.

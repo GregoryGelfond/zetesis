@@ -68,11 +68,16 @@ inconsistency, while an empty vector collected from a stopped stream does not.
 An arbitrary vector and a detached outcome cannot construct a `WorldView`.
 
 `WorldViewLimits` independently bounds retained answers, summed full atoms and
-canonical payload bytes, including score priorities. The byte bound excludes
-shared subjects, allocator overhead, engine state and the one answer being
+canonical payload bytes, including each answer's entire referenced atom catalog,
+selected positions and score priorities. Shared catalogs are conservatively
+counted once per retained answer. The byte bound excludes
+shared subjects, spare capacity, allocator/Arc overhead, engine state and the one answer being
 considered for collection. It is not a process-memory limit. Members are moved
 into the collection without a repeated membership check or full-model clone;
 retained space can still be exponential in program size.
+
+[Retained interpretations](models.md) explains catalog ownership, logical model
+identity and the distinction between shared payload and selected true atoms.
 
 `WorldViewFailure` preserves the checked prefix, original subject, typed cause
 and available semantic outcome. Search interruption, scoring failure and

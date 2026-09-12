@@ -1,9 +1,7 @@
 //! Completion and gate equality are distinct obligations of normal acceptance.
 
-use std::collections::BTreeSet;
-
 use zetesis_core::{
-    AdmissionLimits, Atom, AtomPattern, Predicate, Program, Seed, Template, Term, Value,
+    AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Seed, Template, Term, Value,
 };
 
 use super::{Control, Limits, Statistics, Stop, Work, gate_agreement, least_closure};
@@ -80,9 +78,17 @@ fn join_bindings_borrow_their_source_values() {
 fn gate_agreement_requires_every_derived_gate_atom() {
     let program = choices();
     let seed = Seed::new(&program, []).unwrap();
-    let closure = BTreeSet::from([atom("a")]);
+    let closure = Model::new([atom("a")]);
     let control = Control::default();
-    assert!(!gate_agreement(&program, seed.view(), &closure, &mut work(&control, 1)).unwrap());
+    assert!(
+        !gate_agreement(
+            &program,
+            seed.view(),
+            closure.atoms(),
+            &mut work(&control, 1)
+        )
+        .unwrap()
+    );
 }
 
 #[test]
@@ -94,7 +100,7 @@ fn gate_agreement_requires_every_seed_atom() {
         !gate_agreement(
             &program,
             seed.view(),
-            &BTreeSet::new(),
+            Model::default().atoms(),
             &mut work(&control, 1)
         )
         .unwrap()
@@ -115,23 +121,36 @@ fn gate_agreement_ignores_positive_only_atoms() {
     )
     .unwrap();
     let seed = Seed::new(&program, []).unwrap();
-    let closure = BTreeSet::from([atom("a")]);
+    let closure = Model::new([atom("a")]);
     let control = Control::default();
-    assert!(gate_agreement(&program, seed.view(), &closure, &mut work(&control, 1)).unwrap());
+    assert!(
+        gate_agreement(
+            &program,
+            seed.view(),
+            closure.atoms(),
+            &mut work(&control, 1)
+        )
+        .unwrap()
+    );
 }
 
 #[test]
 fn gate_mismatch_does_not_truncate_charged_scans() {
     let program = choices();
     let seed = Seed::new(&program, [atom("a")]).unwrap();
-    let closure = BTreeSet::from([atom("b")]);
+    let closure = Model::new([atom("b")]);
     let control = Control::default();
     assert_eq!(
-        gate_agreement(&program, seed.view(), &closure, &mut work(&control, 1)),
+        gate_agreement(
+            &program,
+            seed.view(),
+            closure.atoms(),
+            &mut work(&control, 1)
+        ),
         Err(Stop::WorkLimit)
     );
     let mut exact = work(&control, 2);
-    assert!(!gate_agreement(&program, seed.view(), &closure, &mut exact).unwrap());
+    assert!(!gate_agreement(&program, seed.view(), closure.atoms(), &mut exact).unwrap());
     assert_eq!(exact.statistics.work, 2);
 }
 
@@ -179,10 +198,7 @@ fn violated_constraints_preserve_complete_closure() {
     let mut work = work(&control, Limits::default().max_work);
     let completed = least_closure(&program, seed.view(), &mut work).unwrap();
     assert!(completed.constraint_violated);
-    assert_eq!(
-        completed.atoms.atoms(),
-        &BTreeSet::from([atom("a"), atom("b")])
-    );
+    assert_eq!(completed.atoms, Model::new([atom("a"), atom("b")]));
     assert_eq!(work.statistics.rounds, 3);
 }
 

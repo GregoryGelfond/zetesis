@@ -3,7 +3,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use zetesis_core::{
-    Atom, AtomPattern, Filter, Model, Predicate, Program, Seed, SeedView, Template, Term, Value,
+    Atom, AtomPattern, Filter, Model, ModelAtoms, Predicate, Program, Seed, SeedView, Template,
+    Term, Value,
 };
 
 use crate::{Control, Stop};
@@ -338,7 +339,7 @@ fn least_closure(
 fn gate_agreement(
     program: &Program,
     seed: SeedView<'_>,
-    closure: &BTreeSet<Atom>,
+    closure: ModelAtoms<'_>,
     work: &mut Work<'_>,
 ) -> Result<bool, Stop> {
     let mut agreement = true;

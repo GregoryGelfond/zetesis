@@ -4,13 +4,13 @@ use crate::ExecutionObservation as Event;
 use crate::execution_observation::ExecutionSink;
 use crate::phase_timing::{Recorder, SolvePhase};
 use crate::{SolveConfig, SolveError};
-use zetesis_core::Atom;
+use zetesis_core::AtomCatalog;
 use zetesis_ferraris::Theory;
 
 #[derive(Clone, Copy)]
 pub(crate) struct Input<'a> {
     pub(crate) theory: &'a Theory,
-    pub(crate) atoms: &'a [Atom],
+    pub(crate) atoms: &'a AtomCatalog,
     pub(crate) gate_atoms: usize,
     pub(crate) objectives: &'a zetesis_objective::ObjectiveProgram,
 }

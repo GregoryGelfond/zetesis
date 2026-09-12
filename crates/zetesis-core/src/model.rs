@@ -2,7 +2,11 @@
 
 use std::{cmp::Ordering, fmt, iter::FusedIterator, slice, sync::Arc};
 
-use crate::Atom;
+use crate::{Atom, Value};
+
+const LENGTH_BYTES: usize = std::mem::size_of::<u64>();
+const TAG_BYTES: usize = 1;
+const ATOM_HEADER_BYTES: usize = 2 * LENGTH_BYTES + TAG_BYTES;
 
 /// Immutable typed atoms in their original dense index order.
 ///
@@ -10,29 +14,40 @@ use crate::Atom;
 /// occupy different positions; indices retain their supplied meanings. Cloning
 /// shares the vector and its payloads in constant time. Selections retain the
 /// entire catalog, including unselected atoms, until the last owner is dropped.
-#[derive(Clone, Debug, Default)]
-pub struct AtomCatalog(Arc<Vec<Atom>>);
+#[derive(Clone, Debug)]
+pub struct AtomCatalog(Arc<CatalogData>);
+
+#[derive(Debug)]
+struct CatalogData {
+    atoms: Vec<Atom>,
+    canonical_bytes: Option<usize>,
+}
 
 impl AtomCatalog {
     /// Retain an existing atom vector without copying or reordering its cells.
     /// Existing atom/value addresses and vector capacity are preserved. The Arc
-    /// envelope allocation is infallible, not a typed allocation refusal.
+    /// envelope allocation is infallible, not a typed allocation refusal. One
+    /// traversal records a checked canonical payload size for later retention
+    /// admission; this traverses atom/value descriptions but copies no payload.
     #[must_use]
     pub fn new(atoms: Vec<Atom>) -> Self {
-        Self(Arc::new(atoms))
+        Self(Arc::new(CatalogData {
+            canonical_bytes: canonical_bytes(&atoms),
+            atoms,
+        }))
     }
 
     /// Original dense-order atoms. Borrowing and indexing allocate nothing.
     #[must_use]
     pub fn atoms(&self) -> &[Atom] {
-        &self.0
+        &self.0.atoms
     }
 
     /// Retained atom-vector capacity in cells, excluding the Arc envelope and
     /// nested payload allocations. Sharing does not multiply this capacity.
     #[must_use]
     pub fn capacity(&self) -> usize {
-        self.0.capacity()
+        self.0.atoms.capacity()
     }
 
     /// Whether both handles retain the same catalog allocation. This is owner
@@ -41,6 +56,35 @@ impl AtomCatalog {
     pub fn same_owner(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.0, &other.0)
     }
+}
+
+impl Default for AtomCatalog {
+    fn default() -> Self {
+        Self::new(Vec::new())
+    }
+}
+
+// u64 list lengths, a predicate-sign byte and typed logical value encodings.
+// This portable admission measure is independent of allocator capacity or RSS.
+fn canonical_bytes(atoms: &[Atom]) -> Option<usize> {
+    let mut bytes = LENGTH_BYTES;
+    for atom in atoms {
+        bytes = bytes
+            .checked_add(ATOM_HEADER_BYTES)?
+            .checked_add(atom.predicate().name().len())?;
+        for value in atom.values() {
+            let payload = match value {
+                Value::Infimum | Value::Supremum => 0,
+                Value::Number(_) => std::mem::size_of::<i32>(),
+                Value::Structured(value) => value.canonical_bytes().checked_sub(TAG_BYTES)?,
+                Value::Symbol(text) | Value::String(text) => {
+                    LENGTH_BYTES.checked_add(text.len())?
+                }
+            };
+            bytes = bytes.checked_add(TAG_BYTES)?.checked_add(payload)?;
+        }
+    }
+    Some(bytes)
 }
 
 /// A canonical true-atom set, also named [`Interpretation`]. Construction
@@ -151,6 +195,23 @@ impl Model {
     #[must_use]
     pub fn selection_capacity(&self) -> usize {
         self.0.positions.capacity()
+    }
+
+    /// Canonical retained payload size: every catalog atom, including unselected
+    /// atoms, plus a u64 selection length and u64 positions. Constant time after
+    /// the catalog's initial traversal. Returns `None` on size overflow.
+    ///
+    /// Counting this per retained model conservatively recounts shared catalogs.
+    /// This is a portable admission measure, not allocated bytes or RSS: spare
+    /// vector capacity, Arc envelopes and allocator bookkeeping are excluded.
+    #[must_use]
+    pub fn retained_payload_bytes(&self) -> Option<usize> {
+        self.0
+            .catalog
+            .0
+            .canonical_bytes?
+            .checked_add(LENGTH_BYTES)?
+            .checked_add(self.0.positions.len().checked_mul(LENGTH_BYTES)?)
     }
 }
 

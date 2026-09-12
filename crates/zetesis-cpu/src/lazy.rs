@@ -9,7 +9,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use zetesis_core::{Atom, Model, Program, Seed, SeedView};
+use zetesis_core::{Atom, AtomCatalog, Model, ModelError, Program, Seed, SeedView};
 
 use crate::oracle::{Work, worlds};
 use crate::{Control, Stop, source};
@@ -686,11 +686,16 @@ impl State {
     }
 
     fn conclusions<'seed>(
-        &self,
+        self,
         program: &Program,
         seeds: impl ExactSizeIterator<Item = SeedView<'seed>>,
         control: &Control,
     ) -> Result<Vec<Check>, Stop> {
+        // Source rounds are complete. Retain their final dense atom vector once
+        // and release the mutable lookup's duplicate payload owner. Every world
+        // below selects this same immutable catalog, preserving its dense IDs.
+        drop(self.catalog);
+        let catalog = AtomCatalog::new(self.atoms);
         let mut checks = Vec::new();
         checks
             .try_reserve_exact(self.violated.len())
@@ -701,13 +706,14 @@ impl State {
                 return Err(Stop::InvalidProgram);
             }
             let words = &self.snapshots[world * self.words..][..self.words];
-            let closure = Model::new(
-                self.atoms
-                    .iter()
-                    .enumerate()
-                    .filter(|(id, _)| contains(words, *id))
-                    .map(|(_, atom)| atom.clone()),
-            );
+            let closure = Model::from_positions(
+                &catalog,
+                (0..catalog.atoms().len()).filter(|id| contains(words, *id)),
+            )
+            .map_err(|error| match error {
+                ModelError::Allocation => Stop::Allocation,
+                ModelError::Position { .. } => Stop::InvalidProgram,
+            })?;
             let mismatch = closure
                 .atoms()
                 .iter()
@@ -788,8 +794,10 @@ impl State {
             return Err(Stop::CarrierLimit);
         }
         let bytes = atom_bytes(atom)?;
-        // Two catalog copies, one union copy and at most one copy in each
-        // returned world. This reserves the worst retained symbolic payload.
+        // Preserve the conservative symbolic envelope: two growing catalog
+        // copies, one union snapshot and one atom-sized allowance per world.
+        // Finished worlds share the final catalog and retain only indices;
+        // their per-atom index allowance is smaller than this retained bound.
         let worlds = self.violated.len();
         let bytes = bytes
             .checked_mul(worlds.checked_add(3).ok_or(Stop::Allocation)?)

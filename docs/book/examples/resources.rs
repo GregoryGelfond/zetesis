@@ -1,8 +1,7 @@
 //! Reuse one device across independent native-program sessions.
 
 // ANCHOR: example
-use std::collections::BTreeSet;
-use zetesis_core::{AdmissionLimits, Atom, AtomPattern, Predicate, Program, Template};
+use zetesis_core::{AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Template};
 use zetesis_cpu::Control;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionResources, Grounder, PreparedInput, Session,
@@ -39,8 +38,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .start()?;
         let answer = session.next().unwrap()?;
         assert_eq!(
-            answer.interpretation().atoms(),
-            &BTreeSet::from([Atom::new(predicate, vec![])?])
+            answer.interpretation(),
+            &Model::new([Atom::new(predicate, vec![])?])
         );
         assert!(
             answer

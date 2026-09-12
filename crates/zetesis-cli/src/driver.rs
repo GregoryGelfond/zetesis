@@ -142,6 +142,8 @@ pub enum RunError {
     SharedCpu(zetesis_cpu::lazy::shared::Cause),
     /// A static oracle returned an invalid dense closure representation.
     Words(zetesis_core::WordError),
+    /// A verified interpretation could not retain its selected catalog atoms.
+    Model(zetesis_core::ModelError),
     /// A driver requested a successful legacy report before search classified its stop.
     /// This protocol failure establishes neither interruption nor unsatisfiability.
     CompletionUnavailable,
@@ -213,6 +215,7 @@ impl fmt::Display for RunError {
             Self::LazyStatisticsOverflow => f.write_str("lazy execution statistics overflow"),
             Self::CompletionUnavailable => f.write_str("driver report requires established search completion"),
             Self::Words(error) => error.fmt(f),
+            Self::Model(error) => error.fmt(f),
             Self::FormulaBatchShape { expected, actual } => write!(f, "formula checker returned {actual} results for {expected} candidates"),
         }?;
         self.write_diagnostics(f)
@@ -289,6 +292,7 @@ impl std::error::Error for RunError {
             #[cfg(feature = "gpu")]
             Self::LazyGpu(error) => Some(error),
             Self::Words(error) => Some(error),
+            Self::Model(error) => Some(error),
             Self::SharedCpu(error) => Some(error),
             Self::PreparedInput { .. } => None,
         }
@@ -683,6 +687,7 @@ impl From<zetesis_solve::SolveError> for RunError {
             SolveError::LazyStatisticsOverflow => Self::LazyStatisticsOverflow,
             SolveError::SharedCpu(error) => Self::SharedCpu(error),
             SolveError::Words(error) => Self::Words(error),
+            SolveError::Model(error) => Self::Model(error),
             SolveError::UnsupportedOracle { backend, grounder } => {
                 Self::UnsupportedOracle { backend, grounder }
             }

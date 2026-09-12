@@ -191,11 +191,13 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                     return self.next_retained().map(Ok);
                 }
             };
-            let model = Model::new(
-                interpretation
-                    .atoms()
-                    .map(|atom| self.input.atoms[atom].clone()),
-            );
+            let model = match Model::from_positions(self.input.atoms, interpretation.atoms()) {
+                Ok(model) => model,
+                Err(error) => {
+                    self.fail(SolveError::Model(error), phases);
+                    return self.pending_error.take().map(Err);
+                }
+            };
             if !self.input.objectives.is_present() {
                 self.yielded += 1;
                 return Some(Ok((model, None)));

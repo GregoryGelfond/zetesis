@@ -39,7 +39,13 @@ impl Bounds {
             max_key_bytes: options.max_objective_key_bytes,
             ..Default::default()
         };
-        match ObjectivePlan::new(input.theory, input.atoms, input.objectives, limits, control) {
+        match ObjectivePlan::new(
+            input.theory,
+            input.atoms.atoms(),
+            input.objectives,
+            limits,
+            control,
+        ) {
             Ok(plan) => {
                 state.work = plan.statistics().work;
                 state.plan = Some(plan);

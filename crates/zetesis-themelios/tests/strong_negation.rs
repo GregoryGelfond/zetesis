@@ -242,7 +242,10 @@ fn independent_reduct_models_match_signed_reference_models_costs_and_displays() 
         let models = stable_models(&admitted);
         let mut unique = BTreeSet::new();
         for model in &models {
-            assert!(unique.insert(model.atoms().clone()), "unique full models");
+            assert!(
+                unique.insert(model.atoms().iter().cloned().collect::<BTreeSet<_>>()),
+                "unique full models"
+            );
             for atom in model.atoms() {
                 assert!(
                     !model.atoms().iter().any(|other| {
@@ -335,7 +338,7 @@ fn ordinary_and_extended_closure_routes_enforce_the_same_signed_coherence() {
     ] {
         let expected: BTreeSet<_> = stable_models(&input(source).unwrap())
             .into_iter()
-            .map(|model| model.atoms().clone())
+            .map(|model| model.atoms().iter().cloned().collect::<BTreeSet<_>>())
             .collect();
         for admitted in [
             admit(source.into(), AdmissionOptions::default()).unwrap(),
@@ -360,7 +363,16 @@ fn ordinary_and_extended_closure_routes_enforce_the_same_signed_coherence() {
                 )
                 .unwrap();
                 if checked.accepted() {
-                    assert!(actual.insert(checked.closure().atoms().clone()));
+                    assert!(
+                        actual.insert(
+                            checked
+                                .closure()
+                                .atoms()
+                                .iter()
+                                .cloned()
+                                .collect::<BTreeSet<_>>()
+                        )
+                    );
                 }
             }
             assert_eq!(actual, expected, "{source}");

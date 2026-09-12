@@ -47,6 +47,8 @@ pub enum SolveError {
     SharedCpu(zetesis_cpu::lazy::shared::Cause),
     /// A static oracle returned an invalid dense closure.
     Words(zetesis_core::WordError),
+    /// An accepted interpretation could not retain its checked atom selection.
+    Model(zetesis_core::ModelError),
     /// An injected checker violated the ordered result-count contract.
     FormulaBatchShape {
         /// Original candidates supplied.
@@ -76,6 +78,7 @@ impl fmt::Display for SolveError {
             Self::LazyStatisticsOverflow => formatter.write_str("lazy execution statistics overflow"),
             Self::SharedCpu(error) => error.fmt(formatter),
             Self::Words(error) => error.fmt(formatter),
+            Self::Model(error) => error.fmt(formatter),
             Self::FormulaBatchShape { expected, actual } => write!(formatter,
                 "formula checker returned {actual} results for {expected} candidates"),
         }
@@ -95,6 +98,7 @@ impl std::error::Error for SolveError {
             Self::LazyGpu(error) => Some(error),
             Self::SharedCpu(error) => Some(error),
             Self::Words(error) => Some(error),
+            Self::Model(error) => Some(error),
             Self::BackendUnavailable
             | Self::UnsupportedOracle { .. }
             | Self::UnsupportedSourceBatching

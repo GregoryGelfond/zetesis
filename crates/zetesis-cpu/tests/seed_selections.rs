@@ -180,8 +180,10 @@ fn discovered_positions_preserve_static_checks_across_batches() {
             graph
                 .model_from_words(actual.closure_words())
                 .unwrap()
-                .atoms(),
-            owned.atoms()
+                .atoms()
+                .iter()
+                .collect::<Vec<_>>(),
+            owned.atoms().iter().collect::<Vec<_>>()
         );
         assert_eq!(actual.statistics(), reference.statistics());
     }

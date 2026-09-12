@@ -87,3 +87,42 @@ fn rejected_shared_check_retains_its_raw_closure() {
     assert!(checked.constraint_violated());
     assert_eq!(checked.into_closure(), expected());
 }
+
+#[test]
+fn shared_closures_retain_one_finished_catalog() {
+    let program = {
+        let head = AtomPattern::new(Predicate::new("zchoice", 0).unwrap(), vec![]).unwrap();
+        let mut templates = source(false).templates().to_vec();
+        templates.push(Template::new(
+            Some(head.clone()),
+            vec![],
+            vec![head],
+            vec![],
+            vec![],
+        ));
+        Program::new(templates, AdmissionLimits::default()).unwrap()
+    };
+    let chosen = Atom::new(Predicate::new("zchoice", 0).unwrap(), vec![]).unwrap();
+    let checks = lazy::check_with(
+        &program,
+        &[
+            Seed::new(&program, []).unwrap(),
+            Seed::new(&program, [chosen.clone()]).unwrap(),
+        ],
+        lazy::Limits::default(),
+        &Control::default(),
+        lazy::evaluate,
+    )
+    .unwrap()
+    .checks;
+    assert!(checks.iter().all(lazy::Check::accepted));
+    let models: Vec<_> = checks.into_iter().map(lazy::Check::into_closure).collect();
+    drop(program);
+    assert_eq!(models[0], expected());
+    assert_eq!(
+        models[1],
+        Model::new(expected().atoms().iter().cloned().chain([chosen]))
+    );
+    assert!(models[0].catalog().same_owner(models[1].catalog()));
+    assert_eq!(payload(&models[0]).as_ptr(), payload(&models[1]).as_ptr());
+}

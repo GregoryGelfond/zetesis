@@ -6,7 +6,7 @@ use zetesis_core::{Interpretation, Program};
 /// Native closure acceptance is the only construction path. This establishes
 /// membership for one interpretation, not enumeration coverage. Accessors borrow
 /// without allocation; consuming the receipt transfers the owned interpretation.
-/// Cloning shares the program but clones the interpretation's atom set/payload.
+/// Cloning shares the program, atom catalog and selected interpretation.
 /// The receipt records a native runtime result; it is not a formal proof object.
 ///
 /// ```compile_fail

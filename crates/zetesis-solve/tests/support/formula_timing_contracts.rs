@@ -44,7 +44,7 @@ fn interleaved_sessions_preserve_all_phase_attempts() {
     let mut observations = Ignore;
     let input = Input {
         theory: admitted.theory(),
-        atoms: admitted.atoms(),
+        atoms: admitted.atom_catalog(),
         objectives: admitted.objectives(),
         gate_atoms: 0,
     };

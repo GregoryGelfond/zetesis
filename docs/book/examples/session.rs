@@ -2,7 +2,7 @@
 
 // ANCHOR: example
 use std::collections::BTreeSet;
-use zetesis_core::{Atom, Predicate, Seed};
+use zetesis_core::{Atom, Model, Predicate, Seed};
 use zetesis_cpu::{Control, Limits, check};
 use zetesis_solve::{
     Backend, Completion, PreparedInput, Session, SolveConfig, WorldView, WorldViewLimits,
@@ -29,13 +29,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(answers.len(), 2);
     let family = answers
         .iter()
-        .map(|answer| answer.interpretation().atoms().clone())
+        .map(|answer| answer.interpretation().clone())
         .collect::<BTreeSet<_>>();
     let a = Atom::new(Predicate::new("a", 0)?, vec![])?;
     let b = Atom::new(Predicate::new("b", 0)?, vec![])?;
     assert_eq!(
         family,
-        BTreeSet::from([BTreeSet::from([a.clone()]), BTreeSet::from([b])])
+        BTreeSet::from([Model::new([a.clone()]), Model::new([b])])
     );
     assert_eq!(outcome.verified_models(), 2);
     assert_eq!(outcome.completion(), Some(Completion::Exhausted));
@@ -50,7 +50,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &Control::default(),
     )?;
     assert!(checked.accepted());
-    assert_eq!(checked.closure().atoms(), &BTreeSet::from([a]));
+    assert_eq!(checked.closure(), &Model::new([a]));
 
     // A fresh bounded collection owns the complete-family claim. A Vec gathered
     // from an arbitrary stream cannot acquire it from a separate outcome.

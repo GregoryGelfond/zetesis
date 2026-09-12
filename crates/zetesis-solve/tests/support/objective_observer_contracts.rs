@@ -56,7 +56,7 @@ fn attempt(
     let mut bounds = Bounds::new(
         Input {
             theory: planned.theory(),
-            atoms: planned.atoms(),
+            atoms: planned.atom_catalog(),
             gate_atoms: 0,
             objectives: planned.objectives(),
         },

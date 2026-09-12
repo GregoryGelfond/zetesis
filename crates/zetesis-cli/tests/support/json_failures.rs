@@ -194,6 +194,13 @@ fn failure_envelopes_never_invent_search_coverage() {
         ),
         (RunError::Words(zetesis_core::WordError::TailBits), "words"),
         (
+            RunError::Model(zetesis_core::ModelError::Position {
+                position: 1,
+                atoms: 1,
+            }),
+            "model",
+        ),
+        (
             RunError::FormulaBatchShape {
                 expected: 2,
                 actual: 1,

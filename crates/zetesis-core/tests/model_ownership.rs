@@ -191,3 +191,20 @@ fn selected_model_retains_unselected_catalog_atoms() {
     assert_eq!(model.atoms().len(), 1);
     assert_eq!(model.catalog().atoms().len(), 5);
 }
+
+#[test]
+fn retained_bytes_include_the_whole_catalog_record() {
+    let atoms = vec![
+        Atom::new(Predicate::new("a", 0).unwrap(), vec![]).unwrap(),
+        Atom::new(
+            Predicate::new("hidden", 1).unwrap(),
+            vec![Value::String("secret".into())],
+        )
+        .unwrap(),
+    ];
+    let model = Model::from_positions(&AtomCatalog::new(atoms), [0]).unwrap();
+    // Catalog length:8. Nullary a:8+1+8+1. Hidden string atom:
+    // predicate length8+name6+arity8+sign1+tag1+text length8+text6.
+    // Selected-position record: length8+one position8.
+    assert_eq!(model.retained_payload_bytes(), Some(8 + 18 + 38 + 16));
+}

@@ -75,7 +75,14 @@ fn native(program: &Program) -> Models {
             check(program, &seed, Limits::default(), &control).expect("complete reduct closure");
         if result.accepted() {
             assert!(
-                models.insert(result.closure().atoms().clone()),
+                models.insert(
+                    result
+                        .closure()
+                        .atoms()
+                        .iter()
+                        .cloned()
+                        .collect::<BTreeSet<_>>()
+                ),
                 "one seed per model"
             );
         }

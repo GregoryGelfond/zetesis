@@ -705,8 +705,11 @@ fn zero_payload_budget_refuses_even_an_empty_answer() {
 fn score_priorities_consume_collection_payload() {
     let absent = formula("a.");
     let active = formula("a. #minimize {0@3,k:a}.");
+    // Catalog length + nullary atom record + selected-position length/index;
+    // an absent score adds only its one-byte option tag.
+    let model_bytes = 8 + 18 + 8 + 8;
     let limits = WorldViewLimits {
-        max_bytes: 27,
+        max_bytes: model_bytes + 1,
         ..Default::default()
     };
     let world_view = WorldView::collect(

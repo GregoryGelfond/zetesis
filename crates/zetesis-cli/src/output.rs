@@ -299,6 +299,7 @@ fn error_kind(error: &RunError) -> &'static str {
         RunError::PublicationStopped(_) => "publication_stopped",
         RunError::Static(_) => "static",
         RunError::Words(_) => "words",
+        RunError::Model(_) => "model",
         RunError::FormulaBatchShape { .. } => "formula_batch_shape",
         #[cfg(feature = "gpu")]
         RunError::Gpu(_) => "gpu",

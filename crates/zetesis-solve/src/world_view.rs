@@ -19,9 +19,11 @@ pub struct WorldViewLimits {
     pub max_answer_sets: usize,
     /// Maximum summed atom counts across retained full answer sets.
     pub max_atoms: usize,
-    /// Maximum canonical answer payload bytes: full atoms and optional score
-    /// priorities. Excludes shared subjects, tree/vector allocation overhead,
-    /// execution state and the one yielded answer being considered for admission.
+    /// Maximum canonical answer payload bytes: each answer's entire referenced
+    /// atom catalog, selected positions and optional score priorities. Shared
+    /// catalogs are conservatively recounted. Excludes shared subjects, spare
+    /// vector capacity, allocator/Arc overhead, execution state and the one
+    /// yielded answer being considered for admission.
     pub max_bytes: usize,
 }
 

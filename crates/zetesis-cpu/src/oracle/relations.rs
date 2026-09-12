@@ -103,9 +103,9 @@ impl Catalogs {
     }
 
     pub(super) fn into_model(self) -> Model {
-        // Model's canonical BTreeSet is the final public interpretation. Moving
-        // its atoms consumes the catalogs; no second live tuple owner is kept.
-        // Model's final O(n log n) canonicalization/tree allocation is not in
+        // Move the completed closure into its shared model catalog. No second
+        // live tuple owner is kept. Model's final O(n log n) canonicalization
+        // and catalog/selection allocation are not in
         // the source operation schedule; input atom count is already bounded.
         Model::new(self.relations.into_values().flat_map(Catalog::into_atoms))
     }

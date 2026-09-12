@@ -40,7 +40,9 @@ pub struct SolveConfig {
     pub max_optimal_models: usize,
     /// Maximum atoms across retained incumbents.
     pub max_optimal_atoms: usize,
-    /// Maximum retained incumbent payload bytes, excluding allocator overhead.
+    /// Maximum canonical incumbent payload bytes. Each model counts its entire
+    /// referenced atom catalog plus selected positions; shared catalogs are
+    /// conservatively recounted. Spare capacity and allocator/Arc overhead are excluded.
     pub max_optimal_bytes: usize,
     /// Maximum candidates per owned batch.
     pub batch_size: NonZeroUsize,

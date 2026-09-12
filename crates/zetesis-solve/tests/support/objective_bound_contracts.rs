@@ -28,7 +28,7 @@ fn admitted(source: &str) -> AdmittedFormula {
 fn input(admitted: &AdmittedFormula) -> Input<'_> {
     Input {
         theory: admitted.theory(),
-        atoms: admitted.atoms(),
+        atoms: admitted.atom_catalog(),
         gate_atoms: 0,
         objectives: admitted.objectives(),
     }

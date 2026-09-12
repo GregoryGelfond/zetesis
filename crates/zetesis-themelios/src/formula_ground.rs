@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use themelios_base::span::Location;
 use themelios_program::program::{AggregateFunction, DefaultNegation};
-use zetesis_core::{Atom, AtomPattern, Value};
+use zetesis_core::{Atom, AtomCatalog, AtomPattern, Value};
 use zetesis_ferraris::{
     AggregateComparison, AggregateElement, AggregateExtremum, AggregateFamilyLimits,
     AggregateGuard as NumericGuard, Node, Theory, ValueExtremumElement, append_aggregate,
@@ -82,7 +82,7 @@ pub(crate) fn ground(
         analyzed,
         theory,
         count_plan,
-        atoms,
+        atoms: AtomCatalog::new(atoms),
         origins,
         objectives,
         objective_origins,

@@ -179,9 +179,14 @@ fn existing_scalar_fact_and_normal_rule_profile_keeps_its_models() {
                 &control,
             )
             .expect("closure");
-            checked
-                .accepted()
-                .then(|| checked.closure().atoms().clone())
+            checked.accepted().then(|| {
+                checked
+                    .closure()
+                    .atoms()
+                    .iter()
+                    .cloned()
+                    .collect::<BTreeSet<_>>()
+            })
         })
         .collect();
         assert_eq!(native(source), expected, "{source}");

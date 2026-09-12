@@ -1,7 +1,6 @@
 use std::cmp::Ordering;
-use std::collections::btree_set;
 
-use zetesis_core::{Atom, AtomPattern, Filter, Model, Term, Value};
+use zetesis_core::{Atom, AtomPattern, Filter, Model, ModelIter, Term, Value};
 use zetesis_cpu::Control;
 
 use crate::{
@@ -260,7 +259,7 @@ fn final_cost(priority: i32, total: i128) -> Result<i64, ErrorKind> {
 }
 
 struct Frame<'a> {
-    atoms: btree_set::Iter<'a, Atom>,
+    atoms: ModelIter<'a>,
     trail_start: usize,
 }
 

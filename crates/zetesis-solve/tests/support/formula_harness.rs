@@ -52,7 +52,7 @@ pub(super) fn admitted(source: &str) -> AdmittedFormula {
 pub(super) fn input(owner: &AdmittedFormula) -> super::Input<'_> {
     super::Input {
         theory: owner.theory(),
-        atoms: owner.atoms(),
+        atoms: owner.atom_catalog(),
         gate_atoms: 0,
         objectives: owner.objectives(),
     }

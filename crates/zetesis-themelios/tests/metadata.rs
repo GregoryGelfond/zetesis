@@ -42,7 +42,16 @@ fn models(program: &Program) -> Models {
         )
         .expect("complete reduct");
         if result.accepted() {
-            assert!(models.insert(result.closure().atoms().clone()));
+            assert!(
+                models.insert(
+                    result
+                        .closure()
+                        .atoms()
+                        .iter()
+                        .cloned()
+                        .collect::<BTreeSet<_>>()
+                )
+            );
         }
     }
     models

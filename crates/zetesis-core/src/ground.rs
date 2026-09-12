@@ -5,7 +5,8 @@ use std::fmt;
 
 use crate::carrier::advance;
 use crate::{
-    Atom, AtomPattern, CarrierError, Model, Program, Seed, SeedError, SeedView, Template, Value,
+    Atom, AtomCatalog, AtomPattern, CarrierError, Model, ModelError, Program, Seed, SeedError,
+    SeedView, Template, Value,
 };
 
 /// Dense atom index within one [`GroundProgram`]. It is never a symbolic identity.
@@ -71,7 +72,7 @@ impl GroundRule {
 #[derive(Clone, Debug)]
 pub struct GroundProgram {
     program: Program,
-    atoms: Vec<Atom>,
+    atoms: AtomCatalog,
     rules: Vec<GroundRule>,
     gate_atom_ids: Vec<AtomId>,
 }
@@ -113,11 +114,11 @@ impl GroundProgram {
         }
         let mut graph = Self {
             program: program.clone(),
-            atoms,
+            atoms: AtomCatalog::new(atoms),
             rules: Vec::new(),
             gate_atom_ids: Vec::new(),
         };
-        for (index, atom) in graph.atoms.iter().enumerate() {
+        for (index, atom) in graph.atoms.atoms().iter().enumerate() {
             if program.contains_gate_atom(atom) {
                 graph
                     .gate_atom_ids
@@ -228,12 +229,17 @@ impl GroundProgram {
     /// Canonical atoms; slice index equals dense ID.
     #[must_use]
     pub fn atoms(&self) -> &[Atom] {
+        self.atoms.atoms()
+    }
+    /// Shared dense-order atom ownership used by decoded interpretations.
+    #[must_use]
+    pub fn atom_catalog(&self) -> &AtomCatalog {
         &self.atoms
     }
     /// Number of materialized atom tuples.
     #[must_use]
     pub fn atom_count(&self) -> usize {
-        self.atoms.len()
+        self.atoms.atoms().len()
     }
     /// All filter-valid ground rules in template/substitution order.
     #[must_use]
@@ -249,6 +255,7 @@ impl GroundProgram {
     #[must_use]
     pub fn atom_id(&self, atom: &Atom) -> Option<AtomId> {
         self.atoms
+            .atoms()
             .binary_search(atom)
             .ok()
             .and_then(|index| u32::try_from(index).ok())
@@ -311,9 +318,12 @@ impl GroundProgram {
 
     /// Decode exact words after validating length and zero unused tail bits.
     /// The empty graph accepts the empty slice. The result alone claims no stability.
+    /// The interpretation shares this graph's whole atom catalog and retains
+    /// only a canonical selected-position vector of its own. No atom is cloned.
     ///
     /// # Errors
-    /// Returns [`WordError`] for an invalid word count or nonzero padding.
+    /// Returns [`WordError`] for an invalid word count, nonzero padding or
+    /// unavailable selected-position storage.
     pub fn model_from_words(&self, words: &[u32]) -> Result<Model, WordError> {
         if words.len() != self.word_count() {
             return Err(WordError::Length {
@@ -325,24 +335,24 @@ impl GroundProgram {
         if remainder != 0 && words.last().is_some_and(|word| word >> remainder != 0) {
             return Err(WordError::TailBits);
         }
-        Ok(Model::new(
-            self.atoms
-                .iter()
-                .enumerate()
-                .filter(|(index, _)| words[index / WORD_BITS] & (1 << (index % WORD_BITS)) != 0)
-                .map(|(_, atom)| atom.clone()),
-        ))
+        Model::from_positions(
+            &self.atoms,
+            (0..self.atom_count())
+                .filter(|index| words[index / WORD_BITS] & (1 << (index % WORD_BITS)) != 0),
+        )
+        .map_err(WordError::Model)
     }
 
     /// Decode an arbitrary interpretation with this graph's atom-index meanings.
     /// This is the accurately named counterpart of [`Self::model_from_words`];
     /// no satisfaction or stability check occurs. Decoding scans the whole carrier
-    /// and clones selected atoms into a canonical set. Costs include their payload
-    /// and set comparisons; no compilation occurs. The owned tree uses infallible
-    /// allocation, so allocator failure is not represented by [`WordError`].
+    /// and selects positions in canonical order without cloning atom payloads.
+    /// Index storage is fallible; the shared Arc envelope allocation is infallible.
+    /// The result retains the entire atom catalog after the graph is dropped.
     ///
     /// # Errors
-    /// Refuses an incorrect word count or nonzero tail padding. Raw words carry
+    /// Refuses an incorrect word count, nonzero tail padding or unavailable
+    /// selection storage. Raw words carry
     /// no instance identity; callers must establish their correspondence to this graph.
     pub fn interpretation_from_words(
         &self,
@@ -426,6 +436,8 @@ pub enum WordError {
     },
     /// Bits outside the finite atom carrier were set.
     TailBits,
+    /// A decoded interpretation could not retain its checked selection.
+    Model(ModelError),
 }
 impl fmt::Display for WordError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -434,7 +446,15 @@ impl fmt::Display for WordError {
                 write!(f, "expected {expected} result words, received {actual}")
             }
             Self::TailBits => f.write_str("result contains nonzero bits outside the atom carrier"),
+            Self::Model(error) => error.fmt(f),
         }
     }
 }
-impl std::error::Error for WordError {}
+impl std::error::Error for WordError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Model(error) => Some(error),
+            Self::Length { .. } | Self::TailBits => None,
+        }
+    }
+}

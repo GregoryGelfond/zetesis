@@ -3,7 +3,7 @@
 use std::cmp::Ordering;
 use std::fmt;
 
-use zetesis_core::{Model, Value};
+use zetesis_core::Model;
 use zetesis_cpu::Control;
 use zetesis_objective::{ObjectiveProgram, Score};
 
@@ -201,29 +201,10 @@ impl Incumbents {
 }
 
 pub(crate) fn payload_bytes(model: &Model) -> Result<usize, OptimizationStop> {
-    // Canonical payload accounting: u64 model/atom lengths, one predicate-sign
-    // tag per atom, predicate UTF-8,
-    // and tagged i32 or length-prefixed scalar values; not allocator overhead.
-    let mut bytes = 8usize;
-    for atom in model.atoms() {
-        bytes = bytes
-            .checked_add(17)
-            .and_then(|sum| sum.checked_add(atom.predicate().name().len()))
-            .ok_or(OptimizationStop::Overflow)?;
-        for value in atom.values() {
-            let payload = match value {
-                Value::Infimum | Value::Supremum => 0,
-                Value::Number(_) => 4,
-                Value::Structured(value) => value.canonical_bytes() - 1,
-                Value::Symbol(text) | Value::String(text) => 8usize
-                    .checked_add(text.len())
-                    .ok_or(OptimizationStop::Overflow)?,
-            };
-            bytes = bytes
-                .checked_add(1)
-                .and_then(|sum| sum.checked_add(payload))
-                .ok_or(OptimizationStop::Overflow)?;
-        }
-    }
-    Ok(bytes)
+    // Count the entire retained catalog, including false atoms, for every
+    // retained model. Shared catalogs are conservatively recounted. The checked
+    // catalog summary is computed once; this admission is constant time.
+    model
+        .retained_payload_bytes()
+        .ok_or(OptimizationStop::Overflow)
 }

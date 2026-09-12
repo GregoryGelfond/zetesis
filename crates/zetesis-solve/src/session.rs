@@ -88,7 +88,7 @@ impl<'a> PreparedInput<'a> {
         Self {
             input: Prepared::Formula(crate::countermodel::Input {
                 theory: owner.theory(),
-                atoms: owner.atoms(),
+                atoms: owner.atom_catalog(),
                 objectives: owner.objectives(),
                 gate_atoms: 0,
             }),
@@ -101,7 +101,7 @@ impl<'a> PreparedInput<'a> {
         Self {
             input: Prepared::Formula(crate::countermodel::Input {
                 theory: owner.theory(),
-                atoms: owner.atoms(),
+                atoms: owner.atom_catalog(),
                 objectives: owner.objectives(),
                 gate_atoms: 0,
             }),
@@ -202,7 +202,9 @@ impl Subject {
 /// Private construction preserves its subject association after detachment.
 /// This is semantic evidence, independently of display selection or publication.
 /// It records completed native membership, not a Lean proof or enumeration
-/// coverage. Cloning shares the subject and clones the full interpretation.
+/// coverage. Cloning shares the subject, atom catalog and selected interpretation;
+/// the optional score's cost vector is cloned. Retained interpretations keep the
+/// entire shared catalog alive, including unselected atoms.
 ///
 /// ```compile_fail
 /// use zetesis_solve::{AnswerSet, Subject};

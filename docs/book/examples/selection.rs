@@ -3,7 +3,7 @@
 // ANCHOR: example
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
-use zetesis_core::{Atom, Predicate};
+use zetesis_core::{Atom, Model, Predicate};
 use zetesis_cpu::Control;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, PreparedInput, Session, SolveConfig, WorldView,
@@ -19,10 +19,7 @@ fn check_optimum(
     let mut selected = Session::new(input, config, Control::default())?;
     let optimum = selected.by_ref().collect::<Result<Vec<_>, _>>()?;
     assert_eq!(optimum.len(), 1);
-    assert_eq!(
-        optimum[0].interpretation().atoms(),
-        &BTreeSet::from([expected])
-    );
+    assert_eq!(optimum[0].interpretation(), &Model::new([expected]));
     assert_eq!(
         optimum[0].score().expect("active objective").costs(),
         &[(2, 1)]
@@ -63,7 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .iter()
         .map(|answer| {
             (
-                answer.interpretation().atoms().clone(),
+                answer.interpretation().clone(),
                 answer.score().expect("active objective").costs().to_vec(),
             )
         })
@@ -71,8 +68,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(
         full_answers,
         BTreeSet::from([
-            (BTreeSet::from([a]), vec![(2, 1)]),
-            (BTreeSet::from([b]), vec![(2, 2)]),
+            (Model::new([a]), vec![(2, 1)]),
+            (Model::new([b]), vec![(2, 2)]),
         ])
     );
     let outcome = all.outcome().expect("finished enumeration");
@@ -94,7 +91,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .iter()
         .map(|answer| {
             (
-                answer.interpretation().atoms().clone(),
+                answer.interpretation().clone(),
                 answer.score().expect("active objective").costs().to_vec(),
             )
         })
@@ -115,7 +112,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(failure.answer_sets().len(), 1);
     let retained = &failure.answer_sets()[0];
     assert!(full_answers.contains(&(
-        retained.interpretation().atoms().clone(),
+        retained.interpretation().clone(),
         retained.score().expect("active objective").costs().to_vec(),
     )));
     assert!(retained.subject().same_instance(failure.subject()));

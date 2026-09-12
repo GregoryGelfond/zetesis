@@ -2,7 +2,7 @@
 
 // ANCHOR: example
 use std::convert::Infallible;
-use zetesis_core::{AdmissionLimits, Atom, AtomPattern, Predicate, Program, Template};
+use zetesis_core::{AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Template};
 use zetesis_cpu::Control;
 use zetesis_solve::{
     Backend, Completion, ExecutionObservation, ExecutionObserver, Grounder, PreparedInput, Session,
@@ -52,8 +52,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let answer = session.next_observed(&mut preparation).unwrap()?;
     assert_eq!(
-        answer.interpretation().atoms(),
-        &std::collections::BTreeSet::from([Atom::new(ready, vec![])?])
+        answer.interpretation(),
+        &Model::new([Atom::new(ready, vec![])?])
     );
     assert!(session.next_observed(&mut preparation).is_none());
     assert_eq!(

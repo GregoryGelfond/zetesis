@@ -33,7 +33,8 @@ impl Default for CandidateLimits {
 pub struct CandidateRestrictionLimits {
     /// Source joins, checked copies and premise comparisons across all seeds.
     /// Fact canonicalization uses [`zetesis_core::Model::new`]: its `O(n log n)`
-    /// comparisons are unmetered and tree allocation is infallible. Its copied
+    /// comparisons and catalog-size traversal are unmetered; vector/Arc allocation
+    /// is infallible. Its copied
     /// inputs remain bounded by `max_atoms` and `max_bytes`.
     pub max_work: u64,
     /// Fact and forbidden-conjunction atom occurrences copied during preparation.
