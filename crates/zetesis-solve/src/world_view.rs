@@ -171,11 +171,12 @@ impl WorldView {
     /// use [`SessionBuilder::collect`] or [`SessionBuilder::collect_observed`].
     /// This convenience operation uses that same request and collection loop.
     ///
-    /// Work is the ordinary search and scoring plus a scan of every returned
-    /// answer's payload. Retained space is the full family within `limits`, in
-    /// addition to the session's independent budgets. The family can be
-    /// exponentially large. Fallible vector reservation does not change the
-    /// existing raw atom-set representation's infallible tree allocation.
+    /// Work is the ordinary search and scoring plus constant-time payload
+    /// admission per returned answer using its catalog's checked size summary.
+    /// Retained space is the full family within `limits`, in addition to the
+    /// session's independent budgets. The family can be exponentially large.
+    /// Collection-vector reservation is fallible; the model's shared ownership
+    /// envelopes retain their existing infallible allocation boundary.
     ///
     /// # Errors
     /// Returns the retained checked prefix on any setup/execution failure,

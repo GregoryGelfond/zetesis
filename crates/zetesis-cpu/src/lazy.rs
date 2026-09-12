@@ -63,8 +63,8 @@ pub struct Limits {
     /// Maximum requested owned payload bytes for catalog copies, snapshots,
     /// seeds, pending deltas, chunk packing, one result and optional source
     /// membership masks/frames/indices. Input program/seeds, allocator rounding,
-    /// tree-node bookkeeping and backend-private transport are excluded; a
-    /// backend must bound its transport separately.
+    /// tree-node bookkeeping, Arc envelopes and backend-private transport are
+    /// excluded; a backend must bound its transport separately.
     pub max_host_bytes: usize,
 }
 
@@ -380,9 +380,11 @@ fn evaluate_world(
 /// No completed checks are returned on any incomplete scan or execution failure.
 /// Atom IDs grow only when seeds or source instances demand them. All seed atoms
 /// participate in the final projection check, even if no rule derives them.
-/// Empty batches perform no source or evaluator work. Catalog trees use bounded
-/// but infallible standard-library allocations, as do existing Atom/Model copies;
-/// vector reservations are fallible. This is not a process-RSS guarantee.
+/// Empty batches perform no source or evaluator work. Catalog trees, symbolic
+/// source-snapshot collection and shared ownership envelopes use infallible
+/// allocations. Explicit vector reservations return typed allocation failures.
+/// Completed worlds share one final atom catalog and retain their own selected
+/// positions. This is a logical payload bound, not a process-RSS guarantee.
 ///
 /// # Errors
 /// Returns source, evaluator or malformed-output failure with retained progress.

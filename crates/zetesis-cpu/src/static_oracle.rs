@@ -1,8 +1,15 @@
 //! Packed integer closure scans over an explicitly compiled static graph.
 
-use zetesis_core::{AtomId, GroundProgram, GroundRule, Interpretation, Program, Seed, SeedView};
+use zetesis_core::{
+    AtomId, GroundProgram, GroundRule, Interpretation, ModelError, Program, Seed, SeedView,
+    WordError,
+};
 
 use crate::{Control, Limits, Stop};
+
+#[cfg(test)]
+#[path = "../tests/support/static_decode.rs"]
+mod decode_tests;
 
 /// Work counters for a completed dense CPU invocation. These measure this
 /// algorithm's operations, not equivalent work by the lazy or GPU backends.
@@ -41,21 +48,24 @@ impl StaticCheck {
 
     /// Decode the completed closure only with a graph of the checked instance.
     /// Compiled graphs of the same immutable program have the same canonical
-    /// carrier order. This scans the carrier and clones selected atom payload into
-    /// a tree set; it performs no grounding or membership check.
-    /// Tree construction and payload copying use infallible allocation, not a
-    /// typed resource refusal. See [`GroundProgram::interpretation_from_words`].
+    /// carrier order. This scans the carrier and selects canonical positions
+    /// without cloning atom payloads or repeating grounding or membership work.
+    /// The interpretation retains the entire shared catalog, including unselected
+    /// atoms, after the graph is dropped. Index storage is fallible; the shared
+    /// ownership envelope allocation is infallible.
+    /// See [`GroundProgram::interpretation_from_words`].
     ///
     /// # Errors
     /// Rejects a foreign program before decoding, even when word counts match.
-    /// An invalid packed shape reports an internal admitted-invariant failure.
+    /// An invalid packed shape reports an internal admitted-invariant failure;
+    /// unavailable selection storage returns [`Stop::Allocation`].
     pub fn interpretation(&self, graph: &GroundProgram) -> Result<Interpretation, Stop> {
         if !self.program.same_instance(graph.program()) {
             return Err(Stop::WrongProgram);
         }
         graph
             .interpretation_from_words(&self.closure_words)
-            .map_err(|_| Stop::InvalidProgram)
+            .map_err(|error| decoding_stop(&error))
     }
 
     /// Decode an accepted closure into a stable receipt for the checked program.
@@ -65,7 +75,8 @@ impl StaticCheck {
     ///
     /// # Errors
     /// Rejects foreign graph identity even for a rejected check; an invalid word
-    /// shape returns [`Stop::InvalidProgram`].
+    /// shape returns [`Stop::InvalidProgram`]. Unavailable selected-position
+    /// storage returns [`Stop::Allocation`].
     pub fn stable_interpretation(
         &self,
         graph: &GroundProgram,
@@ -112,6 +123,15 @@ impl StaticCheck {
     #[must_use]
     pub fn statistics(&self) -> StaticStatistics {
         self.statistics
+    }
+}
+
+fn decoding_stop(error: &WordError) -> Stop {
+    match error {
+        WordError::Model(ModelError::Allocation) => Stop::Allocation,
+        WordError::Length { .. }
+        | WordError::TailBits
+        | WordError::Model(ModelError::Position { .. }) => Stop::InvalidProgram,
     }
 }
 

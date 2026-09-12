@@ -140,7 +140,7 @@ pub enum RunError {
     LazyStatisticsOverflow,
     /// Concrete shared CPU evaluation violated its round protocol.
     SharedCpu(zetesis_cpu::lazy::shared::Cause),
-    /// A static oracle returned an invalid dense closure representation.
+    /// Static closure decoding refused its words or selected-position storage.
     Words(zetesis_core::WordError),
     /// A verified interpretation could not retain its selected catalog atoms.
     Model(zetesis_core::ModelError),

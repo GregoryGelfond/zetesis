@@ -45,7 +45,7 @@ pub enum SolveError {
     LazyStatisticsOverflow,
     /// Shared CPU evaluation violated its round protocol.
     SharedCpu(zetesis_cpu::lazy::shared::Cause),
-    /// A static oracle returned an invalid dense closure.
+    /// Static closure decoding refused its words or selected-position storage.
     Words(zetesis_core::WordError),
     /// An accepted interpretation could not retain its checked atom selection.
     Model(zetesis_core::ModelError),
