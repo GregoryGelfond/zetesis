@@ -11,12 +11,16 @@ mod physical;
 mod seed_views;
 
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use zetesis_core::{
     AdmissionLimits, AtomPattern, GroundProgram, Predicate, Program, Seed, SeedSelection,
     StaticLimits, Template,
 };
 use zetesis_wgpu::{GpuCheck, GpuLimits, GpuOptions, GpuOracle};
+
+// Complete powersets stay bounded at 256 candidate occurrences per fixture.
+const MAX_FIXTURE_GATES: usize = 8;
 
 fn atom(name: &str) -> AtomPattern {
     AtomPattern::new(Predicate::new(name, 0).expect("valid signature"), vec![])
@@ -46,7 +50,10 @@ fn compile(templates: Vec<Template>) -> GroundProgram {
 
 fn seeds(graph: &GroundProgram) -> Vec<Seed> {
     let gates = graph.gate_atom_ids();
-    assert!(gates.len() <= 8, "fixture candidate enumeration is bounded");
+    assert!(
+        gates.len() <= MAX_FIXTURE_GATES,
+        "fixture candidate enumeration is bounded"
+    );
     (0..1usize << gates.len())
         .map(|bits| {
             Seed::new(
@@ -60,6 +67,33 @@ fn seeds(graph: &GroundProgram) -> Vec<Seed> {
                     }),
             )
             .expect("program-bound gate seed")
+        })
+        .collect()
+}
+
+fn indexed_selections(graph: &GroundProgram, seeds: &[Seed]) -> Vec<SeedSelection> {
+    let gate_count = graph.gate_atom_ids().len();
+    assert!(gate_count <= MAX_FIXTURE_GATES);
+    // Share one bounded carrier across every selected subset. Taking one extra
+    // item makes an unexpected carrier extension a failure, not truncation.
+    let gates: Vec<_> = graph
+        .program()
+        .indexed_gate_atoms()
+        .take(gate_count + 1)
+        .map(|atom| Arc::new(atom.expect("bounded indexed gate fixture")))
+        .collect();
+    assert_eq!(gates.len(), gate_count);
+    seeds
+        .iter()
+        .map(|seed| {
+            SeedSelection::from_gate_atoms(
+                graph.program(),
+                gates
+                    .iter()
+                    .filter(|gate| seed.atoms().contains(gate.atom()))
+                    .cloned(),
+            )
+            .expect("indexed subset of the program's gate carrier")
         })
         .collect()
 }
@@ -150,7 +184,7 @@ fn compare(oracle: &mut GpuOracle, graph: &GroundProgram) -> usize {
     // The next epoch uses reversed candidate order and the same immutable
     // program. Any leaked candidate latches or stale lane mapping is visible.
     let reversed: Vec<_> = candidates.into_iter().rev().collect();
-    let selections = seed_views::selections(&reversed);
+    let selections = indexed_selections(graph, &reversed);
     let repeated = oracle
         .check_batch_views(
             graph,
@@ -169,10 +203,11 @@ fn compare(oracle: &mut GpuOracle, graph: &GroundProgram) -> usize {
         hot.resident_graph_bytes
     );
     if reversed.len() > 1 {
+        let manual = seed_views::selections(&reversed[..1]);
         let smaller = oracle
-            .check_batch(
+            .check_batch_views(
                 graph,
-                &reversed[..1],
+                manual.iter().map(SeedSelection::view),
                 GpuLimits {
                     max_batch_bytes: hot.accounted_batch_bytes,
                     ..GpuLimits::default()
@@ -281,16 +316,21 @@ fn qualify_static(mut oracle: GpuOracle) {
         .iter()
         .map(|graph| compare(&mut oracle, graph))
         .sum::<usize>();
-    let mut chain = vec![rule(Some("p0"), &[], &["p0"], &[])];
+    // Fixed-width names keep numeric positions in canonical predicate order.
+    let mut chain = vec![rule(Some("p000"), &[], &["p000"], &[])];
     for index in (1..130).rev() {
         chain.push(rule(
-            Some(&format!("p{index}")),
-            &[&format!("p{}", index - 1)],
+            Some(&format!("p{index:03}")),
+            &[&format!("p{:03}", index - 1)],
             &[],
             &[],
         ));
     }
-    compared += compare(&mut oracle, &compile(chain));
+    // Gate ordinals 0/1/2 must resolve to dense bits in three distinct words.
+    chain.push(rule(None, &[], &["p064"], &["p129"]));
+    let chain = compile(chain);
+    assert_eq!(chain.gate_atom_ids(), [0, 64, 129]);
+    compared += compare(&mut oracle, &chain);
     let boundary = (0..zetesis_wgpu::MAX_ATOMS)
         .map(|index| rule(Some(&format!("b{index}")), &[], &[], &[]))
         .collect();
