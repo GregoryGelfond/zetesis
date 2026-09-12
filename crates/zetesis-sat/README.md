@@ -211,11 +211,11 @@ optional probe. After a successful candidate restriction, root failed-literal
 probing tries each unassigned semantic variable in both polarities using unit propagation.
 A conflict certifies its opposite as a root assignment; successful trials are
 fully undone. Only the outer candidate query uses this precheck. Resumption undoes the last complete leaf and explores the
-next unvisited region. Exact semantic blocking clauses are appended to the
-bounded CNF, but act as filters at complete leaves; they are not registered in
-the original watch lists. A binary trie indexes the complete semantic key forbidden by each appended
-block. Exact prefix shape is checked before insertion; no auxiliary variable
-can enter a key. A leaf must be absent from this index before it
+next unvisited region. Exact semantic exclusions are inserted directly into one
+persistent binary trie. They are not materialized as blocking clauses or
+registered in watch lists, including after a candidate restriction restarts
+traversal. The index has the fixed original atom width; no auxiliary variable
+can enter a key. A completed assignment must be absent from this index before it
 counts as another candidate. This also excludes repeated semantic projections
 when a classical encoding admits multiple auxiliary extensions. No such
 uniqueness premise is needed for enumeration coverage.
@@ -229,6 +229,9 @@ countermodel validation are unchanged.
 
 `AdmissionLimits` bounds variables, submitted clauses and submitted literal
 occurrences, including duplicates and tautologies before canonicalization.
+An exact exclusion consumes one logical clause unit and its semantic width in
+literal units, preserving the joint admission ceiling without retaining those
+literal occurrences. These units do not describe allocated CNF storage.
 Arithmetic and watch-index representability are checked. Storage reservations
 are fallible. These are shape bounds, not a claim that a configured count is a
 particular number of bytes or that allocator bookkeeping is measured as work.
@@ -237,9 +240,11 @@ particular number of bytes or that allocator bookkeeping is measured as work.
 initializing each search-state entry, watched-clause and literal examination,
 occurrence counting, merge-sort output cells, branch scans, trail undo and witness
 validation, resumption, failed-literal trial propagation and undo, projection
-index construction and lookup. The trie has at most one node per admitted
-blocking literal plus its root; its reservation is fallible. Formula runs also charge
-encoding-node and literal operations, fixed-size gate-key lookups, semantic projection and blocking.
+index insertion and lookup. The trie has at most one node per admitted exclusion
+bit plus its root; amortized growth is fallible. Formula runs also charge
+encoding-node and literal operations, fixed-size gate-key lookups, semantic
+projection and exact exclusion. No work is charged for copying nonexistent
+blocking literals.
 The fallibly grown gate map retains at most one entry per fresh auxiliary;
 hash-table allocation and collision handling are shape-bounded library operations.
 Allocation, sorting inside CNF admission and allocator overhead are governed

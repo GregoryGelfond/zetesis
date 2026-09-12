@@ -13,21 +13,20 @@ distinction between original satisfaction and reduct minimality.
 
 A candidate region has a fixed base query. Initial admission creates the first
 region; a successful candidate restriction creates another containing the
-previous clauses and exact semantic blocks. Within a region, the cursor retains
+previous clauses and the persistent exact exclusion index. Within a region, the cursor retains
 its watch registry, assignment trail, decision frames and branching permutation.
 
-The base clause and variable counts are fixed. Appended blocks introduce no
-variables and do not alter the original clause prefix. They filter complete
-assignments before semantic projection and candidate accounting; they are not
-dynamically installed into the watch lists. A rejected leaf resumes the same
-traversal. Every returned full assignment is checked against both the base
-clauses and appended filters.
+The base clause and variable counts are fixed. Exact exclusions introduce no
+variables or clauses. They filter complete assignments before semantic projection
+and candidate accounting. A rejected leaf resumes the same traversal. Every
+returned full assignment is checked against the base clauses and, independently
+of traversal state, the persistent exclusion index.
 
 A complete semantic-prefix block is indexed by its exact Boolean key.
 Auxiliary variables are absent from that key, so several auxiliary extensions
 cannot produce duplicate semantic candidates. This argument does not require
 unique auxiliary extension, although the encoder retains full gate equivalences.
-The internal linear filter remains a reference for the index.
+Tests compare the index with an independent linear exclusion reference.
 
 Within a region, completed leaves are not revisited and every unvisited base
 model remains in a pending branch. False-first traversal and occurrence-based
@@ -58,10 +57,13 @@ See [restriction and projection contracts](candidate-pruning.md).
 
 ## Work and retained storage
 
-The original state and accumulated clauses share the query's shape ceilings.
+The original state, accumulated restrictions and logical exclusions share the
+query's shape ceilings. Each exclusion admits one clause unit and its semantic
+width in literal units; only the trie retains its key. Those logical units do
+not claim that blocking literals occupy CNF storage.
 The retained outer state stays live while an inner query runs, and each owns
 bounded variable/watch/trail arrays. No additional base-clause copy is required.
-Resumption, undo, complete-leaf validation and appended-filter operations charge
+Resumption, undo, complete-leaf validation and exact-index operations charge
 the cumulative work counter and poll control.
 
 Exact blocks act at completed leaves. This mechanism does not add clause

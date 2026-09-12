@@ -61,6 +61,16 @@ Its Boolean search representation does not redefine ASP as classical
 satisfiability: auxiliary encoding variables do not participate in answer-set
 identity or minimality.
 
+Exact projection exclusions have one owner across candidate restrictions. The
+outer cursor retains an index of previously checked semantic interpretations;
+strengthening the candidate query rebuilds its traversal while preserving that
+index. Original and restriction clauses alone enter the watch lists. A completed
+assignment is independently checked against those clauses and looked up in the
+exclusion index before becoming another candidate. The original theory and its
+reduct remain separate from both operations. The
+[projection contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/docs/candidate-pruning.md)
+states its transactional insertion and logical admission units.
+
 Local search operations can specialize while preserving the candidate sequence
 of completed search. In a three-literal clause, two distinct watched positions
 leave one possible replacement position: `3 - first - second`, with indices from zero to

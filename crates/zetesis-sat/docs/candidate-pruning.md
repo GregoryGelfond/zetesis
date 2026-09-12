@@ -13,8 +13,9 @@ and outcomes.
 `StableModels::restrict_candidates` accepts a constraint-only `Theory` whose
 semantic atom indices must mean the same atoms as the original theory.
 Full gate equivalences append the restriction to the candidate CNF.
-Earlier restrictions and exact semantic blocks remain, while the outer cursor
-restarts against the new fixed prefix.
+Earlier restrictions remain in the CNF and exact semantic exclusions remain in
+their separate index. The outer cursor restarts against the new fixed prefix
+without rebuilding that index or placing its keys in watch lists.
 
 An encoding failure restores the previous variables, clauses, submitted shape
 counts and live cursor. Work charged before failure remains charged.
@@ -58,21 +59,23 @@ See [root probing](../src/search/probe.rs) and
 
 ## Exact complete projection index
 
-Each block is a canonical CNF clause containing one signed literal for every
-original semantic atom. The cursor checks that shape and inserts the clause's
-falsifying key into a binary trie. A complete leaf is rejected exactly when its
-semantic prefix is already indexed. Auxiliary variables never enter the key.
-The zero-atom case has an empty key and an empty blocking clause.
+Each exclusion is the fixed-width Boolean key of one original interpretation.
+The cursor inserts that key directly into a binary trie; no equivalent blocking
+clause is allocated. A complete leaf is rejected exactly when its semantic
+prefix is already indexed. Auxiliary variables never enter the key. The
+zero-atom case has one empty key, represented by an explicit exclusion flag.
 
-Each appended block is indexed once. Lookup examines at most the semantic width;
-the arena contains at most one node per admitted blocking literal plus its root.
-Growth is fallible under the existing CNF shape bound, and insertion/lookup
-steps charge work.
+Lookup examines at most the semantic width. Admission charges one logical clause
+unit and the key width in literal units; the arena contains at most one node per
+admitted exclusion bit plus its root. These are shape bounds, not byte limits.
+Growth is fallible and amortized. A new suffix is attached only after all its
+nodes are constructed. Failure restores the previous key set and admission
+counts while retaining spent work; insertion and lookup poll control.
 
-After a successful restriction, old blocks are part of the new base CNF.
-A fresh empty suffix index needs no copy of them because base solving already
-enforces those clauses. The index filters completed assignments; it does not
-propagate appended clauses or introduce clause learning.
+After a successful restriction, the same index still excludes every earlier
+projection. Only traversal state is rebuilt. Final exact membership is checked
+on the completed assignment independently of DPLL state, over the same stored
+index. This does not introduce clause learning or propagate the exclusions.
 
 See [projection indexing](../src/search/cursor/projections.rs).
 
