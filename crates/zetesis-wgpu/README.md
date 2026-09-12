@@ -95,6 +95,15 @@ patterns and binding. Preparation, filtering and reconstruction each have
 explicit limits; the enclosing caller accounts for simultaneously retained views.
 These operations do not replace ordinary source grounding.
 
+Filtering first checks the minimum payload, then fallibly reserves host query,
+equality and complete output-mask vectors before any invocation device effects.
+All retained element capacity, including allocator-provided spare slots, is
+charged together with resident columns, device transport and host parameters.
+The reported `accounted_bytes` is that admitted peak; readback fills the existing
+output storage without growth. Allocation and byte-ceiling refusals remain
+distinct and publish no partial masks. This payload bound excludes allocator
+metadata and driver-private storage; it is not an RSS guarantee.
+
 The core `Relation::select_mask` producer returns the same low-bit-first row
 layout for CPU consumers, directly from the shared equality predicate. Device
 qualification compares both producers and an independent typed-row reference.

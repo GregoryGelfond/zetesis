@@ -43,8 +43,7 @@ pub(super) fn validate_with_purpose(
     let counters = std::mem::take(context.counters);
     let mut builder = Builder::empty(context.limits, context.budget, counters, purpose, None);
     let result = (|| {
-        builder.node(Node::False, context.location)?;
-        builder.node(Node::Implies(0, 0), context.location)?;
+        builder.initialize(context.location)?;
         builder.body(literals, binding, context.location, support)
     })();
     *context.counters = builder.counters;

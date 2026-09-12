@@ -3,6 +3,8 @@
 mod objectives;
 mod scoped_body;
 mod atoms;
+#[cfg(test)]
+mod constants;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -25,6 +27,15 @@ use crate::formula_ir::{
 use crate::formula_support::{self, Counters, Join, Support};
 use crate::grounding_observer::{Event, Profile};
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
+
+/// Canonical Boolean nodes established by `Builder::initialize`.
+/// Falsum is bottom; verum is the implication from bottom to itself.
+pub(super) const FALSUM: usize = 0;
+pub(super) const VERUM: usize = 1;
+
+pub(super) const fn boolean(truth: bool) -> usize {
+    if truth { VERUM } else { FALSUM }
+}
 
 pub(crate) fn ground(
     prepared: Prepared,
@@ -124,8 +135,7 @@ fn instantiate<'a>(
             Purpose::Theory,
             count_plan.map(|request| crate::formula_count_plan::Collector::new(request, location)),
         );
-        builder.node(Node::False, location)?;
-        builder.node(Node::Implies(0, 0), location)?;
+        builder.initialize(location)?;
         Ok::<_, FormulaFailure>(builder)
     })?;
     for rule in &prepared.rules {
@@ -258,6 +268,14 @@ impl Builder<'_> {
             ),
         }
     }
+    /// Admit the canonical constants before any other node in an empty builder.
+    /// Each admission retains its ordinary work and purpose-specific ceiling.
+    /// On failure the caller still owns the builder and its spent counters.
+    fn initialize(&mut self, location: Location) -> Result<(), FormulaFailure> {
+        self.node(Node::False, location)?;
+        self.node(Node::Implies(FALSUM, FALSUM), location)?;
+        Ok(())
+    }
     fn atom_bound(&self) -> (FormulaResource, usize) {
         match self.purpose {
             Purpose::Theory | Purpose::Validation => {
@@ -353,11 +371,11 @@ impl Builder<'_> {
         right: usize,
         location: Location,
     ) -> Result<usize, FormulaFailure> {
-        if left == 0 || right == 0 {
-            Ok(0)
-        } else if left == 1 {
+        if left == FALSUM || right == FALSUM {
+            Ok(FALSUM)
+        } else if left == VERUM {
             Ok(right)
-        } else if right == 1 || left == right {
+        } else if right == VERUM || left == right {
             Ok(left)
         } else {
             self.node(Node::And(left, right), location)
@@ -369,11 +387,11 @@ impl Builder<'_> {
         right: usize,
         location: Location,
     ) -> Result<usize, FormulaFailure> {
-        if left == 1 || right == 1 {
-            Ok(1)
-        } else if left == 0 {
+        if left == VERUM || right == VERUM {
+            Ok(VERUM)
+        } else if left == FALSUM {
             Ok(right)
-        } else if right == 0 || left == right {
+        } else if right == FALSUM || left == right {
             Ok(left)
         } else {
             self.node(Node::Or(left, right), location)
@@ -384,7 +402,7 @@ impl Builder<'_> {
         formula: usize,
         location: Location,
     ) -> Result<usize, FormulaFailure> {
-        self.node(Node::Implies(formula, 0), location)
+        self.node(Node::Implies(formula, FALSUM), location)
     }
     pub(super) fn root(&mut self, formula: usize, rule: &RuleIr) -> Result<(), FormulaFailure> {
         self.root_at(formula, &rule.origins, rule.location)
@@ -495,7 +513,7 @@ impl Builder<'_> {
         location: Location,
         support: &Support,
     ) -> Result<usize, FormulaFailure> {
-        let mut result = 1;
+        let mut result = VERUM;
         for literal in literals {
             if let LiteralIr::Atom(negation, pattern) = literal {
                 let mut atom = self.atom(pattern, assignment, location)?;
@@ -551,7 +569,7 @@ impl Builder<'_> {
                     self.budget,
                     location,
                 )?;
-                let mut result = 0;
+                let mut result = FALSUM;
                 while let Some(row) =
                     rows.next(self.limits, self.budget, &mut self.counters, location)?
                 {
@@ -572,7 +590,7 @@ impl Builder<'_> {
         support: &Support,
         location: Location,
     ) -> Result<usize, FormulaFailure> {
-        let mut result = 0;
+        let mut result = FALSUM;
         for atom in support.rows(predicate) {
             self.work(location)?;
             let mut matches = true;
@@ -622,24 +640,24 @@ impl Builder<'_> {
             rule.location,
             support,
         )?;
-        if body == 0 {
+        if body == FALSUM {
             return Ok(());
         }
         match &rule.head {
             HeadIr::Normal(head) => {
                 let head = match head {
                     Some(head) => self.atom(head, assignment, rule.location)?,
-                    None => 0,
+                    None => FALSUM,
                 };
                 let formula = self.node(Node::Implies(body, head), rule.location)?;
                 self.root(formula, rule)?;
-                if head != 0 {
+                if head != FALSUM {
                     self.producer(head, body, rule)?;
                 }
                 Ok(())
             }
             HeadIr::Disjunction(heads) => {
-                let mut disjunction = 0;
+                let mut disjunction = FALSUM;
                 let mut distinct = BTreeSet::new();
                 for head in heads {
                     let (literal, atom) = self.head_literal(head, assignment, rule.location)?;
@@ -696,7 +714,7 @@ impl Builder<'_> {
     fn support_guards(&mut self) -> Result<(), FormulaFailure> {
         for atom in 0..self.catalog.len() {
             let location = self.atom_locations[atom];
-            let mut supported = 0;
+            let mut supported = FALSUM;
             for antecedent in std::mem::take(&mut self.producers[atom]) {
                 supported = self.or(supported, antecedent, location)?;
             }
@@ -782,7 +800,7 @@ impl Builder<'_> {
             )?;
             let outside = self.neg(within, rule.location)?;
             let violated = self.and(body, outside, rule.location)?;
-            let constraint = self.node(Node::Implies(violated, 0), rule.location)?;
+            let constraint = self.node(Node::Implies(violated, FALSUM), rule.location)?;
             self.root(constraint, rule)?;
             if let (Some(collector), Some((eligible, Some(keys))), Some(bounds)) =
                 (&mut self.count_plan, retained, count_bounds)
@@ -818,8 +836,7 @@ impl Builder<'_> {
                 let atom = self.atom(pattern, assignment, location)?;
                 (atom, Some(atom))
             }
-            // The initialized builder fixes falsum at 0 and verum at 1.
-            HeadOperand::Boolean(value) => (usize::from(*value), None),
+            HeadOperand::Boolean(value) => (boolean(*value), None),
         };
         if head.negation != DefaultNegation::None {
             literal = self.neg(literal, location)?;
@@ -854,7 +871,7 @@ impl Builder<'_> {
                 let (head, atom) = self.head_literal(&element.head, &binding, rule.location)?;
                 if let Some(atom) = atom {
                     if element.head.positive_atom().is_some() {
-                        let previous = result.eligible.get(&atom).copied().unwrap_or(0);
+                        let previous = result.eligible.get(&atom).copied().unwrap_or(FALSUM);
                         result
                             .eligible
                             .insert(atom, self.or(previous, condition, rule.location)?);
@@ -911,7 +928,7 @@ impl Builder<'_> {
         selected: usize,
         location: Location,
     ) -> Result<(), FormulaFailure> {
-        let previous = group.activity.get(&key).copied().unwrap_or(0);
+        let previous = group.activity.get(&key).copied().unwrap_or(FALSUM);
         if !group.activity.contains_key(&key) {
             ceiling(
                 FormulaResource::AggregateElements,
@@ -1299,7 +1316,9 @@ impl Builder<'_> {
                     GroundKey::Atom(_) => Value::Number(1),
                 };
                 let condition = self.body(&element.condition, &binding, location, support)?;
-                let previous = grouped.get(&key).map_or(0, |(_, condition)| *condition);
+                let previous = grouped
+                    .get(&key)
+                    .map_or(FALSUM, |(_, condition)| *condition);
                 if !grouped.contains_key(&key) {
                     ceiling(
                         FormulaResource::AggregateElements,
@@ -1393,7 +1412,7 @@ impl Builder<'_> {
             // Only structural sharing and intuitionistic constant/identity laws
             // are used; no classical eligibility simplification is permitted.
             let index = match node {
-                Node::False => 0,
+                Node::False => FALSUM,
                 Node::Atom(atom) => self.node(Node::Atom(atom), location)?,
                 Node::And(left, right) => self.and(map(left), map(right), location)?,
                 Node::Or(left, right) => self.or(map(left), map(right), location)?,
@@ -1432,7 +1451,7 @@ impl Builder<'_> {
         location: Location,
         mut capture: Option<&mut crate::formula_count_plan::Bounds>,
     ) -> Result<usize, FormulaFailure> {
-        let mut result = 1;
+        let mut result = VERUM;
         for guard in guards {
             let bound = formula_support::expression(
                 &guard.bound,
@@ -1466,7 +1485,7 @@ impl Builder<'_> {
                     if let Some(capture) = capture.as_deref_mut() {
                         capture.exclude_logical_guard();
                     }
-                    result = self.and(result, usize::from(truth), location)?;
+                    result = self.and(result, boolean(truth), location)?;
                     continue;
                 }
             };

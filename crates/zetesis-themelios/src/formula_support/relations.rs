@@ -1,7 +1,7 @@
 //! One atom owner and immutable column views between support-growth rounds.
 
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, btree_map::Entry};
 use std::mem::size_of;
 
 use themelios_base::span::Location;
@@ -116,11 +116,15 @@ impl SupportCatalog {
                     .enumerate()
                 {
                     counters.work(limits, location)?;
-                    if !postings.contains_key(&id) {
-                        memory.add(size_of::<(u32, Vec<usize>)>())?;
-                    }
-                    memory.reserve(postings.entry(id).or_default(), 1)?;
-                    postings.get_mut(&id).expect("posting inserted").push(row);
+                    let posting = match postings.entry(id) {
+                        Entry::Occupied(entry) => entry.into_mut(),
+                        Entry::Vacant(entry) => {
+                            memory.add(size_of::<(u32, Vec<usize>)>())?;
+                            entry.insert(Vec::new())
+                        }
+                    };
+                    memory.reserve(posting, 1)?;
+                    posting.push(row);
                     counters.record(Event::SupportIndexEntry);
                 }
                 columns.push(postings);

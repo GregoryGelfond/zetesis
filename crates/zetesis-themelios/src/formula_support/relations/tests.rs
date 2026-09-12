@@ -245,11 +245,17 @@ fn snapshot_bytes_include_construction_scratch() {
         max_support_bytes: exact - 1,
         ..limits
     };
-    assert!(
-        catalog
-            .snapshot(&below, &mut Counters::default(), location())
-            .is_err()
-    );
+    assert!(matches!(
+        catalog.snapshot(&below, &mut Counters::default(), location()),
+        Err(FormulaFailure::Limit {
+            resource: FormulaResource::SupportBytes,
+            limit,
+            observed,
+            location: actual_location,
+        }) if limit == (exact - 1) as u128
+            && observed == exact as u128
+            && actual_location == location()
+    ));
 }
 
 #[test]

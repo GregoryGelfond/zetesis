@@ -1,6 +1,8 @@
 use super::*;
 use zetesis_core::{Atom, Predicate, Value};
 
+mod allocations;
+
 fn source(rows: usize) -> (Predicate, Vec<Atom>) {
     let predicate = Predicate::new("row", 1).unwrap();
     let atoms = (0..rows)
@@ -29,11 +31,11 @@ fn plan(relation: &Relation<'_>, queries: &[relation::Query<'_, '_>]) -> packing
 // Synthetic receipts test decoding only. Actual device execution is established
 // separately by the physical tests and independent typed row reference.
 fn records(
-    plan: &packing::Plan,
+    plan: &mut packing::Plan,
     queries: &[relation::Query<'_, '_>],
     masks: &[Vec<u32>],
 ) -> Vec<u32> {
-    let packed = plan.pack(queries, &Control::default()).unwrap();
+    let packed = plan.pack(queries, &Control::default(), u64::MAX).unwrap();
     masks
         .iter()
         .enumerate()
@@ -48,6 +50,10 @@ fn records(
             record
         })
         .collect()
+}
+
+fn output(plan: &packing::Plan) -> Vec<u32> {
+    vec![0; usize::try_from(plan.mask_bytes / 4).unwrap()]
 }
 
 #[test]
@@ -74,10 +80,16 @@ fn mask_reconstruction_preserves_catalog_occurrences() {
     let relation =
         Relation::from_catalog(&predicate, &atoms, &indices, relation::Limits::default()).unwrap();
     let queries = [relation.query(&[], relation::Limits::default()).unwrap()];
-    let plan = plan(&relation, &queries);
-    let input = records(&plan, &queries, &[vec![0b1101]]);
+    let mut plan = plan(&relation, &queries);
+    let input = records(&mut plan, &queries, &[vec![0b1101]]);
     let result = plan
-        .decode(&relation, &queries, &input, &Control::default())
+        .decode(
+            &relation,
+            &queries,
+            &input,
+            output(&plan),
+            &Control::default(),
+        )
         .unwrap();
     let selection = result.selection(0, relation::Limits::default()).unwrap();
     assert_eq!(selection.positions(), [0, 2, 3]);
@@ -95,20 +107,38 @@ fn decoding_requires_the_complete_query_population() {
         relation.query(&[], relation::Limits::default()).unwrap(),
         relation.query(&[], relation::Limits::default()).unwrap(),
     ];
-    let plan = plan(&relation, &queries);
-    let input = records(&plan, &queries, &[vec![u32::MAX, 1], vec![0, 0]]);
+    let mut plan = plan(&relation, &queries);
+    let input = records(&mut plan, &queries, &[vec![u32::MAX, 1], vec![0, 0]]);
     for length in [0, 1, input.len() - 1] {
         assert!(
-            plan.decode(&relation, &queries, &input[..length], &Control::default())
-                .is_err()
+            plan.decode(
+                &relation,
+                &queries,
+                &input[..length],
+                output(&plan),
+                &Control::default()
+            )
+            .is_err()
         );
     }
     assert!(
-        plan.decode(&relation, &queries[..1], &input, &Control::default())
-            .is_err()
+        plan.decode(
+            &relation,
+            &queries[..1],
+            &input,
+            output(&plan),
+            &Control::default()
+        )
+        .is_err()
     );
     let result = plan
-        .decode(&relation, &queries, &input, &Control::default())
+        .decode(
+            &relation,
+            &queries,
+            &input,
+            output(&plan),
+            &Control::default(),
+        )
         .unwrap();
     assert_eq!(result.query_count(), 2);
     assert_eq!(result.words(0), Some([u32::MAX, 1].as_slice()));
@@ -121,13 +151,19 @@ fn query_receipts_require_each_expected_field() {
     let (predicate, atoms) = source(1);
     let relation = Relation::from_atoms(&predicate, &atoms, relation::Limits::default()).unwrap();
     let queries = [relation.query(&[], relation::Limits::default()).unwrap()];
-    let plan = plan(&relation, &queries);
-    let input = records(&plan, &queries, &[vec![1]]);
+    let mut plan = plan(&relation, &queries);
+    let input = records(&mut plan, &queries, &[vec![1]]);
     for field in 0..RECEIPT_WORDS as usize {
         let mut changed = input.clone();
         changed[field] ^= 1;
         let error = plan
-            .decode(&relation, &queries, &changed, &Control::default())
+            .decode(
+                &relation,
+                &queries,
+                &changed,
+                output(&plan),
+                &Control::default(),
+            )
             .err()
             .unwrap();
         assert_eq!(error.kind(), GpuErrorKind::Readback);
@@ -141,15 +177,21 @@ fn nonzero_mask_padding_is_refused() {
         let relation =
             Relation::from_atoms(&predicate, &atoms, relation::Limits::default()).unwrap();
         let queries = [relation.query(&[], relation::Limits::default()).unwrap()];
-        let plan = plan(&relation, &queries);
+        let mut plan = plan(&relation, &queries);
         let mut mask = vec![0; rows.div_ceil(32)];
         *mask.last_mut().unwrap() = 1 << (rows % 32);
-        let input = records(&plan, &queries, &[mask]);
+        let input = records(&mut plan, &queries, &[mask]);
         assert_eq!(
-            plan.decode(&relation, &queries, &input, &Control::default())
-                .err()
-                .unwrap()
-                .kind(),
+            plan.decode(
+                &relation,
+                &queries,
+                &input,
+                output(&plan),
+                &Control::default()
+            )
+            .err()
+            .unwrap()
+            .kind(),
             GpuErrorKind::Readback
         );
     }
@@ -188,10 +230,16 @@ fn mask_scans_consume_work_for_empty_selections() {
     let (predicate, atoms) = source(65);
     let relation = Relation::from_atoms(&predicate, &atoms, relation::Limits::default()).unwrap();
     let queries = [relation.query(&[], relation::Limits::default()).unwrap()];
-    let plan = plan(&relation, &queries);
-    let input = records(&plan, &queries, &[vec![0, 0, 0]]);
+    let mut plan = plan(&relation, &queries);
+    let input = records(&mut plan, &queries, &[vec![0, 0, 0]]);
     let result = plan
-        .decode(&relation, &queries, &input, &Control::default())
+        .decode(
+            &relation,
+            &queries,
+            &input,
+            output(&plan),
+            &Control::default(),
+        )
         .unwrap();
     assert!(
         result
@@ -267,10 +315,16 @@ fn reconstruction_budgets_include_live_row_capacity() {
     let (predicate, atoms) = source(33);
     let relation = Relation::from_atoms(&predicate, &atoms, relation::Limits::default()).unwrap();
     let queries = [relation.query(&[], relation::Limits::default()).unwrap()];
-    let plan = plan(&relation, &queries);
-    let input = records(&plan, &queries, &[vec![0b101, 1]]);
+    let mut plan = plan(&relation, &queries);
+    let input = records(&mut plan, &queries, &[vec![0b101, 1]]);
     let masks = plan
-        .decode(&relation, &queries, &input, &Control::default())
+        .decode(
+            &relation,
+            &queries,
+            &input,
+            output(&plan),
+            &Control::default(),
+        )
         .unwrap();
     let selected = 3;
     let max_bytes = relation.storage().retained_bytes

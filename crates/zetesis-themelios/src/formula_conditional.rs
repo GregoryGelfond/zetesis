@@ -7,7 +7,7 @@ use zetesis_ferraris::Node;
 
 use crate::FormulaFailure;
 use crate::formula_conditional_ir::{ConditionalIr, Consequent, ConsequentOperand};
-use crate::formula_ground::Builder;
+use crate::formula_ground::{Builder, FALSUM, VERUM, boolean};
 use crate::formula_support::{Join, Support};
 
 impl Builder<'_> {
@@ -18,7 +18,7 @@ impl Builder<'_> {
         support: &Support,
         location: Location,
     ) -> Result<usize, FormulaFailure> {
-        let mut result = 1;
+        let mut result = VERUM;
         let mut bindings = Join::new(
             &conditional.condition,
             assignment,
@@ -34,7 +34,7 @@ impl Builder<'_> {
             let condition = self.body(&conditional.condition, &binding, location, support)?;
             let consequent = match &conditional.consequent {
                 Consequent::Atoms(negation, alternatives) => {
-                    let mut disjunction = 0;
+                    let mut disjunction = FALSUM;
                     for alternative in alternatives {
                         let mut rows = Join::new(
                             &alternative.bindings,
@@ -65,7 +65,7 @@ impl Builder<'_> {
                     }
                     disjunction
                 }
-                Consequent::Guard(guard) => usize::from(guard.evaluate(
+                Consequent::Guard(guard) => boolean(guard.evaluate(
                     &binding,
                     self.limits,
                     self.budget,

@@ -140,6 +140,17 @@ admitted theory, including necessary-support guards and candidate-frozen bounds;
 they do not establish pointwise equivalence between unguarded source formulas and
 every internal activity node.
 
+[`Builder::initialize`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground.rs)
+establishes the named `FALSUM` and `VERUM` nodes used by formula construction.
+Their mathematical meanings agree with `GroundGuards.constant`; its
+[`constant_original` and `constant_frozen`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/GroundGuards.lean)
+laws state that these constants retain their truth in every interpretation and
+frozen reduct. Rust tests check the emitted constants through original and
+frozen satisfaction, and check the node/work limits and counter restoration on
+initialization failure. The named indices and those operational properties
+remain implementation obligations, not consequences established by the Lean
+laws alone.
+
 [`OrderedHeadActivity`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/OrderedHeadActivity.lean)
 relates selected signed tuple activity to an ordered value reduction. In Rust,
 [`contribution`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_head_aggregate.rs)

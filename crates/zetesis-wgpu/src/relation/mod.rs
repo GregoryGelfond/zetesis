@@ -27,6 +27,8 @@ pub struct RelationGpuLimits {
     /// Queries in one batch, preserving repeated query occurrences.
     pub max_queries: usize,
     /// Authored resident columns, transport, host packing and returned masks.
+    /// Preflight checks minimum payload; before device effects, host reservations
+    /// additionally charge all retained element capacity, including spare slots.
     /// Borrowed source atoms, relation storage and caller query allocations are
     /// excluded and must be charged by the enclosing operation. Driver-private
     /// storage, allocator metadata and delayed retirement are also excluded.
@@ -83,7 +85,10 @@ pub struct RelationGpuStats {
     pub column_bytes: u64,
     /// Uniform, query, equality, result and readback payload.
     pub transport_bytes: u64,
-    /// Conservative authored payload checked before host/device allocation.
+    /// Admitted authored peak: resident columns, device transport, host parameters
+    /// and full retained element capacities of packing and returned-mask vectors.
+    /// Minimum payload is checked before host allocation; actual retained capacity
+    /// is checked after each reservation and before device allocation/submission.
     pub accounted_bytes: u64,
     /// Exact physical dispatch dimensions; zero dimensions denote no dispatch.
     pub workgroups: [u32; 3],

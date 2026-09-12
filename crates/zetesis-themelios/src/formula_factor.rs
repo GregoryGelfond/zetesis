@@ -9,7 +9,7 @@ use zetesis_core::{AtomPattern, Term, Value};
 use zetesis_ferraris::Node;
 
 use crate::FormulaFailure;
-use crate::formula_ground::Builder;
+use crate::formula_ground::{Builder, FALSUM, VERUM};
 use crate::formula_ir::{HeadIr, LiteralIr, RuleIr};
 use crate::formula_support::{Join, Support, copy};
 
@@ -84,9 +84,9 @@ fn emit(
     components: &[Component],
     fixed: &[Option<Value>],
 ) -> Result<(), FormulaFailure> {
-    let mut body = 1;
+    let mut body = VERUM;
     for component in components {
-        let mut alternatives = 0;
+        let mut alternatives = FALSUM;
         let mut bindings = Join::component(
             &component.literals,
             rule.variables,
@@ -106,7 +106,7 @@ fn emit(
                 builder.body(&component.literals, &binding, rule.location, support)?;
             alternatives = builder.or(alternatives, conjunction, rule.location)?;
         }
-        if alternatives == 0 {
+        if alternatives == FALSUM {
             return Ok(());
         }
         body = builder.and(body, alternatives, rule.location)?;
@@ -125,11 +125,11 @@ fn emit(
         }
         builder.atom(head, &assignment, rule.location)?
     } else {
-        0
+        FALSUM
     };
     let formula = builder.node(Node::Implies(body, head), rule.location)?;
     builder.root(formula, rule)?;
-    if head != 0 {
+    if head != FALSUM {
         builder.producer(head, body, rule)?;
     }
     Ok(())

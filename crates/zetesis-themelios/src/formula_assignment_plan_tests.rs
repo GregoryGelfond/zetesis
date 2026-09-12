@@ -24,11 +24,7 @@ fn aggregate(target: usize) -> LiteralIr {
         elements: Vec::new(),
     })
 }
-fn plan(
-    body: &[LiteralIr],
-    variables: usize,
-    limits: ExpansionLimits,
-) -> Result<Plan, FormulaFailure> {
+fn with_compiler<R>(limits: ExpansionLimits, work: impl FnOnce(&mut Compiler<'_>) -> R) -> R {
     let source = Source::new(SourceId::new(113), String::new()).unwrap();
     let mut budget = Budget::new(limits, 100);
     let mut compiler = Compiler {
@@ -43,9 +39,19 @@ fn plan(
             span: source.span(),
         },
     };
-    compiler
-        .assignment_plan(body, variables, variables, &[])
-        .map(Option::unwrap)
+    work(&mut compiler)
+}
+
+fn plan(
+    body: &[LiteralIr],
+    variables: usize,
+    limits: ExpansionLimits,
+) -> Result<Plan, FormulaFailure> {
+    with_compiler(limits, |compiler| {
+        compiler
+            .assignment_plan(body, variables, variables, &[])
+            .map(Option::unwrap)
+    })
 }
 
 #[test]
@@ -392,4 +398,224 @@ fn every_nonbinding_guard_can_mark_an_objective_consumer() {
                 .consumers
         );
     }
+}
+
+fn nonbinding_element(key: AggregateKey, condition: Vec<LiteralIr>) -> LiteralIr {
+    LiteralIr::Aggregate(AggregateIr {
+        id: 9,
+        binding: None,
+        negation: DefaultNegation::None,
+        function: AggregateFunction::Count,
+        guards: Vec::new(),
+        elements: vec![AggregateElementIr {
+            key,
+            condition,
+            variables: 2,
+        }],
+    })
+}
+
+#[test]
+fn nonbinding_tuple_keys_mark_objective_consumers() {
+    for negation in [
+        DefaultNegation::None,
+        DefaultNegation::Not,
+        DefaultNegation::NotNot,
+    ] {
+        let mut consumer =
+            nonbinding_element(AggregateKey::Tuple(vec![CoreTerm::Variable(0)]), Vec::new());
+        let LiteralIr::Aggregate(value) = &mut consumer else {
+            unreachable!()
+        };
+        value.negation = negation;
+        let mut body = [aggregate(0), consumer];
+        for reversed in [false, true] {
+            if reversed {
+                body.reverse();
+            }
+            let plan = plan(&body, 1, ExpansionLimits::default()).unwrap();
+            assert!(plan.consumers, "{negation:?}, reversed={reversed}");
+            assert_eq!(plan.steps.len(), 1, "a comparison is not a producer");
+            assert_eq!(plan.steps[0].produced, 0);
+            assert!(plan.steps[0].required.is_empty());
+        }
+    }
+}
+
+#[test]
+fn nonbinding_atom_keys_mark_objective_consumers() {
+    let body = [
+        aggregate(0),
+        nonbinding_element(
+            AggregateKey::Atom(
+                AtomPattern::new(Predicate::new("p", 1).unwrap(), vec![CoreTerm::Variable(0)])
+                    .unwrap(),
+            ),
+            Vec::new(),
+        ),
+    ];
+    assert!(
+        plan(&body, 1, ExpansionLimits::default())
+            .unwrap()
+            .consumers
+    );
+}
+
+#[test]
+fn nonbinding_conditions_read_aggregate_descendants() {
+    for negation in [
+        DefaultNegation::None,
+        DefaultNegation::Not,
+        DefaultNegation::NotNot,
+    ] {
+        let body = [
+            aggregate(0),
+            LiteralIr::Bind {
+                target: 1,
+                value: variable(0),
+            },
+            nonbinding_element(
+                AggregateKey::Tuple(vec![CoreTerm::Constant(Value::Number(1))]),
+                vec![LiteralIr::Atom(
+                    negation,
+                    AtomPattern::new(Predicate::new("p", 1).unwrap(), vec![CoreTerm::Variable(1)])
+                        .unwrap(),
+                )],
+            ),
+        ];
+        // Inspect the consumer directly as well: the scalar producer already
+        // marks the whole plan, which alone would conceal an omitted condition.
+        assert!(with_compiler(ExpansionLimits::default(), |compiler| {
+            compiler
+                .assignment_context(&body[2..], &[], &[false, true])
+                .unwrap()
+        }));
+        let plan = plan(&body, 2, ExpansionLimits::default()).unwrap();
+        assert!(plan.consumers);
+        assert_eq!(plan.steps[1].required, [0]);
+    }
+}
+
+#[test]
+fn nonbinding_local_reads_do_not_alias_outer_slots() {
+    let body = [
+        aggregate(0),
+        nonbinding_element(
+            AggregateKey::Tuple(vec![CoreTerm::Variable(1)]),
+            vec![LiteralIr::Atom(
+                DefaultNegation::None,
+                AtomPattern::new(Predicate::new("p", 1).unwrap(), vec![CoreTerm::Variable(1)])
+                    .unwrap(),
+            )],
+        ),
+    ];
+    let plan = plan(&body, 1, ExpansionLimits::default()).unwrap();
+    assert!(!plan.consumers);
+    assert!(plan.steps[0].required.is_empty());
+}
+
+#[test]
+fn nonbinding_element_reads_obey_the_work_ceiling() {
+    let body = [nonbinding_element(
+        AggregateKey::Tuple(vec![CoreTerm::Variable(0)]),
+        Vec::new(),
+    )];
+    let limits = ExpansionLimits {
+        max_term_work: 4,
+        ..Default::default()
+    };
+    let failure = with_compiler(limits, |compiler| {
+        compiler.assignment_context(&body, &[], &[true])
+    })
+    .unwrap_err();
+    let FormulaFailure::Expansion(ExpansionFailure::Limit {
+        resource: ExpansionResource::TermWork,
+        limit: 4,
+        observed: 5,
+        location,
+    }) = failure
+    else {
+        panic!("expected the located element-read work refusal: {failure}")
+    };
+    assert_eq!(location.source, SourceId::new(113));
+}
+
+#[test]
+fn parsed_nonbinding_reads_preserve_outer_scope() {
+    for (text, consumed) in [
+        ("p(N):-N=#count{},0<=#count{N:q}.", true),
+        ("p(N):-N=#count{},0<=#count{1:q(N)}.", true),
+        ("p(N):-0<=#count{1: -q(N)},N=#count{}.", true),
+        ("p(N):-N=#count{},0<={q(N)}.", true),
+        ("p(N):-N=#count{},0<=#count{X:q(X)}.", false),
+    ] {
+        let source = Source::new(SourceId::new(113), text.into()).unwrap();
+        let parsed =
+            themelios_syntax::parse::parse(&source, themelios_syntax::dialect::Dialect::Clingo);
+        assert!(parsed.diagnostics().is_empty());
+        let raised = themelios_program::raise::raise(&parsed);
+        assert!(raised.diagnostics().is_empty());
+        let Statement::Rule(rule) = raised.program().statements().next().unwrap().get() else {
+            unreachable!()
+        };
+        let compiled = with_compiler(ExpansionLimits::default(), |compiler| {
+            compiler.rule(rule, Vec::new(), None).unwrap()
+        });
+        let plan = compiled.bindings.unwrap();
+        assert_eq!(plan.consumers, consumed, "{text}");
+        assert_eq!(plan.steps.len(), 1, "the comparison adds no producer");
+        assert!(plan.steps[0].required.is_empty());
+    }
+}
+
+#[test]
+fn multiple_aggregates_require_conservative_eligibility() {
+    let source = Source::new(
+        SourceId::new(113),
+        "q(0).p(N):-N=#count{},0<=#count{1:q(N)}.#minimize{1@N:p(N)}.".into(),
+    )
+    .unwrap();
+    let parsed =
+        themelios_syntax::parse::parse(&source, themelios_syntax::dialect::Dialect::Clingo);
+    assert!(parsed.diagnostics().is_empty());
+    let raised = themelios_program::raise::raise(&parsed);
+    assert!(raised.diagnostics().is_empty());
+    let mut budget = Budget::new(ExpansionLimits::default(), 100);
+    let mut prepared = prepare(
+        raised.program(),
+        &crate::formula_choice_source::Catalog::default(),
+        AdmissionOptions::default(),
+        &FormulaLimits::default(),
+        &mut budget,
+        Location {
+            source: source.id(),
+            span: source.span(),
+        },
+    )
+    .unwrap();
+    assert_eq!(prepared.objectives.len(), 1);
+    assert!(prepared.objectives[0].needs_eligibility_query);
+    let plans: Vec<_> = prepared
+        .rules
+        .iter_mut()
+        .filter_map(|rule| rule.bindings.as_mut())
+        .collect();
+    assert_eq!(plans.len(), 1);
+    assert!(plans[0].consumers);
+    // Deliberately reproduce the old incomplete summary. The independent
+    // single-aggregate applicability restriction must still reject precision.
+    for plan in plans {
+        plan.consumers = false;
+    }
+    prepared.objectives[0].needs_eligibility_query = false;
+    assert!(
+        crate::formula_objective_dependencies::check(
+            &prepared.rules,
+            &mut prepared.objectives,
+            &prepared.analysis,
+        )
+        .is_empty()
+    );
+    assert!(prepared.objectives[0].needs_eligibility_query);
+    assert!(prepared.objectives[0].priority_sources.is_empty());
 }

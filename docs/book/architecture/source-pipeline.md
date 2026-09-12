@@ -95,6 +95,13 @@ objective query construction and validation of discarded rule rows. The caller
 selects the applicable scratch ceilings and retains cumulative source work.
 Discarding the resulting scratch does not discard errors or charged work.
 
+Both scratch and retained formula construction begin with the same canonical
+constants: `FALSUM` represents bottom, and `VERUM` represents bottom implying
+bottom. `Builder::initialize` admits these nodes through the ordinary checked
+node operation. Boolean simplification uses these named identities. If either
+admission fails, the scratch caller restores its cumulative counter owner before
+returning the error.
+
 Compiler-internal assignment tests live under `formula_ir` because they construct
 both valid and invalid private IR. Public source tests cannot reach states that
 scope checking rejects first. These tests complement source admission and

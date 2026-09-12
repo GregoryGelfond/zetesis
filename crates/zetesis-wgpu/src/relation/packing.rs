@@ -1,6 +1,6 @@
 use super::{
     BITS_PER_WORD, PARAM_BYTES, RECEIPT_MARKER, RECEIPT_WORDS, ROWS_PER_GROUP, RelationGpuLimits,
-    RelationGpuMasks, capacity, poll,
+    RelationGpuMasks, RelationGpuStats, capacity, poll,
 };
 use crate::{GpuError, GpuErrorKind};
 use zetesis_core::relation::{Query, Relation};
@@ -8,15 +8,37 @@ use zetesis_cpu::Control;
 
 const CONTROL_INTERVAL: usize = 1024;
 
-pub(super) fn vector<T>(length: usize) -> Result<Vec<T>, GpuError> {
+pub(super) fn vector(length: usize) -> Result<Vec<u32>, GpuError> {
     let mut values = Vec::new();
     values
         .try_reserve_exact(length)
         .map_err(|_| GpuError::new(GpuErrorKind::Allocation, "relation host reservation failed"))?;
-    if values.capacity() > length {
-        return Err(capacity("relation allocation exceeds planned capacity"));
-    }
     Ok(values)
+}
+
+fn retained_bytes(values: &Vec<u32>) -> Result<u64, GpuError> {
+    u64::try_from(values.capacity())
+        .ok()
+        .and_then(|count| count.checked_mul(4))
+        .ok_or_else(|| capacity("relation retained host capacity exceeds u64"))
+}
+
+pub(super) fn accounted_bytes(
+    columns: u64,
+    transport: u64,
+    host: [u64; 3],
+    limit: u64,
+) -> Result<u64, GpuError> {
+    let bytes = [columns, transport, PARAM_BYTES, host[0], host[1], host[2]]
+        .into_iter()
+        .try_fold(0u64, u64::checked_add)
+        .ok_or_else(|| capacity("relation retained payload sum exceeds u64"))?;
+    if bytes > limit {
+        return Err(capacity(
+            "relation invocation exceeds authored byte ceiling",
+        ));
+    }
+    Ok(bytes)
 }
 
 fn address(value: usize) -> Result<u32, GpuError> {
@@ -143,17 +165,12 @@ impl Plan {
             return Err(capacity("relation uniform exceeds granted device limits"));
         }
         let transport_bytes = PARAM_BYTES + query_bytes + equality_bytes + 2 * result_bytes;
-        let accounted_bytes = column_bytes
-            + transport_bytes
-            + PARAM_BYTES
-            + query_bytes
-            + equality_bytes
-            + mask_bytes;
-        if accounted_bytes > limits.max_bytes {
-            return Err(capacity(
-                "relation invocation exceeds authored byte ceiling",
-            ));
-        }
+        let accounted_bytes = accounted_bytes(
+            column_bytes,
+            transport_bytes,
+            [query_bytes, equality_bytes, mask_bytes],
+            limits.max_bytes,
+        )?;
         let mut plan = Self {
             rows,
             queries: count,
@@ -195,6 +212,17 @@ impl Plan {
         ]
     }
 
+    pub(super) fn stats(&self) -> RelationGpuStats {
+        RelationGpuStats {
+            rows: u64::from(self.rows),
+            queries: u64::from(self.queries),
+            column_bytes: self.column_bytes,
+            transport_bytes: self.transport_bytes,
+            accounted_bytes: self.accounted_bytes,
+            workgroups: self.workgroups,
+        }
+    }
+
     fn query_work(&self, query: &Query<'_, '_>) -> Result<u32, GpuError> {
         if self.rows == 0 {
             return Ok(0);
@@ -209,34 +237,80 @@ impl Plan {
     }
 
     pub(super) fn pack(
-        &self,
+        &mut self,
         queries: &[Query<'_, '_>],
         control: &Control,
+        max_bytes: u64,
     ) -> Result<Packed, GpuError> {
-        let query_words = host_words(self.query_bytes)?;
-        let equality_words = host_words(self.equality_bytes)?;
-        let mut records = vector(query_words)?;
-        let mut equalities = vector(equality_words)?;
-        for query in queries {
+        self.pack_with(queries, control, max_bytes, vector)
+    }
+
+    // The reservation operation returns an empty vector with at least the
+    // requested capacity. The same path admits ordinary and test reservations.
+    pub(super) fn pack_with(
+        &mut self,
+        queries: &[Query<'_, '_>],
+        control: &Control,
+        max_bytes: u64,
+        mut reserve: impl FnMut(usize) -> Result<Vec<u32>, GpuError>,
+    ) -> Result<Packed, GpuError> {
+        if queries.len() != self.queries as usize {
+            return Err(capacity("relation packing query population differs"));
+        }
+        let minimum = [self.query_bytes, self.equality_bytes, self.mask_bytes];
+        let mut host = minimum;
+        let mut allocate = |index| {
             poll(control)?;
-            records.extend_from_slice(&[
-                address(equalities.len() / 2)?,
+            let length = host_words(minimum[index])?;
+            let mut values = reserve(length)?;
+            if !values.is_empty() || values.capacity() < length {
+                return Err(capacity("relation reservation cannot hold planned output"));
+            }
+            host[index] = retained_bytes(&values)?;
+            accounted_bytes(self.column_bytes, self.transport_bytes, host, max_bytes)?;
+            poll(control)?;
+            values.resize(length, 0);
+            Ok(values)
+        };
+        let mut records = allocate(0)?;
+        let mut equalities = allocate(1)?;
+        let masks = allocate(2)?;
+        self.accounted_bytes =
+            accounted_bytes(self.column_bytes, self.transport_bytes, host, max_bytes)?;
+        let mut offset = 0;
+        for (record, query) in records.chunks_exact_mut(4).zip(queries) {
+            poll(control)?;
+            record.copy_from_slice(&[
+                address(offset / 2)?,
                 address(query.equalities().len())?,
                 u32::from(query.is_possible()),
                 self.query_work(query)?,
             ]);
-            for (index, equality) in query.equalities().iter().enumerate() {
+            let end = query
+                .equalities()
+                .len()
+                .checked_mul(2)
+                .and_then(|count| offset.checked_add(count))
+                .ok_or_else(|| capacity("relation packing equality offset exceeds usize"))?;
+            let targets = equalities
+                .get_mut(offset..end)
+                .ok_or_else(|| capacity("relation packing equality population differs"))?;
+            for (index, (target, equality)) in targets
+                .chunks_exact_mut(2)
+                .zip(query.equalities())
+                .enumerate()
+            {
                 if index % CONTROL_INTERVAL == 0 {
                     poll(control)?;
                 }
-                equalities.extend_from_slice(&[address(equality.column())?, equality.value_id()]);
+                target.copy_from_slice(&[address(equality.column())?, equality.value_id()]);
             }
+            offset = end;
         }
-        records.resize(query_words, 0);
-        equalities.resize(equality_words, 0);
         Ok(Packed {
             records,
             equalities,
+            masks,
         })
     }
 
@@ -245,15 +319,18 @@ impl Plan {
         relation: &'owner Relation<'source>,
         queries: &[Query<'_, '_>],
         input: &[u32],
+        mut words: Vec<u32>,
         control: &Control,
     ) -> Result<RelationGpuMasks<'owner, 'source>, GpuError> {
-        if queries.len() != self.queries as usize || input.len() != host_words(self.result_bytes)? {
+        if queries.len() != self.queries as usize
+            || input.len() != host_words(self.result_bytes)?
+            || words.len() != host_words(self.mask_bytes)?
+        {
             return Err(readback(
                 "relation result length differs from complete query population",
             ));
         }
         let stride = (RECEIPT_WORDS + self.words) as usize;
-        let mut words = vector(host_words(self.mask_bytes)?)?;
         for (index, (record, query)) in input.chunks_exact(stride).zip(queries).enumerate() {
             poll(control)?;
             if record[..RECEIPT_WORDS as usize]
@@ -271,7 +348,8 @@ impl Plan {
             if tail != 0 && mask.last().is_some_and(|word| word >> tail != 0) {
                 return Err(readback("relation mask has nonzero unused tail bits"));
             }
-            words.extend_from_slice(mask);
+            let start = index * self.words as usize;
+            words[start..start + mask.len()].copy_from_slice(mask);
         }
         Ok(RelationGpuMasks {
             relation,
@@ -285,6 +363,7 @@ impl Plan {
 pub(super) struct Packed {
     pub(super) records: Vec<u32>,
     pub(super) equalities: Vec<u32>,
+    pub(super) masks: Vec<u32>,
 }
 
 pub(super) fn workgroups(groups: [u32; 3], limit: u32) -> Result<u64, GpuError> {

@@ -134,9 +134,10 @@ impl Compiler<'_> {
                     // Another producer may read it only after the checked plan
                     // completes its inputs. Such a dependency is still a value
                     // consumer for the objective-observer admission contract.
-                    // A nonbinding aggregate reads guard values only after
-                    // the complete proposal row. Its comparison and default
-                    // negation remain separate original formula operations;
+                    // A nonbinding aggregate reads guards, element keys and
+                    // element conditions from the complete proposal row, with
+                    // independently scoped local witnesses. Its comparison
+                    // and default negation remain original formula operations;
                     // the guard neither generates values nor filters support.
                     if other.binding != Some(target) {
                         consumed |= self.literal_uses(literal, target)?;
@@ -209,6 +210,9 @@ impl Compiler<'_> {
         element: &AggregateElementIr,
         variable: usize,
     ) -> Result<bool, FormulaFailure> {
+        // Callers supply an outer-frame slot. Element-local slots extend that
+        // frame, so matching an inherited index retains correlation without
+        // treating local witnesses or later synthetic head slots as inputs.
         self.scope_work(1)?;
         let key_uses = match &element.key {
             AggregateKey::Tuple(terms) => {
@@ -307,11 +311,12 @@ impl Compiler<'_> {
                         return Ok(true);
                     }
                 }
-                if aggregate.binding.is_some() {
-                    for element in &aggregate.elements {
-                        if self.element_uses(element, variable)? {
-                            return Ok(true);
-                        }
+                // Whether the aggregate supplies an output does not change
+                // its element reads. In particular, a comparison aggregate
+                // can consume another aggregate's completed proposal.
+                for element in &aggregate.elements {
+                    if self.element_uses(element, variable)? {
+                        return Ok(true);
                     }
                 }
                 false

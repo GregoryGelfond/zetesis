@@ -15,8 +15,10 @@ use crate::{ExpansionResource, FormulaFailure};
 pub(crate) struct Plan {
     pub steps: Vec<Step>,
     /// An outer filter, negative gate, conditional, scalar/range binding,
-    /// aggregate producer, nonbinding aggregate guard or head bound reads an
-    /// aggregate proposal or a value derived from one.
+    /// aggregate producer, nonbinding aggregate (guard, element key or element
+    /// condition), or head bound reads an aggregate proposal or its descendant.
+    /// Only the original body frame participates; local witness indices and
+    /// the later synthetic head suffix are not interchangeable outer inputs.
     /// Objective admission consumes this fact; scheduling does not certify a
     /// total objective observer.
     pub consumers: bool,

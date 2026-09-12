@@ -173,6 +173,10 @@ impl<'owner, 'source> PreparedGpuRelation<'_, 'owner, 'source> {
     /// Each nonempty call allocates exact batch transport, uses the already
     /// uploaded columns, and releases transport handles after readback. A later
     /// experiment may justify transport reuse; no such cache is hidden here.
+    /// Host packing and the complete output-mask vector are reserved before
+    /// device scopes open. Their actual retained capacities, including spare
+    /// elements, must fit the total byte ceiling. Readback fills that output
+    /// storage without further reservation or vector growth.
     ///
     /// # Errors
     /// Refuses foreign query owners, capacity, allocation, cancellation and device
@@ -205,23 +209,15 @@ impl<'owner, 'source> PreparedGpuRelation<'_, 'owner, 'source> {
             .epoch
             .checked_add(1)
             .ok_or_else(|| capacity("relation invocation epoch exhausted"))?;
-        let plan = packing::Plan::new(
+        let mut plan = packing::Plan::new(
             self.relation,
             queries,
             limits,
             self.executor.runtime.limits(),
             epoch,
         )?;
-        let stats = RelationGpuStats {
-            rows: u64::from(plan.rows),
-            queries: u64::from(plan.queries),
-            column_bytes: plan.column_bytes,
-            transport_bytes: plan.transport_bytes,
-            accounted_bytes: plan.accounted_bytes,
-            workgroups: plan.workgroups,
-        };
         if plan.rows == 0 || plan.queries == 0 {
-            self.last = Some(stats);
+            self.last = Some(plan.stats());
             return Ok(RelationGpuMasks {
                 relation: self.relation,
                 queries: queries.len(),
@@ -229,7 +225,7 @@ impl<'owner, 'source> PreparedGpuRelation<'_, 'owner, 'source> {
                 words: Vec::new(),
             });
         }
-        let packed = plan.pack(queries, control)?;
+        let packed = plan.pack(queries, control, limits.max_bytes)?;
         poll(control)?;
         self.executor.epoch = epoch;
         let runtime = &mut self.executor.runtime;
@@ -262,14 +258,14 @@ impl<'owner, 'source> PreparedGpuRelation<'_, 'owner, 'source> {
                 submission,
                 limits.timeout,
                 || poll(control),
-                |words| plan.decode(self.relation, queries, words, control),
+                |words| plan.decode(self.relation, queries, words, packed.masks, control),
             )
         });
         let masks = runtime.complete(scopes, outcome)?;
         self.activity.completed_queries = u64::from(plan.queries);
         self.activity.completed_work = plan.work;
         self.activity.downloaded_bytes = plan.result_bytes;
-        self.last = Some(stats);
+        self.last = Some(plan.stats());
         Ok(masks)
     }
 }

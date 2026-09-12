@@ -208,6 +208,16 @@ const CASES: &[(&str, &str)] = &[
         "{p}.q(N):-N=#count{1:p},not not N=1.",
         "{p}.q(1):-1=#count{1:p}.",
     ),
+    // The nonbinding aggregate keeps the completed proposal's key identity.
+    (
+        "{a}.p(N):-N=#count{1:a},2=#count{N:a;0:a}.",
+        "{a}.p(0):-0=#count{1:a},2=#count{0:a;0:a}.p(1):-1=#count{1:a},2=#count{1:a;0:a}.",
+    ),
+    // A local condition reads the same outer value, with signed atom identity.
+    (
+        "-q(0).q(1).{a}.p(N):-N=#count{1:a},1=#count{1: -q(N)}.",
+        "-q(0).q(1).{a}.p(0):-0=#count{1:a},1=#count{1: -q(0)}.p(1):-1=#count{1:a},1=#count{1: -q(1)}.",
+    ),
 ];
 
 #[test]
