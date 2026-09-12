@@ -305,13 +305,12 @@ impl SourceMetadata {
         // Apply effective atom policy independently, without manufacturing spans.
         for carrier in program.statements() {
             match carrier.get() {
-                Statement::Show(Show::All) => metadata.output.explicit = true,
+                Statement::Show(Show::All) => metadata.output.mark_explicit(),
                 Statement::Show(Show::Signature(signature)) => {
                     let location = crate::extended::origin(carrier, fallback);
                     let predicate = super::predicate(signature, location)
                         .map_err(|error| MetadataError::Compilation(error.into()))?;
-                    metadata.output.explicit = true;
-                    metadata.output.signatures.insert(predicate);
+                    metadata.output.include(predicate);
                 }
                 _ => {}
             }

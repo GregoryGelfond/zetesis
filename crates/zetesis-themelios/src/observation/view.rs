@@ -91,7 +91,7 @@ impl ModelView<'_> {
 
     /// Selected original atoms in full-model order; no term-channel deduplication.
     /// Constructing the iterator takes constant time and allocates nothing. A full
-    /// traversal scans all atoms and, for explicit selection, performs a tree-set
+    /// traversal scans all atoms and, for explicit selection, performs a binary
     /// lookup per atom; predicate comparison also inspects name bytes.
     pub fn shown_atoms(&self) -> impl Iterator<Item = &Atom> {
         self.model
@@ -134,9 +134,10 @@ impl ModelView<'_> {
     ///
     /// # Cost and space
     /// Encoding traverses every full-model atom, value node, shown term node, and
-    /// cost entry, together with their emitted UTF-8 bytes. It also scans selected
-    /// signatures separately for each atom: with `A` atoms and `S` signatures there
-    /// are up to `A * S` predicate comparisons, whose cost includes name bytes.
+    /// cost entry, together with their emitted UTF-8 bytes. Signature selection
+    /// uses the same binary lookup as [`OutputSelection::includes`], with at most
+    /// `floor(log2(S)) + 1` comparisons per atom for nonempty `S` signatures.
+    /// Each probe charges one unit plus both predicate-name byte lengths.
     /// Observation evaluation has already occurred and is not repeated here.
     ///
     /// The returned record retains `B` bytes, bounded by `max_bytes`. Encoding
@@ -203,17 +204,7 @@ impl ModelView<'_> {
         out.text("],\"shown\":{\"atom_indices\":[")?;
         let mut first = true;
         for (index, atom) in self.model.atoms().iter().enumerate() {
-            let mut selected = !self.selection.is_explicit();
-            for signature in self.selection.signatures() {
-                out.step(
-                    1 + atom.predicate().name().len() as u128 + signature.name().len() as u128,
-                )?;
-                if atom.predicate() == signature {
-                    selected = true;
-                    break;
-                }
-            }
-            if selected {
+            if self.selection.try_includes(atom, |units| out.step(units))? {
                 if !first {
                     out.text(",")?;
                 }

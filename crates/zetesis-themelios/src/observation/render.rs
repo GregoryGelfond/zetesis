@@ -173,24 +173,6 @@ fn symbol(out: &mut String, value: &Symbol, work: &mut Work<'_>) -> Result<(), E
     }
 }
 
-fn selected(
-    predicate: &zetesis_core::Predicate,
-    selection: &crate::OutputSelection,
-    work: &mut Work<'_>,
-) -> Result<bool, Error> {
-    if !selection.is_explicit() {
-        return Ok(true);
-    }
-    // Every name/arity equality check is visible in the observation budget.
-    for signature in selection.signatures() {
-        work.step(1 + predicate.name().len() as u128 + signature.name().len() as u128)?;
-        if predicate == signature {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
 pub(super) fn render(
     program: &ObservationProgram,
     model: &Model,
@@ -213,7 +195,7 @@ pub(super) fn render(
     let mut first = true;
     for atom in model.atoms() {
         work.step(1 + atom.predicate().name().len() as u128)?;
-        if !selected(atom.predicate(), selection, &mut work)? {
+        if !selection.try_includes(atom, |units| work.step(units))? {
             continue;
         }
         if !first {

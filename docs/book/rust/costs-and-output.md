@@ -68,6 +68,21 @@ Both preserve complete model identity. A term and an atom with the same printed
 text remain separate output contributions. Consumers may retain typed values
 instead of rendering them.
 
+Atom-channel selection has one implementation for library views, human text and
+JSON. `AtomSelection::signatures()` borrows a sorted, unique slice of signed
+predicate signatures. This replaces its previous `BTreeSet` return type; callers
+can iterate the slice or use `includes` for membership. Name, arity and sign all
+participate in identity. Explicitly empty selection differs from implicit all-atom
+selection, and neither changes the underlying answer set.
+
+`includes` and `try_includes` use the same binary lookup. The latter accepts a
+fallible work callback and charges before each comparison: one unit plus both
+predicate-name byte lengths. For `S > 0` signatures, a lookup performs at most
+`floor(log2(S)) + 1` comparisons; implicit all-atom and explicit empty selection
+need none. Human and JSON encoders apply their own budgets through this callback.
+Interrupted lookup returns no selection decision and leaves the policy intact.
+This bounds lookup work without a separate index or duplicated signature store.
+
 Observation limits separately bound work, completed bindings, constructed
 symbols, local owned payload and output. The local byte budget counts semantic
 nodes and text; it excludes borrowed model values and allocator overhead.
