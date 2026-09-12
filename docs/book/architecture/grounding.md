@@ -202,6 +202,20 @@ out atoms outside that carrier. [SourceSupport](../lean/theorems.md) and the
 state this premise explicitly; successful Rust completion is not a proof of the
 source-to-reduct correspondence.
 
+Formula nodes use an exact-key hash index with randomized hashing. The separate
+node sequence establishes dense IDs and output order; hash-table iteration never
+participates in formula construction. Complete-key equality preserves node identity under hash collisions, and node ceilings are checked before a new ID is published.
+
+Completed formula theories always include double-negated necessary support
+guards. These guards strengthen candidate checks while preserving reduct subset
+freedom; they are mathematically redundant, not a selectable construction option.
+Each atom's producer locations remain sorted and deduplicated, and its completed
+guard transfers those locations into root provenance. This preserves the
+association between authored sources and emitted formulas without a tree-to-vector
+conversion or another provenance copy. Per-atom producer collections remain;
+their storage is distinct from the node index and the root provenance owner.
+
+
 ### Relation rows and vector operations
 
 A relation row is one complete typed tuple. Formula support's

@@ -183,3 +183,118 @@ fn scoped_initialization_retains_spent_work() {
         assert_eq!(counters.work, 10, "the restored owner remains cumulative");
     }
 }
+
+#[test]
+fn producer_origins_preserve_atom_associations() {
+    let limits = FormulaLimits::default();
+    let mut budget = Budget::new(ExpansionLimits::default(), 0);
+    let mut builder = Builder::empty(
+        &limits,
+        &mut budget,
+        Counters::default(),
+        Purpose::Theory,
+        None,
+    );
+    builder.initialize(location()).unwrap();
+    for name in ["p", "q"] {
+        let pattern =
+            AtomPattern::new(zetesis_core::Predicate::new(name, 0).unwrap(), vec![]).unwrap();
+        builder
+            .atom(&pattern, &Binding::default(), location())
+            .unwrap();
+    }
+    let origin = |offset| Location {
+        source: SourceId::new(19),
+        span: Span::empty(ByteOffset::new(offset)),
+    };
+    let rule = |origins| RuleIr {
+        head: HeadIr::Normal(None),
+        body: vec![],
+        body_variables: 0,
+        bindings: None,
+        variables: 0,
+        location: location(),
+        origins,
+    };
+    builder
+        .record_head_origins(0, &rule(vec![origin(8), origin(2), origin(8)]))
+        .unwrap();
+    builder
+        .record_head_origins(1, &rule(vec![origin(3)]))
+        .unwrap();
+    assert_eq!(
+        builder.producer_origins[0],
+        [location(), origin(2), origin(8)]
+    );
+    assert_eq!(builder.producer_origins[1], [location(), origin(3)]);
+    let expected = builder.producer_origins.clone();
+    builder.support_guards().unwrap();
+    assert_eq!(builder.origins, expected);
+}
+
+#[test]
+fn owned_root_provenance_transfers_its_storage() {
+    let limits = FormulaLimits::default();
+    let mut budget = Budget::new(ExpansionLimits::default(), 0);
+    let mut builder = Builder::empty(
+        &limits,
+        &mut budget,
+        Counters::default(),
+        Purpose::Theory,
+        None,
+    );
+    let origins = vec![location()];
+    let data = origins.as_ptr();
+    builder
+        .root_at(FALSUM, Cow::Owned(origins), location())
+        .unwrap();
+    assert!(std::ptr::eq(builder.origins[0].as_ptr(), data));
+}
+
+#[test]
+fn origin_insertion_obeys_the_work_ceiling() {
+    let mut limits = FormulaLimits::default();
+    let mut budget = Budget::new(ExpansionLimits::default(), 0);
+    let next = Location {
+        source: SourceId::new(20),
+        span: Span::empty(ByteOffset::new(0)),
+    };
+    let rule = RuleIr {
+        head: HeadIr::Normal(None),
+        body: vec![],
+        body_variables: 0,
+        bindings: None,
+        variables: 0,
+        location: next,
+        origins: vec![next],
+    };
+    // Full length/capacity one means one growth copy plus one appended location.
+    limits.max_work = 2;
+    let mut builder = Builder::empty(
+        &limits,
+        &mut budget,
+        Counters::default(),
+        Purpose::Theory,
+        None,
+    );
+    builder.producer_origins.push(vec![location()]);
+    builder.record_head_origins(0, &rule).unwrap();
+    assert_eq!(builder.counters.work, 2);
+    let short = FormulaLimits {
+        max_work: 1,
+        ..limits
+    };
+    let mut short_budget = Budget::new(ExpansionLimits::default(), 0);
+    let mut refused = Builder::empty(
+        &short,
+        &mut short_budget,
+        Counters::default(),
+        Purpose::Theory,
+        None,
+    );
+    refused.producer_origins.push(vec![location()]);
+    assert!(
+        matches!(refused.record_head_origins(0, &rule), Err(FormulaFailure::Limit { resource: FormulaResource::Work, observed: 2, limit: 1, location: found }) if found == next)
+    );
+    assert_eq!(refused.producer_origins[0], [location()]);
+}

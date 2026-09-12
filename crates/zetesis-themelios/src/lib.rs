@@ -17,8 +17,10 @@
 //! its narrower safety reading proves the clingo assignment extension.
 //! Syntax walks and
 //! term normalization are iterative. The formula route preserves recursive
-//! eligibility and uses constraints for choice bounds; its optional necessary
-//! support guards remain double-negated so they do not constrain reduct subsets.
+//! eligibility and uses constraints for choice bounds. Completed theories always
+//! include necessary support guards. These semantically redundant guards remain
+//! double-negated so they do not constrain reduct subsets; they are not a
+//! selectable constructor option.
 //! Source acceptance is not a parser-to-Lean or Rust implementation proof.
 #![forbid(unsafe_code)]
 

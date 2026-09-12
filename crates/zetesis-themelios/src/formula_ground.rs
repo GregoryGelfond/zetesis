@@ -3,9 +3,11 @@
 mod objectives;
 mod scoped_body;
 mod atoms;
+mod nodes;
 #[cfg(test)]
 mod constants;
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -188,10 +190,12 @@ pub(super) struct Builder<'a> {
     pub(super) budget: &'a mut Budget,
     catalog: atoms::Catalog,
     producers: Vec<Vec<usize>>,
-    producer_origins: Vec<BTreeSet<Location>>,
+    // Each atom retains sorted unique source locations; completed guards
+    // transfer these vectors directly to root provenance.
+    producer_origins: Vec<Vec<Location>>,
     atom_locations: Vec<Location>,
     nodes: Vec<Node>,
-    node_indices: BTreeMap<(u8, usize, usize), usize>,
+    node_indices: nodes::Index,
     roots: Vec<usize>,
     origins: Vec<Vec<Location>>,
     pub(super) counters: Counters,
@@ -253,7 +257,7 @@ impl Builder<'_> {
             producer_origins: Vec::new(),
             atom_locations: Vec::new(),
             nodes: Vec::new(),
-            node_indices: BTreeMap::new(),
+            node_indices: nodes::Index::new(),
             roots: Vec::new(),
             origins: Vec::new(),
             counters,
@@ -346,7 +350,7 @@ impl Builder<'_> {
                 } else {
                     &origins[..]
                 };
-                self.root_at(constraint, evidence, location)?;
+                self.root_at(constraint, Cow::Borrowed(evidence), location)?;
             }
         }
         Ok(())
@@ -358,20 +362,17 @@ impl Builder<'_> {
     pub(super) fn node(&mut self, node: Node, location: Location) -> Result<usize, FormulaFailure> {
         self.work(location)?;
         self.counters.record(Event::NodeLookup);
-        let key = node_key(node);
-        if let Some(index) = self.node_indices.get(&key) {
-            return Ok(*index);
-        }
-        ceiling(
-            self.node_bound().0,
-            self.nodes.len() as u128 + 1,
-            self.node_bound().1 as u128,
+        let bound = self.node_bound();
+        let (index, inserted) = nodes::intern(
+            &mut self.node_indices,
+            &mut self.nodes,
+            node,
+            bound,
             location,
         )?;
-        let index = self.nodes.len();
-        self.nodes.push(node);
-        self.node_indices.insert(key, index);
-        self.counters.record(Event::NodeInserted);
+        if inserted {
+            self.counters.record(Event::NodeInserted);
+        }
         Ok(index)
     }
     pub(super) fn and(
@@ -414,12 +415,12 @@ impl Builder<'_> {
         self.node(Node::Implies(formula, FALSUM), location)
     }
     pub(super) fn root(&mut self, formula: usize, rule: &RuleIr) -> Result<(), FormulaFailure> {
-        self.root_at(formula, &rule.origins, rule.location)
+        self.root_at(formula, Cow::Borrowed(&rule.origins), rule.location)
     }
     fn root_at(
         &mut self,
         formula: usize,
-        evidence: &[Location],
+        evidence: Cow<'_, [Location]>,
         location: Location,
     ) -> Result<(), FormulaFailure> {
         ceiling(
@@ -437,7 +438,7 @@ impl Builder<'_> {
         )?;
         self.origin_count += evidence.len();
         self.roots.push(formula);
-        self.origins.push(evidence.to_vec());
+        self.origins.push(evidence.into_owned());
         self.counters.record(Event::Root);
         Ok(())
     }
@@ -482,7 +483,7 @@ impl Builder<'_> {
                     .map_err(|error| FormulaFailure::AtomAllocation { error, location })?;
                 if matches!(self.purpose, Purpose::Theory) {
                     self.producers.push(Vec::new());
-                    self.producer_origins.push(BTreeSet::from([location]));
+                    self.producer_origins.push(vec![location]);
                     self.atom_locations.push(location);
                 }
                 self.counters.record(Event::AtomInserted);
@@ -710,10 +711,21 @@ impl Builder<'_> {
     }
     fn record_head_origins(&mut self, atom: usize, rule: &RuleIr) -> Result<(), FormulaFailure> {
         for &location in &rule.origins {
-            if !self.producer_origins[atom].contains(&location) {
+            if let Err(position) = self.producer_origins[atom].binary_search(&location) {
                 self.budget
                     .charge(ExpansionResource::Origins, 1, location)?;
-                self.producer_origins[atom].insert(location);
+                let origins = &self.producer_origins[atom];
+                let growth_copy = if origins.len() == origins.capacity() {
+                    origins.len()
+                } else {
+                    0
+                };
+                self.counters.charge_work(
+                    (origins.len() - position) as u128 + 1 + growth_copy as u128,
+                    self.limits,
+                    location,
+                )?;
+                self.producer_origins[atom].insert(position, location);
             }
         }
         Ok(())
@@ -729,10 +741,8 @@ impl Builder<'_> {
             let necessary = self.node(Node::Implies(head, supported), location)?;
             let negative = self.neg(necessary, location)?;
             let guard = self.neg(negative, location)?;
-            let origins: Vec<_> = std::mem::take(&mut self.producer_origins[atom])
-                .into_iter()
-                .collect();
-            self.root_at(guard, &origins, location)?;
+            let origins = std::mem::take(&mut self.producer_origins[atom]);
+            self.root_at(guard, Cow::Owned(origins), location)?;
         }
         Ok(())
     }
@@ -1548,15 +1558,6 @@ fn remap(index: usize, first: usize, canonical: &[usize]) -> usize {
         index
     } else {
         canonical[index - first]
-    }
-}
-fn node_key(node: Node) -> (u8, usize, usize) {
-    match node {
-        Node::False => (0, 0, 0),
-        Node::Atom(a) => (1, a, 0),
-        Node::And(a, b) => (2, a, b),
-        Node::Or(a, b) => (3, a, b),
-        Node::Implies(a, b) => (4, a, b),
     }
 }
 fn aggregate_comparison(relation: themelios_program::program::Relation) -> AggregateComparison {
