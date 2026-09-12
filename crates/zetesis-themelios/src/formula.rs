@@ -73,7 +73,7 @@ pub struct FormulaLimits {
     pub max_work: u64,
     /// Complete rounds constructing the possible-positive support relation.
     pub max_support_rounds: u64,
-    /// Original source locations copied into emitted formula-root evidence.
+    /// Original source locations retained in emitted formula-root evidence.
     pub max_origin_locations: usize,
     /// Final dense atom, formula-node, and theory-root storage ceilings.
     pub theory: zetesis_ferraris::AdmissionLimits,

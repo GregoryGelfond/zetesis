@@ -5,7 +5,7 @@
 //! collisions can require linear work and growth can rehash prior keys. Hashes
 //! establish bucket placement only: the complete node key decides identity.
 
-use std::collections::{HashMap, hash_map::Entry};
+use std::collections::HashMap;
 use std::hash::BuildHasher;
 
 use themelios_base::span::Location;
@@ -24,16 +24,17 @@ pub(super) fn intern<S: BuildHasher>(
     bound: (FormulaResource, usize),
     location: Location,
 ) -> Result<(usize, bool), FormulaFailure> {
-    match index.entry(key(node)) {
-        Entry::Occupied(entry) => Ok((*entry.get(), false)),
-        Entry::Vacant(entry) => {
-            ceiling(bound.0, nodes.len() as u128 + 1, bound.1 as u128, location)?;
-            let id = nodes.len();
-            nodes.push(node);
-            entry.insert(id);
-            Ok((id, true))
-        }
+    let key = key(node);
+    if let Some(&id) = index.get(&key) {
+        return Ok((id, false));
     }
+    // HashMap::entry may reserve for a vacant key before yielding the entry.
+    // Perform miss admission before any mutating table operation instead.
+    ceiling(bound.0, nodes.len() as u128 + 1, bound.1 as u128, location)?;
+    let id = nodes.len();
+    nodes.push(node);
+    index.insert(key, id);
+    Ok((id, true))
 }
 
 fn key(node: Node) -> Key {
@@ -140,5 +141,80 @@ mod tests {
             .unwrap(),
             (1, true)
         );
+    }
+    #[test]
+    fn zero_node_admission_allocates_no_index() {
+        let mut index = Index::new();
+        let mut nodes = Vec::new();
+        assert!(
+            intern(
+                &mut index,
+                &mut nodes,
+                Node::False,
+                (FormulaResource::Nodes, 0),
+                location()
+            )
+            .is_err()
+        );
+        assert_eq!(index.capacity(), 0);
+        assert_eq!(nodes.capacity(), 0);
+    }
+
+    #[test]
+    fn refused_growth_preserves_index_capacity() {
+        let mut index = Index::new();
+        let mut nodes = Vec::new();
+        intern(
+            &mut index,
+            &mut nodes,
+            Node::False,
+            (FormulaResource::Nodes, usize::MAX),
+            location(),
+        )
+        .unwrap();
+        while index.len() < index.capacity() {
+            let node = Node::Atom(nodes.len());
+            intern(
+                &mut index,
+                &mut nodes,
+                node,
+                (FormulaResource::Nodes, usize::MAX),
+                location(),
+            )
+            .unwrap();
+        }
+        let capacity = index.capacity();
+        let node_capacity = nodes.capacity();
+        let before = nodes.clone();
+        let proposed = Node::Atom(nodes.len());
+        let mut control_index = index.clone();
+        let mut control_nodes = nodes.clone();
+        intern(
+            &mut control_index,
+            &mut control_nodes,
+            proposed,
+            (FormulaResource::Nodes, usize::MAX),
+            location(),
+        )
+        .unwrap();
+        assert!(
+            control_index.capacity() > capacity,
+            "control insertion actually grows the index"
+        );
+        let limit = nodes.len();
+        assert!(
+            intern(
+                &mut index,
+                &mut nodes,
+                proposed,
+                (FormulaResource::Nodes, limit),
+                location()
+            )
+            .is_err()
+        );
+        assert_eq!(index.capacity(), capacity);
+        assert_eq!(nodes.capacity(), node_capacity);
+        assert_eq!(nodes, before);
+        assert_eq!(index.len(), limit);
     }
 }
