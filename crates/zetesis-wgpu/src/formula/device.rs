@@ -17,6 +17,7 @@ pub struct GpuFormulaOracle {
     resident: Option<Resident>,
     epoch: u32,
     last: Option<FormulaBatchStats>,
+    last_submission_candidates: Option<usize>,
 }
 impl GpuFormulaOracle {
     /// Require Metal and the requested physical-device policy.
@@ -145,6 +146,7 @@ impl GpuFormulaOracle {
             resident: None,
             epoch: 0,
             last: None,
+            last_submission_candidates: None,
         }
     }
 
@@ -164,11 +166,21 @@ impl GpuFormulaOracle {
     pub fn last_batch_stats(&self) -> Option<&FormulaBatchStats> {
         self.last.as_ref()
     }
+    /// Candidate count from this oracle's most recent call, if it reached queue
+    /// submission, even if the result was interrupted or could not decode.
+    /// Every new call clears this receipt, including empty and pre-stopped calls.
+    /// It certifies submission only, not completed shader work or candidate checks.
+    #[must_use]
+    pub const fn last_submission_candidates(&self) -> Option<usize> {
+        self.last_submission_candidates
+    }
     /// Release authored resident handles. This neither cancels GPU work nor
     /// repairs an invalidated device; driver retirement can occur later.
+    /// Clears the last batch and submission receipts.
     pub fn clear_residency(&mut self) {
         self.resident = None;
         self.last = None;
+        self.last_submission_candidates = None;
     }
     /// Evaluate original roots, freeze M, and cooperatively narrow the proper-
     /// subset query. Results retain input order and no partial batch is returned.
@@ -208,6 +220,7 @@ impl GpuFormulaOracle {
         control: &Control,
     ) -> Result<Vec<FormulaCheck>, GpuError> {
         self.last = None;
+        self.last_submission_candidates = None;
         let context = self.profile.runtime.context.clone();
         let _lease = context.lease()?;
         control.poll().map_err(GpuError::interrupted)?;
@@ -294,6 +307,7 @@ impl GpuFormulaOracle {
                     &plan,
                     limits.timeout,
                     control,
+                    &mut self.last_submission_candidates,
                 )
             });
         let result = self.profile.runtime.complete(scopes, outcome);

@@ -103,7 +103,8 @@ impl SemanticOutcome {
         self.countermodel_statistics.as_ref()
     }
 
-    /// Bounded formula batch accounting, including queued verified models.
+    /// Bounded formula batch accounting, including effective device limits,
+    /// actual submissions, decoded results and queued verified models.
     #[must_use]
     pub const fn formula_execution(&self) -> Option<&crate::FormulaExecutionStatistics> {
         self.formula_execution.as_ref()

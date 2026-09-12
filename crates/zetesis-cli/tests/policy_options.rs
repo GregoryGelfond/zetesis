@@ -240,3 +240,36 @@ fn non_utf8_policy_values_remain_parser_errors() {
         assert_eq!(error.kind(), ErrorKind::InvalidUtf8);
     }
 }
+
+#[test]
+fn formula_device_limits_remain_distinct_from_cpu_work() {
+    for (work, rounds) in [(0, 0), (789, 17), (u32::MAX, u32::MAX)] {
+        let options = Options::try_parse_from([
+            "zetesis",
+            "--max-work",
+            "18446744073709551615",
+            "--gpu-formula-work",
+            &work.to_string(),
+            "--gpu-formula-rounds",
+            &rounds.to_string(),
+        ])
+        .unwrap();
+        let config = SolveConfig::from(&options);
+        assert_eq!(config.max_work, u64::MAX);
+        assert_eq!(config.gpu_formula_work, work);
+        assert_eq!(config.gpu_formula_rounds, rounds);
+    }
+    let defaults = SolveConfig::from(&Options::try_parse_from(["zetesis"]).unwrap());
+    assert_eq!(defaults.gpu_formula_work, 100_000_000);
+    assert_eq!(defaults.gpu_formula_rounds, 64);
+}
+
+#[test]
+fn formula_device_limits_reject_unrepresentable_values() {
+    for flag in ["--gpu-formula-work", "--gpu-formula-rounds"] {
+        for value in ["4294967296", "18446744073709551615"] {
+            let error = Options::try_parse_from(["zetesis", flag, value]).unwrap_err();
+            assert_eq!(error.kind(), ErrorKind::ValueValidation);
+        }
+    }
+}

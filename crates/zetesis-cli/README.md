@@ -124,6 +124,20 @@ reduct queries exactly on CPU. Outer candidate search and objective scoring also
 remain on the host. This route is hybrid, and explicit lazy formula execution is
 unsupported.
 
+`--gpu-formula-work` and `--gpu-formula-rounds` independently bound device
+propagation per formula candidate. Their defaults are 100,000,000 charged work
+units and 64 sweeps, matching the device library. `--max-work` retains its CPU
+oracle/source units; it no longer sets a silently saturated formula GPU limit.
+Values above `u32::MAX` are argument errors. Zero device work refuses a nonempty
+setup that needs work; zero rounds still checks original truth and sends
+undecided candidates to exact CPU residual search. Neither limit bounds driver
+initialization or wall-clock duration.
+
+Formula statistics report the effective device limits, actual submitted
+batches/candidates and successfully decoded batches/candidates separately.
+Propagation work and sweeps count decoded results; an interrupted unreturned
+submission does not establish how much shader work completed.
+
 `--workers` controls closure workers. `--completion-workers` separately controls
 independent exact formula checks, with a scalar CPU default of one.
 `--batch-size`, `--max-batch-bytes` and

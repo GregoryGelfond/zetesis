@@ -63,6 +63,18 @@ Its worker setting is distinct from the relational closure pool. Scalar outer
 candidate search does not become parallel simply because residual membership
 queries use Rayon.
 
+`SolveConfig::gpu_formula_work` and `gpu_formula_rounds` bound device propagation
+per candidate, independently of CPU work and residual-search quotas. Their
+defaults match `FormulaLimits`: 100,000,000 charged units and 64 sweeps. A work
+limit below mandatory setup refuses before submission; zero sweeps still checks
+original roots and returns unresolved candidates for exact completion.
+`FormulaExecutionStatistics::gpu_limits` records the effective values when a
+device executor exists. Submitted batch/candidate counters survive readback
+failure, while existing decoded-result counters include only returned batches.
+`GpuFormulaOracle::last_submission_candidates` provides the underlying receipt
+after queue submission. It says nothing about completion; an unreturned batch's
+shader work and sweeps remain unknown.
+
 ## One source stream, independent world truth
 
 `zetesis_cpu::lazy::check_with` owns the bounded round protocol and accepts an

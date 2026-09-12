@@ -79,6 +79,11 @@ decoded nonempty batch. They do not measure operations or rounds performed by an
 interrupted submission whose result was not returned; those quantities are
 unavailable. Payload accounting is not a measurement of process RSS or physical bus
 traffic. Read each operation's rustdoc before reusing residency after a failure.
+`GpuFormulaOracle::last_submission_candidates()` separately records the candidate
+count only after an actual queue submission. It survives an interrupted read,
+but each new call or explicit residency clear resets it. It is not completion
+evidence. Formula propagation work and round limits are per candidate; ordinary
+solving exposes both directly, independently of CPU quotas.
 
 Static `check_batch_with_control` / `check_batch_views_with_control` and formula
 `propagate_batch_with_control` accept the same cooperative `Control` used by CPU

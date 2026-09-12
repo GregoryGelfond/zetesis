@@ -210,6 +210,12 @@ fn hybrid_field_rendering_is_explicitly_a_formatting_fixture_not_device_evidence
         let mut report = actual("a | b.", &options, &Control::default()).unwrap();
         report.formula_execution = Some(crate::FormulaExecutionStatistics {
             completion: crate::CompletionAccounting::default(),
+            gpu_limits: Some(crate::FormulaDeviceLimits {
+                work_per_candidate: 789,
+                rounds_per_candidate: 17,
+            }),
+            gpu_submitted_batches: 3,
+            gpu_submitted_candidates: 10,
             adapter: "FORMAT FIXTURE: no physical execution".to_owned(),
             gpu_batches: 2,
             gpu_candidates: 7,
@@ -236,6 +242,8 @@ fn hybrid_field_rendering_is_explicitly_a_formatting_fixture_not_device_evidence
         )));
         assert!(text.contains("peak authored GPU bytes=456"));
         assert!(text.contains("GPU kernel timing=unavailable"));
+        assert!(text.contains("propagation sweeps/candidate=17; propagation work/candidate=789"));
+        assert!(text.contains("submitted: batches=3; candidates=10"));
         assert!(!text.contains("Backend: gpu"));
         if !completed {
             assert!(!text.contains("completion: exhausted"));

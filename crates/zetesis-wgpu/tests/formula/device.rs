@@ -266,3 +266,126 @@ fn metal_profile_reuse_checks_context_lifecycle() {
 fn vulkan_profile_reuse_checks_context_lifecycle() {
     profile_lifecycle(GpuBackendPreference::Vulkan);
 }
+
+fn submission_receipt(backend: GpuBackendPreference) {
+    let mut oracle = GpuFormulaOracle::new_selected(
+        GpuOptions::default(),
+        GpuSelection {
+            backend,
+            vendor_id: None,
+        },
+    )
+    .unwrap();
+    require_profile_device(oracle.compiled_profile(), backend);
+    let theory = Theory::new(
+        1,
+        vec![zetesis_ferraris::Node::Atom(0)],
+        vec![0],
+        zetesis_ferraris::AdmissionLimits::default(),
+    )
+    .unwrap();
+    let candidates = [
+        Interpretation::new(&theory, []).unwrap(),
+        Interpretation::new(&theory, [0]).unwrap(),
+    ];
+    let limits = FormulaLimits {
+        max_rounds: 0,
+        max_work_per_candidate: 4,
+        ..Default::default()
+    };
+    let checks = oracle
+        .propagate_batch(&theory, &candidates, limits)
+        .unwrap();
+    assert_eq!(oracle.last_submission_candidates(), Some(2));
+    assert_eq!(checks[0].verdict(), super::super::FormulaVerdict::NotModel);
+    assert_eq!(
+        checks[1].verdict(),
+        super::super::FormulaVerdict::Residual(super::super::ResidualReason::RoundLimit)
+    );
+    for check in checks {
+        assert_eq!(
+            check.statistics(),
+            super::super::FormulaStatistics { work: 4, rounds: 0 }
+        );
+    }
+    oracle.propagate_batch(&theory, &[], limits).unwrap();
+    assert_eq!(oracle.last_submission_candidates(), None);
+    let cancelled = Control::default();
+    cancelled.cancel();
+    let failure = oracle
+        .propagate_batch_with_control(&theory, &candidates, limits, &cancelled)
+        .unwrap_err();
+    assert_eq!(failure.interruption(), Some(zetesis_cpu::Stop::Cancelled));
+    assert_eq!(oracle.last_submission_candidates(), None);
+    for work in [0, 3] {
+        let failure = oracle
+            .propagate_batch(
+                &theory,
+                &candidates,
+                FormulaLimits {
+                    max_work_per_candidate: work,
+                    ..limits
+                },
+            )
+            .unwrap_err();
+        assert_eq!(failure.kind(), GpuErrorKind::Capacity);
+        assert_eq!(oracle.last_submission_candidates(), None);
+        oracle.context().check_health().unwrap();
+    }
+    submitted_interruption(&mut oracle, &candidates, limits, &cancelled);
+}
+
+fn submitted_interruption(
+    oracle: &mut GpuFormulaOracle,
+    candidates: &[Interpretation],
+    limits: FormulaLimits,
+    cancelled: &Control,
+) {
+    // Invoke the same transport after host admission with already-stopped control.
+    // The receipt is written only after queue.submit; readback then observes Stop.
+    // This controls the phase exactly, without a race against shader duration.
+    let runtime = &oracle.profile.runtime;
+    let _lease = runtime.context.lease().unwrap();
+    let resident = oracle.resident.as_mut().unwrap();
+    let plan = Plan::new(
+        &resident.graph,
+        candidates.len(),
+        limits,
+        runtime.limits(),
+        false,
+        2,
+    )
+    .unwrap();
+    let seeds = plan.pack(&resident.graph, candidates).unwrap();
+    let scopes = ErrorScopes::new(runtime.device());
+    let outcome = resident.dispatch(
+        runtime,
+        &seeds,
+        &plan,
+        limits.timeout,
+        cancelled,
+        &mut oracle.last_submission_candidates,
+    );
+    let failure = runtime.complete(scopes, outcome).unwrap_err();
+    assert_eq!(failure.kind(), GpuErrorKind::Interrupted);
+    assert_eq!(failure.interruption(), Some(zetesis_cpu::Stop::Cancelled));
+    assert_eq!(oracle.last_submission_candidates, Some(2));
+    assert!(oracle.last.is_none());
+    assert_eq!(
+        runtime.check_health().unwrap_err().kind(),
+        GpuErrorKind::Device
+    );
+    println!("formula submitted=2 decoded=0 stop=Cancelled phase=after-queue-submit");
+}
+
+#[test]
+#[ignore = "requires actual Metal; checks submission phase and device limits"]
+fn metal_formula_submission_receipt_survives_interruption() {
+    submission_receipt(GpuBackendPreference::Metal);
+}
+
+#[test]
+#[ignore = "requires actual Vulkan; checks submission phase and device limits"]
+fn vulkan_formula_submission_receipt_survives_interruption() {
+    submission_receipt(GpuBackendPreference::Vulkan);
+}

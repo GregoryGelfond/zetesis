@@ -708,6 +708,17 @@ fn execution_statistics(
     };
     out.text("{\"adapter\":")?;
     out.optional_string((!stats.adapter.is_empty()).then_some(stats.adapter.as_str()))?;
+    out.text(",\"gpu_limits\":")?;
+    if let Some(limits) = stats.gpu_limits {
+        out.text("{\"work_per_candidate\":")?;
+        out.text(&limits.work_per_candidate.to_string())?;
+        out.number_field("rounds_per_candidate", limits.rounds_per_candidate)?;
+        out.text("}")?;
+    } else {
+        out.text("null")?;
+    }
+    out.number_field("gpu_submitted_batches", stats.gpu_submitted_batches)?;
+    out.number_field("gpu_submitted_candidates", stats.gpu_submitted_candidates)?;
     out.number_field("gpu_batches", stats.gpu_batches)?;
     out.number_field("gpu_candidates", stats.gpu_candidates)?;
     out.number_field("gpu_work", stats.gpu_work)?;

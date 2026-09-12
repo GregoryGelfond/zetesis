@@ -171,6 +171,14 @@ pub struct Options {
     /// plus antecedent tests. Join/copy and eager scan units differ.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_work, hide_short_help = true)]
     pub max_work: u64,
+    /// Device propagation work per formula candidate, independent of CPU work.
+    /// A budget below mandatory setup work refuses before device submission.
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.gpu_formula_work, hide_short_help = true)]
+    pub gpu_formula_work: u32,
+    /// Device propagation sweeps per formula candidate. Zero keeps original-truth
+    /// setup and sends undecided candidates to exact CPU residual search.
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.gpu_formula_rounds, hide_short_help = true)]
+    pub gpu_formula_rounds: u32,
     /// Collective source work per shared CPU batch. Separate from max-work,
     /// which bounds record visits plus antecedent tests per shared CPU world.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_source_work, hide_short_help = true)]
@@ -236,6 +244,8 @@ impl From<&Options> for crate::SolveConfig {
             max_candidate_bytes: options.max_candidate_bytes,
             max_carrier_atoms: options.max_carrier_atoms,
             max_work: options.max_work,
+            gpu_formula_work: options.gpu_formula_work,
+            gpu_formula_rounds: options.gpu_formula_rounds,
             max_source_work: options.max_source_work,
             max_atoms: options.max_atoms,
             max_substitutions: options.max_substitutions,

@@ -502,7 +502,7 @@ fn formula(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
             options.batch_size, options.max_batch_bytes
         )?;
         if !execution.adapter.is_empty() {
-            formula_gpu(sink, options, execution)?;
+            formula_gpu(sink, execution)?;
         }
         Ok(())
     } else {
@@ -515,12 +515,11 @@ fn formula(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
 
 fn formula_gpu(
     sink: &mut impl Write,
-    options: &Options,
     execution: &crate::FormulaExecutionStatistics,
 ) -> io::Result<()> {
     writeln!(
         sink,
-        "  formula GPU: batches={}; candidates={}; propagation work={}; completed sweeps={}; GPU-decided committed={}; CPU residuals completed={}",
+        "  formula GPU decoded: batches={}; candidates={}; propagation work={}; completed sweeps={}; GPU-decided committed={}; CPU residuals completed={}",
         execution.gpu_batches,
         execution.gpu_candidates,
         execution.gpu_work,
@@ -530,8 +529,19 @@ fn formula_gpu(
     )?;
     writeln!(
         sink,
-        "  formula GPU limits: propagation sweeps=64; propagation work/candidate={} (u32 ceiling); peak authored GPU bytes={}; GPU kernel timing=unavailable",
-        options.max_work.min(u64::from(u32::MAX)),
+        "  formula GPU submitted: batches={}; candidates={}; work/sweeps for unreturned results=unavailable",
+        execution.gpu_submitted_batches, execution.gpu_submitted_candidates
+    )?;
+    if let Some(limits) = execution.gpu_limits {
+        writeln!(
+            sink,
+            "  formula GPU limits: propagation sweeps/candidate={}; propagation work/candidate={}",
+            limits.rounds_per_candidate, limits.work_per_candidate
+        )?;
+    }
+    writeln!(
+        sink,
+        "  formula GPU resources: peak authored GPU bytes={}; GPU kernel timing=unavailable",
         execution.peak_accounted_bytes
     )
 }

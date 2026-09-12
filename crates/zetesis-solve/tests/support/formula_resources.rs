@@ -77,6 +77,12 @@ fn supplied_profile(backend: Backend, expected_api: &str) {
             assert!(oracle.last_batch_stats().is_none());
             assert_eq!(queue.len(), 0);
             assert_eq!(statistics.gpu_batches, 0);
+            assert_eq!(
+                statistics.gpu_limits,
+                Some(super::FormulaDeviceLimits::from(&options))
+            );
+            assert_eq!(statistics.gpu_submitted_batches, 0);
+            assert_eq!(statistics.gpu_submitted_candidates, 0);
             assert_eq!(statistics.gpu_candidates, 0);
             assert_eq!(statistics.gpu_work, 0);
             assert_eq!(statistics.gpu_rounds, 0);
@@ -93,6 +99,8 @@ fn supplied_profile(backend: Backend, expected_api: &str) {
             );
             assert!(result.is_ok());
             assert_eq!(statistics.gpu_batches, 1);
+            assert_eq!(statistics.gpu_submitted_batches, 1);
+            assert_eq!(statistics.gpu_submitted_candidates, 1);
             assert_eq!(statistics.gpu_candidates, 1);
             assert!(statistics.gpu_work > 0);
             assert!(oracle.last_batch_stats().unwrap().theory_uploaded);
@@ -112,4 +120,57 @@ fn metal_formula_sessions_reuse_the_supplied_profile() {
 #[ignore = "requires actual Vulkan; ordinary formula execution reuses one compilation"]
 fn vulkan_formula_sessions_reuse_the_supplied_profile() {
     supplied_profile(Backend::Vulkan, "Vulkan");
+}
+
+#[test]
+fn device_limits_preserve_exact_configured_units() {
+    for (work, rounds) in [(0, 0), (789, 17), (u32::MAX, u32::MAX)] {
+        let options = SolveConfig {
+            max_work: u64::MAX,
+            gpu_formula_work: work,
+            gpu_formula_rounds: rounds,
+            ..Default::default()
+        };
+        let limits = super::device_limits(&options);
+        assert_eq!(limits.max_work_per_candidate, work);
+        assert_eq!(limits.max_rounds, rounds);
+        assert_eq!(
+            super::FormulaDeviceLimits::from(&options),
+            super::FormulaDeviceLimits {
+                work_per_candidate: work,
+                rounds_per_candidate: rounds,
+            }
+        );
+    }
+    let limits = super::device_limits(&SolveConfig::default());
+    let library = zetesis_wgpu::FormulaLimits::default();
+    assert_eq!(
+        limits.max_work_per_candidate,
+        library.max_work_per_candidate
+    );
+    assert_eq!(limits.max_rounds, library.max_rounds);
+}
+
+#[test]
+fn submission_accounting_preserves_undecoded_candidates() {
+    let mut statistics = super::FormulaExecutionStatistics::default();
+    assert!(super::record_submission(&mut statistics, None).is_ok());
+    assert!(super::record_submission(&mut statistics, Some(3)).is_ok());
+    assert!(super::record_submission(&mut statistics, Some(5)).is_ok());
+    assert_eq!(statistics.gpu_submitted_batches, 2);
+    assert_eq!(statistics.gpu_submitted_candidates, 8);
+    assert_eq!((statistics.gpu_batches, statistics.gpu_candidates), (0, 0));
+    assert_eq!((statistics.gpu_work, statistics.gpu_rounds), (0, 0));
+    for (batches, candidates) in [(u64::MAX, 8), (2, u64::MAX)] {
+        statistics.gpu_submitted_batches = batches;
+        statistics.gpu_submitted_candidates = candidates;
+        assert!(matches!(
+            super::record_submission(&mut statistics, Some(1)),
+            Err(super::Failure::Search(
+                zetesis_sat::Incomplete::CounterOverflow
+            ))
+        ));
+        assert_eq!(statistics.gpu_submitted_batches, batches);
+        assert_eq!(statistics.gpu_submitted_candidates, candidates);
+    }
 }

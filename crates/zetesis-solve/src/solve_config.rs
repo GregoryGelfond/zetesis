@@ -62,6 +62,12 @@ pub struct SolveConfig {
     /// work per lazy GPU batch. Shared CPU rounds count record visits plus
     /// antecedent tests per world; independent joins and device units differ.
     pub max_work: u64,
+    /// Maximum device propagation work per formula candidate, independent of
+    /// CPU work. Below mandatory setup work the device refuses before submission.
+    pub gpu_formula_work: u32,
+    /// Maximum device propagation sweeps per formula candidate. Zero performs
+    /// original-truth setup and leaves undecided candidates to exact CPU search.
+    pub gpu_formula_rounds: u32,
     /// Collective source work per shared CPU batch, distinct from per-world work.
     pub max_source_work: u64,
     /// Maximum derived independent CPU atoms, demanded shared CPU/GPU batch
@@ -106,6 +112,8 @@ impl SolveConfig {
         max_carrier_atoms: 4_096,
         max_candidate_bytes: 67_108_864,
         max_work: 10_000_000,
+        gpu_formula_work: 100_000_000,
+        gpu_formula_rounds: 64,
         max_source_work: 10_000_000,
         max_atoms: 1_000_000,
         max_substitutions: 10_000_000,

@@ -13,6 +13,24 @@ use crate::{Backend, ExecutionResources, SolveConfig, SolveError};
 
 pub use crate::completion_accounting::CompletionAccounting;
 
+/// Effective per-candidate device propagation limits; CPU search has separate units.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FormulaDeviceLimits {
+    /// Charged original-truth, initialization and propagation work.
+    pub work_per_candidate: u32,
+    /// Maximum propagation sweeps after original-truth setup.
+    pub rounds_per_candidate: u32,
+}
+
+impl From<&SolveConfig> for FormulaDeviceLimits {
+    fn from(options: &SolveConfig) -> Self {
+        Self {
+            work_per_candidate: options.gpu_formula_work,
+            rounds_per_candidate: options.gpu_formula_rounds,
+        }
+    }
+}
+
 /// Actual formula GPU work and explicitly retained candidate results.
 #[derive(Clone, Debug, Default)]
 pub struct FormulaExecutionStatistics {
@@ -20,6 +38,12 @@ pub struct FormulaExecutionStatistics {
     pub adapter: String,
     /// Bounded batch completion accounting; scalar cursor execution has no record.
     pub completion: CompletionAccounting,
+    /// Effective device limits, absent when no GPU formula executor was created.
+    pub gpu_limits: Option<FormulaDeviceLimits>,
+    /// Batches actually submitted, including submissions without a decoded result.
+    pub gpu_submitted_batches: u64,
+    /// Candidate worlds actually submitted, including unreturned results.
+    pub gpu_submitted_candidates: u64,
     /// Successfully dispatched and decoded GPU batches.
     pub gpu_batches: u64,
     /// Candidate worlds returned by successful GPU dispatches.
@@ -141,6 +165,7 @@ impl Execution {
             queue: Box::new(crate::formula_queue::BatchQueue::new(options)?),
             statistics: Box::new(FormulaExecutionStatistics {
                 adapter,
+                gpu_limits: Some(options.into()),
                 ..Default::default()
             }),
         })
@@ -222,12 +247,7 @@ fn propagate(
     control: &zetesis_cpu::Control,
     phases: &Recorder,
 ) -> Result<Vec<zetesis_sat::BatchVerdict>, Failure> {
-    let limits = zetesis_wgpu::FormulaLimits {
-        max_candidates: options.batch_size.get(),
-        max_batch_bytes: options.max_batch_bytes,
-        max_work_per_candidate: u32::try_from(options.max_work).unwrap_or(u32::MAX),
-        ..Default::default()
-    };
+    let limits = device_limits(options);
     // The device API returns one ordered verdict per candidate. Reserve its
     // host conversion before dispatch so allocation failure cannot hide a
     // successfully decoded batch from the execution counters.
@@ -235,14 +255,17 @@ fn propagate(
     verdicts
         .try_reserve_exact(candidates.len())
         .map_err(|_| Failure::Search(Incomplete::Allocation))?;
-    let checks = phases
-        .measure(SolvePhase::GpuHostOracle, || {
-            oracle.propagate_batch_with_control(theory, candidates, limits, control)
-        })
-        .map_err(|error| match error.interruption() {
-            Some(stop) => Failure::Search(stop.into()),
-            None => Failure::Run(SolveError::Gpu(error)),
-        })?;
+    let result = phases.measure(SolvePhase::GpuHostOracle, || {
+        oracle.propagate_batch_with_control(theory, candidates, limits, control)
+    });
+    // Submission is observable even when mapping or decoding fails. Preserve
+    // that operation's original error over a secondary accounting overflow.
+    let submitted = record_submission(statistics, oracle.last_submission_candidates());
+    let checks = result.map_err(|error| match error.interruption() {
+        Some(stop) => Failure::Search(stop.into()),
+        None => Failure::Run(SolveError::Gpu(error)),
+    })?;
+    submitted?;
     add(&mut statistics.gpu_batches, 1)?;
     add(
         &mut statistics.gpu_candidates,
@@ -267,6 +290,39 @@ fn propagate(
         });
     }
     Ok(verdicts)
+}
+
+#[cfg(feature = "gpu")]
+fn device_limits(options: &SolveConfig) -> zetesis_wgpu::FormulaLimits {
+    zetesis_wgpu::FormulaLimits {
+        max_candidates: options.batch_size.get(),
+        max_batch_bytes: options.max_batch_bytes,
+        max_work_per_candidate: options.gpu_formula_work,
+        max_rounds: options.gpu_formula_rounds,
+        ..Default::default()
+    }
+}
+
+#[cfg(feature = "gpu")]
+fn record_submission(
+    statistics: &mut FormulaExecutionStatistics,
+    candidates: Option<usize>,
+) -> Result<(), Failure> {
+    let Some(candidates) = candidates else {
+        return Ok(());
+    };
+    let candidates =
+        u64::try_from(candidates).map_err(|_| Failure::Search(Incomplete::CounterOverflow))?;
+    // Commit both counters together, retaining the previous coherent receipt
+    // when their representation is exhausted.
+    let batches = statistics.gpu_submitted_batches.checked_add(1);
+    let candidates = statistics.gpu_submitted_candidates.checked_add(candidates);
+    let (Some(batches), Some(candidates)) = (batches, candidates) else {
+        return Err(Failure::Search(Incomplete::CounterOverflow));
+    };
+    statistics.gpu_submitted_batches = batches;
+    statistics.gpu_submitted_candidates = candidates;
+    Ok(())
 }
 
 #[cfg(feature = "gpu")]

@@ -222,3 +222,39 @@ fn failure_envelopes_never_invent_search_coverage() {
         assert_eq!(value["models"], serde_json::json!([]));
     }
 }
+
+#[test]
+fn formula_json_keeps_submission_limits_and_decoding_distinct() {
+    let statistics = crate::FormulaExecutionStatistics {
+        gpu_limits: Some(crate::FormulaDeviceLimits {
+            work_per_candidate: 789,
+            rounds_per_candidate: 17,
+        }),
+        gpu_submitted_batches: 3,
+        gpu_submitted_candidates: 10,
+        gpu_batches: 2,
+        gpu_candidates: 7,
+        ..Default::default()
+    };
+    let mut out = Buffer::new(4096);
+    super::execution_statistics(&mut out, Some(&statistics)).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
+    assert_eq!(
+        value["gpu_limits"],
+        serde_json::json!({
+            "work_per_candidate": 789, "rounds_per_candidate": 17
+        })
+    );
+    assert_eq!(value["gpu_submitted_batches"], 3);
+    assert_eq!(value["gpu_submitted_candidates"], 10);
+    assert_eq!(value["gpu_batches"], 2);
+    assert_eq!(value["gpu_candidates"], 7);
+    let mut out = Buffer::new(4096);
+    super::execution_statistics(
+        &mut out,
+        Some(&crate::FormulaExecutionStatistics::default()),
+    )
+    .unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
+    assert!(value["gpu_limits"].is_null());
+}

@@ -93,7 +93,9 @@ pub use completion::{Completion, Interruption};
 pub use error::{FailureParts, SolveError, SolveFailure};
 pub use execution_observation::{ExecutionObservation, ExecutionObserver};
 pub use execution_resources::ExecutionResources;
-pub use formula_execution::{CompletionAccounting, FormulaExecutionStatistics};
+pub use formula_execution::{
+    CompletionAccounting, FormulaDeviceLimits, FormulaExecutionStatistics,
+};
 pub use grounding_timing::{GroundingMeasurement, GroundingTimings};
 pub use lazy_execution::{
     LazyBufferUsage, LazyExecutionStatistics, LazyTransportReplacements, LazyTransportUsage,

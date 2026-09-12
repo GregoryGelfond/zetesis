@@ -33,6 +33,7 @@ impl Resident {
         plan: &Plan,
         timeout: Duration,
         control: &zetesis_cpu::Control,
+        submitted_candidates: &mut Option<usize>,
     ) -> Result<Vec<FormulaCheck>, GpuError> {
         let device = runtime.device();
         let queue = runtime.queue();
@@ -64,6 +65,7 @@ impl Resident {
                 result_bytes: plan.results,
             },
         );
+        *submitted_candidates = Some(plan.worlds as usize);
         runtime::read_polled(
             device,
             &transport.readback,
