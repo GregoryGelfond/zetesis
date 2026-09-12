@@ -315,14 +315,16 @@ fn gate_agreement(
     Ok(agreement)
 }
 
-fn visit<E: From<Stop>>(
+fn visit<'source, E: From<Stop>>(
     template: &Template,
-    relations: &Relations<'_>,
+    relations: &Relations<'source>,
     seed: Option<&Seed>,
     mut membership: Option<&mut worlds::Join<'_>>,
     work: &mut Work<'_>,
-    mut emit: impl FnMut(&[Option<Value>], &mut Work<'_>) -> Result<(), E>,
+    mut emit: impl FnMut(&[Option<&'source Value>], &mut Work<'_>) -> Result<(), E>,
 ) -> Result<(), E> {
+    // The immutable relation snapshot owns every bound value. Backtracking
+    // changes only these references; owned values are constructed at emission.
     let mut assignment = vec![None; template.variable_count()];
     if !guards(template, &assignment, seed, work)? {
         return Ok(());
@@ -387,10 +389,10 @@ fn visit<E: From<Stop>>(
     }
 }
 
-fn bind(
+fn bind<'source>(
     pattern: &AtomPattern,
-    atom: &Atom,
-    assignment: &mut [Option<Value>],
+    atom: &'source Atom,
+    assignment: &mut [Option<&'source Value>],
     undo: &mut Vec<usize>,
     work: &mut Work<'_>,
 ) -> Result<bool, Stop> {
@@ -398,11 +400,11 @@ fn bind(
         structural_work(value, work)?;
         match term {
             Term::Constant(expected) if expected != value => return Ok(false),
-            Term::Variable(variable) => match &assignment[*variable] {
+            Term::Variable(variable) => match assignment[*variable] {
                 Some(expected) if expected != value => return Ok(false),
                 Some(_) => {}
                 None => {
-                    assignment[*variable] = Some(value.clone());
+                    assignment[*variable] = Some(value);
                     undo.push(*variable);
                 }
             },
@@ -421,20 +423,20 @@ fn structural_work(value: &Value, work: &mut Work<'_>) -> Result<(), Stop> {
     Ok(())
 }
 
-fn clear(assignment: &mut [Option<Value>], undo: &mut Vec<usize>) {
+fn clear(assignment: &mut [Option<&Value>], undo: &mut Vec<usize>) {
     for variable in undo.drain(..) {
         assignment[variable] = None;
     }
 }
 
-fn resolve<'a>(term: &'a Term, assignment: &'a [Option<Value>]) -> Option<&'a Value> {
+fn resolve<'a>(term: &'a Term, assignment: &[Option<&'a Value>]) -> Option<&'a Value> {
     match term {
         Term::Constant(value) => Some(value),
-        Term::Variable(variable) => assignment[*variable].as_ref(),
+        Term::Variable(variable) => assignment[*variable],
     }
 }
 
-fn instantiate(pattern: &AtomPattern, assignment: &[Option<Value>]) -> Result<Option<Atom>, Stop> {
+fn instantiate(pattern: &AtomPattern, assignment: &[Option<&Value>]) -> Result<Option<Atom>, Stop> {
     let Some(values) = pattern
         .terms()
         .iter()
@@ -450,7 +452,7 @@ fn instantiate(pattern: &AtomPattern, assignment: &[Option<Value>]) -> Result<Op
 
 fn guards(
     template: &Template,
-    assignment: &[Option<Value>],
+    assignment: &[Option<&Value>],
     seed: Option<&Seed>,
     work: &mut Work<'_>,
 ) -> Result<bool, Stop> {

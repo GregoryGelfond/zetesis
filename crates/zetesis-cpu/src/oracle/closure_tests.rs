@@ -2,7 +2,9 @@
 
 use std::collections::BTreeSet;
 
-use zetesis_core::{AdmissionLimits, Atom, AtomPattern, Predicate, Program, Seed, Template};
+use zetesis_core::{
+    AdmissionLimits, Atom, AtomPattern, Predicate, Program, Seed, Template, Term, Value,
+};
 
 use super::{Control, Limits, Statistics, Stop, Work, gate_agreement, least_closure};
 
@@ -39,6 +41,39 @@ fn choices() -> Program {
         AdmissionLimits::default(),
     )
     .unwrap()
+}
+
+#[test]
+fn join_bindings_borrow_their_source_values() {
+    let predicate = Predicate::new("row", 1).unwrap();
+    let mut rows = [
+        Value::String("first".into()),
+        Value::Symbol("second".into()),
+    ]
+    .map(|value| Atom::new(predicate.clone(), vec![value]).unwrap());
+    rows.sort();
+    let pattern = AtomPattern::new(predicate.clone(), vec![Term::Variable(0)]).unwrap();
+    let template = Template::new(None, vec![pattern], vec![], vec![], vec![]);
+    let relations = super::Relations::from([(&predicate, rows.iter().collect())]);
+    let control = Control::default();
+    let mut work = work(&control, Limits::default().max_work);
+    let mut visited = 0;
+    super::visit(
+        &template,
+        &relations,
+        None,
+        None,
+        &mut work,
+        |assignment, _| -> Result<(), Stop> {
+            let bound = assignment[0].expect("the positive row binds its variable");
+            let original = &rows[visited].values()[0];
+            assert!(std::ptr::eq(bound, original));
+            visited += 1;
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert_eq!(visited, rows.len());
 }
 
 #[test]

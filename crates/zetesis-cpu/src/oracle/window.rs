@@ -22,7 +22,7 @@ use crate::Stop;
 pub(super) fn matching_prefix(
     pattern: &AtomPattern,
     rows: &[&Atom],
-    assignment: &[Option<Value>],
+    assignment: &[Option<&Value>],
     work: &mut Work<'_>,
 ) -> Result<Range<usize>, Stop> {
     if rows.is_empty() {
@@ -69,7 +69,7 @@ fn boundary(
 fn compare_prefix(
     pattern: &AtomPattern,
     row: &Atom,
-    assignment: &[Option<Value>],
+    assignment: &[Option<&Value>],
     length: usize,
     work: &mut Work<'_>,
 ) -> Result<Ordering, Stop> {

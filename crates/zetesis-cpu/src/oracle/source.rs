@@ -271,7 +271,7 @@ fn scan_inner<'a, E>(
 
 fn copy_atom(
     pattern: &AtomPattern,
-    assignment: &[Option<Value>],
+    assignment: &[Option<&Value>],
     remaining_atoms: &mut usize,
     remaining_bytes: &mut usize,
     work: &mut Work<'_>,

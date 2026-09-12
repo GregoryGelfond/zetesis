@@ -82,6 +82,16 @@ The [ownership chapter](../architecture/ownership.md) and
 [session example](../rust/sessions.md#reuse-and-identity) connect these obligations
 to the maintained implementation.
 
+The CPU source join borrows bound values from its immutable relation snapshot.
+Backtracking clears references; emitting a ground instance constructs its owned
+values. This changes storage ownership without changing the substitution used by
+whole-tuple matching, filters or frozen gates. The implementation obligation is
+that each live binding denotes its matched source value until that branch ends,
+and emitted values preserve full typed identity. Rust lifetimes prevent the
+snapshot from being invalidated while those references are live; identity and
+join tests check the concrete behavior. This does not establish source-join
+coverage or a Lean-to-Rust refinement.
+
 ## Representation and source laws
 
 [`ColumnRelations`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ColumnRelations.lean)

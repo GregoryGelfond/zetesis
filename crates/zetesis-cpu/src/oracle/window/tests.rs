@@ -43,7 +43,7 @@ fn values() -> Vec<Value> {
 fn lookup(
     pattern: &AtomPattern,
     rows: &[&Atom],
-    assignment: &[Option<Value>],
+    assignment: &[Option<&Value>],
     limit: u64,
 ) -> Result<(Range<usize>, u64), Stop> {
     let control = Control::default();
@@ -52,14 +52,14 @@ fn lookup(
     Ok((range, work.statistics.work))
 }
 
-fn assert_linear_selection(pattern: &AtomPattern, rows: &[&Atom], assignment: &[Option<Value>]) {
+fn assert_linear_selection(pattern: &AtomPattern, rows: &[&Atom], assignment: &[Option<&Value>]) {
     // Build a test-only concrete key without calling resolve or the ordered
     // comparator. An unknown value ends the prefix even if later terms are known.
     let mut key = Vec::new();
     for term in pattern.terms() {
         match term {
             Term::Constant(value) => key.push(value.clone()),
-            Term::Variable(slot) => match &assignment[*slot] {
+            Term::Variable(slot) => match assignment[*slot] {
                 Some(value) => key.push(value.clone()),
                 None => break,
             },
@@ -89,14 +89,14 @@ fn windows_equal_linear_prefix_selection() {
     let rows: Vec<_> = rows.iter().collect();
     let mut terms: Vec<_> = values.iter().cloned().map(Term::Constant).collect();
     terms.extend([Term::Variable(0), Term::Variable(1)]);
-    let mut assignments: Vec<_> = values.iter().cloned().map(Some).collect();
+    let mut assignments: Vec<_> = values.iter().map(Some).collect();
     assignments.push(None);
     for first in &terms {
         for second in &terms {
             let pattern = pattern(vec![first.clone(), second.clone()]);
             for left in &assignments {
                 for right in &assignments {
-                    assert_linear_selection(&pattern, &rows, &[left.clone(), right.clone()]);
+                    assert_linear_selection(&pattern, &rows, &[*left, *right]);
                 }
             }
         }
