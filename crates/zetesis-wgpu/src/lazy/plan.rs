@@ -1,5 +1,6 @@
 //! Checked active shapes and retained transport payloads.
 
+use std::num::NonZeroU32;
 use zetesis_cpu::lazy;
 
 use super::{DIMENSION_WORDS, RESULT_METADATA_WORDS, UNIFORM_BYTES};
@@ -10,7 +11,7 @@ pub(super) struct Plan {
     pub(super) result_words: usize,
     pub(super) result_bytes: u64,
     pub(super) uploaded_bytes: u64,
-    pub(super) epoch: u32,
+    pub(super) epoch: NonZeroU32,
     pub(super) capacity: Capacity,
 }
 
@@ -157,6 +158,7 @@ impl Capacity {
 
 impl Plan {
     pub(super) fn new(
+        epoch: NonZeroU32,
         chunk: &lazy::Chunk<'_>,
         limits: GpuLimits,
         device: &wgpu::Limits,
@@ -167,20 +169,16 @@ impl Plan {
                 "lazy chunk exceeds checked host/device dimensions",
             )
         };
-        let dimensions = [
-            chunk.words(),
-            chunk.offsets().len(),
-            chunk.worlds(),
-            chunk.catalog_atoms(),
-        ]
-        .map(u32::try_from);
-        let [words, rules, candidates, atoms] = dimensions;
+        let dimensions = [chunk.words(), chunk.offsets().len(), chunk.worlds()].map(u32::try_from);
+        let [words, rules, candidates] = dimensions;
         let dimensions = [
             words.map_err(|_| capacity())?,
             rules.map_err(|_| capacity())?,
             candidates.map_err(|_| capacity())?,
-            atoms.map_err(|_| capacity())?,
         ];
+        // Source records address this catalog with u32 indices, even though its
+        // count is not needed in the device uniform.
+        u32::try_from(chunk.catalog_atoms()).map_err(|_| capacity())?;
         u32::try_from(chunk.records().len()).map_err(|_| capacity())?;
         dimensions[1]
             .checked_add(crate::WORKGROUP_SIZE)
@@ -236,7 +234,7 @@ impl Plan {
             result_words,
             result_bytes,
             uploaded_bytes,
-            epoch: 1,
+            epoch,
             capacity: storage,
         };
         let accounted = storage.accounted(&plan).ok_or_else(capacity)?;
@@ -244,6 +242,15 @@ impl Plan {
             return Err(capacity());
         }
         Ok(plan)
+    }
+
+    pub(super) fn params(&self) -> [u32; 4] {
+        [
+            self.dimensions[0],
+            self.dimensions[1],
+            self.dimensions[2],
+            self.epoch.get(),
+        ]
     }
 
     pub(super) fn decode(&self, words: &[u32]) -> Result<Vec<u32>, GpuError> {
@@ -266,7 +273,7 @@ impl Plan {
             .chunks_exact(width + RESULT_METADATA_WORDS)
             .enumerate()
         {
-            if record[width + 1] as usize != world || record[width + 2] != self.epoch {
+            if record[width + 1] as usize != world || record[width + 2] != self.epoch.get() {
                 return Err(malformed());
             }
             decoded.extend_from_slice(&record[..=width]);

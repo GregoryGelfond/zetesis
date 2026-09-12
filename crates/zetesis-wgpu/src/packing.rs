@@ -16,7 +16,7 @@ pub(crate) fn next_epoch(previous: u32) -> Result<NonZeroU32, GpuError> {
     previous
         .checked_add(1)
         .and_then(NonZeroU32::new)
-        .ok_or_else(|| GpuError::new(GpuErrorKind::Capacity, "static submission epoch exhausted"))
+        .ok_or_else(|| GpuError::new(GpuErrorKind::Capacity, "submission epoch exhausted"))
 }
 
 pub(crate) struct GraphPlan {

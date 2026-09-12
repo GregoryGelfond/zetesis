@@ -1,6 +1,6 @@
 // One workgroup owns one world. All instances read immutable round snapshots.
 // Newly derived heads go only to the separate output delta, never to antecedents.
-struct Dimensions { words: u32, rules: u32, worlds: u32, catalog_atoms: u32, epoch: u32, reserved0: u32, reserved1: u32, reserved2: u32 }
+struct Dimensions { words: u32, rules: u32, worlds: u32, epoch: u32 }
 @group(0) @binding(0) var<uniform> dimensions: Dimensions;
 @group(0) @binding(1) var<storage, read> offsets: array<u32>;
 @group(0) @binding(2) var<storage, read> records: array<u32>;

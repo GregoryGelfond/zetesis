@@ -168,16 +168,7 @@ impl Transport {
         chunk: &lazy::Chunk<'_>,
         plan: &Plan,
     ) -> wgpu::SubmissionIndex {
-        let dimensions = [
-            plan.dimensions[0],
-            plan.dimensions[1],
-            plan.dimensions[2],
-            plan.dimensions[3],
-            plan.epoch,
-            0,
-            0,
-            0,
-        ];
+        let dimensions = plan.params();
         runtime
             .queue()
             .write_buffer(&self.buffers.uniform, 0, bytemuck::cast_slice(&dimensions));

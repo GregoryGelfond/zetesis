@@ -1,5 +1,7 @@
 //! Capacity contracts are portable; execution selects a physical API explicitly.
 
+use std::num::NonZeroU32;
+
 use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, Predicate, Program, Seed, Template, Term, Value,
 };
@@ -12,7 +14,13 @@ use super::{Capacity, GpuLazyOracle, LazyGpuStatistics, Plan, Selection, tests::
 #[test]
 fn retained_inputs_count_toward_the_transport_ceiling() {
     inspect(|chunk| {
-        let plan = Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
+        let plan = Plan::new(
+            NonZeroU32::MIN,
+            chunk,
+            GpuLimits::default(),
+            &wgpu::Limits::default(),
+        )
+        .unwrap();
         let mut retained = plan.capacity;
         retained.inputs[0] += 64;
         retained.inputs[1] += 128;
@@ -28,7 +36,13 @@ fn retained_inputs_count_toward_the_transport_ceiling() {
 #[test]
 fn every_input_binding_must_fit_before_reuse() {
     inspect(|chunk| {
-        let plan = Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
+        let plan = Plan::new(
+            NonZeroU32::MIN,
+            chunk,
+            GpuLimits::default(),
+            &wgpu::Limits::default(),
+        )
+        .unwrap();
         for index in 0..4 {
             let mut retained = plan.capacity;
             retained.inputs[index] -= 4;
@@ -40,7 +54,13 @@ fn every_input_binding_must_fit_before_reuse() {
 #[test]
 fn result_shape_changes_require_replacement() {
     inspect(|chunk| {
-        let plan = Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
+        let plan = Plan::new(
+            NonZeroU32::MIN,
+            chunk,
+            GpuLimits::default(),
+            &wgpu::Limits::default(),
+        )
+        .unwrap();
         for result in [plan.result_bytes - 4, plan.result_bytes + 4] {
             assert!(
                 !Capacity {
@@ -57,7 +77,13 @@ fn result_shape_changes_require_replacement() {
 #[test]
 fn inactive_input_capacity_does_not_inflate_uploads() {
     inspect(|chunk| {
-        let plan = Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
+        let plan = Plan::new(
+            NonZeroU32::MIN,
+            chunk,
+            GpuLimits::default(),
+            &wgpu::Limits::default(),
+        )
+        .unwrap();
         let mut retained = plan.capacity;
         retained.inputs[1] += 128;
         let reused = LazyGpuStatistics::default()
@@ -75,7 +101,13 @@ fn inactive_input_capacity_does_not_inflate_uploads() {
 #[test]
 fn retained_capacity_arithmetic_refuses_overflow() {
     inspect(|chunk| {
-        let plan = Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
+        let plan = Plan::new(
+            NonZeroU32::MIN,
+            chunk,
+            GpuLimits::default(),
+            &wgpu::Limits::default(),
+        )
+        .unwrap();
         for retained in [
             Capacity {
                 inputs: [u64::MAX; 4],
@@ -86,7 +118,14 @@ fn retained_capacity_arithmetic_refuses_overflow() {
                 ..plan.capacity
             },
             Capacity {
-                inputs: [u64::MAX - 128, 0, 0, 0],
+                // Retained GPU bytes alone fit exactly. The independent active
+                // host packing/decode allowance must still overflow the sum.
+                inputs: [
+                    u64::MAX - super::UNIFORM_BYTES - 2 * plan.result_bytes,
+                    0,
+                    0,
+                    0,
+                ],
                 ..plan.capacity
             },
         ] {
@@ -99,7 +138,13 @@ fn retained_capacity_arithmetic_refuses_overflow() {
 #[test]
 fn transport_observation_counters_refuse_overflow() {
     inspect(|chunk| {
-        let plan = Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
+        let plan = Plan::new(
+            NonZeroU32::MIN,
+            chunk,
+            GpuLimits::default(),
+            &wgpu::Limits::default(),
+        )
+        .unwrap();
         for (statistics, reused) in [
             (
                 LazyGpuStatistics {
@@ -226,7 +271,7 @@ fn execute_inspected(
     limits: GpuLimits,
     cached: &mut Option<super::Transport>,
 ) -> Result<Vec<u32>, crate::GpuError> {
-    let plan = Plan::new(chunk, limits, oracle.runtime.limits())?;
+    let plan = Plan::new(NonZeroU32::MIN, chunk, limits, oracle.runtime.limits())?;
     let selected = Selection::new(
         cached.as_ref().map(|value| value.capacity),
         &plan,
@@ -314,8 +359,13 @@ fn source_sequence_exercises_transport_resize_boundaries() {
             selection,
             &Control::default(),
             |chunk| {
-                let plan =
-                    Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
+                let plan = Plan::new(
+                    NonZeroU32::MIN,
+                    chunk,
+                    GpuLimits::default(),
+                    &wgpu::Limits::default(),
+                )
+                .unwrap();
                 let selected = Selection::new(retained, &plan, u64::MAX);
                 let reused = selected.transition.is_reuse();
                 if let Some(previous) = previous {
@@ -370,7 +420,13 @@ fn qualify_lazy_transport_reuse_preserves_round_truth(backend: GpuBackendPrefere
             selection,
             &Control::default(),
             |chunk| {
-                let plan = Plan::new(chunk, GpuLimits::default(), oracle.runtime.limits()).unwrap();
+                let plan = Plan::new(
+                    NonZeroU32::MIN,
+                    chunk,
+                    GpuLimits::default(),
+                    oracle.runtime.limits(),
+                )
+                .unwrap();
                 let reuses = oracle.statistics.transport_reuses;
                 let result =
                     execute_inspected(&mut oracle, chunk, GpuLimits::default(), &mut cached)?;
@@ -462,7 +518,13 @@ fn qualify_input_slack_preserves_exact_admission(backend: GpuBackendPreference) 
             selection,
             &Control::default(),
             |chunk| {
-                let plan = Plan::new(chunk, GpuLimits::default(), oracle.runtime.limits()).unwrap();
+                let plan = Plan::new(
+                    NonZeroU32::MIN,
+                    chunk,
+                    GpuLimits::default(),
+                    oracle.runtime.limits(),
+                )
+                .unwrap();
                 let maximum = plan.capacity.accounted(&plan).unwrap();
                 execute_inspected(
                     &mut oracle,
@@ -511,7 +573,13 @@ fn qualify_lazy_transport_refusal_preserves_reuse(backend: GpuBackendPreference)
         }
         ran = true;
         let mut cached = None;
-        let plan = Plan::new(chunk, GpuLimits::default(), oracle.runtime.limits()).unwrap();
+        let plan = Plan::new(
+            NonZeroU32::MIN,
+            chunk,
+            GpuLimits::default(),
+            oracle.runtime.limits(),
+        )
+        .unwrap();
         let exact = plan.capacity.accounted(&plan).unwrap();
         let expected = lazy::evaluate(chunk).unwrap();
         assert_eq!(
@@ -641,7 +709,13 @@ fn qualify_cancelled_replacement(backend: GpuBackendPreference) {
         lazy::SourceSelection::Worlds,
         &Control::default(),
         |chunk| {
-            let plan = Plan::new(chunk, GpuLimits::default(), oracle.runtime.limits()).unwrap();
+            let plan = Plan::new(
+                NonZeroU32::MIN,
+                chunk,
+                GpuLimits::default(),
+                oracle.runtime.limits(),
+            )
+            .unwrap();
             let selected = Selection::new(
                 cached
                     .as_ref()

@@ -1,5 +1,7 @@
 //! Capacity observations are portable shape evidence, not device work.
 
+use std::num::NonZeroU32;
+
 use crate::{GpuErrorKind, GpuLimits};
 
 use super::{LazyGpuStatistics, Plan, Selection, tests::inspect};
@@ -7,7 +9,13 @@ use super::{LazyGpuStatistics, Plan, Selection, tests::inspect};
 #[test]
 fn growth_reasons_identify_undersized_inputs() {
     inspect(|chunk| {
-        let plan = Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
+        let plan = Plan::new(
+            NonZeroU32::MIN,
+            chunk,
+            GpuLimits::default(),
+            &wgpu::Limits::default(),
+        )
+        .unwrap();
         let expected = [
             super::LazyTransportReplacements {
                 offsets_growth: 1,
@@ -41,7 +49,13 @@ fn growth_reasons_identify_undersized_inputs() {
 #[test]
 fn replacement_reasons_preserve_simultaneous_causes() {
     inspect(|chunk| {
-        let plan = Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
+        let plan = Plan::new(
+            NonZeroU32::MIN,
+            chunk,
+            GpuLimits::default(),
+            &wgpu::Limits::default(),
+        )
+        .unwrap();
         let mut retained = plan.capacity;
         retained.inputs[0] -= 4;
         retained.inputs[1] += 128;
@@ -67,7 +81,13 @@ fn replacement_reasons_preserve_simultaneous_causes() {
 #[test]
 fn retention_overflow_is_distinct_from_a_byte_limit() {
     inspect(|chunk| {
-        let plan = Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
+        let plan = Plan::new(
+            NonZeroU32::MIN,
+            chunk,
+            GpuLimits::default(),
+            &wgpu::Limits::default(),
+        )
+        .unwrap();
         let mut retained = plan.capacity;
         retained.inputs[1] = u64::MAX;
         let observed = LazyGpuStatistics::default()
@@ -86,7 +106,13 @@ fn retention_overflow_is_distinct_from_a_byte_limit() {
 #[test]
 fn reuse_retains_replacement_observations() {
     inspect(|chunk| {
-        let plan = Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
+        let plan = Plan::new(
+            NonZeroU32::MIN,
+            chunk,
+            GpuLimits::default(),
+            &wgpu::Limits::default(),
+        )
+        .unwrap();
         let first = LazyGpuStatistics::default()
             .submitted(&plan, Selection::new(None, &plan, u64::MAX))
             .unwrap();
@@ -107,7 +133,13 @@ fn reuse_retains_replacement_observations() {
 #[test]
 fn replacement_counter_overflow_preserves_statistics() {
     inspect(|chunk| {
-        let plan = Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
+        let plan = Plan::new(
+            NonZeroU32::MIN,
+            chunk,
+            GpuLimits::default(),
+            &wgpu::Limits::default(),
+        )
+        .unwrap();
         let statistics = LazyGpuStatistics {
             dispatches: 7,
             transport_replacements: super::LazyTransportReplacements {
@@ -246,9 +278,13 @@ fn three_way_joins_expose_retention_causes() {
                         selection,
                         &Control::default(),
                         |chunk| {
-                            let plan =
-                                Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default())
-                                    .unwrap();
+                            let plan = Plan::new(
+                                NonZeroU32::MIN,
+                                chunk,
+                                GpuLimits::default(),
+                                &wgpu::Limits::default(),
+                            )
+                            .unwrap();
                             let selected = Selection::new(retained, &plan, u64::MAX);
                             retained = Some(selected.capacity);
                             statistics = statistics.submitted(&plan, selected).unwrap();

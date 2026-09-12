@@ -67,13 +67,9 @@ impl Resident {
             .checked_add(PARAM_BYTES)
             .and_then(|bytes| bytes.checked_add(plan.masks))
             .ok_or_else(|| capacity("aggregate upload accounting overflow"))?;
-        if self.transport.is_none() {
-            self.transport = Some(Transport::new(runtime, self, plan));
-        }
         let transport = self
             .transport
-            .as_ref()
-            .expect("aggregate transport allocated");
+            .get_or_insert_with(|| Transport::new(runtime, &self.tuples, &self.guards, plan));
         poll(control)?;
         runtime.queue().write_buffer(
             &transport.params,
@@ -128,7 +124,7 @@ pub(super) struct Transport {
     group: wgpu::BindGroup,
 }
 impl Transport {
-    fn new(runtime: &Runtime, resident: &Resident, plan: &Plan) -> Self {
+    fn new(runtime: &Runtime, tuples: &wgpu::Buffer, guards: &wgpu::Buffer, plan: &Plan) -> Self {
         let params = runtime::buffer(
             runtime.device(),
             "aggregate dimensions",
@@ -160,8 +156,8 @@ impl Transport {
                 layout: &runtime.pipeline.get_bind_group_layout(0),
                 entries: &[
                     runtime::entry(0, &params),
-                    runtime::entry(1, &resident.tuples),
-                    runtime::entry(2, &resident.guards),
+                    runtime::entry(1, tuples),
+                    runtime::entry(2, guards),
                     runtime::entry(3, &masks),
                     runtime::entry(4, &output),
                 ],

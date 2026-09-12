@@ -65,6 +65,12 @@ An empty batch checks context health and graph admission, then returns without
 transport allocation, dispatch limits or an epoch increment. Clearing residency
 does not reset epochs; exhausting their 32-bit sequence requires a new oracle.
 
+Lazy plans also receive a checked nonzero submission epoch when constructed.
+Their 16-byte uniform contains only word count, rule count, world count and
+epoch; the source catalog's address range is checked on the host. Every returned
+world record must match the plan's epoch and ordinal. Retained buffers do not
+retain an earlier chunk's output or reset the oracle's submission sequence.
+
 Adapter, allocation, limit, cancellation, timeout, validation and device failures
 remain failures or incomplete work. They are never converted into UNSAT results.
 Resident plans and transport buffers retain explicit identity and capacity

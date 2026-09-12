@@ -26,8 +26,8 @@ use plan::{Capacity, Plan, Selection};
 use transport::Transport;
 
 const SHADER: &str = include_str!("lazy.wgsl");
-const DIMENSION_WORDS: usize = 4;
-const UNIFORM_BYTES: u64 = 32;
+const DIMENSION_WORDS: usize = 3;
+const UNIFORM_BYTES: u64 = 16;
 const RESULT_METADATA_WORDS: usize = 3;
 
 /// Actual submitted device work for the latest attempted lazy batch, including
@@ -291,12 +291,9 @@ impl GpuLazyOracle {
         transport: &mut Option<Transport>,
     ) -> Result<Vec<u32>, GpuError> {
         self.runtime.check_health()?;
-        let mut plan = Plan::new(chunk, limits, self.runtime.limits())?;
-        let epoch = self.epoch.checked_add(1).ok_or_else(|| {
-            GpuError::new(GpuErrorKind::Capacity, "lazy submission identity exhausted")
-        })?;
-        plan.epoch = epoch;
-        self.epoch = epoch;
+        let epoch = crate::packing::next_epoch(self.epoch)?;
+        let plan = Plan::new(epoch, chunk, limits, self.runtime.limits())?;
+        self.epoch = epoch.get();
         let scopes = ErrorScopes::new(self.runtime.device());
         let outcome = self.dispatch(chunk, limits, &plan, control, transport);
         let result = self.runtime.complete(scopes, outcome);
@@ -329,7 +326,9 @@ impl GpuLazyOracle {
                 |previous| previous.replace(&self.runtime, selection),
             ));
         }
-        let transport = cached.as_ref().expect("transport retained or replaced");
+        let transport = cached.as_ref().ok_or_else(|| {
+            GpuError::new(GpuErrorKind::Device, "lazy transport is not initialized")
+        })?;
         let submission = transport.submit(&self.runtime, chunk, plan);
         self.statistics = counters;
         let start = std::time::Instant::now();
@@ -434,6 +433,7 @@ mod capability_tests;
 #[cfg(test)]
 mod tests {
     use crate::{GpuErrorKind, GpuLimits};
+    use std::num::NonZeroU32;
     use zetesis_core::{AdmissionLimits, AtomPattern, Predicate, Program, Seed, Template};
     use zetesis_cpu::{Control, lazy};
 
@@ -468,12 +468,19 @@ mod tests {
     fn lazy_transport_bytes_have_an_exact_ceiling() {
         inspect(|chunk| {
             let device = wgpu::Limits::default();
-            let plan = super::Plan::new(chunk, GpuLimits::default(), &device).unwrap();
-            assert_eq!(plan.dimensions, [1, 1, 1, 1]);
+            let plan =
+                super::Plan::new(NonZeroU32::MIN, chunk, GpuLimits::default(), &device).unwrap();
+            assert_eq!(plan.dimensions, [1, 1, 1]);
             assert_eq!(plan.result_words, 4);
+            // Four live uniform words, one offset, one four-word source record,
+            // one snapshot word and one seed word: 44 uploaded bytes. Retained
+            // buffers plus host packing and decoded output total 136 bytes.
+            assert_eq!(plan.uploaded_bytes, 44);
+            assert_eq!(plan.capacity.accounted(&plan), Some(136));
             let accounted = plan.uploaded_bytes * 2 + plan.result_bytes * 3;
             assert!(
                 super::Plan::new(
+                    NonZeroU32::MIN,
                     chunk,
                     GpuLimits {
                         max_batch_bytes: accounted,
@@ -484,6 +491,7 @@ mod tests {
                 .is_ok()
             );
             let error = super::Plan::new(
+                NonZeroU32::MIN,
                 chunk,
                 GpuLimits {
                     max_batch_bytes: accounted - 1,
@@ -504,7 +512,7 @@ mod tests {
                 max_storage_buffer_binding_size: 8,
                 ..wgpu::Limits::default()
             };
-            let error = super::Plan::new(chunk, GpuLimits::default(), &device)
+            let error = super::Plan::new(NonZeroU32::MIN, chunk, GpuLimits::default(), &device)
                 .err()
                 .unwrap();
             assert_eq!(error.kind(), GpuErrorKind::Capacity);
@@ -515,6 +523,7 @@ mod tests {
     fn lazy_transport_refuses_excess_candidate_occurrences() {
         inspect(|chunk| {
             let error = super::Plan::new(
+                NonZeroU32::MIN,
                 chunk,
                 GpuLimits {
                     max_candidates: 0,
@@ -531,8 +540,13 @@ mod tests {
     #[test]
     fn lazy_submission_counters_refuse_overflow() {
         inspect(|chunk| {
-            let plan =
-                super::Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
+            let plan = super::Plan::new(
+                NonZeroU32::MIN,
+                chunk,
+                GpuLimits::default(),
+                &wgpu::Limits::default(),
+            )
+            .unwrap();
             for statistics in [
                 super::LazyGpuStatistics {
                     dispatches: u64::MAX,
@@ -561,13 +575,18 @@ mod tests {
     #[test]
     fn lazy_readback_requires_submission_identity() {
         inspect(|chunk| {
-            let plan =
-                super::Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
+            let plan = super::Plan::new(
+                NonZeroU32::MIN,
+                chunk,
+                GpuLimits::default(),
+                &wgpu::Limits::default(),
+            )
+            .unwrap();
             let mut output = vec![0; plan.result_words];
             let width = plan.dimensions[0] as usize;
-            output[width + 2] = plan.epoch;
+            output[width + 2] = plan.epoch.get();
             assert_eq!(plan.decode(&output).unwrap(), vec![0; width + 1]);
-            output[width + 2] = plan.epoch + 1;
+            output[width + 2] = plan.epoch.get() + 1;
             assert_eq!(
                 plan.decode(&output).unwrap_err().kind(),
                 GpuErrorKind::Readback
@@ -578,12 +597,17 @@ mod tests {
     #[test]
     fn lazy_readback_requires_world_identity() {
         inspect(|chunk| {
-            let plan =
-                super::Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
+            let plan = super::Plan::new(
+                NonZeroU32::MIN,
+                chunk,
+                GpuLimits::default(),
+                &wgpu::Limits::default(),
+            )
+            .unwrap();
             let mut output = vec![0; plan.result_words];
             let width = plan.dimensions[0] as usize;
             output[width + 1] = 1;
-            output[width + 2] = plan.epoch;
+            output[width + 2] = plan.epoch.get();
             assert_eq!(
                 plan.decode(&output).unwrap_err().kind(),
                 GpuErrorKind::Readback
@@ -594,8 +618,13 @@ mod tests {
     #[test]
     fn lazy_readback_requires_the_complete_output_shape() {
         inspect(|chunk| {
-            let plan =
-                super::Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
+            let plan = super::Plan::new(
+                NonZeroU32::MIN,
+                chunk,
+                GpuLimits::default(),
+                &wgpu::Limits::default(),
+            )
+            .unwrap();
             assert_eq!(plan.decode(&[]).unwrap_err().kind(), GpuErrorKind::Readback);
         });
     }
@@ -607,13 +636,13 @@ mod tests {
                 max_uniform_buffer_binding_size: super::UNIFORM_BYTES,
                 ..wgpu::Limits::default()
             };
-            assert!(super::Plan::new(chunk, GpuLimits::default(), &exact).is_ok());
+            assert!(super::Plan::new(NonZeroU32::MIN, chunk, GpuLimits::default(), &exact).is_ok());
             let below = wgpu::Limits {
                 max_uniform_buffer_binding_size: super::UNIFORM_BYTES - 1,
                 ..exact
             };
             assert_eq!(
-                super::Plan::new(chunk, GpuLimits::default(), &below)
+                super::Plan::new(NonZeroU32::MIN, chunk, GpuLimits::default(), &below)
                     .err()
                     .unwrap()
                     .kind(),
@@ -627,6 +656,7 @@ mod tests {
         inspect(|chunk| {
             assert_eq!(
                 super::Plan::new(
+                    NonZeroU32::MIN,
                     chunk,
                     GpuLimits {
                         timeout: std::time::Duration::ZERO,

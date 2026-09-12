@@ -56,3 +56,56 @@ fn lazy_profile_refuses_each_resource_one_below_its_requirement() {
         );
     }
 }
+
+#[test]
+fn lazy_uniform_contains_only_the_live_protocol_fields() {
+    let module = naga::front::wgsl::parse_str(super::SHADER).unwrap();
+    let (_, dimensions) = module
+        .types
+        .iter()
+        .find(|(_, ty)| ty.name.as_deref() == Some("Dimensions"))
+        .unwrap();
+    let naga::TypeInner::Struct { members, span } = &dimensions.inner else {
+        panic!("uniform has a defined struct layout");
+    };
+    assert_eq!(u64::from(*span), super::UNIFORM_BYTES);
+    assert_eq!(*span, 16);
+    assert_eq!(
+        members
+            .iter()
+            .map(|member| (member.name.as_deref(), member.offset))
+            .collect::<Vec<_>>(),
+        [
+            (Some("words"), 0),
+            (Some("rules"), 4),
+            (Some("worlds"), 8),
+            (Some("epoch"), 12)
+        ]
+    );
+}
+
+#[test]
+fn lazy_plan_owns_the_supplied_submission_identity() {
+    super::tests::inspect(|chunk| {
+        for previous in [0, 41, u32::MAX - 1] {
+            let epoch = crate::packing::next_epoch(previous).unwrap();
+            let plan = super::Plan::new(
+                epoch,
+                chunk,
+                crate::GpuLimits::default(),
+                &wgpu::Limits::default(),
+            )
+            .unwrap();
+            assert_eq!(plan.params(), [1, 1, 1, previous + 1]);
+            assert_eq!(plan.decode(&[0, 0, 0, previous + 1]).unwrap(), [0, 0]);
+            assert_eq!(
+                plan.decode(&[0, 0, 0, previous]).unwrap_err().kind(),
+                GpuErrorKind::Readback
+            );
+        }
+        assert_eq!(
+            crate::packing::next_epoch(u32::MAX).unwrap_err().kind(),
+            GpuErrorKind::Capacity
+        );
+    });
+}

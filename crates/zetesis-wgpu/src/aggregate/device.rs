@@ -190,22 +190,20 @@ impl GpuAggregateOracle {
         poll(control)?;
         let scopes = ErrorScopes::new(self.runtime.device());
         if fresh {
-            self.resident = Some(Resident::new(&self.runtime, Arc::clone(&group.numeric)));
             self.activity.uploaded_bytes = group.numeric.bytes;
         }
-        self.epoch = epoch;
-        let outcome = self
+        let resident = self
             .resident
-            .as_mut()
-            .expect("prepared aggregate residency")
-            .dispatch(
-                &self.runtime,
-                &masks,
-                &plan,
-                limits.timeout,
-                control,
-                &mut self.activity,
-            );
+            .get_or_insert_with(|| Resident::new(&self.runtime, Arc::clone(&group.numeric)));
+        self.epoch = epoch;
+        let outcome = resident.dispatch(
+            &self.runtime,
+            &masks,
+            &plan,
+            limits.timeout,
+            control,
+            &mut self.activity,
+        );
         let result = self.runtime.complete(scopes, outcome).and_then(|results| {
             poll(control)?;
             Ok(results)

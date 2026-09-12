@@ -1,5 +1,7 @@
 //! Prospective payload bounds and submitted per-binding observations.
 
+use std::num::NonZeroU32;
+
 use super::{
     Capacity, LazyBufferUsage, LazyGpuStatistics, LazyTransportUsage, Plan, Selection,
     plan::Allowance, tests::inspect,
@@ -9,7 +11,13 @@ use crate::{GpuErrorKind, GpuLimits};
 #[test]
 fn selective_retention_preserves_every_admitted_ceiling() {
     inspect(|chunk| {
-        let plan = Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
+        let plan = Plan::new(
+            NonZeroU32::MIN,
+            chunk,
+            GpuLimits::default(),
+            &wgpu::Limits::default(),
+        )
+        .unwrap();
         let exact = plan.capacity.accounted(&plan).unwrap();
         // Exhaust the independent smaller/exact/larger input shapes, each
         // result shape direction, and both tight and generous allowances.
@@ -60,7 +68,13 @@ fn selective_retention_preserves_every_admitted_ceiling() {
 #[test]
 fn prospective_growth_can_require_releasing_input_slack() {
     inspect(|chunk| {
-        let plan = Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
+        let plan = Plan::new(
+            NonZeroU32::MIN,
+            chunk,
+            GpuLimits::default(),
+            &wgpu::Limits::default(),
+        )
+        .unwrap();
         let mut previous = plan.capacity;
         previous.inputs[0] -= 4;
         previous.inputs[1] += 64;
@@ -83,7 +97,13 @@ fn prospective_growth_can_require_releasing_input_slack() {
 #[test]
 fn tight_fallback_preserves_exact_fit_buffers() {
     inspect(|chunk| {
-        let plan = Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
+        let plan = Plan::new(
+            NonZeroU32::MIN,
+            chunk,
+            GpuLimits::default(),
+            &wgpu::Limits::default(),
+        )
+        .unwrap();
         let mut previous = plan.capacity;
         previous.inputs[1] += 128;
         let maximum = plan.capacity.accounted(&plan).unwrap();
@@ -98,7 +118,13 @@ fn tight_fallback_preserves_exact_fit_buffers() {
 #[test]
 fn overflow_releases_slack_without_refusing_the_exact_shape() {
     inspect(|chunk| {
-        let plan = Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
+        let plan = Plan::new(
+            NonZeroU32::MIN,
+            chunk,
+            GpuLimits::default(),
+            &wgpu::Limits::default(),
+        )
+        .unwrap();
         let mut previous = plan.capacity;
         previous.inputs[2] = u64::MAX;
         let chosen = Selection::new(Some(previous), &plan, u64::MAX);
@@ -128,7 +154,13 @@ fn bindings(usage: LazyTransportUsage) -> [LazyBufferUsage; 7] {
 #[test]
 fn every_submitted_binding_has_one_usage_observation() {
     inspect(|chunk| {
-        let plan = Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
+        let plan = Plan::new(
+            NonZeroU32::MIN,
+            chunk,
+            GpuLimits::default(),
+            &wgpu::Limits::default(),
+        )
+        .unwrap();
         let mut previous = plan.capacity;
         let mut observed = LazyGpuStatistics::default()
             .submitted(&plan, Selection::new(None, &plan, u64::MAX))
@@ -202,7 +234,13 @@ fn usage_sums_refuse_each_field_overflow() {
 #[test]
 fn usage_overflow_keeps_submission_statistics_unchanged() {
     inspect(|chunk| {
-        let plan = Plan::new(chunk, GpuLimits::default(), &wgpu::Limits::default()).unwrap();
+        let plan = Plan::new(
+            NonZeroU32::MIN,
+            chunk,
+            GpuLimits::default(),
+            &wgpu::Limits::default(),
+        )
+        .unwrap();
         let observed = LazyGpuStatistics {
             transport_usage: LazyTransportUsage {
                 uniform: LazyBufferUsage {
