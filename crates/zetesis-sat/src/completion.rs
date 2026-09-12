@@ -29,6 +29,8 @@ pub struct CompletionStatistics {
     /// conservative transient envelope. May exceed the ceiling on a post-
     /// reservation scratch refusal; no candidate work has then started.
     /// Allocator/table control overhead, stacks and device memory are excluded.
+    /// Saturates at `u64::MAX` if the envelope is unrepresentable. Such an
+    /// attempt fails; an earlier reservation error retains precedence.
     pub peak_scratch_bytes: u64,
     /// Candidate slots actually entered, including supplied certificates.
     pub candidates: usize,
@@ -168,6 +170,27 @@ impl CompletionExecutor {
         statistics: &mut Statistics,
         accepted: &mut Vec<bool>,
     ) -> Result<(), Incomplete> {
+        self.complete_with(
+            input,
+            budget,
+            statistics,
+            accepted,
+            reduct_query::Workspace::reserve,
+        )
+    }
+
+    fn complete_with(
+        &mut self,
+        input: Input<'_>,
+        budget: &mut Budget<'_>,
+        statistics: &mut Statistics,
+        accepted: &mut Vec<bool>,
+        mut reserve: impl FnMut(
+            &mut reduct_query::Workspace,
+            &Theory,
+            crate::AdmissionLimits,
+        ) -> Result<(), Incomplete>,
+    ) -> Result<(), Incomplete> {
         self.last = None;
         let timed = statistics.phase_timings.is_some();
         let mut progress = CompletionStatistics {
@@ -189,28 +212,31 @@ impl CompletionExecutor {
                 requirements.admit(self.workers().min(residuals), self.max_scratch_bytes)?;
             progress.effective_workers = admission.0;
             progress.requested_scratch_bytes = admission.1;
+            progress.peak_scratch_bytes = requirements.result_bytes;
             accepted
                 .try_reserve_exact(input.candidates.len())
                 .map_err(|_| Incomplete::Allocation)?;
             let mut workspaces = storage(admission.0)?;
             let transient = scratch::transient(input.theory, input.limits)?;
             let mut peak = u128::from(requirements.result_bytes)
-                + workspaces.capacity().saturating_sub(admission.0) as u128
+                + workspaces.capacity() as u128
                     * std::mem::size_of::<reduct_query::Workspace>() as u128;
+            record_peak(&mut progress, peak)?;
             for _ in 0..admission.0 {
                 budget.control.poll()?;
                 let mut workspace = reduct_query::Workspace::default();
-                workspace.reserve(input.theory, input.limits.admission)?;
-                peak += workspace.retained_bytes() + transient;
-                progress.peak_scratch_bytes =
-                    u64::try_from(peak).map_err(|_| Incomplete::CounterOverflow)?;
+                let reservation = reserve(&mut workspace, input.theory, input.limits.admission);
+                // Every header was counted with the outer allocation. Even a
+                // failed reservation can retain newly allocated query vectors.
+                peak += workspace.retained_bytes()
+                    - std::mem::size_of::<reduct_query::Workspace>() as u128
+                    + transient;
+                record_reservation(&mut progress, peak, reservation)?;
                 if progress.peak_scratch_bytes > self.max_scratch_bytes {
                     return Err(Incomplete::CompletionScratch);
                 }
                 workspaces.push(workspace);
             }
-            progress.peak_scratch_bytes =
-                u64::try_from(peak).map_err(|_| Incomplete::CounterOverflow)?;
             if let Some(pool) = &self.pool
                 && !workspaces.is_empty()
             {
@@ -238,6 +264,22 @@ impl CompletionExecutor {
         self.last = Some(progress);
         result
     }
+}
+
+fn record_peak(progress: &mut CompletionStatistics, peak: u128) -> Result<(), Incomplete> {
+    let measured = u64::try_from(peak).map_err(|_| Incomplete::CounterOverflow);
+    progress.peak_scratch_bytes = measured.unwrap_or(u64::MAX);
+    measured.map(|_| ())
+}
+
+fn record_reservation(
+    progress: &mut CompletionStatistics,
+    peak: u128,
+    reservation: Result<(), Incomplete>,
+) -> Result<(), Incomplete> {
+    let measured = record_peak(progress, peak);
+    reservation?;
+    measured
 }
 
 /// Borrows the immutable batch owner for the lifetime of a joined execution.
@@ -464,3 +506,7 @@ fn merge_timing(progress: &mut CompletionStatistics, worker: Option<SearchPhaseT
         }
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/support/completion_reservation.rs"]
+mod reservation_tests;
