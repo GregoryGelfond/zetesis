@@ -106,6 +106,27 @@ substitutions, nodes, work, candidate occurrences, retained results or transport
 storage. Zero is a real ceiling where those limits apply; it does not mean
 unlimited. Work and storage limits are independent.
 
+Ordinary sessions and CLI flags share `SolveConfig::DEFAULT`: ten billion
+cumulative search-work units, ten million branch decisions, ten million
+candidates and one hundred million CPU oracle-work units under that field's
+per-candidate or shared-batch contract. These are finite logical allowances,
+not wall-clock deadlines or performance claims. Standalone primitive limit
+types keep their own operation-specific defaults. Source admission, derived
+atoms, carrier storage, batch bytes, objective retention and complete `WorldView`
+capture remain independently bounded; requesting every answer does not make
+those resources unlimited. A smaller explicit work, decision or candidate
+allowance still yields an interrupted prefix when exhausted.
+
+The [streaming regression](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/tests/streaming_defaults.rs)
+checks every full answer for independent selections on a 24-vertex path against
+an independently generated bitmask family, using both automatic specialization
+and the general countermodel oracle. The former already completes within the
+previous search-work allowance; the latter needs more work and still interrupts
+when explicitly given that earlier ceiling. The test releases each answer after
+checking its identity; it does not collect a `WorldView` or bypass that type's
+retention limits. This demonstrates completed enumeration within the ordinary
+allowances, not a running-time guarantee or a change to answer-set semantics.
+
 `Control` is cloneable shared cancellation with an optional absolute deadline.
 Cancellation is observed at cooperative polling boundaries, not by forcibly
 terminating arbitrary work. In particular, an already-started bounded static

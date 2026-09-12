@@ -87,6 +87,9 @@ pub struct SolveConfig {
 
 impl SolveConfig {
     /// Shared ordinary-solve defaults used by both library sessions and CLI flags.
+    /// These finite session allowances differ from standalone primitive defaults.
+    /// Logical work ceilings do not impose a wall-clock deadline or remove the
+    /// independently configured source, storage and materialization limits.
     pub const DEFAULT: Self = Self {
         backend: Backend::Auto,
         grounder: Grounder::Auto,
@@ -94,8 +97,8 @@ impl SolveConfig {
         oracle: Oracle::Auto,
         stats: false,
         models: 1,
-        max_search_work: 100_000_000,
-        max_search_decisions: 1_000_000,
+        max_search_work: 10_000_000_000,
+        max_search_decisions: 10_000_000,
         max_objective_work: 100_000_000,
         max_objective_bound_work: 10_000_000,
         max_objective_bindings: 1_000_000,
@@ -108,10 +111,10 @@ impl SolveConfig {
         workers: NonZeroUsize::new(4).unwrap(),
         completion_workers: NonZeroUsize::new(1).unwrap(),
         max_completion_scratch_bytes: 268_435_456,
-        max_candidates: 1_000_000,
+        max_candidates: 10_000_000,
         max_carrier_atoms: 4_096,
         max_candidate_bytes: 67_108_864,
-        max_work: 10_000_000,
+        max_work: 100_000_000,
         gpu_formula_work: 100_000_000,
         gpu_formula_rounds: 64,
         max_source_work: 10_000_000,
