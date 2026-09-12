@@ -13,6 +13,34 @@ pub struct OutputSelection {
 /// Truthful atom-channel name; `OutputSelection` remains the compatibility name.
 pub type AtomSelection = OutputSelection;
 
+/// Source collection owns an unordered occurrence buffer. Only `finish`
+/// publishes the immutable canonical selection used by membership queries.
+#[derive(Default)]
+pub(super) struct Builder {
+    explicit: bool,
+    signatures: Vec<Predicate>,
+}
+
+impl Builder {
+    pub(super) fn mark_explicit(&mut self) {
+        self.explicit = true;
+    }
+
+    pub(super) fn include(&mut self, signature: Predicate) {
+        self.mark_explicit();
+        self.signatures.push(signature);
+    }
+
+    pub(super) fn finish(mut self) -> OutputSelection {
+        self.signatures.sort_unstable();
+        self.signatures.dedup();
+        OutputSelection {
+            explicit: self.explicit,
+            signatures: self.signatures,
+        }
+    }
+}
+
 /// Inclusive admission limits for an explicit signed-signature slice.
 #[derive(Clone, Copy, Debug)]
 pub struct AtomSelectionLimits {
@@ -113,17 +141,6 @@ impl OutputSelection {
     #[must_use]
     pub fn is_explicit(&self) -> bool {
         self.explicit
-    }
-
-    pub(super) fn mark_explicit(&mut self) {
-        self.explicit = true;
-    }
-
-    pub(super) fn include(&mut self, signature: Predicate) {
-        self.mark_explicit();
-        if let Err(position) = self.signatures.binary_search(&signature) {
-            self.signatures.insert(position, signature);
-        }
     }
 
     /// The union of signed predicate signatures selected explicitly. An empty

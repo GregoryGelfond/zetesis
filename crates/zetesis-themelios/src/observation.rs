@@ -408,7 +408,7 @@ impl ObservationProgram {
         fallback: Location,
     ) -> Result<Self, crate::MetadataError> {
         crate::SourceMetadata::compile(program, limits, fallback)
-            .map(|metadata| metadata.observations)
+            .map(crate::SourceMetadata::into_observations)
     }
 
     /// Whether the term channel contains no source templates.

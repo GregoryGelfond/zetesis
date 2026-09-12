@@ -20,7 +20,7 @@ use themelios_syntax::parse::Parse;
 use themelios_syntax::tree::AstNode;
 
 use crate::expansion::Budget;
-use crate::{AdmissionFailure, ExpansionResource, FormulaFailure, SourceMetadata, metadata};
+use crate::{AdmissionFailure, ExpansionResource, FormulaFailure, metadata};
 
 /// Only `include` produces variants, from an already admitted original parse.
 /// The upstream raise materializes one occurrence owner, bounded by the admitted
@@ -136,7 +136,7 @@ impl Catalog {
 /// this composition pairs the original parse with its occurrence stream.
 pub(crate) fn raise(
     parsed: &Parse<ast::Program>,
-    metadata: &mut SourceMetadata,
+    metadata: &mut metadata::Builder,
     budget: &mut Budget,
     choices: &mut Catalog,
 ) -> Result<Program, FormulaFailure> {

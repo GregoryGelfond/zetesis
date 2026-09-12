@@ -106,3 +106,50 @@ fn constant_selections_need_no_signature_probe() {
         Ok(false)
     );
 }
+
+#[test]
+fn source_selection_matches_explicit_union_construction() {
+    use std::fmt::Write;
+    use zetesis_themelios::{AdmissionOptions, ExpansionLimits, admit_extended};
+
+    let signatures: Vec<_> = (0..256)
+        .rev()
+        .map(|index| {
+            Predicate::with_sign(
+                format!("p{index:03}"),
+                index % 3,
+                if index % 2 == 0 {
+                    Sign::Positive
+                } else {
+                    Sign::Negative
+                },
+            )
+            .unwrap()
+        })
+        .collect();
+    let mut source = String::new();
+    for signature in signatures.iter().chain(&signatures) {
+        let prefix = if signature.sign() == Sign::Negative {
+            "-"
+        } else {
+            ""
+        };
+        writeln!(
+            source,
+            "#show {prefix}{}/{}.",
+            signature.name(),
+            signature.arity()
+        )
+        .unwrap();
+    }
+    let admitted = admit_extended(
+        source,
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+    )
+    .unwrap();
+    let expected =
+        AtomSelection::from_signatures(&signatures, AtomSelectionLimits::default()).unwrap();
+    assert_eq!(admitted.metadata().atom_selection(), &expected);
+    assert_eq!(admitted.metadata().directives().len(), 512);
+}

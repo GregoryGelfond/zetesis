@@ -64,6 +64,15 @@ impl LocatedDirective {
 pub struct SourceMetadata {
     directives: Vec<LocatedDirective>,
     output: OutputSelection,
+    observations: crate::observation::ObservationProgram,
+}
+
+/// Collection state cannot be observed as a completed output policy. Signature
+/// occurrences append in source order and are canonicalized once at publication.
+#[derive(Default)]
+pub(crate) struct Builder {
+    directives: Vec<LocatedDirective>,
+    output: selection::Builder,
     pub(crate) observations: crate::observation::ObservationProgram,
 }
 
@@ -101,10 +110,20 @@ impl SourceMetadata {
         &self.observations
     }
 
-    pub(crate) fn finish(mut self) -> Self {
+    pub(crate) fn into_observations(self) -> crate::observation::ObservationProgram {
+        self.observations
+    }
+}
+
+impl Builder {
+    pub(crate) fn finish(mut self) -> SourceMetadata {
         self.directives
             .sort_by_key(|entry| (entry.location.source, entry.location.span));
-        self
+        SourceMetadata {
+            directives: self.directives,
+            output: self.output.finish(),
+            observations: self.observations,
+        }
     }
 }
 
@@ -154,14 +173,14 @@ pub(crate) fn check_count(
 
 pub(crate) fn collect(
     program: &SourceProgram,
-    metadata: &mut SourceMetadata,
+    metadata: &mut Builder,
 ) -> Result<(), AdmissionFailure> {
     collect_profile(program, metadata, false)
 }
 
 pub(crate) fn collect_profile(
     program: &SourceProgram,
-    metadata: &mut SourceMetadata,
+    metadata: &mut Builder,
     formula: bool,
 ) -> Result<(), AdmissionFailure> {
     collect_carriers(program.statements(), metadata, formula)
@@ -174,7 +193,7 @@ pub(crate) fn collect_profile(
 /// precedence between otherwise valid source declarations.
 pub(crate) fn collect_occurrences(
     occurrences: &Occurrences,
-    metadata: &mut SourceMetadata,
+    metadata: &mut Builder,
 ) -> Result<(), AdmissionFailure> {
     collect_carriers(
         occurrences
@@ -188,7 +207,7 @@ pub(crate) fn collect_occurrences(
 
 fn collect_carriers<'a>(
     carriers: impl Iterator<Item = &'a WithProvenance<Statement>>,
-    metadata: &mut SourceMetadata,
+    metadata: &mut Builder,
     formula: bool,
 ) -> Result<(), AdmissionFailure> {
     for carrier in carriers {

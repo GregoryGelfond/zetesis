@@ -825,7 +825,7 @@ fn prepare_source(
     extended::check_definitions_in(parsed, expansion, &mut BTreeMap::new())?;
     metadata::check_count(parsed, expansion, &mut 0)?;
     formula_ir::check_objectives(parsed, limits, &mut 0)?;
-    let mut metadata = SourceMetadata::default();
+    let mut metadata = metadata::Builder::default();
     let mut budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates);
     let mut choices = crate::formula_choice_source::Catalog::default();
     let raised =
@@ -912,7 +912,7 @@ fn prepare_bundle(
     let mut definitions = BTreeMap::new();
     let mut metadata_count = 0;
     let mut objective_count = 0;
-    let mut metadata = SourceMetadata::default();
+    let mut metadata = metadata::Builder::default();
     let mut statements = Vec::new();
     let mut visited = 0;
     let mut budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates);
@@ -975,7 +975,7 @@ fn prepare(
     mut budget: crate::expansion::Budget,
     limits: &FormulaLimits,
     location: Location,
-    metadata: &mut SourceMetadata,
+    metadata: &mut metadata::Builder,
 ) -> Result<Preparation, FormulaFailure> {
     metadata.observations =
         crate::observation::compile(source, options, limits.observation, &mut budget, location)?;

@@ -298,12 +298,19 @@ impl SourceMetadata {
         fallback: Location,
     ) -> Result<Self, MetadataError> {
         validate(program, limits, fallback)?;
-        let mut metadata = Self::default();
+        let mut metadata = super::Builder::default();
         super::collect_profile(program, &mut metadata, true)
             .map_err(|error| MetadataError::Compilation(error.into()))?;
         // Parsed occurrence collection intentionally omits Constructed origins.
         // Apply effective atom policy independently, without manufacturing spans.
         for carrier in program.statements() {
+            if carrier
+                .provenance()
+                .origins()
+                .any(|origin| matches!(origin, Origin::Parsed(_)))
+            {
+                continue;
+            }
             match carrier.get() {
                 Statement::Show(Show::All) => metadata.output.mark_explicit(),
                 Statement::Show(Show::Signature(signature)) => {

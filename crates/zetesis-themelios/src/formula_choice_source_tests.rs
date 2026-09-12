@@ -21,7 +21,7 @@ fn include(
     parsed: &Parse<ast::Program>,
     budget: &mut Budget,
 ) -> Result<Program, FormulaFailure> {
-    raise(parsed, &mut SourceMetadata::default(), budget, catalog)
+    raise(parsed, &mut metadata::Builder::default(), budget, catalog)
 }
 
 fn catalog(source: &Source) -> (Catalog, Program) {
@@ -443,7 +443,7 @@ fn metadata_matches_collection_from_the_program() {
     );
     let parsed = parse(&source, Dialect::Clingo);
     assert!(parsed.diagnostics().is_empty());
-    let mut actual = SourceMetadata::default();
+    let mut actual = metadata::Builder::default();
     let program = raise(
         &parsed,
         &mut actual,
@@ -451,7 +451,7 @@ fn metadata_matches_collection_from_the_program() {
         &mut Catalog::default(),
     )
     .unwrap();
-    let mut expected = SourceMetadata::default();
+    let mut expected = metadata::Builder::default();
     metadata::collect_profile(&program, &mut expected, true).unwrap();
     assert_eq!(actual.finish(), expected.finish());
 }

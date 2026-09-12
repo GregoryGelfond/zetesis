@@ -281,7 +281,7 @@ fn compile_bundle(
     let mut statements = Vec::new();
     let mut visited_nodes = 0;
     let mut metadata_count = 0;
-    let mut source_metadata = SourceMetadata::default();
+    let mut source_metadata = metadata::Builder::default();
     for source in bundle.sources() {
         let local = AdmissionOptions {
             source_id: source.id(),

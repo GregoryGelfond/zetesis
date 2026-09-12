@@ -86,7 +86,7 @@ fn compile_parsed(
     if !raised.diagnostics().is_empty() {
         return Err(AdmissionFailure::Raise(raised.diagnostics().to_vec()).into());
     }
-    let mut source_metadata = SourceMetadata::default();
+    let mut source_metadata = metadata::Builder::default();
     metadata::collect(raised.program(), &mut source_metadata)?;
     let location = Location {
         source: source.source().id(),

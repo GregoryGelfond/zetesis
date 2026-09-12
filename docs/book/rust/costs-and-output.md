@@ -82,6 +82,11 @@ predicate-name byte lengths. For `S > 0` signatures, a lookup performs at most
 need none. Human and JSON encoders apply their own budgets through this callback.
 Interrupted lookup returns no selection decision and leaves the policy intact.
 This bounds lookup work without a separate index or duplicated signature store.
+Source collection appends signature occurrences to a private builder, then sorts
+and deduplicates once before publishing `SourceMetadata`. Constructed directives
+affect the same selection without inventing source locations. For `S` signature
+occurrences, selection construction requires `O(S log S)` comparisons and `O(S)`
+cells. A partially collected policy is not exposed as a completed selection.
 
 Term queries borrow the supplied model in canonical atom order. Equal signed
 predicates form contiguous ranges, so two binary bounds locate a relation
