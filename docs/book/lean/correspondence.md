@@ -167,6 +167,15 @@ over 64 lanes and merges their summaries. Its strided coverage, bounded `u32`
 arithmetic, immutable scan inputs, atom correspondence and synchronization remain
 Rust/WGSL obligations. The laws justify domain narrowing, not answer-set acceptance.
 
+[`DependencySchedule`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DependencySchedule.lean)
+preserves initial agreement with a reference valuation by induction over ready
+assignments. The evaluator reads only declared dependencies; those dependencies already agree,
+and the reference satisfies each local equation. Complete root coverage then
+preserves ordered observations. This explains the formula kernel's original-truth
+schedule before reduct masking. Constructing its packed levels, preserving node
+IDs and proving concurrent writes and barriers refine the sequential schedule
+remain implementation obligations. A cached order does not cache candidate truth.
+
 Payload bookkeeping charges a whole amount before the corresponding comparison
 or copy. `WorkCharge` equates the completed work prefix with repeated unit
 charging under unchanged control, including exact quota exhaustion. A positive

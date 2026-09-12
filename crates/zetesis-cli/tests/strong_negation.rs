@@ -268,10 +268,13 @@ fn signed_display_limits_refuse_before_any_partial_answer() {
 }
 
 #[test]
-fn retained_model_bytes_include_a_sign_tag_for_both_signs_before_display() {
-    // One model-length header (8), one atom header (16), one predicate-sign
-    // tag (1), and the one-byte name p. The minus is not part of that name.
-    const PAYLOAD: usize = 8 + 16 + 1 + 1;
+fn both_signs_have_the_same_retained_tag_size() {
+    // Catalog length (8), atom header (16), sign (1), and name p (1).
+    // The minus is not part of that name. One selected position adds a
+    // selection length (8) and its original catalog index (8).
+    const CATALOG_BYTES: usize = 8 + 16 + 1 + 1;
+    const SELECTION_BYTES: usize = 8 + 8;
+    const PAYLOAD: usize = CATALOG_BYTES + SELECTION_BYTES;
     for atom in ["p", "-p"] {
         for hidden in [false, true] {
             let source = format!(

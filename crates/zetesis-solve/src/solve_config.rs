@@ -14,7 +14,7 @@ pub struct SolveConfig {
     pub backend: Backend,
     /// Materialization policy for relational programs.
     pub grounder: Grounder,
-    /// Relational CPU source traversal; explicit sharing pins auto backend to CPU.
+    /// Relational source traversal; the sharing strategies require CPU execution.
     pub source_batching: SourceBatching,
     /// Exact membership policy; prepared formula inputs retain their original theory.
     pub oracle: Oracle,

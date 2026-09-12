@@ -10,7 +10,9 @@ use zetesis_cpu::{
 
 use super::{Configuration, Error, Event, Outcome, Output, Phase, Preparation, Route};
 use super::{
-    config::{DICTIONARY_VALUES, DOMAIN_VALUES, MAX_RETAINED_BYTES, MAX_VARIABLES},
+    config::{
+        DICTIONARY_VALUES, DOMAIN_VALUES, MAX_RETAINED_BYTES, MAX_SUBJECT_BYTES, MAX_VARIABLES,
+    },
     fixture::Fixture,
     view::BoundedWriter,
 };
@@ -48,7 +50,7 @@ pub fn measure(
     let subject = fixture.subject(configuration.case)?;
     let mut bytes = Vec::new();
     serde_json::to_writer(
-        &mut BoundedWriter::new(&mut bytes, 8 * 1024 * 1024),
+        &mut BoundedWriter::new(&mut bytes, MAX_SUBJECT_BYTES),
         &subject,
     )
     .map_err(|error| Error::Output(io::Error::other(error)))?;

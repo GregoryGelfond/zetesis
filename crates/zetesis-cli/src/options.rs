@@ -38,23 +38,23 @@ pub struct Options {
     pub additional_inputs: Vec<PathBuf>,
     /// Execution backend.
     ///
-    /// Explicit GPU requests fail if unavailable; auto may
-    /// fall back to CPU with a reason on stderr. GPU support is enabled by default.
+    /// Auto retains CPU execution. Explicit GPU requests fail if unavailable;
+    /// device failure does not silently retry on CPU. GPU support is enabled by default.
     #[arg(long, value_parser = backend_parser(), default_value = "auto")]
     pub backend: Backend,
     /// Grounding mode, independent of execution backend.
     ///
-    /// Lazy uses source joins for the relational profile on CPU or GPU,
-    /// including automatic hardware selection. General formulas require eager grounding, bounded by atom,
-    /// substitution and ground-rule ceilings.
+    /// Lazy uses source joins for the relational profile on CPU or GPU.
+    /// General formulas require eager grounding, bounded by atom, substitution
+    /// and ground-rule ceilings.
     #[arg(long, value_parser = grounder_parser(), default_value = "auto")]
     pub grounder: Grounder,
     /// Advanced relational CPU source batching. Union/worlds require lazy or
-    /// auto grounding and select CPU when backend is auto. A stopped shared
+    /// auto grounding and CPU execution. A stopped shared
     /// batch publishes no candidate checks; independent remains the default.
     #[arg(long, value_parser = source_batching_parser(), default_value = "independent", hide_short_help = true)]
     pub source_batching: SourceBatching,
-    /// Advanced oracle selection. Auto preserves stable-model semantics while
+    /// Advanced oracle selection. Auto preserves answer-set semantics while
     /// selecting an applicable reduct procedure. Explicit hardware and grounder
     /// requests are always honored or refused.
     #[arg(long, value_parser = oracle_parser(), default_value = "auto", hide_short_help = true)]

@@ -5,6 +5,7 @@ use super::Error;
 pub(super) const MAX_ROWS: usize = 8_192;
 pub(super) const MAX_QUERIES: usize = 128;
 pub(super) const MAX_REPORT_BYTES: usize = 64 * 1024 * 1024;
+pub(super) const MAX_SUBJECT_BYTES: usize = 8 * 1024 * 1024;
 pub(super) const MAX_RETAINED_BYTES: usize = 128 * 1024 * 1024;
 pub(super) const MAX_WORK: u64 = 100_000_000;
 pub(super) const MAX_VARIABLES: usize = 4;

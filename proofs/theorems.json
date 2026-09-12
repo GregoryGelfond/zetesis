@@ -1545,6 +1545,26 @@
     "line": 77
   },
   {
+    "name": "Zetesis.DependencySchedule.ready_evaluation",
+    "file": "Zetesis/DependencySchedule.lean",
+    "line": 67
+  },
+  {
+    "name": "Zetesis.DependencySchedule.assignment_preserves_agreement",
+    "file": "Zetesis/DependencySchedule.lean",
+    "line": 84
+  },
+  {
+    "name": "Zetesis.DependencySchedule.execution_preserves_agreement",
+    "file": "Zetesis/DependencySchedule.lean",
+    "line": 106
+  },
+  {
+    "name": "Zetesis.DependencySchedule.observed_roots_equal",
+    "file": "Zetesis/DependencySchedule.lean",
+    "line": 136
+  },
+  {
     "name": "Zetesis.DisjunctiveSupport.head_satisfies",
     "file": "Zetesis/DisjunctiveSupport.lean",
     "line": 67

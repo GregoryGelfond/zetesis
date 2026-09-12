@@ -23,7 +23,7 @@ fn solve(source: &str, extra: &[&str]) -> (Result<zetesis_cli::Report, RunError>
     (result, String::from_utf8(output).unwrap())
 }
 #[test]
-fn closed_values_copy_identically_through_lazy_static_and_reduct_routes() {
+fn closed_values_are_preserved_across_membership_routes() {
     for args in [
         vec!["--oracle", "closure", "--grounder", "lazy"],
         vec!["--oracle", "closure", "--grounder", "eager"],
@@ -62,9 +62,12 @@ fn observation_channels_keep_hidden_full_ties_and_nested_whole_variables() {
     }
 }
 #[test]
-fn exact_canonical_retention_and_render_ceilings_are_checked_before_publication() {
-    // model header8 + signed atom header17 + name1 + function header18/name1 + number5.
-    const RETAINED: usize = 8 + 17 + 1 + 18 + 1 + 5;
+fn retained_structural_payload_is_admitted_before_publication() {
+    // Catalog header8 + signed atom header17 + name1 + function header18/name1
+    // + number5. Selection storage adds its length8 and one original index8.
+    const CATALOG_BYTES: usize = 8 + 17 + 1 + 18 + 1 + 5;
+    const SELECTION_BYTES: usize = 8 + 8;
+    const RETAINED: usize = CATALOG_BYTES + SELECTION_BYTES;
     for ceiling in [RETAINED - 1, RETAINED] {
         let (report, output) = solve(
             "p(f(1)).#minimize{0:p(f(1))}.",
@@ -91,6 +94,10 @@ fn exact_canonical_retention_and_render_ceilings_are_checked_before_publication(
             assert!(!output.contains("OPTIMUM FOUND"));
         }
     }
+}
+
+#[test]
+fn rendered_structural_output_is_admitted_before_publication() {
     for ceiling in [17, 18] {
         let (result, output) = solve(
             "p(f(1)).#show p/1.#show x:q.",

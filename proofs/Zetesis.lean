@@ -16,6 +16,7 @@ import Zetesis.QueryCompaction
 import Zetesis.Thresholds
 import Zetesis.AggregateAssignment
 import Zetesis.DagSharing
+import Zetesis.DependencySchedule
 import Zetesis.CandidateCursor
 import Zetesis.ExtremumCandidates
 import Zetesis.ExtremumHeadActivity

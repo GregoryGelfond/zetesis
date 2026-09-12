@@ -319,6 +319,10 @@
 'Zetesis.DeltaJoins.first_true' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.DeltaJoins.partition_complete' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.DeltaJoins.partition_disjoint' depends on axioms: [propext, Quot.sound]
+'Zetesis.DependencySchedule.ready_evaluation' does not depend on any axioms
+'Zetesis.DependencySchedule.assignment_preserves_agreement' depends on axioms: [propext]
+'Zetesis.DependencySchedule.execution_preserves_agreement' depends on axioms: [propext]
+'Zetesis.DependencySchedule.observed_roots_equal' depends on axioms: [propext, Quot.sound]
 'Zetesis.DisjunctiveSupport.head_satisfies' depends on axioms: [propext, Quot.sound]
 'Zetesis.DisjunctiveSupport.head_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.DisjunctiveSupport.other_head' depends on axioms: [propext, Classical.choice, Quot.sound]

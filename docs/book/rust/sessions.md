@@ -178,12 +178,10 @@ The profile includes its exact context and gate projection. It cannot be paired
 with a different device through an independent field. The builder clones shared
 handles, so the original variables need not outlive the session.
 
-Resource ownership does not choose an execution policy. CPU paths ignore a
-supplied context. Automatic formula execution retains its CPU policy; automatic
-relational execution considers the context at its existing delayed attempt and
-can retain or resume CPU execution under the existing fallback policy. A forced
-backend or vendor request checks the supplied adapter and refuses a mismatch;
-it does not discover a replacement device.
+Resource ownership does not choose an execution policy. CPU and automatic
+execution ignore a supplied context. An explicit GPU request consumes those
+resources, checks the requested backend and vendor against the supplied adapter,
+and refuses a mismatch. It does not discover a replacement device.
 
 Operations sharing a context are serialized through nonblocking leases. A busy
 context refuses the overlapping operation; no hidden queue is created. Device

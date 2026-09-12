@@ -95,12 +95,14 @@ fn eager_lazy_formula_certified_and_parallel_routes_preserve_results() {
                 );
                 assert!(text.contains("failed_attempts=included; schema=2"));
                 if source == "1{p;q}1." {
+                    // One parse, one closure admission and one formula admission.
+                    // Retrying the grammar reuses the original parsed owner.
                     assert_eq!(
                         timings
                             .get(SolvePhase::AdmissionMaterialization)
                             .unwrap()
                             .calls,
-                        2
+                        3
                     );
                     assert_eq!(
                         timings
@@ -108,7 +110,7 @@ fn eager_lazy_formula_certified_and_parallel_routes_preserve_results() {
                             .get(SolveStage::SourcePreparation)
                             .unwrap()
                             .calls,
-                        2
+                        3
                     );
                     assert!(timings.get(SolvePhase::CertificateSetup).is_some());
                 }

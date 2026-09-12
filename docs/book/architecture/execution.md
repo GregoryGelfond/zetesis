@@ -163,6 +163,48 @@ of logical device buffer storage. Bit packing alone leaves uploaded and
 downloaded payloads unchanged; grouped construction additionally uploads its
 immutable offsets on a fresh theory.
 
+## Formula evaluation on the device
+
+The general formula kernel assigns one workgroup to each candidate. A prepared
+theory groups original DAG nodes by dependency depth. Nodes in one level read
+only earlier levels, so the lanes can compute them independently:
+
+```text
+for level in dependency_order:
+    frozen[level] := map(evaluate_original_node, level, candidate, frozen)
+    make_level_writes_visible
+```
+
+This constructs the original truth used by the Ferraris reduct. Node and root
+identities remain unchanged. The order is reused for the same retained theory;
+truth is recomputed for every candidate. A chain with one node per level keeps
+the serial fold because it contains no independent node work. Other narrow
+levels may still pay more in barriers than they gain in parallel evaluation.
+
+During propagation, only semantic atoms can witness a proper subset. Each lane
+scans its atom positions and the workgroup combines exact summaries:
+
+```text
+eligible := candidate_true_atoms_whose_domain_allows_false
+(count, last) := reduce(sum_counts, maximum_index, lane_summaries(eligible))
+if count = 0: refute_the_proper_subset_query
+if count = 1: intersect_domain(last, {false})
+```
+
+`last` identifies an atom only when the count is one; zero is a valid atom index.
+Auxiliary formula nodes never participate in this subset test. An original-false
+subformula remains disabled by the frozen mask throughout propagation.
+
+[Preparation](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/formula/preparation.rs)
+owns temporary depth and schedule storage and releases staging after upload.
+Only a finalized graph enters residency. Actual staging capacity participates
+in cold admission. A later preparation failure can discard old residency while
+leaving a healthy context; it cannot publish a result or advance the oracle’s epoch.
+The [kernel](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/formula.wgsl)
+implements the level map and subset reduction. Their
+[Lean laws and remaining obligations](../lean/correspondence.md) are distinct
+from device qualification and timing evidence.
+
 ## CPU and GPU responsibilities
 
 | Capability | Execution boundary |

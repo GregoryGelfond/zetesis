@@ -64,6 +64,31 @@ is selected. The [GPU Compact-Table paper](https://arxiv.org/abs/2507.18413)
 motivates examining this family of support operations; its performance results
 do not establish a speedup for zetesis.
 
+## Compare complete projections
+
+The maintained experiment compares a prepared row scan, scalar support bitsets
+and independent projections sharing one table through Rayon:
+
+```sh
+zetesis-bench table --case independent --rows 1024 --queries 32 \
+  --workers 4 --warmups 1 --repetitions 3 > table.jsonl
+```
+
+The other cases are `correlated` and `aliased`. Every route receives the same
+typed rows and sequence of narrowing, replacement and restored domains. An
+independent whole-row reference checks row positions and projected domains.
+JSON-lines output retains the subject, preparation costs, every batch and
+explicit limit refusals. A completed schedule with such refusals exits 1;
+configuration, execution, parity or output failures exit 2.
+
+Compare Rayon batch wall times, since individual worker intervals overlap.
+Preparation, projection and common-output conversion have separate intervals.
+The fixed scan/table/Rayon route order does not control cache or thermal effects.
+The capacity receipts describe the named objects, not RSS or total concurrent
+memory. See the [experiment contract](https://github.com/GregoryGelfond/zetesis/tree/main/crates/zetesis-experiments#finite-table-domain-projection)
+for finite populations and report limits. This experiment establishes neither
+source-grounding completeness nor ordinary solver acceleration.
+
 ## Preservation argument
 
 A selected row belongs to every variable's union of permitted supports, hence

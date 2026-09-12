@@ -309,6 +309,10 @@ import Zetesis
 #print axioms Zetesis.DeltaJoins.first_true
 #print axioms Zetesis.DeltaJoins.partition_complete
 #print axioms Zetesis.DeltaJoins.partition_disjoint
+#print axioms Zetesis.DependencySchedule.ready_evaluation
+#print axioms Zetesis.DependencySchedule.assignment_preserves_agreement
+#print axioms Zetesis.DependencySchedule.execution_preserves_agreement
+#print axioms Zetesis.DependencySchedule.observed_roots_equal
 #print axioms Zetesis.DisjunctiveSupport.head_satisfies
 #print axioms Zetesis.DisjunctiveSupport.head_reduct
 #print axioms Zetesis.DisjunctiveSupport.other_head

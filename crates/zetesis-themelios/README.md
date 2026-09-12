@@ -20,6 +20,7 @@ cargo doc --locked -p zetesis-themelios --no-deps --open
 
 | Entry point | Result and intended use |
 |---|---|
+| `ParsedSource` | One owned parse with consuming admission attempts; eligible retries retain the original source and parse. |
 | `admit` | Relational templates for the strict normal-rule profile. |
 | `admit_extended`, `admit_bundle_extended` | Relational templates with bounded scalar expansion and source metadata. Suitable input for lazy relational solving. |
 | `prepare_formula`, `prepare_bundle_formula` | An owned preparation that separates source preparation from eager formula grounding. |
@@ -42,6 +43,8 @@ These APIs deliberately remain distinct. A caller may use
 through the richer boundary. Syntax errors, undefined arithmetic, overflow and
 exhausted limits are failures, not reasons to retry with weaker checks.
 The command-line adapter makes this selection automatically.
+For an owned retry without copying or reparsing the original input, use
+`ParsedSource` as shown in the [source-admission example](../../docs/book/rust/source.md).
 
 ## Finite formula language
 

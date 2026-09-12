@@ -15,6 +15,7 @@ The maintained full index is
 | Does a gate position resolve to the same atom in the full carrier? | `GatePositions.retained_position_exact` | Filtering indexed atoms preserves their original dense positions and gate ranks |
 | Can interpretations share a catalog without sharing truth? | `ModelSelections.unselected_entries_irrelevant` | Selected positions decode to the same atoms; storage outside the selection adds no true atom |
 | Can lanes combine a strict-subset availability scan? | `PartitionedScan.partition_count_exact`, `one_forces_strict_drop` | Exact occurrence coverage, frozen candidate and fitting domains; machine arithmetic and synchronization remain separate |
+| Can dependency order change original formula evaluation? | `DependencySchedule.observed_roots_equal` | Initial agreement, ready dependency reads, reference equations and covered roots; packed levels and concurrent execution remain separate |
 | Can a stored mask evaluate a reduct? | `Ferraris.masked_eval_iff_reduct` in `FerrarisMask` | Mask agrees with original truth at every formula; arbitrary tested interpretation |
 | Can joins be decomposed? | `Lifted.composition_exact` | Binding, filtering, gates and projection denote the supplied template |
 | When may equality columns prefilter full matches? | `ColumnRelations.full_matches_preserved` | Exact dictionary/columns, supplied rows and a total matcher entailing the equalities |

@@ -136,6 +136,11 @@ error paths. Consuming a closure creates no stronger membership evidence.
 `zetesis_wgpu::GpuLazyOracle` supplies a device-backed evaluator using the same
 protocol. The required adapter and resource validation remain runtime concerns.
 Its explicit source-selection wrapper does not change ordinary CLI defaults.
+Within one GPU batch, frozen seed uploads are reused while layout and buffer
+ownership agree. Positive snapshots are reused only within their owning round.
+Catalog-width growth or buffer replacement invalidates the corresponding
+receipt. Source records and output resets still occur for each chunk; completion
+remains synchronous before the coordinator reuses its chunk storage.
 The [execution chapter](../architecture/execution.md) explains why per-world
 isolation and whole-round commits are semantic requirements.
 
