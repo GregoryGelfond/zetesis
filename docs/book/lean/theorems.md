@@ -12,6 +12,7 @@ The maintained full index is
 | Why do normal and formula checking agree on this fragment? | `NormalFerraris.answer_set_iff`, `ferraris_answer_set_iff_closure` | The specified filter-aware translation and one shared atom universe |
 | Why may only gate atoms be guessed? | `Semantics.accept_sound`, `stable_complete`, `stable_iff_exists_seed` | The supplied carrier covers every frozen gate |
 | Does canonicalizing shared seed handles preserve truth? | `SeedSelections.materialization_exact` | Sorting is a permutation and deduplication preserves denoted atom membership |
+| Does a gate position resolve to the same atom in the full carrier? | `GatePositions.retained_position_exact` | Filtering indexed atoms preserves their original dense positions and gate ranks |
 | Can a stored mask evaluate a reduct? | `Ferraris.masked_eval_iff_reduct` in `FerrarisMask` | Mask agrees with original truth at every formula; arbitrary tested interpretation |
 | Can joins be decomposed? | `Lifted.composition_exact` | Binding, filtering, gates and projection denote the supplied template |
 | When may equality columns prefilter full matches? | `ColumnRelations.full_matches_preserved` | Exact dictionary/columns, supplied rows and a total matcher entailing the equalities |

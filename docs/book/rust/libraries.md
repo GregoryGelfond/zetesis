@@ -115,8 +115,17 @@ tree for consumers requiring the existing `Seed::atoms` contract.
 cursor. Mixing their pulls continues that cursor; it cannot restart enumeration.
 Returned selections remain valid across later pulls or after the cursor is
 dropped. Each discovered atom needs one shared allocation; each selection still
-needs its handle vector, carrier validation and canonicalization. These are
+needs its handle vector, identity checks and canonicalization. These are
 ownership guarantees, not a total-memory bound.
+
+`Program::indexed_gate_atoms` supplies opaque `GateAtom` values with their
+canonical gate-carrier positions. `SeedSelection::from_gate_atoms` retains
+shared tokens from that exact program instance. Ordinary candidates use these
+tokens: static checking resolves a position through `GroundProgram::gate_atom_ids`
+without another symbolic lookup. Manually supplied atom handles use the checked
+lookup path. Both routes use `SeedAtom::resolve_in`; an invalid indexed position
+is refused. Tokens retain program and position metadata, so eliminating lookup
+does not imply every intermediate representation is smaller.
 
 `relation::Relation` borrows one immutable atom source with a dictionary and
 aligned equality-ID columns. `from_atoms` and `from_catalog` own that layout.

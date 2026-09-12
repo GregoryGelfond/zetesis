@@ -112,6 +112,15 @@ comparison and the executable candidate cursor remain separate correspondence
 obligations. This interpretation law does not establish answer-set membership
 or complete candidate coverage.
 
+`GatePositions.atoms_exact` identifies the gate subsequence of an indexed atom
+carrier. `retained_position_exact` relates each gate rank to its original dense
+position and atom. Rust's `GateAtom` retains an opaque program identity, atom and
+checked positive position. `SeedAtom::resolve_in` uses that position in the
+compiled gate table; ordinary CPU and GPU packing share this resolver. The
+implementation must establish the common predicate/domain order, inseparable
+token construction, program identity and checked indices. The Lean laws prove
+the filtered-list correspondence, not those Rust obligations or membership.
+
 The scalar lazy closure retains one typed `Catalog` for each predicate. Every
 round borrows their existing ordered rows; new consequences remain separate
 until that round's complete template scan finishes. Catalogs are consumed once
