@@ -24,10 +24,13 @@ mod work_tests;
 /// Exact checking budgets, applied before the next charged operation/insertion.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Limits {
-    /// Maximum charged template, tuple-probe, gate/filter, and output operations.
+    /// Maximum charged template, tuple-probe, atom-key argument span, gate/filter,
+    /// and output operations.
     /// Lazy joins also charge bound-prefix inspections and ordered comparisons,
     /// including both compared values' referenced payload bytes. Work counts can
     /// change with the execution algorithm; they are not ground-instance counts.
+    /// A key charges its complete argument span even when an absent slot defers
+    /// a gate. The bounded construction itself polls only at that boundary.
     pub max_work: u64,
     /// Maximum distinct derived atoms, including pending round outputs.
     pub max_derived_atoms: usize,
@@ -280,8 +283,9 @@ fn least_closure(
                 |assignment, work| {
                     work.tick()?;
                     if let Some(head) = template.head() {
-                        let atom = instantiate(head, assignment)?.ok_or(Stop::InvalidProgram)?;
-                        if !closure.contains(&atom, work)? && !delta.contains(&atom) {
+                        work.charge(head.terms().len())?;
+                        let key = head.key(assignment).map_err(|_| Stop::InvalidProgram)?;
+                        if !closure.contains(&key, work)? && key.get(&delta).is_none() {
                             if closure
                                 .len()
                                 .checked_add(delta.len())
@@ -290,7 +294,7 @@ fn least_closure(
                             {
                                 return Err(Stop::DerivedAtomLimit);
                             }
-                            delta.insert(atom);
+                            delta.insert(key.to_atom());
                         }
                     } else {
                         constraint_violated = true;
@@ -455,20 +459,6 @@ fn resolve<'a>(term: &'a Term, assignment: &[Option<&'a Value>]) -> Option<&'a V
     }
 }
 
-fn instantiate(pattern: &AtomPattern, assignment: &[Option<&Value>]) -> Result<Option<Atom>, Stop> {
-    let Some(values) = pattern
-        .terms()
-        .iter()
-        .map(|term| resolve(term, assignment).cloned())
-        .collect::<Option<Vec<_>>>()
-    else {
-        return Ok(None);
-    };
-    Atom::new(pattern.predicate().clone(), values)
-        .map(Some)
-        .map_err(|_| Stop::InvalidProgram)
-}
-
 fn guards(
     template: &Template,
     assignment: &[Option<&Value>],
@@ -493,8 +483,11 @@ fn guards(
     for (patterns, required) in [(template.gate_true(), true), (template.gate_false(), false)] {
         for pattern in patterns {
             work.tick()?;
-            if let Some(atom) = instantiate(pattern, assignment)?
-                && seed.contains(&atom) != required
+            work.charge(pattern.terms().len())?;
+            // An absent referenced slot defers this gate until a later join
+            // supplies it. A complete key borrows the exact seed lookup tuple.
+            if let Ok(key) = pattern.key(assignment)
+                && key.get(seed.atoms()).is_some() != required
             {
                 return Ok(false);
             }

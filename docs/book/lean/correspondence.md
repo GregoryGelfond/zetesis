@@ -92,6 +92,13 @@ snapshot from being invalidated while those references are live; identity and
 join tests check the concrete behavior. This does not establish source-join
 coverage or a Lean-to-Rust refinement.
 
+Gate and consequence membership uses a checked `AtomKey` over that borrowed
+assignment. The key denotes the same signed predicate and complete typed tuple
+as materialization. Gate lookup and duplicate-head lookup create no owned atom;
+only a new consequence is copied into the pending delta. Key construction charges
+the argument span separately from catalog lookup receipts, including a deferred
+gate with a missing slot. Emitted source instances still own their values.
+
 The scalar lazy closure retains one typed `Catalog` for each predicate. Every
 round borrows their existing ordered rows; new consequences remain separate
 until that round's complete template scan finishes. Catalogs are consumed once

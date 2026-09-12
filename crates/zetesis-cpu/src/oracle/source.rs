@@ -9,7 +9,7 @@
 use std::fmt;
 use zetesis_core::{Atom, AtomPattern, Model, Program, Value};
 
-use super::{Relations, Work, instantiate, visit, worlds};
+use super::{Relations, Work, visit, worlds};
 use crate::{Control, Stop};
 
 /// Bounds on a source scan, including a single emitted instance's copied data.
@@ -289,5 +289,8 @@ pub(super) fn copy_atom(
     }
     *remaining_bytes = remaining_bytes.checked_sub(bytes).ok_or(Stop::Allocation)?;
     work.charge(bytes)?;
-    instantiate(pattern, assignment)?.ok_or(Stop::InvalidProgram)
+    pattern
+        .key(assignment)
+        .map(zetesis_core::AtomKey::to_atom)
+        .map_err(|_| Stop::InvalidProgram)
 }

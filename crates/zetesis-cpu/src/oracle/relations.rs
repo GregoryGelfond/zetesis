@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, btree_map::Entry};
 
 use zetesis_core::{
-    Atom, Model, Predicate,
+    Atom, AtomKey, Model, Predicate,
     relation::{Catalog, CatalogFailure, Failure, Insertion, Limits, Resource},
 };
 
@@ -69,12 +69,12 @@ impl Catalogs {
         self.atoms
     }
 
-    pub(super) fn contains(&self, atom: &Atom, work: &mut Work<'_>) -> Result<bool, Stop> {
+    pub(super) fn contains(&self, key: &AtomKey<'_>, work: &mut Work<'_>) -> Result<bool, Stop> {
         work.control.poll()?;
-        let Some(catalog) = self.relations.get(atom.predicate()) else {
+        let Some(catalog) = self.relations.get(key.predicate()) else {
             return Ok(false);
         };
-        let lookup = completed(catalog.lookup(atom, limits(work)), work)?;
+        let lookup = completed(catalog.lookup_key(key, limits(work)), work)?;
         account(work, lookup.storage.construction_work)?;
         Ok(lookup.row.is_some())
     }
