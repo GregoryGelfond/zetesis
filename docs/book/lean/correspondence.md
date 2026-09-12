@@ -214,8 +214,10 @@ aggregate elements use complete tuple keys; ordinary Boolean choices use origina
 source occurrences, with local witnesses coalesced within an occurrence. Ordinary
 atomic choices distinguish their default-negation sign as well as their atom.
 The Rust
-source adapter checks syntax-tree and provenance correspondence before retaining
-those keys. Tests cover duplicate rules, separate files and finite interpretations;
+source adapter receives original occurrences from themelios before program-set
+collection and checks their Boolean element locations against the original
+syntax. It retains complete source identities and separate enclosing-rule
+scopes. Tests cover duplicate rules, separate files and finite interpretations;
 proving this adapter implements the Lean family remains a separate obligation.
 
 The shared Rust

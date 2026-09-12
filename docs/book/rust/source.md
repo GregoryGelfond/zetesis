@@ -90,7 +90,13 @@ The public implementation declarations are
 ## Work and retained space
 
 Preparation traverses and retains bounded source/analysis structure; source
-catalog recovery and pool expansion consume cumulative expansion resources.
+occurrence retention and pool expansion consume cumulative expansion resources.
+Boolean choice retention charges each selected rule's source span and syntax
+nodes as work, its node bound as Values, and a conservative four locations per
+node as Origins before copying. Raising and metadata diagnostics retain their
+precedence over these copy limits. The original occurrence stream and the
+additional selected-rule copies coexist temporarily; this is not streaming
+admission or a zero-copy guarantee.
 `max_analysis_nodes` bounds visited structure, while `max_analysis_edges` bounds
 head/dependency occurrence products before graph allocation. These are different
 from source-byte limits and do not bound process RSS.

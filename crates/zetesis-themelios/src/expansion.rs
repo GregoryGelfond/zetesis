@@ -22,7 +22,7 @@ pub struct ExpansionLimits {
     /// Maximum intermediate scalar alternatives, emitted fact arguments, and
     /// conservatively counted nodes in finite-pool source alternatives and
     /// compiled structural patterns. Original Boolean choice rules additionally
-    /// reserve selected syntax nodes before their independent raising.
+    /// reserve selected syntax nodes before retaining their raised occurrence.
     pub max_values: usize,
     /// Maximum scalar payload bytes copied during substitution/fact emission
     /// plus finite-pool cursor positions, copied term cells/text, constructor-plan
@@ -44,7 +44,7 @@ pub struct ExpansionLimits {
     /// Original source storage remains bounded by admission options.
     pub max_scalar_bytes: usize,
     /// Maximum original locations reserved for template evidence and independently
-    /// raised Boolean choice rules, including their nested occurrence evidence.
+    /// retained Boolean choice rules, including their nested occurrence evidence.
     pub max_origin_locations: usize,
     /// Maximum original `#defined` and `#show` occurrences before deduplication.
     pub max_metadata_statements: usize,
@@ -74,7 +74,7 @@ pub enum ExpansionResource {
     /// Emitted core templates.
     Templates,
     /// Intermediate alternatives, emitted fact arguments, finite-pool source nodes
-    /// and independently raised Boolean choice syntax nodes.
+    /// and retained Boolean choice syntax nodes.
     Values,
     /// Copied scalar payload, finite-pool positions, term/plan storage and
     /// constructed/extracted value reservations, including structural pattern deltas.

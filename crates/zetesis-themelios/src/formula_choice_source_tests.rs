@@ -1,8 +1,9 @@
 //! Source identities and refusal controls for the private occurrence catalog.
 
-use themelios_program::raise::raise;
+use themelios_base::source::{Source, SourceId};
+use themelios_program::raise::raise as raise_program;
+use themelios_syntax::dialect::Dialect;
 use themelios_syntax::parse::parse;
-use themelios_syntax::token::check_token_source_laws;
 
 use super::*;
 use crate::{ExpansionFailure, ExpansionLimits};
@@ -15,16 +16,25 @@ fn budget(limits: ExpansionLimits) -> Budget {
     Budget::new(limits, limits.max_templates)
 }
 
+fn include(
+    catalog: &mut Catalog,
+    parsed: &Parse<ast::Program>,
+    budget: &mut Budget,
+) -> Result<Program, FormulaFailure> {
+    raise(parsed, &mut SourceMetadata::default(), budget, catalog)
+}
+
 fn catalog(source: &Source) -> (Catalog, Program) {
     let parsed = parse(source, Dialect::Clingo);
     assert!(parsed.diagnostics().is_empty());
     let mut catalog = Catalog::default();
-    catalog
-        .include(source, &parsed, &mut budget(ExpansionLimits::default()))
-        .unwrap();
-    let raised = raise(&parsed);
-    assert!(raised.diagnostics().is_empty());
-    (catalog, raised.into_program())
+    let program = include(
+        &mut catalog,
+        &parsed,
+        &mut budget(ExpansionLimits::default()),
+    )
+    .unwrap();
+    (catalog, program)
 }
 
 fn fallback(source: &Source) -> Location {
@@ -34,72 +44,8 @@ fn fallback(source: &Source) -> Location {
     }
 }
 
-fn window(source: &Source) -> StatementWindow<'_> {
-    let parsed = parse(source, Dialect::Clingo);
-    assert!(parsed.diagnostics().is_empty());
-    let statement = parsed
-        .tree()
-        .statements()
-        .find(|statement| {
-            let ast::Statement::Rule(rule) = statement else {
-                return false;
-            };
-            matches!(
-                rule.head(),
-                Some(ast::Head::Aggregate(ast::Aggregate::Set(_)))
-            )
-        })
-        .unwrap();
-    StatementWindow {
-        lexer: Lexer::new(source, Dialect::Clingo),
-        span: parsed.location(statement.syntax().text_range()).span,
-    }
-}
-
 #[test]
-fn window_obeys_public_token_source_laws() {
-    let source = source(
-        9,
-        "p(\"λ\").\r\n%! choice documentation\r\n1{#true;#false:p(\"λ\")}1.\r\nq(\"雪\").",
-    );
-    assert!(check_token_source_laws(&window(&source)).is_empty());
-}
-
-#[test]
-fn window_retains_the_original_source_bytes() {
-    let source = source(9, "p. 1{#true}1. q.");
-    let window = window(&source);
-    assert_eq!(window.id(), source.id());
-    assert_eq!(window.text(), source.text());
-    assert_eq!(
-        parse_statement(&window, NestingLimit::DEFAULT)
-            .syntax()
-            .text(),
-        source.text()
-    );
-}
-
-#[test]
-fn selected_tokens_are_unchanged_lexer_tokens() {
-    let source = source(9, "p.\r\n1{#true: % comment\r\n p;#false}1.\r\nq.");
-    let window = window(&source);
-    let mut at = window.span.start();
-    let mut last = None;
-    while at < window.span.end() {
-        let actual = window.token_at(at, LexMode::Normal).unwrap();
-        assert_eq!(actual, window.lexer.token_at(at, LexMode::Normal).unwrap());
-        assert!(!actual.text.is_empty());
-        at = at
-            .checked_add(u32::try_from(actual.text.len()).unwrap())
-            .unwrap();
-        last = Some(actual.kind);
-    }
-    assert_eq!(at, window.span.end());
-    assert_eq!(last, Some(SyntaxKind::DOT));
-}
-
-#[test]
-fn fragments_keep_original_boolean_element_ranges() {
+fn occurrences_keep_original_boolean_element_ranges() {
     let source = source(
         9,
         "p(\"λ\").\r\n%! documented\r\n1{#true;#true:p(\"λ\");#false}1.\r\nq.",
@@ -125,7 +71,7 @@ fn fragments_keep_original_boolean_element_ranges() {
 }
 
 #[test]
-fn fragments_keep_original_documented_rule_ranges() {
+fn occurrences_keep_original_documented_rule_ranges() {
     let source = source(9, "p.\r\n%! documented\r\n1{#true}1.\r\nq.");
     let parsed = parse(&source, Dialect::Clingo);
     let original = parsed.tree().statements().nth(1).unwrap();
@@ -136,6 +82,21 @@ fn fragments_keep_original_documented_rule_ranges() {
         [&Origin::Parsed(
             parsed.location(original.syntax().text_range())
         )]
+    );
+}
+
+#[test]
+fn occurrences_retain_the_upstream_documentation() {
+    let source = source(9, "%! first line\r\n%! second line\r\n1{#true}1.");
+    let (catalog, _) = catalog(&source);
+    assert_eq!(
+        catalog.variants[0]
+            .provenance()
+            .annotations()
+            .doc()
+            .collect::<Vec<_>>(),
+        // The upstream doc view retains the CR bytes; zetesis does not rewrite it.
+        ["first line\r\nsecond line\r"]
     );
 }
 
@@ -200,8 +161,8 @@ fn equal_rules_in_separate_sources_keep_source_identity() {
     let mut statements = Vec::new();
     for source in [&first, &second] {
         let parsed = parse(source, Dialect::Clingo);
-        catalog.include(source, &parsed, &mut budget).unwrap();
-        statements.extend(raise(&parsed).program().statements().cloned());
+        let program = include(&mut catalog, &parsed, &mut budget).unwrap();
+        statements.extend(program.statements().cloned());
     }
     let program = Program::of_nodes(statements);
     assert_eq!(program.statements().count(), 1);
@@ -224,18 +185,17 @@ fn other_head_identities_do_not_enter_the_catalog() {
         let source = source(9, text);
         let parsed = parse(&source, Dialect::Clingo);
         let mut catalog = Catalog::default();
-        catalog
-            .include(
-                &source,
-                &parsed,
-                &mut budget(ExpansionLimits {
-                    max_term_work: 0,
-                    ..ExpansionLimits::default()
-                }),
-            )
-            .unwrap();
+        include(
+            &mut catalog,
+            &parsed,
+            &mut budget(ExpansionLimits {
+                max_term_work: 0,
+                ..ExpansionLimits::default()
+            }),
+        )
+        .unwrap();
         assert!(catalog.variants.is_empty());
-        let program = raise(&parsed).into_program();
+        let program = raise_program(&parsed).into_program();
         assert_eq!(
             catalog
                 .statements(&program, fallback(&source))
@@ -265,7 +225,7 @@ fn a_partial_catalog_refuses_merged_rule_origins() {
     let first = source(9, "1{#true}1.");
     let second = source(10, "1{#true;#true}1.");
     let (catalog, first_program) = catalog(&first);
-    let second_program = raise(&parse(&second, Dialect::Clingo)).into_program();
+    let second_program = raise_program(&parse(&second, Dialect::Clingo)).into_program();
     let merged = Program::of_nodes(
         first_program
             .statements()
@@ -300,38 +260,15 @@ fn constructed_rule_origins_cannot_replace_a_catalog() {
 }
 
 #[test]
-fn mismatched_source_identity_refuses_fragment_raising() {
-    let first = source(9, "1{#true}1.");
-    let second = source(10, first.text());
-    let result = Catalog::default().include(
-        &second,
-        &parse(&first, Dialect::Clingo),
-        &mut budget(ExpansionLimits::default()),
-    );
-    assert!(matches!(result, Err(FormulaFailure::ChoiceSource { .. })));
-}
-
-#[test]
-fn mismatched_source_bytes_refuse_fragment_raising() {
-    let first = source(9, "1{#true}1.");
-    let second = source(9, "2{#true}2.");
-    let result = Catalog::default().include(
-        &second,
-        &parse(&first, Dialect::Clingo),
-        &mut budget(ExpansionLimits::default()),
-    );
-    assert!(matches!(result, Err(FormulaFailure::ChoiceSource { .. })));
-}
-
-#[test]
-fn fragment_work_refuses_before_retaining_a_variant() {
+fn source_work_refuses_before_retaining_a_variant() {
     let source = source(9, "p. 1{#true}1. q.");
     let parsed = parse(&source, Dialect::Clingo);
     let rule = parsed.tree().statements().nth(1).unwrap();
-    let expected = source.text().len() * 3 + rule.syntax().descendants().count();
+    let expected = parsed.location(rule.syntax().text_range()).span.len() as usize
+        + rule.syntax().descendants().count();
     let mut catalog = Catalog::default();
-    let result = catalog.include(
-        &source,
+    let result = include(
+        &mut catalog,
         &parsed,
         &mut budget(ExpansionLimits {
             max_term_work: expected - 1,
@@ -351,7 +288,7 @@ fn catalog_work_is_cumulative_across_sources() {
     let first = source(9, "1{#true}1.");
     let second = source(10, first.text());
     let parsed = parse(&first, Dialect::Clingo);
-    let expected = first.text().len() * 3
+    let expected = first.text().len()
         + parsed
             .tree()
             .statements()
@@ -365,8 +302,8 @@ fn catalog_work_is_cumulative_across_sources() {
         max_term_work: expected,
         ..ExpansionLimits::default()
     });
-    catalog.include(&first, &parsed, &mut budget).unwrap();
-    let result = catalog.include(&second, &parse(&second, Dialect::Clingo), &mut budget);
+    include(&mut catalog, &parsed, &mut budget).unwrap();
+    let result = include(&mut catalog, &parse(&second, Dialect::Clingo), &mut budget);
     assert!(
         matches!(result, Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
         resource: ExpansionResource::TermWork, observed, location, ..
@@ -376,7 +313,7 @@ fn catalog_work_is_cumulative_across_sources() {
 }
 
 #[test]
-fn retained_nodes_are_reserved_before_fragment_parsing() {
+fn retained_nodes_are_reserved_before_copying() {
     let source = source(9, "1{#true;#true}1.");
     let parsed = parse(&source, Dialect::Clingo);
     let nodes = parsed
@@ -388,8 +325,8 @@ fn retained_nodes_are_reserved_before_fragment_parsing() {
         .descendants()
         .count();
     let mut catalog = Catalog::default();
-    let result = catalog.include(
-        &source,
+    let result = include(
+        &mut catalog,
         &parsed,
         &mut budget(ExpansionLimits {
             max_values: nodes - 1,
@@ -405,7 +342,7 @@ fn retained_nodes_are_reserved_before_fragment_parsing() {
 }
 
 #[test]
-fn occurrence_locations_are_reserved_before_parsing() {
+fn occurrence_locations_are_reserved_before_copying() {
     let source = source(9, "1{#true;#true}1.");
     let parsed = parse(&source, Dialect::Clingo);
     let locations = parsed
@@ -418,8 +355,8 @@ fn occurrence_locations_are_reserved_before_parsing() {
         .count()
         * 4;
     let mut catalog = Catalog::default();
-    let result = catalog.include(
-        &source,
+    let result = include(
+        &mut catalog,
         &parsed,
         &mut budget(ExpansionLimits {
             max_origin_locations: locations - 1,
@@ -455,7 +392,11 @@ fn duplicate_scope_refusal_preserves_the_catalog() {
     let source = source(9, "1{#true}1.");
     let parsed = parse(&source, Dialect::Clingo);
     let (mut catalog, program) = catalog(&source);
-    let result = catalog.include(&source, &parsed, &mut budget(ExpansionLimits::default()));
+    let result = include(
+        &mut catalog,
+        &parsed,
+        &mut budget(ExpansionLimits::default()),
+    );
     assert!(matches!(result, Err(FormulaFailure::ChoiceSource { .. })));
     let retained: Vec<_> = catalog
         .statements(&program, fallback(&source))
@@ -463,4 +404,102 @@ fn duplicate_scope_refusal_preserves_the_catalog() {
         .unwrap();
     assert_eq!(retained.len(), 1);
     assert_eq!(boolean_origins(retained[0].get()).unwrap().len(), 1);
+}
+
+#[test]
+fn raising_preserves_the_original_program_parts() {
+    let source = source(
+        9,
+        "1{#true}1. #program step(t). 1{#false}1. #program base. 1{#true;#true}1.",
+    );
+    let parsed = parse(&source, Dialect::Clingo);
+    assert!(parsed.diagnostics().is_empty());
+    let (catalog, actual) = catalog(&source);
+    let expected = raise_program(&parsed).into_program();
+    assert_eq!(actual, expected);
+    assert_eq!(actual.parts().count(), 2);
+    let locations: Vec<_> = catalog
+        .variants
+        .iter()
+        .map(|entry| {
+            entry
+                .provenance()
+                .origins()
+                .find_map(|origin| match origin {
+                    Origin::Parsed(location) => Some(*location),
+                    _ => None,
+                })
+                .unwrap()
+        })
+        .collect();
+    assert!(locations.windows(2).all(|pair| pair[0] < pair[1]));
+}
+
+#[test]
+fn metadata_matches_collection_from_the_program() {
+    let source = source(
+        9,
+        "#show z/0. #defined a/0. 1{#true}1. #show. #show z/0. #show 7.",
+    );
+    let parsed = parse(&source, Dialect::Clingo);
+    assert!(parsed.diagnostics().is_empty());
+    let mut actual = SourceMetadata::default();
+    let program = raise(
+        &parsed,
+        &mut actual,
+        &mut budget(ExpansionLimits::default()),
+        &mut Catalog::default(),
+    )
+    .unwrap();
+    let mut expected = SourceMetadata::default();
+    metadata::collect_profile(&program, &mut expected, true).unwrap();
+    assert_eq!(actual.finish(), expected.finish());
+}
+
+#[test]
+fn raise_diagnostics_precede_occurrence_copy_limits() {
+    let source = source(9, "1{#true}1. p(2147483648).");
+    let parsed = parse(&source, Dialect::Clingo);
+    assert!(parsed.diagnostics().is_empty());
+    let expected = raise_program(&parsed).diagnostics().to_vec();
+    assert!(!expected.is_empty());
+    let mut catalog = Catalog::default();
+    let error = include(
+        &mut catalog,
+        &parsed,
+        &mut budget(ExpansionLimits {
+            max_term_work: 0,
+            max_values: 0,
+            max_origin_locations: 0,
+            ..ExpansionLimits::default()
+        }),
+    )
+    .unwrap_err();
+    let FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Raise(actual))) =
+        error
+    else {
+        panic!("expected original raise diagnostics: {error}");
+    };
+    assert_eq!(actual, expected);
+    assert!(catalog.variants.is_empty());
+}
+
+#[test]
+fn unrelated_source_bytes_do_not_charge_choice_copying() {
+    let source = source(9, &format!("1{{#true}}1. % {}", "unrelated".repeat(128)));
+    let parsed = parse(&source, Dialect::Clingo);
+    let statement = parsed.tree().statements().next().unwrap();
+    let work = parsed.location(statement.syntax().text_range()).span.len() as usize
+        + statement.syntax().descendants().count();
+    let mut catalog = Catalog::default();
+    include(
+        &mut catalog,
+        &parsed,
+        &mut budget(ExpansionLimits {
+            max_term_work: work,
+            ..ExpansionLimits::default()
+        }),
+    )
+    .unwrap();
+    assert_eq!(catalog.variants.len(), 1);
 }

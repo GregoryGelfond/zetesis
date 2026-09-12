@@ -7,7 +7,6 @@ use themelios_base::diagnostic::Diagnostic;
 use themelios_base::source::Source;
 use themelios_base::span::{ByteOffset, Location, Span};
 use themelios_program::program::{Program as SourceProgram, Statement};
-use themelios_program::raise::raise;
 use themelios_syntax::dialect::Dialect;
 use themelios_syntax::parse::parse;
 use zetesis_core::Atom;
@@ -826,21 +825,17 @@ pub fn prepare_formula(
     extended::check_definitions_in(&parsed, expansion, &mut BTreeMap::new())?;
     metadata::check_count(&parsed, expansion, &mut 0)?;
     formula_ir::check_objectives(&parsed, &limits, &mut 0)?;
-    let raised = raise(&parsed);
-    if !raised.diagnostics().is_empty() {
-        return Err(AdmissionFailure::Raise(raised.diagnostics().to_vec()).into());
-    }
     let mut metadata = SourceMetadata::default();
-    metadata::collect_profile(raised.program(), &mut metadata, true)?;
     let mut budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates);
     let mut choices = crate::formula_choice_source::Catalog::default();
-    choices.include(&source, &parsed, &mut budget)?;
+    let raised =
+        crate::formula_choice_source::raise(&parsed, &mut metadata, &mut budget, &mut choices)?;
     let location = Location {
         source: source.id(),
         span: source.span(),
     };
     let preparation = prepare(
-        raised.program(),
+        &raised,
         &choices,
         options,
         budget,
@@ -935,15 +930,14 @@ fn prepare_bundle(
         extended::check_definitions_in(source.parsed(), expansion, &mut definitions)?;
         metadata::check_count(source.parsed(), expansion, &mut metadata_count)?;
         formula_ir::check_objectives(source.parsed(), limits, &mut objective_count)?;
-        let raised = raise(source.parsed());
-        if !raised.diagnostics().is_empty() {
-            return Err(AdmissionFailure::Raise(raised.diagnostics().to_vec()).into());
-        }
-        metadata::collect_profile(raised.program(), &mut metadata, true)?;
-        choices.include(source.source(), source.parsed(), &mut budget)?;
+        let raised = crate::formula_choice_source::raise(
+            source.parsed(),
+            &mut metadata,
+            &mut budget,
+            &mut choices,
+        )?;
         statements.extend(
             raised
-                .program()
                 .statements()
                 .filter(|carrier| !matches!(carrier.get(), Statement::Include(_)))
                 .cloned(),

@@ -9,6 +9,8 @@ use std::collections::BTreeSet;
 use themelios_base::span::Location;
 use themelios_program::program::{Program as SourceProgram, Show, Statement};
 use themelios_program::provenance::Origin;
+use themelios_program::provenance::WithProvenance;
+use themelios_program::raise::{Occurrences, StatementOccurrence};
 use themelios_program::symbol::Signature;
 use themelios_syntax::ast;
 use themelios_syntax::parse::Parse;
@@ -284,7 +286,34 @@ pub(crate) fn collect_profile(
     metadata: &mut SourceMetadata,
     formula: bool,
 ) -> Result<(), AdmissionFailure> {
-    for carrier in program.statements() {
+    collect_carriers(program.statements(), metadata, formula)
+}
+
+/// Original declarations precede occurrence-copy admission. The upstream stream
+/// retains duplicates and locations; `finish` establishes the public location
+/// order. Formula metadata accepts every raised Show shape, and a raised
+/// signature's Name is nonempty, so changing collection order adds no diagnostic
+/// precedence between otherwise valid source declarations.
+pub(crate) fn collect_occurrences(
+    occurrences: &Occurrences,
+    metadata: &mut SourceMetadata,
+) -> Result<(), AdmissionFailure> {
+    collect_carriers(
+        occurrences
+            .occurrences()
+            .iter()
+            .map(StatementOccurrence::statement),
+        metadata,
+        true,
+    )
+}
+
+fn collect_carriers<'a>(
+    carriers: impl Iterator<Item = &'a WithProvenance<Statement>>,
+    metadata: &mut SourceMetadata,
+    formula: bool,
+) -> Result<(), AdmissionFailure> {
+    for carrier in carriers {
         if !matches!(carrier.get(), Statement::Defined(_) | Statement::Show(_)) {
             continue;
         }

@@ -21,11 +21,23 @@ identities must survive materialization.
 Zetesis's private
 [`Catalog`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_choice_source.rs)
 checks that each retained Boolean choice family corresponds to an original
-enclosing rule and its written element occurrences. It uses the pinned themelios
-parser and original coordinates, and refuses correspondence it cannot establish.
+enclosing rule and its written element occurrences. A single themelios
+`raise_occurrences` call supplies source-ordered statements, part keys,
+diagnostics and original provenance. Zetesis retains the affected occurrences
+before collecting that owner into themelios's ordinary program set. It neither
+lexes source nor reparses statement fragments. The original syntax supplies
+bounded node counts and an independent check of the Boolean element locations.
 In particular, merging two whole rules must not combine their separate counting
 groups. This source preservation supports subsequent lowering; successful
 correspondence checking does not prove the lowering's answer-set semantics.
+
+Raising diagnostics precede metadata collection and occurrence-copy admission.
+Only selected rule spans and nodes consume the catalog's copy-work allowance;
+unrelated source bytes are not recopied for each selected rule. The upstream
+occurrence owner is materialized, and retained Boolean variants coexist with it
+until program collection. Source and syntax limits bound that initial owner;
+expansion Values and Origins bound the additional retained variants. These
+logical limits exclude allocator overhead and are not process-memory measurements.
 
 At the formula boundary, tuple activity and atom permission remain independent.
 For `{a}.1#count{1:#true:a;1:b}1.`, `a` activates the shared tuple through its
