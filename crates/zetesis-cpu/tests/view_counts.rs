@@ -8,14 +8,20 @@ struct Views<'a> {
     remaining: usize,
     claimed: usize,
     cloned: usize,
+    clones: Option<std::sync::Arc<std::sync::atomic::AtomicUsize>>,
 }
 impl Clone for Views<'_> {
     fn clone(&self) -> Self {
+        let first = self
+            .clones
+            .as_ref()
+            .is_some_and(|count| count.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0);
         Self {
             seed: self.seed,
-            remaining: self.cloned,
+            remaining: if first { self.claimed } else { self.cloned },
             claimed: self.claimed,
             cloned: self.cloned,
+            clones: self.clones.clone(),
         }
     }
 }
@@ -44,6 +50,7 @@ fn false_count_claims_refuse_before_source_work() {
             remaining: actual,
             claimed,
             cloned: actual,
+            clones: None,
         };
         let error = lazy::check_with_views(
             &program,
@@ -71,6 +78,7 @@ fn changed_final_iteration_cannot_publish_missing_worlds() {
             remaining: actual,
             claimed: 1,
             cloned: 1,
+            clones: None,
         };
         let error = lazy::check_with_views(
             &program,
@@ -85,5 +93,33 @@ fn changed_final_iteration_cannot_publish_missing_worlds() {
             lazy::Cause::Source(Stop::InvalidProgram)
         ));
         assert_eq!(error.progress.rounds, 1);
+    }
+}
+
+#[test]
+fn changed_packing_count_refuses_before_evaluation() {
+    let program = Program::new(vec![], AdmissionLimits::default()).unwrap();
+    let seed = Seed::new(&program, []).unwrap();
+    for actual in [0, 2] {
+        let views = Views {
+            seed: seed.view(),
+            remaining: 1,
+            claimed: 1,
+            cloned: actual,
+            clones: Some(std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0))),
+        };
+        let error = lazy::check_with_views(
+            &program,
+            views,
+            lazy::Limits::default(),
+            &Control::default(),
+            |_| -> Result<Vec<u32>, Stop> { panic!("packing count mismatch must not execute") },
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error.cause,
+            lazy::Cause::Source(Stop::InvalidProgram)
+        ));
+        assert_eq!(error.progress, lazy::Progress::default());
     }
 }
