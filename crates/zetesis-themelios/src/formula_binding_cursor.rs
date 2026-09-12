@@ -119,7 +119,10 @@ impl<'a> Cursor<'a> {
                     self.values
                         .read(target(generator).expect("generator target"), location)?;
                 }
-                return self.values.copied(budget, location).map(Some);
+                return self
+                    .values
+                    .copied(limits, counters, budget, location)
+                    .map(Some);
             }
             if matches!(self.states[self.depth], State::Fresh) {
                 self.states[self.depth] =

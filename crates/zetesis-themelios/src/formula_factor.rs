@@ -116,7 +116,13 @@ fn emit(
         unreachable!("only normal rules have a component plan");
     };
     let head = if let Some(head) = head {
-        let assignment = Binding::copy_slots(fixed, builder.budget, rule.location)?;
+        let assignment = Binding::copy_slots(
+            fixed,
+            builder.limits,
+            &mut builder.counters,
+            builder.budget,
+            rule.location,
+        )?;
         builder.atom(head, &assignment, rule.location)?
     } else {
         FALSUM

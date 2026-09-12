@@ -912,7 +912,7 @@ impl<'a> Join<'a> {
                 return Err(FormulaFailure::UnsafeVariable { variable, location });
             }
         }
-        let values = Binding::copy_slots(&self.values, budget, location)?;
+        let values = Binding::copy_slots(&self.values, limits, counters, budget, location)?;
         counters.record(Event::BindingSnapshot);
         Ok(Some(values))
     }

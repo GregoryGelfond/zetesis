@@ -7,8 +7,8 @@ use themelios_base::span::Location;
 use zetesis_core::{Atom, AtomPattern, Term, Value};
 
 use crate::expansion::Budget;
-use crate::formula_support::copy;
-use crate::{ExpansionResource, FormulaFailure};
+use crate::formula_support::{Counters, copy};
+use crate::{ExpansionResource, FormulaFailure, FormulaLimits};
 
 /// Slots retain source variable identity across local and component scopes.
 /// Owned frames can be extended; a body-prefix view borrows its parent's slots.
@@ -18,15 +18,20 @@ pub(crate) struct Binding<'a> {
     slots: Cow<'a, [Option<Value>]>,
 }
 
+// Every production static constructor owns its slots. The only borrowed
+// static frame is Default's empty slice; to_mut cannot clone logical values.
 impl Binding<'static> {
     pub(crate) fn copy_slots(
         source: &[Option<Value>],
+        limits: &FormulaLimits,
+        counters: &mut Counters,
         budget: &mut Budget,
         location: Location,
     ) -> Result<Self, FormulaFailure> {
         let mut slots = Vec::new();
         reserve(&mut slots, source.len(), budget, location)?;
         for slot in source {
+            counters.work(limits, location)?;
             slots.push(
                 slot.as_ref()
                     .map(|value| copy(value, budget, location))
@@ -38,6 +43,8 @@ impl Binding<'static> {
         })
     }
 
+    /// An unevaluated head suffix may not exist yet. Clearing such a slot is
+    /// a no-op; an existing output becomes absent before backtracking.
     pub(crate) fn clear(&mut self, variable: usize) {
         if let Some(slot) = self.slots.to_mut().get_mut(variable) {
             *slot = None;
@@ -75,6 +82,7 @@ impl Binding<'static> {
 }
 
 impl Binding<'_> {
+    /// The compiler-owned body boundary must be within this frame.
     pub(crate) fn prefix(&self, end: usize) -> Binding<'_> {
         Binding {
             slots: Cow::Borrowed(&self.slots[..end]),
@@ -126,10 +134,12 @@ impl Binding<'_> {
 
     pub(crate) fn copied(
         &self,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
         budget: &mut Budget,
         location: Location,
     ) -> Result<Binding<'static>, FormulaFailure> {
-        Binding::copy_slots(self.slots(), budget, location)
+        Binding::copy_slots(self.slots(), limits, counters, budget, location)
     }
 }
 
