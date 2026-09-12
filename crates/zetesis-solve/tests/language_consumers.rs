@@ -53,7 +53,7 @@ struct DisplayRecord {
     displays: Vec<(Vec<String>, u64)>,
 }
 
-fn cases() -> [Case; 10] {
+fn cases() -> [Case; 11] {
     [
         Case {
             source: include_str!("fixtures/language-consumers/symbolic-weight.lp"),
@@ -125,6 +125,7 @@ fn cases() -> [Case; 10] {
                 .into(),
         },
         independent_objectives(),
+        recursive_alternatives(),
         neutral_minimum(),
         cyclic_observer(),
         Case {
@@ -154,6 +155,50 @@ fn cases() -> [Case; 10] {
             ]),
         },
     ]
+}
+
+fn recursive_alternatives() -> Case {
+    // Each node has one supported alternative. The constraint excludes choosing
+    // both left(0) and left(1); left(2) does not affect the objective.
+    let alternatives: [(&[i32], i64); 6] = [
+        (&[], 0),
+        (&[0], 1),
+        (&[1], 1),
+        (&[2], 0),
+        (&[0, 2], 1),
+        (&[1, 2], 1),
+    ];
+    let answers = alternatives
+        .into_iter()
+        .map(|(left, cost)| {
+            let mut atoms = Vec::new();
+            for node in 0..=2 {
+                atoms.push(atom("node", vec![Value::Number(node)]));
+                let choice = if left.contains(&node) {
+                    "left"
+                } else {
+                    "right"
+                };
+                atoms.push(atom(choice, vec![Value::Number(node)]));
+            }
+            atoms.sort();
+            Record {
+                atoms,
+                costs: vec![(1, cost)],
+                display: left
+                    .iter()
+                    .map(|node| format!("left({node})"))
+                    .collect::<Vec<_>>()
+                    .join(" "),
+            }
+        })
+        .collect();
+    Case {
+        source: include_str!("fixtures/language-consumers/recursive-alternatives.lp"),
+        file: "recursive-alternatives.lp",
+        answers,
+        reference_difference: None,
+    }
 }
 
 fn neutral_minimum() -> Case {
@@ -337,7 +382,10 @@ fn device_evidence(outcome: &zetesis_solve::SemanticOutcome, backend: Backend, c
     if backend == Backend::Metal
         && matches!(
             case.file,
-            "shared-tuple.lp" | "neutral-minimum.lp" | "cyclic-observer.lp"
+            "shared-tuple.lp"
+                | "neutral-minimum.lp"
+                | "cyclic-observer.lp"
+                | "recursive-alternatives.lp"
         )
     {
         let execution = outcome
