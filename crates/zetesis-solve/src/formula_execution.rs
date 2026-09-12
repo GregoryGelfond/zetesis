@@ -24,9 +24,11 @@ pub struct FormulaExecutionStatistics {
     pub gpu_batches: u64,
     /// Candidate worlds returned by successful GPU dispatches.
     pub gpu_candidates: u64,
-    /// Charged propagation work; not time or GPU instruction count.
+    /// Charged propagation work from successfully decoded results; not time or
+    /// GPU instruction count. Work in an interrupted unreturned batch is unknown.
     pub gpu_work: u64,
-    /// Sum of completed per-candidate propagation sweeps.
+    /// Sum of completed per-candidate propagation sweeps in decoded results.
+    /// Sweeps in an interrupted unreturned batch are unknown.
     pub gpu_rounds: u64,
     /// Committed candidates completed by exact native CPU residual search.
     pub cpu_residuals: u64,
@@ -202,7 +204,9 @@ impl MembershipExecution for Execution {
                 queue,
                 statistics,
             } => queue.next(models, options, control, |theory, candidates| {
-                propagate(oracle, statistics, theory, candidates, options, phases)
+                propagate(
+                    oracle, statistics, theory, candidates, options, control, phases,
+                )
             }),
         }
     }
@@ -215,6 +219,7 @@ fn propagate(
     theory: &zetesis_ferraris::Theory,
     candidates: &[Interpretation],
     options: &SolveConfig,
+    control: &zetesis_cpu::Control,
     phases: &Recorder,
 ) -> Result<Vec<zetesis_sat::BatchVerdict>, Failure> {
     let limits = zetesis_wgpu::FormulaLimits {
@@ -232,9 +237,12 @@ fn propagate(
         .map_err(|_| Failure::Search(Incomplete::Allocation))?;
     let checks = phases
         .measure(SolvePhase::GpuHostOracle, || {
-            oracle.propagate_batch(theory, candidates, limits)
+            oracle.propagate_batch_with_control(theory, candidates, limits, control)
         })
-        .map_err(|e| Failure::Run(SolveError::Gpu(e)))?;
+        .map_err(|error| match error.interruption() {
+            Some(stop) => Failure::Search(stop.into()),
+            None => Failure::Run(SolveError::Gpu(error)),
+        })?;
     add(&mut statistics.gpu_batches, 1)?;
     add(
         &mut statistics.gpu_candidates,

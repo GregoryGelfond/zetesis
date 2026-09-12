@@ -52,13 +52,15 @@ impl ResidentGraph {
 
     pub(crate) fn dispatch(
         &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        pipeline: &wgpu::ComputePipeline,
+        runtime: &runtime::Runtime,
         packed: &PackedSeeds<'_>,
         plan: &BatchPlan,
         timeout: Duration,
+        control: &zetesis_cpu::Control,
     ) -> Result<Vec<GpuCheck>, GpuError> {
+        let device = runtime.device();
+        let queue = runtime.queue();
+        let pipeline = &runtime.pipeline;
         if self.transport.is_none() {
             self.transport = Some(Transport::new(device, pipeline, self, packed, plan));
         }
@@ -82,9 +84,14 @@ impl ResidentGraph {
                 result_bytes: plan.result_bytes,
             },
         );
-        runtime::read(device, &transport.readback, submission, timeout, |words| {
-            packing::decode(words, plan, packed)
-        })
+        runtime::read_polled(
+            device,
+            &transport.readback,
+            submission,
+            timeout,
+            || control.poll().map_err(GpuError::interrupted),
+            |words| packing::decode(words, plan, packed),
+        )
     }
 }
 

@@ -530,9 +530,20 @@ impl Executor {
                     max_batch_bytes: options.max_batch_bytes,
                     ..Default::default()
                 };
-                let checks = oracle
-                    .check_batch_views(ground, seeds.iter().map(SeedSelection::view), limits)
-                    .map_err(SolveError::Gpu)?;
+                let checks = match oracle.check_batch_views_with_control(
+                    ground,
+                    seeds.iter().map(SeedSelection::view),
+                    limits,
+                    control,
+                ) {
+                    Ok(checks) => checks,
+                    Err(error) => {
+                        return match error.interruption() {
+                            Some(stop) => Ok(vec![Err(stop)]),
+                            None => Err(SolveError::Gpu(error)),
+                        };
+                    }
+                };
                 if let Err(error) = control.poll() {
                     return Ok(vec![Err(error)]);
                 }

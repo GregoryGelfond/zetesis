@@ -21,6 +21,7 @@ struct NativeBatch {
     proposed: Vec<Vec<Vec<usize>>>,
     fail_work: bool,
     omit_verdict: bool,
+    stop: Option<Incomplete>,
 }
 
 impl MembershipExecution for NativeBatch {
@@ -40,6 +41,9 @@ impl MembershipExecution for NativeBatch {
                         .map(|candidate| candidate.atoms().collect())
                         .collect(),
                 );
+                if let Some(stop) = self.stop {
+                    return Err(Failure::Search(stop));
+                }
                 if self.fail_work {
                     let limits = zetesis_sat::Limits {
                         search: zetesis_sat::SearchLimits {
@@ -285,6 +289,30 @@ fn bounded_execution_cannot_prove_optimality() {
             assert_eq!(execution.snapshots.last().unwrap().0.pending, 3);
             assert!(capture.answers.is_empty());
         }
+    }
+}
+
+#[test]
+fn stopped_checker_preserves_uncommitted_proposals() {
+    let owner = admitted("{a;b;c}.");
+    for stop in [Incomplete::Cancelled, Incomplete::Deadline] {
+        let mut execution = NativeBatch {
+            stop: Some(stop),
+            ..Default::default()
+        };
+        let capture = run(&owner, &config(), &Control::default(), &mut execution);
+        assert!(capture.error.is_none());
+        assert!(capture.answers.is_empty());
+        assert_eq!(capture.outcome.verified_models(), 0);
+        assert_eq!(capture.outcome.completion(), Some(Completion::Interrupted));
+        assert_eq!(
+            capture.outcome.interruption(),
+            Some(Interruption::Countermodel(stop))
+        );
+        assert_eq!(execution.proposed.len(), 1);
+        assert_eq!(execution.proposed[0].len(), 3);
+        let (batch, _, queued) = execution.snapshots.last().unwrap();
+        assert_eq!((batch.pending, batch.propagated, *queued), (3, 0, 0));
     }
 }
 

@@ -281,3 +281,7 @@ impl Faults {
 #[cfg(test)]
 #[path = "../tests/context/state.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "../tests/context/control.rs"]
+mod control_tests;

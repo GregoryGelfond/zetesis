@@ -33,6 +33,7 @@ use std::fmt;
 use std::time::Duration;
 
 use zetesis_core::{GroundProgram, Seed, SeedView};
+use zetesis_cpu::Control;
 
 use packing::{BatchPlan, GraphPlan, PackedGraph, PackedSeeds};
 use residency::ResidentGraph;
@@ -140,6 +141,8 @@ pub enum GpuErrorKind {
     Device,
     /// The bounded host wait expired.
     Timeout,
+    /// Caller cancellation or deadline was observed; no complete batch is returned.
+    Interrupted,
     /// Readback mapping, shape, status, or tail-bit validation failed.
     Readback,
 }
@@ -163,8 +166,8 @@ impl GpuError {
 
     fn interrupted(stop: zetesis_cpu::Stop) -> Self {
         Self {
-            kind: GpuErrorKind::Device,
-            detail: "lazy readback interrupted; in-flight lifecycle invalidated".to_owned(),
+            kind: GpuErrorKind::Interrupted,
+            detail: stop.to_string(),
             interruption: Some(stop),
         }
     }
@@ -179,6 +182,13 @@ impl GpuError {
     #[must_use]
     pub fn detail(&self) -> &str {
         &self.detail
+    }
+
+    /// Exact control stop, when this error reports an interrupted operation.
+    /// A preceding scope/device fault replaces the stop and returns `None`.
+    #[must_use]
+    pub const fn interruption(&self) -> Option<zetesis_cpu::Stop> {
+        self.interruption
     }
 }
 
@@ -379,6 +389,20 @@ impl GpuOracle {
         self.check_batch_views(program, seeds.iter().map(Seed::view), limits)
     }
 
+    /// Check owned seeds with caller cancellation and deadline observation.
+    ///
+    /// # Errors
+    /// Preserves [`Self::check_batch_views_with_control`]'s failure contract.
+    pub fn check_batch_with_control(
+        &mut self,
+        program: &GroundProgram,
+        seeds: &[Seed],
+        limits: GpuLimits,
+        control: &Control,
+    ) -> Result<Vec<GpuCheck>, GpuError> {
+        self.check_batch_views_with_control(program, seeds.iter().map(Seed::view), limits, control)
+    }
+
     /// Check the same static candidate occurrences through borrowed seed views.
     /// The cloneable exact-size iterator preserves input order across admission
     /// and packing. Wrapping owned seeds or shared selections allocates no view
@@ -394,9 +418,31 @@ impl GpuOracle {
         seeds: impl ExactSizeIterator<Item = SeedView<'seed>> + Clone,
         limits: GpuLimits,
     ) -> Result<Vec<GpuCheck>, GpuError> {
+        self.check_batch_views_with_control(program, seeds, limits, &Control::default())
+    }
+
+    /// Check borrowed seeds with cooperative caller control. Busy admission
+    /// precedes control; control precedes health and graph admission, even for
+    /// empty batches. Polls also follow host packing and occur between device
+    /// waits of at most 50 ms. Host operations, drivers and scope settlement are
+    /// not preempted, so this is not a hard wall-clock deadline.
+    ///
+    /// # Errors
+    /// Returns [`GpuErrorKind::Interrupted`] with the exact stop and no partial
+    /// batch. Pre-submission stops leave health reusable; an interrupted wait
+    /// invalidates it. Scope/device faults retain priority over interruption.
+    /// Other failures follow [`Self::check_batch`].
+    pub fn check_batch_views_with_control<'seed>(
+        &mut self,
+        program: &GroundProgram,
+        seeds: impl ExactSizeIterator<Item = SeedView<'seed>> + Clone,
+        limits: GpuLimits,
+        control: &Control,
+    ) -> Result<Vec<GpuCheck>, GpuError> {
         self.last_batch_stats = None;
         let context = self.runtime.context.clone();
         let _lease = context.lease()?;
+        control.poll().map_err(GpuError::interrupted)?;
         self.runtime.check_health()?;
         let fresh_graph = if self
             .resident
@@ -459,6 +505,7 @@ impl GpuOracle {
             .as_ref()
             .map(|graph| PackedGraph::new(program, graph))
             .transpose()?;
+        control.poll().map_err(GpuError::interrupted)?;
         let scopes = ErrorScopes::new(self.runtime.device());
         if let Some((graph, packed)) = fresh_graph.zip(packed_graph) {
             self.resident = Some(ResidentGraph::new(self.runtime.device(), graph, &packed));
@@ -471,14 +518,7 @@ impl GpuOracle {
             .as_mut()
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing resident graph"))
             .and_then(|resident| {
-                resident.dispatch(
-                    self.runtime.device(),
-                    self.runtime.queue(),
-                    &self.runtime.pipeline,
-                    &packed,
-                    &plan,
-                    limits.timeout,
-                )
+                resident.dispatch(&self.runtime, &packed, &plan, limits.timeout, control)
             });
         let result = self.runtime.complete(scopes, outcome);
         if result.is_ok() {

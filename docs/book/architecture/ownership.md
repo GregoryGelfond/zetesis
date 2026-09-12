@@ -87,9 +87,15 @@ refusals leave the context reusable. Relation preparation submits no queue work;
 it releases its mapped host access before settling scopes. A cancellation or
 deadline at that stage leaves a healthy context reusable only after every scope
 and device-health check succeeds. An interrupted submitted operation may still
-be live and invalidates the context. Lazy batch entry polls control and then
-checks shared health before source traversal, including a batch that would offer
-no device chunks. Failure retains incomplete accounting.
+be live and invalidates the context. Controlled static, formula and lazy batch
+entry polls control and then checks shared health, including empty batches.
+Readback observes control between waits of at most 50 milliseconds and releases
+mapped access before returning. Driver calls, shader execution and scope
+settlement are not preempted. `GpuError::interruption()` retains the exact stop;
+ordinary solving reports incomplete work without an automatic backend retry.
+Candidate proposals remain accounted for even when no device result returns.
+Formula work and sweep counters include decoded results only; work performed by
+an interrupted unreturned submission is unknown.
 
 Byte ceilings retain their per-primitive scope. They do not automatically sum all
 prepared objects sharing a context or include device infrastructure. There is no

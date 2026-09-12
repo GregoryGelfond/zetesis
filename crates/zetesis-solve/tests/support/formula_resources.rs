@@ -88,6 +88,7 @@ fn supplied_profile(backend: Backend, expected_api: &str) {
                 &theory,
                 &candidates,
                 &options,
+                &zetesis_cpu::Control::default(),
                 &crate::phase_timing::Recorder::new(false),
             );
             assert!(result.is_ok());

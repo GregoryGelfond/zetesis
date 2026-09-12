@@ -28,13 +28,15 @@ impl Resident {
     }
     pub(super) fn dispatch(
         &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        pipeline: &wgpu::ComputePipeline,
+        runtime: &runtime::Runtime,
         seeds: &[u32],
         plan: &Plan,
         timeout: Duration,
+        control: &zetesis_cpu::Control,
     ) -> Result<Vec<FormulaCheck>, GpuError> {
+        let device = runtime.device();
+        let queue = runtime.queue();
+        let pipeline = &runtime.pipeline;
         if self.transport.is_none() {
             self.transport = Some(Transport::new(device, pipeline, self, plan));
         }
@@ -62,9 +64,14 @@ impl Resident {
                 result_bytes: plan.results,
             },
         );
-        runtime::read(device, &transport.readback, submission, timeout, |words| {
-            packing::decode(words, plan)
-        })
+        runtime::read_polled(
+            device,
+            &transport.readback,
+            submission,
+            timeout,
+            || control.poll().map_err(GpuError::interrupted),
+            |words| packing::decode(words, plan),
+        )
     }
 }
 pub(super) struct Transport {

@@ -61,7 +61,7 @@ stale, duplicate, reordered or malformed records and independently checks that
 the gate-projection verdict agrees with the closure and original seed. Any error
 refuses the entire batch. Framing identifies a completed record; rule closure and
 constraint evaluation still rely on the shader and device execution contract.
-An empty batch checks context health and graph admission, then returns without
+An empty batch checks caller control, context health and graph admission, then returns without
 transport allocation, dispatch limits or an epoch increment. Clearing residency
 does not reset epochs; exhausting their 32-bit sequence requires a new oracle.
 
@@ -74,9 +74,22 @@ retain an earlier chunk's output or reset the oracle's submission sequence.
 Adapter, allocation, limit, cancellation, timeout, validation and device failures
 remain failures or incomplete work. They are never converted into UNSAT results.
 Resident plans and transport buffers retain explicit identity and capacity
-contracts. Statistics distinguish submitted work from completely validated
-results; payload accounting is not a measurement of process RSS or physical bus
+contracts. Static and formula batch statistics describe the last successfully
+decoded nonempty batch. They do not measure operations or rounds performed by an
+interrupted submission whose result was not returned; those quantities are
+unavailable. Payload accounting is not a measurement of process RSS or physical bus
 traffic. Read each operation's rustdoc before reusing residency after a failure.
+
+Static `check_batch_with_control` / `check_batch_views_with_control` and formula
+`propagate_batch_with_control` accept the same cooperative `Control` used by CPU
+execution. Existing calls delegate with default control. A busy context takes
+precedence; otherwise control is checked before admission, including empty calls,
+after host packing and between device waits of at most 50 milliseconds. Driver
+calls and shader execution are not preempted: this is not a hard deadline.
+`GpuErrorKind::Interrupted` and `GpuError::interruption()` expose the exact stop
+without interpreting display text. Consumers with exhaustive error-kind matches
+must handle this variant. Ordinary solving retains interrupted candidates as
+uncommitted and does not retry a stopped operation on another backend.
 
 Relation preparation releases mapped host access without submitting queue work.
 Cancellation or deadline expiry during that copy returns no prepared view but
