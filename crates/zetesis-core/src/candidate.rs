@@ -59,44 +59,6 @@ impl Seed {
     }
 }
 
-/// A canonical set of supplied atoms, also named [`Interpretation`]. Construction
-/// establishes neither derivation, program satisfaction, nor stable membership.
-/// Cloning copies the tree and owned atom/string payload; structured values share
-/// their immutable node storage. No program or oracle is retained.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Model {
-    atoms: BTreeSet<Atom>,
-}
-impl Model {
-    /// Coalesce supplied atoms into canonical set order.
-    /// The iterator must terminate. Construction owns distinct atoms and uses
-    /// `O(n log n)` comparisons for `n` input atoms; comparisons inspect tuple and
-    /// text/node payload. Tree allocation is infallible, not a typed refusal.
-    #[must_use]
-    pub fn new(atoms: impl IntoIterator<Item = Atom>) -> Self {
-        Self {
-            atoms: atoms.into_iter().collect(),
-        }
-    }
-    /// All supplied atoms in canonical order. Borrowing is constant time;
-    /// traversing the set visits each distinct atom without cloning it.
-    #[must_use]
-    pub fn atoms(&self) -> &BTreeSet<Atom> {
-        &self.atoms
-    }
-    /// Exact set membership with a logarithmic number of atom comparisons.
-    /// A comparison can inspect tuple and text/node payload.
-    #[must_use]
-    pub fn contains(&self, atom: &Atom) -> bool {
-        self.atoms.contains(atom)
-    }
-}
-
-/// A finite total truth assignment represented by its true atoms. Every absent
-/// atom is false. This raw value carries no program-satisfaction or stability
-/// guarantee; [`Model`] remains available as the original compatible name.
-pub type Interpretation = Model;
-
 /// A candidate construction or representation refusal, never logical rejection.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SeedError {

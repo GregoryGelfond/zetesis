@@ -46,8 +46,13 @@ fn borrowed_packing_replaces_dirty_words_with_exact_bits() {
         assert_eq!(words.as_ptr(), storage);
         assert_eq!(graph.seed_words(&owned).unwrap(), words);
         assert_eq!(
-            graph.model_from_words(&words).unwrap().atoms(),
-            owned.atoms()
+            graph
+                .model_from_words(&words)
+                .unwrap()
+                .atoms()
+                .iter()
+                .collect::<Vec<_>>(),
+            owned.atoms().iter().collect::<Vec<_>>()
         );
     }
 }

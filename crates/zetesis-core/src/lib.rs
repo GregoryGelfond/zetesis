@@ -29,17 +29,19 @@ mod template;
 mod atom_key;
 mod program;
 mod candidate;
+mod model;
 mod carrier;
 mod ground;
 pub mod relation;
 
 pub use atom_key::{AtomKey, BindingView};
 pub use candidate::{
-    GateAtom, GateAtomError, GateAtoms, Interpretation, Model, Seed, SeedAtom, SeedError,
-    SeedSelection, SeedSelectionError, SeedView,
+    GateAtom, GateAtomError, GateAtoms, Seed, SeedAtom, SeedError, SeedSelection,
+    SeedSelectionError, SeedView,
 };
 pub use carrier::{AtomIter, CarrierError};
 pub use ground::{AtomId, GroundProgram, GroundRule, StaticError, StaticLimits, WordError};
+pub use model::{AtomCatalog, Interpretation, Model, ModelAtoms, ModelError, ModelIter};
 pub use program::{AdmissionError, AdmissionLimits, AdmissionResource, Program};
 pub use template::{AtomPattern, Filter, InstantiationError, Template, Term};
 pub use value::{Atom, ConstructionError, Predicate, Sign, Value};

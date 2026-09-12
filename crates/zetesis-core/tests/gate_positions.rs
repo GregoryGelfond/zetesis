@@ -96,8 +96,13 @@ fn sorting_keeps_token_position_and_payload_together() {
     assert_eq!(graph.seed_words(&owned).unwrap(), packed);
     drop(tokens);
     assert_eq!(
-        graph.model_from_words(&packed).unwrap().atoms(),
-        owned.atoms()
+        graph
+            .model_from_words(&packed)
+            .unwrap()
+            .atoms()
+            .iter()
+            .collect::<Vec<_>>(),
+        owned.atoms().iter().collect::<Vec<_>>()
     );
 }
 
