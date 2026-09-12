@@ -313,6 +313,74 @@ mod physical {
         qualify_formula_results(Backend::Vulkan);
     }
 
+    #[test]
+    #[ignore = "requires actual Metal after source table-join grounding"]
+    fn ordinary_metal_table_joins_preserve_complete_answers() {
+        qualify_table_joins(Backend::Metal);
+    }
+
+    #[test]
+    #[ignore = "requires actual Vulkan after source table-join grounding"]
+    fn ordinary_vulkan_table_joins_preserve_complete_answers() {
+        qualify_table_joins(Backend::Vulkan);
+    }
+
+    fn qualify_table_joins(backend: Backend) {
+        let source = "edge(1,1). edge(1,2). edge(2,1). edge(2,2). 1{choose(1);choose(2)}1. witness(X,Y):-choose(X),edge(X,Y). diagonal(X):-edge(X,X). #show witness/2.";
+        let mut expected = Vec::new();
+        let cpu = run_with_diagnostics(
+            source.into(),
+            &options(&["--backend", "cpu", "--json", "--formula-joins", "indexed"]),
+            &mut expected,
+            &mut Vec::new(),
+            &Control::default(),
+        )
+        .unwrap();
+        assert_eq!(cpu.completion, Completion::Exhausted);
+        assert_eq!(cpu.models, 2);
+        let mut actual = Vec::new();
+        let gpu = run_with_diagnostics(
+            source.into(),
+            &options(&[
+                "--backend",
+                backend.argument(),
+                "--oracle",
+                "countermodel",
+                "--formula-joins",
+                "table",
+                "--json",
+                "--stats",
+                "--batch-size",
+                "3",
+            ]),
+            &mut actual,
+            &mut Vec::new(),
+            &Control::default(),
+        )
+        .unwrap();
+        assert_eq!(gpu.completion, Completion::Exhausted);
+        assert_eq!(full_records(&actual), full_records(&expected));
+        let execution = gpu.formula_execution.unwrap();
+        assert!(execution.adapter.contains(backend.name()));
+        assert!(execution.gpu_candidates > 0);
+        assert_eq!(execution.gpu_candidates, gpu.checked);
+        assert_eq!(execution.gpu_decided + execution.cpu_residuals, gpu.checked);
+        assert_eq!(
+            (execution.pending_candidates, execution.queued_models),
+            (0, 0)
+        );
+        let grounding = gpu.phase_timings.unwrap().grounding;
+        let work = zetesis_cli::GroundingPhase::ALL
+            .into_iter()
+            .filter_map(|phase| grounding.get(phase))
+            .fold(zetesis_cli::GroundingWork::default(), |sum, measured| {
+                sum.checked_sum(measured.work)
+            });
+        assert!(work.table_preparations.unwrap() > 0);
+        assert!(work.table_probes.unwrap() > 0);
+        assert!(work.table_rows.unwrap() > 0);
+    }
+
     fn qualify_formula_results(backend: Backend) {
         for source in [
             "a | b.",

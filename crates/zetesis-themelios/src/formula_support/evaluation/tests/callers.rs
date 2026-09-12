@@ -8,7 +8,7 @@ use super::location;
 use crate::expansion::Budget;
 use crate::formula_binding::{Binding, complete};
 use crate::formula_ir::{Expression, LiteralIr, Operation};
-use crate::formula_support::{Comparisons, Counters, Join, Support};
+use crate::formula_support::{Comparisons, Counters, Join, Relations, Support};
 use crate::{ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource};
 
 fn number(value: i32) -> Expression {
@@ -36,7 +36,14 @@ fn final_filters_use_the_join_workspace() {
         Relation::Eq,
         vec![increment(0)],
     )];
-    let support = Support::default();
+    let relations = Relations::default();
+    let support = Support::indexed(
+        &relations,
+        &crate::FormulaLimits::default(),
+        &crate::formula_support::Counters::default(),
+        location(),
+    )
+    .unwrap();
     let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
     let mut join = Join::new(
         &literals,
@@ -74,7 +81,14 @@ fn binding_generators_use_the_join_workspace() {
             value: increment(0),
         },
     ];
-    let support = Support::default();
+    let relations = Relations::default();
+    let support = Support::indexed(
+        &relations,
+        &crate::FormulaLimits::default(),
+        &crate::formula_support::Counters::default(),
+        location(),
+    )
+    .unwrap();
     let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
     let mut counters = Counters::default();
     let mut join = Join::new(
@@ -120,7 +134,14 @@ fn range_endpoints_use_the_join_workspace() {
         upper: increment(0),
         binder: true,
     }];
-    let support = Support::default();
+    let relations = Relations::default();
+    let support = Support::indexed(
+        &relations,
+        &crate::FormulaLimits::default(),
+        &crate::formula_support::Counters::default(),
+        location(),
+    )
+    .unwrap();
     let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
     let mut join = Join::new(
         &literals,
@@ -161,7 +182,14 @@ fn false_filters_do_not_hide_later_arithmetic_errors() {
             vec![number(0)],
         ),
     ];
-    let support = Support::default();
+    let relations = Relations::default();
+    let support = Support::indexed(
+        &relations,
+        &crate::FormulaLimits::default(),
+        &crate::formula_support::Counters::default(),
+        location(),
+    )
+    .unwrap();
     let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
     let mut join = Join::new(
         &literals,
@@ -188,7 +216,14 @@ fn false_filters_do_not_hide_later_arithmetic_errors() {
 #[test]
 fn stopped_filters_release_live_workspace_values() {
     let literals = [LiteralIr::Compare(increment(0), Relation::Eq, increment(0))];
-    let support = Support::default();
+    let relations = Relations::default();
+    let support = Support::indexed(
+        &relations,
+        &crate::FormulaLimits::default(),
+        &crate::formula_support::Counters::default(),
+        location(),
+    )
+    .unwrap();
     let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
     let mut join = Join::new(
         &literals,
@@ -249,7 +284,14 @@ fn generator_reads_refuse_absent_inputs() {
             value: number(8),
         },
     ];
-    let support = Support::default();
+    let relations = Relations::default();
+    let support = Support::indexed(
+        &relations,
+        &crate::FormulaLimits::default(),
+        &crate::formula_support::Counters::default(),
+        location(),
+    )
+    .unwrap();
     let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
     let mut join = Join::new(
         &literals,
@@ -268,7 +310,14 @@ fn generator_reads_refuse_absent_inputs() {
 #[test]
 fn component_rows_preserve_excluded_slots() {
     let literals = [LiteralIr::Compare(number(1), Relation::Eq, number(1))];
-    let support = Support::default();
+    let relations = Relations::default();
+    let support = Support::indexed(
+        &relations,
+        &crate::FormulaLimits::default(),
+        &crate::formula_support::Counters::default(),
+        location(),
+    )
+    .unwrap();
     let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
     let mut join = Join::component(
         &literals,

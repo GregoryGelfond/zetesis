@@ -26,3 +26,7 @@ tempfile = "3"
 
 [lints]
 workspace = true
+
+[[example]]
+name = "book-table-grounding"
+path = "../../docs/book/examples/table-grounding.rs"

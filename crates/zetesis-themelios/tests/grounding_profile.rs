@@ -434,3 +434,13 @@ fn outcome_labels_form_a_unique_complete_catalog() {
         ["completed", "failed", "unwound"].into_iter().collect()
     );
 }
+
+#[test]
+fn support_capacity_peaks_combine_by_maximum() {
+    let mut first = GroundingWork::default();
+    first.support_peak_bytes = Some(17);
+    let mut second = GroundingWork::default();
+    second.support_peak_bytes = Some(29);
+    assert_eq!(first.checked_sum(second).support_peak_bytes, Some(29));
+    assert_eq!(second.checked_sum(first).support_peak_bytes, Some(29));
+}

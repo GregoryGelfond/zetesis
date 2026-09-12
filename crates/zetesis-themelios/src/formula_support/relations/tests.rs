@@ -30,7 +30,7 @@ fn atom(values: &[i32]) -> Atom {
     .unwrap()
 }
 
-fn contains(support: &Support<'_>, atom: &Atom) -> bool {
+fn contains(support: &Relations<'_>, atom: &Atom) -> bool {
     let pattern = AtomPattern::new(
         atom.predicate().clone(),
         atom.values().iter().cloned().map(Term::Constant).collect(),

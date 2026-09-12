@@ -16,21 +16,21 @@ use super::{Counters, Support};
 use crate::formula_ir::{HeadIr, LiteralIr, RuleIr};
 use crate::{FormulaFailure, FormulaLimits};
 
-pub(super) struct Variants<'a> {
+pub(super) struct Variants<'a, 'source> {
     rule: &'a RuleIr,
-    support: &'a Support<'a>,
+    support: &'a Support<'source>,
     full: bool,
     certified: bool,
     next: usize,
 }
 
-pub(super) fn variants<'a>(
+pub(super) fn variants<'a, 'source>(
     rule: &'a RuleIr,
-    support: &'a Support<'a>,
+    support: &'a Support<'source>,
     first: bool,
     limits: &FormulaLimits,
     counters: &mut Counters,
-) -> Result<Variants<'a>, FormulaFailure> {
+) -> Result<Variants<'a, 'source>, FormulaFailure> {
     let mut certified = matches!(rule.head, HeadIr::Normal(Some(_)));
     let mut inputs = 0;
     for literal in &rule.body {
@@ -64,7 +64,7 @@ pub(super) enum Variant {
     Delta(usize),
 }
 
-impl Variants<'_> {
+impl Variants<'_, '_> {
     pub(super) fn next(
         &mut self,
         limits: &FormulaLimits,

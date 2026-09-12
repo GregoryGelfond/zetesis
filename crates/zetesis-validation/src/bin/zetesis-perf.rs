@@ -25,6 +25,9 @@ struct Options {
     /// Separate child RSS rounds per solver/case, zero through 41 (ordinary CPU only).
     #[arg(long, default_value_t = 0)]
     memory_runs: usize,
+    /// Explicit native eager-formula join strategy; omission preserves its default.
+    #[arg(long, value_enum)]
+    formula_joins: Option<JoinArgument>,
     /// Explicit instrumented profile; repeat for a matrix. Corpus defaults to all four.
     #[arg(long, value_enum)]
     profile: Vec<ProfileArgument>,
@@ -131,6 +134,7 @@ fn execute(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
         reference: &reference,
         report: &options.report,
         schedule,
+        formula_joins: options.formula_joins.map(Into::into),
         limits,
     };
     let report = if options.memory_runs > 0 || request.schedule.suite().is_none() {
@@ -212,23 +216,36 @@ enum ProfileArgument {
     MetalLazy,
 }
 
-fn matrix(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
-    use zetesis_validation::{
-        performance::matrix,
-        selected::{Backend, Grounder, NativeExecution},
-    };
+#[derive(Clone, Copy, ValueEnum)]
+enum JoinArgument {
+    Indexed,
+    Table,
+}
+
+impl From<JoinArgument> for zetesis_validation::selected::FormulaJoins {
+    fn from(value: JoinArgument) -> Self {
+        match value {
+            JoinArgument::Indexed => Self::Indexed,
+            JoinArgument::Table => Self::Table,
+        }
+    }
+}
+
+fn execution_profiles(options: &Options) -> Vec<zetesis_validation::selected::NativeExecution> {
+    use zetesis_validation::selected::{Backend, Grounder, NativeExecution};
+    let defaults = [
+        ProfileArgument::CpuEager,
+        ProfileArgument::CpuLazy,
+        ProfileArgument::MetalEager,
+        ProfileArgument::MetalLazy,
+    ];
     let profiles = if options.profile.is_empty() {
-        vec![
-            ProfileArgument::CpuEager,
-            ProfileArgument::CpuLazy,
-            ProfileArgument::MetalEager,
-            ProfileArgument::MetalLazy,
-        ]
+        defaults.as_slice()
     } else {
-        options.profile
+        options.profile.as_slice()
     };
-    let profiles = profiles
-        .into_iter()
+    profiles
+        .iter()
         .map(|profile| {
             let (backend, grounder) = match profile {
                 ProfileArgument::CpuEager => (Backend::Cpu, Grounder::Eager),
@@ -239,6 +256,7 @@ fn matrix(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
             NativeExecution {
                 backend,
                 grounder,
+                formula_joins: options.formula_joins.map(Into::into),
                 workers: options
                     .workers
                     .unwrap_or(std::num::NonZeroUsize::new(4).expect("four is nonzero")),
@@ -251,7 +269,12 @@ fn matrix(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
                 ..NativeExecution::default()
             }
         })
-        .collect();
+        .collect()
+}
+
+fn matrix(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
+    use zetesis_validation::performance::matrix;
+    let profiles = execution_profiles(&options);
     let suite = match options.suite {
         SuiteArgument::Baseline => matrix::Suite::Baseline,
         SuiteArgument::Queens => matrix::Suite::Queens,

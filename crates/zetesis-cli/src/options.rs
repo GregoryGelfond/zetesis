@@ -49,6 +49,13 @@ pub struct Options {
     /// and ground-rule ceilings.
     #[arg(long, value_parser = grounder_parser(), default_value = "auto")]
     pub grounder: Grounder,
+    /// Positive joins during eager formula grounding.
+    ///
+    /// Table reuses support masks for eligible flat patterns. Relational source
+    /// grounding and support-growth rounds retain indexed joins. Preparation
+    /// consumes the existing support-storage and grounding-work limits.
+    #[arg(long, value_parser = formula_joins_parser(), default_value = "indexed", hide_short_help = true)]
+    pub formula_joins: zetesis_themelios::JoinStrategy,
     /// Advanced relational CPU source batching. Union/worlds require lazy or
     /// auto grounding and CPU execution. A stopped shared
     /// batch publishes no candidate checks; independent remains the default.
@@ -329,6 +336,21 @@ fn grounder_parser() -> impl TypedValueParser<Value = Grounder> {
         (Grounder::Auto, PossibleValue::new(Grounder::Auto.label()).help("Prefer lazy source grounding where admitted, independently of hardware.")),
         (Grounder::Lazy, PossibleValue::new(Grounder::Lazy.label()).help("Require source joins without materializing a complete ground rule store. Explicit GPU requests use immutable relational rounds; Auto hardware selection retains CPU.")),
         (Grounder::Eager, PossibleValue::new(Grounder::Eager.label()).help("Materialize a bounded static program before checking on CPU or GPU.")),
+    ])
+}
+
+fn formula_joins_parser() -> impl TypedValueParser<Value = zetesis_themelios::JoinStrategy> {
+    use zetesis_themelios::JoinStrategy;
+    policy_parser([
+        (
+            JoinStrategy::Indexed,
+            PossibleValue::new("indexed").help("Probe the shortest matching value posting."),
+        ),
+        (
+            JoinStrategy::Table,
+            PossibleValue::new("table")
+                .help("Reuse finite-table masks over completed possible support."),
+        ),
     ])
 }
 

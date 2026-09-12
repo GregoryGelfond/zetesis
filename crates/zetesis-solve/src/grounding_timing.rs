@@ -11,7 +11,7 @@ use zetesis_themelios::{GroundingOutcome, GroundingPhase, GroundingWork};
 pub struct GroundingMeasurement {
     /// Sum of observed host intervals, or `None` on duration overflow.
     pub elapsed: Option<Duration>,
-    /// Checked sum of the frontend's selected work populations.
+    /// Combined frontend work counts and maximum support-capacity peak.
     pub work: GroundingWork,
     outcomes: [Option<u64>; GroundingOutcome::ALL.len()],
 }
@@ -23,11 +23,11 @@ impl GroundingMeasurement {
         self.outcomes[outcome_index(outcome)]
     }
 
-    fn record(&mut self, elapsed: Duration, outcome: GroundingOutcome, work: GroundingWork) {
+    fn record(&mut self, elapsed: Duration, outcome: GroundingOutcome, work: &GroundingWork) {
         self.elapsed = self.elapsed.and_then(|value| value.checked_add(elapsed));
         let count = &mut self.outcomes[outcome_index(outcome)];
         *count = count.and_then(|value| value.checked_add(1));
-        self.work = self.work.checked_sum(work);
+        self.work = self.work.checked_sum(*work);
     }
 }
 
@@ -109,7 +109,7 @@ impl Recorder {
         attempt: Attempt,
         phase: GroundingPhase,
         outcome: GroundingOutcome,
-        work: GroundingWork,
+        work: &GroundingWork,
     ) {
         let elapsed = attempt.finish(phase);
         self.lock_timings().measurements[phase_index(phase)]

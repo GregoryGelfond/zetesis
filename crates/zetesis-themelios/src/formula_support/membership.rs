@@ -35,9 +35,16 @@ fn probe(existing: Vec<Atom>, delta: &BTreeSet<Atom>, value: Option<Value>) -> b
             .insert(atom, &limits, &mut counters, location())
             .unwrap();
     }
-    let support = catalog
+    let relations = catalog
         .snapshot(&limits, &mut counters, location())
         .unwrap();
+    let support = super::Support::indexed(
+        &relations,
+        &crate::FormulaLimits::default(),
+        &crate::formula_support::Counters::default(),
+        location(),
+    )
+    .unwrap();
     let mut budget = Budget::new(
         ExpansionLimits {
             max_scalar_bytes: 0,

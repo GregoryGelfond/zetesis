@@ -24,7 +24,7 @@ use crate::expansion::Budget;
 use crate::formula::ceiling;
 use crate::formula_binding::Binding;
 use crate::formula_ir::{HeadIr, LiteralIr, Prepared, RuleIr};
-use crate::formula_support::{self, CompletedSupport, Counters, Join, Support};
+use crate::formula_support::{self, CompletedQueries, Counters, Join, Support};
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
 
 fn ordinary(literals: &[LiteralIr]) -> bool {
@@ -203,11 +203,11 @@ impl Context<'_> {
 impl SourceEligibility {
     pub(crate) fn build(
         prepared: &Prepared,
-        completed_support: &CompletedSupport<'_>,
+        completed_support: &CompletedQueries<'_>,
         retained: usize,
         context: &mut Context<'_>,
     ) -> Result<Self, FormulaFailure> {
-        let support = completed_support.relations();
+        let support = completed_support.support();
         let graph = prepared.analysis.dependencies();
         let relevant = context.closure(
             graph,

@@ -310,7 +310,13 @@ mod tests {
                 elements,
             },
             &crate::formula_binding::Binding::default(),
-            &Support::default(),
+            &Support::indexed(
+                &crate::formula_support::Relations::default(),
+                &crate::FormulaLimits::default(),
+                &crate::formula_support::Counters::default(),
+                location,
+            )
+            .unwrap(),
             &FormulaLimits::default(),
             &mut budget,
             &mut Counters::default(),

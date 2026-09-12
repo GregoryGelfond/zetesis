@@ -101,7 +101,14 @@ fn local_joins_cannot_rebind_absent_outer_inputs() {
         )
         .unwrap(),
     )];
-    let support = crate::formula_support::Support::default();
+    let relations = crate::formula_support::Relations::default();
+    let support = crate::formula_support::Support::indexed(
+        &relations,
+        &crate::FormulaLimits::default(),
+        &crate::formula_support::Counters::default(),
+        location(),
+    )
+    .unwrap();
     assert!(matches!(
         crate::formula_support::Join::new(
             &literals,

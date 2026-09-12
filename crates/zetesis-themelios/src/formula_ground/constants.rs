@@ -165,7 +165,13 @@ fn scoped_initialization_retains_spent_work() {
             scoped_body::validate_with_purpose(
                 &[],
                 &crate::formula_binding::Binding::default(),
-                &Support::default(),
+                &Support::indexed(
+                    &crate::formula_support::Relations::default(),
+                    &crate::FormulaLimits::default(),
+                    &crate::formula_support::Counters::default(),
+                    location()
+                )
+                .unwrap(),
                 &mut context,
                 purpose
             ),

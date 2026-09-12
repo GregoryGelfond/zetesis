@@ -2,7 +2,7 @@
 //! No model search or least-required solver runs here. Optional covers either
 //! truth value; only atoms outside completed support are classified absent.
 //! Unresolved dependants use the same conservative carrier. The enclosing
-//! constructor requires `CompletedSupport`, so aggregate proposals and scoped
+//! constructor requires `CompletedQueries`, so aggregate proposals and scoped
 //! producers share the rows used by final grounding only after a full fixed
 //! point. Aggregate equality and conditional truth remain in the original
 //! theory, never in this source-activity lookup.

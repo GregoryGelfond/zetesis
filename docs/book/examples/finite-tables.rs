@@ -1,10 +1,10 @@
-//! Project complete typed rows and restore a previously wider domain.
+//! Select complete typed rows, project their values and restore a wider domain.
 
 // ANCHOR: example
 use zetesis_core::{Atom, Predicate, Value, relation::Relation};
 use zetesis_cpu::{
     Control,
-    table::{Limits, Table},
+    table::{Domain, Limits, Table},
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -21,6 +21,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let relation = Relation::from_atoms(&pair, &atoms, zetesis_core::relation::Limits::default())?;
     let control = Control::default();
     let table = Table::prepare(&relation, &[0, 1], Limits::default(), &control)?;
+    let departure = Value::Number(1);
+    let selected = table.select(
+        &[Domain::Singleton(&departure), Domain::Unrestricted],
+        Limits::default(),
+        &control,
+    )?;
+    assert_eq!(selected.rows().collect::<Vec<_>>(), vec![0, 1]);
+
     let departures = [Value::Number(1), Value::Number(2)];
     let arrivals = [Value::Number(3)];
     let restricted = table.project(&[&departures, &arrivals], Limits::default(), &control)?;

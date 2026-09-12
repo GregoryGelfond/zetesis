@@ -90,13 +90,14 @@ impl GroundingOutcome {
 /// Exact selected work populations for one phase, including partial failures.
 ///
 /// Every field starts at `Some(0)`. `None` means that field overflowed `u64`;
-/// other fields remain usable. Counts are neither bytes nor durations and do not
-/// alter existing semantic resource charges. A failed operation contributes only
+/// other fields remain usable. Work counts and named capacity receipts are not
+/// durations and do not alter resource admission. A failed operation contributes only
 /// the events reached before its error. Recording uses constant space and one
-/// checked addition per event; event collection itself has diagnostic overhead.
+/// checked addition or maximum per event; event collection itself has diagnostic overhead.
 /// These fields do not cover every operation; for example, theory validation
-/// can take time while every counter remains zero. Sum phase-local fields with
-/// checked addition, propagating `None` whenever a constituent is unavailable.
+/// can take time while every counter remains zero. Combine phase-local work
+/// and publication counts by checked addition; combine capacity peaks by maximum.
+/// Propagate `None` whenever a constituent is unavailable.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct GroundingWork {
@@ -108,6 +109,29 @@ pub struct GroundingWork {
     pub support_index_entries: Option<u64>,
     /// Bound-column probe attempts, including absent relations or empty matches.
     pub join_probes: Option<u64>,
+    /// Probes executed by the indexed positive-row matcher.
+    pub indexed_probes: Option<u64>,
+    /// Completed-support table probes using indexed matching for structural
+    /// patterns or absent relations. Support-growth phases remain indexed.
+    pub table_inapplicable_probes: Option<u64>,
+    /// Prepared table indices successfully retained by this grounding attempt.
+    pub table_preparations: Option<u64>,
+    /// Table probes reusing an already prepared predicate and alias scope.
+    pub table_reuses: Option<u64>,
+    /// Finite-table selections attempted over complete possible support.
+    pub table_probes: Option<u64>,
+    /// Table-selected row occurrences visited by the unchanged full matcher.
+    pub table_rows: Option<u64>,
+    /// Completed charged work inside finite-table index preparation.
+    pub table_prepare_work: Option<u64>,
+    /// Completed charged work inside finite-table row selection.
+    pub table_query_work: Option<u64>,
+    /// Additional index capacity successfully retained, excluding cache slots.
+    pub table_index_bytes: Option<u64>,
+    /// Highest reported admitted support/query capacity, including live masks
+    /// and conservative operation peaks. Refused proposals do not contribute;
+    /// actual allocator slack can. Not process RSS or a complete stack measure.
+    pub support_peak_bytes: Option<u64>,
     /// Existing support rows selected for an attempted pattern match.
     pub join_rows: Option<u64>,
     /// Base relational binding snapshots successfully copied by the join cursor.
@@ -140,6 +164,16 @@ impl Default for GroundingWork {
             support_atoms: Some(0),
             support_index_entries: Some(0),
             join_probes: Some(0),
+            indexed_probes: Some(0),
+            table_inapplicable_probes: Some(0),
+            table_preparations: Some(0),
+            table_reuses: Some(0),
+            table_probes: Some(0),
+            table_rows: Some(0),
+            table_prepare_work: Some(0),
+            table_query_work: Some(0),
+            table_index_bytes: Some(0),
+            support_peak_bytes: Some(0),
             join_rows: Some(0),
             binding_snapshots: Some(0),
             readiness_nodes: Some(0),
@@ -160,6 +194,16 @@ pub(crate) enum Event {
     SupportAtom,
     SupportIndexEntry,
     JoinProbe,
+    IndexedProbe,
+    TableInapplicableProbe,
+    TablePreparation,
+    TableReuse,
+    TableProbe,
+    TableRow,
+    TablePrepareWork(u64),
+    TableQueryWork(u64),
+    TableIndexBytes(usize),
+    SupportPeakBytes(u128),
     JoinRow,
     BindingSnapshot,
     ReadinessNode,
@@ -173,7 +217,8 @@ pub(crate) enum Event {
 }
 
 impl GroundingWork {
-    /// Sum two snapshots field by field in constant time and space.
+    /// Combine snapshots in constant time and space: add work/capacity publication
+    /// counts and retain the maximum support capacity peak.
     ///
     /// A field is unavailable if either input is unavailable or their sum
     /// overflows `u64`; other fields retain their exact sums. This operation
@@ -188,6 +233,22 @@ impl GroundingWork {
             support_atoms: sum(self.support_atoms, other.support_atoms),
             support_index_entries: sum(self.support_index_entries, other.support_index_entries),
             join_probes: sum(self.join_probes, other.join_probes),
+            indexed_probes: sum(self.indexed_probes, other.indexed_probes),
+            table_inapplicable_probes: sum(
+                self.table_inapplicable_probes,
+                other.table_inapplicable_probes,
+            ),
+            table_preparations: sum(self.table_preparations, other.table_preparations),
+            table_reuses: sum(self.table_reuses, other.table_reuses),
+            table_probes: sum(self.table_probes, other.table_probes),
+            table_rows: sum(self.table_rows, other.table_rows),
+            table_prepare_work: sum(self.table_prepare_work, other.table_prepare_work),
+            table_query_work: sum(self.table_query_work, other.table_query_work),
+            table_index_bytes: sum(self.table_index_bytes, other.table_index_bytes),
+            support_peak_bytes: self
+                .support_peak_bytes
+                .zip(other.support_peak_bytes)
+                .map(|(a, b)| a.max(b)),
             join_rows: sum(self.join_rows, other.join_rows),
             binding_snapshots: sum(self.binding_snapshots, other.binding_snapshots),
             readiness_nodes: sum(self.readiness_nodes, other.readiness_nodes),
@@ -202,11 +263,31 @@ impl GroundingWork {
     }
 
     fn record(&mut self, event: Event) {
+        let amount = match event {
+            Event::TablePrepareWork(work) | Event::TableQueryWork(work) => Some(work),
+            Event::TableIndexBytes(bytes) => u64::try_from(bytes).ok(),
+            Event::SupportPeakBytes(bytes) => u64::try_from(bytes).ok(),
+            _ => Some(1),
+        };
+        if matches!(event, Event::SupportPeakBytes(_)) {
+            self.support_peak_bytes = self.support_peak_bytes.zip(amount).map(|(a, b)| a.max(b));
+            return;
+        }
         let field = match event {
             Event::SupportRound => &mut self.support_rounds,
             Event::SupportAtom => &mut self.support_atoms,
             Event::SupportIndexEntry => &mut self.support_index_entries,
             Event::JoinProbe => &mut self.join_probes,
+            Event::IndexedProbe => &mut self.indexed_probes,
+            Event::TableInapplicableProbe => &mut self.table_inapplicable_probes,
+            Event::TablePreparation => &mut self.table_preparations,
+            Event::TableReuse => &mut self.table_reuses,
+            Event::TableProbe => &mut self.table_probes,
+            Event::TableRow => &mut self.table_rows,
+            Event::TablePrepareWork(_) => &mut self.table_prepare_work,
+            Event::TableQueryWork(_) => &mut self.table_query_work,
+            Event::TableIndexBytes(_) => &mut self.table_index_bytes,
+            Event::SupportPeakBytes(_) => &mut self.support_peak_bytes,
             Event::JoinRow => &mut self.join_rows,
             Event::BindingSnapshot => &mut self.binding_snapshots,
             Event::ReadinessNode => &mut self.readiness_nodes,
@@ -218,7 +299,7 @@ impl GroundingWork {
             Event::NodeInserted => &mut self.nodes_inserted,
             Event::Root => &mut self.roots,
         };
-        *field = field.and_then(|value| value.checked_add(1));
+        *field = field.and_then(|value| amount.and_then(|amount| value.checked_add(amount)));
     }
 }
 

@@ -48,6 +48,7 @@ pub(crate) fn ground(
     location: Location,
     observer: Option<&dyn crate::GroundingObserver>,
     count_plan: Option<crate::formula_count_plan::Request<'_>>,
+    options: crate::GroundingOptions,
 ) -> Result<Compiled, FormulaFailure> {
     use crate::GroundingPhase;
 
@@ -60,7 +61,9 @@ pub(crate) fn ground(
         analysis,
         analyzed,
         objective_declarations,
-    } = instantiate(prepared, limits, budget, location, &profile, count_plan)?;
+    } = instantiate(
+        prepared, limits, budget, location, &profile, count_plan, options,
+    )?;
     let Emission {
         atoms,
         nodes,
@@ -109,6 +112,7 @@ fn instantiate<'a>(
     location: Location,
     profile: &Profile<'_>,
     count_plan: Option<crate::formula_count_plan::Request<'_>>,
+    options: crate::GroundingOptions,
 ) -> Result<Instantiation<'a>, FormulaFailure> {
     use crate::GroundingPhase;
 
@@ -119,17 +123,13 @@ fn instantiate<'a>(
     let completed = profile.phase(GroundingPhase::SupportCompletion, None, || {
         catalog.snapshot(limits, &mut counters, location)
     })?;
-    let support = completed.relations();
+    let queries = profile.phase(GroundingPhase::SupportCompletion, None, || {
+        completed.queries(options.joins, limits, &counters, location)
+    })?;
+    let support = queries.support();
     let (objectives, objective_origins) =
         profile.phase(GroundingPhase::ObjectiveActivation, None, || {
-            objectives::prepare(
-                &prepared,
-                &completed,
-                limits,
-                budget,
-                &mut counters,
-                location,
-            )
+            objectives::prepare(&prepared, &queries, limits, budget, &mut counters, location)
         })?;
     let mut builder = profile.phase(GroundingPhase::FormulaInitialization, None, || {
         let mut builder = Builder::empty(

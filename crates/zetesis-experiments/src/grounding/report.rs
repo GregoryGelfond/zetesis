@@ -61,6 +61,8 @@ pub struct Report {
     pub timing_scope: &'static str,
     /// Exact native and capture ceilings used throughout this run.
     pub configuration: Configuration,
+    /// Unmeasured reference strategy, independent of the timed request.
+    pub reference_join_strategy: &'static str,
     /// Original source catalog; files are loaded anew before each admission.
     pub sources: Vec<SourceIdentity>,
     /// Full signed atom identities in native theory index order, without #show.
@@ -88,6 +90,7 @@ impl Report {
             schema_version: 1,
             timing_scope: "fresh_bundle_formula_admission_excluding_load_parse_and_observer_setup",
             configuration: *configuration,
+            reference_join_strategy: "indexed",
             sources: Vec::new(),
             atoms: Vec::new(),
             nodes: None,

@@ -3,6 +3,7 @@
 mod evaluation;
 mod delta;
 mod relations;
+mod queries;
 #[cfg(test)]
 mod columnar;
 #[cfg(test)]
@@ -25,9 +26,10 @@ use crate::grounding_observer::{Event, Work};
 use crate::{ExpansionFailure, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
 
 pub(crate) use evaluation::Evaluation;
+pub(crate) use queries::Support;
 #[cfg(test)]
 use relations::RelationRows;
-pub(crate) use relations::{Support, SupportCatalog};
+pub(crate) use relations::{Relations, SupportCatalog};
 
 /// Possible atoms after a complete support round added no new head.
 ///
@@ -39,9 +41,9 @@ pub(crate) struct CompletedCatalog {
 }
 
 /// An immutable relation view of one successfully completed support owner.
-/// Intermediate round snapshots deliberately have only the `Support` type.
+/// Intermediate round snapshots deliberately have only the `Relations` type.
 pub(crate) struct CompletedSupport<'source> {
-    relations: Support<'source>,
+    relations: Relations<'source>,
 }
 
 impl CompletedCatalog {
@@ -57,10 +59,29 @@ impl CompletedCatalog {
     }
 }
 
-impl<'source> CompletedSupport<'source> {
+impl CompletedSupport<'_> {
     /// Borrow the same typed rows used by final grounding and objective joins.
-    pub(crate) fn relations(&self) -> &Support<'source> {
-        &self.relations
+    pub(crate) fn queries(
+        &self,
+        strategy: crate::JoinStrategy,
+        limits: &FormulaLimits,
+        counters: &Counters,
+        location: Location,
+    ) -> Result<CompletedQueries<'_>, FormulaFailure> {
+        Ok(CompletedQueries {
+            support: Support::completed(&self.relations, strategy, limits, counters, location)?,
+        })
+    }
+}
+
+/// Queries over exactly one completed support certificate. Only its completed
+/// snapshot constructs this workspace; growing relations cannot claim it.
+pub(crate) struct CompletedQueries<'source> {
+    support: Support<'source>,
+}
+impl<'source> CompletedQueries<'source> {
+    pub(crate) fn support(&self) -> &Support<'source> {
+        &self.support
     }
 }
 
@@ -163,7 +184,8 @@ pub(crate) fn build(
         )?;
         rounds += 1;
         counters.record(Event::SupportRound);
-        let support = catalog.snapshot(limits, counters, fallback)?;
+        let relations = catalog.snapshot(limits, counters, fallback)?;
+        let support = Support::indexed(&relations, limits, counters, fallback)?;
         let mut delta = BTreeSet::new();
         for rule in &prepared.rules {
             if matches!(rule.head, HeadIr::Normal(None)) {
@@ -182,6 +204,7 @@ pub(crate) fn build(
             }
         }
         drop(support);
+        drop(relations);
         if delta.is_empty() {
             return Ok(CompletedCatalog { catalog });
         }
@@ -194,7 +217,7 @@ pub(crate) fn build(
 
 fn derive_rule(
     rule: &crate::formula_ir::RuleIr,
-    outer: &mut Join<'_>,
+    outer: &mut Join<'_, '_>,
     support: &Support<'_>,
     delta: &mut BTreeSet<Atom>,
     limits: &FormulaLimits,
@@ -369,22 +392,22 @@ enum Slot {
 /// The cursor owns its current assignment, undo trails and bounded expression
 /// storage. Negative gates never restrict this upper relation; the emitted
 /// formulas still retain them.
-pub(crate) struct Join<'a> {
+pub(crate) struct Join<'a, 'source> {
     bindings: Option<&'a crate::formula_assignment_plan::Plan>,
     literals: &'a [LiteralIr],
     generated: bool,
     comparisons: Comparisons,
     evaluation: Evaluation,
-    pending: Option<crate::formula_binding_cursor::Cursor<'a>>,
-    pending_head: Option<crate::formula_binding_cursor::Cursor<'a>>,
+    pending: Option<crate::formula_binding_cursor::Cursor<'a, 'source>>,
+    pending_head: Option<crate::formula_binding_cursor::Cursor<'a, 'source>>,
     head_slots: std::ops::Range<usize>,
     patterns: Vec<PatternOccurrence<'a>>,
     delta: Option<usize>,
-    support: &'a Support<'a>,
+    support: &'a Support<'source>,
     values: Vec<Option<Value>>,
     slots: Vec<Slot>,
     positions: Vec<usize>,
-    probes: Vec<Option<delta::Rows<'a>>>,
+    probes: Vec<Option<Probe<'a, 'source>>>,
     changes: Vec<Vec<usize>>,
     depth: usize,
     empty_yielded: bool,
@@ -398,10 +421,45 @@ pub(crate) struct Row {
     pub passes: bool,
 }
 
-impl<'a> Join<'a> {
+/// A row source retains its original occurrence indices. Indexed positions
+/// count posting entries; table positions are the next source row to inspect.
+enum Probe<'a, 'source> {
+    Indexed(delta::Rows<'a>),
+    Table(queries::Rows<'a, 'source>),
+}
+impl Probe<'_, '_> {
+    fn next(
+        &self,
+        position: &mut usize,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: Location,
+    ) -> Result<Option<usize>, FormulaFailure> {
+        let row = match self {
+            Self::Indexed(rows) => {
+                let row = rows.get(*position);
+                if row.is_some() {
+                    *position += 1;
+                }
+                row
+            }
+            Self::Table(rows) => {
+                let row = rows.next(*position, limits, counters, location)?;
+                if let Some(row) = row {
+                    *position = row + 1;
+                    counters.record(Event::TableRow);
+                }
+                row
+            }
+        };
+        Ok(row)
+    }
+}
+
+impl<'a, 'source> Join<'a, 'source> {
     pub(super) fn rule(
         rule: &'a crate::formula_ir::RuleIr,
-        support: &'a Support<'a>,
+        support: &'a Support<'source>,
         budget: &mut Budget,
     ) -> Result<Self, FormulaFailure> {
         let mut join = Self::new(
@@ -420,7 +478,7 @@ impl<'a> Join<'a> {
     pub(super) fn element(
         element: &'a crate::formula_ir::Element,
         prefix: &Binding,
-        support: &'a Support<'a>,
+        support: &'a Support<'source>,
         budget: &mut Budget,
         location: Location,
     ) -> Result<Self, FormulaFailure> {
@@ -448,7 +506,7 @@ impl<'a> Join<'a> {
 
     pub(crate) fn objective(
         objective: &'a crate::formula_ir::ObjectiveIr,
-        support: &'a Support<'a>,
+        support: &'a Support<'source>,
         budget: &mut Budget,
     ) -> Result<Self, FormulaFailure> {
         let mut join = Self::new(
@@ -470,7 +528,7 @@ impl<'a> Join<'a> {
         variables: usize,
         used: &BTreeSet<usize>,
         fixed: &[Option<Value>],
-        support: &'a Support<'a>,
+        support: &'a Support<'source>,
         budget: &mut Budget,
         location: Location,
     ) -> Result<Self, FormulaFailure> {
@@ -498,7 +556,7 @@ impl<'a> Join<'a> {
         literals: &'a [LiteralIr],
         prefix: &Binding,
         variables: usize,
-        support: &'a Support<'a>,
+        support: &'a Support<'source>,
         budget: &mut Budget,
         location: Location,
     ) -> Result<Self, FormulaFailure> {
@@ -568,7 +626,7 @@ impl<'a> Join<'a> {
             values,
             slots,
             positions: vec![0; count],
-            probes: vec![None; count],
+            probes: std::iter::repeat_with(|| None).take(count).collect(),
             changes: vec![Vec::new(); count],
             depth: 0,
             empty_yielded: false,
@@ -781,22 +839,38 @@ impl<'a> Join<'a> {
             }
             let pattern = self.patterns[self.depth];
             if self.probes[self.depth].is_none() {
-                let posting =
-                    self.support
-                        .probe(pattern.atom(), &self.values, limits, counters, location)?;
-                let total = self.support.row_count(pattern.atom().predicate());
-                self.probes[self.depth] = Some(if self.delta.is_some() {
-                    let old = self.support.old_rows(pattern.atom().predicate());
-                    let range = delta::interval(self.delta, pattern.source, old, total);
-                    delta::Rows::within(posting, range, limits, counters, location)?
-                } else {
-                    delta::Rows::all(posting, total)
-                });
+                self.probes[self.depth] = Some(
+                    if let Some(rows) = self.support.select(
+                        pattern.pattern,
+                        &self.values,
+                        limits,
+                        counters,
+                        location,
+                    )? {
+                        Probe::Table(rows)
+                    } else {
+                        let posting = self.support.probe(
+                            pattern.atom(),
+                            &self.values,
+                            limits,
+                            counters,
+                            location,
+                        )?;
+                        let total = self.support.row_count(pattern.atom().predicate());
+                        Probe::Indexed(if self.delta.is_some() {
+                            let old = self.support.old_rows(pattern.atom().predicate());
+                            let range = delta::interval(self.delta, pattern.source, old, total);
+                            delta::Rows::within(posting, range, limits, counters, location)?
+                        } else {
+                            delta::Rows::all(posting, total)
+                        })
+                    },
+                );
             }
-            let position = self.positions[self.depth];
             let row = self.probes[self.depth]
                 .as_ref()
-                .and_then(|rows| rows.get(position));
+                .expect("prepared probe")
+                .next(&mut self.positions[self.depth], limits, counters, location)?;
             let atom = row.and_then(|row| self.support.row(pattern.atom().predicate(), row));
             let Some(atom) = atom else {
                 self.positions[self.depth] = 0;
@@ -809,7 +883,6 @@ impl<'a> Join<'a> {
                 self.undo();
                 continue;
             };
-            self.positions[self.depth] += 1;
             counters.record(Event::JoinRow);
             let matches =
                 self.match_row(pattern.pattern, atom, limits, budget, counters, location)?;
@@ -1083,7 +1156,7 @@ fn bound(
     Ok(true)
 }
 
-impl Join<'_> {
+impl Join<'_, '_> {
     fn filters(
         &mut self,
         assignment: &Binding,

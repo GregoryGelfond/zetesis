@@ -236,8 +236,12 @@ measured inputs, including about 18% for SEND and 8% for task allocation.
 The matched CPU path remains faster on these inputs and uses a different
 certified membership procedure. Results retain explicit lazy refusals and
 distinguish full native model agreement from clingo's observable output.
-The optional [finite-table projection library](docs/book/rust/finite-tables.md)
-has separate scalar/Rayon measurements; ordinary grounding does not select it.
+The [finite-table library](docs/book/rust/finite-tables.md) also serves completed
+eager support through the optional `--formula-joins table` strategy. It reuses
+prepared indices and consumes ordered row masks without copying the relation.
+Indexed joins remain the default; table preparation and query masks consume the
+same source resource budgets. Separate scalar/Rayon primitive measurements do
+not establish an ordinary grounding speedup.
 Earlier N=10 comparisons
 and isolated GPU measurements remain in the
 [historical performance evidence](docs/book/reference/validation.md#performance-evidence).

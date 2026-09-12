@@ -41,7 +41,7 @@ impl SupportCatalog {
         counters: &mut Counters,
         location: Location,
     ) -> Result<Self, FormulaFailure> {
-        let mut memory = Memory::new(self.index_bytes, limits, location);
+        let mut memory = Memory::new(self.index_bytes, limits, counters, location);
         let source = match self.rows.entry(atom.predicate().clone()) {
             Entry::Occupied(entry) => entry.into_mut(),
             Entry::Vacant(entry) => {
@@ -127,9 +127,9 @@ impl SupportCatalog {
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: Location,
-    ) -> Result<Support<'_>, FormulaFailure> {
-        let mut memory = Memory::new(self.index_bytes, limits, location);
-        memory.add(size_of::<Support<'_>>())?;
+    ) -> Result<Relations<'_>, FormulaFailure> {
+        let mut memory = Memory::new(self.index_bytes, limits, counters, location);
+        memory.add(size_of::<Relations<'_>>())?;
         let mut rows = BTreeMap::new();
         for (predicate, source) in &self.rows {
             counters.work(limits, location)?;
@@ -146,9 +146,10 @@ impl SupportCatalog {
                 },
             );
         }
-        Ok(Support {
+        Ok(Relations {
             rows,
             atoms: self.atoms,
+            entries: self.entries,
             bytes: memory.bytes,
         })
     }
@@ -204,10 +205,11 @@ fn catalog_failure(
 /// Immutable possible support, including snapshots between growth rounds.
 /// This view alone establishes neither completion nor current-world truth.
 #[derive(Default)]
-pub(crate) struct Support<'source> {
+pub(crate) struct Relations<'source> {
     rows: BTreeMap<&'source Predicate, RelationRows<'source>>,
     atoms: usize,
-    bytes: usize,
+    pub(super) entries: usize,
+    pub(super) bytes: usize,
 }
 
 pub(super) struct RelationRows<'source> {
@@ -219,7 +221,11 @@ pub(super) struct RelationRows<'source> {
     pub(super) atoms: &'source [Atom],
 }
 
-impl Support<'_> {
+impl Relations<'_> {
+    pub(super) fn relation(&self, predicate: &Predicate) -> Option<&Relation<'_>> {
+        self.rows.get(predicate).map(|rows| &rows.relation)
+    }
+
     /// Predicates in this snapshot, borrowed from their sole atom owner.
     pub(crate) fn predicates(&self) -> impl Iterator<Item = &Predicate> {
         self.rows.keys().copied()
@@ -269,6 +275,7 @@ impl Support<'_> {
         Ok(receipt.row.is_some())
     }
 
+    #[cfg(test)]
     pub(super) fn probe(
         &self,
         pattern: &AtomPattern,
@@ -277,11 +284,30 @@ impl Support<'_> {
         counters: &mut Counters,
         location: Location,
     ) -> Result<Option<&[usize]>, FormulaFailure> {
+        self.probe_with_bytes(pattern, values, limits, counters, location, 0)
+    }
+
+    pub(super) fn probe_with_bytes(
+        &self,
+        pattern: &AtomPattern,
+        values: &[Option<Value>],
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: Location,
+        outer_bytes: usize,
+    ) -> Result<Option<&[usize]>, FormulaFailure> {
         counters.record(Event::JoinProbe);
         let Some(rows) = self.rows.get(pattern.predicate()) else {
             return Ok(Some(&[]));
         };
-        let mut memory = Memory::new(self.bytes, limits, location);
+        let mut memory = Memory::new(
+            self.bytes
+                .checked_add(outer_bytes)
+                .ok_or_else(|| failure(Failure::Overflow, location))?,
+            limits,
+            counters,
+            location,
+        );
         memory.add(size_of::<Vec<(usize, &Value)>>())?;
         let mut keys = Vec::new();
         for (column, term) in pattern.terms().iter().enumerate() {
@@ -409,14 +435,21 @@ struct Memory<'limits> {
     bytes: usize,
     limits: &'limits FormulaLimits,
     location: Location,
+    observed: crate::grounding_observer::Work,
 }
 
 impl<'limits> Memory<'limits> {
-    fn new(bytes: usize, limits: &'limits FormulaLimits, location: Location) -> Self {
+    fn new(
+        bytes: usize,
+        limits: &'limits FormulaLimits,
+        counters: &Counters,
+        location: Location,
+    ) -> Self {
         Self {
             bytes,
             limits,
             location,
+            observed: counters.observed.clone(),
         }
     }
 
@@ -430,6 +463,8 @@ impl<'limits> Memory<'limits> {
         )?;
         self.bytes =
             usize::try_from(next).map_err(|_| failure(Failure::Overflow, self.location))?;
+        self.observed
+            .record(Event::SupportPeakBytes(self.bytes as u128));
         Ok(())
     }
 

@@ -118,6 +118,10 @@ pub struct NativeExecution {
     pub oracle: Oracle,
     /// Requested materialization policy.
     pub grounder: Grounder,
+    /// Optional eager-formula join strategy. Omission preserves the sealed
+    /// executable's default and permits comparison with versions before this flag.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub formula_joins: Option<FormulaJoins>,
     /// Closure worker request.
     pub workers: NonZeroUsize,
     /// Formula completion worker request.
@@ -133,10 +137,30 @@ impl Default for NativeExecution {
             backend: Backend::Cpu,
             oracle: Oracle::Auto,
             grounder: Grounder::Eager,
+            formula_joins: None,
             workers: NonZeroUsize::new(1).expect("one is nonzero"),
             completion_workers: NonZeroUsize::new(1).expect("one is nonzero"),
             batch_size: NonZeroUsize::new(64).expect("64 is nonzero"),
             max_completion_scratch_bytes: 268_435_456,
+        }
+    }
+}
+
+/// Requested source-join strategy, independent of backend and reduct procedure.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FormulaJoins {
+    /// Existing shortest-posting joins.
+    Indexed,
+    /// Prepared table masks for eligible completed-support patterns.
+    Table,
+}
+
+impl FormulaJoins {
+    pub(crate) const fn label(self) -> &'static str {
+        match self {
+            Self::Indexed => "indexed",
+            Self::Table => "table",
         }
     }
 }

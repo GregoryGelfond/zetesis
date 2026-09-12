@@ -91,6 +91,15 @@ eligible richer source through finite Ferraris countermodel checking. Syntax,
 arithmetic and resource failures are preserved. The
 [frontend guide](../zetesis-themelios/README.md) defines admitted source profiles.
 
+Advanced `--formula-joins indexed|table` selects positive joins within eager
+formula grounding. Indexed matching is the default. Table matching reuses
+prepared masks for flat patterns over completed possible support; support growth,
+structural patterns and relational-source grounding retain their existing paths.
+The flag does not force a formula execution route or move grounding onto a GPU.
+Preparation and live query masks consume the existing source work and storage
+budgets. `--stats` distinguishes actual table preparations, reuses and row visits.
+See the [finite-table contract](../../docs/book/rust/finite-tables.md).
+
 ```sh
 zetesis input.lp --backend cpu
 zetesis input.lp --backend metal --grounder eager

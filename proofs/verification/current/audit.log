@@ -1053,6 +1053,9 @@
 'Zetesis.StructuredWitnesses.complete_row_collection_keeps_stability' depends on axioms: [propext,
  Classical.choice,
  Quot.sound]
+'Zetesis.TableBindings.flat_match_survives' depends on axioms: [propext, Quot.sound]
+'Zetesis.TableBindings.indexed_matches_preserved' depends on axioms: [propext]
+'Zetesis.TableBindings.join_family_preserved' depends on axioms: [propext, Quot.sound]
 'Zetesis.TernaryWatch.remaining_unique' depends on axioms: [propext, Quot.sound]
 'Zetesis.TernaryWatch.replacement_exact' depends on axioms: [propext, Quot.sound]
 'Zetesis.Thresholds.threshold_query_exact' depends on axioms: [propext, Classical.choice, Quot.sound]

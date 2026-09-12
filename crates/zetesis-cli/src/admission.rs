@@ -85,6 +85,7 @@ pub(crate) fn source(
             parsed
                 .prepare_formula(expansion_limits(options), formula_limits(options))
                 .map_err(SourceFailure::into_error)?
+                .with_grounding_options(grounding_options(options))
                 .ground_with_observer(
                     observer
                         .as_ref()
@@ -172,11 +173,14 @@ pub(crate) fn bundle(
     let observer = phases.grounding_observer();
     let admitted = phases
         .measure(SolvePhase::AdmissionMaterialization, || {
-            zetesis_themelios::admit_bundle_formula_with_grounding_observer(
+            zetesis_themelios::prepare_bundle_formula(
                 bundle,
                 BundleAdmissionOptions::default(),
                 expansion_limits(options),
                 formula_limits(options),
+            )?
+            .with_grounding_options(grounding_options(options))
+            .ground_with_observer(
                 observer
                     .as_ref()
                     .map(|observer| observer as &dyn zetesis_themelios::GroundingObserver),
@@ -224,6 +228,12 @@ pub(crate) fn expansion_limits(options: &Options) -> ExpansionLimits {
         max_templates: options.max_expanded_templates,
         max_values: options.max_expansion_values,
         ..Default::default()
+    }
+}
+
+fn grounding_options(options: &Options) -> zetesis_themelios::GroundingOptions {
+    zetesis_themelios::GroundingOptions {
+        joins: options.formula_joins,
     }
 }
 

@@ -63,6 +63,24 @@ overhead and unrelated state have separate bounds. The CLI exposes the same
 allowance as `--max-support-bytes` in `--help-all`. This is an admission limit;
 `SolveConfig` applies after the formula owner has already been constructed.
 
+Choose positive joins separately through the preparation's
+`with_grounding_options(GroundingOptions { joins: JoinStrategy::Table })` method.
+The default `Indexed` strategy probes existing value postings. `Table` reuses
+support masks only for flat positive patterns over completed eager support;
+structural patterns and support-growth rounds keep indexed joins. The bundle
+preparation exposes the same method, and the CLI maps `--formula-joins table`
+to it. The choice retains the preparation's source identity and remaining budgets.
+
+The private query workspace owns cached indices and accounts for simultaneous
+selected masks, scratch and cumulative work. Named vector/object capacities are
+distinct from nested atom payloads, allocator/tree/control-runtime overhead and
+other grounding state; the limit is not RSS. An exhausted table operation returns
+a located failure without silently choosing a different strategy. The existing
+matcher and required authored-body validation remain shared. Choosing table joins
+does not launch ordinary Rayon or GPU grounding; later answer-set execution has
+its own policy. See [finite-table selection](finite-tables.md) for the ownership,
+applicability and proof boundaries.
+
 ## Know which program was analyzed
 
 The analysis accessors are part of the prepared solver input's inspection

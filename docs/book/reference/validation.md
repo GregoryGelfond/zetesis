@@ -653,10 +653,12 @@ scripts/check.sh book
 
 Physical Metal qualification adds the named device tests with
 `scripts/check.sh coverage --metal` on a machine exposing a Metal adapter.
-The current selection contains 55 exact tests in 16 groups, including explicit
+The current selection contains 56 exact tests in 16 groups, including explicit
 Metal static-oracle construction and complete closure comparisons against an
 independent ordered-set reference. The [static tests](../../../crates/zetesis-wgpu/tests/hardware.rs)
 check the static shader and readback contract; formula tests do not replace them.
+The formula CLI group also checks completed-support table joins, requiring actual
+table probes and GPU candidates plus complete CPU/Metal answer families.
 Use fresh instrumentation for the source being qualified; matching executable
 filenames do not establish matching builds. Coverage has independent workspace
 and CPU-only populations and does not replace assertion review. The CPU-only

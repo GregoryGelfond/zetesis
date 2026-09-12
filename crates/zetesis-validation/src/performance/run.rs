@@ -63,6 +63,7 @@ pub(super) fn campaign(request: &Request<'_>, helper: Option<&Path>) -> Result<R
         schema: if request.schedule.extended() { 2 } else { 1 },
         manifest_sha256: examples::MANIFEST_SHA256,
         schedule: request.schedule.clone(),
+        formula_joins: request.formula_joins,
         limits: request.limits,
         started_unix_ns,
         finished_unix_ns: None,
@@ -353,6 +354,11 @@ fn arguments<'a>(
         ),
     };
     let mut arguments: Vec<OsString> = flags.iter().map(OsString::from).collect();
+    if slot.producer == Producer::Native
+        && let Some(joins) = request.formula_joins
+    {
+        arguments.extend(["--formula-joins".into(), joins.label().into()]);
+    }
     if slot.phase == Phase::Diagnostics {
         arguments.push("--stats".into());
     }

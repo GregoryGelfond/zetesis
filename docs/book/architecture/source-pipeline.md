@@ -34,6 +34,30 @@ theory's dense universe is a different object from the possible-support bound.
 Objective queries borrow completed support and own bounded transient formula
 scratch. Their atoms and roots cannot become program producers.
 
+`GroundingOptions` selects the positive-join execution strategy before formula
+materialization. The default `Indexed` strategy probes the shortest applicable
+value posting. Explicit `Table` selection prepares reusable value-support masks
+for flat positive patterns over completed eager support. Growth-round snapshots
+and structural patterns keep indexed probes. This changes the source of row
+positions, while the existing whole-row matcher, binding schedule and original
+formula emission remain shared.
+
+The completed query workspace borrows the authoritative relations and owns its
+index cache. Each join depth owns a selected row mask that borrows the relation,
+so later cache insertion does not invalidate an earlier selection. Indices are
+keyed by signed predicate and canonical alias scope; domains are rebuilt from
+current constants and bound values. Required body validation receives the same
+positive witnesses. Table membership never replaces a source atom with truth.
+
+The workspace charges cumulative preparation/query work and simultaneous named
+snapshot, index, scratch and mask capacities to the existing source limits.
+Refused capacity, allocation and work remain located grounding failures; a
+failed table operation is not an indexed fallback or an empty program. These
+objects are not a process-memory ceiling. The source builder remains sequential:
+an immutable index can serve independent callers, but selecting this strategy
+launches neither Rayon grounding nor a GPU kernel. See the
+[table API and its preservation boundary](../rust/finite-tables.md).
+
 ## Locate the operation
 
 The names below are modules under
@@ -59,6 +83,7 @@ those instructions rather than interpreting the plan as new program semantics.
 | Head lowering | `formula_head_ir`, `formula_choice_ir`, `formula_head_aggregate` | Signed head activity, independent permission and aggregate measure |
 | Conditional lowering | `formula_conditional_ir`, `formula_consequent_ir`, `formula_conditional_head_ir` | Outer/local scopes and the admitted conditional-head profile |
 | Complete joins and possible support | `formula_support`, `formula_pattern` | Transactional whole-tuple matching, snapshots, indexes and support completion |
+| Positive-row query strategy | `grounding_options`, `formula_support::queries`, CPU `table` | Explicit completed-support table indices and owned row masks; shared matcher and cumulative source budgets |
 | Formula emission | `formula_ground`, `formula_guard`, `formula_conditional` | Original implications, aggregate conditions and universal instances |
 | Optional formula factoring | `formula_factor` | Qualified existential components with the complete-join path as fallback |
 | Optional count certificates | `formula_count_plan` | Capture, derivation and emitted correspondence to the original theory |

@@ -345,6 +345,12 @@ fn native_arguments(execution: NativeExecution, input: &Path) -> Vec<OsString> {
     values
         .into_iter()
         .flat_map(|(flag, value)| [flag.into(), value.into()])
+        .chain(execution.formula_joins.into_iter().flat_map(|joins| {
+            [
+                OsString::from("--formula-joins"),
+                OsString::from(joins.label()),
+            ]
+        }))
         .chain([
             "--json".into(),
             "--stats".into(),

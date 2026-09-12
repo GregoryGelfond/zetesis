@@ -1005,6 +1005,9 @@ import Zetesis
 #print axioms Zetesis.StructuredWitnesses.refused_witness_preserves_condition
 #print axioms Zetesis.StructuredWitnesses.active_condition_requires_witness
 #print axioms Zetesis.StructuredWitnesses.complete_row_collection_keeps_stability
+#print axioms Zetesis.TableBindings.flat_match_survives
+#print axioms Zetesis.TableBindings.indexed_matches_preserved
+#print axioms Zetesis.TableBindings.join_family_preserved
 #print axioms Zetesis.TernaryWatch.remaining_unique
 #print axioms Zetesis.TernaryWatch.replacement_exact
 #print axioms Zetesis.Thresholds.threshold_query_exact

@@ -21,7 +21,7 @@ fn aggregation_preserves_outcome_populations() {
     ] {
         let mut work = GroundingWork::default();
         work.join_rows = Some(rows);
-        measurement.record(Duration::from_nanos(rows), outcome, work);
+        measurement.record(Duration::from_nanos(rows), outcome, &work);
     }
     assert_eq!(measurement.elapsed, Some(Duration::from_nanos(10)));
     assert_eq!(measurement.work.join_rows, Some(10));
@@ -41,7 +41,7 @@ fn overflow_preserves_independent_fields() {
     let mut work = GroundingWork::default();
     work.join_rows = Some(1);
     work.roots = Some(2);
-    measurement.record(Duration::from_nanos(1), GroundingOutcome::Completed, work);
+    measurement.record(Duration::from_nanos(1), GroundingOutcome::Completed, &work);
     assert_eq!(measurement.elapsed, None);
     assert_eq!(measurement.count(GroundingOutcome::Completed), None);
     assert_eq!(measurement.count(GroundingOutcome::Failed), Some(0));
@@ -62,7 +62,7 @@ fn a_recorder_retains_separate_phase_attempts() {
             attempt,
             phase,
             GroundingOutcome::Completed,
-            GroundingWork::default(),
+            &GroundingWork::default(),
         );
     }
     let timings = recorder.snapshot();
@@ -91,7 +91,7 @@ fn poisoned_grounding_bookkeeping_stays_unavailable_without_stopping_work() {
         attempt,
         phase,
         GroundingOutcome::Completed,
-        GroundingWork::default(),
+        &GroundingWork::default(),
     );
     assert!(recorder.snapshot().get(phase).is_some());
     let failure = std::panic::catch_unwind(|| {
@@ -106,7 +106,7 @@ fn poisoned_grounding_bookkeeping_stays_unavailable_without_stopping_work() {
         attempt,
         phase,
         GroundingOutcome::Failed,
-        GroundingWork::default(),
+        &GroundingWork::default(),
     );
     let snapshot = recorder.snapshot();
     for phase in GroundingPhase::ALL {

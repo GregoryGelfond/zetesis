@@ -5026,6 +5026,21 @@
       "name": "Zetesis.StructuredWitnesses.complete_row_collection_keeps_stability"
     },
     {
+      "file": "Zetesis/TableBindings.lean",
+      "line": 57,
+      "name": "Zetesis.TableBindings.flat_match_survives"
+    },
+    {
+      "file": "Zetesis/TableBindings.lean",
+      "line": 112,
+      "name": "Zetesis.TableBindings.indexed_matches_preserved"
+    },
+    {
+      "file": "Zetesis/TableBindings.lean",
+      "line": 161,
+      "name": "Zetesis.TableBindings.join_family_preserved"
+    },
+    {
       "file": "Zetesis/TernaryWatch.lean",
       "line": 37,
       "name": "Zetesis.TernaryWatch.remaining_unique"
@@ -5771,6 +5786,7 @@
     "Zetesis/StrongNegation.lean",
     "Zetesis/StructuralBindings.lean",
     "Zetesis/StructuredWitnesses.lean",
+    "Zetesis/TableBindings.lean",
     "Zetesis/TernaryWatch.lean",
     "Zetesis/Thresholds.lean",
     "Zetesis/TightEvaluation.lean",
@@ -5786,8 +5802,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "2288ded9c11960287f25223bf0b809cd61ebe87032edc1eed5007966eb0035a0",
-    "Zetesis.lean": "590001d6a57d43f6ac1937c1f0d4490fa63719391de7864a8ecb75d63a48f369",
+    "Audit.lean": "091efbd789579b093b01bbeea17c70303454803384df42d949936aecac7a90e4",
+    "Zetesis.lean": "050ac74aa09bd6dd0b2cd9ea4ac24353211fbc0498437e68ca778fd35d2de369",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
     "Zetesis/AggregateConsumers.lean": "41aded89dbfaa79833ed3b336030ef4b08afa5be8e7029060416c2f8de59ef97",
@@ -5892,6 +5908,7 @@
     "Zetesis/StrongNegation.lean": "4f99901e0dfc2e777d12110aca36c2c3be4964f5cbcf88d0a3d87b355a5730c6",
     "Zetesis/StructuralBindings.lean": "8606044bbfeab1c9238e9c2311206d0dd894bb6482463c02613e759a44f06894",
     "Zetesis/StructuredWitnesses.lean": "035fda4f2857801d516f26c1dca179233a561581beffbfbc69c1897e8926be8c",
+    "Zetesis/TableBindings.lean": "dd0584c9a72627b8205f5c6773bfd3b50be67a9f48dee86322567d86df822e6b",
     "Zetesis/TernaryWatch.lean": "ff2f1d1a4a02522b2646b0a54fff3e7c08e64bbd5661cf4c3631518aa41ba57e",
     "Zetesis/Thresholds.lean": "271ba89d3885ecf242dca61cc0ce8998f7b0f36db6a4df907ed1d4f7bd075a85",
     "Zetesis/TightEvaluation.lean": "b6c23ae4aa0608505b07b42a0fc8be58e0bec557aedefa6a8d6cf76ef8b2644e",

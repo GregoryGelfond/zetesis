@@ -24,6 +24,14 @@ fn header(sink: &mut impl Write, options: &Options, elapsed: Duration) -> io::Re
         "  configured: workers={}; batch={}; displayed models={} (0=all)",
         options.workers, options.batch_size, options.models
     )?;
+    writeln!(
+        sink,
+        "  formula joins: requested={}; scope=completed_eager_support",
+        match options.formula_joins {
+            zetesis_themelios::JoinStrategy::Indexed => "indexed",
+            zetesis_themelios::JoinStrategy::Table => "table",
+        }
+    )?;
     limits(sink, options)?;
     writeln!(
         sink,

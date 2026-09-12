@@ -14,6 +14,7 @@ pub(super) struct Preparation {
     program: formula_ir::Prepared,
     budget: Budget,
     limits: FormulaLimits,
+    options: crate::GroundingOptions,
     location: Location,
 }
 
@@ -30,6 +31,7 @@ impl Preparation {
             // The deferred receipt owns one immutable snapshot; its later
             // compilation and grounding helpers borrow this configuration.
             limits: *limits,
+            options: crate::GroundingOptions::default(),
             location,
         }
     }
@@ -47,6 +49,7 @@ impl Preparation {
                 self.location,
                 observer,
                 count_plan,
+                self.options,
             )
         })
     }
@@ -112,6 +115,16 @@ impl PreparedFormula {
     #[must_use]
     pub fn metadata(&self) -> &SourceMetadata {
         &self.metadata
+    }
+
+    /// Choose the positive-join execution policy without changing the retained
+    /// source, preparation budgets or source identity. This stores a small value;
+    /// it performs no grounding, allocation, timing or solver operation. All
+    /// materialization doors, including count planning, use this policy.
+    #[must_use]
+    pub const fn with_grounding_options(mut self, options: crate::GroundingOptions) -> Self {
+        self.preparation.options = options;
+        self
     }
 
     /// Materialize the complete formula theory using the retained preparation.
@@ -232,6 +245,16 @@ impl PreparedFormulaBundle {
     #[must_use]
     pub fn metadata(&self) -> &SourceMetadata {
         &self.metadata
+    }
+
+    /// Choose the positive-join execution policy without changing the retained
+    /// source, preparation budgets or source identity. This stores a small value;
+    /// it performs no grounding, allocation, timing or solver operation. All
+    /// materialization doors, including count planning, use this policy.
+    #[must_use]
+    pub const fn with_grounding_options(mut self, options: crate::GroundingOptions) -> Self {
+        self.preparation.options = options;
+        self
     }
 
     /// Materialize the complete formula theory using the retained preparation.

@@ -5025,6 +5025,21 @@
     "line": 113
   },
   {
+    "name": "Zetesis.TableBindings.flat_match_survives",
+    "file": "Zetesis/TableBindings.lean",
+    "line": 57
+  },
+  {
+    "name": "Zetesis.TableBindings.indexed_matches_preserved",
+    "file": "Zetesis/TableBindings.lean",
+    "line": 112
+  },
+  {
+    "name": "Zetesis.TableBindings.join_family_preserved",
+    "file": "Zetesis/TableBindings.lean",
+    "line": 161
+  },
+  {
     "name": "Zetesis.TernaryWatch.remaining_unique",
     "file": "Zetesis/TernaryWatch.lean",
     "line": 37

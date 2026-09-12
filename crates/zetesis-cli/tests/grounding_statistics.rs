@@ -67,6 +67,45 @@ fn json_attribution_preserves_typed_measurements() {
 }
 
 #[test]
+fn ordinary_formula_solving_uses_requested_table_joins() {
+    let mut output = Vec::new();
+    let mut diagnostics = Vec::new();
+    let report = run_detailed_with_diagnostics(
+        "edge(1,1). edge(1,2). edge(2,1). edge(2,2). 1{choose(1);choose(2)}1. witness(X,Y):-choose(X),edge(X,Y). diagonal(X):-edge(X,X).".into(),
+        &options(&["--formula-joins", "table"]),
+        &mut output,
+        &mut diagnostics,
+        &Control::default(),
+    ).unwrap();
+    let grounding = report.phase_timings.unwrap().grounding;
+    let work = GroundingPhase::ALL
+        .into_iter()
+        .filter_map(|phase| grounding.get(phase))
+        .fold(
+            zetesis_cli::GroundingWork::default(),
+            |work, measurement| work.checked_sum(measurement.work),
+        );
+    assert!(work.table_preparations.unwrap() > 0);
+    assert!(work.table_probes.unwrap() > 0);
+    assert!(work.table_rows.unwrap() > 0);
+    let document: Value = serde_json::from_slice(&output).unwrap();
+    for phase in GroundingPhase::ALL {
+        let measurement = grounding.get(phase).unwrap();
+        let view =
+            &document["statistics"]["grounding_attribution"]["measurements"][phase.label()]["work"];
+        assert_eq!(
+            view["table_preparations"].as_u64(),
+            measurement.work.table_preparations
+        );
+        assert_eq!(view["table_probes"].as_u64(), measurement.work.table_probes);
+        assert_eq!(
+            view["support_peak_bytes"].as_u64(),
+            measurement.work.support_peak_bytes
+        );
+    }
+}
+
+#[test]
 fn relational_grounding_stays_unmeasured_in_formula_attribution() {
     for grounder in ["eager", "lazy"] {
         let mut output = Vec::new();

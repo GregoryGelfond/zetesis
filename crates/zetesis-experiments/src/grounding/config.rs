@@ -3,7 +3,10 @@
 use std::path::PathBuf;
 
 use serde::Serialize;
-use zetesis_themelios::{BundleAdmissionOptions, BundleLimits, ExpansionLimits, FormulaLimits};
+use zetesis_themelios::{
+    BundleAdmissionOptions, BundleLimits, ExpansionLimits, FormulaLimits, GroundingOptions,
+    JoinStrategy,
+};
 
 use super::Error;
 
@@ -65,6 +68,9 @@ pub struct Configuration {
     /// Actual formula grounding and storage ceilings.
     #[serde(with = "views::Formula")]
     pub formula: FormulaLimits,
+    /// Positive-join execution for timed admissions; the reference always uses indexed joins.
+    #[serde(with = "views::Grounding")]
+    pub grounding: GroundingOptions,
     /// Native complete-model enumeration ceilings, outside admission timing.
     #[serde(with = "views::Search")]
     pub search: zetesis_sat::Limits,
@@ -83,6 +89,7 @@ impl Default for Configuration {
             admission: BundleAdmissionOptions::default(),
             expansion: ExpansionLimits::default(),
             formula: FormulaLimits::default(),
+            grounding: GroundingOptions::default(),
             search: zetesis_sat::Limits::default(),
             certificate: zetesis_ferraris::TightPlanLimits::default(),
             capture: CaptureLimits::default(),
@@ -107,6 +114,9 @@ pub struct Options {
     /// Rotated rounds of unobserved, boundary-only and detailed admissions (1–11).
     #[arg(long, default_value_t = 3)]
     pub repetitions: usize,
+    /// Completed-support joins in measured admissions; the reference uses indexed joins.
+    #[arg(long, value_enum, default_value_t = Joins::Indexed)]
+    pub joins: Joins,
     /// Inclusive per-admission record ceiling; refusal preserves the recorded prefix.
     #[arg(long, default_value_t = 4_096)]
     pub max_phase_records: usize,
@@ -136,6 +146,12 @@ impl Options {
     pub fn configuration(&self) -> Configuration {
         Configuration {
             repetitions: self.repetitions,
+            grounding: GroundingOptions {
+                joins: match self.joins {
+                    Joins::Indexed => JoinStrategy::Indexed,
+                    Joins::Table => JoinStrategy::Table,
+                },
+            },
             capture: CaptureLimits {
                 max_phase_records: self.max_phase_records,
                 max_models: self.max_models,
@@ -148,4 +164,13 @@ impl Options {
             ..Configuration::default()
         }
     }
+}
+
+/// Command spelling for the library's positive-join execution strategy.
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+pub enum Joins {
+    /// Probe the existing shortest matching value posting.
+    Indexed,
+    /// Use prepared support masks for eligible completed-support patterns.
+    Table,
 }

@@ -54,6 +54,6 @@ impl zetesis_themelios::GroundingObserver for Observer<'_> {
         work: crate::GroundingWork,
     ) {
         let attempt = self.phase.take().expect("phase exit follows its entry");
-        self.grounding.exit(attempt, phase, outcome, work);
+        self.grounding.exit(attempt, phase, outcome, &work);
     }
 }

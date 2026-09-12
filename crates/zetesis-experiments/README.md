@@ -235,11 +235,19 @@ measure full tuple matching, source grounding or answer-set solving. See the
 ### Original-source grounding
 
 The grounding profile loads the original include graph and performs unmeasured
-reference admission and complete native solving. It then rotates fresh admission
+indexed-join reference admission and complete native solving. It then rotates fresh admission
 with no observer, boundary observation and detailed observation. File loading
 and initial parsing lie outside the admission timer. Admission includes native
 raising, normalization, analysis and materialization; observer grounding spans
 isolate finite instance construction.
+
+`--joins indexed` selects the existing shortest-posting joins. `--joins table`
+selects reusable support masks for eligible flat positive patterns over completed
+possible support. Every timed strategy is checked against the indexed reference;
+the report records both choices. Detailed counters distinguish preparation,
+reuse, actual table/indexed probes, query work and accounted support peak. Other
+contexts retain indexed matching, and resource exhaustion remains a failure.
+Compare preparation and query costs together before inferring a grounding gain.
 
 After timing, each result is checked against the reference atom/formula catalog,
 source evidence and complete native model collection. A fingerprint is available

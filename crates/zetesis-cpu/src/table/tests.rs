@@ -4,6 +4,8 @@ use zetesis_core::{Atom, Predicate, Sign, relation::Limits as RelationLimits};
 
 use super::*;
 
+mod selection;
+
 fn atoms(predicate: &Predicate, rows: &[Vec<Value>]) -> Vec<Atom> {
     rows.iter()
         .cloned()
@@ -172,6 +174,14 @@ fn typed_domains_do_not_conflate_equal_spellings() {
     let relation = Relation::from_atoms(&predicate, &source, RelationLimits::default()).unwrap();
     let table = Table::prepare(&relation, &[0], Limits::default(), &Control::default()).unwrap();
     for (index, value) in values.iter().enumerate() {
+        let selected = table
+            .select(
+                &[Domain::Singleton(value)],
+                Limits::default(),
+                &Control::default(),
+            )
+            .unwrap();
+        assert_eq!(selected.rows().collect::<Vec<_>>(), vec![index]);
         let projection = table
             .project(
                 &[std::slice::from_ref(value)],

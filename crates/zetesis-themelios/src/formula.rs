@@ -43,11 +43,13 @@ pub struct FormulaLimits {
     pub max_assignment_values: usize,
     /// Distinct owned elements in one unconditional disjunctive head.
     pub max_disjunction_elements: usize,
-    /// Retained row identifiers across bound-column support indexes.
+    /// Retained row identifiers across bound-column support indexes, plus
+    /// distinct variable/value entries in optional prepared finite-table indices.
     pub max_support_index_entries: usize,
     /// Live support atom-vector cells, equality layout, postings, snapshot
-    /// objects and query capacity, including operation scratch. Nested atom
-    /// payloads, allocator/tree overhead and other grounding state retain
+    /// objects, reusable query-workspace/index capacity and simultaneous row
+    /// masks, including named query frames and operation scratch. Nested atom
+    /// payloads, allocator/tree/control-runtime overhead and other grounding state retain
     /// separate bounds. This is not a total grounder-memory ceiling.
     pub max_support_bytes: usize,
     /// Distinct aggregate/outer-binding entries retained during final grounding.
@@ -65,6 +67,8 @@ pub struct FormulaLimits {
     /// Total outer and local substitutions, including ones rejected by filters.
     pub max_substitutions: u64,
     /// Total grounding expression, relation-view and formula construction work.
+    /// Optional table preparation, domain resolution, mask selection and
+    /// inspected mask words consume this same cumulative allowance.
     /// Includes shared metadata relocation, origin search/insertion, producer
     /// traversal and final root-evidence traversal/copy. Fixed atom and producer
     /// publication remains part of their existing construction work ticks.
@@ -229,6 +233,13 @@ pub enum FormulaFailure {
         /// Source occurrence whose new atom required storage.
         location: Location,
     },
+    /// A finite-table index or row selection failed without publishing a result.
+    SupportTable {
+        /// Exact cause and completed operation receipts; never semantic UNSAT.
+        error: zetesis_cpu::table::Failure,
+        /// Original positive source occurrence.
+        location: Location,
+    },
     /// A typed relation view refused construction or query resolution.
     SupportRelation {
         /// Exact core refusal; never an empty relation or semantic UNSAT.
@@ -345,6 +356,7 @@ impl FormulaFailure {
             Self::MetadataAllocation { location, .. }
             | Self::AtomAllocation { location, .. }
             | Self::SupportRelation { location, .. }
+            | Self::SupportTable { location, .. }
             | Self::ChoiceSource { location }
             | Self::Limit { location, .. }
             | Self::UnsafeVariable { location, .. }
@@ -369,6 +381,7 @@ impl fmt::Display for FormulaFailure {
             }
             Self::AtomAllocation { error, .. } => error.fmt(f),
             Self::SupportRelation { error, .. } => error.fmt(f),
+            Self::SupportTable { error, .. } => error.fmt(f),
             Self::ChoiceSource { .. } => {
                 f.write_str("Boolean choice source occurrences could not be preserved")
             }
@@ -408,6 +421,7 @@ impl std::error::Error for FormulaFailure {
             Self::MetadataAllocation { error, .. } => Some(error),
             Self::AtomAllocation { error, .. } => Some(error),
             Self::SupportRelation { error, .. } => Some(error),
+            Self::SupportTable { error, .. } => Some(error),
             Self::Expansion(error) => Some(error),
             Self::Include(error) => Some(error.as_ref()),
             Self::Theory { error, .. } => Some(error),

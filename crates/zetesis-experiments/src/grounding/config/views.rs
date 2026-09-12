@@ -3,6 +3,27 @@
 use serde::Serialize;
 
 #[derive(Serialize)]
+#[serde(remote = "zetesis_themelios::GroundingOptions")]
+pub(super) struct Grounding {
+    #[serde(serialize_with = "join_strategy")]
+    joins: zetesis_themelios::JoinStrategy,
+}
+
+#[expect(
+    clippy::trivially_copy_pass_by_ref,
+    reason = "Serde serialize_with callbacks borrow the serialized field."
+)]
+fn join_strategy<S: serde::Serializer>(
+    strategy: &zetesis_themelios::JoinStrategy,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(match strategy {
+        zetesis_themelios::JoinStrategy::Indexed => "indexed",
+        zetesis_themelios::JoinStrategy::Table => "table",
+    })
+}
+
+#[derive(Serialize)]
 #[serde(remote = "zetesis_themelios::BundleLimits")]
 #[expect(
     clippy::struct_field_names,

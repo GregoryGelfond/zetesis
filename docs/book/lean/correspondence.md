@@ -231,10 +231,30 @@ explains the hypotheses with a correlated-tuple example.
 relates intersections of value supports to surviving complete rows. Projection
 preserves these rows, contracts their domains and is idempotent for a single
 table. Recomputing from the original table preserves previously surviving rows
-when domains widen. The optional [Rust primitive](../rust/finite-tables.md)
-borrows typed values and retains row identity; its bitsets, alias checks,
-resource accounting and translation from an ASP source remain executable
-correspondence obligations. Ordinary solving does not select this primitive.
+when domains widen. The [Rust primitive](../rust/finite-tables.md) borrows typed
+values and retains row identity. Direct selection stops at an ordered row mask;
+full projection additionally returns witnessed domains.
+
+[`TableBindings`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/TableBindings.lean)
+connects this row law to positive source matching. `flat_match_survives` derives
+alias coherence and necessary constant/incoming-binding domains from
+`StructuralBindings.matching_sound`; canonical table labels have explicit source
+argument origins. `indexed_matches_preserved` preserves the ordered list of row
+occurrences and resulting bindings. `join_family_preserved` composes equal step
+families over the same finite schedule, retaining full source-occurrence/row
+traces, including repeated predicates and duplicate-valued row positions.
+
+The explicit table grounding strategy consumes completed possible support and
+retains the existing matcher. Structural patterns and growth-round snapshots
+keep indexed probes. Concrete scope construction, typed decoding, packed bits,
+owner lifetimes and cumulative resource accounting remain executable
+correspondence obligations. Relational mismatch in the mathematical matcher
+does not represent interruption or an undefined authored expression. Comparisons,
+negative conditions and aggregate validation keep their separate continuation;
+the table cannot silently prune a required error. Source rows remain original
+atoms in the emitted formulas. The [binding guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/table-bindings.md)
+separates these obligations from the independent support-coverage and reduct
+arguments.
 
 [`DomainContraction`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DomainContraction.lean)
 proves concrete singleton-distinctness and affine filters preserve compatible

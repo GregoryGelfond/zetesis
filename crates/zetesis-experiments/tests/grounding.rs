@@ -32,6 +32,145 @@ fn qualified_identity() -> Report {
 }
 
 #[test]
+fn table_joins_preserve_the_indexed_subject() {
+    let mut config = configuration();
+    config.grounding.joins = zetesis_themelios::JoinStrategy::Table;
+    let report = profile(source("table-joins.lp"), config).unwrap();
+    assert!(report.complete, "{:?}", report.failure);
+    assert_eq!(report.reference_join_strategy, "indexed");
+    for sample in &report.samples {
+        assert_eq!(sample.subject_equal, Some(true));
+        assert_eq!(sample.subject_fingerprint, report.subject_fingerprint);
+    }
+}
+
+#[test]
+fn a_table_refusal_retains_the_indexed_reference() {
+    let mut config = configuration();
+    config.grounding.joins = zetesis_themelios::JoinStrategy::Table;
+    // The source's equality postings fit; adding the table indices does not.
+    // This must fail if the reference accidentally inherits the measured policy.
+    config.formula.max_support_index_entries = 24;
+    let report = profile(source("table-joins.lp"), config).unwrap();
+    assert!(!report.complete);
+    let Some(Error::Admission(error)) = &report.failure else {
+        panic!("expected table index refusal: {:?}", report.failure);
+    };
+    assert!(matches!(
+        error.error(),
+        zetesis_themelios::FormulaFailure::Limit {
+            resource: zetesis_themelios::FormulaResource::SupportIndexEntries,
+            limit: 24,
+            ..
+        }
+    ));
+    let reference = report
+        .qualification
+        .as_ref()
+        .expect("indexed reference qualifies");
+    assert!(reference.exhausted);
+    assert_eq!(reference.interpretations.len(), 2);
+    assert_eq!(report.samples.len(), 1);
+    assert!(!report.samples[0].admitted);
+    assert!(report.samples[0].models.is_none());
+}
+
+#[test]
+fn table_join_models_retain_whole_row_witnesses() {
+    let mut config = configuration();
+    config.grounding.joins = zetesis_themelios::JoinStrategy::Table;
+    let report = profile(source("table-joins.lp"), config).unwrap();
+    assert!(report.complete, "{:?}", report.failure);
+    let common = [
+        "domain(1)",
+        "domain(2)",
+        "-edge(1,1)",
+        "-edge(1,2)",
+        "-edge(2,1)",
+        "-edge(2,2)",
+        "diagonal(1)",
+        "diagonal(2)",
+    ];
+    let expected: std::collections::BTreeSet<std::collections::BTreeSet<String>> = (1..=2)
+        .map(|selected| {
+            common
+                .iter()
+                .map(|atom| (*atom).to_owned())
+                .chain([
+                    format!("choose({selected})"),
+                    format!("witness({selected},1)"),
+                    format!("witness({selected},2)"),
+                ])
+                .collect()
+        })
+        .collect();
+    for sample in &report.samples {
+        let models = sample.models.as_ref().unwrap();
+        assert!(models.exhausted);
+        assert_eq!(models.interpretations.len(), 2);
+        let observed: std::collections::BTreeSet<std::collections::BTreeSet<String>> = models
+            .interpretations
+            .iter()
+            .map(|model| {
+                model
+                    .iter()
+                    .map(|&atom| report.atoms[atom].clone())
+                    .collect()
+            })
+            .collect();
+        assert_eq!(expected, observed);
+    }
+}
+
+#[test]
+fn table_measurement_observes_actual_selection() {
+    let mut config = configuration();
+    config.grounding.joins = zetesis_themelios::JoinStrategy::Table;
+    let report = profile(source("table-joins.lp"), config).unwrap();
+    assert!(report.complete, "{:?}", report.failure);
+    let detailed = report
+        .samples
+        .iter()
+        .find(|sample| sample.mode == Mode::Detailed)
+        .unwrap();
+    let work = detailed
+        .phases
+        .iter()
+        .fold(zetesis_themelios::GroundingWork::default(), |sum, phase| {
+            sum.checked_sum(phase.work)
+        });
+    assert!(work.table_preparations.unwrap() > 0);
+    assert!(work.table_probes.unwrap() > 0);
+    assert!(work.table_rows.unwrap() > 0);
+    assert!(work.table_prepare_work.unwrap() > 0);
+    assert!(work.table_query_work.unwrap() > 0);
+    assert!(work.table_index_bytes.unwrap() > 0);
+    assert!(work.support_peak_bytes.unwrap() >= work.table_index_bytes.unwrap());
+}
+
+#[test]
+fn table_strategy_is_recorded_in_the_report() {
+    let options = CommandOptions::try_parse_from([
+        "zetesis-bench",
+        "grounding",
+        "input.lp",
+        "--joins",
+        "table",
+    ])
+    .unwrap();
+    let Some(Experiment::Grounding(options)) = options.command else {
+        panic!("grounding command expected");
+    };
+    let config = options.configuration();
+    assert_eq!(
+        config.grounding.joins,
+        zetesis_themelios::JoinStrategy::Table
+    );
+    let serialized = serde_json::to_value(config).unwrap();
+    assert_eq!(serialized["grounding"]["joins"], "table");
+}
+
+#[test]
 fn modes_preserve_complete_native_models() {
     let report = qualified_identity();
     assert_eq!(report.atoms, ["hidden", "-p", "q"]);

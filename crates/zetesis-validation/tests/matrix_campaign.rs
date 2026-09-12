@@ -362,6 +362,8 @@ fn cli_profiles_preserve_their_execution_arguments() {
             "4",
             "--batch-size",
             "7",
+            "--formula-joins",
+            "table",
             "--warmups",
             "0",
             "--repetitions",
@@ -376,13 +378,17 @@ fn cli_profiles_preserve_their_execution_arguments() {
     assert_eq!(report["plan"]["profiles"].as_array().unwrap().len(), 2);
     assert_eq!(report["plan"]["profiles"][1]["backend"], "metal");
     assert_eq!(report["plan"]["profiles"][1]["grounder"], "lazy");
+    assert_eq!(report["plan"]["profiles"][0]["formula_joins"], "table");
+    assert_eq!(report["plan"]["profiles"][1]["formula_joins"], "table");
     assert_eq!(report["plan"]["reference_workers"], 4);
-    for sample in report["samples"]
+    let native: Vec<_> = report["samples"]
         .as_array()
         .unwrap()
         .iter()
         .filter(|s| s["capture"].is_object() && s["slot"]["producer"]["solver"] == "native")
-    {
+        .collect();
+    assert!(!native.is_empty());
+    for sample in native {
         let arguments = sample["capture"]["arguments"].as_array().unwrap();
         assert!(
             arguments
@@ -398,6 +404,7 @@ fn cli_profiles_preserve_their_execution_arguments() {
             ("--workers", "2"),
             ("--completion-workers", "3"),
             ("--batch-size", "7"),
+            ("--formula-joins", "table"),
         ] {
             let flag = serde_json::to_value(std::ffi::OsString::from(flag)).unwrap();
             let index = arguments.iter().position(|a| a == &flag).unwrap();
@@ -407,6 +414,20 @@ fn cli_profiles_preserve_their_execution_arguments() {
             );
         }
     }
+    let reference: Vec<_> = report["samples"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|s| s["capture"].is_object() && s["slot"]["producer"]["solver"] == "reference")
+        .collect();
+    assert!(!reference.is_empty());
+    let native_flag = serde_json::to_value(std::ffi::OsString::from("--formula-joins")).unwrap();
+    assert!(reference.iter().all(|sample| {
+        !sample["capture"]["arguments"]
+            .as_array()
+            .unwrap()
+            .contains(&native_flag)
+    }));
 }
 
 #[test]

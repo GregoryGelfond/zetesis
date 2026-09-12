@@ -19,11 +19,11 @@ enum State {
     Values { values: Vec<Value>, index: usize },
 }
 
-pub(super) struct Cursor<'a> {
+pub(super) struct Cursor<'a, 'source> {
     generators: Vec<&'a LiteralIr>,
     states: Vec<State>,
     values: Binding<'static>,
-    support: &'a Support<'a>,
+    support: &'a Support<'source>,
     depth: usize,
     finished: bool,
     variables: usize,
@@ -42,11 +42,11 @@ pub(super) fn target(literal: &LiteralIr) -> Option<usize> {
     }
 }
 
-impl<'a> Cursor<'a> {
+impl<'a, 'source> Cursor<'a, 'source> {
     pub fn new(
         literals: &'a [LiteralIr],
         values: Binding<'static>,
-        support: &'a Support<'a>,
+        support: &'a Support<'source>,
         plan: Option<&'a crate::formula_assignment_plan::Plan>,
         targets: Range<usize>,
     ) -> Self {

@@ -56,12 +56,22 @@ fn outcome_label<S: serde::Serializer>(value: &GroundingOutcome, s: S) -> Result
 
 fn serialize_work<S: serde::Serializer>(work: &GroundingWork, s: S) -> Result<S::Ok, S::Error> {
     use serde::ser::SerializeStruct;
-    let mut fields = s.serialize_struct("GroundingWork", 14)?;
+    let mut fields = s.serialize_struct("GroundingWork", 24)?;
     fields.serialize_field("support_rounds", &work.support_rounds)?;
     fields.serialize_field("support_atoms", &work.support_atoms)?;
     fields.serialize_field("support_index_entries", &work.support_index_entries)?;
     fields.serialize_field("join_probes", &work.join_probes)?;
     fields.serialize_field("join_rows", &work.join_rows)?;
+    fields.serialize_field("indexed_probes", &work.indexed_probes)?;
+    fields.serialize_field("table_inapplicable_probes", &work.table_inapplicable_probes)?;
+    fields.serialize_field("table_preparations", &work.table_preparations)?;
+    fields.serialize_field("table_reuses", &work.table_reuses)?;
+    fields.serialize_field("table_probes", &work.table_probes)?;
+    fields.serialize_field("table_rows", &work.table_rows)?;
+    fields.serialize_field("table_prepare_work", &work.table_prepare_work)?;
+    fields.serialize_field("table_query_work", &work.table_query_work)?;
+    fields.serialize_field("table_index_bytes", &work.table_index_bytes)?;
+    fields.serialize_field("support_peak_bytes", &work.support_peak_bytes)?;
     fields.serialize_field("binding_snapshots", &work.binding_snapshots)?;
     fields.serialize_field("readiness_nodes", &work.readiness_nodes)?;
     fields.serialize_field("expression_evaluations", &work.expression_evaluations)?;
@@ -193,6 +203,16 @@ impl GroundingObserver for Observer {
             work.support_index_entries,
             work.join_probes,
             work.join_rows,
+            work.indexed_probes,
+            work.table_inapplicable_probes,
+            work.table_preparations,
+            work.table_reuses,
+            work.table_probes,
+            work.table_rows,
+            work.table_prepare_work,
+            work.table_query_work,
+            work.table_index_bytes,
+            work.support_peak_bytes,
             work.binding_snapshots,
             work.readiness_nodes,
             work.expression_evaluations,

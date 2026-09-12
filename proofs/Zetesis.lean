@@ -114,4 +114,5 @@ import Zetesis.SeedSelections
 import Zetesis.GatePositions
 import Zetesis.SourceContributions
 import Zetesis.FiniteTables
+import Zetesis.TableBindings
 import Zetesis.ModelSelections

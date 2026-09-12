@@ -12,7 +12,7 @@ use themelios_program::term::BinaryOp;
 use zetesis_core::relation::{Limits, Relation};
 use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value, ValueLimits, ValueNode};
 
-use super::{Budget, Counters, Join, SupportCatalog};
+use super::{Budget, Counters, Join, Support, SupportCatalog};
 use crate::formula_ir::{Expression, LiteralIr, Operation};
 use crate::formula_pattern::{ArgumentPattern, PatternAtom, PatternNode};
 use crate::{ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource};
@@ -75,22 +75,23 @@ fn evaluate(
 ) -> Result<Vec<Vec<Value>>, FormulaFailure> {
     let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
     let mut counters = Counters::default();
-    let support = catalog.snapshot(
+    let relations = catalog.snapshot(
         &FormulaLimits::default(),
         &mut Counters::default(),
         location(),
     )?;
-    let mut join = Join::new(
-        literals,
-        &crate::formula_binding::complete(prefix.iter().cloned()),
-        variables,
-        &support,
-        &mut budget,
+    let support = Support::indexed(
+        &relations,
+        &crate::FormulaLimits::default(),
+        &crate::formula_support::Counters::default(),
         location(),
-    )?;
-    assert_eq!(join.patterns.len(), 1, "fixed single-pattern control");
-    let positive = join.patterns[0];
-    let atom = positive.atom();
+    )
+    .unwrap();
+    let atom = match &literals[0] {
+        LiteralIr::Atom(DefaultNegation::None, atom) => atom,
+        LiteralIr::PatternAtom(pattern) => &pattern.atom,
+        _ => panic!("positive first pattern"),
+    };
     let original: Vec<_> = support
         .rows(atom.predicate())
         .map(|row| {
@@ -117,10 +118,21 @@ fn evaluate(
         .collect();
     let query = relation.query(&keys, Limits::default()).unwrap();
     let selected = relation.select(&query, &all, Limits::default()).unwrap();
+    let mut join = Join::new(
+        literals,
+        &crate::formula_binding::complete(prefix.iter().cloned()),
+        variables,
+        &support,
+        &mut budget,
+        location(),
+    )?;
+    assert_eq!(join.patterns.len(), 1, "fixed single-pattern control");
     match route {
         Route::Indexed => {}
         Route::Scan => {
-            join.probes[0] = Some(super::delta::Rows::Posting(all.positions()));
+            join.probes[0] = Some(super::Probe::Indexed(super::delta::Rows::Posting(
+                all.positions(),
+            )));
         }
         Route::Columns => {
             // Contiguous source mapping is checked by construction. No new
@@ -130,7 +142,9 @@ fn evaluate(
                     relation.row(position).unwrap().source_index() == position
                 })
             );
-            join.probes[0] = Some(super::delta::Rows::Posting(selected.positions()));
+            join.probes[0] = Some(super::Probe::Indexed(super::delta::Rows::Posting(
+                selected.positions(),
+            )));
         }
     }
     let mut bindings = Vec::new();

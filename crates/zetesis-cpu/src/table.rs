@@ -1,6 +1,5 @@
-//! Exact finite-table projection over an immutable typed relation.
+//! Exact finite-table selection and projection over an immutable typed relation.
 //!
-//! This optional execution primitive does not participate in ordinary solving.
 //! A surviving row is a tuple in the supplied table, not an ASP producer, a
 //! true atom, or an answer set. Source completeness and reduct membership remain
 //! separate obligations. Equality and aliasing use whole typed values.
@@ -8,7 +7,8 @@
 //! Preparation borrows the authoritative relation and builds value-to-row
 //! bitsets. Every projection starts from the same immutable coherent rows;
 //! domains may narrow, widen, or be restored in any order. No trail or previous
-//! domain cardinality is trusted. Returned results borrow the prepared table.
+//! domain cardinality is trusted. Row masks borrow only the authoritative
+//! relation; projected value domains also borrow the prepared table.
 
 use std::{mem::size_of, ops::Range};
 
@@ -17,12 +17,15 @@ use zetesis_core::{Value, relation::Relation};
 use crate::{Control, Stop};
 
 mod accounting;
+mod selection;
+
+pub use selection::{Domain, Selection};
 
 use accounting::Work;
 
 const WORD_BITS: usize = u32::BITS as usize;
 
-/// Inclusive limits for one preparation or projection operation.
+/// Inclusive limits for one preparation, selection or projection operation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Limits {
     /// Maximum distinct variable/value support entries across this table.
@@ -44,7 +47,7 @@ impl Default for Limits {
     }
 }
 
-/// A finite preparation/projection resource.
+/// A finite table-operation resource.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Resource {
     /// Distinct variable/value entries, including the same value in different variables.
@@ -82,7 +85,7 @@ pub enum Cause {
 }
 
 /// Failure with the completed work prefix and conservative capacity peak.
-/// No partial table or projection is published. Existing borrowed objects remain valid.
+/// No partial table or result is published. Existing borrowed objects remain valid.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Failure {
     /// Original cause, without converting an interruption into an empty table.
@@ -95,7 +98,7 @@ pub struct Failure {
 
 impl std::fmt::Display for Failure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "finite-table projection failed: {:?}", self.cause)
+        write!(f, "finite-table operation failed: {:?}", self.cause)
     }
 }
 impl std::error::Error for Failure {}
@@ -248,7 +251,7 @@ impl<'owner, 'source> Table<'owner, 'source> {
         &self.scope
     }
 
-    /// Number of independently supplied finite domains.
+    /// Number of independently supplied domains.
     #[must_use]
     pub fn variable_count(&self) -> usize {
         self.variables.len()
@@ -287,16 +290,39 @@ impl<'owner, 'source> Table<'owner, 'source> {
         limits: Limits,
         control: &Control,
     ) -> Result<Projection<'_, 'owner, 'source>, Failure> {
-        let external = self
-            .relation
-            .storage()
-            .retained_bytes
-            .checked_add(self.statistics.retained_bytes)
-            .ok_or(Failure {
-                cause: Cause::Overflow,
-                work: 0,
-                peak_bytes: usize::MAX,
-            })?;
+        self.project_inner(
+            domains.iter().map(|domain| Domain::Finite(domain)),
+            limits,
+            control,
+        )
+    }
+
+    /// Project borrowed finite, singleton or unrestricted domains.
+    ///
+    /// This shares row restriction and value projection with [`Self::project`].
+    /// The result borrows the prepared table, not the supplied domain storage.
+    /// An unrestricted variable permits every indexed value; a singleton needs
+    /// one typed lookup and no union scratch. Finite lists retain set meaning.
+    ///
+    /// # Errors
+    /// Refuses invalid domain count, finite limits, allocation failure or
+    /// interrupted control without publishing a partial projection.
+    pub fn project_domains(
+        &self,
+        domains: &[Domain<'_>],
+        limits: Limits,
+        control: &Control,
+    ) -> Result<Projection<'_, 'owner, 'source>, Failure> {
+        self.project_inner(domains.iter().copied(), limits, control)
+    }
+
+    fn project_inner<'domain>(
+        &self,
+        domains: impl ExactSizeIterator<Item = Domain<'domain>>,
+        limits: Limits,
+        control: &Control,
+    ) -> Result<Projection<'_, 'owner, 'source>, Failure> {
+        let external = self.retained_inputs()?;
         let scratch_header = size_of::<Vec<u32>>();
         let mut work = Work::new(
             limits,
@@ -305,47 +331,17 @@ impl<'owner, 'source> Table<'owner, 'source> {
             size_of::<Projection<'_, '_, '_>>() + scratch_header,
         )?;
         let result = (|| {
-            work.entries(self.values.len())?;
-            if domains.len() != self.variable_count() {
-                return Err(Cause::Domains);
-            }
-            let mut rows = work.reserve(self.coherent.len())?;
-            for &word in &self.coherent {
-                work.tick(1)?;
-                rows.push(word);
-            }
+            self.check_domains(domains.len(), &work)?;
             let mut supported = work.reserve(self.values.len())?;
             work.tick(self.values.len())?;
             supported.resize(self.values.len(), false);
-            let mut union = work.zeros(rows.len())?;
-            for (variable, domain) in domains.iter().enumerate() {
-                for word in &mut union {
-                    work.tick(1)?;
-                    *word = 0;
-                }
-                for value in *domain {
-                    work.tick(1)?;
-                    if let Some(entry) = self.lookup(variable, value, &mut work)? {
-                        work.tick(1)?;
-                        supported[entry] = true;
-                        for (target, &word) in union.iter_mut().zip(self.support(entry)) {
-                            work.tick(1)?;
-                            *target |= word;
-                        }
-                    }
-                }
-                for (target, &word) in rows.iter_mut().zip(&union) {
-                    work.tick(1)?;
-                    *target &= word;
-                }
-            }
+            let rows = self.restrict_rows(domains, Some(&mut supported), &mut work)?;
             for (entry, allowed) in supported.iter_mut().enumerate() {
                 work.tick(1)?;
                 if *allowed {
                     *allowed = intersects(&rows, self.support(entry), &mut work)?;
                 }
             }
-            work.release(union);
             work.release_bytes(scratch_header);
             Ok(Projection {
                 table: self,
@@ -355,6 +351,27 @@ impl<'owner, 'source> Table<'owner, 'source> {
             })
         })();
         result.map_err(|cause| work.failure(cause))
+    }
+
+    fn retained_inputs(&self) -> Result<usize, Failure> {
+        self.relation
+            .storage()
+            .retained_bytes
+            .checked_add(self.statistics.retained_bytes)
+            .ok_or(Failure {
+                cause: Cause::Overflow,
+                work: 0,
+                peak_bytes: usize::MAX,
+            })
+    }
+
+    fn check_domains(&self, count: usize, work: &Work<'_>) -> Result<(), Cause> {
+        work.entries(self.values.len())?;
+        if count == self.variable_count() {
+            Ok(())
+        } else {
+            Err(Cause::Domains)
+        }
     }
 
     fn prepare_variable(&mut self, column: usize, work: &mut Work<'_>) -> Result<(), Cause> {

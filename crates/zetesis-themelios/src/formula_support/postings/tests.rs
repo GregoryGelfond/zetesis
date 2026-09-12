@@ -331,7 +331,7 @@ impl GroundingObserver for Observer {
 fn report_json(
     path: &str,
     report: &Report,
-    work: GroundingWork,
+    work: &GroundingWork,
     admission_completed: bool,
 ) -> serde_json::Value {
     let limits = Limits::default();
@@ -402,7 +402,7 @@ fn corpus_postings_preserve_full_row_equalities() {
         });
         println!(
             "{}",
-            report_json(path, &report, observer.0.get(), result.is_ok())
+            report_json(path, &report, &observer.0.get(), result.is_ok())
         );
         result.unwrap_or_else(|error| panic!("{path}: {error}"));
         assert_eq!(report.stop, None, "{path}: incomplete diagnostic");

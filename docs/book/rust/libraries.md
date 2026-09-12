@@ -19,6 +19,7 @@ construction and standalone analysis APIs belong to its own manual.
 | Shared candidate ownership and borrowed checking | `zetesis_core::{SeedSelection, SeedView}`, `Candidates::next_selection` |
 | Checked borrowed atom identity | `AtomPattern::key`, `BindingView`, `AtomKey` |
 | Bounded typed column views and equality selection | `zetesis_core::relation::{Relation, Query, Selection, Mask}` |
+| Reusable finite-table row selection and domain projection | `zetesis_cpu::table::{Table, Domain, Selection}` |
 | Explicit complete relational graph | `zetesis_core::GroundProgram::compile` |
 | Normal reduct membership | `zetesis_cpu::{check, check_static, BatchOracle}` |
 | Finite formula construction and reference membership | `zetesis_ferraris::{Theory, Node, Interpretation, check}` |
@@ -142,6 +143,23 @@ positions are local to the relation. Eager formula support uses this view for
 typed lookup and row access between catalog-growth rounds. Bounded primitive
 experiments use the same representation. It is not an alternative source parser
 or a complete grounder.
+
+`zetesis_cpu::table::Table` borrows a relation and indexes coherent original rows
+by variable/value supports. Its `select` operation accepts borrowed unrestricted,
+singleton or finite domains and returns an owned mask borrowing only the
+relation. Full projection additionally returns witnessed value domains. Both use
+the same row restriction operation; neither copies atom payloads or asserts
+logical truth. The [finite-table chapter](finite-tables.md) gives the API,
+capacity/work contract and row-preservation argument.
+
+`PreparedFormula::with_grounding_options` and its bundle counterpart compose this
+primitive into eager formula grounding through explicit `JoinStrategy::Table`.
+The default is `Indexed`. Only flat positive patterns over completed possible
+support use table masks; structural patterns and support-growth rounds retain
+indexed joins. The private query workspace accounts for shared indices and all
+live masks under the enclosing source limits. It feeds the existing matcher and
+authored-body validation. This scalar grounding strategy is independent of the
+later solver's CPU/Rayon/GPU backend.
 
 `Catalog::construction`, `insert` and `lookup` report operation work and actual
 retained capacity. Failed operations return `CatalogFailure` with completed work

@@ -123,12 +123,44 @@ impl Fixture {
             reference: &self.reference,
             report: &self.report,
             schedule: Schedule::new(0, 1).unwrap(),
+            formula_joins: None,
             limits: performance::Limits::default(),
         }
     }
     fn run(&self) -> performance::Report {
         performance::run(&self.request()).unwrap()
     }
+}
+
+#[test]
+fn formula_strategy_reaches_only_native_invocations() {
+    let fixture = Fixture::new("", |_| {});
+    let mut request = fixture.request();
+    request.formula_joins = Some(zetesis_validation::selected::FormulaJoins::Table);
+    let report = performance::run(&request).unwrap();
+    assert!(report.passed());
+    for sample in report.samples() {
+        let selected = sample
+            .capture()
+            .arguments()
+            .windows(2)
+            .any(|pair| pair[0] == "--formula-joins" && pair[1] == "table");
+        assert_eq!(selected, sample.slot().producer == Producer::Native);
+    }
+}
+
+#[test]
+fn default_strategy_keeps_legacy_invocations() {
+    let fixture = Fixture::new("", |_| {});
+    let report = fixture.run();
+    assert!(report.passed());
+    assert!(report.samples().iter().all(|sample| {
+        sample
+            .capture()
+            .arguments()
+            .iter()
+            .all(|argument| argument != "--formula-joins")
+    }));
 }
 
 fn producer_reports(contract: &examples::Contract) -> (String, Value) {

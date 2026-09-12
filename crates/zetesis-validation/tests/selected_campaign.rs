@@ -130,6 +130,31 @@ fn campaign_schema_names_the_license_ceiling() {
 }
 
 #[test]
+fn formula_strategy_reaches_only_native_invocations() {
+    let fixture = Fixture::new(|_, _| {});
+    let mut request = fixture.request();
+    request.execution.formula_joins = Some(selected::FormulaJoins::Table);
+    let report = selected::run(&request).unwrap();
+    assert!(report.passed(), "{report:?}");
+    for case in report.cases() {
+        let native = case.native().unwrap().arguments();
+        assert_eq!(
+            native
+                .windows(2)
+                .filter(|pair| pair[0] == "--formula-joins" && pair[1] == "table")
+                .count(),
+            1
+        );
+        assert!(
+            case.reference()
+                .arguments()
+                .iter()
+                .all(|argument| argument != "--formula-joins")
+        );
+    }
+}
+
+#[test]
 fn hidden_identity_mismatch_cannot_pass() {
     let fixture = Fixture::new(|index, record| {
         if index == 0 {

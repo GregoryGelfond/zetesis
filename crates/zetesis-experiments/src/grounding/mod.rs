@@ -11,8 +11,8 @@ use std::{io::Write, path::Path, time::Instant};
 
 use serde::Serialize;
 use zetesis_themelios::{
-    AdmittedFormulaBundle, GroundingObserver, SourceBundle,
-    admit_bundle_formula_with_grounding_observer,
+    AdmittedFormulaBundle, GroundingObserver, GroundingOptions, JoinStrategy, SourceBundle,
+    prepare_bundle_formula,
 };
 
 mod config;
@@ -23,7 +23,7 @@ mod report;
 mod semantic;
 mod storage;
 
-pub use config::{CaptureLimits, Configuration, Options};
+pub use config::{CaptureLimits, Configuration, Joins, Options};
 pub use error::Error;
 pub use fingerprint::{FingerprintUnavailable, SubjectFingerprint};
 pub use observer::{CaptureRefusal, PhaseRecord, SourceSpan};
@@ -49,7 +49,7 @@ impl Mode {
 
 /// Profile an original source file and its native include graph.
 ///
-/// One unmeasured admission and complete native solve establish the reference.
+/// One unmeasured indexed-join admission and complete native solve establish the reference.
 /// Each round then loads/parses the original graph again, verifies exact bytes
 /// and include identities, preallocates observer records, and times admission.
 /// A failed timed attempt retains its duration and phase prefix. Objective
@@ -82,7 +82,16 @@ fn qualify(path: &Path, report: &mut Report) -> Result<(), Error> {
     let config = report.configuration;
     let bundle = SourceBundle::load(path, config.bundle).map_err(Error::Source)?;
     report.sources = report::catalog(&bundle, config.capture.max_source_path_bytes)?;
-    let reference = admit(bundle, &config, None)?;
+    let reference = admit(
+        bundle,
+        &Configuration {
+            grounding: GroundingOptions {
+                joins: JoinStrategy::Indexed,
+            },
+            ..config
+        },
+        None,
+    )?;
     semantic::objective_free(&reference)?;
     report.atoms = semantic::catalog(&reference, config.capture.max_atom_text_bytes)?;
     report.nodes = Some(reference.theory().nodes().len());
@@ -112,14 +121,13 @@ fn admit(
     config: &Configuration,
     observer: Option<&dyn GroundingObserver>,
 ) -> Result<AdmittedFormulaBundle, Error> {
-    admit_bundle_formula_with_grounding_observer(
-        bundle,
-        config.admission,
-        config.expansion,
-        config.formula,
-        observer,
-    )
-    .map_err(|error| Error::Admission(Box::new(error)))
+    let preparation =
+        prepare_bundle_formula(bundle, config.admission, config.expansion, config.formula)
+            .map_err(|error| Error::Admission(Box::new(error)))?;
+    preparation
+        .with_grounding_options(config.grounding)
+        .ground_with_observer(observer)
+        .map_err(|error| Error::Admission(Box::new(error)))
 }
 
 fn sample(
@@ -180,15 +188,8 @@ fn measure(
     let observer = observer::Observer::new(mode, config.capture.max_phase_records)?;
     let selected = (mode != Mode::Unobserved).then_some(&observer as &dyn GroundingObserver);
     let start = Instant::now();
-    let admitted = admit_bundle_formula_with_grounding_observer(
-        bundle,
-        config.admission,
-        config.expansion,
-        config.formula,
-        selected,
-    );
+    let admitted = admit(bundle, config, selected);
     let admission_elapsed_ns = u64::try_from(start.elapsed().as_nanos()).ok();
-    let admitted = admitted.map_err(|error| Error::Admission(Box::new(error)));
     let (grounding_elapsed_ns, phases, capture) = observer.finish();
     let refusal = capture.map(Error::Capture).or_else(|| {
         admission_elapsed_ns
