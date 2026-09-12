@@ -2,7 +2,7 @@
 
 use std::mem::size_of;
 
-use crate::{Atom, Predicate};
+use crate::{Atom, AtomKey, Predicate, Value};
 
 use super::{
     Cell, Failure, Layout, LayoutOwner, Limits, Relation, Resource, Source, Storage, Work, ceiling,
@@ -208,6 +208,22 @@ impl Catalog {
             .map_err(|error| self.failed(error, work.used))
     }
 
+    /// Look up a borrowed substitution with the same comparison and accounting
+    /// as [`Self::lookup`]. No atom or value payload is copied.
+    ///
+    /// # Errors
+    /// Refuses foreign predicates or work/byte ceilings, preserving completed
+    /// comparison work in the failure receipt.
+    pub fn lookup_key(&self, key: &AtomKey<'_>, limits: Limits) -> Result<Lookup, CatalogFailure> {
+        let mut work = self.work(limits).map_err(|error| self.failed(error, 0))?;
+        self.position_values(key.predicate(), |column| key.argument(column), &mut work)
+            .map(|position| Lookup {
+                row: position.ok(),
+                storage: self.receipt(&work),
+            })
+            .map_err(|error| self.failed(error, work.used))
+    }
+
     /// Insert an atom only after every required reservation and check succeeds.
     ///
     /// # Errors
@@ -373,8 +389,17 @@ impl Catalog {
     }
 
     fn position(&self, atom: &Atom, work: &mut Work) -> Result<Result<usize, usize>, Failure> {
-        work.tick(1 + self.predicate.name().len() as u128 + atom.predicate().name().len() as u128)?;
-        if atom.predicate() != &self.predicate {
+        self.position_values(atom.predicate(), |column| &atom.values()[column], work)
+    }
+
+    fn position_values<'value>(
+        &self,
+        predicate: &Predicate,
+        value: impl Fn(usize) -> &'value Value,
+        work: &mut Work,
+    ) -> Result<Result<usize, usize>, Failure> {
+        work.tick(1 + self.predicate.name().len() as u128 + predicate.name().len() as u128)?;
+        if predicate != &self.predicate {
             return Err(Failure::Predicate);
         }
         let mut start = 0;
@@ -383,8 +408,8 @@ impl Catalog {
             let middle = start + (end - start) / 2;
             let row = self.rows[middle];
             let mut order = std::cmp::Ordering::Equal;
-            for (left, right) in self.atoms[row].values().iter().zip(atom.values()) {
-                order = work.compare(left, right)?;
+            for (column, left) in self.atoms[row].values().iter().enumerate() {
+                order = work.compare(left, value(column))?;
                 if !order.is_eq() {
                     break;
                 }

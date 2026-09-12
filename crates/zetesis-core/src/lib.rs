@@ -26,12 +26,14 @@
 mod value;
 mod structured;
 mod template;
+mod atom_key;
 mod program;
 mod candidate;
 mod carrier;
 mod ground;
 pub mod relation;
 
+pub use atom_key::{AtomKey, BindingView};
 pub use candidate::{Interpretation, Model, Seed, SeedError};
 pub use carrier::{AtomIter, CarrierError};
 pub use ground::{AtomId, GroundProgram, GroundRule, StaticError, StaticLimits, WordError};

@@ -62,12 +62,7 @@ impl AtomPattern {
     /// # Errors
     /// Returns the first missing variable; constants do not read the assignment.
     pub fn instantiate(&self, assignment: &[Value]) -> Result<Atom, InstantiationError> {
-        let values = self
-            .terms
-            .iter()
-            .map(|term| term.resolve(assignment).cloned())
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(Atom::from_valid_parts(self.predicate.clone(), values))
+        self.key(assignment).map(crate::AtomKey::to_atom)
     }
 }
 

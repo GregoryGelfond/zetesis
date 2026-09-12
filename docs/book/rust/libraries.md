@@ -156,3 +156,15 @@ session boundaries are useful without pretending those interfaces are present.
 Generate the [local Rust API reference](../../doc/zetesis_solve/index.html) as
 described in [Building the documentation](../building.md). Public signatures and
 their per-operation cost and error contracts are authoritative.
+
+`AtomPattern::key` provides a checked, borrowed atom identity over a
+`BindingView`. Complete values, partial owned slots and partial borrowed slots
+use the same lookup boundary. Unreferenced variables may remain absent; a missing
+referenced variable returns `InstantiationError`. The key preserves signed
+predicate identity, argument order and typed structural values. Its storage
+ordering and hash operations agree with an owned `Atom`. `AtomKey::get` borrows
+an existing member of an ordered atom set, and `Catalog::lookup_key` supplies the
+same checked work receipt as owned-atom lookup. Neither operation copies an atom;
+`AtomKey::to_atom` explicitly transfers the identity into a new owner. These
+operations establish identity only, without certifying support or answer-set
+membership.

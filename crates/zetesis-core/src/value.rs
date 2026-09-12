@@ -124,10 +124,16 @@ impl Predicate {
 }
 
 /// A ground atom, ordered by signature and then by its arity-checked tuple.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Atom {
     predicate: Predicate,
     values: Vec<Value>,
+}
+
+impl std::hash::Hash for Atom {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        crate::atom_key::hash_atom(self, state);
+    }
 }
 
 impl Atom {
