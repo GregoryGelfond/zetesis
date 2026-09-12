@@ -197,6 +197,15 @@ accounting, fallible matching and any device masks still need executable
 correspondence arguments. The [proof guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/column-relations.md)
 explains the hypotheses with a correlated-tuple example.
 
+[`FiniteTables`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/FiniteTables.lean)
+relates intersections of value supports to surviving complete rows. Projection
+preserves these rows, contracts their domains and is idempotent for a single
+table. Recomputing from the original table preserves previously surviving rows
+when domains widen. The optional [Rust primitive](../rust/finite-tables.md)
+borrows typed values and retains row identity; its bitsets, alias checks,
+resource accounting and translation from an ASP source remain executable
+correspondence obligations. Ordinary solving does not select this primitive.
+
 [`DomainContraction`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DomainContraction.lean)
 proves concrete singleton-distinctness and affine filters preserve compatible
 assignments under fixed constraints. Finite compositions preserve that family;

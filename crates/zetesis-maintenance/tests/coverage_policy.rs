@@ -201,7 +201,7 @@ fn metal_selection_refuses_vulkan_substitution() {
         ),
         (
             "metal_automatic_collection_retains_cpu_execution",
-            "vulkan_collection_observer_failure_retains_a_prefix",
+            "vulkan_automatic_collection_retains_cpu_execution",
         ),
         (
             "formula_execution::resource_tests::metal_formula_sessions_reuse_the_supplied_profile",
@@ -278,7 +278,7 @@ fn physical_metadata_keeps_floor_populations_separate() {
         record["floor_profiles"],
         serde_json::json!(["workspace", "cli-cpu"])
     );
-    assert_eq!(record["expected_physical_tests"], 51);
+    assert_eq!(record["expected_physical_tests"], 54);
     assert_eq!(record["physical_test_groups"].as_array().unwrap().len(), 16);
     assert_eq!(
         record["project_added_filename_filters"],
@@ -304,7 +304,7 @@ fn physical_metadata_retains_the_reviewed_schedule() {
     assert_eq!(
         identities,
         serde_json::json!([
-            ["wgpu-lib", "lib", "workspace libraries", 10],
+            ["wgpu-lib", "lib", "workspace libraries", 13],
             ["tight", "test", "hardware_tight", 4],
             ["formula", "test", "hardware_formula", 2],
             ["aggregate", "test", "hardware_aggregate", 3],
@@ -331,19 +331,19 @@ fn physical_metadata_retains_the_reviewed_schedule() {
     ]);
     assert_eq!(groups[14]["tests"], language_tests);
     let tests = record["physical_tests"].as_array().unwrap();
-    assert_eq!(tests.len(), 51);
-    assert_eq!(
-        &tests[47..49],
-        language_tests.as_array().unwrap().as_slice()
-    );
+    assert_eq!(tests.len(), 54);
     let static_tests = serde_json::json!([
         "metal_constructor_executes_resident_batches_without_fallback",
         "metal_static_oracle_matches_independent_closures"
     ]);
     assert_eq!(groups[15]["tests"], static_tests);
-    assert_eq!(&tests[49..], static_tests.as_array().unwrap().as_slice());
+    let grouped_tests: Vec<_> = groups
+        .iter()
+        .flat_map(|group| group["tests"].as_array().unwrap().iter())
+        .collect();
+    assert_eq!(tests.iter().collect::<Vec<_>>(), grouped_tests);
     let scope = record["physical_scope"].as_str().unwrap();
-    assert!(scope.starts_with("51 exact Metal tests: "));
+    assert!(scope.starts_with("54 exact Metal tests: "));
     assert!(scope.contains("static constructor and complete closure/reference checks"));
     assert!(
         scope.contains(

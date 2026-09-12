@@ -653,7 +653,7 @@ scripts/check.sh book
 
 Physical Metal qualification adds the named device tests with
 `scripts/check.sh coverage --metal` on a machine exposing a Metal adapter.
-The current selection contains 51 exact tests in 16 groups, including explicit
+The current selection contains 54 exact tests in 16 groups, including explicit
 Metal static-oracle construction and complete closure comparisons against an
 independent ordered-set reference. The [static tests](../../../crates/zetesis-wgpu/tests/hardware.rs)
 check the static shader and readback contract; formula tests do not replace them.
@@ -722,7 +722,7 @@ Vulkan and other untested devices are outside this measurement.
 Reproduce this recorded snapshot from the linked source revision with
 `scripts/check.sh coverage --metal` using the
 [verification tools](#prepare-verification-tools). The linked revision selects
-51 physical tests in 16 groups. Retain the generated JSON and
+54 physical tests in 16 groups. Retain the generated JSON and
 HTML reports under `target/coverage/workspace` and `target/coverage/cli-cpu`.
 Update the badge and this table together only after qualification completes.
 Line coverage identifies executed Rust lines; it does not establish assertion

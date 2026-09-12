@@ -111,3 +111,4 @@ import Zetesis.AtomKeys
 import Zetesis.SeedSelections
 import Zetesis.GatePositions
 import Zetesis.SourceContributions
+import Zetesis.FiniteTables
