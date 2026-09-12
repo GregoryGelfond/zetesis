@@ -6,7 +6,7 @@ mod physical;
 
 use zetesis_core::{
     Atom, Predicate, Sign, Value, ValueLimits, ValueNode,
-    relation::{Limits, Relation},
+    relation::{Catalog, Limits, Relation},
 };
 use zetesis_cpu::{Control, Stop};
 use zetesis_wgpu::{
@@ -129,6 +129,7 @@ fn qualify_masks(backend: physical::Backend) {
     for rows in [0, 1, 31, 32, 33, 63, 64, 65] {
         compare_rows(&mut executor, rows);
     }
+    compare_catalog_growth(&mut executor);
     let predicate = Predicate::new("nullary", 0).unwrap();
     let atoms = [Atom::new(predicate.clone(), vec![]).unwrap()];
     let relation = Relation::from_atoms(&predicate, &atoms, Limits::default()).unwrap();
@@ -149,6 +150,53 @@ fn qualify_masks(backend: physical::Backend) {
         .unwrap();
     assert_eq!(empty.query_count(), 0);
     assert_eq!(prepared.activity(), RelationGpuActivity::default());
+}
+
+fn compare_catalog_growth(executor: &mut GpuRelationExecutor) {
+    let predicate = Predicate::with_sign("row", 2, Sign::Negative).unwrap();
+    let values = values();
+    let mut catalog = Catalog::new(predicate.clone(), Limits::default()).unwrap();
+    // Insertion order deliberately differs from typed-value order. The second
+    // snapshot reuses the first dictionary IDs and crosses two mask boundaries.
+    for rows in [31, 65] {
+        for row in catalog.atoms().len()..rows {
+            let atom = Atom::new(
+                predicate.clone(),
+                vec![
+                    Value::Number(-i32::try_from(row).unwrap()),
+                    values[row % values.len()].clone(),
+                ],
+            )
+            .unwrap();
+            catalog.insert(atom, Limits::default()).unwrap();
+        }
+        let relation = catalog.view();
+        let queries: Vec<_> = values
+            .iter()
+            .map(|value| relation.query(&[(1, value)], Limits::default()).unwrap())
+            .collect();
+        let mut prepared = executor
+            .prepare(&relation, RelationGpuLimits::default(), &Control::default())
+            .unwrap();
+        let masks = prepared
+            .filter(&queries, RelationGpuLimits::default(), &Control::default())
+            .unwrap();
+        assert_eq!(
+            prepared.activity().completed_queries,
+            u64::try_from(values.len()).unwrap()
+        );
+        assert_eq!(prepared.activity().submissions, 1);
+        for (query, value) in values.iter().enumerate() {
+            let expected: Vec<_> = catalog
+                .atoms()
+                .iter()
+                .enumerate()
+                .filter_map(|(position, atom)| (atom.values()[1] == *value).then_some(position))
+                .collect();
+            let selection = masks.selection(query, Limits::default()).unwrap();
+            assert_eq!(selection.positions(), expected);
+        }
+    }
 }
 
 #[test]
