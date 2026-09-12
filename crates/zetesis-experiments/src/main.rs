@@ -6,6 +6,16 @@ fn main() -> std::process::ExitCode {
     let options = zetesis_experiments::CommandOptions::parse();
     let mut output = std::io::stdout().lock();
     let outcome = match options.command {
+        Some(zetesis_experiments::Experiment::Table(options)) => {
+            return match zetesis_experiments::table_measurement::run(&options, &mut output) {
+                Ok(true) => std::process::ExitCode::SUCCESS,
+                Ok(false) => std::process::ExitCode::FAILURE,
+                Err(error) => {
+                    eprintln!("zetesis-bench: {error}");
+                    std::process::ExitCode::from(2)
+                }
+            };
+        }
         Some(zetesis_experiments::Experiment::Relation(options)) => {
             zetesis_experiments::relation_measurement::run(&options, &mut output)
                 .map_err(|error| error.to_string())

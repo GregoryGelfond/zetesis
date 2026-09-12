@@ -22,11 +22,12 @@ these operations fit into the solver. Public interfaces start in
 | `tight` | Complete-theory tight certificates with exact completion | `tight_measurement` |
 | `lazy` | Matched relational source rounds and closures | `lazy_measurement` |
 | `relation` | Equality masks over one retained typed column view | `relation_measurement` |
+| `table` | Complete surviving rows and projected domains on CPU | `table_measurement::measure` |
 | `grounding` | Fresh original-source formula admission | `grounding::profile`, `write_report` |
 
 Device profiles accept physical Metal or Vulkan. CPU mode explicitly omits the
 device; `formula-projection` requires a physical device, and `grounding` is
-CPU-only. An explicit API never silently falls back to another API, CPU or a
+CPU-only, as is `table`. An explicit API never silently falls back to another API, CPU or a
 software adapter. Device metadata records selection, not platform-wide
 qualification. The default static command requires Metal.
 
@@ -43,6 +44,8 @@ zetesis-bench lazy --backend metal --widths 4,8 \
   --batches 1,32,128 --families sparse,dense --workers 4
 zetesis-bench relation --backend metal --family independent --payload tuple \
   --rows 4096 --queries 32 --workers 4 --warmups 2 --repetitions 6
+zetesis-bench table --case aliased --rows 1024 --queries 32 \
+  --workers 4 --warmups 1 --repetitions 3
 zetesis-bench grounding examples/kr-domains/standalone/send-money/send-money.lp \
   --repetitions 3
 ```
@@ -53,6 +56,51 @@ record the command's exit status. Reports are profile-specific TSV, JSON or
 JSON-lines views, not a single interchangeable timing schema.
 
 ## What each measurement includes
+
+### Finite-table domain projection
+
+`table` compares a complete typed row scan, scalar support bitsets and an owned
+Rayon pool sharing one immutable support index. Every procedure returns the same
+original row occurrences and projected domains. The scan prepares sorted domain
+memberships once; table projections resolve their supplied typed domains on each
+call. Their distinct setup costs are recorded. The independent reference scans
+original rows with linear domain membership and pairwise alias checks.
+
+The fixed cases are correlated numeric columns, independently varying mixed typed
+columns and repeated-variable columns with both coherent and incoherent rows.
+An explicit source-index map retains duplicate occurrences in reverse source
+order. Seven query families repeat in order: full domains, singleton domains,
+absent values, alternating half domains, an empty first domain, the complementary
+half domains and restored full domains. Restoration tests reuse the same table.
+These are finite relation constraints; they do not establish ASP producer support,
+source completeness, candidate truth or answer-set membership.
+
+JSON-lines events contain the complete typed subject and its SHA-256, one-time
+preparation intervals, table work/capacity receipts and every initial, warmup and
+timed batch. Output domain IDs refer to the subject's typed `values` list, not
+logical integers or relation dictionary IDs. Original row positions retain their
+`original_indices` mapping. Each batch is checked outside its timing interval;
+per-query projection and conversion intervals are also separate. Use batch wall
+times when comparing scalar and Rayon schedules; summing overlapping worker
+intervals does not give parallel wall time. Routes run in fixed scan/table/Rayon
+order, so measurements do not control order or thermal effects.
+
+The library caps dimensions at 8192 rows, 128 queries, four variables, seventeen
+typed dictionary values, eight workers and five timed repetitions. Preparation
+and per-query table work have independent receipts under the requested shared
+per-operation ceiling. Limits cover the relation and table input/scratch for
+that operation; caller fixture, other retained results and thread stacks are
+separate. The report retains a conservative fixture envelope and actual common
+result-vector capacities. These measures are not RSS. The CLI stops publication
+at 64 MiB. Exit 0 means every scheduled comparison completed without refusal;
+exit 1 retains a completed schedule with finite-table applicability refusals;
+exit 2 denotes a command, acquisition, correctness, interruption or output failure.
+Missing metrics are omitted, never represented by zero.
+
+No GPU procedure or ordinary solving path is selected by this command.
+Singleton equality-mask comparisons belong to the distinct `relation` contract;
+they must not be compared with timings that also compute projected domains.
+Keep source revision and executable hash beside reports when measuring changes.
 
 ### Static and general reduct checking
 

@@ -20,6 +20,7 @@ mod formula_parallel;
 mod measurement;
 pub mod relation_fixtures;
 pub mod relation_measurement;
+pub mod table_measurement;
 pub mod grounding;
 pub mod lazy_measurement;
 pub mod tight_measurement;
@@ -52,6 +53,8 @@ pub struct CommandOptions {
 /// Execution profiles with independent validation contracts.
 #[derive(Debug, clap::Subcommand)]
 pub enum Experiment {
+    /// Compare complete finite-table row survival and projected typed domains on CPU.
+    Table(table_measurement::Options),
     /// Compare packed relation equality masks on the same typed rows and keys.
     Relation(relation_measurement::Options),
     /// Compare exact native aggregate reductions on matched original/frozen masks.
