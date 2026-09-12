@@ -28,6 +28,7 @@ import Zetesis.ChoiceIntervals
 import Zetesis.StrongNegation
 import Zetesis.ClauseValidation
 import Zetesis.Propagation
+import Zetesis.PartitionedScan
 import Zetesis.BatchAccounting
 import Zetesis.GroundGuards
 import Zetesis.SignedObjectiveBounds
@@ -112,3 +113,4 @@ import Zetesis.SeedSelections
 import Zetesis.GatePositions
 import Zetesis.SourceContributions
 import Zetesis.FiniteTables
+import Zetesis.ModelSelections

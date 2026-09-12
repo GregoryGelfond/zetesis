@@ -2276,6 +2276,31 @@
       "name": "Zetesis.FinitePools.flattening_changes_original_truth"
     },
     {
+      "file": "Zetesis/FiniteTables.lean",
+      "line": 61,
+      "name": "Zetesis.FiniteTables.indexed_survival_exact"
+    },
+    {
+      "file": "Zetesis/FiniteTables.lean",
+      "line": 82,
+      "name": "Zetesis.FiniteTables.narrowing_contracts"
+    },
+    {
+      "file": "Zetesis/FiniteTables.lean",
+      "line": 95,
+      "name": "Zetesis.FiniteTables.narrowing_preserves_rows"
+    },
+    {
+      "file": "Zetesis/FiniteTables.lean",
+      "line": 115,
+      "name": "Zetesis.FiniteTables.narrowing_idempotent"
+    },
+    {
+      "file": "Zetesis/FiniteTables.lean",
+      "line": 134,
+      "name": "Zetesis.FiniteTables.widening_preserves_rows"
+    },
+    {
       "file": "Zetesis/FiniteValues.lean",
       "line": 49,
       "name": "Zetesis.FiniteValues.input_agreement"
@@ -2881,6 +2906,21 @@
       "name": "Zetesis.LiftedBridge.lazy_accept_sound"
     },
     {
+      "file": "Zetesis/ModelSelections.lean",
+      "line": 29,
+      "name": "Zetesis.ModelSelections.canonicalization_exact"
+    },
+    {
+      "file": "Zetesis/ModelSelections.lean",
+      "line": 39,
+      "name": "Zetesis.ModelSelections.unselected_entries_irrelevant"
+    },
+    {
+      "file": "Zetesis/ModelSelections.lean",
+      "line": 54,
+      "name": "Zetesis.ModelSelections.renumbering_preserves_interpretation"
+    },
+    {
       "file": "Zetesis/NegativeEligibility.lean",
       "line": 25,
       "name": "Zetesis.NegativeEligibility.negative_activity_frozen"
@@ -3388,31 +3428,36 @@
     {
       "file": "Zetesis/Observations.lean",
       "line": 78,
-      "name": "Zetesis.Observations.shared_equality_choice_exact"
+      "name": "Zetesis.Observations.necessary_filter_preserves_terms"
     },
     {
       "file": "Zetesis/Observations.lean",
       "line": 101,
+      "name": "Zetesis.Observations.shared_equality_choice_exact"
+    },
+    {
+      "file": "Zetesis/Observations.lean",
+      "line": 124,
       "name": "Zetesis.Observations.equal_measures_do_not_identify_tuple_keys"
     },
     {
       "file": "Zetesis/Observations.lean",
-      "line": 112,
+      "line": 135,
       "name": "Zetesis.Observations.original_family_projection"
     },
     {
       "file": "Zetesis/Observations.lean",
-      "line": 119,
+      "line": 142,
       "name": "Zetesis.Observations.decorated_world_view"
     },
     {
       "file": "Zetesis/Observations.lean",
-      "line": 128,
+      "line": 151,
       "name": "Zetesis.Observations.different_models_remain_different_records"
     },
     {
       "file": "Zetesis/Observations.lean",
-      "line": 138,
+      "line": 161,
       "name": "Zetesis.Observations.display_deduplication_can_shrink_a_family"
     },
     {
@@ -3664,6 +3709,56 @@
       "file": "Zetesis/PartitionCapacities.lean",
       "line": 84,
       "name": "Zetesis.PartitionCapacities.full_capacity"
+    },
+    {
+      "file": "Zetesis/PartitionedScan.lean",
+      "line": 47,
+      "name": "Zetesis.PartitionedScan.maximum_append"
+    },
+    {
+      "file": "Zetesis/PartitionedScan.lean",
+      "line": 54,
+      "name": "Zetesis.PartitionedScan.maximum_permutation"
+    },
+    {
+      "file": "Zetesis/PartitionedScan.lean",
+      "line": 63,
+      "name": "Zetesis.PartitionedScan.partition_count_flatten"
+    },
+    {
+      "file": "Zetesis/PartitionedScan.lean",
+      "line": 72,
+      "name": "Zetesis.PartitionedScan.partition_index_flatten"
+    },
+    {
+      "file": "Zetesis/PartitionedScan.lean",
+      "line": 82,
+      "name": "Zetesis.PartitionedScan.partition_count_exact"
+    },
+    {
+      "file": "Zetesis/PartitionedScan.lean",
+      "line": 91,
+      "name": "Zetesis.PartitionedScan.partition_index_exact"
+    },
+    {
+      "file": "Zetesis/PartitionedScan.lean",
+      "line": 98,
+      "name": "Zetesis.PartitionedScan.zero_excludes_eligible"
+    },
+    {
+      "file": "Zetesis/PartitionedScan.lean",
+      "line": 115,
+      "name": "Zetesis.PartitionedScan.one_identifies_singleton"
+    },
+    {
+      "file": "Zetesis/PartitionedScan.lean",
+      "line": 133,
+      "name": "Zetesis.PartitionedScan.zero_excludes_strict_drop"
+    },
+    {
+      "file": "Zetesis/PartitionedScan.lean",
+      "line": 153,
+      "name": "Zetesis.PartitionedScan.one_forces_strict_drop"
     },
     {
       "file": "Zetesis/PositiveArguments.lean",
@@ -5597,6 +5692,7 @@
     "Zetesis/FerrarisMask.lean",
     "Zetesis/FiniteBindings.lean",
     "Zetesis/FinitePools.lean",
+    "Zetesis/FiniteTables.lean",
     "Zetesis/FiniteValues.lean",
     "Zetesis/GatePositions.lean",
     "Zetesis/GateProjection.lean",
@@ -5611,6 +5707,7 @@
     "Zetesis/LazyRounds.lean",
     "Zetesis/Lifted.lean",
     "Zetesis/LiftedBridge.lean",
+    "Zetesis/ModelSelections.lean",
     "Zetesis/NegativeEligibility.lean",
     "Zetesis/NegativeHeads.lean",
     "Zetesis/NormalFerraris.lean",
@@ -5633,6 +5730,7 @@
     "Zetesis/OuterRanges.lean",
     "Zetesis/PackedQueryLiterals.lean",
     "Zetesis/PartitionCapacities.lean",
+    "Zetesis/PartitionedScan.lean",
     "Zetesis/PositiveArguments.lean",
     "Zetesis/ProjectedConditionals.lean",
     "Zetesis/Propagation.lean",
@@ -5667,8 +5765,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "244c46646ef935edf78b6fac53703d5b7b61e8cf8fe833a1c9f02f47ae1efa2e",
-    "Zetesis.lean": "e84221887950c35b8340cbadf778a9ce8c539ed8e73c977712fbba11b439af5e",
+    "Audit.lean": "219a35a8ac9af7094682c4c5e5432f6a165ab569bca8a850a40e32ea8b4ed7ec",
+    "Zetesis.lean": "d7d05d2378256921f7d8a1db40a4075b845ede8fc9d0391f6c0c665945ea25f3",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
     "Zetesis/AggregateConsumers.lean": "41aded89dbfaa79833ed3b336030ef4b08afa5be8e7029060416c2f8de59ef97",
@@ -5714,6 +5812,7 @@
     "Zetesis/FerrarisMask.lean": "fb8f654bdec019250c1990e75598df34f7074e49bb9beac629c33b79600add83",
     "Zetesis/FiniteBindings.lean": "5d62b03133f3e8d5843f32b56bbb1694d1dfc5185daccdc8d9f2a560b851ee2c",
     "Zetesis/FinitePools.lean": "18d2c7afd4a250d3a2ed24a22a3c3debb77c269ca930951a775da7795938a79d",
+    "Zetesis/FiniteTables.lean": "892e5722be539571301797e33d2c42a0cb552bc765081523a7fc06f874cd3177",
     "Zetesis/FiniteValues.lean": "14e3d4f778b607fabdaa2c9153c7341618ab895f73158095efb46ff1d12d5788",
     "Zetesis/GatePositions.lean": "0ce62d9226db2cf7b0a9374461b65050aab1e15dd39bd939c37190e8729dac6d",
     "Zetesis/GateProjection.lean": "d8fffb8e150ab7a0852b097c188da9c4d14f51242ac05be843d98f07940693a6",
@@ -5728,6 +5827,7 @@
     "Zetesis/LazyRounds.lean": "c356b730916c3add85d422183146eab7150281d375b5b54eff775a6157a76e86",
     "Zetesis/Lifted.lean": "beae8b170cd0dc605155cf996395bb3105b544dd622753954de443727915dbbb",
     "Zetesis/LiftedBridge.lean": "97de4a489c8a4e1fadf43d759320532064a70d90be463da25ed1da78b601ca09",
+    "Zetesis/ModelSelections.lean": "59a905cd9cabe1b003e8365fe6c3e67a03c9fb22be167ae316a9cca35b1b21a4",
     "Zetesis/NegativeEligibility.lean": "19642232da0d78920f9a2a9ca2e120c2356692e0e176a08ba97f6dd334fec403",
     "Zetesis/NegativeHeads.lean": "8167d8b182fe903c5d477df2418beb37b9eed1411068f4c400e044d5c8d2b10b",
     "Zetesis/NormalFerraris.lean": "8d66055e9bf2fdee4472bc15f8f661e287234b5629de22f479c7005d8707ad9a",
@@ -5739,7 +5839,7 @@
     "Zetesis/ObjectivePriorities.lean": "2a6511a641661e8889d8e8cd59c3f3bb78c999da174680fb1f171bc792aa5109",
     "Zetesis/ObjectiveTransport.lean": "8ca886389c40cd4a644f184af076d5e476d203292355a89cbea44dabd9adae24",
     "Zetesis/ObjectiveValues.lean": "7b9f638d0bc06f6fd2d9154c79fc110441e52fe220a82ebd00b051c4e399310d",
-    "Zetesis/Observations.lean": "e897894cfe6ec9b2483cf82ed7ca21e26aacafe03d9dc3793563630e6e2b278d",
+    "Zetesis/Observations.lean": "170567aea24bcd1c7975d7d0a7a31df91506e7d185de4e4922b3a9c36f245169",
     "Zetesis/Optimization.lean": "b913fcfa9a5ce52ef3f26754e6a1a14f3bef3ad314d3e474516467c9e931a227",
     "Zetesis/OptionalIndex.lean": "a34226123cff7834e8171673bf9df269594269a6403ffe7f26e6520361ddc421",
     "Zetesis/OrderedBounds.lean": "b29093f47a0993ad392826a3b0c70f137f3a88c22857e9d874be98722420d5d7",
@@ -5750,6 +5850,7 @@
     "Zetesis/OuterRanges.lean": "0534f1216fbdfa31fb82b0c0b18885b70aadd64e575b68c75a5e0276b95434a2",
     "Zetesis/PackedQueryLiterals.lean": "4700438efc4c0e35d1601acb2ada298d51b335287de0469cefca110600c3f853",
     "Zetesis/PartitionCapacities.lean": "9affe7200203f4b5e4ada5eaf950be5598b5c1c6588600df68200c1364f471a8",
+    "Zetesis/PartitionedScan.lean": "513fd9e0b5d9fad9eb89911aab621f11ba9a604ecc416c16d7f4c1e76ee3748e",
     "Zetesis/PositiveArguments.lean": "71e99535d01f24ecf2bc447153cbd48006231bab85babead9f982638e9735bd2",
     "Zetesis/ProjectedConditionals.lean": "a420d26c76215b77f75cf33831dce80055a5d6cdb448db53f83c8951bf06dc4b",
     "Zetesis/Propagation.lean": "f6b516c7a9f15e58f78342b47f96990a0a9e5a18a5df962ed8367e47fdad3368",

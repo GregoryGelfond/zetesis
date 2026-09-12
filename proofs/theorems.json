@@ -2275,6 +2275,31 @@
     "line": 81
   },
   {
+    "name": "Zetesis.FiniteTables.indexed_survival_exact",
+    "file": "Zetesis/FiniteTables.lean",
+    "line": 61
+  },
+  {
+    "name": "Zetesis.FiniteTables.narrowing_contracts",
+    "file": "Zetesis/FiniteTables.lean",
+    "line": 82
+  },
+  {
+    "name": "Zetesis.FiniteTables.narrowing_preserves_rows",
+    "file": "Zetesis/FiniteTables.lean",
+    "line": 95
+  },
+  {
+    "name": "Zetesis.FiniteTables.narrowing_idempotent",
+    "file": "Zetesis/FiniteTables.lean",
+    "line": 115
+  },
+  {
+    "name": "Zetesis.FiniteTables.widening_preserves_rows",
+    "file": "Zetesis/FiniteTables.lean",
+    "line": 134
+  },
+  {
     "name": "Zetesis.FiniteValues.input_agreement",
     "file": "Zetesis/FiniteValues.lean",
     "line": 49
@@ -2880,6 +2905,21 @@
     "line": 197
   },
   {
+    "name": "Zetesis.ModelSelections.canonicalization_exact",
+    "file": "Zetesis/ModelSelections.lean",
+    "line": 29
+  },
+  {
+    "name": "Zetesis.ModelSelections.unselected_entries_irrelevant",
+    "file": "Zetesis/ModelSelections.lean",
+    "line": 39
+  },
+  {
+    "name": "Zetesis.ModelSelections.renumbering_preserves_interpretation",
+    "file": "Zetesis/ModelSelections.lean",
+    "line": 54
+  },
+  {
     "name": "Zetesis.NegativeEligibility.negative_activity_frozen",
     "file": "Zetesis/NegativeEligibility.lean",
     "line": 25
@@ -3385,34 +3425,39 @@
     "line": 62
   },
   {
-    "name": "Zetesis.Observations.shared_equality_choice_exact",
+    "name": "Zetesis.Observations.necessary_filter_preserves_terms",
     "file": "Zetesis/Observations.lean",
     "line": 78
   },
   {
-    "name": "Zetesis.Observations.equal_measures_do_not_identify_tuple_keys",
+    "name": "Zetesis.Observations.shared_equality_choice_exact",
     "file": "Zetesis/Observations.lean",
     "line": 101
   },
   {
+    "name": "Zetesis.Observations.equal_measures_do_not_identify_tuple_keys",
+    "file": "Zetesis/Observations.lean",
+    "line": 124
+  },
+  {
     "name": "Zetesis.Observations.original_family_projection",
     "file": "Zetesis/Observations.lean",
-    "line": 112
+    "line": 135
   },
   {
     "name": "Zetesis.Observations.decorated_world_view",
     "file": "Zetesis/Observations.lean",
-    "line": 119
+    "line": 142
   },
   {
     "name": "Zetesis.Observations.different_models_remain_different_records",
     "file": "Zetesis/Observations.lean",
-    "line": 128
+    "line": 151
   },
   {
     "name": "Zetesis.Observations.display_deduplication_can_shrink_a_family",
     "file": "Zetesis/Observations.lean",
-    "line": 138
+    "line": 161
   },
   {
     "name": "Zetesis.Optimization.best_none_iff",
@@ -3663,6 +3708,56 @@
     "name": "Zetesis.PartitionCapacities.full_capacity",
     "file": "Zetesis/PartitionCapacities.lean",
     "line": 84
+  },
+  {
+    "name": "Zetesis.PartitionedScan.maximum_append",
+    "file": "Zetesis/PartitionedScan.lean",
+    "line": 47
+  },
+  {
+    "name": "Zetesis.PartitionedScan.maximum_permutation",
+    "file": "Zetesis/PartitionedScan.lean",
+    "line": 54
+  },
+  {
+    "name": "Zetesis.PartitionedScan.partition_count_flatten",
+    "file": "Zetesis/PartitionedScan.lean",
+    "line": 63
+  },
+  {
+    "name": "Zetesis.PartitionedScan.partition_index_flatten",
+    "file": "Zetesis/PartitionedScan.lean",
+    "line": 72
+  },
+  {
+    "name": "Zetesis.PartitionedScan.partition_count_exact",
+    "file": "Zetesis/PartitionedScan.lean",
+    "line": 82
+  },
+  {
+    "name": "Zetesis.PartitionedScan.partition_index_exact",
+    "file": "Zetesis/PartitionedScan.lean",
+    "line": 91
+  },
+  {
+    "name": "Zetesis.PartitionedScan.zero_excludes_eligible",
+    "file": "Zetesis/PartitionedScan.lean",
+    "line": 98
+  },
+  {
+    "name": "Zetesis.PartitionedScan.one_identifies_singleton",
+    "file": "Zetesis/PartitionedScan.lean",
+    "line": 115
+  },
+  {
+    "name": "Zetesis.PartitionedScan.zero_excludes_strict_drop",
+    "file": "Zetesis/PartitionedScan.lean",
+    "line": 133
+  },
+  {
+    "name": "Zetesis.PartitionedScan.one_forces_strict_drop",
+    "file": "Zetesis/PartitionedScan.lean",
+    "line": 153
   },
   {
     "name": "Zetesis.PositiveArguments.declared_input_agreement",

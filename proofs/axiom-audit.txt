@@ -469,6 +469,11 @@
 'Zetesis.FinitePools.frozen_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.FinitePools.stable_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.FinitePools.flattening_changes_original_truth' depends on axioms: [propext, Quot.sound]
+'Zetesis.FiniteTables.indexed_survival_exact' does not depend on any axioms
+'Zetesis.FiniteTables.narrowing_contracts' does not depend on any axioms
+'Zetesis.FiniteTables.narrowing_preserves_rows' does not depend on any axioms
+'Zetesis.FiniteTables.narrowing_idempotent' does not depend on any axioms
+'Zetesis.FiniteTables.widening_preserves_rows' does not depend on any axioms
 'Zetesis.FiniteValues.input_agreement' depends on axioms: [propext]
 'Zetesis.FiniteValues.extension_target' depends on axioms: [propext]
 'Zetesis.FiniteValues.extension_preserves' depends on axioms: [propext]
@@ -592,6 +597,9 @@
 'Zetesis.LiftedBridge.completed_lazy_stage_exact' depends on axioms: [propext, Quot.sound]
 'Zetesis.LiftedBridge.completed_lazy_stage_accept_sound' depends on axioms: [propext, Quot.sound]
 'Zetesis.LiftedBridge.lazy_accept_sound' depends on axioms: [propext, Quot.sound]
+'Zetesis.ModelSelections.canonicalization_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.ModelSelections.unselected_entries_irrelevant' depends on axioms: [propext, Quot.sound]
+'Zetesis.ModelSelections.renumbering_preserves_interpretation' depends on axioms: [propext, Quot.sound]
 'Zetesis.NegativeEligibility.negative_activity_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.NegativeEligibility.double_negative_activity_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.NegativeEligibility.double_negative_gate_is_not_positive' depends on axioms: [propext,
@@ -707,6 +715,7 @@
 'Zetesis.ObjectiveValues.ignored_entry_preserves_optima' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Observations.completed_terms_exact' does not depend on any axioms
 'Zetesis.Observations.same_rows_preserve_terms' does not depend on any axioms
+'Zetesis.Observations.necessary_filter_preserves_terms' depends on axioms: [propext]
 'Zetesis.Observations.shared_equality_choice_exact' does not depend on any axioms
 'Zetesis.Observations.equal_measures_do_not_identify_tuple_keys' does not depend on any axioms
 'Zetesis.Observations.original_family_projection' depends on axioms: [propext, Quot.sound]
@@ -765,6 +774,16 @@
 'Zetesis.PartitionCapacities.local_lower' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PartitionCapacities.inconsistent_premises' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PartitionCapacities.full_capacity' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.PartitionedScan.maximum_append' depends on axioms: [propext]
+'Zetesis.PartitionedScan.maximum_permutation' depends on axioms: [propext]
+'Zetesis.PartitionedScan.partition_count_flatten' depends on axioms: [propext]
+'Zetesis.PartitionedScan.partition_index_flatten' depends on axioms: [propext]
+'Zetesis.PartitionedScan.partition_count_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.PartitionedScan.partition_index_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.PartitionedScan.zero_excludes_eligible' depends on axioms: [propext, Quot.sound]
+'Zetesis.PartitionedScan.one_identifies_singleton' depends on axioms: [propext, Quot.sound]
+'Zetesis.PartitionedScan.zero_excludes_strict_drop' depends on axioms: [propext, Quot.sound]
+'Zetesis.PartitionedScan.one_forces_strict_drop' depends on axioms: [propext, Quot.sound]
 'Zetesis.PositiveArguments.declared_input_agreement' depends on axioms: [propext]
 'Zetesis.PositiveArguments.successful_check' depends on axioms: [propext]
 'Zetesis.PositiveArguments.undefined_check' depends on axioms: [propext]

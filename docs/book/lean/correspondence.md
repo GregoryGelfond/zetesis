@@ -146,6 +146,27 @@ subtracting it leaves the other charged source operations, not a runtime estimat
 Control is polled around each bounded catalog operation. Final `Model`
 canonicalization retains its separate comparison and allocation contract.
 
+[`ModelSelections`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ModelSelections.lean)
+relates selected catalog positions to their interpretation. Canonical ordering
+and coalescing preserve the true set; unselected catalog entries supply no truth,
+and a renumbering preserves meaning when the selected atoms agree. Rust
+[`Model`](../rust/models.md) retains a shared catalog and canonical selection.
+Static and formula answers share their program catalogs; completed batched lazy
+closures share a catalog frozen after the final complete round. Checked positions,
+logical comparison, ownership and allocation remain executable obligations.
+The retained-byte limit conservatively charges the entire catalog for each
+retained answer, including unselected atoms; it is neither unique allocation
+accounting nor process memory.
+
+[`PartitionedScan`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/PartitionedScan.lean)
+proves that exact finite partitioning preserves an eligible-atom count and maximum
+index. Zero availability excludes a fitting strict-subset completion; one
+available atom must be false in every such completion. The maximum names that
+atom only under the count-one premise. The formula kernel distributes this scan
+over 64 lanes and merges their summaries. Its strided coverage, bounded `u32`
+arithmetic, immutable scan inputs, atom correspondence and synchronization remain
+Rust/WGSL obligations. The laws justify domain narrowing, not answer-set acceptance.
+
 Payload bookkeeping charges a whole amount before the corresponding comparison
 or copy. `WorkCharge` equates the completed work prefix with repeated unit
 charging under unchanged control, including exact quota exhaustion. A positive

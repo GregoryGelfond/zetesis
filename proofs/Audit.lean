@@ -455,6 +455,11 @@ import Zetesis
 #print axioms Zetesis.FinitePools.frozen_in_context
 #print axioms Zetesis.FinitePools.stable_in_context
 #print axioms Zetesis.FinitePools.flattening_changes_original_truth
+#print axioms Zetesis.FiniteTables.indexed_survival_exact
+#print axioms Zetesis.FiniteTables.narrowing_contracts
+#print axioms Zetesis.FiniteTables.narrowing_preserves_rows
+#print axioms Zetesis.FiniteTables.narrowing_idempotent
+#print axioms Zetesis.FiniteTables.widening_preserves_rows
 #print axioms Zetesis.FiniteValues.input_agreement
 #print axioms Zetesis.FiniteValues.extension_target
 #print axioms Zetesis.FiniteValues.extension_preserves
@@ -576,6 +581,9 @@ import Zetesis
 #print axioms Zetesis.LiftedBridge.completed_lazy_stage_exact
 #print axioms Zetesis.LiftedBridge.completed_lazy_stage_accept_sound
 #print axioms Zetesis.LiftedBridge.lazy_accept_sound
+#print axioms Zetesis.ModelSelections.canonicalization_exact
+#print axioms Zetesis.ModelSelections.unselected_entries_irrelevant
+#print axioms Zetesis.ModelSelections.renumbering_preserves_interpretation
 #print axioms Zetesis.NegativeEligibility.negative_activity_frozen
 #print axioms Zetesis.NegativeEligibility.double_negative_activity_frozen
 #print axioms Zetesis.NegativeEligibility.double_negative_gate_is_not_positive
@@ -677,6 +685,7 @@ import Zetesis
 #print axioms Zetesis.ObjectiveValues.ignored_entry_preserves_optima
 #print axioms Zetesis.Observations.completed_terms_exact
 #print axioms Zetesis.Observations.same_rows_preserve_terms
+#print axioms Zetesis.Observations.necessary_filter_preserves_terms
 #print axioms Zetesis.Observations.shared_equality_choice_exact
 #print axioms Zetesis.Observations.equal_measures_do_not_identify_tuple_keys
 #print axioms Zetesis.Observations.original_family_projection
@@ -733,6 +742,16 @@ import Zetesis
 #print axioms Zetesis.PartitionCapacities.local_lower
 #print axioms Zetesis.PartitionCapacities.inconsistent_premises
 #print axioms Zetesis.PartitionCapacities.full_capacity
+#print axioms Zetesis.PartitionedScan.maximum_append
+#print axioms Zetesis.PartitionedScan.maximum_permutation
+#print axioms Zetesis.PartitionedScan.partition_count_flatten
+#print axioms Zetesis.PartitionedScan.partition_index_flatten
+#print axioms Zetesis.PartitionedScan.partition_count_exact
+#print axioms Zetesis.PartitionedScan.partition_index_exact
+#print axioms Zetesis.PartitionedScan.zero_excludes_eligible
+#print axioms Zetesis.PartitionedScan.one_identifies_singleton
+#print axioms Zetesis.PartitionedScan.zero_excludes_strict_drop
+#print axioms Zetesis.PartitionedScan.one_forces_strict_drop
 #print axioms Zetesis.PositiveArguments.declared_input_agreement
 #print axioms Zetesis.PositiveArguments.successful_check
 #print axioms Zetesis.PositiveArguments.undefined_check

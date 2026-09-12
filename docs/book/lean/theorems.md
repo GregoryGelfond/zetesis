@@ -13,6 +13,8 @@ The maintained full index is
 | Why may only gate atoms be guessed? | `Semantics.accept_sound`, `stable_complete`, `stable_iff_exists_seed` | The supplied carrier covers every frozen gate |
 | Does canonicalizing shared seed handles preserve truth? | `SeedSelections.materialization_exact` | Sorting is a permutation and deduplication preserves denoted atom membership |
 | Does a gate position resolve to the same atom in the full carrier? | `GatePositions.retained_position_exact` | Filtering indexed atoms preserves their original dense positions and gate ranks |
+| Can interpretations share a catalog without sharing truth? | `ModelSelections.unselected_entries_irrelevant` | Selected positions decode to the same atoms; storage outside the selection adds no true atom |
+| Can lanes combine a strict-subset availability scan? | `PartitionedScan.partition_count_exact`, `one_forces_strict_drop` | Exact occurrence coverage, frozen candidate and fitting domains; machine arithmetic and synchronization remain separate |
 | Can a stored mask evaluate a reduct? | `Ferraris.masked_eval_iff_reduct` in `FerrarisMask` | Mask agrees with original truth at every formula; arbitrary tested interpretation |
 | Can joins be decomposed? | `Lifted.composition_exact` | Binding, filtering, gates and projection denote the supplied template |
 | When may equality columns prefilter full matches? | `ColumnRelations.full_matches_preserved` | Exact dictionary/columns, supplied rows and a total matcher entailing the equalities |
