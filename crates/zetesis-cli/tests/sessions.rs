@@ -729,8 +729,8 @@ impl RejectObservation {
     }
 }
 impl zetesis_cli::ExecutionObserver for RejectObservation {
-    // Deliberately backend-shaped: an external fault must never enter the
-    // automatic device fallback path, even if its source has that type.
+    // Deliberately backend-shaped: a device error must not turn an observer
+    // failure into another execution route.
     type Error = RunError;
     fn observe(
         &mut self,
