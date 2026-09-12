@@ -75,8 +75,13 @@ fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
     }
     writeln!(
         sink,
-        "  search limits: candidates={}; formula work={}; decisions={}; CPU candidate/lazy GPU batch source work={}",
+        "  search limits: candidates={}; candidate restriction/formula work={}; decisions={}; CPU candidate/lazy GPU batch source work={}",
         o.max_candidates, o.max_search_work, o.max_search_decisions, o.max_work
+    )?;
+    writeln!(
+        sink,
+        "  candidate restriction limits: copied payload bytes={}; atom occurrences={}; allocator/index overhead excluded",
+        o.max_candidate_bytes, o.max_atoms
     )?;
     writeln!(
         sink,
@@ -153,6 +158,7 @@ struct Details<'a> {
     completion: Option<Completion>,
     interruption: Option<crate::Interruption>,
     discovered_gate_atoms: usize,
+    candidate_statistics: Option<zetesis_cpu::CandidateStatistics>,
     countermodel_statistics: Option<&'a zetesis_sat::Statistics>,
     formula_execution: Option<&'a crate::FormulaExecutionStatistics>,
     lazy_execution: Option<&'a crate::LazyExecutionStatistics>,
@@ -168,6 +174,7 @@ impl<'a> From<&'a Report> for Details<'a> {
             completion: Some(report.completion),
             interruption: report.interruption,
             discovered_gate_atoms: report.discovered_gate_atoms,
+            candidate_statistics: report.candidate_statistics,
             countermodel_statistics: report.countermodel_statistics.as_ref(),
             formula_execution: report.formula_execution.as_ref(),
             lazy_execution: report.lazy_execution.as_ref(),
@@ -185,6 +192,7 @@ impl<'a> From<&'a crate::PartialReport> for Details<'a> {
             completion: report.completion,
             interruption: report.interruption,
             discovered_gate_atoms: report.discovered_gate_atoms,
+            candidate_statistics: report.candidate_statistics,
             countermodel_statistics: report.countermodel_statistics.as_ref(),
             formula_execution: report.formula_execution.as_ref(),
             lazy_execution: report.lazy_execution.as_ref(),
@@ -195,6 +203,18 @@ impl<'a> From<&'a crate::PartialReport> for Details<'a> {
 }
 
 fn details(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io::Result<()> {
+    if let Some(stats) = report.candidate_statistics {
+        writeln!(
+            sink,
+            "  candidate restrictions: work={}; conjunctions={}; skipped impossible intervals={}; prepared atom occurrences={}; copied payload bytes={}; peak copied payload bytes={}; allocator/index overhead excluded",
+            stats.restriction_work,
+            stats.restriction_conjunctions,
+            stats.conflicts,
+            stats.restriction_atoms,
+            stats.restriction_bytes,
+            stats.restriction_peak_bytes
+        )?;
+    }
     if let Some(stats) = report.shared_execution {
         shared(sink, stats)?;
     }
@@ -216,40 +236,7 @@ fn details(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
     }
     if let Some(stats) = report.countermodel_statistics {
         formula(sink, options, report)?;
-        writeln!(
-            sink,
-            "  countermodel: search work={}; decisions={}; candidates={}; queries={}; witnesses={}; candidate restrictions={}; classical queries={}; verified stable models={}",
-            stats.search.work,
-            stats.search.decisions,
-            stats.candidates,
-            stats.countermodel_queries,
-            stats.countermodels,
-            stats.candidate_restrictions,
-            stats.candidate_queries,
-            stats.stable_models
-        )?;
-        if let Some(certified) = stats.certified {
-            writeln!(
-                sink,
-                "  tight certificate: eligible={}; refusal={:?}; storage limit={}; construction work={}; checks={}; stable decisions before commit={}; residuals={}; failed={}; checking work={}",
-                certified.plan.is_some(),
-                certified.refusal,
-                options.max_completion_scratch_bytes,
-                certified.construction_work,
-                certified.checks,
-                certified.stable,
-                certified.residuals,
-                certified.failed,
-                certified.checking_work
-            )?;
-            if let Some(plan) = certified.plan {
-                writeln!(
-                    sink,
-                    "  tight certificate storage: construction logical bytes={}; resident logical bytes={}; dependencies={}",
-                    plan.construction_bytes, plan.resident_bytes, plan.dependencies
-                )?;
-            }
-        }
+        countermodel(sink, options, stats)?;
         writeln!(
             sink,
             "  discovered gate tuples: inapplicable (complete semantic candidates)"
@@ -397,6 +384,55 @@ fn lazy_buffer_usage(sink: &mut impl Write, usage: crate::LazyTransportUsage) ->
         " slack releases: budget={}; accounting overflow={}",
         usage.budget_releases, usage.accounting_overflow_releases
     )
+}
+
+fn countermodel(
+    sink: &mut impl Write,
+    options: &Options,
+    stats: &zetesis_sat::Statistics,
+) -> io::Result<()> {
+    if let Some(support) = stats.support {
+        writeln!(
+            sink,
+            "  necessary disjunctive support: status={:?}; construction work={}; encoding work={} (included in search work)",
+            support.status, support.construction_work, support.encoding_work
+        )?;
+    }
+    writeln!(
+        sink,
+        "  countermodel: search work={}; decisions={}; candidates={}; queries={}; witnesses={}; candidate restrictions={}; classical queries={}; verified stable models={}",
+        stats.search.work,
+        stats.search.decisions,
+        stats.candidates,
+        stats.countermodel_queries,
+        stats.countermodels,
+        stats.candidate_restrictions,
+        stats.candidate_queries,
+        stats.stable_models
+    )?;
+    if let Some(certified) = stats.certified {
+        writeln!(
+            sink,
+            "  tight certificate: eligible={}; refusal={:?}; storage limit={}; construction work={}; checks={}; stable decisions before commit={}; residuals={}; failed={}; checking work={}",
+            certified.plan.is_some(),
+            certified.refusal,
+            options.max_completion_scratch_bytes,
+            certified.construction_work,
+            certified.checks,
+            certified.stable,
+            certified.residuals,
+            certified.failed,
+            certified.checking_work
+        )?;
+        if let Some(plan) = certified.plan {
+            writeln!(
+                sink,
+                "  tight certificate storage: construction logical bytes={}; resident logical bytes={}; dependencies={}",
+                plan.construction_bytes, plan.resident_bytes, plan.dependencies
+            )?;
+        }
+    }
+    Ok(())
 }
 
 fn formula(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io::Result<()> {

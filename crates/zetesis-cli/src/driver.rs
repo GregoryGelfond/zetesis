@@ -33,6 +33,8 @@ pub struct Report {
     pub interruption: Option<Interruption>,
     /// Gate tuples discovered by the candidate generator.
     pub discovered_gate_atoms: usize,
+    /// Necessary closure-candidate restrictions, including interrupted work.
+    pub candidate_statistics: Option<zetesis_cpu::CandidateStatistics>,
     /// Cumulative countermodel accounting when available; absent for closure
     /// and for an initialization failure that returns no statistics.
     pub countermodel_statistics: Option<zetesis_sat::Statistics>,

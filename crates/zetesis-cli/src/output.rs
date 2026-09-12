@@ -196,14 +196,7 @@ fn summary(
         out.text("null")?;
     }
     out.text("},\"statistics\":")?;
-    statistics(
-        &mut out,
-        view.search,
-        view.execution,
-        view.lazy_execution,
-        view.shared_execution,
-        view.timings,
-    )?;
+    statistics(&mut out, &view)?;
     out.text("}")?;
     Ok(out.bytes)
 }
@@ -487,31 +480,26 @@ fn write_interruption(
     Ok(())
 }
 
-fn statistics(
-    out: &mut Buffer,
-    search: Option<&zetesis_sat::Statistics>,
-    execution: Option<&crate::FormulaExecutionStatistics>,
-    lazy_execution: Option<&crate::LazyExecutionStatistics>,
-    shared_execution: Option<&crate::SharedExecutionStatistics>,
-    timings: Option<&PhaseTimings>,
-) -> Result<(), RunError> {
+fn statistics(out: &mut Buffer, view: &SummaryView<'_>) -> Result<(), RunError> {
     // Counts are typed and optional; this is a bounded fixed-shape view, not a
     // serialization of debug text or the human statistics protocol.
-    if timings.is_some() {
+    if view.timings.is_some() {
         out.text("{\"search\":")?;
-        search_statistics(out, search)?;
+        search_statistics(out, view.search)?;
+        out.text(",\"candidate_restrictions\":")?;
+        candidate_statistics(out, view.candidates)?;
         out.text(",\"execution\":")?;
-        execution_statistics(out, execution)?;
+        execution_statistics(out, view.execution)?;
         out.text(",\"lazy_execution\":")?;
-        lazy_statistics(out, lazy_execution)?;
+        lazy_statistics(out, view.lazy_execution)?;
         out.text(",\"shared_execution\":")?;
-        shared_statistics(out, shared_execution)?;
+        shared_statistics(out, view.shared_execution)?;
         out.text(",\"phase_timings\":")?;
-        phases(out, timings)?;
+        phases(out, view.timings)?;
         out.text(",\"stage_timings\":")?;
-        stages(out, timings.map(|timing| &timing.stages))?;
+        stages(out, view.timings.map(|timing| &timing.stages))?;
         out.text(",\"grounding_attribution\":")?;
-        grounding(out, timings.map(|timing| &timing.grounding))?;
+        grounding(out, view.timings.map(|timing| &timing.grounding))?;
         out.text("}")?;
     } else {
         out.text("null")?;
@@ -604,6 +592,7 @@ struct SummaryView<'a> {
     interruption: Option<Interruption>,
     optimization: Option<&'a crate::Optimization>,
     search: Option<&'a zetesis_sat::Statistics>,
+    candidates: Option<zetesis_cpu::CandidateStatistics>,
     execution: Option<&'a crate::FormulaExecutionStatistics>,
     lazy_execution: Option<&'a crate::LazyExecutionStatistics>,
     shared_execution: Option<&'a crate::SharedExecutionStatistics>,
@@ -623,6 +612,7 @@ impl<'a> SummaryView<'a> {
                     interruption: semantic.and_then(crate::SemanticOutcome::interruption),
                     optimization: semantic.and_then(crate::SemanticOutcome::incumbent),
                     search: semantic.and_then(crate::SemanticOutcome::countermodel_statistics),
+                    candidates: semantic.and_then(crate::SemanticOutcome::candidate_statistics),
                     execution: semantic.and_then(crate::SemanticOutcome::formula_execution),
                     lazy_execution: semantic.and_then(crate::SemanticOutcome::lazy_execution),
                     shared_execution: semantic.and_then(crate::SemanticOutcome::shared_execution),
@@ -642,6 +632,7 @@ impl<'a> SummaryView<'a> {
                     interruption: partial.and_then(|p| p.interruption),
                     optimization: partial.and_then(|p| p.optimization.as_ref()),
                     search: partial.and_then(|p| p.countermodel_statistics.as_ref()),
+                    candidates: partial.and_then(|p| p.candidate_statistics),
                     execution: partial.and_then(|p| p.formula_execution.as_ref()),
                     lazy_execution: partial.and_then(|p| p.lazy_execution.as_ref()),
                     shared_execution: partial.and_then(|p| p.shared_execution.as_ref()),
@@ -668,6 +659,44 @@ fn search_statistics(
     out.number_field("countermodel_queries", stats.countermodel_queries)?;
     out.number_field("countermodels", stats.countermodels)?;
     out.number_field("stable_models", stats.stable_models)?;
+    out.text(",\"necessary_support\":")?;
+    support_statistics(out, stats.support)?;
+    out.text("}")
+}
+
+fn candidate_statistics(
+    out: &mut Buffer,
+    statistics: Option<zetesis_cpu::CandidateStatistics>,
+) -> Result<(), RunError> {
+    let Some(stats) = statistics else {
+        return out.text("null");
+    };
+    out.text("{\"work\":")?;
+    out.text(&stats.restriction_work.to_string())?;
+    out.number_field("conjunctions", stats.restriction_conjunctions)?;
+    out.number_field("skipped_intervals", stats.conflicts)?;
+    out.number_field("prepared_atom_occurrences", stats.restriction_atoms)?;
+    out.number_field("copied_payload_bytes", stats.restriction_bytes)?;
+    out.number_field("peak_copied_payload_bytes", stats.restriction_peak_bytes)?;
+    out.text("}")
+}
+
+fn support_statistics(
+    out: &mut Buffer,
+    statistics: Option<zetesis_sat::SupportStatistics>,
+) -> Result<(), RunError> {
+    let Some(stats) = statistics else {
+        return out.text("null");
+    };
+    out.text("{\"status\":")?;
+    out.string(match stats.status {
+        zetesis_sat::SupportStatus::Applied => "applied",
+        zetesis_sat::SupportStatus::NotApplicable => "not_applicable",
+        zetesis_sat::SupportStatus::FormulaLimit => "formula_limit",
+        zetesis_sat::SupportStatus::EncodingLimit(_) => "encoding_limit",
+    })?;
+    out.number_field("construction_work", stats.construction_work)?;
+    out.number_field("encoding_work", stats.encoding_work)?;
     out.text("}")
 }
 fn execution_statistics(

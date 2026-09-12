@@ -27,6 +27,8 @@ pub struct PartialReport {
     pub summary_published: bool,
     /// Gate tuples discovered by the closure candidate generator.
     pub discovered_gate_atoms: usize,
+    /// Necessary closure-candidate restrictions, including interrupted work.
+    pub candidate_statistics: Option<zetesis_cpu::CandidateStatistics>,
     /// Original candidate/reduct accounting, when that stream was initialized.
     pub countermodel_statistics: Option<zetesis_sat::Statistics>,
     /// Actual hybrid accounting, including uncommitted candidates and queued models.
@@ -139,6 +141,7 @@ impl Progress {
             completion,
             interruption: semantic.interruption(),
             discovered_gate_atoms: semantic.discovered_gate_atoms(),
+            candidate_statistics: semantic.candidate_statistics(),
             countermodel_statistics: semantic.countermodel_statistics().copied(),
             formula_execution: semantic.formula_execution().cloned(),
             lazy_execution: semantic.lazy_execution().cloned(),
@@ -174,6 +177,7 @@ impl Progress {
             summary_published: self.publication.summary,
             discovered_gate_atoms: semantic
                 .map_or(0, crate::SemanticOutcome::discovered_gate_atoms),
+            candidate_statistics: semantic.and_then(crate::SemanticOutcome::candidate_statistics),
             countermodel_statistics: semantic
                 .and_then(crate::SemanticOutcome::countermodel_statistics)
                 .copied(),

@@ -151,3 +151,23 @@ Host intervals around device calls include transport, waits and readback.
 Enabled session elapsed time can include the consumer's delay between pulls;
 active solving spans do not include that delay. These scopes matter when using
 the same library in a server or comparing it with a command-line run.
+
+Closure sessions expose `SemanticOutcome::candidate_statistics()` separately
+from membership results. These counters report necessary source restrictions,
+their preparation and traversal work, and skipped impossible binary intervals.
+An interval can contain several seeds; it is not an examined-candidate count.
+Prepared and peak copied payload bytes exclude allocator and index overhead and
+are not process memory. The peak includes temporary restriction templates.
+Failed preparation retains its work but has no completed preparation footprint.
+The CLI exposes the same fields as `statistics.candidate_restrictions` in JSON.
+`--max-candidate-bytes` bounds copied payload; `--max-search-work` bounds cumulative
+restriction work on this route. Both advanced controls appear in `--help-all`.
+
+Formula search records its necessary disjunctive support attempt separately from
+user or objective refinements. `statistics.search.necessary_support` identifies
+application, an inapplicable head grammar, or a configured construction/encoding
+shape limit. Its construction and encoding work are included in search work,
+including a rolled-back encoding. A shape refusal retains general search;
+cancellation, work exhaustion and allocation failure remain explicit stops.
+Every proposed interpretation still needs membership checking against the
+original theory and its frozen reduct.

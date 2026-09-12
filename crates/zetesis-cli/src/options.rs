@@ -77,7 +77,7 @@ pub struct Options {
     /// Maximum JSON bytes per model record or terminal outcome; not an all-model buffer.
     #[arg(long, default_value_t = 8_388_608, hide_short_help = true)]
     pub max_json_record_bytes: usize,
-    /// Cumulative encoding, certificate and search operations for the formula oracle.
+    /// Cumulative candidate restriction preparation/traversal or formula search work.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_search_work, hide_short_help = true)]
     pub max_search_work: u64,
     /// Cumulative branch decisions for the countermodel oracle.
@@ -159,6 +159,10 @@ pub struct Options {
     /// Maximum candidate seeds; reaching a limit leaves search incomplete.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_candidates, hide_short_help = true)]
     pub max_candidates: u64,
+    /// Maximum copied payload for necessary candidate restrictions, including
+    /// temporary templates. Allocator and index overhead are excluded.
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_candidate_bytes, hide_short_help = true)]
+    pub max_candidate_bytes: usize,
     /// Maximum gate tuples retained by the incremental candidate cursor.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_carrier_atoms, hide_short_help = true)]
     pub max_carrier_atoms: usize,
@@ -229,6 +233,7 @@ impl From<&Options> for crate::SolveConfig {
             completion_workers: options.completion_workers,
             max_completion_scratch_bytes: options.max_completion_scratch_bytes,
             max_candidates: options.max_candidates,
+            max_candidate_bytes: options.max_candidate_bytes,
             max_carrier_atoms: options.max_carrier_atoms,
             max_work: options.max_work,
             max_source_work: options.max_source_work,

@@ -63,6 +63,8 @@ fn nondefault_options_preserve_each_solver_field() {
         "32",
         "--max-batch-bytes",
         "33",
+        "--max-candidate-bytes",
+        "34",
     ])
     .unwrap();
     let config = SolveConfig::from(&options);
@@ -94,6 +96,7 @@ fn nondefault_options_preserve_each_solver_field() {
     assert_eq!(config.max_substitutions, 31);
     assert_eq!(config.max_ground_rules, 32);
     assert_eq!(config.max_batch_bytes, 33);
+    assert_eq!(config.max_candidate_bytes, 34);
 }
 
 #[test]

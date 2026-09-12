@@ -131,6 +131,55 @@ fn statistics_are_absent_without_opt_in() {
     }
 }
 
+#[test]
+fn support_statistics_identify_the_outer_restriction() {
+    for (source, status) in [("a | b.", "applied"), ("{a;b}.", "not_applicable")] {
+        let (report, value) = solve(source, &options(&["--stats", "--oracle", "countermodel"]));
+        let report = report.unwrap();
+        let measured = report.countermodel_statistics.unwrap().support.unwrap();
+        let support = &value["statistics"]["search"]["necessary_support"];
+        assert_eq!(support["status"], status);
+        assert_eq!(support["construction_work"], measured.construction_work);
+        assert_eq!(support["encoding_work"], measured.encoding_work);
+    }
+}
+
+#[test]
+fn candidate_statistics_preserve_restriction_accounting() {
+    let (report, value) = solve(
+        "{a}. {b}. :- a,b.",
+        &options(&["--stats", "--grounder", "lazy"]),
+    );
+    let report = report.unwrap();
+    assert_eq!(report.models, 3);
+    let measured = report.candidate_statistics.unwrap();
+    let stats = &value["statistics"]["candidate_restrictions"];
+    assert_eq!(stats["work"], measured.restriction_work);
+    assert_eq!(stats["conjunctions"], 1);
+    assert_eq!(stats["skipped_intervals"], 1);
+    assert_eq!(
+        stats["prepared_atom_occurrences"],
+        measured.restriction_atoms
+    );
+    assert_eq!(stats["copied_payload_bytes"], measured.restriction_bytes);
+    assert_eq!(
+        stats["peak_copied_payload_bytes"],
+        measured.restriction_peak_bytes
+    );
+}
+
+#[test]
+fn interrupted_restriction_work_remains_visible() {
+    let (report, value) = solve(
+        "{a}. {b}. :- a,b.",
+        &options(&["--stats", "--grounder", "lazy", "--max-search-work", "1"]),
+    );
+    let report = report.unwrap();
+    assert_eq!(report.completion, Completion::Interrupted);
+    assert_eq!(value["statistics"]["candidate_restrictions"]["work"], 1);
+    assert_eq!(value["outcome"]["coverage"], "partial");
+}
+
 fn priority_ties(bounds: &str) -> (Report, Json) {
     let (result, value) = solve(
         "a. {b;c}. #show a. #minimize{0@2,k:a;0@-1,j:b}.",

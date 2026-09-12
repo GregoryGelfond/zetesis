@@ -65,6 +65,30 @@ fn statistics_distinguish_formula_profile_limits() {
 }
 
 #[test]
+fn statistics_explain_candidate_restriction_units() {
+    let (_, _, text) = solve(
+        "{a}. {b}. :- a,b.",
+        &options(&["--stats", "--grounder", "lazy"]),
+    );
+    assert!(
+        text.contains("conjunctions=1; skipped impossible intervals=1;"),
+        "{text}"
+    );
+    assert!(text.contains("peak copied payload bytes="), "{text}");
+    assert!(text.contains("allocator/index overhead excluded"), "{text}");
+}
+
+#[test]
+fn statistics_identify_necessary_disjunctive_support() {
+    let (_, _, text) = solve("a | b.", &options(&["--stats", "--oracle", "countermodel"]));
+    assert!(
+        text.contains("necessary disjunctive support: status=Applied;"),
+        "{text}"
+    );
+    assert!(text.contains("(included in search work)"), "{text}");
+}
+
+#[test]
 fn requested_statistics_use_accepted_policy_spelling() {
     for backend in ["auto", "cpu"] {
         for oracle in ["auto", "closure", "countermodel"] {

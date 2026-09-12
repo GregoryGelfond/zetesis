@@ -39,6 +39,7 @@ fn default_help_shows_everyday_solving_options() {
         "--max-search-work",
         "--max-source-bytes",
         "--max-support-bytes",
+        "--max-candidate-bytes",
         "--max-observation-bytes",
     ] {
         assert!(
@@ -60,6 +61,7 @@ fn full_help_exposes_the_resource_contracts() {
         "--max-search-decisions",
         "--max-source-bytes",
         "--max-support-bytes",
+        "--max-candidate-bytes",
         "--max-observation-bytes",
         "--max-objective-work",
         "--max-completion-scratch-bytes",
