@@ -4,6 +4,9 @@ use crate::{Atom, Program};
 use std::collections::BTreeSet;
 use std::fmt;
 
+mod selection;
+pub use selection::{SeedSelection, SeedSelectionError, SeedView};
+
 /// A complete candidate represented only by its finite true atoms. Any atom
 /// absent from this exact set is false; candidate construction never expands S.
 #[derive(Clone, Debug)]

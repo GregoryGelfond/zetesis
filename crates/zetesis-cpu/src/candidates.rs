@@ -1,8 +1,9 @@
 //! Incremental powerset enumeration whose first seed needs no carrier tuple.
 
 use std::iter::FusedIterator;
+use std::sync::Arc;
 
-use zetesis_core::{Atom, AtomIter, Program, Seed};
+use zetesis_core::{Atom, AtomIter, Program, Seed, SeedSelection, SeedSelectionError};
 
 use crate::oracle::restrictions::{Conflict, Restrictions};
 use crate::{Control, Stop};
@@ -94,10 +95,13 @@ pub enum CandidateTermination {
 /// Enumerate empty, `{a}`, `{b}`, `{a,b}`, `{c}`, and so on. A new carrier
 /// atom is requested only on carry beyond the known binary counter. Creation
 /// and the first successful empty seed never request a carrier tuple.
+/// Each discovered atom payload is retained once in an immutable shared owner.
+/// Creating that Arc uses infallible allocation under the carrier-count bound;
+/// carrier and selected-handle vectors use typed fallible reservation.
 pub struct Candidates<'a> {
     program: &'a Program,
     carrier: AtomIter<'a>,
-    atoms: Vec<Atom>,
+    atoms: Vec<Arc<Atom>>,
     bits: Vec<bool>,
     limits: CandidateLimits,
     control: Control,
@@ -174,7 +178,20 @@ impl<'a> Candidates<'a> {
         self.termination
     }
 
-    fn next_seed(&mut self) -> Result<Option<Seed>, Stop> {
+    /// Pull the next complete candidate while sharing discovered atom payloads.
+    /// The selection owns its lifetime across later carries or iterator drop.
+    /// This and the owned Iterator door share one sequence, emitted count and
+    /// terminal state; mixing the doors never repeats a candidate.
+    ///
+    /// Construction allocates only selected handles, validates their carrier
+    /// membership and canonicalizes them. It does not build the owned Seed tree.
+    /// Errors are returned once and fuse both doors, including reservation,
+    /// candidate/carrier/restriction limits, cancellation and deadlines.
+    pub fn next_selection(&mut self) -> Option<Result<SeedSelection, Stop>> {
+        self.pull(std::convert::identity)
+    }
+
+    fn selection(&mut self) -> Result<Option<SeedSelection>, Stop> {
         self.control.poll()?;
         self.prepare_restrictions()?;
         if self.started {
@@ -190,18 +207,45 @@ impl<'a> Candidates<'a> {
         if self.emitted >= self.limits.max_candidates {
             return Err(Stop::CandidateLimit);
         }
-        let seed = Seed::new(
+        let seed = SeedSelection::new(
             self.program,
             self.atoms
                 .iter()
                 .zip(&self.bits)
                 .filter(|(_, selected)| **selected)
-                .map(|(atom, _)| atom.clone()),
+                .map(|(atom, _)| Arc::clone(atom)),
         )
-        .map_err(|_| Stop::InvalidProgram)?;
-        self.control.poll()?;
-        self.emitted += 1;
+        .map_err(|error| match error {
+            SeedSelectionError::Allocation => Stop::Allocation,
+            SeedSelectionError::OutsideCarrier { .. } => Stop::InvalidProgram,
+        })?;
         Ok(Some(seed))
+    }
+
+    fn pull<T>(&mut self, materialize: impl FnOnce(SeedSelection) -> T) -> Option<Result<T, Stop>> {
+        if self.termination.is_some() {
+            return None;
+        }
+        let result = self.selection().and_then(|selection| {
+            let Some(selection) = selection else {
+                return Ok(None);
+            };
+            let candidate = materialize(selection);
+            self.control.poll()?;
+            self.emitted += 1;
+            Ok(Some(candidate))
+        });
+        match result {
+            Ok(Some(candidate)) => Some(Ok(candidate)),
+            Ok(None) => {
+                self.termination = Some(CandidateTermination::Exhausted);
+                None
+            }
+            Err(error) => {
+                self.termination = Some(CandidateTermination::Stopped(error));
+                Some(Err(error))
+            }
+        }
     }
 
     fn prepare_restrictions(&mut self) -> Result<(), Stop> {
@@ -268,7 +312,7 @@ impl<'a> Candidates<'a> {
         }
         self.atoms.try_reserve(1).map_err(|_| Stop::Allocation)?;
         self.bits.try_reserve(1).map_err(|_| Stop::Allocation)?;
-        self.atoms.push(atom);
+        self.atoms.push(Arc::new(atom));
         self.bits.push(true);
         Ok(true)
     }
@@ -278,21 +322,12 @@ impl Iterator for Candidates<'_> {
     type Item = Result<Seed, Stop>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.termination.is_some() {
-            return None;
-        }
-        match self.next_seed() {
-            Ok(Some(seed)) => Some(Ok(seed)),
-            Ok(None) => {
-                self.termination = Some(CandidateTermination::Exhausted);
-                None
-            }
-            Err(error) => {
-                self.termination = Some(CandidateTermination::Stopped(error));
-                Some(Err(error))
-            }
-        }
+        self.pull(|selection| selection.to_seed())
     }
 }
 
 impl FusedIterator for Candidates<'_> {}
+
+#[cfg(test)]
+#[path = "../tests/support/selection_cursor.rs"]
+mod selection_tests;

@@ -34,7 +34,9 @@ mod ground;
 pub mod relation;
 
 pub use atom_key::{AtomKey, BindingView};
-pub use candidate::{Interpretation, Model, Seed, SeedError};
+pub use candidate::{
+    Interpretation, Model, Seed, SeedError, SeedSelection, SeedSelectionError, SeedView,
+};
 pub use carrier::{AtomIter, CarrierError};
 pub use ground::{AtomId, GroundProgram, GroundRule, StaticError, StaticLimits, WordError};
 pub use program::{AdmissionError, AdmissionLimits, AdmissionResource, Program};
