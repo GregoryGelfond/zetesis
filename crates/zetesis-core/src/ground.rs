@@ -4,7 +4,9 @@
 use std::fmt;
 
 use crate::carrier::advance;
-use crate::{Atom, AtomPattern, CarrierError, Model, Program, Seed, SeedError, Template, Value};
+use crate::{
+    Atom, AtomPattern, CarrierError, Model, Program, Seed, SeedError, SeedView, Template, Value,
+};
 
 /// Dense atom index within one [`GroundProgram`]. It is never a symbolic identity.
 pub type AtomId = u32;
@@ -271,6 +273,33 @@ impl GroundProgram {
             .try_reserve_exact(self.word_count())
             .map_err(|_| SeedError::Allocation)?;
         words.resize(self.word_count(), 0);
+        self.seed_words_into(seed.view(), &mut words)?;
+        Ok(words)
+    }
+
+    /// Pack a borrowed seed into caller-owned, exact-width storage. On success
+    /// every output word is replaced, including zero complement and tail bits.
+    /// No input tree, payload copy or temporary word vector is constructed.
+    /// Each true atom is resolved in this graph's canonical carrier; this costs
+    /// one binary lookup per selected atom plus initialization of all words.
+    ///
+    /// # Errors
+    /// Refuses foreign program identity, then a wrong output word count, before
+    /// changing output. Equal source syntax admitted separately is foreign.
+    /// An atom absent from the graph reports [`SeedError::OutsideCarrier`]; this
+    /// violates the admitted complete-carrier invariant and may leave partial
+    /// output, which must not be used as a packed candidate.
+    pub fn seed_words_into(&self, seed: SeedView<'_>, words: &mut [u32]) -> Result<(), SeedError> {
+        if !self.program.same_instance(seed.program()) {
+            return Err(SeedError::WrongProgram);
+        }
+        if words.len() != self.word_count() {
+            return Err(SeedError::WordCount {
+                expected: self.word_count(),
+                actual: words.len(),
+            });
+        }
+        words.fill(0);
         for atom in seed.atoms() {
             let Some(id) = self.atom_id(atom) else {
                 return Err(SeedError::OutsideCarrier { atom: atom.clone() });
@@ -278,7 +307,7 @@ impl GroundProgram {
             let index = id as usize;
             words[index / WORD_BITS] |= 1 << (index % WORD_BITS);
         }
-        Ok(words)
+        Ok(())
     }
 
     /// Decode exact words after validating length and zero unused tail bits.

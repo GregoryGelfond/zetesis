@@ -105,6 +105,13 @@ pub enum SeedError {
     },
     /// The seed belongs to a separately admitted instance.
     WrongProgram,
+    /// Caller-provided word storage has a different graph width.
+    WordCount {
+        /// Required complete interpretation words.
+        expected: usize,
+        /// Supplied output words.
+        actual: usize,
+    },
     /// A requested dense representation could not reserve its storage.
     Allocation,
 }
@@ -115,6 +122,9 @@ impl fmt::Display for SeedError {
                 write!(f, "candidate atom lies outside the gate carrier: {atom:?}")
             }
             Self::WrongProgram => f.write_str("candidate belongs to a different program instance"),
+            Self::WordCount { expected, actual } => {
+                write!(f, "candidate requires {expected} words, received {actual}")
+            }
             Self::Allocation => f.write_str("candidate word storage could not be reserved"),
         }
     }
