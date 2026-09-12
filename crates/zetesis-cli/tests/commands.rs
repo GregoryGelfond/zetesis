@@ -214,9 +214,21 @@ fn automatic_device_failure_preserves_complete_models() {
     let answers: std::collections::BTreeSet<_> = lines
         .windows(2)
         .filter(|pair| pair[0].starts_with("Answer:"))
-        .map(|pair| pair[1])
+        .map(|pair| pair[1].to_owned())
         .collect();
-    assert_eq!(answers.len(), 64);
+    // Six independent choices have exactly their powerset as answer sets.
+    // Construct that family without consulting the solver's carrier or output.
+    let expected: std::collections::BTreeSet<_> = (0_u8..64)
+        .map(|mask| {
+            ["a", "b", "c", "d", "e", "f"]
+                .into_iter()
+                .enumerate()
+                .filter_map(|(index, atom)| (mask & (1 << index) != 0).then_some(atom))
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .collect();
+    assert_eq!(answers, expected);
     let diagnostics = String::from_utf8(diagnostics).unwrap();
     assert!(
         diagnostics.contains("retaining eager CPU; GPU unavailable:")
