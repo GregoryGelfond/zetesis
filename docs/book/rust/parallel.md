@@ -75,6 +75,23 @@ failure, while existing decoded-result counters include only returned batches.
 after queue submission. It says nothing about completion; an unreturned batch's
 shader work and sweeps remain unknown.
 
+The formula device graph keeps original node indices for child references and
+frozen truth, but uses dense domain positions only for non-Atom nodes. Atom
+leaves resolve to their semantic atom; repeated leaves alias the same position.
+The non-Atom positions are disjoint from semantic atoms and from one another.
+Initialization visits each original node and writes only those auxiliary
+positions; root constraints and enabled gates resolve through the same output
+mapping. An original-false gate still disables its connective and constrains its
+output to false. Removing unused leaf slots cannot re-enable that connective.
+
+This uses the variable-independent relation contract in
+[`Propagation.narrow_models_iff`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Propagation.lean)
+and the alias-aware finite transfer in
+[`GateProjection`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/GateProjection.lean).
+The dense mapping's coverage, injectivity outside leaf aliases, initialized
+address range and checked world offsets are Rust/WGSL correspondence obligations;
+those abstract laws do not certify the packing or physical execution.
+
 ## One source stream, independent world truth
 
 `zetesis_cpu::lazy::check_with` owns the bounded round protocol and accepts an

@@ -58,8 +58,15 @@ impl Graph {
         let atoms = address(theory.atom_count())?;
         let nodes = address(theory.nodes().len())?;
         let roots = address(theory.roots().len())?;
+        let auxiliary = address(
+            theory
+                .nodes()
+                .iter()
+                .filter(|node| !matches!(node, Node::Atom(_)))
+                .count(),
+        )?;
         let variables = atoms
-            .checked_add(nodes)
+            .checked_add(auxiliary)
             .ok_or_else(|| capacity("formula variable addresses overflow"))?;
         // Strided GPU loops increment by 64 after their last valid address.
         if [atoms, nodes, roots, variables]
@@ -102,8 +109,10 @@ impl Graph {
             usize::try_from(self.node_bytes / 4)
                 .map_err(|_| capacity("node length exceeds host"))?,
         )?;
-        for (index, node) in self.theory.nodes().iter().enumerate() {
-            let output = self.atoms + address(index)?;
+        // Original node indices remain topological references. Only non-Atom
+        // nodes need auxiliary domain slots; every leaf aliases its semantic atom.
+        let mut output = self.atoms;
+        for node in self.theory.nodes() {
             let words = match *node {
                 Node::False => [0, 0, 0, output],
                 Node::Atom(atom) => [1, address(atom)?, 0, address(atom)?],
@@ -112,6 +121,11 @@ impl Graph {
                 Node::Implies(a, b) => [4, address(a)?, address(b)?, output],
             };
             nodes.extend(words);
+            if !matches!(node, Node::Atom(_)) {
+                output = output
+                    .checked_add(1)
+                    .ok_or_else(|| capacity("formula output address overflow"))?;
+            }
         }
         if nodes.is_empty() {
             nodes.extend([0; 4]);

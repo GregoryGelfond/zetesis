@@ -45,6 +45,14 @@ without waiting. Primitive byte ceilings retain their local scope. See
 ## Exact completion and failure
 
 A formula propagation fixed point is not itself an answer-set certificate.
+Formula domain storage contains one slot per semantic atom and one additional
+slot per non-Atom node, including false. Atom leaves alias their semantic slot;
+duplicate leaves do not allocate or initialize extra domains. Non-Atom outputs
+occupy dense positions while child references retain original DAG indices.
+Frozen truth still has one value per original node. This removes four requested
+domain bytes per leaf per candidate (subject to the required empty-buffer
+padding), without changing original satisfaction or the frozen query.
+
 `FormulaVerdict::Residual` requires the exact host completion path. Candidate
 ordering, original theory identity and the frozen candidate are preserved across
 that boundary. Device results cannot silently change the subject being checked.

@@ -88,8 +88,13 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
         atomicStore(&domains[base + atom], select(1u, 3u, contains(world, atom)));
     }
     for (var index = lane; index < params.nodes; index += 64u) {
-        atomicStore(&domains[base + params.atoms + index],
-            select(1u, 3u, frozen[mask_base + index] != 0u));
+        let node = nodes[index];
+        // Atom nodes already share the initialized semantic atom slot. All
+        // other outputs occupy distinct dense auxiliary positions.
+        if (node.tag != 1u) {
+            atomicStore(&domains[base + node.output],
+                select(1u, 3u, frozen[mask_base + index] != 0u));
+        }
     }
     storageBarrier();
     for (var index = lane; index < params.roots; index += 64u) {

@@ -30,7 +30,7 @@ fn packed_nodes_preserve_topology_shared_atom_ids_and_original_operators() {
     assert_eq!(
         nodes,
         vec![
-            0, 0, 0, 2, 1, 0, 0, 0, 1, 1, 0, 1, 2, 1, 2, 5, 3, 1, 2, 6, 4, 3, 4, 7
+            0, 0, 0, 2, 1, 0, 0, 0, 1, 1, 0, 1, 2, 1, 2, 3, 3, 1, 2, 4, 4, 3, 4, 5
         ]
     );
     assert_eq!(roots, vec![5]);
@@ -39,7 +39,7 @@ fn packed_nodes_preserve_topology_shared_atom_ids_and_original_operators() {
     let plan = plan(&graph, limits, true);
     assert_eq!(
         plan.params(&graph),
-        [2, 6, 1, 8, 1, 2, 64, 100_000_000, 15, 57, 7, 0]
+        [2, 6, 1, 6, 1, 2, 64, 100_000_000, 15, 57, 7, 0]
     );
     let a = Interpretation::new(&graph.theory, [0]).unwrap();
     let b = Interpretation::new(&graph.theory, [1]).unwrap();
@@ -222,4 +222,70 @@ fn result_records_validate_epoch_world_status_and_exact_charged_work() {
         decode(&[1, 0, 3, 1, 72, MAGIC], &fixed).unwrap()[0].verdict(),
         FormulaVerdict::Residual(ResidualReason::FixedPoint)
     );
+}
+
+#[test]
+fn dense_outputs_preserve_leaf_aliases_and_original_children() {
+    let theory = Theory::new(
+        2,
+        vec![
+            Node::Atom(1),
+            Node::False,
+            Node::Atom(0),
+            Node::Atom(1),
+            Node::And(0, 2),
+            Node::Or(1, 4),
+            Node::Implies(5, 3),
+        ],
+        vec![6],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
+    let graph = Graph::new(&theory, &device()).unwrap();
+    assert_eq!(graph.variables, 6); // 2 semantic atoms + 4 non-Atom nodes.
+    let (nodes, roots) = graph.pack().unwrap();
+    assert_eq!(
+        nodes,
+        [
+            1, 1, 0, 1, 0, 0, 0, 2, 1, 0, 0, 0, 1, 1, 0, 1, 2, 0, 2, 3, 3, 1, 4, 4, 4, 5, 3, 5,
+        ]
+    );
+    assert_eq!(roots, [6]);
+    // Each original node is still visited twice during setup. Omitting leaf
+    // stores does not omit the visit or duplicate semantic-atom initialization.
+    assert_eq!((graph.setup_work, graph.sweep_work), (17, 66));
+}
+
+#[test]
+fn leaf_only_domains_admit_the_exact_reduced_buffer() {
+    let theory = Theory::new(
+        100,
+        vec![Node::Atom(0), Node::Atom(99), Node::Atom(0), Node::Atom(51)],
+        vec![],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
+    let graph = Graph::new(&theory, &device()).unwrap();
+    assert_eq!(graph.variables, 100);
+    let exact = 4 * 100 * 3; // Three worlds, one word per semantic atom only.
+    for (ceiling, accepted) in [(exact, true), (exact - 1, false)] {
+        let mut limits = device();
+        limits.max_storage_buffer_binding_size = ceiling;
+        let outcome = Plan::new(&graph, 3, FormulaLimits::default(), &limits, true, 1);
+        assert_eq!(outcome.is_ok(), accepted);
+        if let Ok(plan) = outcome {
+            assert_eq!(plan.domains, exact);
+            assert_eq!(4 * (100 + 4) * 3 - plan.domains, 48);
+        }
+    }
+}
+
+#[test]
+fn empty_domains_keep_only_the_required_storage_padding() {
+    let theory = Theory::new(0, vec![], vec![], AdmissionLimits::default()).unwrap();
+    let graph = Graph::new(&theory, &device()).unwrap();
+    assert_eq!(graph.variables, 0);
+    let plan = Plan::new(&graph, 3, FormulaLimits::default(), &device(), true, 1).unwrap();
+    assert_eq!(plan.domains, 4);
+    assert_eq!(graph.pack().unwrap(), (vec![0; 4], vec![0]));
 }

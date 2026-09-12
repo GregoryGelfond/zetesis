@@ -112,18 +112,38 @@ fn metal_formula_queries_preserve_exact_frozen_semantics_and_residency() {
     }
 }
 
-fn qualify_frozen_queries(backend: physical::Backend, projection: GateProjection) {
-    let mut oracle = oracle(backend, projection);
-    println!(
-        "formula projection={} adapter={}",
-        projection.label(),
-        oracle.info().name()
-    );
-    let mut totals = (0, 0);
-    for graph in [
+fn frozen_theories() -> [Theory; 9] {
+    [
         theory(0, vec![], vec![]),
         theory(0, vec![Node::False], vec![0]),
         theory(1, vec![Node::Atom(0)], vec![0]),
+        // Duplicate leaves retain one semantic slot even when non-Atom slots
+        // interleave them. The original child references remain DAG indices.
+        theory(
+            2,
+            vec![
+                Node::Atom(0),
+                Node::False,
+                Node::Atom(0),
+                Node::Atom(1),
+                Node::And(0, 2),
+                Node::Or(4, 3),
+            ],
+            vec![5],
+        ),
+        // In (not a)->a, M={a} satisfies the original formula, but empty J
+        // satisfies the frozen reduct false->a. The false negation's original
+        // connective must never force a while its dense output is false.
+        theory(
+            1,
+            vec![
+                Node::False,
+                Node::Atom(0),
+                Node::Implies(1, 0),
+                Node::Implies(2, 1),
+            ],
+            vec![3],
+        ),
         // Bare double negation: {p} is a model, but its reduct permits empty J.
         theory(
             1,
@@ -168,7 +188,18 @@ fn qualify_frozen_queries(backend: physical::Backend, projection: GateProjection
             ],
             vec![2, 3, 4],
         ),
-    ] {
+    ]
+}
+
+fn qualify_frozen_queries(backend: physical::Backend, projection: GateProjection) {
+    let mut oracle = oracle(backend, projection);
+    println!(
+        "formula projection={} adapter={}",
+        projection.label(),
+        oracle.info().name()
+    );
+    let mut totals = (0, 0);
+    for graph in frozen_theories() {
         let count = compare(&mut oracle, &graph);
         totals.0 += count.0;
         totals.1 += count.1;
