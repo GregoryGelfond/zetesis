@@ -5,8 +5,9 @@ use std::fs;
 
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
-    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, GroundingObserver, InputLimit,
-    SourceBundle, admit_bundle_formula, admit_formula, prepare_bundle_formula, prepare_formula,
+    ExpansionLimits, ExpansionResource, FormulaBundleFailure, FormulaFailure, FormulaLimits,
+    FormulaResource, GroundingObserver, InputLimit, SourceBundle, admit_bundle_formula,
+    admit_formula, prepare_bundle_formula, prepare_formula,
 };
 
 #[derive(Default)]
@@ -439,4 +440,213 @@ fn bundle_preparation_refusals_retain_source_evidence() {
             ..
         }
     ));
+}
+
+fn preparation_fixture(entry: &str, child: &str) -> tempfile::TempDir {
+    let fixture = tempfile::tempdir().unwrap();
+    fs::write(fixture.path().join("entry.lp"), entry).unwrap();
+    fs::write(fixture.path().join("child.lp"), child).unwrap();
+    fixture
+}
+
+fn retained_preparation_failure(error: &FormulaBundleFailure, entry: &str, child: &str) {
+    assert_eq!(error.bundle().sources().len(), 2);
+    assert_eq!(error.bundle().sources()[0].source().text(), entry);
+    assert_eq!(error.bundle().sources()[1].source().text(), child);
+    let diagnostics = error.diagnostics();
+    assert!(!diagnostics.is_empty());
+    for diagnostic in diagnostics {
+        let location = diagnostic.primary().location;
+        assert!(
+            !error
+                .bundle()
+                .get(location.source)
+                .unwrap()
+                .source()
+                .slice(location.span)
+                .unwrap()
+                .is_empty()
+        );
+    }
+    // The bundle wrapper preserves the typed cause and its ordinary human view.
+    assert_eq!(error.to_string(), error.error().to_string());
+    assert_eq!(
+        std::error::Error::source(error).unwrap().to_string(),
+        error.error().to_string()
+    );
+}
+
+#[test]
+fn bundle_definitions_share_one_preparation_budget() {
+    let entry = "#const first=1. #include \"child.lp\". p(first,second).";
+    let child = "#const second=2.";
+    let fixture = preparation_fixture(entry, child);
+    let limited = |max_constants| {
+        prepare_bundle_formula(
+            load(&fixture),
+            BundleAdmissionOptions::default(),
+            ExpansionLimits {
+                max_constants,
+                ..ExpansionLimits::default()
+            },
+            FormulaLimits::default(),
+        )
+    };
+    let error = limited(1).unwrap_err();
+    assert!(matches!(
+        error.error(),
+        FormulaFailure::Expansion(ExpansionFailure::Limit {
+            resource: ExpansionResource::Constants,
+            limit: 1,
+            observed: 2,
+            ..
+        })
+    ));
+    retained_preparation_failure(&error, entry, child);
+    let admitted = limited(2).unwrap().ground().unwrap();
+    assert_eq!(
+        admitted.atoms(),
+        admit_formula(
+            "p(1,2).".into(),
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        )
+        .unwrap()
+        .atoms()
+    );
+}
+
+#[test]
+fn bundle_metadata_counts_original_occurrences() {
+    let entry = "#show p/0. #include \"child.lp\". p.";
+    let child = "#show p/0.";
+    let fixture = preparation_fixture(entry, child);
+    let limited = |max_metadata_statements| {
+        prepare_bundle_formula(
+            load(&fixture),
+            BundleAdmissionOptions::default(),
+            ExpansionLimits {
+                max_metadata_statements,
+                ..ExpansionLimits::default()
+            },
+            FormulaLimits::default(),
+        )
+    };
+    let error = limited(1).unwrap_err();
+    assert!(matches!(
+        error.error(),
+        FormulaFailure::Expansion(ExpansionFailure::Limit {
+            resource: ExpansionResource::MetadataStatements,
+            limit: 1,
+            observed: 2,
+            ..
+        })
+    ));
+    retained_preparation_failure(&error, entry, child);
+    let prepared = limited(2).unwrap();
+    assert_eq!(prepared.metadata().directives().len(), 2);
+    assert_eq!(prepared.metadata().atom_selection().signatures().len(), 1);
+}
+
+#[test]
+fn bundle_objectives_share_one_preparation_budget() {
+    let entry = "#minimize{1@0,a}. #include \"child.lp\".";
+    let child = ":~ #true. [2@0,b]";
+    let fixture = preparation_fixture(entry, child);
+    let limited = |max_templates| {
+        prepare_bundle_formula(
+            load(&fixture),
+            BundleAdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits {
+                objective: zetesis_objective::AdmissionLimits {
+                    max_templates,
+                    ..zetesis_objective::AdmissionLimits::default()
+                },
+                ..FormulaLimits::default()
+            },
+        )
+    };
+    let error = limited(1).unwrap_err();
+    assert!(matches!(
+        error.error(),
+        FormulaFailure::Limit {
+            resource: FormulaResource::ObjectiveElements,
+            limit: 1,
+            observed: 2,
+            ..
+        }
+    ));
+    retained_preparation_failure(&error, entry, child);
+    assert_eq!(
+        limited(2)
+            .unwrap()
+            .ground()
+            .unwrap()
+            .objectives()
+            .templates()
+            .len(),
+        2
+    );
+}
+
+#[test]
+fn duplicate_definitions_precede_later_metadata_refusal() {
+    let entry = "#const same=1. #include \"child.lp\".";
+    let child = "#const same=1. #show p/0.";
+    let fixture = preparation_fixture(entry, child);
+    let error = prepare_bundle_formula(
+        load(&fixture),
+        BundleAdmissionOptions::default(),
+        ExpansionLimits {
+            max_metadata_statements: 0,
+            ..ExpansionLimits::default()
+        },
+        FormulaLimits::default(),
+    )
+    .unwrap_err();
+    let FormulaFailure::Expansion(ExpansionFailure::DuplicateConstant {
+        first, duplicate, ..
+    }) = error.error()
+    else {
+        panic!("{error}");
+    };
+    assert_ne!(first.source, duplicate.source);
+    for location in [first, duplicate] {
+        assert_eq!(
+            error
+                .bundle()
+                .get(location.source)
+                .unwrap()
+                .source()
+                .slice(location.span)
+                .unwrap(),
+            "#const same=1."
+        );
+    }
+    retained_preparation_failure(&error, entry, child);
+}
+
+#[test]
+fn bundle_raise_failure_retains_the_loaded_catalog() {
+    let entry = "#include \"child.lp\". p.";
+    let child = "q(2147483648).";
+    let fixture = preparation_fixture(entry, child);
+    let error = prepare_bundle_formula(
+        load(&fixture),
+        BundleAdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        error.error(),
+        FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Raise(_)))
+    ));
+    retained_preparation_failure(&error, entry, child);
+    assert_eq!(
+        error.diagnostics()[0].primary().location.source,
+        error.bundle().sources()[1].id()
+    );
 }

@@ -112,6 +112,16 @@ const CASES: &[(&str, &str)] = &[
         "d(1).p(f(1)):-d(1).p(g(1)):-d(1).",
     ),
     ("d(1).p(Y):-d(X),Y=f(X).", "d(1).p(f(1)):-d(1)."),
+    // An extracted constructor binding remains subject to the whole chain.
+    ("d(1;2).p(Y):-d(X),Y=f(X)=f(1).", "d(1;2).p(f(1)):-d(1)."),
+    (
+        "d(1;2).p(Y):-d(X),not not Y=(-f(X),(X,))=(-f(2),(2,)).",
+        "d(1;2).p((-f(2),(2,))):-d(2).",
+    ),
+    (
+        "d(#inf;#sup).p(f(#inf)).q(X):-d(X),p(f(X)).",
+        "d(#inf;#sup).p(f(#inf)).q(#inf):-d(#inf),p(f(#inf)).",
+    ),
 ];
 
 #[test]
@@ -122,6 +132,62 @@ fn constructed_models_match_explicit_substitution() {
         assert_eq!(native(&source), native(&expanded));
         assert_eq!(native(&source), exhaustive(&source));
     }
+}
+
+fn construction_admissions(resource: ExpansionResource) {
+    let source = "d(1;2).p(Y):-d(X),not not Y=(-f(X),(X,))=(-f(2),(2,)).";
+    let expected = input(source);
+    let mut limit = 0;
+    // Follow the next required cumulative amount. This exercises each actual
+    // admission boundary without assuming allocation capacities or charge sizes.
+    for _ in 0..2_048 {
+        let mut expansion = ExpansionLimits::default();
+        match resource {
+            ExpansionResource::ScalarBytes => expansion.max_scalar_bytes = limit,
+            ExpansionResource::TermWork => expansion.max_term_work = limit,
+            _ => panic!("not a construction admission resource"),
+        }
+        match limited(source, expansion, &FormulaLimits::default()) {
+            Ok(actual) => {
+                assert!(limit > 0);
+                assert_eq!(actual.atoms(), expected.atoms());
+                assert_eq!(actual.theory().nodes(), expected.theory().nodes());
+                assert_eq!(actual.theory().roots(), expected.theory().roots());
+                assert_eq!(actual.formula_origins(), expected.formula_origins());
+                return;
+            }
+            Err(error @ FormulaFailure::Expansion(ExpansionFailure::Limit { .. })) => {
+                let FormulaFailure::Expansion(ExpansionFailure::Limit {
+                    resource: actual,
+                    limit: reported_limit,
+                    observed,
+                    location,
+                }) = &error
+                else {
+                    unreachable!()
+                };
+                assert_eq!(*actual, resource);
+                assert_eq!(*reported_limit, limit as u128);
+                assert!(*observed > limit as u128);
+                assert!(*observed <= 1_048_576, "fixture must remain small");
+                assert_eq!(error.diagnostics()[0].primary().location, *location);
+                assert!(expected.source().slice(location.span).is_ok());
+                limit = usize::try_from(*observed).unwrap();
+            }
+            Err(error) => panic!("{resource:?}/{limit}: {error}"),
+        }
+    }
+    panic!("construction exceeded the fixture's bounded admission exploration");
+}
+
+#[test]
+fn constructed_guards_respect_each_storage_admission() {
+    construction_admissions(ExpansionResource::ScalarBytes);
+}
+
+#[test]
+fn constructed_guards_respect_each_work_admission() {
+    construction_admissions(ExpansionResource::TermWork);
 }
 
 #[test]
