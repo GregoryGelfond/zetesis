@@ -78,7 +78,7 @@ fn program() -> ObjectiveProgram {
 }
 
 #[test]
-fn predicate_windows_preserve_typed_keys_and_duplicate_eligibility() {
+fn predicate_windows_preserve_objective_contributions() {
     let program = program();
     let small = evaluate(
         &program,
@@ -109,11 +109,41 @@ fn predicate_windows_preserve_typed_keys_and_duplicate_eligibility() {
             .map(|value| vec![value])
             .collect::<Vec<_>>()
     );
-    for result in [&small, &large] {
+}
+
+#[test]
+fn predicate_windows_retain_duplicate_eligibility() {
+    for size in [100, 1_000] {
+        let result = evaluate(
+            &program(),
+            &model(size),
+            Limits::default(),
+            &Control::default(),
+        )
+        .unwrap();
         assert_eq!(result.statistics().bindings, 10);
         assert_eq!(result.statistics().duplicates, 5);
         assert_eq!(result.statistics().keys, 5);
     }
+}
+
+#[test]
+fn lookup_work_avoids_scanning_unrelated_predicates() {
+    let program = program();
+    let small = evaluate(
+        &program,
+        &model(100),
+        Limits::default(),
+        &Control::default(),
+    )
+    .unwrap();
+    let large = evaluate(
+        &program,
+        &model(1_000),
+        Limits::default(),
+        &Control::default(),
+    )
+    .unwrap();
     // Ten times more unrelated atoms may deepen binary probes. They must not
     // produce ten times the old per-frame model scanning work.
     assert!(large.statistics().work < 2 * small.statistics().work);

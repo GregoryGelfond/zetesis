@@ -160,7 +160,7 @@ fn catalog() -> Vec<Atom> {
 }
 
 #[test]
-fn catalog_lookup_preserves_original_rows_and_full_keys() {
+fn predicate_ranges_preserve_original_rows() {
     let atoms = catalog();
     let index = AtomIndex::new_with(&atoms, || Ok::<_, Infallible>(())).unwrap();
     let lookup = index.lookup();
@@ -180,6 +180,15 @@ fn catalog_lookup_preserves_original_rows_and_full_keys() {
             .map(|(i, _)| i)
             .collect();
         assert_eq!(actual, expected);
+    }
+}
+
+#[test]
+fn key_lookup_preserves_full_typed_identity() {
+    let atoms = catalog();
+    let index = AtomIndex::new_with(&atoms, || Ok::<_, Infallible>(())).unwrap();
+    let lookup = index.lookup();
+    for query in &atoms {
         let row = lookup
             .get_with(query, || Ok::<_, Infallible>(()))
             .unwrap()
@@ -199,6 +208,12 @@ fn catalog_lookup_preserves_original_rows_and_full_keys() {
                 .is_none()
         );
     }
+}
+
+#[test]
+fn preparation_peak_includes_retained_index_storage() {
+    let atoms = catalog();
+    let index = AtomIndex::new_with(&atoms, || Ok::<_, Infallible>(())).unwrap();
     assert!(index.preparation_peak_bytes() >= index.retained_bytes());
 }
 
@@ -244,10 +259,10 @@ fn duplicate_catalog_rows_are_a_refusal_not_coalesced_ids() {
 }
 
 #[test]
-fn index_and_lookup_stops_do_not_publish_partial_results() {
+fn index_stops_never_publish_a_partial_index() {
     let atoms = catalog();
     let mut total = 0;
-    let index = AtomIndex::new_with(&atoms, || {
+    AtomIndex::new_with(&atoms, || {
         total += 1;
         Ok::<_, Infallible>(())
     })
@@ -264,6 +279,12 @@ fn index_and_lookup_stops_do_not_publish_partial_results() {
         assert!(matches!(result, Err(AtomIndexError::Stopped(actual)) if actual == limit));
         assert_eq!(spent, limit);
     }
+}
+
+#[test]
+fn lookup_stops_never_claim_absence() {
+    let atoms = catalog();
+    let index = AtomIndex::new_with(&atoms, || Ok::<_, Infallible>(())).unwrap();
     let query = &atoms[4];
     let mut total = 0;
     index
@@ -288,7 +309,7 @@ fn index_and_lookup_stops_do_not_publish_partial_results() {
 }
 
 #[test]
-fn empty_catalog_has_empty_ranges_and_no_members() {
+fn empty_catalog_has_no_members() {
     let index = AtomIndex::new_with(&[], || Ok::<_, Infallible>(())).unwrap();
     let query = atom("p", Sign::Positive, vec![]);
     let mut calls = 0;
@@ -303,6 +324,18 @@ fn empty_catalog_has_empty_ranges_and_no_members() {
             .unwrap()
             .is_none()
     );
+    assert_eq!(calls, 0);
+}
+
+#[test]
+fn empty_catalog_has_empty_predicate_ranges() {
+    let index = AtomIndex::new_with(&[], || Ok::<_, Infallible>(())).unwrap();
+    let query = atom("p", Sign::Positive, vec![]);
+    let mut calls = 0;
+    let mut before = || {
+        calls += 1;
+        Ok::<_, Infallible>(())
+    };
     assert_eq!(
         index
             .lookup()

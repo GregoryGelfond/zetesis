@@ -201,7 +201,7 @@ fn query_work_excludes_unrelated_rows_without_hiding_preparation() {
 }
 
 #[test]
-fn catalog_validation_and_query_refusals_preserve_failure_evidence() {
+fn every_plan_work_cutoff_preserves_its_failure_prefix() {
     let atoms = vec![
         atom(
             "p",
@@ -252,9 +252,20 @@ fn catalog_validation_and_query_refusals_preserve_failure_evidence() {
     )
     .unwrap();
     assert_eq!(complete.statistics(), repeated.statistics());
-    let duplicate = [atoms[0].clone(), atoms[0].clone()];
-    let error =
-        ObjectivePlan::new(&original, &duplicate, &objectives, limits, &control).unwrap_err();
+}
+
+#[test]
+fn duplicate_catalog_atoms_refuse_planning() {
+    let atom = atom("p", Sign::Positive, vec![]);
+    let duplicate = [atom.clone(), atom];
+    let error = ObjectivePlan::new(
+        &theory(2),
+        &duplicate,
+        &program(Vec::new()),
+        ObjectivePlanLimits::default(),
+        &Control::default(),
+    )
+    .unwrap_err();
     assert_eq!(error.kind(), ObjectiveBoundErrorKind::AtomCatalog);
     assert_eq!(error.template_index(), None);
 }
