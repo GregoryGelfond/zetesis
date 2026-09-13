@@ -106,7 +106,7 @@ impl<'a> AtomIndex<'a> {
 
     /// Borrow both prepared orders. No allocation, validation or payload copy.
     #[must_use]
-    pub fn lookup(&self) -> AtomLookup<'_> {
+    pub fn lookup(&self) -> AtomLookup<'_, 'a> {
         AtomLookup {
             atoms: self.atoms,
             keys: &self.keys,
@@ -209,13 +209,13 @@ fn sort<E>(
 /// Allocation-free lookup over a model selection or a checked catalog index.
 /// The view cannot outlive either its index or the authoritative atom owner.
 #[derive(Clone, Copy, Debug)]
-pub struct AtomLookup<'a> {
-    pub(crate) atoms: &'a [Atom],
-    pub(crate) keys: &'a [usize],
-    pub(crate) rows: &'a [usize],
+pub struct AtomLookup<'index, 'source> {
+    pub(crate) atoms: &'source [Atom],
+    pub(crate) keys: &'index [usize],
+    pub(crate) rows: &'index [usize],
 }
 
-impl<'a> AtomLookup<'a> {
+impl<'index, 'source> AtomLookup<'index, 'source> {
     /// Select exactly one signed predicate and arity with two binary bounds.
     /// Uses O(log n) predicate comparisons; compared name bytes are additional.
     /// Calls `before` before each binary probe and descriptor/text comparison.
@@ -228,7 +228,7 @@ impl<'a> AtomLookup<'a> {
         self,
         predicate: &Predicate,
         mut before: impl FnMut() -> Result<(), E>,
-    ) -> Result<AtomRows<'a>, E> {
+    ) -> Result<AtomRows<'index, 'source>, E> {
         let low = self.bound(predicate, false, &mut before)?;
         let high = self.bound(predicate, true, &mut before)?;
         Ok(AtomRows {
@@ -269,7 +269,7 @@ impl<'a> AtomLookup<'a> {
         self,
         query: &Atom,
         mut before: impl FnMut() -> Result<(), E>,
-    ) -> Result<Option<AtomRow<'a>>, E> {
+    ) -> Result<Option<AtomRow<'source>>, E> {
         let (mut low, mut high) = (0, self.keys.len());
         while low < high {
             before()?;
@@ -311,12 +311,12 @@ impl<'a> AtomRow<'a> {
 /// comparison. The consuming algorithm accounts those visits separately from
 /// the range search. Clone copies cursor state only.
 #[derive(Clone, Debug)]
-pub struct AtomRows<'a> {
-    atoms: &'a [Atom],
-    positions: slice::Iter<'a, usize>,
+pub struct AtomRows<'index, 'source> {
+    atoms: &'source [Atom],
+    positions: slice::Iter<'index, usize>,
 }
-impl<'a> Iterator for AtomRows<'a> {
-    type Item = AtomRow<'a>;
+impl<'source> Iterator for AtomRows<'_, 'source> {
+    type Item = AtomRow<'source>;
     fn next(&mut self) -> Option<Self::Item> {
         self.positions.next().map(|&position| AtomRow {
             position,
@@ -327,7 +327,7 @@ impl<'a> Iterator for AtomRows<'a> {
         self.positions.size_hint()
     }
 }
-impl DoubleEndedIterator for AtomRows<'_> {
+impl DoubleEndedIterator for AtomRows<'_, '_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         self.positions.next_back().map(|&position| AtomRow {
             position,
@@ -335,5 +335,5 @@ impl DoubleEndedIterator for AtomRows<'_> {
         })
     }
 }
-impl ExactSizeIterator for AtomRows<'_> {}
-impl FusedIterator for AtomRows<'_> {}
+impl ExactSizeIterator for AtomRows<'_, '_> {}
+impl FusedIterator for AtomRows<'_, '_> {}

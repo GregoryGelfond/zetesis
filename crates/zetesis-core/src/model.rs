@@ -181,7 +181,7 @@ impl Model {
     /// in canonical atom order; returned positions address the original catalog,
     /// and unselected catalog atoms never participate in either search.
     #[must_use]
-    pub fn lookup(&self) -> crate::AtomLookup<'_> {
+    pub fn lookup(&self) -> crate::AtomLookup<'_, '_> {
         crate::AtomLookup {
             atoms: self.0.catalog.atoms(),
             keys: &self.0.positions,
