@@ -134,6 +134,23 @@ fn proof_record(
     )
     .into_bytes())
 }
+fn book_libraries(
+    messages: &std::path::Path,
+    build: &std::path::Path,
+    destination: &std::path::Path,
+    roots: &[String],
+) -> Result<Vec<u8>, Error> {
+    let limits = book::Limits::default();
+    let bytes = inventory::read(messages, limits.message_bytes)?;
+    let required: Vec<_> = roots.iter().map(String::as_str).collect();
+    let libraries = book::select(&bytes, &required, limits)?;
+    libraries.publish(build, destination)?;
+    Ok(format!(
+        "Book libraries: {} current artifacts\n",
+        libraries.paths().len()
+    )
+    .into_bytes())
+}
 fn execute(action: Action, output: &mut impl Write) -> Result<(), Error> {
     let value = match action {
         Action::BookLibraries {
@@ -141,18 +158,7 @@ fn execute(action: Action, output: &mut impl Write) -> Result<(), Error> {
             build_directory,
             destination,
             required_crates,
-        } => {
-            let limits = book::Limits::default();
-            let bytes = inventory::read(&messages, limits.message_bytes)?;
-            let required: Vec<_> = required_crates.iter().map(String::as_str).collect();
-            let libraries = book::select(&bytes, &required, limits)?;
-            libraries.publish(&build_directory, &destination)?;
-            format!(
-                "Book libraries: {} current artifacts\n",
-                libraries.paths().len()
-            )
-            .into_bytes()
-        }
+        } => book_libraries(&messages, &build_directory, &destination, &required_crates)?,
         Action::ProofInventory { proofs_dir, view } => {
             let inventory = proofs::inventory(&proofs_dir, proofs::Limits::default())?;
             match view {
