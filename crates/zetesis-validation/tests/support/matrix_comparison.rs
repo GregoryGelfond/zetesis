@@ -3,6 +3,10 @@ use super::*;
 use serde_json::json;
 use std::num::NonZeroUsize;
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[path = "matrix_effects.rs"]
+mod effects;
+
 fn request() -> Request<'static> {
     Request {
         corpus: Path::new("/unused/corpus"),
