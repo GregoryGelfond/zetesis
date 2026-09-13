@@ -1,5 +1,8 @@
 //! Synthetic execution/publication controls, never evidence of Lean acceptance.
-#![cfg(feature = "test-fixtures")]
+#![cfg(all(
+    feature = "test-fixtures",
+    any(target_os = "linux", target_os = "macos")
+))]
 use serde_json::Value;
 use std::{fs, path::PathBuf, time::Duration};
 use zetesis_maintenance::proofs::{

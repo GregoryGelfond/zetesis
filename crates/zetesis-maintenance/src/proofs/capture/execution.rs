@@ -184,8 +184,8 @@ pub(super) fn command_environment(tools: &Tools) -> Result<BTreeMap<String, OsSt
         ("ELAN_TOOLCHAIN".into(), "leanprover/lean4:v4.33.1".into()),
     ]);
     // These are the only inherited settings forwarded through env -i. Compiler
-    // flags are deliberately absent; an alternate build configuration requires
-    // a separate reviewed invocation rather than an invisible ambient change.
+    // flag variables are deliberately absent. The three explicit debug/cache
+    // settings preserve bounded build storage without hiding them from receipts.
     for name in [
         "HOME",
         "TMPDIR",
@@ -193,6 +193,9 @@ pub(super) fn command_environment(tools: &Tools) -> Result<BTreeMap<String, OsSt
         "TEMP",
         "CARGO_HOME",
         "CARGO_TARGET_DIR",
+        "CARGO_INCREMENTAL",
+        "CARGO_PROFILE_DEV_DEBUG",
+        "CARGO_PROFILE_TEST_DEBUG",
         "RUSTUP_HOME",
         "ELAN_HOME",
     ] {

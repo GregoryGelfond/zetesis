@@ -128,8 +128,10 @@ OS calls are outside the polling-time guarantee.
 
 Commands run through `env -i` with pinned tool directories first in PATH,
 `LC_ALL=C`, offline Cargo, one build worker and the declared Rust/Lean toolchains.
-Only HOME, temporary-directory variables, CARGO_HOME, CARGO_TARGET_DIR, RUSTUP_HOME
-and ELAN_HOME are forwarded in addition to that PATH. Actual argv, environment
+Only HOME, temporary-directory variables, CARGO_HOME, CARGO_TARGET_DIR, RUSTUP_HOME,
+ELAN_HOME and the explicit build-storage settings CARGO_INCREMENTAL,
+CARGO_PROFILE_DEV_DEBUG and CARGO_PROFILE_TEST_DEBUG are forwarded in addition to
+that PATH. Actual argv, environment
 assignments, separate raw streams, exits and cleanup disposition stay under the
 external `commands` directory; its `before` directory preserves the prior record,
 audit and logs. A source copy and portable record views stay under `stage`.
