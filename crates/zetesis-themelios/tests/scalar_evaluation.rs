@@ -30,6 +30,14 @@ const CASES: &[(&str, &str)] = &[
         "d(2). p(f(X+1,(X*X,)),~X):-d(X).",
         "d(2). p(f(3,(4,)),-3):-d(2).",
     ),
+    (
+        "d(#inf;\"x\"). p(f(X,()),(X,)):-d(X).",
+        "d(#inf;\"x\"). p(f(#inf,()),(#inf,)):-d(#inf). p(f(\"x\",()),(\"x\",)):-d(\"x\").",
+    ),
+    (
+        "d(-f(1)). p(g(X,X),(X,)):-d(X).",
+        "d(-f(1)). p(g(-f(1),-f(1)),(-f(1),)):-d(-f(1)).",
+    ),
 ];
 fn input(source: &str) -> AdmittedFormula {
     admit_formula(

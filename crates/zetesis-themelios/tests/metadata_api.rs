@@ -475,3 +475,109 @@ fn native_directive_limit_counts_originals() {
         }))
     ));
 }
+
+#[test]
+fn native_metadata_preserves_structured_expression_values() {
+    let native = metadata(
+        "#const c=(1+2,\"x\"). #show. #show (c,-X,|X-2|):p(X),X+1=4. #show -p/1. #defined q/1.",
+    );
+    let evaluated = native
+        .observations()
+        .evaluate(&model(), Limits::default(), &Control::default())
+        .unwrap();
+    assert_eq!(
+        evaluated.symbols(),
+        &[Symbol::Tuple(vec![
+            Symbol::Tuple(vec![Symbol::Number(3), Symbol::String("x".into())]),
+            Symbol::Number(-3),
+            Symbol::Number(1),
+        ])],
+    );
+    assert_eq!(
+        native.atom_selection().signatures(),
+        &[Predicate::with_sign("p", 1, Sign::Negative).unwrap()],
+    );
+}
+
+#[test]
+fn canonical_strings_with_nulls_are_located_refusals() {
+    // The owned symbol vocabulary can represent this string even though the
+    // metadata/source bridge cannot. Refuse at the public borrowed-input door.
+    let shared = Program::of_nodes([WithProvenance::constructed(Statement::Show(Show::Term(
+        Symbol::String("before\0after".into()).into(),
+    )))]);
+    let error =
+        SourceMetadata::compile(&shared, MetadataLimits::default(), fallback()).unwrap_err();
+    assert!(matches!(error, MetadataError::Unsupported {
+        feature: MetadataFeature::NullText, location
+    } if location == fallback()));
+    assert_eq!(error.to_string(), "metadata refuses NullText");
+}
+
+#[test]
+fn native_metadata_refuses_unsupported_expression_shapes() {
+    for source in ["#show (1;2).", "#show 1..2.", "#show @f(1)."] {
+        let (original, shared) = program(source);
+        let error =
+            SourceMetadata::compile(&shared, MetadataLimits::default(), fallback()).unwrap_err();
+        let MetadataError::Unsupported { feature, location } = error else {
+            panic!("expected canonical metadata shape refusal: {error}");
+        };
+        assert_eq!(feature, MetadataFeature::Term, "{source}");
+        assert_eq!(original.slice(location.span).unwrap(), source);
+        assert_eq!(location.source, original.id());
+    }
+}
+
+#[test]
+fn constructed_tuple_limits_count_the_borrowed_nodes() {
+    let shared = Program::of_nodes([WithProvenance::constructed(Statement::Show(Show::Term(
+        Symbol::Tuple(vec![Symbol::Number(1), Symbol::String("x".into())]).into(),
+    )))]);
+    // One directive, its symbolic term, the tuple and its two children.
+    let limits = MetadataLimits {
+        max_nodes: 5,
+        ..MetadataLimits::default()
+    };
+    let native = SourceMetadata::compile(&shared, limits, fallback()).unwrap();
+    assert_eq!(
+        native
+            .observations()
+            .evaluate(&Model::default(), Limits::default(), &Control::default())
+            .unwrap()
+            .symbols(),
+        &[Symbol::Tuple(vec![
+            Symbol::Number(1),
+            Symbol::String("x".into())
+        ])],
+    );
+    let error = SourceMetadata::compile(
+        &shared,
+        MetadataLimits {
+            max_nodes: 4,
+            ..limits
+        },
+        fallback(),
+    )
+    .unwrap_err();
+    assert!(matches!(error, MetadataError::Limit {
+        resource: MetadataResource::Nodes, observed: 5, limit: 4, location
+    } if location == fallback()));
+    assert_eq!(error.to_string(), "metadata Nodes count 5 exceeds 4");
+}
+
+#[test]
+fn native_metadata_displays_its_underlying_failure() {
+    for source in ["#const a=b. #const b=a.", "#show X:not p(X)."] {
+        let (_, shared) = program(source);
+        let error =
+            SourceMetadata::compile(&shared, MetadataLimits::default(), fallback()).unwrap_err();
+        let message = match &error {
+            MetadataError::Expansion(cause) => cause.to_string(),
+            MetadataError::Compilation(cause) => cause.to_string(),
+            other => panic!("expected a retained normalization or compilation cause: {other}"),
+        };
+        assert!(!message.is_empty());
+        assert_eq!(error.to_string(), message, "{source}");
+    }
+}
