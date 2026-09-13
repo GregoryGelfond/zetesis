@@ -79,6 +79,13 @@ does not replace an earlier failure. Redirected output uses a fixed
 prompt. This process policy does not change the library's record acknowledgement:
 acceptance by a caller-supplied writer promises neither flushing nor durability.
 
+The pinned Rust runtime on Linux and macOS reopens closed standard descriptors
+as `/dev/null` before the command enters its own code. At that boundary, a closed
+stdin is indistinguishable from an intentionally empty stream, and a closed
+stdout can discard output without a write error. The command cannot recover the
+parent's intent from those descriptors. Library callers can supply explicit
+readers and writers; observed I/O errors retain their original causes.
+
 `--json` streams one schema-1 document without ANSI styling. Full semantic atoms,
 shown atom indices, shown terms, costs and terminal outcomes remain distinct.
 `--max-json-record-bytes` bounds each model and terminal record, with an 8 MiB
