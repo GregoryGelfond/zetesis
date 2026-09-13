@@ -112,3 +112,7 @@ impl<W: io::Write> io::Write for Output<'_, W> {
         self.writer.flush()
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/support/relation_publication.rs"]
+mod publication_contracts;
