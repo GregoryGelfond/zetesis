@@ -81,6 +81,10 @@ impl<'a> ClosureSession<'a> {
         if self.terminal {
             return None;
         }
+        if let Err(stop) = &self.engine {
+            self.complete(SearchState::Interrupted(Interruption::Preparation(*stop)));
+            return None;
+        }
         if config.models != 0 && self.yielded >= config.models {
             self.complete(SearchState::RequestedModels);
             return None;
@@ -115,8 +119,14 @@ impl<'a> ClosureSession<'a> {
             } else {
                 config.batch_size.get()
             };
-            let mut seeds = Vec::new();
             let generation = phases.start(SolvePhase::CandidateGeneration);
+            let mut seeds = match batch_storage(count, control) {
+                Ok(seeds) => seeds,
+                Err(stop) => {
+                    self.complete(SearchState::Interrupted(Interruption::Oracle(stop)));
+                    return None;
+                }
+            };
             for _ in 0..count {
                 match self.candidates.next_selection() {
                     Some(Ok(seed)) => seeds.push(seed),
@@ -195,5 +205,46 @@ impl<'a> ClosureSession<'a> {
                 .ok()
                 .and_then(|engine| engine.lazy_statistics(self.ready.len())),
         }
+    }
+}
+
+// Reserve the occurrence slots before asking the generator for a candidate.
+// Refusal therefore cannot consume an unsubmitted selection or discard an
+// already checked batch prefix. Payload owners still belong to each selection.
+fn batch_storage(
+    count: usize,
+    control: &Control,
+) -> Result<Vec<zetesis_core::SeedSelection>, Stop> {
+    control.poll()?;
+    let mut seeds = Vec::new();
+    seeds
+        .try_reserve_exact(count)
+        .map_err(|_| Stop::Allocation)?;
+    Ok(seeds)
+}
+
+#[cfg(test)]
+mod storage_tests {
+    use super::batch_storage;
+    use zetesis_cpu::{Control, Stop};
+
+    #[test]
+    fn capacity_refusal_is_typed_and_control_precedes_reservation() {
+        assert!(matches!(
+            batch_storage(usize::MAX, &Control::default()),
+            Err(Stop::Allocation)
+        ));
+        let cancelled = Control::default();
+        cancelled.cancel();
+        assert!(matches!(
+            batch_storage(usize::MAX, &cancelled),
+            Err(Stop::Cancelled)
+        ));
+        let expired = Control::with_deadline(std::time::Instant::now());
+        assert!(matches!(
+            batch_storage(usize::MAX, &expired),
+            Err(Stop::Deadline)
+        ));
+        assert!(batch_storage(3, &Control::default()).unwrap().capacity() >= 3);
     }
 }

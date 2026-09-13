@@ -278,3 +278,51 @@ fn pending_candidate_stop_preserves_the_checked_answers_before_finalization() {
         assert_eq!(outcome.verified_models(), 4);
     }
 }
+
+#[test]
+fn batch_storage_refusal_preserves_the_already_checked_prefix() {
+    let fixture = Fixture::new();
+    for mut config in configurations() {
+        config.batch_size = NonZeroUsize::new(usize::MAX).unwrap();
+        for cancel in [false, true] {
+            let control = Control::default();
+            let mut session = Session::builder(
+                PreparedInput::program(&fixture.program),
+                config,
+                control.clone(),
+            )
+            .start()
+            .unwrap();
+            let first = session.next().unwrap().unwrap();
+            assert_eq!(
+                first
+                    .interpretation()
+                    .atoms()
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<_>>(),
+                fixture.interpretation(&[])
+            );
+            // The first one-candidate batch is complete. The next capacity is
+            // unrepresentable, so this does not rely on exhausting host memory.
+            if cancel {
+                control.cancel();
+            }
+            assert!(session.next().is_none());
+            let outcome = session.outcome().unwrap();
+            let reason = if cancel {
+                Stop::Cancelled
+            } else {
+                Stop::Allocation
+            };
+            assert_eq!(
+                outcome.search_state(),
+                Some(SearchState::Interrupted(Interruption::Oracle(reason)))
+            );
+            assert_eq!(outcome.candidate_progress(), 1);
+            assert_eq!(outcome.verified_models(), 1);
+            assert!(!outcome.unsatisfiable());
+            assert!(session.next().is_none());
+        }
+    }
+}
