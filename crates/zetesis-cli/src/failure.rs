@@ -166,27 +166,27 @@ impl Progress {
                 .semantic
                 .take()
                 .ok_or_else(|| crate::PublicationFailure::from(RunError::CompletionUnavailable))?;
-            return Ok(crate::PublicationOutcome::Stopped(
+            return Ok(crate::PublicationOutcome::Stopped(Box::new(
                 crate::StoppedPublication {
                     stop,
                     semantic,
                     publication: self.publication,
                     phase_timings: self.phase_timings,
                 },
-            ));
+            )));
         }
         let report = match self.report() {
             Ok(report) => report,
             Err(cause) => return Err(self.fail(cause)),
         };
         match self.semantic {
-            Some(semantic) => Ok(crate::PublicationOutcome::Completed(
+            Some(semantic) => Ok(crate::PublicationOutcome::Completed(Box::new(
                 crate::PublicationReport {
                     publication: self.publication,
                     semantic,
                     report,
                 },
-            )),
+            ))),
             None => Err(self.fail(RunError::CompletionUnavailable)),
         }
     }
@@ -228,7 +228,7 @@ impl Progress {
         });
         failure.semantic = self.semantic.map(Box::new);
         failure.publication = Some(self.publication);
-        failure.publication_stop = self.stop;
+        failure.publication_stop = self.stop.map(Box::new);
         failure
     }
 }

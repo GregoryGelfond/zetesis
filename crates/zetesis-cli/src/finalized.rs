@@ -69,7 +69,7 @@ pub struct PublicationFailure {
     pub(crate) subject: Option<crate::Subject>,
     pub(crate) semantic: Option<Box<SemanticOutcome>>,
     pub(crate) publication: Option<Publication>,
-    pub(crate) publication_stop: Option<PublicationStop>,
+    pub(crate) publication_stop: Option<Box<PublicationStop>>,
     diagnostics: Option<Arc<io::Error>>,
     summary: Option<Arc<io::Error>>,
 }
@@ -99,8 +99,8 @@ impl PublicationFailure {
 
     /// A cooperative stop preceding this actual writer/reporting failure.
     #[must_use]
-    pub const fn publication_stop(&self) -> Option<&PublicationStop> {
-        self.publication_stop.as_ref()
+    pub fn publication_stop(&self) -> Option<&PublicationStop> {
+        self.publication_stop.as_deref()
     }
 
     pub(crate) fn acknowledge_summary(&mut self) {
@@ -214,7 +214,7 @@ pub enum PublicationPhase {
 pub struct PublicationStop {
     reason: zetesis_cpu::Stop,
     phase: PublicationPhase,
-    observation: Option<zetesis_themelios::observation::Error>,
+    observation: Option<Box<zetesis_themelios::observation::Error>>,
 }
 impl PublicationStop {
     /// Original control reason, without a new poll or inferred clock state.
@@ -229,8 +229,8 @@ impl PublicationStop {
     }
     /// Located observation evidence, including any completed observation work.
     #[must_use]
-    pub const fn observation(&self) -> Option<&zetesis_themelios::observation::Error> {
-        self.observation.as_ref()
+    pub fn observation(&self) -> Option<&zetesis_themelios::observation::Error> {
+        self.observation.as_deref()
     }
 
     pub(crate) fn classify(error: RunError) -> Result<Self, RunError> {
@@ -250,7 +250,7 @@ impl PublicationStop {
                 ErrorKind::Stopped(reason) if cooperative(*reason) => Ok(Self {
                     reason: *reason,
                     phase: PublicationPhase::Observation,
-                    observation: Some(error),
+                    observation: Some(Box::new(error)),
                 }),
                 _ => Err(RunError::Observation(error)),
             },
@@ -282,17 +282,18 @@ impl fmt::Display for PublicationStop {
 
 /// Finalized publication either completed or stopped cooperatively.
 /// Writer, encoding-resource and execution failures remain the outer `Err`.
+/// Each variant retains one boxed evidence owner; inspecting it borrows that owner.
 #[derive(Clone, Debug)]
 pub enum PublicationOutcome {
     /// The requested publication completed, with independent search coverage.
-    Completed(PublicationReport),
+    Completed(Box<PublicationReport>),
     /// Publication stopped without invalidating previously established semantics.
-    Stopped(StoppedPublication),
+    Stopped(Box<StoppedPublication>),
 }
 impl PublicationOutcome {
     /// Search evidence is retained in both outcomes; delivery cannot revise it.
     #[must_use]
-    pub const fn semantic(&self) -> &SemanticOutcome {
+    pub fn semantic(&self) -> &SemanticOutcome {
         match self {
             Self::Completed(report) => report.semantic(),
             Self::Stopped(stopped) => &stopped.semantic,
@@ -300,7 +301,7 @@ impl PublicationOutcome {
     }
     /// Complete record and summary acknowledgements.
     #[must_use]
-    pub const fn publication(&self) -> Publication {
+    pub fn publication(&self) -> Publication {
         match self {
             Self::Completed(report) => report.publication(),
             Self::Stopped(stopped) => stopped.publication,
@@ -308,7 +309,7 @@ impl PublicationOutcome {
     }
     /// A compatibility report exists only for completed publication.
     #[must_use]
-    pub const fn report(&self) -> Option<&Report> {
+    pub fn report(&self) -> Option<&Report> {
         match self {
             Self::Completed(report) => Some(report.report()),
             Self::Stopped(_) => None,
@@ -321,7 +322,7 @@ impl PublicationOutcome {
     /// A stopped publication becomes the legacy `PublicationStopped` cause.
     pub fn into_legacy(self) -> Result<PublicationReport, PublicationFailure> {
         match self {
-            Self::Completed(report) => Ok(report),
+            Self::Completed(report) => Ok(*report),
             Self::Stopped(stopped) => {
                 let reason = stopped.stop.reason();
                 let mut progress = crate::failure::Progress::new();
