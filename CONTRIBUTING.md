@@ -226,6 +226,28 @@ identities with experimental evidence. If a target has been shared across those
 trees, treat its checks as provisional and qualify again from a fresh target.
 Matching Cargo artifact filenames do not attest which source tree produced them.
 
+## Build storage
+
+Give each build directory an owner and a retirement point. Reuse an active
+checkout's target for compatible checks; keep distinct source trees and
+instrumentation populations separate. Do not create another full build tree
+without a concrete isolation or comparison need. Check available space before
+large builds, accounting for temporary compiler output and retained baselines.
+
+At closeout, retain the source revision, tool and command identities, reports,
+required profiles, and the specific binaries or other inputs needed for pending
+qualification, reproducible evidence or the next comparison. Store those durable
+artifacts outside disposable build directories and verify the retained copies.
+Then remove completed build caches, including incremental state and superseded
+targets. Record any build tree that must remain and the condition for retiring it;
+a historical path in a log alone does not make an entire target tree permanent.
+Keep one comparison baseline unless the next experiment needs more.
+
+Preserve unique source files, unpublished work and active qualification inputs.
+Coordinate cleanup when another process or contributor owns the directory.
+Failed checks retain their reports and failure evidence; retaining a failure
+does not require keeping every rebuildable dependency artifact indefinitely.
+
 ## Repository presentation
 
 Keep the GitHub description, topics, README badges and release metadata aligned

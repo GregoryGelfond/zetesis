@@ -225,7 +225,8 @@ wants the ordinary source driver with injected output sinks. These finalized
 functions return `Result<PublicationOutcome, PublicationFailure>`: `Completed`
 contains a `PublicationReport`, while `Stopped` retains the cooperative control
 reason, checked semantic evidence and accepted record counts. Cancellation during
-observation or encoding leaves the writer available for an incomplete footer.
+observation or encoding does not itself invalidate the writer; an incomplete
+footer is attempted, and actual writer failures still prevent delivery.
 Search exhaustion and a proved optimum survive a later publication stop.
 The process returns exit 3 for that stop; actual writer or flush errors return 2.
 `run` and `run_detailed` keep their legacy return shapes through the explicit

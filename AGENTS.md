@@ -81,6 +81,11 @@ Rust or shader correctness. Performance claims need reproducible measurements
 with source, binary, backend and workload identities. Never weaken a gate to
 accommodate a change.
 
+Follow the contributor guide's [build storage policy](CONTRIBUTING.md#build-storage).
+Assign build owners, check disk space before large builds, and retire completed
+caches after preserving the specific evidence and comparison artifacts still
+needed. Do not retain entire superseded target trees by default.
+
 ## Keep public documentation current
 
 Update affected manual explanations, runnable examples, source references and

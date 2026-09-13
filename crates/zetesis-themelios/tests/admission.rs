@@ -126,6 +126,96 @@ fn raw_choice_shape_is_checked_before_set_canonicalization() {
 }
 
 #[test]
+fn relational_refusals_preserve_the_profile_diagnostic() {
+    use themelios_base::diagnostic::Severity;
+    use themelios_base::source::Source;
+
+    // These are refusals of the deliberately smaller relational admission
+    // door. They do not assert that ordinary formula solving refuses the forms.
+    for (text, feature, description, highlighted) in [
+        (
+            "{p;q}.",
+            ProfileFeature::ChoiceCardinality,
+            "choice with other than one element",
+            "{p;q}",
+        ),
+        (
+            "1{p}.",
+            ProfileFeature::BoundedChoice,
+            "bounded choice",
+            "1{p}",
+        ),
+        (
+            "{p:q}.",
+            ProfileFeature::ConditionalChoice,
+            "conditional choice element",
+            "{p:q}",
+        ),
+        (
+            "not p.",
+            ProfileFeature::NegatedHead,
+            "default-negated head",
+            "not p.",
+        ),
+        (
+            "p:-not 1=1.",
+            ProfileFeature::NegatedComparison,
+            "default-negated comparison",
+            "p:-not 1=1.",
+        ),
+        (
+            "p:-1=1=1.",
+            ProfileFeature::ComparisonChain,
+            "comparison chain",
+            "p:-1=1=1.",
+        ),
+        (
+            "p:-1<2.",
+            ProfileFeature::ComparisonRelation,
+            "comparison relation",
+            "p:-1<2.",
+        ),
+        (
+            "p:-#true.",
+            ProfileFeature::BooleanLiteral,
+            "Boolean literal",
+            "p:-#true.",
+        ),
+    ] {
+        let source_id = SourceId::new(219);
+        let source = Source::new(source_id, text.into()).unwrap();
+        let error = admit(
+            text.into(),
+            AdmissionOptions {
+                source_id,
+                ..AdmissionOptions::default()
+            },
+        )
+        .unwrap_err();
+        let AdmissionFailure::Profile {
+            feature: actual,
+            location,
+        } = &error
+        else {
+            panic!("{text}: {error}");
+        };
+        assert_eq!(*actual, feature, "{text}");
+        assert_eq!(location.source, source_id);
+        assert_eq!(source.slice(location.span).unwrap(), highlighted, "{text}");
+        let expected = format!("source profile does not admit {description}");
+        assert_eq!(error.to_string(), expected);
+        assert!(std::error::Error::source(&error).is_none());
+        let diagnostics = error.diagnostics();
+        let [diagnostic] = diagnostics.as_slice() else {
+            panic!("one profile refusal must yield one diagnostic: {diagnostics:?}");
+        };
+        assert_eq!(diagnostic.severity(), Severity::Error);
+        assert_eq!(diagnostic.message(), expected);
+        assert_eq!(diagnostic.primary().location, *location);
+    }
+}
+
+#[test]
 fn unsupported_language_families_never_become_partial_programs() {
     for text in [
         "p. #show p/0.",
