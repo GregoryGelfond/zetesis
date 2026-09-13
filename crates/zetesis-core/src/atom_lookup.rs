@@ -45,7 +45,14 @@ impl<E: fmt::Display> fmt::Display for AtomIndexError<E> {
         }
     }
 }
-impl<E: std::error::Error + 'static> std::error::Error for AtomIndexError<E> {}
+impl<E: std::error::Error + 'static> std::error::Error for AtomIndexError<E> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Stopped(error) => Some(error),
+            Self::Allocation | Self::Duplicate { .. } => None,
+        }
+    }
+}
 
 impl<'a> AtomIndex<'a> {
     /// Prepare both integer orders with a stable, fallible merge sort.

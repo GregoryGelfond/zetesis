@@ -16,6 +16,29 @@ fn atom(name: &str, sign: Sign, values: Vec<Value>) -> Atom {
     .unwrap()
 }
 
+#[test]
+fn stopped_index_exposes_the_callers_error_cause() {
+    let error = AtomIndex::new_with(&[], || {
+        Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "stop"))
+    })
+    .unwrap_err();
+    let source = std::error::Error::source(&error)
+        .unwrap()
+        .downcast_ref::<std::io::Error>()
+        .unwrap();
+    assert_eq!(source.kind(), std::io::ErrorKind::Interrupted);
+}
+
+#[test]
+fn intrinsic_index_refusals_have_no_underlying_cause() {
+    for error in [
+        AtomIndexError::<std::io::Error>::Allocation,
+        AtomIndexError::Duplicate { first: 2, second: 7 },
+    ] {
+        assert!(std::error::Error::source(&error).is_none());
+    }
+}
+
 fn values() -> Vec<Value> {
     let mut values = vec![
         Value::Infimum,
