@@ -100,7 +100,7 @@ pub fn metadata(request: Metadata<'_>) -> Result<Value, Error> {
     )?;
     let version = cargo_version
         .strip_prefix("cargo-llvm-cov ")
-        .expect("validated cargo-llvm-cov banner");
+        .ok_or_else(|| Error::Invalid("invalid cargo-llvm-cov banner".into()))?;
     Floor::parse(request.floor)?.admit(request.mode)?;
     let groups: Vec<Group> = request
         .physical_table
