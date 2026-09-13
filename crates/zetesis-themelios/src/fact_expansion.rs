@@ -1,5 +1,7 @@
 //! Checked finite fact products; no rule binding enumeration occurs here.
 
+use std::ops::RangeInclusive;
+
 use themelios_base::span::Location;
 use themelios_program::program::{DefaultNegation, Head, LiteralInner, Statement};
 use themelios_program::provenance::WithProvenance;
@@ -107,10 +109,9 @@ fn size(term: &SourceTerm, location: Location) -> Result<u128, ExpansionFailure>
         match term {
             SourceTerm::Pool(items) => pending.extend(items),
             SourceTerm::Interval { lower, upper } => {
-                let (lower, upper) = interval(lower, upper, location)?;
-                let width = (i64::from(upper) - i64::from(lower) + 1).max(0);
-                size =
-                    size.saturating_add(u128::try_from(width).expect("nonnegative interval width"));
+                let range = interval(lower, upper, location)?;
+                let width = range.as_ref().map_or(0, crate::integer_range::width);
+                size = size.saturating_add(u128::from(width));
             }
             SourceTerm::Symbolic(symbol) => {
                 compile::validate_scalar(symbol, location)?;
@@ -141,8 +142,9 @@ fn values(
         match term {
             SourceTerm::Pool(items) => pending.extend(items.iter().rev()),
             SourceTerm::Interval { lower, upper } => {
-                let (lower, upper) = interval(lower, upper, location)?;
-                values.extend((lower..=upper).map(Value::Number));
+                if let Some(range) = interval(lower, upper, location)? {
+                    values.extend(range.map(Value::Number));
+                }
             }
             SourceTerm::Symbolic(symbol) => {
                 let bytes = crate::structural_value::symbol_bytes(symbol);
@@ -159,16 +161,30 @@ fn interval(
     lower: &SourceTerm,
     upper: &SourceTerm,
     location: Location,
-) -> Result<(i32, i32), ExpansionFailure> {
-    match (lower, upper) {
-        (
-            SourceTerm::Symbolic(Symbol::Number(lower)),
-            SourceTerm::Symbolic(Symbol::Number(upper)),
-        ) => Ok((*lower, *upper)),
-        _ => Err(ExpansionFailure::Evaluation {
-            error: EvalError::Undefined,
+) -> Result<Option<RangeInclusive<i32>>, ExpansionFailure> {
+    // Validate both endpoints before classifying an empty range. A nonnumeric
+    // value cannot hide an unbound variable or an unsupported endpoint form.
+    let lower = endpoint(lower, location)?;
+    let upper = endpoint(upper, location)?;
+    Ok(crate::integer_range::inclusive(lower, upper))
+}
+
+fn endpoint(term: &SourceTerm, location: Location) -> Result<Option<i32>, ExpansionFailure> {
+    match term {
+        SourceTerm::Symbolic(symbol) => {
+            compile::validate_scalar(symbol, location)?;
+            Ok(match symbol {
+                Symbol::Number(number) => Some(*number),
+                _ => None,
+            })
+        }
+        SourceTerm::Variable(variable) => Err(ExpansionFailure::Evaluation {
+            error: EvalError::NotGround {
+                variable: variable.clone(),
+            },
             location,
         }),
+        _ => Err(unsupported(ProfileFeature::Term, location).into()),
     }
 }
 

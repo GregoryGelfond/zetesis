@@ -526,6 +526,12 @@ need its own semantics and interface; current solving does not ignore such atoms
 
 ## Numeric boundaries and refusal meaning
 
+An interval contributes integers only when its evaluated endpoints are numeric
+and ascending. Defined nonnumeric or descending endpoints give an empty range
+in both facts and generated bindings: `p(a..b).` contributes no fact. Endpoint
+errors remain errors, so `p(a..(1/0)).` refuses admission. An empty range also
+does not hide an unbound variable or invalid sibling argument.
+
 Reached undefined or overflowing scalar operations produce located refusals.
 The formula source API does not emulate clingo's warning-and-drop behavior for
 such operations. A syntactically false condition is not permission to skip

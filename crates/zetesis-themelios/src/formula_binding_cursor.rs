@@ -1,6 +1,6 @@
 //! Per-relational-row scalar/range cursors; no global value-domain products.
 
-use std::ops::Range;
+use std::ops::{Range, RangeInclusive};
 
 use themelios_base::span::Location;
 use zetesis_core::Value;
@@ -15,7 +15,7 @@ use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 enum State {
     Fresh,
     Scalar(Option<Value>),
-    Range { next: i64, end: i64 },
+    Range(Option<RangeInclusive<i32>>),
     Values { values: Vec<Value>, index: usize },
 }
 
@@ -131,12 +131,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
             let value = match &mut self.states[self.depth] {
                 State::Fresh => unreachable!("cursor initialized"),
                 State::Scalar(value) => value.take(),
-                State::Range { next, end } if *next <= *end => {
-                    let value = i32::try_from(*next).expect("range endpoints are i32");
-                    *next += 1;
-                    Some(Value::Number(value))
-                }
-                State::Range { .. } => None,
+                State::Range(range) => range.as_mut().and_then(Iterator::next).map(Value::Number),
                 State::Values { values, index } => {
                     if let Some(value) = values.get(*index) {
                         *index += 1;
@@ -200,20 +195,19 @@ impl<'a, 'source> Cursor<'a, 'source> {
                     counters,
                     location,
                 )?;
-                let (Value::Number(lower), Value::Number(upper)) = (lower, upper) else {
-                    return Ok(State::Range { next: 1, end: 0 });
+                let number = |value| match value {
+                    Value::Number(number) => Some(number),
+                    _ => None,
                 };
-                let width = (i64::from(upper) - i64::from(lower) + 1).max(0);
+                let range = crate::integer_range::inclusive(number(lower), number(upper));
+                let width = range.as_ref().map_or(0, crate::integer_range::width);
                 ceiling(
                     FormulaResource::AssignmentValues,
-                    u128::try_from(width).expect("nonnegative range width"),
+                    u128::from(width),
                     limits.max_assignment_values as u128,
                     location,
                 )?;
-                Ok(State::Range {
-                    next: i64::from(lower),
-                    end: i64::from(upper),
-                })
+                Ok(State::Range(range))
             }
             LiteralIr::Aggregate(aggregate) => Ok(State::Values {
                 values: crate::formula_assignment::values(

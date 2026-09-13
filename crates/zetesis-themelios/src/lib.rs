@@ -35,6 +35,7 @@ mod bundle_admission;
 mod expansion;
 mod extended;
 mod fact_expansion;
+mod integer_range;
 mod metadata;
 mod formula;
 mod formula_choice_source;

@@ -117,8 +117,10 @@ admitted consequent alternatives are described below.
 
 Arithmetic uses checked `i32` operations. Undefined or overflowing evaluation
 refuses admission instead of silently dropping a substitution. Descending or
-nonnumeric interval endpoints yield no rows; an error while evaluating an
-endpoint remains a failure. Numeric `i32::MIN`/`i32::MAX` extrema tuple values
+nonnumeric interval endpoints yield no rows in facts and generated bindings.
+For example, `p(a..b).` contributes no fact; `p(a..(1/0)).` remains an
+evaluation failure. Both endpoints are checked before an empty range is
+selected. Numeric `i32::MIN`/`i32::MAX` extrema tuple values
 and bounds retain an internal guard. That guard is a zetesis limitation, separate
 from themelios syntax/raising diagnostics and from intentional language exclusions.
 

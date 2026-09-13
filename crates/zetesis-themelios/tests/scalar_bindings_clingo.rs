@@ -314,3 +314,33 @@ fn scalar_and_interval_reference_models_and_unsafe_cases_match_fresh_clingo() {
         );
     }
 }
+
+#[test]
+#[ignore = "requires independent clingo; bounded interval facts"]
+fn nonnumeric_fact_ranges_match_clingo() {
+    for source in [
+        "p(a..b).",
+        "p(1..a).",
+        "p(a..1).",
+        "p(\"a\"..\"b\").",
+        "p(#inf..#sup).",
+        "p(f(a)..f(b)).",
+    ] {
+        let case = Case {
+            name: source.into(),
+            source: source.into(),
+            valid: true,
+            native: "admit".into(),
+            expected: Models::from([BTreeSet::new()]),
+        };
+        let input = admit_formula(
+            source.into(),
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        )
+        .expect("defined nonnumeric endpoints");
+        assert_eq!(exhaustive(&input), case.expected, "{source}");
+        assert_eq!(clingo(&case), case.expected, "{source}");
+    }
+}
