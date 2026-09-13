@@ -1,0 +1,231 @@
+{
+  "schema": 1,
+  "kind": "derived_historical_observation_view",
+  "observed_local_date": "2026-09-12",
+  "time_zone": "America/New_York",
+  "platform": {
+    "hardware": "Apple M4 Pro",
+    "os": "macOS 26.6.2",
+    "rust": "1.97.1",
+    "clingo": "5.8.2"
+  },
+  "native_versions": [
+    {
+      "label": "prior",
+      "source": "6bebb980f9c102dbb7f943076d7cde92374841ce",
+      "binary_sha256": "35b96c837dd5027853c735044e092f9054d63fc516940ec83d10627ecc2cf5d8"
+    },
+    {
+      "label": "current",
+      "source": "1e5b78ce913ab3aeece6ed496f69ca8176f0644d",
+      "binary_sha256": "0758210934e1a80c350808fc936414c359974a2327119e0af3b3ab5e5f0f79f8"
+    }
+  ],
+  "tools": [
+    {
+      "name": "clingo",
+      "bytes": 341232,
+      "sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015"
+    },
+    {
+      "name": "zetesis-perf",
+      "bytes": 2197136,
+      "sha256": "5eb1c1d1de5e9076c2d37150dea8d7a869d34468cc88a8fc3627cf1002595e53"
+    }
+  ],
+  "corpus_files": [
+    {
+      "path": "examples/kr-domains/manifest.json",
+      "bytes": 176545,
+      "sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958"
+    },
+    {
+      "path": "examples/kr-domains/LICENSE",
+      "bytes": 1072,
+      "sha256": "663fd58c4daf8c2247da12c61b73474ee7a5f79f884c6f16d785a725fe9bfe99"
+    },
+    {
+      "path": "examples/kr-domains/encodings/shortest-path/variant-01.lp",
+      "bytes": 2115,
+      "sha256": "ee593089ab5ecfa2cf1a1cef152686f9b5d99c2ab08d126f212050568f1179e7"
+    },
+    {
+      "path": "examples/kr-domains/encodings/task-allocation/variant-04.lp",
+      "bytes": 3672,
+      "sha256": "7a16f9cb73d644ea061ee71a8aed3a5686f5dce3dc6e1015cdf83c603305e421"
+    },
+    {
+      "path": "examples/kr-domains/scenarios/shortest-path/variant-01/06-layered-dag.lp",
+      "bytes": 837,
+      "sha256": "8c19d1d8dd791a19f235ce4e07d57becadc753c9e15a5cc264adfaef171b001e"
+    },
+    {
+      "path": "examples/kr-domains/scenarios/task-allocation/variant-04/05-larger-mix.lp",
+      "bytes": 898,
+      "sha256": "a7d80af4886cff9c7a0b592f51f95afdf5943af5ebcbeadd57b4a650082393fe"
+    },
+    {
+      "path": "examples/kr-domains/standalone/n-queens/variant-01.lp",
+      "bytes": 858,
+      "sha256": "c43d5ddf900ce2fd1d3328f2df337f1c1e8b85b63255473713b16a2dfd0dc1fd"
+    },
+    {
+      "path": "examples/kr-domains/standalone/n-queens/variant-02.lp",
+      "bytes": 960,
+      "sha256": "b6e636c06664e0e3b1a34b883e342f9c7b599f8625e154adb1927d41442fca02"
+    },
+    {
+      "path": "examples/kr-domains/standalone/n-queens/variant-03.lp",
+      "bytes": 878,
+      "sha256": "6e04e47594fd44b6ed2e17370f81ad3ae9db684af9e5aa4a85c7e1d98a5f5dd6"
+    },
+    {
+      "path": "examples/kr-domains/standalone/n-queens/variant-04.lp",
+      "bytes": 919,
+      "sha256": "d599e4b8e68f0b68df20bfaefb0a9916da69c6829cd340de301b08997cfb9295"
+    },
+    {
+      "path": "examples/kr-domains/standalone/n-queens/variant-05.lp",
+      "bytes": 1078,
+      "sha256": "42475b96940e06b957f45441cb5de66681a509d35f1c41ddc72fc36899cbfaaa"
+    },
+    {
+      "path": "examples/kr-domains/standalone/n-queens/variant-06.lp",
+      "bytes": 1116,
+      "sha256": "9d6ff26ac9bec747f4a237145ea732fd689d065545254186375afc682604fc3c"
+    },
+    {
+      "path": "examples/kr-domains/standalone/send-money/send-money.lp",
+      "bytes": 1954,
+      "sha256": "de33a9970b578cf06fa42a85b55aaefaea2fd12b6d78ae051a6654875cd9e704"
+    }
+  ],
+  "build_recipe": [
+    "cargo",
+    "build",
+    "--locked",
+    "--release",
+    "--target",
+    "aarch64-apple-darwin",
+    "--target-dir",
+    "<target-directory>",
+    "-p",
+    "zetesis-cli",
+    "-p",
+    "zetesis-experiments",
+    "-p",
+    "zetesis-validation"
+  ],
+  "build_scope": "Matched installer package/feature/profile recipe and pinned compiler; the prior inherited SDK and entire ambient environment were not fully captured. These are application comparisons, not isolated compiler-option effects.",
+  "execution": {
+    "backend": "cpu",
+    "grounding": "eager",
+    "oracle": "auto",
+    "closure_workers": 1,
+    "completion_workers": 1,
+    "clingo_workers": 1,
+    "native_output": "human; separate statistics observations",
+    "reference_output": "JSON; exhaustive optN",
+    "prior_formula_joins": null,
+    "current_formula_joins": "indexed",
+    "constants": "unchanged corpus defaults; queens N=8"
+  },
+  "schedule": {
+    "warmups": 1,
+    "repetitions": 3,
+    "selected": [
+      {
+        "selected": "standalone/n-queens/variant-01.lp"
+      },
+      {
+        "selected": "standalone/n-queens/variant-02.lp"
+      },
+      {
+        "selected": "standalone/n-queens/variant-03.lp"
+      },
+      {
+        "selected": "standalone/n-queens/variant-04.lp"
+      },
+      {
+        "selected": "standalone/n-queens/variant-05.lp"
+      },
+      {
+        "selected": "standalone/n-queens/variant-06.lp"
+      },
+      {
+        "selected": "standalone/send-money/send-money.lp"
+      },
+      {
+        "selected": "scenarios/task-allocation/variant-04/05-larger-mix.lp"
+      },
+      {
+        "selected": "scenarios/shortest-path/variant-01/06-layered-dag.lp"
+      }
+    ],
+    "memory_runs": 1
+  },
+  "limits": {
+    "answers": {
+      "max_cost_dimensions": 8388608,
+      "max_input_bytes": 8388608,
+      "max_symbols": 8388608,
+      "max_witnesses": 8388608
+    },
+    "campaign_timeout": {
+      "nanos": 0,
+      "secs": 30
+    },
+    "corpus": {
+      "cases": 94,
+      "contract_symbols": 65536,
+      "files": 108,
+      "manifest_bytes": 1048576,
+      "source_bytes": 1048576,
+      "total_source_bytes": 4194304
+    },
+    "max_executable_bytes": 268435456,
+    "max_report_bytes": 536870912,
+    "max_total_capture_bytes": 134217728,
+    "process": {
+      "cleanup_timeout": {
+        "nanos": 0,
+        "secs": 1
+      },
+      "max_output_bytes": 4194304,
+      "timeout": {
+        "nanos": 0,
+        "secs": 5
+      }
+    }
+  },
+  "comparison_scope": "complete_selected_displays_with_symbol_and_model_multiplicities; final_optimum_ties_and_costs; hidden_interpretations_unavailable",
+  "wall_scope": "fresh_process_spawn_capture_reap; output_included; comparison_hashing_excluded; no_cold_cache_claim",
+  "rss_scope": "separate_fresh_helper_RUSAGE_CHILDREN; excludes_helper; may_include_usage_propagated_by_waited_descendants; not_simultaneous_tree_RSS_or_device_memory; macOS_bytes_Linux_KiB_converted_to_bytes",
+  "curation_scope": "All 468 ordered observation receipts, raw elapsed nanoseconds and separate child-RSS bytes are retained. Process IDs, machine-local paths, raw output streams and diagnostic payloads are omitted. Recorded pass decisions preserve the original display-parity qualification; this view does not independently re-establish it or compare hidden interpretations. Original reports remain retained separately, bound below by SHA-256 and byte length. This is not a byte-identical raw archive, current-version qualification, or publication of the other Metal/LTO comparisons.",
+  "original_reports": [
+    {
+      "label": "prior-1",
+      "original_schema": 2,
+      "bytes": 25546207,
+      "sha256": "52eb70575c1e9bfd8897145ca4dc1acefdd610b7174f92237c9a90b07ac987cd"
+    },
+    {
+      "label": "current-1",
+      "original_schema": 2,
+      "bytes": 25602638,
+      "sha256": "c797e8bac5309ffa9bf7d7596e1e9d35e151339ec265f7218243dbf3c265f474"
+    },
+    {
+      "label": "current-2",
+      "original_schema": 2,
+      "bytes": 25602834,
+      "sha256": "04b5ccc04ae309cced8383ca8f45fb3b1a8ee9b50f866ddf755208935d1ad4db"
+    },
+    {
+      "label": "prior-2",
+      "original_schema": 2,
+      "bytes": 25546639,
+      "sha256": "79774f78e5fa8acfe0a99fcf03719a50ba0dc2e93cd2fe0925e5c677eab83844"
+    }
+  ]
+}

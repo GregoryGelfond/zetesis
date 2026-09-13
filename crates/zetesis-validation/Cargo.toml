@@ -37,3 +37,7 @@ path = "src/main.rs"
 name = "book-workload"
 path = "../../docs/book/examples/workload.rs"
 test = true
+
+[[example]]
+name = "release_observations"
+test = true

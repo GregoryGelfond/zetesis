@@ -64,6 +64,14 @@ memory census or device-memory measure. MiB means 1,048,576 bytes.
 
 ## Canonical release comparison
 
+The [curated observation data](observations/README.md) publishes all 468 ordered
+receipts for this historical nine-workload, four-block comparison, with exact
+timing/RSS samples and source, executable and original-report hashes. The
+maintained `release_observations` Rust example reproduces the three tables below.
+This derived view retains the original selected-display qualification scope;
+it is not a raw-output archive, a new parity check or qualification of the
+current implementation. The other Metal and LTO populations are outside it.
+
 The prior binary uses its default joins; the current binary explicitly requests
 Indexed. Current blocks largely resemble the closing prior block, while many
 first prior timings are lower. Matched clingo observations also drift (for
