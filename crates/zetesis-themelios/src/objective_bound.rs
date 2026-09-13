@@ -19,7 +19,10 @@ use zetesis_objective::{ObjectiveProgram, Score};
 /// Inclusive construction limits; zero is a real ceiling.
 #[derive(Clone, Copy, Debug)]
 pub struct ObjectivePlanLimits {
-    /// Supplied original semantic atoms.
+    /// Supplied original semantic atoms. Also bounds the requested lengths of
+    /// two integer lookup orders and one reusable merge-scratch vector. Each
+    /// reservation is fallible; allocator slack and atom payload are not a
+    /// process memory ceiling.
     pub max_atoms: usize,
     /// Complete positive relational bindings before filters.
     pub max_bindings: u64,
@@ -35,7 +38,8 @@ pub struct ObjectivePlanLimits {
     pub max_variables: usize,
     /// Positive conditions per lifted objective.
     pub max_body_atoms: usize,
-    /// Charged construction operations, including scalar payload comparisons.
+    /// Charged construction operations, including prepared-index comparisons
+    /// and writes, query probes and visited scalar descriptors/text bytes.
     pub max_work: u64,
 }
 impl Default for ObjectivePlanLimits {
@@ -180,6 +184,21 @@ impl ObjectivePlan {
     /// `atoms` must be the original theory's complete, unique atom
     /// catalog; each catalog index is reused verbatim. This API does not prove
     /// that the supplied relation covers all stable models.
+    ///
+    /// Preparation borrows the atoms and builds an `AtomIndex` containing only
+    /// row positions. The atom ceiling is checked before its fallible linear
+    /// storage reservations. Both index construction and later binary searches
+    /// charge the same work owner; preparation is not free. Predicate ranges
+    /// preserve original catalog order within a predicate, while full-key
+    /// membership returns the original dense identity. The temporary index is
+    /// dropped after planning; the resulting plan retains its eligibility DAG.
+    ///
+    /// All comparisons use checked canonical typed identity, including sign,
+    /// arity and structural values. This is separate from ASP term ordering.
+    /// A missing closed-condition atom is false without extending the catalog.
+    /// Work cutoffs reflect actual preparation/traversal, so a changed algorithm
+    /// can refuse at a different numeric cutoff while preserving typed failure
+    /// and the performed prefix. No partly constructed plan is returned.
     ///
     /// # Errors
     /// Refuses invalid catalogs, numeric normalization overflow, resource ceilings,

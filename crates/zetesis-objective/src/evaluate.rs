@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-use zetesis_core::{Atom, AtomPattern, Filter, Model, ModelIter, Term, Value};
+use zetesis_core::{Atom, AtomPattern, AtomRows, Filter, Model, Term, Value};
 use zetesis_cpu::Control;
 
 use crate::{
@@ -55,46 +55,11 @@ impl Work<'_> {
         left.checked_add(right)
             .ok_or_else(|| self.stop(Stop::ArithmeticOverflow))
     }
-    fn bytes(&mut self, left: &[u8], right: &[u8]) -> Result<Ordering, Error> {
-        for (&a, &b) in left.iter().zip(right) {
-            self.tick()?;
-            let order = a.cmp(&b);
-            if order != Ordering::Equal {
-                return Ok(order);
-            }
-        }
-        Ok(left.len().cmp(&right.len()))
-    }
-    // Canonical storage order for identity tests and deduplicated contribution
-    // keys. Equality agrees with logical-value identity; ordering is not the ASP
-    // term-order relation used by source comparisons. Each caller either tests
-    // equality or uses the same order to insert and find complete keys.
+    // One checked canonical identity operation is shared with catalog lookup.
+    // Source comparisons use ASP term order instead; these callers test equality
+    // or sort complete contribution keys consistently.
     fn compare_identity(&mut self, left: &Value, right: &Value) -> Result<Ordering, Error> {
-        self.tick()?;
-        if matches!(left, Value::Structured(_)) || matches!(right, Value::Structured(_)) {
-            for value in [left, right] {
-                for _ in 0..value.payload_bytes() {
-                    self.tick()?;
-                }
-            }
-            return Ok(left.cmp(right));
-        }
-        Ok(match (left, right) {
-            (Value::Structured(_), _) | (_, Value::Structured(_)) => {
-                unreachable!("structural branch handled")
-            }
-            (Value::Infimum, Value::Infimum) | (Value::Supremum, Value::Supremum) => {
-                Ordering::Equal
-            }
-            (Value::Infimum, _) | (_, Value::Supremum) => Ordering::Less,
-            (Value::Supremum, _) | (_, Value::Infimum) => Ordering::Greater,
-            (Value::Number(a), Value::Number(b)) => a.cmp(b),
-            (Value::String(a), Value::String(b)) | (Value::Symbol(a), Value::Symbol(b)) => {
-                return self.bytes(a.as_bytes(), b.as_bytes());
-            }
-            (Value::Number(_), _) | (Value::String(_), Value::Symbol(_)) => Ordering::Less,
-            (_, Value::Number(_)) | (Value::Symbol(_), Value::String(_)) => Ordering::Greater,
-        })
+        left.compare_identity_with(right, || self.tick())
     }
     fn resolve<'a>(
         &mut self,
@@ -144,30 +109,7 @@ impl Work<'_> {
     }
 
     fn contains(&mut self, model: &Model, query: &Atom) -> Result<bool, Error> {
-        // A charged scan avoids hiding key comparisons in an opaque set lookup.
-        for atom in model.atoms() {
-            self.tick()?;
-            if query.predicate().sign() != atom.predicate().sign()
-                || query.predicate().arity() != atom.predicate().arity()
-                || self.bytes(
-                    query.predicate().name().as_bytes(),
-                    atom.predicate().name().as_bytes(),
-                )? != Ordering::Equal
-            {
-                continue;
-            }
-            let mut equal = true;
-            for (left, right) in query.values().iter().zip(atom.values()) {
-                if self.compare_identity(left, right)? != Ordering::Equal {
-                    equal = false;
-                    break;
-                }
-            }
-            if equal {
-                return Ok(true);
-            }
-        }
-        Ok(false)
+        Ok(model.lookup().get_with(query, || self.tick())?.is_some())
     }
 
     fn condition(&mut self, condition: &Condition, model: &Model) -> Result<bool, Error> {
@@ -259,7 +201,7 @@ fn final_cost(priority: i32, total: i128) -> Result<i64, ErrorKind> {
 }
 
 struct Frame<'a> {
-    atoms: ModelIter<'a>,
+    atoms: AtomRows<'a, 'a>,
     trail_start: usize,
 }
 
@@ -286,7 +228,9 @@ impl Evaluator<'_> {
         let mut frames = self.work.reserve(template.positive().len())?;
         let mut trail = self.work.reserve(variables)?;
         frames.push(Frame {
-            atoms: model.atoms().iter(),
+            atoms: model
+                .lookup()
+                .predicate_with(template.positive()[0].predicate(), || self.work.tick())?,
             trail_start: 0,
         });
         while !frames.is_empty() {
@@ -297,18 +241,27 @@ impl Evaluator<'_> {
                 let variable = trail.pop().expect("nonempty undo trail");
                 binding[variable] = None;
             }
-            let Some(atom) = frames[depth].atoms.next() else {
+            let Some(row) = frames[depth].atoms.next() else {
                 frames.pop();
                 continue;
             };
-            if !self.matches(&template.positive()[depth], atom, &mut binding, &mut trail)? {
+            if !self.matches(
+                &template.positive()[depth],
+                row.atom(),
+                &mut binding,
+                &mut trail,
+            )? {
                 continue;
             }
             if depth + 1 == template.positive().len() {
                 self.active(template, &binding, slot)?;
             } else {
                 frames.push(Frame {
-                    atoms: model.atoms().iter(),
+                    atoms: model
+                        .lookup()
+                        .predicate_with(template.positive()[depth + 1].predicate(), || {
+                            self.work.tick()
+                        })?,
                     trail_start: trail.len(),
                 });
             }
@@ -324,15 +277,8 @@ impl Evaluator<'_> {
         trail: &mut Vec<usize>,
     ) -> Result<bool, Error> {
         self.work.tick()?;
-        if pattern.predicate().sign() != atom.predicate().sign()
-            || pattern.predicate().arity() != atom.predicate().arity()
-            || self.work.bytes(
-                pattern.predicate().name().as_bytes(),
-                atom.predicate().name().as_bytes(),
-            )? != Ordering::Equal
-        {
-            return Ok(false);
-        }
+        // The predicate window has already established the full signed signature;
+        // matching below still checks constants and repeated/bound whole values.
         for (term, value) in pattern.terms().iter().zip(atom.values()) {
             self.work.tick()?;
             match term {

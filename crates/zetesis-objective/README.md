@@ -106,17 +106,30 @@ allocator overhead and temporary borrowed tuple storage. It is not a process
 memory limit.
 
 Joins use iterative heap frames and an undo trail; they do not recurse on body
-depth or enumerate a global domain. Model atoms are scanned directly, without a
-separately allocated relation index. Scalar comparisons, string copying, binding
-work, key searches and key insertion shifts are charged, with shared cancellation
-and deadline polling at charged operations. Counts and storage reservations are
-checked. Input construction and standard allocator internals are outside this
-logical work budget.
+depth or enumerate a global domain. `Model::lookup` borrows the model's existing
+canonical selected positions without building another index or copying atoms.
+Each positive frame finds the exact signed-predicate/arity range by two binary
+searches and visits that range in canonical model order. The unchanged matcher
+then checks constants and repeated variables on whole typed values. Unselected
+catalog atoms are never exposed as true rows.
+
+The shared `Value::compare_identity_with` operation charges visited descriptors,
+text-byte comparisons and sequence ends before doing that work. This is canonical
+storage identity/order, distinct from ASP term ordering. It replaces both opaque
+structural equality and charges for unused payload suffixes. String copying,
+binding visits, key searches and key insertion shifts remain charged, with
+shared cancellation and deadline polling at charged operations. Counts and
+storage reservations are checked. Input construction and standard allocator
+internals are outside this logical work budget. Numeric work cutoffs can change
+with the performed algorithm; every refusal retains the actual charged prefix.
 
 Closed queries use linear temporary Boolean storage and visit operations in
-their admitted order. Atom tests use charged scans of the supplied model;
-worst-case query work is linear in query nodes times model payload. There is no
-recursive evaluation, implicit solver, or condition-specific score path.
+their admitted order. Atom tests use the same borrowed lookup's full-key binary
+search, with checked signed predicate and typed tuple comparisons. Each lookup
+uses logarithmically many probes; comparison cost depends on the actual shared
+payload prefixes. A complete miss is false, while a refused comparison is an
+unfinished evaluation. There is no recursive evaluation, implicit solver, or
+condition-specific score path.
 
 Retained keys use a sorted vector with binary-search lookup and charged linear
 insertion shifts. This simple implementation can take quadratic insertion work
@@ -145,6 +158,11 @@ zero priority slots, coalescing with lifted rows, malformed references and exact
 work ceilings. `zetesis-themelios/tests/objective_condition_bounds.rs` compares
 every candidate against every retained score to establish that optional bounds
 preserve closed-query costs and ties without changing the original atom catalog.
+`tests/lookup.rs` checks full typed key families, duplicate eligibility, exact
+work-refusal prefixes and the effect of adding unrelated predicates without
+using elapsed-time assertions. Prepared bound lookup is checked separately in
+`zetesis-themelios/tests/objective_bound_lookup.rs`, including independent mask
+costs on a shuffled catalog and query work separated from index preparation.
 
 Run `cargo test -p zetesis-objective` and
 `cargo clippy -p zetesis-objective --all-targets -- -D warnings` from the workspace.

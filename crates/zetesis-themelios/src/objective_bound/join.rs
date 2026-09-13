@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
-use zetesis_core::{Atom, AtomPattern, Filter, Predicate, Term, Value};
+use zetesis_core::{Atom, AtomIndex, AtomIndexError, AtomPattern, AtomRows, Filter, Term, Value};
 use zetesis_cpu::Control;
 use zetesis_ferraris::{AggregateElement, Node, Theory};
 use zetesis_objective::{Condition, ConditionNode, ObjectiveProgram, ObjectiveTemplate};
@@ -19,8 +19,7 @@ struct Key<'a> {
 }
 struct Compiler<'a> {
     work: Work<'a>,
-    atoms: &'a [Atom],
-    relations: BTreeMap<&'a Predicate, Vec<usize>>,
+    index: AtomIndex<'a>,
     nodes: Vec<Node>,
     keys: Vec<Key<'a>>,
     truth: usize,
@@ -47,26 +46,21 @@ pub(super) fn compile(
         return Err(work.limit(Resource::Atoms));
     }
     let mut nodes = Vec::new();
-    let mut relations: BTreeMap<&Predicate, Vec<usize>> = BTreeMap::new();
-    let mut unique = BTreeSet::new();
-    for (index, atom) in atoms.iter().enumerate() {
-        work.tick()?;
-        catalog_work(&mut work, atom, atoms.len())?;
-        if !unique.insert(atom) {
-            return Err(work.error(Kind::AtomCatalog));
-        }
-        let row = relations.entry(atom.predicate()).or_default();
-        row.try_reserve(1)
-            .map_err(|_| work.error(Kind::Allocation))?;
-        row.push(index);
+    // The existing atom ceiling admits both O(n) index orders and reusable
+    // merge scratch. Only integer row IDs are allocated; payload remains here.
+    let index = AtomIndex::new_with(atoms, || work.tick()).map_err(|error| match error {
+        AtomIndexError::Stopped(error) => error,
+        AtomIndexError::Allocation => work.error(Kind::Allocation),
+        AtomIndexError::Duplicate { .. } => work.error(Kind::AtomCatalog),
+    })?;
+    for index in 0..atoms.len() {
         work.node(&mut nodes, Node::Atom(index))?;
     }
     let falsum = work.node(&mut nodes, Node::False)?;
     let truth = work.node(&mut nodes, Node::Implies(falsum, falsum))?;
     let mut compiler = Compiler {
         work,
-        atoms,
-        relations,
+        index,
         nodes,
         keys: Vec::new(),
         truth,
@@ -100,9 +94,8 @@ pub(super) fn compile(
     })
 }
 
-struct Frame<'a> {
-    rows: &'a [usize],
-    position: usize,
+struct Frame<'index, 'source> {
+    rows: AtomRows<'index, 'source>,
     trail_start: usize,
 }
 
@@ -113,14 +106,6 @@ impl<'a> Compiler<'a> {
         }
         if template.tuple().len() > self.work.limits.max_tuple_width {
             return Err(self.work.limit(Resource::TupleWidth));
-        }
-        for pattern in template.positive() {
-            let depth = 2 * (usize::BITS - self.relations.len().leading_zeros()) + 1;
-            let amount = u64::try_from(pattern.predicate().name().len())
-                .ok()
-                .and_then(|value| value.checked_mul(u64::from(depth)))
-                .ok_or_else(|| self.work.error(Kind::Overflow))?;
-            self.work.charge(amount)?;
         }
         let count = self.variables(template)?;
         let mut binding = self.work.reserve(count)?;
@@ -139,12 +124,9 @@ impl<'a> Compiler<'a> {
                 .map_err(|_| self.work.error(Kind::Allocation))?;
             chosen.push(condition);
         }
-        let relations = &self.relations;
+        let lookup = self.index.lookup();
         frames.push(Frame {
-            rows: relations
-                .get(template.positive()[0].predicate())
-                .map_or(&[], Vec::as_slice),
-            position: 0,
+            rows: lookup.predicate_with(template.positive()[0].predicate(), || self.work.tick())?,
             trail_start: 0,
         });
         while !frames.is_empty() {
@@ -158,15 +140,15 @@ impl<'a> Compiler<'a> {
                     .ok_or_else(|| self.work.error(Kind::UnboundVariable))?;
                 binding[variable] = None;
             }
-            let Some(&atom_index) = frame.rows.get(frame.position) else {
+            let Some(row) = frame.rows.next() else {
                 frames.pop();
                 continue;
             };
-            frame.position += 1;
+            let atom_index = row.position();
             if !matches(
                 &mut self.work,
                 &template.positive()[depth],
-                &self.atoms[atom_index],
+                row.atom(),
                 &mut binding,
                 &mut trail,
             )? {
@@ -185,10 +167,10 @@ impl<'a> Compiler<'a> {
                 )?;
             } else {
                 frames.push(Frame {
-                    rows: relations
-                        .get(template.positive()[depth + 1].predicate())
-                        .map_or(&[], Vec::as_slice),
-                    position: 0,
+                    rows: lookup
+                        .predicate_with(template.positive()[depth + 1].predicate(), || {
+                            self.work.tick()
+                        })?,
                     trail_start: trail.len(),
                 });
             }
@@ -255,13 +237,8 @@ impl<'a> Compiler<'a> {
     }
 
     fn condition_atom(&mut self, query: &Atom) -> Result<usize, ObjectiveBoundError> {
-        for (index, atom) in self.atoms.iter().enumerate() {
-            self.work.tick()?;
-            catalog_work(&mut self.work, query, 1)?;
-            catalog_work(&mut self.work, atom, 1)?;
-            if atom == query {
-                return Ok(index);
-            }
+        if let Some(row) = self.index.lookup().get_with(query, || self.work.tick())? {
+            return Ok(row.position());
         }
         // Atoms outside the caller's complete catalog are false in every
         // represented candidate. Querying one must not enlarge that catalog.
@@ -279,12 +256,14 @@ fn matches<'a>(
     for (term, value) in pattern.terms().iter().zip(atom.values()) {
         work.tick()?;
         match term {
-            Term::Constant(constant) if compare(work, constant, value)? != Ordering::Equal => {
+            Term::Constant(constant)
+                if compare_identity(work, constant, value)? != Ordering::Equal =>
+            {
                 return Ok(false);
             }
             Term::Variable(variable) => {
                 if let Some(previous) = binding[*variable] {
-                    if compare(work, previous, value)? != Ordering::Equal {
+                    if compare_identity(work, previous, value)? != Ordering::Equal {
                         return Ok(false);
                     }
                 } else {
@@ -313,32 +292,15 @@ fn resolve<'a>(
             .ok_or_else(|| work.error(Kind::UnboundVariable)),
     }
 }
-fn compare(
+// Canonical typed identity for equality and contribution-key storage only.
+// This is not ASP term order; use the shared checked comparator, not Value::Ord
+// behind a conservative payload-size estimate.
+fn compare_identity(
     work: &mut Work<'_>,
     left: &Value,
     right: &Value,
 ) -> Result<Ordering, ObjectiveBoundError> {
-    work.tick()?;
-    if let (Value::String(a), Value::String(b)) | (Value::Symbol(a), Value::Symbol(b)) =
-        (left, right)
-    {
-        for (a, b) in a.bytes().zip(b.bytes()) {
-            work.tick()?;
-            let order = a.cmp(&b);
-            if order != Ordering::Equal {
-                return Ok(order);
-            }
-        }
-        return Ok(a.len().cmp(&b.len()));
-    }
-    for value in [left, right] {
-        if let Value::Structured(value) = value {
-            for _ in 0..value.payload_bytes() {
-                work.tick()?;
-            }
-        }
-    }
-    Ok(left.cmp(right))
+    left.compare_identity_with(right, || work.tick())
 }
 
 fn active<'a>(
@@ -359,7 +321,9 @@ fn active<'a>(
         let (left, right) = filter.terms();
         let left = resolve(work, left, binding)?;
         let right = resolve(work, right, binding)?;
-        if (compare(work, left, right)? == Ordering::Equal) != matches!(filter, Filter::Eq(..)) {
+        if (compare_identity(work, left, right)? == Ordering::Equal)
+            != matches!(filter, Filter::Eq(..))
+        {
             return Ok(());
         }
     }
@@ -409,7 +373,7 @@ fn key_order(
         return Ok(prefix);
     }
     for (left, right) in left.tuple.iter().zip(&right.tuple) {
-        let order = compare(work, left, right)?;
+        let order = compare_identity(work, left, right)?;
         if order != Ordering::Equal {
             return Ok(order);
         }
@@ -474,27 +438,4 @@ fn contribute<'a>(
     work.statistics.keys = keys.len();
     work.statistics.key_bytes = bytes;
     Ok(())
-}
-
-fn catalog_work(work: &mut Work<'_>, atom: &Atom, count: usize) -> Result<(), ObjectiveBoundError> {
-    // Conservative logical payload charge for ordered catalog/index lookups.
-    // This is not an allocator or RSS estimate.
-    let mut bytes = atom.predicate().name().len();
-    for value in atom.values() {
-        work.tick()?;
-        let payload = match value {
-            Value::String(text) | Value::Symbol(text) => text.len(),
-            Value::Structured(value) => value.payload_bytes(),
-            Value::Number(_) | Value::Infimum | Value::Supremum => 1,
-        };
-        bytes = bytes
-            .checked_add(payload)
-            .ok_or_else(|| work.error(Kind::Overflow))?;
-    }
-    let depth = 2 * (usize::BITS - count.leading_zeros()) + 1;
-    let amount = u64::try_from(bytes)
-        .ok()
-        .and_then(|value| value.checked_mul(u64::from(depth)))
-        .ok_or_else(|| work.error(Kind::Overflow))?;
-    work.charge(amount)
 }
