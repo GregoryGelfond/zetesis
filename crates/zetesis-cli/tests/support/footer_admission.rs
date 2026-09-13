@@ -106,6 +106,47 @@ fn every_footer_byte_ceiling_preserves_completed_cpu_evidence() {
 }
 
 #[test]
+fn batched_cpu_footer_admission_preserves_exact_completion() {
+    let mut options = options("countermodel");
+    options.completion_workers = std::num::NonZeroUsize::new(2).unwrap();
+    options.batch_size = std::num::NonZeroUsize::new(2).unwrap();
+    // Original satisfaction forces a, but the positive self-loop cannot
+    // establish a in the reduct's least model. The full family is empty.
+    let outcome = crate::run_finalized_with_diagnostics(
+        "a :- a. :- not a.".into(),
+        &options,
+        &mut io::sink(),
+        &mut io::sink(),
+        &Control::default(),
+    )
+    .unwrap();
+    assert!(outcome.semantic().unsatisfiable());
+    let execution = outcome.semantic().formula_execution().unwrap();
+    assert_eq!(execution.completion.requested_workers, 2);
+    assert!(execution.completion.entered > 0);
+    assert_eq!(execution.completion.completed, execution.completion.entered);
+    assert_eq!(execution.completion.failed, 0);
+    assert_eq!(execution.gpu_submitted_candidates, 0);
+    assert_eq!(execution.gpu_work, 0);
+    let document = checked_footer(&outcome, &mut options);
+    let encoded = &document["statistics"]["execution"];
+    assert!(encoded["adapter"].is_null());
+    assert!(encoded["gpu_limits"].is_null());
+    assert_eq!(encoded["gpu_submitted_candidates"], 0);
+    assert_eq!(
+        encoded["completion"]["entered"],
+        execution.completion.entered
+    );
+    assert_eq!(
+        encoded["completion"]["completed"],
+        execution.completion.completed
+    );
+    assert_eq!(encoded["completion"]["failed"], 0);
+    assert_eq!(encoded["completion"]["complete"], true);
+    assert_eq!(document["outcome"]["status"], "unsatisfiable");
+}
+
+#[test]
 fn every_footer_byte_ceiling_preserves_shared_cpu_refusals() {
     use crate::SourceBatching;
     use zetesis_cpu::{Stop, lazy::shared::Cause};
