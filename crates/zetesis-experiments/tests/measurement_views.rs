@@ -68,6 +68,36 @@ fn an_absent_batch_does_not_invent_success_accounting() {
     assert_eq!(view["downloaded_bytes"], 7);
 }
 
+#[test]
+fn adapter_view_preserves_the_supplied_metadata() {
+    use zetesis_experiments::tight_measurement::Device;
+    use zetesis_wgpu::{AdapterBackend, AdapterCategory, AdapterMetadata};
+
+    let supplied = AdapterMetadata {
+        name: "supplied metadata",
+        backend: AdapterBackend::Vulkan,
+        category: AdapterCategory::IntegratedGpu,
+        vendor_id: 0,
+        device_id: u32::MAX,
+        pci_bus_id: None,
+        driver: Some("driver name"),
+        driver_info: Some("driver detail"),
+    };
+    assert_eq!(
+        serde_json::to_value(Device::from(supplied)).unwrap(),
+        serde_json::json!({
+            "name": "supplied metadata",
+            "backend": "Vulkan",
+            "category": "IntegratedGpu",
+            "vendor_id": 0,
+            "device_id": 4_294_967_295_u32,
+            "pci_bus_id": null,
+            "driver": "driver name",
+            "driver_info": "driver detail"
+        })
+    );
+}
+
 struct Prefix {
     remaining: usize,
     bytes: Vec<u8>,
