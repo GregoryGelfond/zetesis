@@ -36,6 +36,12 @@ pub(crate) use relations::{Relations, SupportCatalog};
 /// Construction is private to `build`: reaching a resource ceiling never
 /// produces this owner. Its finite fixed point is an observed result, not a
 /// promise that recursive value generation terminates for every source.
+///
+/// Answer-set coverage additionally requires the source producer's reduct
+/// projection property. `NormalSupport.projection_compatible` proves it for
+/// mathematical normalized rules; complete source bindings, aggregate values
+/// and head permissions must connect this builder to that property. The
+/// producer map in `proofs/guide/source-support.md` records those boundaries.
 pub(crate) struct CompletedCatalog {
     catalog: SupportCatalog,
 }

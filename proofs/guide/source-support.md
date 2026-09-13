@@ -39,6 +39,43 @@ retaining their original equalities in the formula theory. Head permissions
 remain independent of measured contributions. The existing aggregate coverage
 laws are ingredients of this argument, not a verification of the Rust compiler.
 
+## A proved normal producer
+
+[NormalSupport](../Zetesis/NormalSupport.lean) supplies a concrete producer over
+the existing mathematical normalized rules. A rule proposes its atomic head
+when its ground filter holds and its positive body belongs to the carrier.
+It ignores candidate gates. A constraint proposes no head.
+
+`projection_compatible` proves the required property:
+
+1. Suppose `M` models the program and `C` is closed under possible heads.
+2. If a frozen rule's body holds in `M ∩ C`, its positive body holds in both
+   `M` and `C`. Original satisfaction puts the head in `M`; producer closure
+   puts it in `C`. Thus the head belongs to `M ∩ C`.
+3. Removing positive atoms preserves constraints with the same frozen gates.
+4. `NormalFerraris.models_frozen_translate` transfers that normalized reduct
+   model to the formula reduct.
+
+`projection_compatible_of_coverage` extends the result to any producer containing
+every normal proposal at every carrier. Extra possible heads do not invalidate
+coverage. `answer_set_inside_closed` then applies reduct minimality.
+The existing `NormalFerraris.ferraris_answer_set_iff_closure` separately gives
+the exact least-closure-and-constraints membership test. These results share
+the normalized-rule semantics; they do not replace the general formula reduct.
+
+## Source producer correspondence
+
+| Producer | Established mathematical part | Remaining implementation obligation |
+| --- | --- | --- |
+| Normalized atomic heads and constraints | `NormalSupport` proves projection compatibility, including producers with extra proposals | Rust must supply every relevant typed ground instance and preserve checked filters, atom identity and completion |
+| Source normal rules with joins and generated values | The normalized-rule result applies after faithful instantiation | Prove complete whole bindings and generated head values; source classification or a completed loop alone does not establish this |
+| Disjunctive and choice heads | Existing head/support laws describe necessary producers and head permissions | Connect local eligibility, every positive head occurrence and the original formula reduct to possible-support projection |
+| Aggregate assignments and measured heads | `AggregateAssignment`, `ValueExtrema` and `SourceMeasures` supply key/value coverage laws | Preserve correlated keys/values, checked arithmetic and independent head permissions through concrete joins and lowering |
+
+The first row is a theorem over the mathematical representation. The other rows
+identify the source-to-representation work still needed. In particular, a
+dependency projection's class verdict cannot certify omitted source semantics.
+
 ## The completed owner and its consumers
 
 The Rust [support builder](../../crates/zetesis-themelios/src/formula_support.rs)

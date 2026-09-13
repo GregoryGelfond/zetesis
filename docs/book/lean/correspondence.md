@@ -176,12 +176,16 @@ schedule before reduct masking. Constructing its packed levels, preserving node
 IDs and proving concurrent writes and barriers refine the sequential schedule
 remain implementation obligations. A cached order does not cache candidate truth.
 
-Payload bookkeeping charges a whole amount before the corresponding comparison
-or copy. `WorkCharge` equates the completed work prefix with repeated unit
-charging under unchanged control, including exact quota exhaustion. A positive
-charge polls control once; a zero charge remains a no-op. There is no promise to
-observe asynchronous cancellation between bookkeeping units. Rust word bounds
-and the placement of control checks remain concrete implementation obligations.
+The CPU oracle's [`Work::charge`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/oracle.rs)
+charges a payload amount before the corresponding comparison or copy.
+[`WorkCharge`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/WorkCharge.lean)
+equates its available work prefix with repeated unit charging under unchanged
+control, including exact quota exhaustion. A positive charge polls control once;
+a zero charge remains a no-op. This law describes the CPU oracle's prefix
+convention. Formula source admission instead checks an entire proposed charge
+before changing its counter. Rust word bounds and the placement of control
+checks remain concrete implementation obligations; the law does not promise
+observation of asynchronous cancellation between bookkeeping units.
 
 Eager support joins partition new tuple combinations by their first new source
 occurrence. `DeltaJoins.partition_complete` proves coverage and
@@ -200,6 +204,26 @@ remains outstanding. The Rust implementation must additionally preserve this
 invariant under word arithmetic, locking, unwinding and cancellation. A joined
 batch records spent operations only after all leases settle; a lease is not
 evidence of candidate execution or membership.
+
+## Candidate generation and query representation
+
+Candidate restrictions and storage transformations preserve different objects.
+A necessary restriction may remove impossible proposals; a query representation
+must preserve the same classical assignments. Neither operation changes the
+original program or the reduct used to check membership.
+
+| Law | Implementation boundary | Remaining correspondence |
+| --- | --- | --- |
+| [`GateRestrictions.answer_set_avoids`, `suffix_region_rejected`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/GateRestrictions.lean) | Source-derived positive gate restrictions and binary seed-region skipping | Each witness uses actual unconditional facts, complete source bindings and the stated gate indices. Possible support alone is insufficient. Rust counter jumps and resource accounting need refinement. |
+| [`DisjunctiveSupport.answer_set_supported`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DisjunctiveSupport.lean) | The necessary support restriction for ordinary disjunctive heads | Extraction must cover the complete asserted-head grammar, coalesce repeated head atoms and preserve the original theory as the reduct subject. DAG extraction and Boolean encoding remain unproved. |
+| [`PackedQueryLiterals.decode_encode`, `packed_truth`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/PackedQueryLiterals.lean) | Packed classical literals in `Cnf` and borrowed clause views | Admission must establish machine representability and valid offsets, including repeated offsets for empty clauses. Natural-number arithmetic does not prove machine operations or allocation. |
+| [`IndexedCandidates.index_equals_all_blocks`, `failed_literal_forced`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/IndexedCandidates.lean) | The authoritative semantic-projection exclusion index and independently checked completed assignments | Flat-trie insertion, watches and trial undo must implement exact complete keys. A failed-literal conclusion needs a completed branch refutation; a stopped trial supplies none. |
+| [`CandidateCursor.completed_coverage`, `stable_outputs_exact`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/CandidateCursor.lean) | Retained candidate traversal, completed checks and exhaustion | Rust traversal must denote the abstract finite forest, preserve its open remainder and block only completed checks. Exact accepted output additionally requires candidate coverage and a correct membership oracle. |
+
+The [execution chapter](../architecture/execution.md) explains these operations
+in the solver. The [candidate cursor contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/docs/candidate-cursor.md)
+and [projection-index contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/docs/candidate-pruning.md)
+describe their concrete ownership and failure boundaries.
 
 ## Representation and source laws
 
@@ -379,6 +403,15 @@ carrier must preserve that model's frozen reduct; minimality then excludes
 atoms outside the carrier. `completed_activity_covers` derives optional/absent
 truth coverage for objective queries. Proposal monotonicity is a separate
 hypothesis of the finite-stage containment law, not a termination theorem.
+
+[`NormalSupport`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/NormalSupport.lean)
+discharges that projection premise for possible heads of mathematical normalized
+rules, and for any producer containing their proposals. Original satisfaction
+supplies each required head's membership in the model; producer closure supplies
+its membership in the carrier. Constraints survive restriction under unchanged
+gates. The normal/Ferraris bridge then supplies the same frozen-reduct verdict.
+This advances the mathematical producer argument without certifying Rust's
+source bindings, rich heads or aggregate assignment machinery.
 
 The Rust [support builder](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support.rs)
 creates `CompletedCatalog` only after a full round adds no atom. Its immutable

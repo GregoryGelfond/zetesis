@@ -14,7 +14,10 @@ Answer-set coverage needs a separate semantic premise. `ProjectionCompatible`
 says that intersecting any original model with a producer-closed carrier still
 models the original model's frozen reduct. Minimality then excludes atoms
 outside that carrier. This premise must be established for the source profile;
-it is not a consequence of finite storage or an empty delta alone.
+it is not a consequence of finite storage or an empty delta alone. The companion
+`NormalSupport` module proves this premise for the mathematical normal-rule
+producer and for any producer covering its proposals. Richer source producers
+still need their own correspondence.
 
 For the Rust adapter, ordinary positive joins supply necessary data bindings;
 nonbinding aggregate/conditional truth never removes possible producers.

@@ -92,6 +92,7 @@ import Zetesis.EvaluatedWitnesses
 import Zetesis.ObjectiveValues
 import Zetesis.ExtremumPresence
 import Zetesis.NormalFerraris
+import Zetesis.NormalSupport
 import Zetesis.OrderedBounds
 import Zetesis.ObjectivePriorities
 import Zetesis.AggregateInvariants

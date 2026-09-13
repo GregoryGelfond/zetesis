@@ -30,6 +30,7 @@ The maintained full index is
 | Must an ordinary disjunctive answer set have head support? | `DisjunctiveSupport.answer_set_supported` | Complete ordinary producer grammar; unchanged original theory |
 | When may candidate domains be narrowed? | `DomainContraction.compatible_contraction` | Unchanged theory, fixed assignment interpretation and activation, recognized constraints and a sound filter |
 | When does completed source support cover an answer set? | `SourceSupport.stable_inside_closed`, `completed_activity_covers` | Completed producer closure and an explicit original-model/reduct projection premise; no termination or realizability conclusion |
+| Which possible-head producer establishes the projection premise? | `NormalSupport.projection_compatible`, `projection_compatible_of_coverage` | Mathematical normalized rules, or a producer covering their proposals; concrete source instantiation remains unproved |
 | When is a lazy closure complete? | `LiftedBridge.completed_lazy_stage_exact` | Sound stages, conceptual grounding, final enabled-instance coverage and closure |
 | Can a union scan serve independent worlds? | `LazyRounds.world_consequences_exact`, `world_constraints_exact` | Individual-world gates and positive truth are still checked |
 | Can empty world masks prune joins? | `WorldMasks.masked_scan_covers_world` | Membership belongs to the current immutable snapshots; no future-carrier conclusion |
