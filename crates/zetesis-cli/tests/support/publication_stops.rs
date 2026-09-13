@@ -182,6 +182,11 @@ fn publication_stop_before_first_record_keeps_unclassified_search() {
             assert_eq!(value["outcome"]["status"], "incomplete");
             assert!(value["outcome"]["completion"].is_null());
             assert_eq!(value["outcome"]["coverage"], "unavailable");
+            assert_eq!(value["outcome"]["verified_models"], 1);
+            assert_eq!(
+                value["outcome"]["checked"],
+                outcome.semantic().candidate_progress()
+            );
         }
     }
 }

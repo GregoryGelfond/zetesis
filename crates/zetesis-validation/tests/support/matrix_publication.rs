@@ -124,12 +124,16 @@ fn publication_stop_cannot_contradict_status_counts_or_semantic_evidence() {
 }
 
 #[test]
-fn publication_stop_does_not_hide_failed_exit_or_writer_error() {
-    let mut document = stopped();
+fn publication_stop_does_not_hide_failed_exit() {
     assert_eq!(
-        outcome::check(&document, Some(exit(0))).unwrap_err().0,
+        outcome::check(&stopped(), Some(exit(0))).unwrap_err().0,
         Decision::InvocationFailure
     );
+}
+
+#[test]
+fn publication_stop_does_not_hide_writer_error() {
+    let mut document = stopped();
     document["outcome"]["status"] = json!("failed");
     document["outcome"]["error"] = json!({"kind":"output","secondary_output_failure":true});
     assert_eq!(
@@ -138,4 +142,21 @@ fn publication_stop_does_not_hide_failed_exit_or_writer_error() {
     );
     assert_eq!(document["outcome"]["completion"], "exhausted");
     assert_eq!(document["outcome"]["optimization"]["optimal"], true);
+}
+
+#[test]
+fn publication_stop_without_semantic_progress_is_not_a_producer_outcome() {
+    let mut document = stopped();
+    document["models"] = json!([]);
+    let outcome = &mut document["outcome"];
+    outcome["completion"] = Value::Null;
+    outcome["coverage"] = json!("unavailable");
+    outcome["published_models"] = json!(0);
+    outcome["verified_models"] = Value::Null;
+    outcome["checked"] = Value::Null;
+    outcome["optimization"] = Value::Null;
+    assert_eq!(
+        outcome::check(&document, Some(exit(3))).unwrap_err().0,
+        Decision::InvalidReport
+    );
 }
