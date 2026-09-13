@@ -14,7 +14,7 @@ use crate::formula_execution::{Failure, MembershipExecution};
 use crate::objective_bounds::Bounds;
 use crate::optimization::Incumbents;
 use crate::phase_timing::{Recorder, SolvePhase};
-use crate::{AnswerSelection, Completion, Interruption, SemanticOutcome, SolveConfig, SolveError};
+use crate::{AnswerSelection, Interruption, SearchState, SemanticOutcome, SolveConfig, SolveError};
 
 pub(crate) struct FormulaSession<'a, E> {
     input: Input<'a>,
@@ -88,8 +88,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             Ok(models) => models,
             Err(error) => {
                 self.complete(
-                    Completion::Interrupted,
-                    Some(Interruption::Countermodel(error)),
+                    SearchState::Interrupted(Interruption::Countermodel(error)),
                     phases,
                 );
                 return Ok(());
@@ -106,8 +105,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             crate::countermodel::prepare_certificate(models, config, observations, phases)?
         {
             self.complete(
-                Completion::Interrupted,
-                Some(Interruption::Countermodel(error)),
+                SearchState::Interrupted(Interruption::Countermodel(error)),
                 phases,
             );
             return Ok(());
@@ -160,7 +158,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             && config.models != 0
             && self.yielded >= config.models
         {
-            self.complete(Completion::RequestedModels, None, phases);
+            self.complete(SearchState::RequestedModels, phases);
             return None;
         }
         // The retained candidate stream owns cumulative work and exact blocks;
@@ -175,8 +173,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                 Some(Ok(model)) => model,
                 Some(Err(Failure::Search(error))) => {
                     self.complete(
-                        Completion::Interrupted,
-                        Some(Interruption::Countermodel(error)),
+                        SearchState::Interrupted(Interruption::Countermodel(error)),
                         phases,
                     );
                     return self.next_retained().map(Ok);
@@ -187,7 +184,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                 }
                 None => {
                     debug_assert!(models.exhausted());
-                    self.complete(Completion::Exhausted, None, phases);
+                    self.complete(SearchState::Exhausted, phases);
                     return self.next_retained().map(Ok);
                 }
             };
@@ -213,7 +210,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                         Some(Ok((model, Some(score))))
                     }
                     Err(reason) => {
-                        self.complete(Completion::Interrupted, Some(reason), phases);
+                        self.complete(SearchState::Interrupted(reason), phases);
                         None
                     }
                 };
@@ -246,7 +243,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                 }
                 Ok(false) => {}
                 Err(reason) => {
-                    self.complete(Completion::Interrupted, Some(reason), phases);
+                    self.complete(SearchState::Interrupted(reason), phases);
                     return self.next_retained().map(Ok);
                 }
             }
@@ -260,15 +257,9 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         })
     }
 
-    fn complete(
-        &mut self,
-        completion: Completion,
-        interruption: Option<Interruption>,
-        phases: &Recorder,
-    ) {
+    fn complete(&mut self, search_state: SearchState, phases: &Recorder) {
         let mut outcome = self.snapshot(phases);
-        outcome.completion = Some(completion);
-        outcome.interruption = interruption;
+        outcome.search_state = Some(search_state);
         self.final_outcome = Some(outcome);
         self.ready = self.incumbents.take_models();
     }
@@ -300,8 +291,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             verified: statistics.map_or(0, |s| s.stable_models),
             scored: self.incumbents.scored(),
             retained: self.incumbents.retained(),
-            completion: None,
-            interruption: None,
+            search_state: None,
             optimization: self.incumbents.metadata().cloned(),
             checked: statistics.map_or(0, |s| s.candidates),
             gate_atoms: self.input.gate_atoms,

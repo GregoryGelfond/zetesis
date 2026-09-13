@@ -23,7 +23,7 @@ use crate::formula_execution::Execution;
 use crate::formula_session::FormulaSession;
 use crate::phase_timing::{Recorder, SolvePhase};
 use crate::{
-    AnswerSelection, Completion, ExecutionResources, Grounder, Interruption, Oracle, PhaseTimings,
+    AnswerSelection, ExecutionResources, Grounder, Interruption, Oracle, PhaseTimings,
     SemanticOutcome, SolveConfig, SolveError, SolveFailure, WorldView, WorldViewFailure,
     WorldViewLimits,
 };
@@ -560,8 +560,7 @@ impl<'a> Session<'a> {
                     verified: 0,
                     scored: 0,
                     retained: 0,
-                    completion: Some(Completion::Interrupted),
-                    interruption: Some(interruption),
+                    search_state: Some(crate::SearchState::Interrupted(interruption)),
                     optimization: None,
                     checked: 0,
                     gate_atoms: 0,

@@ -9,7 +9,7 @@ use zetesis_cpu::{CandidateLimits, CandidateRestrictionLimits, Candidates, Contr
 use crate::engine::Engine;
 use crate::phase_timing::{Recorder, SolvePhase};
 use crate::{
-    Completion, ExecutionResources, Interruption, SemanticOutcome, SolveConfig, SolveError,
+    ExecutionResources, Interruption, SearchState, SemanticOutcome, SolveConfig, SolveError,
 };
 
 pub(crate) struct ClosureSession<'a> {
@@ -22,8 +22,7 @@ pub(crate) struct ClosureSession<'a> {
     verified: u64,
     checked: u64,
     yielded: usize,
-    completion: Option<Completion>,
-    interruption: Option<Interruption>,
+    search_state: Option<SearchState>,
     terminal: bool,
 }
 
@@ -68,8 +67,7 @@ impl<'a> ClosureSession<'a> {
             verified: 0,
             checked: 0,
             yielded: 0,
-            completion: None,
-            interruption: None,
+            search_state: None,
             terminal: false,
         })
     }
@@ -84,7 +82,7 @@ impl<'a> ClosureSession<'a> {
             return None;
         }
         if config.models != 0 && self.yielded >= config.models {
-            self.complete(Completion::RequestedModels, None);
+            self.complete(SearchState::RequestedModels);
             return None;
         }
         // All ready results are already checked. Consuming their prefix changes
@@ -99,17 +97,17 @@ impl<'a> ClosureSession<'a> {
                     }
                     Ok(None) => continue,
                     Err(stop) => {
-                        self.complete(Completion::Interrupted, Some(Interruption::Oracle(stop)));
+                        self.complete(SearchState::Interrupted(Interruption::Oracle(stop)));
                         return None;
                     }
                 }
             }
             if let Some(stop) = self.pending_stop {
-                self.complete(Completion::Interrupted, Some(Interruption::Oracle(stop)));
+                self.complete(SearchState::Interrupted(Interruption::Oracle(stop)));
                 return None;
             }
             if self.finished_batch {
-                self.complete(Completion::Exhausted, None);
+                self.complete(SearchState::Exhausted);
                 return None;
             }
             let count = if self.checked == 0 {
@@ -152,9 +150,8 @@ impl<'a> ClosureSession<'a> {
         }
     }
 
-    fn complete(&mut self, completion: Completion, interruption: Option<Interruption>) {
-        self.completion = Some(completion);
-        self.interruption = interruption;
+    fn complete(&mut self, search_state: SearchState) {
+        self.search_state = Some(search_state);
         self.terminal = true;
     }
 
@@ -169,13 +166,9 @@ impl<'a> ClosureSession<'a> {
             verified: self.verified,
             scored: 0,
             retained: 0,
-            completion: self.completion,
-            interruption: self.interruption.or_else(|| {
-                self.completion
-                    .is_none()
-                    .then_some(self.pending_stop)
-                    .flatten()
-                    .map(Interruption::Oracle)
+            search_state: self.search_state.or_else(|| {
+                self.pending_stop
+                    .map(|stop| SearchState::PendingInterruption(Interruption::Oracle(stop)))
             }),
             optimization: None,
             checked: self.checked,

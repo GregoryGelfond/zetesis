@@ -24,6 +24,14 @@ models. A zero display count, an empty consumer vector, or `completion() == None
 cannot establish inconsistency. A requested model limit and an interrupted
 search are distinct completion states.
 
+`SemanticOutcome::search_state()` carries the status and its reason together.
+`SearchState::PendingInterruption(reason)` records a known batch stop while
+previously checked answers remain to be consumed. After that prefix is drained,
+`Interrupted(reason)` is final. The compatibility `completion()` and
+`interruption()` accessors derive from this state; a pending interruption has
+no final completion classification. An absent state makes no claim about why
+the caller has not obtained a stopping classification.
+
 `SemanticOutcome::selection()` identifies the family requested by the session.
 `All` ranges over the original program; `Optimal` permits sound exclusion of
 worse candidates. `Completion::Exhausted` therefore does not by itself identify

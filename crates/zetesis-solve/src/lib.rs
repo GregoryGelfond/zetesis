@@ -89,7 +89,7 @@ mod phase_timing;
 mod stage_timing;
 mod grounding_timing;
 
-pub use completion::{Completion, Interruption};
+pub use completion::{Completion, Interruption, SearchState};
 pub use error::{FailureParts, SolveError, SolveFailure};
 pub use execution_observation::{ExecutionObservation, ExecutionObserver};
 pub use execution_resources::ExecutionResources;

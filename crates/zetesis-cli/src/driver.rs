@@ -1,7 +1,7 @@
 use crate::failure::Progress;
 use crate::phase_timing::Recorder;
 use crate::presentation::Diagnostics;
-use crate::{Backend, Completion, Grounder, Interruption, Options, RunFailure};
+use crate::{Backend, Completion, Grounder, Interruption, Options, RunFailure, SearchState};
 use std::fmt;
 use std::io::{self, Write};
 use zetesis_core::Model;
@@ -618,13 +618,16 @@ pub(crate) fn finish(
     color: crate::ColorMode,
 ) -> Result<(), RunError> {
     let semantic = progress.semantic().ok_or(RunError::CompletionUnavailable)?;
-    let completion = progress.completion()?;
+    let state = semantic
+        .search_state()
+        .ok_or(RunError::CompletionUnavailable)?;
+    state.completion().ok_or(RunError::CompletionUnavailable)?;
     // JSON emits one final outcome after statistics and failure accounting.
     if json {
         return Ok(());
     }
-    match completion {
-        Completion::Exhausted => {
+    match state {
+        SearchState::Exhausted => {
             if semantic.unsatisfiable() {
                 color.status(output, "UNSATISFIABLE")?;
             } else if semantic.optimum_proved() {
@@ -634,20 +637,15 @@ pub(crate) fn finish(
             }
             writeln!(output, "Coverage: exhausted")?;
         }
-        Completion::RequestedModels => {
+        SearchState::RequestedModels => {
             color.status(output, "SATISFIABLE")?;
             writeln!(output, "Coverage: partial (requested model count reached)")?;
         }
-        Completion::Interrupted => {
-            writeln!(
-                output,
-                "INCOMPLETE: {}",
-                semantic
-                    .interruption()
-                    .expect("interrupted outcome carries a reason")
-            )?;
+        SearchState::Interrupted(reason) => {
+            writeln!(output, "INCOMPLETE: {reason}")?;
             writeln!(output, "Coverage: partial")?;
         }
+        SearchState::PendingInterruption(_) => return Err(RunError::CompletionUnavailable),
     }
     if semantic.countermodel_statistics().is_some()
         || matches!(semantic.interruption(), Some(Interruption::Countermodel(_)))

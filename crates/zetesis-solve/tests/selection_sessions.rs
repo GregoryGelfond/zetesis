@@ -9,7 +9,7 @@ use zetesis_core::{
 use zetesis_cpu::{Control, Stop};
 use zetesis_solve::{
     Backend, Completion, ExecutionObservation, ExecutionObserver, Grounder, Interruption,
-    PreparedInput, SemanticOutcome, Session, SolveConfig,
+    PreparedInput, SearchState, SemanticOutcome, Session, SolveConfig,
 };
 
 const PERMITTED_CANDIDATES: u64 = 192;
@@ -230,6 +230,51 @@ fn candidate_limits_preserve_the_verified_prefix() {
             Some(Interruption::Oracle(Stop::CandidateLimit))
         );
         assert_eq!(outcome.candidate_progress(), 4);
+        assert_eq!(outcome.verified_models(), 4);
+    }
+}
+
+#[test]
+fn pending_candidate_stop_preserves_the_checked_answers_before_finalization() {
+    let fixture = Fixture::new();
+    let reason = Interruption::Oracle(Stop::CandidateLimit);
+    for config in configurations() {
+        let mut session = Session::builder(
+            PreparedInput::program(&fixture.program),
+            SolveConfig {
+                max_candidates: 4,
+                ..config
+            },
+            Control::default(),
+        )
+        .start()
+        .unwrap();
+        assert_eq!(session.progress().search_state(), None);
+        assert!(session.next().unwrap().is_ok());
+        assert_eq!(session.progress().search_state(), None);
+        for consumed in 2..=4 {
+            assert!(session.next().unwrap().is_ok());
+            let progress = session.progress();
+            // The second batch verified three answers and hit its candidate
+            // bound. Its stop must not erase any checked answer in that batch.
+            assert_eq!(progress.verified_models(), 4);
+            assert_eq!(progress.candidate_progress(), consumed);
+            assert_eq!(
+                progress.search_state(),
+                Some(SearchState::PendingInterruption(reason))
+            );
+            assert_eq!(progress.completion(), None);
+            assert_eq!(progress.interruption(), Some(reason));
+            assert!(!progress.unsatisfiable());
+        }
+        assert!(session.next().is_none());
+        let outcome = session.outcome().unwrap();
+        assert_eq!(
+            outcome.search_state(),
+            Some(SearchState::Interrupted(reason))
+        );
+        assert_eq!(outcome.completion(), Some(Completion::Interrupted));
+        assert_eq!(outcome.interruption(), Some(reason));
         assert_eq!(outcome.verified_models(), 4);
     }
 }

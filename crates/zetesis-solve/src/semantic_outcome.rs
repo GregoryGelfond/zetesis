@@ -1,6 +1,6 @@
 //! Established semantic evidence, independent of external publication.
 
-use crate::{Completion, Interruption, Optimization};
+use crate::{Completion, Interruption, Optimization, SearchState};
 
 /// The answer family requested by a semantic session, independently of whether
 /// it was completely searched or delivered.
@@ -25,8 +25,7 @@ pub struct SemanticOutcome {
     pub(crate) verified: u64,
     pub(crate) scored: u64,
     pub(crate) retained: usize,
-    pub(crate) completion: Option<Completion>,
-    pub(crate) interruption: Option<Interruption>,
+    pub(crate) search_state: Option<SearchState>,
     pub(crate) optimization: Option<Optimization>,
     pub(crate) checked: u64,
     pub(crate) gate_atoms: usize,
@@ -50,8 +49,7 @@ impl SemanticOutcome {
             verified: 0,
             scored: 0,
             retained: 0,
-            completion: Some(Completion::Interrupted),
-            interruption: Some(interruption),
+            search_state: Some(SearchState::Interrupted(interruption)),
             optimization: None,
             checked: 0,
             gate_atoms: 0,
@@ -138,17 +136,30 @@ impl SemanticOutcome {
         self.retained
     }
 
+    /// Established search status, including a stop pending behind checked answers.
+    /// Absent when no stopping classification has been established.
+    #[must_use]
+    pub const fn search_state(&self) -> Option<SearchState> {
+        self.search_state
+    }
+
     /// Established search coverage; absent after an unrelated failure or when the
     /// consumer stops pulling before the engine establishes a stopping classification.
     #[must_use]
     pub const fn completion(&self) -> Option<Completion> {
-        self.completion
+        match self.search_state {
+            Some(state) => state.completion(),
+            None => None,
+        }
     }
 
     /// Established logical stop, independent of a later delivery failure.
     #[must_use]
     pub const fn interruption(&self) -> Option<Interruption> {
-        self.interruption
+        match self.search_state {
+            Some(state) => state.interruption(),
+            None => None,
+        }
     }
 
     /// Retained objective evidence; a score alone does not establish an optimum.
@@ -161,13 +172,13 @@ impl SemanticOutcome {
     #[must_use]
     pub const fn optimum_proved(&self) -> bool {
         matches!(self.selection, Some(AnswerSelection::Optimal))
-            && matches!(self.completion, Some(Completion::Exhausted))
+            && matches!(self.search_state, Some(SearchState::Exhausted))
             && self.optimization.is_some()
     }
 
     /// Complete search found no stable model, independently of output delivery.
     #[must_use]
     pub const fn unsatisfiable(&self) -> bool {
-        matches!(self.completion, Some(Completion::Exhausted)) && self.verified == 0
+        matches!(self.search_state, Some(SearchState::Exhausted)) && self.verified == 0
     }
 }
