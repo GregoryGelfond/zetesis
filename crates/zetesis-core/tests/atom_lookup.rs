@@ -169,7 +169,7 @@ fn predicate_ranges_preserve_original_rows() {
             .predicate_with(query.predicate(), || Ok::<_, Infallible>(()))
             .unwrap()
             .map(|row| {
-                assert!(std::ptr::eq(row.atom(), &atoms[row.position()]));
+                assert!(std::ptr::eq(row.atom(), &raw const atoms[row.position()]));
                 row.position()
             })
             .collect();
@@ -233,7 +233,7 @@ fn model_lookup_never_selects_hidden_catalog_atoms() {
     let selected: Vec<_> = lookup
         .predicate_with(&predicate, || Ok::<_, Infallible>(()))
         .unwrap()
-        .map(|row| row.atom())
+        .map(zetesis_core::AtomRow::atom)
         .collect();
     assert_eq!(
         selected,

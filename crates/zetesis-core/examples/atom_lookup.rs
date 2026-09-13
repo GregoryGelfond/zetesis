@@ -171,7 +171,7 @@ fn checked_queries(
     for _ in 0..repeats {
         for query in queries {
             let key = lookup.get_with(&query.atom, || work.tick())?;
-            assert_eq!(key.map(|row| row.position()), query.key);
+            assert_eq!(key.map(zetesis_core::AtomRow::position), query.key);
             let rows = lookup.predicate_with(query.atom.predicate(), || work.tick())?;
             assert_eq!(rows.len(), query.rows.len());
             for (actual, &expected) in rows.zip(&query.rows) {
