@@ -3,8 +3,8 @@
 use std::io::Write;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 use std::sync::{Mutex, MutexGuard};
+use std::time::Duration;
 
 use serde_json::{Value, json};
 
@@ -13,6 +13,9 @@ use crate::corpus_comparison::{NativeBackend, NativeOracle, Request as Options};
 
 const NATIVE: &str = "Answer: 1\na\nSATISFIABLE\nCoverage: exhausted\nModels: 1\n";
 const PHASE_TIMINGS: &str = include_str!("phase_statistics.txt");
+// Fixture publication/execution checks correctness under concurrent suite work,
+// not latency. Deadline regressions retain their separately authored limits.
+const FIXTURE_LIVENESS: Duration = Duration::from_secs(10);
 
 #[path = "runner_stage_contracts.rs"]
 mod stage_contracts;
@@ -32,29 +35,45 @@ fn script(directory: &Path, name: &str, body: &str) -> PathBuf {
     // with CLOEXEC, making Linux refuse this fixture's exec with ETXTBSY. Keep
     // executable writes in a child and wait for its exit: the test process
     // never owns a writable descriptor that another test's fork can inherit.
-    let mut writer = Command::new("/bin/sh")
-        .args([
-            "-c",
-            "umask 077; /bin/cat > \"$1\" && /bin/chmod 700 \"$1\"",
-            "fixture-writer",
-        ])
-        .arg(&path)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let mut input = writer.stdin.take().unwrap();
-    input
-        .write_all(format!("#!/bin/sh\n{body}\n").as_bytes())
-        .unwrap();
-    drop(input);
-    let output = writer.wait_with_output().unwrap();
-    assert!(
-        output.status.success(),
-        "fixture writer failed: {}",
-        String::from_utf8_lossy(&output.stderr)
+    // Positional arguments preserve the literal payload without interpreting it
+    // in the publisher; builtin printf avoids an additional pipe/cat child.
+    let arguments: [std::ffi::OsString; 5] = [
+        "-c".into(),
+        "umask 077; printf '%s' \"$2\" > \"$1\" && /bin/chmod 700 \"$1\"".into(),
+        "fixture-writer".into(),
+        path.as_os_str().to_owned(),
+        format!("#!/bin/sh\n{body}\n").into(),
+    ];
+    let output = crate::process::invoke(
+        crate::process::Invocation {
+            executable: Path::new("/bin/sh"),
+            arguments: &arguments,
+            directory,
+        },
+        crate::process::Limits {
+            timeout: FIXTURE_LIVENESS,
+            max_output_bytes: 4_096,
+            cleanup_timeout: Duration::from_secs(1),
+        },
+    )
+    .unwrap();
+    let (capture, pending) = output.into_parts();
+    if let Some(pending) = pending {
+        panic!(
+            "fixture publication left child {} unreaped",
+            pending.abandon()
+        );
+    }
+    assert_eq!(
+        capture.stop(),
+        crate::process::Stop::Completed,
+        "{capture:?}"
     );
+    assert!(capture.failure().is_none(), "{capture:?}");
+    assert!(capture.cleanup_failure().is_none(), "{capture:?}");
+    assert_eq!(capture.exit().unwrap().code, Some(0), "{capture:?}");
+    assert!(capture.stdout().is_empty());
+    assert!(capture.stderr().is_empty(), "{capture:?}");
     path
 }
 
@@ -199,7 +218,7 @@ fn concurrent_fixture_publication_preserves_exact_process_results() {
                         &executable,
                         &[],
                         path,
-                        std::time::Duration::from_secs(2),
+                        FIXTURE_LIVENESS,
                         4_096,
                     )
                     .unwrap();
