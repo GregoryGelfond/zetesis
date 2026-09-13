@@ -392,6 +392,121 @@ fn pool_capacity_refuses_the_whole_submission() {
 }
 
 #[test]
+fn shared_admission_exposes_the_original_capacity_error() {
+    use std::error::Error as _;
+    let (program, seeds) = fixture(&[1, 2]);
+    let error = pool(1)
+        .check_shared(
+            &program,
+            &seeds,
+            limits(),
+            SourceSelection::Union,
+            &Control::default(),
+        )
+        .unwrap_err();
+    let shared::Error::Admission(original) = &error else {
+        panic!("capacity must refuse admission, not interrupt a submitted batch")
+    };
+    assert!(matches!(
+        original,
+        BatchError::Capacity {
+            limit: 1,
+            actual: 2
+        }
+    ));
+    let exposed = error
+        .source()
+        .unwrap()
+        .downcast_ref::<BatchError>()
+        .unwrap();
+    assert!(std::ptr::eq(exposed, original));
+    assert!(exposed.source().is_none());
+    assert_eq!(error.to_string(), "batch of 2 exceeds capacity 1");
+}
+
+fn incomplete_cause(error: &shared::Error) -> &shared::Failure {
+    use std::error::Error as _;
+    let shared::Error::Incomplete(original) = error else {
+        panic!("expected a submitted batch with retained failure evidence")
+    };
+    let failure = error
+        .source()
+        .unwrap()
+        .downcast_ref::<shared::Failure>()
+        .unwrap();
+    assert!(std::ptr::eq(failure, original));
+    let cause = failure
+        .source()
+        .unwrap()
+        .downcast_ref::<shared::Cause>()
+        .unwrap();
+    assert!(std::ptr::eq(cause, &failure.cause));
+    let stop = match &failure.cause {
+        shared::Cause::Source(stop) | shared::Cause::World { stop, .. } => stop,
+        shared::Cause::InvalidOutput => panic!("expected an actual source or world stop"),
+    };
+    let exposed = cause.source().unwrap().downcast_ref::<Stop>().unwrap();
+    assert!(std::ptr::eq(exposed, stop));
+    assert!(exposed.source().is_none());
+    failure
+}
+
+#[test]
+fn shared_cancellation_exposes_its_source_cause() {
+    let (program, seeds) = fixture(&[1, 2]);
+    let control = Control::default();
+    control.cancel();
+    let error = pool(seeds.len())
+        .check_shared(&program, &seeds, limits(), SourceSelection::Union, &control)
+        .unwrap_err();
+    let failure = incomplete_cause(&error);
+    assert_eq!(failure.cause, shared::Cause::Source(Stop::Cancelled));
+    assert_eq!(failure.statistics.submitted_candidates, seeds.len());
+    assert!(failure.statistics.worlds.is_empty());
+    assert_eq!(
+        failure.statistics.source,
+        zetesis_cpu::lazy::Progress::default()
+    );
+    assert_eq!(error.to_string(), "shared source: operation cancelled");
+}
+
+#[test]
+fn shared_work_refusal_exposes_its_candidate_occurrence() {
+    let (program, seeds) = fixture(&[1, 2]);
+    let mut request = limits();
+    request.max_world_work = 0;
+    let error = pool(seeds.len())
+        .check_shared(
+            &program,
+            &seeds,
+            request,
+            SourceSelection::Worlds,
+            &Control::default(),
+        )
+        .unwrap_err();
+    let failure = incomplete_cause(&error);
+    assert_eq!(
+        failure.cause,
+        shared::Cause::World {
+            index: 0,
+            stop: Stop::WorkLimit
+        }
+    );
+    assert_eq!(failure.statistics.submitted_candidates, seeds.len());
+    assert!(failure.statistics.source.source_work > 0);
+    assert_eq!(failure.statistics.worlds.len(), seeds.len());
+    for world in &failure.statistics.worlds {
+        assert_eq!(world.work, 0);
+        assert_eq!(world.instances, 0);
+        assert_eq!(world.interruption, Some(Stop::WorkLimit));
+    }
+    assert_eq!(
+        error.to_string(),
+        "candidate occurrence 0: oracle work limit reached"
+    );
+}
+
+#[test]
 fn empty_batches_have_no_source_or_world_work() {
     let (program, _) = fixture(&[]);
     let result = pool(1)
