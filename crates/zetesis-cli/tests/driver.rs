@@ -91,17 +91,29 @@ fn cancelled_invocation_never_claims_unsat() {
 
 #[test]
 fn admission_errors_keep_source_positions() {
+    let source = "#project a/0.";
     let error = run(
-        "#project a/0.".into(),
+        source.into(),
         &options(&[]),
         &mut Vec::new(),
         &Control::default(),
     )
     .unwrap_err();
-    assert!(matches!(error, RunError::FormulaAdmission(_)));
+    let RunError::FormulaAdmission(ref refusal) = error else {
+        panic!("expected a typed formula admission refusal")
+    };
+    let diagnostics = refusal.diagnostics();
+    assert_eq!(diagnostics.len(), 1);
+    let location = diagnostics[0].primary().location;
+    assert_eq!(location.source.get(), 0);
+    assert_eq!(location.span.start().get(), 0);
+    assert_eq!(
+        usize::try_from(location.span.end().get()).unwrap(),
+        source.len()
+    );
     let message = error.to_string();
     assert!(message.contains("bytes "));
-    assert!(message.contains("S0"));
+    assert!(message.contains("unsupported source profile"));
 }
 
 #[test]
