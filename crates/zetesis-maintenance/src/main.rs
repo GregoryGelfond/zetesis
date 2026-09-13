@@ -182,7 +182,7 @@ fn proof_capture(
         rust_bin,
         maintenance: &maintenance,
         command_limits: zetesis_validation::process::Limits {
-            timeout: std::time::Duration::from_secs(300),
+            timeout: std::time::Duration::from_mins(5),
             max_output_bytes: 16 * 1024 * 1024,
             cleanup_timeout: std::time::Duration::from_secs(2),
         },
