@@ -45,6 +45,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 # A previous complete report never certifies an interrupted new run.
 printf '%s\n' incomplete > "$coverage_dir/status.txt"
+: > "$coverage_dir/floors.tsv"
 floor=$(scripts/maintenance.sh coverage-floor --mode "$mode" --path scripts/coverage-floor.txt)
 
 tool_version=$(cargo +1.97.1 llvm-cov --version)
@@ -170,9 +171,29 @@ run_profile cli-cpu --package zetesis-cli --package zetesis-solve --no-default-f
 
 export CARGO_LLVM_COV_TARGET_DIR="$coverage_dir/build-workspace"
 if [ "$mode" = gate ]; then
-    cargo +1.97.1 llvm-cov report --locked --fail-under-lines "$floor"
+    # Both reports already exist. Retain both independent floor verdicts even
+    # when the workspace population has not met its unchanged floor.
+    workspace_floor_exit=0
+    if cargo +1.97.1 llvm-cov report --locked --fail-under-lines "$floor"; then
+        :
+    else
+        workspace_floor_exit=$?
+    fi
+    printf 'workspace\t%s\n' "$workspace_floor_exit" >> "$coverage_dir/floors.tsv"
     export CARGO_LLVM_COV_TARGET_DIR="$coverage_dir/build-cli-cpu"
-    cargo +1.97.1 llvm-cov report --package zetesis-cli --package zetesis-solve --locked --fail-under-lines "$floor"
+    cpu_floor_exit=0
+    if cargo +1.97.1 llvm-cov report --package zetesis-cli --package zetesis-solve --locked --fail-under-lines "$floor"; then
+        :
+    else
+        cpu_floor_exit=$?
+    fi
+    printf 'cli-cpu\t%s\n' "$cpu_floor_exit" >> "$coverage_dir/floors.tsv"
+    if [ "$workspace_floor_exit" -ne 0 ]; then
+        exit "$workspace_floor_exit"
+    fi
+    if [ "$cpu_floor_exit" -ne 0 ]; then
+        exit "$cpu_floor_exit"
+    fi
     completion_status=gate-passed
 else
     completion_status='baseline-complete (nongating)'

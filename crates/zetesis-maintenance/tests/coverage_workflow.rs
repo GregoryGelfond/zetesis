@@ -680,3 +680,38 @@ fn book_rustdoc_receives_only_current_artifacts() {
         assert!(!view.join("libraries").exists());
     }
 }
+
+#[test]
+fn coverage_retains_both_independent_floor_failures() {
+    for (failed, workspace, cpu) in [
+        ("build-workspace:gate", 37, 0),
+        ("build-cli-cpu:gate", 0, 37),
+        ("gate", 37, 37),
+    ] {
+        let fixture = Fixture::new();
+        let result = fixture.coverage("gate", false, &[("COVERAGE_TEST_FAIL", failed)]);
+        assert_eq!(result.status.code(), Some(37));
+        fixture.assert_status("incomplete");
+        assert_eq!(
+            fixture.read("target/coverage/floors.tsv"),
+            format!("workspace\t{workspace}\ncli-cpu\t{cpu}\n")
+        );
+        let calls = fixture.calls();
+        let floors: Vec<_> = calls
+            .iter()
+            .filter(|call| {
+                call["args"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|arg| arg == "--fail-under-lines")
+            })
+            .collect();
+        assert_eq!(floors.len(), 2);
+        assert_eq!(floors[0]["profile"], "build-workspace");
+        assert_eq!(floors[1]["profile"], "build-cli-cpu");
+        for entry in floors {
+            assert_eq!(entry["args"].as_array().unwrap().last().unwrap(), "91");
+        }
+    }
+}

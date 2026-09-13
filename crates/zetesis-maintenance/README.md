@@ -28,6 +28,9 @@ selection and libtest output checks from execution. It retains the existing
 `toolchain.json` schema and independent workspace/CPU-only CLI populations. No
 floor or filename filter is changed. The shell driver keeps the exclusive lock,
 fresh cleanup, ordered commands and incomplete status until both floors pass.
+After both reports exist, both floor commands run independently; `floors.tsv`
+retains their profile names and exit statuses, including failures. This does not
+change either floor or make a below-floor portable population pass.
 The sixteen physical groups contain 56 exact tests; the Rust checker rejects
 selection drift, zero matches and incomplete individual outcomes.
 

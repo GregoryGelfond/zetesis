@@ -37,6 +37,7 @@ impl Fixture {
         }
         fixture.write("scripts/coverage-floor.txt", b"91\n");
         fixture.write("target/coverage/status.txt", b"gate-passed\n");
+        fixture.write("target/coverage/floors.tsv", b"workspace\t0\ncli-cpu\t0\n");
         fs::create_dir_all(fixture.root().join("proofs")).unwrap();
         for role in ["cargo", "rustc", "rustup", "mdbook", "lake", "clingo"] {
             fixture.tool(&format!("bin/{role}"), role);
@@ -139,6 +140,7 @@ impl Fixture {
         );
         self.assert_status("incomplete");
         assert!(self.calls().is_empty());
+        assert!(self.read("target/coverage/floors.tsv").is_empty());
     }
     pub fn assert_physical_failure(&self, group: &str) {
         self.assert_status("incomplete");
@@ -183,6 +185,14 @@ impl Fixture {
         assert_eq!(self.calls(), expected);
     }
     pub fn assert_complete_schedule(&self, mode: &str, metal: bool, floor: &str) {
+        assert_eq!(
+            self.read("target/coverage/floors.tsv"),
+            if mode == "gate" {
+                "workspace\t0\ncli-cpu\t0\n"
+            } else {
+                ""
+            }
+        );
         let mut expected = profile_prefix(self.root(), metal);
         if metal {
             for fields in groups() {
