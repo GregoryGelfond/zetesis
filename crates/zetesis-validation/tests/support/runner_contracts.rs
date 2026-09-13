@@ -1037,6 +1037,22 @@ fn progress_write_failure_does_not_change_acceptance() {
             failures.push(error.kind());
         }
     });
+    if failures != vec![std::io::ErrorKind::BrokenPipe; 94] || !report.passed() {
+        // Preserve the actual failing producer, raw streams, elapsed time and
+        // cleanup evidence. A bare acceptance assertion loses this distinction
+        // and TempDir would otherwise delete its fixture during unwinding.
+        let retained = directory.keep();
+        let path = retained.join("failed-report.json");
+        let saved = report
+            .to_json()
+            .and_then(|view| serde_json::to_vec_pretty(&view))
+            .map_err(|error| error.to_string())
+            .and_then(|bytes| std::fs::write(&path, bytes).map_err(|error| error.to_string()));
+        panic!(
+            "progress fixture retained at {}; report retention: {saved:?}; progress errors: {failures:?}; report: {report:#?}",
+            retained.display()
+        );
+    }
     assert_eq!(failures, vec![std::io::ErrorKind::BrokenPipe; 94]);
     assert!(report.passed());
 }

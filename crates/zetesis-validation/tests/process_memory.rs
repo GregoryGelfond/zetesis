@@ -17,7 +17,7 @@ fn run(
 ) -> (process::Capture, Option<Measurement>) {
     let temporary = tempfile::tempdir().unwrap();
     let record = temporary.path().join("rss.json");
-    let capture = run_helper(
+    let capture = run_supervised_helper(
         temporary.path(),
         &record,
         &["/bin/sh".into(), "-c".into(), script.into()],
@@ -30,7 +30,7 @@ fn run(
     (capture, measurement)
 }
 
-fn run_helper(
+fn run_supervised_helper(
     directory: &Path,
     record: &Path,
     child: &[OsString],
@@ -57,18 +57,40 @@ fn run_helper(
     capture
 }
 
+fn run_finished_helper(directory: &Path, record: &Path, child: &[OsString]) -> process::Capture {
+    // These refusal fixtures cannot leave a live solver: path/spawn refusal
+    // happens before a child exists, and create_new follows measure's wait for
+    // its sole builtin-only shell child. Ordinary capture still bounds time,
+    // output and cleanup; it does not request the extra failed-helper group
+    // sweep required by the general measurement/descendant tests above/below.
+    let mut arguments = vec!["__measure-child".into(), record.as_os_str().into()];
+    arguments.extend_from_slice(child);
+    let outcome = process::invoke(
+        Invocation {
+            executable: Path::new(env!("CARGO_BIN_EXE_zetesis-perf")),
+            arguments: &arguments,
+            directory,
+        },
+        Limits {
+            timeout: Duration::from_secs(3),
+            max_output_bytes: 1024,
+            cleanup_timeout: Duration::from_secs(1),
+        },
+    )
+    .unwrap();
+    let (capture, pending) = outcome.into_parts();
+    assert!(pending.is_none(), "{capture:?}");
+    assert!(capture.failure().is_none(), "{capture:?}");
+    assert!(capture.cleanup_failure().is_none(), "{capture:?}");
+    capture
+}
+
 #[test]
 fn absent_child_cannot_publish_a_resource_record() {
     let directory = tempfile::tempdir().unwrap();
     let record = directory.path().join("rss.json");
     let absent = directory.path().join("absent-child");
-    let capture = run_helper(
-        directory.path(),
-        &record,
-        &[absent.into_os_string()],
-        1024,
-        Duration::from_secs(3),
-    );
+    let capture = run_finished_helper(directory.path(), &record, &[absent.into_os_string()]);
     assert_eq!(capture.stop(), Stop::Completed, "{capture:?}");
     assert_eq!(capture.exit().unwrap().code, Some(2));
     assert!(capture.stdout().is_empty());
@@ -84,13 +106,7 @@ fn absent_child_cannot_publish_a_resource_record() {
 fn relative_child_is_not_resolved_by_the_resource_helper() {
     let directory = tempfile::tempdir().unwrap();
     let record = directory.path().join("rss.json");
-    let capture = run_helper(
-        directory.path(),
-        &record,
-        &["sh".into()],
-        1024,
-        Duration::from_secs(3),
-    );
+    let capture = run_finished_helper(directory.path(), &record, &["sh".into()]);
     assert_eq!(capture.stop(), Stop::Completed, "{capture:?}");
     assert_eq!(capture.exit().unwrap().code, Some(2));
     assert_eq!(
@@ -105,7 +121,7 @@ fn resource_publication_preserves_an_existing_record() {
     let directory = tempfile::tempdir().unwrap();
     let record = directory.path().join("rss.json");
     std::fs::write(&record, b"previous resource evidence").unwrap();
-    let capture = run_helper(
+    let capture = run_finished_helper(
         directory.path(),
         &record,
         &[
@@ -113,8 +129,6 @@ fn resource_publication_preserves_an_existing_record() {
             "-c".into(),
             "printf completed-child; exit 37".into(),
         ],
-        1024,
-        Duration::from_secs(3),
     );
     assert_eq!(capture.stop(), Stop::Completed, "{capture:?}");
     assert_eq!(capture.exit().unwrap().code, Some(2));
