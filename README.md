@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 ![Rust 1.97+](https://img.shields.io/badge/rust-1.97%2B-orange?style=flat-square)
-[![Line coverage: 94.30% (CPU + Metal)](https://img.shields.io/badge/coverage-94.30%25%20%28CPU%20%2B%20Metal%29-brightgreen?style=flat-square)](docs/book/reference/validation.md#coverage)
+[![Line coverage: 94.31% (CPU + Metal)](https://img.shields.io/badge/coverage-94.31%25%20%28CPU%20%2B%20Metal%29-brightgreen?style=flat-square)](docs/book/reference/validation.md#coverage)
 
 ζήτησις, *inquiry/search* — candidate-directed answer-set solving through the reduct.
 
@@ -123,7 +123,10 @@ initialization happen during the solve, including on the first run after
 installation. `zetesis devices` is an optional inventory; no qualification step
 is required to use the solver.
 
-Metal has physical regression coverage on Apple M4 Pro. Vulkan is implemented
+Metal has 56 named physical regression checks in 16 groups on Apple M4 Pro,
+including ordinary table-grounded solving against complete CPU answer families.
+The [coverage snapshot](docs/book/reference/validation.md#coverage) identifies
+the measured source and separate CPU-only population. Vulkan is implemented
 but needs physical qualification on each claimed platform. Full GPU residency,
 general lazy formula construction and broad hardware qualification remain open.
 The [execution chapter](docs/book/architecture/execution.md) distinguishes
@@ -236,15 +239,16 @@ end-to-end solves from kernel measurements when comparing performance.
 The [validation chapter](docs/book/reference/validation.md) explains which
 claims the corpus, proof and physical execution checks can establish.
 The [current performance comparison](docs/book/reference/performance.md) records
-ordinary CPU solves, table-join profiles and separate link-time optimization
-experiments. The current application timings drift across blocks and establish
-no broad table-join speedup. The normal release profile remains selected;
+ordinary CPU solves, matched eager CPU/Metal solves, table-join profiles and
+separate link-time optimization experiments. The application timings establish
+no broad table-join speedup; CPU is faster than Metal on the matched inputs.
+The normal release profile remains selected;
 smaller fat-LTO binaries do not compensate for slower measured application
 cases. Reusable table selection is an additional execution choice, not a claim
 that bitsets improve every grounding workload.
-Earlier CPU/Metal comparisons and standalone scalar/Rayon table timings remain
-identified by their measured source revisions. They are not measurements of
-the new ordinary table consumer. Results distinguish complete native model
+The current Metal comparison spans two acquisition windows, whose block results
+remain separate. Earlier CPU/Metal comparisons and standalone scalar/Rayon table
+timings retain their measured source revisions. Results distinguish complete native model
 agreement from clingo's observable output, and retain timeouts and resource
 refusals explicitly. Earlier N=10 comparisons and isolated GPU measurements
 remain in the

@@ -8,9 +8,10 @@ reductions in visited rows; they do not establish a broad application speedup.
 
 The release profile also remains unchanged after a separate normal/thin/fat
 LTO comparison. Smaller binaries and lower sampled RSS did not produce better
-times on all important inputs. New release Metal measurements are not available;
-the earlier Metal and standalone table results below retain their original
-source scope.
+times on all important inputs. Matched eager CPU/Metal measurements also show
+no broad Table speedup; CPU is faster on these inputs. That comparison spans
+two acquisition windows, kept explicit below. Earlier Metal and standalone table
+results retain their original source scope.
 
 ## Versions and measurement boundaries
 
@@ -207,6 +208,14 @@ RSS. Table removes many row visits for Queens 5/6 and some for SEND, task
 allocation and shortest path. Queens 1–4 visit the same number. Preparation and
 query work remain, so these counts do not imply shorter grounding time.
 
+The reduction offers a possible path to larger instances: repeated joins can
+amortize index construction, and selective bindings can limit the growth of
+whole-row matching work as relations expand. Total cost still includes mask
+operations, retained index storage and the final ground program. Measurements
+under fixed time and memory budgets are needed to establish whether more or
+larger instances become tractable; the current counts do not establish an
+asymptotic or measured scalability gain.
+
 The six additional N=8 grounding profiles each compare an indexed reference
 with one unobserved, one boundary-observed and one detailed Table admission.
 Every sample and reference exhausts the same 92 unique full native answer sets;
@@ -368,9 +377,113 @@ measurements do not justify replacing the normal installation profile. Neither
 LTO comparison measures Table joins, GPU execution or active CPU parallelism.
 
 
+## Matched eager CPU and Metal
+
+This comparison uses the canonical executables and corpus identified above,
+with eager grounding and automatic oracle selection. Each case/profile has a
+qualification sample, one warmup and three timed samples. Both native profiles
+request four closure/completion workers and batch 64; clingo uses one worker.
+The matrix includes full native JSON/statistics and clingo JSON. It is a separate
+population from the ordinary human-output and RSS measurements; it has no RSS
+samples. Every sample starts a fresh child; each Metal invocation initializes
+its own GPU context.
+
+All twelve reports pass: 810 positions, with 540 native and 270 clingo captures.
+There are no refusals, blocked positions, capture faults or unresolved children.
+Complete native families agree across the relevant versions, strategies and
+CPU/Metal routes, including typed signed atoms, resolved shown values and costs.
+SEND has one answer, each queens encoding has 92, and task allocation publishes
+1,176 optimum ties. Clingo corroborates the selected displays and objective
+results; its hidden interpretations remain unavailable.
+
+The measurements span **two separate windows** on 12 September 2026. The first
+ran 20:48:12–20:54:30 CDT and stopped on its scheduling allowance after seven
+reports. The five unstarted reports ran at 21:25:04–21:28:36, after a
+**30-minute 34-second gap**. Prior-1, Indexed-1, Table-1 and Table-2 baseline are
+in the first window; Table-2 queens, Indexed-2 and prior-2 are in the second.
+The Table-2 column therefore crosses the window boundary. No report was repeated
+or replaced. The original order was retained, but it does not supply an
+uninterrupted mirrored experiment.
+
+The two suites keep Queens 2 in separate contexts: `baseline` contains SEND,
+task allocation and Queens 2; `queens` contains all six encodings. The tables
+preserve those contexts and every block. Cells are **median [minimum, maximum]
+in milliseconds**, with three timed samples each. No confidence interval or
+pooled cross-window estimate is claimed.
+
+### CPU eager
+
+| Case | prior-1 | Indexed-1 | Table-1 | Table-2 | Indexed-2 | prior-2 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| SEND | 34.189 [34.161, 35.584] | 34.209 [34.197, 35.629] | 35.508 [35.468, 35.632] | 34.984 [34.974, 35.136] | 35.169 [34.216, 36.954] | 34.204 [34.166, 35.625] |
+| Task allocation | 326.493 [325.583, 326.584] | 325.434 [322.771, 325.741] | 324.049 [322.956, 325.237] | 367.010 [365.734, 368.144] | 323.431 [323.094, 325.910] | 326.138 [325.402, 327.925] |
+| Queens 2 (baseline) | 95.890 [94.654, 95.937] | 94.566 [93.323, 94.580] | 94.588 [94.554, 95.967] | 95.401 [95.356, 98.426] | 95.905 [94.381, 97.307] | 94.650 [94.457, 97.052] |
+| Queens 1 | 17.885 [17.875, 19.294] | 17.960 [17.929, 19.410] | 18.500 [17.948, 19.442] | 19.208 [17.969, 19.299] | 18.018 [17.951, 19.434] | 17.928 [17.912, 19.431] |
+| Queens 2 | 98.283 [97.948, 98.350] | 94.665 [94.562, 95.588] | 94.582 [94.566, 95.317] | 92.242 [92.205, 93.970] | 95.876 [94.675, 95.977] | 95.889 [94.702, 97.117] |
+| Queens 3 | 19.151 [19.139, 19.155] | 19.222 [17.856, 19.246] | 19.223 [19.181, 19.239] | 19.155 [18.964, 19.260] | 19.267 [19.262, 19.301] | 19.201 [18.935, 19.236] |
+| Queens 4 | 11.593 [11.458, 11.697] | 11.707 [11.671, 11.739] | 11.722 [10.338, 11.777] | 11.751 [11.696, 12.989] | 11.587 [10.338, 11.697] | 11.777 [10.333, 11.842] |
+| Queens 5 | 47.098 [46.952, 48.574] | 49.471 [47.030, 49.769] | 49.466 [46.934, 49.653] | 48.717 [48.039, 49.006] | 49.454 [47.017, 49.598] | 49.228 [49.143, 49.810] |
+| Queens 6 | 48.409 [48.364, 48.427] | 49.494 [49.437, 49.570] | 49.507 [49.424, 53.568] | 49.328 [48.864, 49.367] | 49.186 [49.168, 49.530] | 49.486 [49.466, 49.574] |
+
+### Metal eager
+
+| Case | prior-1 | Indexed-1 | Table-1 | Table-2 | Indexed-2 | prior-2 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| SEND | 66.990 [65.708, 67.082] | 67.028 [65.707, 67.082] | 66.878 [65.778, 67.153] | 66.745 [66.665, 66.774] | 67.056 [66.840, 68.441] | 66.980 [66.898, 67.045] |
+| Task allocation | 572.618 [569.779, 586.927] | 569.372 [564.941, 571.553] | 571.374 [559.004, 575.246] | 613.848 [610.517, 648.716] | 572.346 [563.973, 577.466] | 573.431 [571.637, 603.987] |
+| Queens 2 (baseline) | 111.075 [109.479, 112.129] | 109.698 [109.691, 109.781] | 109.710 [108.359, 109.753] | 111.897 [110.275, 112.073] | 110.896 [109.745, 113.477] | 112.216 [111.984, 113.227] |
+| Queens 1 | 34.255 [34.105, 34.301] | 32.968 [32.892, 34.175] | 33.050 [33.043, 35.075] | 35.185 [34.299, 35.561] | 33.041 [32.986, 34.357] | 32.944 [32.816, 35.504] |
+| Queens 2 | 114.756 [114.293, 115.889] | 110.912 [109.693, 111.026] | 110.118 [109.594, 111.047] | 110.340 [109.753, 111.024] | 110.839 [110.719, 111.117] | 111.072 [109.604, 112.263] |
+| Queens 3 | 34.312 [34.254, 35.534] | 33.047 [32.972, 34.216] | 34.225 [33.000, 34.392] | 35.572 [35.541, 39.504] | 34.246 [34.202, 34.318] | 33.023 [32.966, 34.374] |
+| Queens 4 | 26.678 [26.638, 26.701] | 25.515 [25.486, 25.536] | 25.507 [25.486, 25.507] | 28.005 [27.509, 29.297] | 25.502 [25.292, 25.508] | 25.404 [25.250, 25.438] |
+| Queens 5 | 63.634 [63.618, 65.951] | 65.961 [64.798, 65.977] | 64.542 [63.639, 65.998] | 67.397 [66.555, 68.377] | 65.875 [65.785, 65.944] | 65.740 [64.539, 65.788] |
+| Queens 6 | 64.664 [63.454, 64.944] | 65.930 [65.780, 67.284] | 65.963 [64.533, 74.453] | 67.188 [66.939, 69.429] | 67.042 [65.739, 67.119] | 65.554 [64.505, 67.010] |
+
+### Matched clingo
+
+| Case | prior-1 | Indexed-1 | Table-1 | Table-2 | Indexed-2 | prior-2 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| SEND | 11.534 [11.519, 11.621] | 11.542 [11.498, 11.594] | 11.540 [11.540, 11.649] | 12.296 [12.292, 12.404] | 11.568 [11.548, 11.646] | 11.551 [11.526, 11.623] |
+| Task allocation | 179.906 [154.734, 182.434] | 182.444 [173.605, 184.828] | 183.691 [182.366, 184.914] | 175.069 [149.345, 187.131] | 168.603 [154.642, 177.509] | 177.486 [174.749, 179.732] |
+| Queens 2 (baseline) | 124.401 [123.226, 124.449] | 123.324 [123.270, 124.563] | 123.268 [123.231, 123.385] | 123.721 [123.325, 125.090] | 123.196 [123.096, 123.309] | 122.967 [121.812, 123.319] |
+| Queens 1 | 6.534 [6.527, 6.576] | 6.521 [6.501, 6.576] | 6.249 [5.237, 6.606] | 6.536 [6.153, 6.606] | 6.537 [6.522, 6.557] | 6.538 [6.518, 6.675] |
+| Queens 2 | 129.398 [128.186, 129.572] | 123.261 [123.207, 123.293] | 123.274 [122.143, 123.296] | 120.793 [120.733, 123.033] | 124.458 [124.033, 124.488] | 123.196 [121.958, 124.526] |
+| Queens 3 | 6.541 [6.518, 6.541] | 6.527 [5.203, 6.538] | 6.365 [5.225, 6.534] | 6.529 [6.528, 6.632] | 6.542 [6.541, 6.563] | 6.526 [6.515, 6.529] |
+| Queens 4 | 6.512 [6.487, 6.533] | 6.537 [6.449, 6.540] | 6.537 [6.448, 6.539] | 6.528 [6.462, 6.540] | 6.528 [6.460, 6.546] | 6.543 [6.452, 6.580] |
+| Queens 5 | 6.587 [6.493, 6.589] | 6.588 [6.469, 6.598] | 6.599 [6.496, 6.615] | 6.604 [6.521, 6.620] | 6.599 [6.464, 6.604] | 6.614 [6.465, 6.624] |
+| Queens 6 | 6.598 [6.593, 6.609] | 6.585 [6.559, 6.615] | 6.553 [6.380, 6.586] | 6.597 [6.577, 6.617] | 6.593 [6.592, 6.600] | 6.589 [6.577, 6.602] |
+
+Metal is slower than its matched CPU route in all nine case/suite contexts.
+The routes use different certified membership procedures, so this is an
+end-to-end execution comparison, not an isolated hardware or Rayon speed ratio.
+There is no broad speedup from Table or from the new release on this population.
+Indexed remains the default.
+
+SEND's Metal block medians remain between 66.745 and 67.056 ms. Task allocation
+usually remains near 569–573 ms, while Table-2 baseline reaches 613.848 ms;
+its matched CPU median also rises to 367.010 ms from the other blocks' 323–326 ms.
+That observation belongs to the first window. The Table-2 solving-stage medians
+are still 95.473 ms CPU and 335.605 ms Metal; its grounding medians are
+2.754 and 2.710 ms. Marginal phase medians do not add to process time, and nested
+phases must not be counted again. These observations do not identify a Table
+regression or remove the visible end-to-end variation.
+
+All 270 Metal captures report actual, settled GPU work with complete candidate
+accounting. SEND's one candidate and each queens run's 92 candidates are decided
+on the GPU with no CPU residuals. Task allocation submits 1,208 candidates:
+13–14 are GPU-decided and the remaining 1,194–1,195 require exact CPU completion
+with four admitted workers. Requested workers alone would not establish that
+activity. Neither route turns a partial answer prefix into a complete family.
+
+All 180 Table-requested native captures report actual table preparation and
+probes. For example, task allocation records 14 preparations, 483 reuses,
+497 probes and 4,765 selected rows in this matrix. These are host grounding
+operations composed with the selected oracle; they do not execute a GPU table
+kernel. Fewer row visits, library reuse and successful GPU execution establish
+neither a general latency improvement nor lower process/device memory.
+
 ## Earlier Metal measurements
 
-The new CPU population has no matching new Metal release timing population.
 The [complete previous comparison](https://github.com/GregoryGelfond/zetesis/blob/993a7bbb625ae62ea4ff0ef4510c3d1a8be514ac/docs/book/reference/performance.md#instrumented-cpu-and-metal-comparison)
 compared sources `15e0f77b` and `6bebb980` on the same Apple M4 Pro.
 Its eager Metal SEND median decreased from 79.853 to 65.836 ms, and task
@@ -495,6 +608,62 @@ failures; setup/publication failure exits 2. Preserve actual exits, raw reports
 and all blocked positions. A refused or uncaptured solve has no imputed time.
 Child and campaign deadlines are polling boundaries; cleanup and publication
 may extend process wall time.
+
+For the matched eager CPU/Metal matrix, use the same four executables and corpus.
+The `baseline` suite selects SEND, task allocation and Queens 2; `queens` selects
+all six N=8 encodings. Keep Queens 2's two contexts distinct.
+
+```sh
+metal_matrix() {
+    comparison_label=$1
+    comparison_suite=$2
+    comparison_solver=$3
+    comparison_joins=$4
+    set -- "$perf_command" examples/kr-domains \
+        --suite "$comparison_suite" \
+        --zetesis "$comparison_solver" --clingo "$clingo_command" \
+        --report "$results_dir/$comparison_label.json" \
+        --profile cpu-eager --profile metal-eager \
+        --workers 4 --completion-workers 4 --clingo-workers 1 --batch-size 64 \
+        --warmups 1 --repetitions 3 --timeout-seconds 10 --campaign-seconds 30 \
+        --sample-bytes 33554432 --native-report-bytes 33554432 \
+        --capture-bytes 134217728 --report-bytes 268435456
+    if [ "$comparison_joins" != default ]; then
+        set -- "$@" --formula-joins "$comparison_joins"
+    fi
+    if /usr/bin/env -i HOME="$HOME" PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+        LC_ALL=C TMPDIR=/private/tmp "$@"; then
+        comparison_exit=0
+    else
+        comparison_exit=$?
+    fi
+    printf '%s\n' "$comparison_exit" > "$results_dir/$comparison_label.exit" || return 2
+    return "$comparison_exit"
+}
+
+metal_matrix metal-prior-1-baseline baseline "$previous_solver" default
+metal_matrix metal-prior-1-queens queens "$previous_solver" default
+metal_matrix metal-indexed-1-baseline baseline "$current_solver" indexed
+metal_matrix metal-indexed-1-queens queens "$current_solver" indexed
+metal_matrix metal-table-1-baseline baseline "$current_solver" table
+metal_matrix metal-table-1-queens queens "$current_solver" table
+metal_matrix metal-table-2-baseline baseline "$current_solver" table
+
+# The recorded second acquisition window starts here.
+metal_matrix metal-table-2-queens queens "$current_solver" table
+metal_matrix metal-indexed-2-baseline baseline "$current_solver" indexed
+metal_matrix metal-indexed-2-queens queens "$current_solver" indexed
+metal_matrix metal-prior-2-baseline baseline "$previous_solver" default
+metal_matrix metal-prior-2-queens queens "$previous_solver" default
+```
+
+As above, run one call at a time and inspect the retained report before starting
+the next. Preserve any scheduling stop and the window boundary when continuing;
+do not replace an unstarted report with a guessed measurement. This matrix
+captures full native JSON/statistics and retains native model records. It allows
+32 MiB per child/native decoder input, 128 MiB total capture and 256 MiB report
+output, retaining the decoder's other structural limits. There are no RSS
+samples. Each Metal invocation initializes its own GPU context.
 
 For the detailed N=8 profile, run each original source separately:
 

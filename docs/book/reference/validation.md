@@ -209,10 +209,11 @@ performance trend.
 ### Performance evidence
 
 The [current comparison](performance.md) reports ordinary CPU time, child peak
-RSS, table-join profiles and separate LTO measurements for source `1e5b78ce`.
-Its earlier Metal and standalone table observations belong to source
-`6bebb980`. The historical measurements below retain their original source and
-execution scopes.
+RSS, matched eager CPU/Metal solves, table-join profiles and separate LTO
+measurements for source `1e5b78ce`. Its Metal comparison retains two acquisition
+windows separately and includes no RSS measurements. The earlier Metal and
+standalone table observations belong to source `6bebb980`. The historical
+measurements below retain their original source and execution scopes.
 
 The measurements below apply to their explicitly named revisions. No timing or
 peak-RSS measurements were collected for
@@ -686,19 +687,30 @@ status. A newer source remains unqualified until its own checks complete.
 
 | Population | Covered / instrumented lines | Coverage |
 | --- | ---: | ---: |
-| Workspace, all features, portable tests plus 55 physical Metal tests | 57,172 / 60,627 | 94.30% |
-| CPU-only solver library and CLI, separate instrumentation | 4,847 / 5,147 | 94.17% |
+| Workspace, all features, portable tests plus 56 physical Metal tests | 57,986 / 61,484 | 94.31% |
+| CPU-only solver library and CLI, separate instrumentation | 4,884 / 5,185 | 94.19% |
 
 This snapshot was qualified on 12 September 2026 for
-[`6bebb980`](https://github.com/GregoryGelfond/zetesis/tree/6bebb980f9c102dbb7f943076d7cde92374841ce),
+compiled source
+[`1e5b78ce`](https://github.com/GregoryGelfond/zetesis/tree/1e5b78ce913ab3aeece6ed496f69ca8176f0644d),
+with documentation
+[`d190abd0`](https://github.com/GregoryGelfond/zetesis/tree/d190abd0bd28f4788cf57d9999d97ab3f2bbede7),
 using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS 26.6.2 with Apple M4 Pro
 Metal. Both populations passed their independent 91% floor. The workspace
-combines 2,067 portable profiles with 16 physical profiles from 55 tests in
+combines 2,068 portable profiles with 16 physical profiles from 56 tests in
 16 groups; the 267-profile CPU-only population remains separate. Before physical
-profile import, the portable-only workspace report covered 54,657 of 60,627
-lines (90.1529%), below the workspace floor. A separate explicit-GPU
+profile import, the portable-only workspace report covered 55,471 of 61,484
+lines (90.2202%), below the workspace floor. A separate explicit-GPU
 device-failure check also passed; its profile and the 17 test-listing profiles
 are excluded from both coverage populations.
+
+The same compiled source passed the portable and external-oracle gates and
+all 94 CPU countermodel corpus cases. A separate Table-requested eager CPU
+matrix passed 376 observations across those 94 cases, retaining complete
+displayed families, costs and optimum ties under the corpus contracts. The
+Lean build, axiom audit and source-record checks cover 118 modules and 1,136
+declarations. Those counts describe the checked mathematical library; they
+do not certify the Rust grounder, masks or GPU execution.
 
 The static closure comparison checked 53 candidate executions against an
 independent ordered-set reference. Owned seeds, indexed selections and manual
@@ -727,12 +739,16 @@ submission receipts under finite device limits.
 Combined language-consumer tests preserve complete answer-set families, scored
 observations and all optimum ties across aggregate heads, objectives and output
 queries. They require actual GPU work and exact accounting of CPU residuals.
+The ordinary table-join case requires positive table preparation, probe and row
+counts, actual GPU candidates, exact decided/residual accounting and no pending
+results. Its complete Metal family equals the independent CPU family. It checks
+host table grounding composed with GPU reduct checking, not a GPU table kernel.
 Vulkan and other untested devices are outside this measurement.
 
 Reproduce this recorded snapshot from the linked source revision with
 `scripts/check.sh coverage --metal` using the
 [verification tools](#prepare-verification-tools). The linked revision selects
-55 physical tests in 16 groups. Retain the generated JSON and
+56 physical tests in 16 groups. Retain the generated JSON and
 HTML reports under `target/coverage/workspace` and `target/coverage/cli-cpu`.
 Update the badge and this table together only after qualification completes.
 Line coverage identifies executed Rust lines; it does not establish assertion
