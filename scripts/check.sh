@@ -50,19 +50,66 @@ if [ "$mode" = book ] || [ "$mode" = full ]; then
     mdbook test --library-path target/book-tests-gpu/debug/deps
 fi
 if [ "$mode" = oracle ] || [ "$mode" = full ]; then
-    cargo test --locked --no-fail-fast -p zetesis-themelios --test arithmetic_validation --test support_delta --test extremal_terms --test observation_bindings --test objective_rich_cycles --test objective_pools -- --ignored --nocapture
-    cargo test --locked --no-fail-fast -p zetesis-solve --no-default-features --test language_consumers original_sources_retain_declared_reference_results -- --ignored --nocapture
-    cargo test --locked --no-fail-fast -p zetesis-themelios --test objective_boundaries --test objective_dependency_contracts -- --ignored --nocapture
-    cargo test --locked --no-fail-fast -p zetesis-themelios --test objective_scopes --test objective_carrier_composition --test objective_language_boundaries -- --ignored --nocapture
-    cargo test --locked --no-fail-fast -p zetesis-themelios --test head_contributions --test objective_source_completion --test objective_field_expressions --test objective_priority_reporting --test objective_cyclic_producers --test objective_rich_producers --test observation_expressions --test observation_scopes --test observation_families -- --ignored --nocapture
-    cargo test --locked --no-fail-fast -p zetesis-themelios --test logical_bounds --test objective_priorities --test objective_priority_certificates --test objective_measure_carriers --test finite_chains --test affine_normalization -- --ignored --nocapture
-    cargo test --locked --no-fail-fast -p zetesis-themelios --test extrema_alias_contracts --test boolean_element_contracts --test signed_element_contracts --test signed_choices -- --ignored --nocapture
-    cargo test --locked --no-fail-fast -p zetesis-themelios --test program_parts --test conditional_consumers --test weighted_heads --test nonbinding_guards --test extrema_heads --test count_plans --test count_head_activity --test objective_forwarding --test boolean_heads --test evaluated_witnesses --test objective_literal_weights --test objective_extrema_presence -- --ignored --nocapture
-    cargo test --locked --no-fail-fast -p zetesis-themelios --test aggregate_dependencies --test aggregate_consumers --test choice_consumers --test outer_negative_consumers --test outer_ranges --test negative_count_eligibility --test structured_witnesses -- --ignored --nocapture
-    cargo test --locked --no-fail-fast -p zetesis-ferraris --test aggregate_clingo -- --ignored --nocapture
-    cargo test --locked --no-fail-fast -p zetesis-ferraris --test extrema_clingo --test value_extrema -- --ignored --nocapture
-    cargo test --locked --no-fail-fast -p zetesis-cli --test clingo --test extended_clingo --test multiple_inputs --test maximize --test language_value_sessions --test contribution_sessions --test bound_priority_sessions --test finite_carrier_sessions --test count_objective_sessions --test strong_negation -- --ignored --nocapture
-    cargo test --locked --no-fail-fast -p zetesis-themelios --test bundle_admission --test metadata --test formula --test formula_clingo --test aggregate_clingo --test aggregate_assignments_multiple --test aggregate_objective_observers --test extrema_source --test scalar_bindings_clingo --test objective_bounds_adversarial --test factorization_clingo --test comparison_reuse --test disjunction --test sum_profiles --test weak_objectives --test maximize_clingo --test observations --test observations_adversarial --test choice_intervals --test ground_guards --test conditional_body --test comparison_generators --test finite_bindings --test evaluated_heads --test negative_heads --test structural_values --test finite_pools --test true_heads --test count_heads --test value_extrema --test structural_bindings --test finite_values --test consequent_alternatives --test function_patterns --test positive_arguments --test scalar_evaluation -- --ignored --nocapture
+    case "${CLINGO:-}" in /*) ;; *)
+        printf '%s\n' 'Oracle checks require CLINGO to name an absolute executable path.' >&2
+        exit 2 ;;
+    esac
+    oracle_path=$(command -v clingo) || {
+        printf '%s\n' 'Oracle checks require clingo on PATH.' >&2
+        exit 2
+    }
+    if [ ! -f "$CLINGO" ] || [ ! -x "$CLINGO" ] || [ ! "$CLINGO" -ef "$oracle_path" ]; then
+        printf '%s\n' 'CLINGO and PATH clingo must select the same executable file.' >&2
+        exit 2
+    fi
+    oracle_version=$("$CLINGO" --version) || {
+        printf '%s\n' 'Cannot observe the clingo version; no oracle campaign started.' >&2
+        exit 2
+    }
+    if [ "$(printf '%s\n' "$oracle_version" | sed -n '1p')" != 'clingo version 5.8.2' ]; then
+        printf 'Oracle checks require clingo 5.8.2; found %s\n' "$oracle_version" >&2
+        exit 2
+    fi
+    mkdir -p -- target/oracle-checks
+    oracle_records=$(mktemp -d "$repo_dir/target/oracle-checks/run.XXXXXXXX")
+    printf '%s\n' "$CLINGO" > "$oracle_records/executable.txt"
+    printf '%s\n' "$oracle_version" > "$oracle_records/version.txt"
+    printf '%s\n' incomplete > "$oracle_records/status.txt"
+    oracle_index=0
+    oracle_first_failure=0
+    oracle_test() {
+        oracle_index=$((oracle_index + 1))
+        printf '%s\n' cargo test "$@" > "$oracle_records/$oracle_index.argv"
+        if cargo test "$@"; then
+            oracle_exit=0
+        else
+            oracle_exit=$?
+        fi
+        printf '%s\n' "$oracle_exit" > "$oracle_records/$oracle_index.exit"
+        printf 'Oracle campaign %s exited %s\n' "$oracle_index" "$oracle_exit"
+        if [ "$oracle_first_failure" -eq 0 ] && [ "$oracle_exit" -ne 0 ]; then
+            oracle_first_failure=$oracle_exit
+        fi
+    }
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test arithmetic_validation --test support_delta --test extremal_terms --test observation_bindings --test objective_rich_cycles --test objective_pools -- --ignored --nocapture
+    oracle_test --locked --no-fail-fast -p zetesis-solve --no-default-features --test language_consumers original_sources_retain_declared_reference_results -- --ignored --nocapture
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test objective_boundaries --test objective_dependency_contracts -- --ignored --nocapture
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test objective_scopes --test objective_carrier_composition --test objective_language_boundaries -- --ignored --nocapture
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test head_contributions --test objective_source_completion --test objective_field_expressions --test objective_priority_reporting --test objective_cyclic_producers --test objective_rich_producers --test observation_expressions --test observation_scopes --test observation_families -- --ignored --nocapture
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test logical_bounds --test objective_priorities --test objective_priority_certificates --test objective_measure_carriers --test finite_chains --test affine_normalization -- --ignored --nocapture
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test extrema_alias_contracts --test boolean_element_contracts --test signed_element_contracts --test signed_choices -- --ignored --nocapture
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test program_parts --test conditional_consumers --test weighted_heads --test nonbinding_guards --test extrema_heads --test count_plans --test count_head_activity --test objective_forwarding --test boolean_heads --test evaluated_witnesses --test objective_literal_weights --test objective_extrema_presence -- --ignored --nocapture
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test aggregate_dependencies --test aggregate_consumers --test choice_consumers --test outer_negative_consumers --test outer_ranges --test negative_count_eligibility --test structured_witnesses -- --ignored --nocapture
+    oracle_test --locked --no-fail-fast -p zetesis-ferraris --test aggregate_clingo -- --ignored --nocapture
+    oracle_test --locked --no-fail-fast -p zetesis-ferraris --test extrema_clingo --test value_extrema -- --ignored --nocapture
+    oracle_test --locked --no-fail-fast -p zetesis-cli --test clingo --test extended_clingo --test multiple_inputs --test maximize --test language_value_sessions --test contribution_sessions --test bound_priority_sessions --test finite_carrier_sessions --test count_objective_sessions --test strong_negation -- --ignored --nocapture
+    oracle_test --locked --no-fail-fast -p zetesis-themelios --test bundle_admission --test metadata --test formula --test formula_clingo --test aggregate_clingo --test aggregate_assignments_multiple --test aggregate_objective_observers --test extrema_source --test scalar_bindings_clingo --test objective_bounds_adversarial --test factorization_clingo --test comparison_reuse --test disjunction --test sum_profiles --test weak_objectives --test maximize_clingo --test observations --test observations_adversarial --test choice_intervals --test ground_guards --test conditional_body --test comparison_generators --test finite_bindings --test evaluated_heads --test negative_heads --test structural_values --test finite_pools --test true_heads --test count_heads --test value_extrema --test structural_bindings --test finite_values --test consequent_alternatives --test function_patterns --test positive_arguments --test scalar_evaluation -- --ignored --nocapture
+    printf 'Oracle campaign records: %s\n' "$oracle_records"
+    if [ "$oracle_first_failure" -ne 0 ]; then
+        printf '%s\n' failed > "$oracle_records/status.txt"
+        exit "$oracle_first_failure"
+    fi
+    printf '%s\n' passed > "$oracle_records/status.txt"
 fi
 if [ "$mode" = proofs ] || [ "$mode" = full ]; then
     (cd proofs && lake build && lake env lean -DautoImplicit=false -DwarningAsError=true Audit.lean)

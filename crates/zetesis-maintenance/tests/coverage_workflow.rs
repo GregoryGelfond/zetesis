@@ -518,3 +518,114 @@ fn mock_report_parser_refuses_unsupported_feature_flags() {
         assert!(String::from_utf8_lossy(&result.stderr).contains("invalid mock report option"));
     }
 }
+
+#[test]
+fn oracle_campaigns_continue_after_independent_failures() {
+    for failed in ["", "arithmetic_validation", "arithmetic_validation,formula"] {
+        let fixture = Fixture::new();
+        let result = fixture
+            .command("scripts/check.sh")
+            .arg("oracle")
+            .env("CHECK_TEST_TRACE", fixture.root().join("trace"))
+            .env("CHECK_TEST_ORACLE_FAILURE", failed)
+            .bounded_output();
+        assert_eq!(
+            result.status.code(),
+            Some(if failed.is_empty() { 0 } else { 23 })
+        );
+        let trace = fixture.read("trace");
+        let campaigns: Vec<_> = trace
+            .lines()
+            .filter(|line| line.starts_with("cargo test "))
+            .collect();
+        assert_eq!(campaigns.len(), 13);
+        assert!(campaigns.iter().all(|line| line.contains("--no-fail-fast")));
+        let records: Vec<_> = fs::read_dir(fixture.root().join("target/oracle-checks"))
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        assert_eq!(records.len(), 1);
+        for index in 1..=13 {
+            let expected =
+                if (index == 1 && !failed.is_empty()) || (index == 13 && failed.contains(',')) {
+                    "23\n"
+                } else {
+                    "0\n"
+                };
+            assert_eq!(
+                fs::read_to_string(records[0].join(format!("{index}.exit"))).unwrap(),
+                expected
+            );
+            let arguments = fs::read_to_string(records[0].join(format!("{index}.argv"))).unwrap();
+            assert_eq!(
+                arguments.lines().collect::<Vec<_>>().join(" "),
+                campaigns[index - 1]
+            );
+        }
+        assert_eq!(
+            fs::read_to_string(records[0].join("status.txt")).unwrap(),
+            if failed.is_empty() {
+                "passed\n"
+            } else {
+                "failed\n"
+            }
+        );
+    }
+}
+
+#[test]
+fn oracle_setup_refusal_prevents_test_execution() {
+    for defect in [
+        "missing",
+        "relative",
+        "foreign",
+        "absent-path",
+        "nonexecutable",
+        "version",
+        "execution",
+    ] {
+        let fixture = Fixture::new();
+        let mut command = fixture.command("scripts/check.sh");
+        command
+            .arg("oracle")
+            .env("CHECK_TEST_TRACE", fixture.root().join("trace"));
+        match defect {
+            "missing" => {
+                command.env_remove("CLINGO");
+            }
+            "relative" => {
+                command.env("CLINGO", "bin/clingo");
+            }
+            "foreign" => {
+                fixture.tool("other/clingo", "clingo");
+                command.env("CLINGO", fixture.root().join("other/clingo"));
+            }
+            "absent-path" => {
+                fixture.tool("other/clingo", "clingo");
+                fs::remove_file(fixture.root().join("bin/clingo")).unwrap();
+                command.env("PATH", fixture.root().join("bin"));
+                command.env("CLINGO", fixture.root().join("other/clingo"));
+            }
+            "nonexecutable" => {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(
+                    fixture.root().join("bin/clingo"),
+                    fs::Permissions::from_mode(0o600),
+                )
+                .unwrap();
+            }
+            "version" => {
+                command.env("CHECK_TEST_CLINGO_VERSION", "5.8.1");
+            }
+            "execution" => {
+                command.env("CHECK_TEST_CLINGO_FAILURE", "version");
+            }
+            _ => unreachable!(),
+        }
+        let result = command.bounded_output();
+        assert_eq!(result.status.code(), Some(2), "{defect}");
+        let trace = fs::read_to_string(fixture.root().join("trace")).unwrap_or_default();
+        assert!(!trace.contains("cargo test "), "{defect}: {trace}");
+        assert!(!fixture.root().join("target/oracle-checks").exists());
+    }
+}

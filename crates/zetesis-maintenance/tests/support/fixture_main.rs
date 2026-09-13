@@ -149,6 +149,14 @@ fn physical(arguments: &[String]) -> Result<(), String> {
 }
 fn cargo(arguments: &[String]) -> Result<(), String> {
     if env::var_os("CHECK_TEST_TRACE").is_some() {
+        let failed = variable("CHECK_TEST_ORACLE_FAILURE", "");
+        if arguments.first().is_some_and(|argument| argument == "test")
+            && arguments
+                .windows(2)
+                .any(|pair| pair[0] == "--test" && failed.split(',').any(|name| name == pair[1]))
+        {
+            return fail("simulated oracle campaign failure");
+        }
         return Ok(());
     }
     if arguments == ["+1.97.1", "llvm-cov", "--version"] {
@@ -244,6 +252,16 @@ fn execute(role: &str, arguments: &[String]) -> Result<(), String> {
             println!(
                 "LLVM (http://llvm.org/):\n  LLVM version {}\n  Optimized build.",
                 variable("COVERAGE_TEST_LLVM_VERSION", "22.1.6")
+            );
+            Ok(())
+        }
+        "clingo" if arguments == ["--version"] => {
+            if variable("CHECK_TEST_CLINGO_FAILURE", "") == "version" {
+                return fail("simulated clingo version failure");
+            }
+            println!(
+                "clingo version {}",
+                variable("CHECK_TEST_CLINGO_VERSION", "5.8.2")
             );
             Ok(())
         }
