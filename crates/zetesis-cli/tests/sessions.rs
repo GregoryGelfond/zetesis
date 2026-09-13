@@ -605,7 +605,7 @@ fn cancelled_closure_retains_typed_incomplete_coverage() {
         assert_eq!(outcome.completion(), Some(Completion::Interrupted));
         assert_eq!(
             outcome.interruption(),
-            Some(Interruption::Oracle(zetesis_cpu::Stop::Cancelled))
+            Some(Interruption::Preparation(zetesis_cpu::Stop::Cancelled))
         );
         assert!(!outcome.unsatisfiable());
     }
@@ -638,7 +638,7 @@ fn stopped_prepared_inputs_skip_execution_setup() {
         let outcome = session.outcome().unwrap();
         assert_eq!(
             outcome.interruption(),
-            Some(Interruption::Oracle(zetesis_cpu::Stop::Cancelled))
+            Some(Interruption::Preparation(zetesis_cpu::Stop::Cancelled))
         );
         let Subject::Program(program) = outcome.subject().unwrap() else {
             panic!("original program")

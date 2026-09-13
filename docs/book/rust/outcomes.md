@@ -32,6 +32,12 @@ previously checked answers remain to be consumed. After that prefix is drained,
 no final completion classification. An absent state makes no claim about why
 the caller has not obtained a stopping classification.
 
+`Interruption::Preparation` identifies cancellation or an expired deadline
+observed before candidate checking starts. It does not attribute work to a
+closure oracle, countermodel search or device that was never entered. JSON
+uses the interruption kind `preparation`, with `cancelled` or `deadline` as
+its control code.
+
 `SemanticOutcome::selection()` identifies the family requested by the session.
 `All` ranges over the original program; `Optimal` permits sound exclusion of
 worse candidates. `Completion::Exhausted` therefore does not by itself identify

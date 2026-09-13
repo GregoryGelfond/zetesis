@@ -32,4 +32,14 @@ fn stopped_formula_adapter_retains_admitted_subject() {
     assert!(theory.same_instance(admitted.theory()));
     assert_eq!(semantic.completion(), Some(crate::Completion::Interrupted));
     assert_eq!(semantic.verified_models(), 0);
+    assert_eq!(
+        semantic.interruption(),
+        Some(crate::Interruption::Preparation(
+            zetesis_cpu::Stop::Cancelled
+        ))
+    );
+    assert!(semantic.countermodel_statistics().is_none());
+    assert!(semantic.formula_execution().is_none());
+    assert!(semantic.lazy_execution().is_none());
+    assert!(semantic.shared_execution().is_none());
 }

@@ -311,7 +311,7 @@ fn error_kind(error: &RunError) -> &'static str {
 
 fn reason_code(reason: Interruption) -> &'static str {
     match reason {
-        Interruption::Oracle(reason) => control_code(reason),
+        Interruption::Preparation(reason) | Interruption::Oracle(reason) => control_code(reason),
         Interruption::Countermodel(reason) => {
             use zetesis_sat::Incomplete;
             match reason {
@@ -464,6 +464,7 @@ fn write_interruption(
 ) -> Result<(), RunError> {
     if let Some(reason) = interruption {
         let (kind, detail) = match reason {
+            Interruption::Preparation(error) => ("preparation", format!("{error:?}")),
             Interruption::Oracle(error) => ("oracle", format!("{error:?}")),
             Interruption::Countermodel(error) => ("countermodel", format!("{error:?}")),
             Interruption::Objective(error) => ("objective", format!("{:?}", error.kind())),

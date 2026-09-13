@@ -125,7 +125,7 @@ pub(crate) fn check_control(
         Err(stop) => {
             let mut progress = Progress::new();
             progress.apply(crate::SemanticOutcome::interrupted_before_start(
-                crate::Interruption::Countermodel(stop.into()),
+                crate::Interruption::Preparation(stop),
             ));
             complete(output, diagnostics, progress, phases, options).map(Some)
         }

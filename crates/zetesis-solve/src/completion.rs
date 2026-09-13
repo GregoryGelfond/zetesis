@@ -60,6 +60,8 @@ impl SearchState {
 /// A typed reason why model enumeration could not establish complete coverage.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Interruption {
+    /// Control stopped preparation before an executor began checking candidates.
+    Preparation(Stop),
     /// Incremental candidate enumeration or a closure oracle stopped.
     Oracle(Stop),
     /// Reduct countermodel encoding, search or independent witness checking stopped.
@@ -72,7 +74,7 @@ pub enum Interruption {
 impl fmt::Display for Interruption {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Oracle(error) => error.fmt(f),
+            Self::Preparation(error) | Self::Oracle(error) => error.fmt(f),
             Self::Countermodel(error) => error.fmt(f),
             Self::Objective(error) => error.fmt(f),
             Self::Incumbent(error) => error.fmt(f),

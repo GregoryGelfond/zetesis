@@ -83,7 +83,7 @@ fn cancelled_invocation_never_claims_unsat() {
     let report = run(String::new(), &options(&[]), &mut output, &control).unwrap();
     assert_eq!(
         report.interruption,
-        Some(zetesis_cli::Interruption::Oracle(Stop::Cancelled))
+        Some(zetesis_cli::Interruption::Preparation(Stop::Cancelled))
     );
     assert_eq!(report.checked, 0);
     assert!(!String::from_utf8(output).unwrap().contains("UNSATISFIABLE"));

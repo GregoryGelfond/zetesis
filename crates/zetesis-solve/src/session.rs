@@ -549,10 +549,7 @@ impl<'a> Session<'a> {
         let config = input.configure(config)?;
         let _solving = phases.stage(crate::SolveStage::Solving);
         if let Err(stop) = control.poll() {
-            let interruption = match input.input {
-                Prepared::Formula(_) => Interruption::Countermodel(stop.into()),
-                Prepared::Relational(_) | Prepared::Ground(_) => Interruption::Oracle(stop),
-            };
+            let interruption = Interruption::Preparation(stop);
             return Ok((
                 State::Stopped(Box::new(SemanticOutcome {
                     subject: Some(input.subject()),

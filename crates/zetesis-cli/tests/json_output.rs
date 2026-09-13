@@ -838,14 +838,7 @@ fn stopped_requests_publish_no_models() {
             assert_eq!(report.completion, Completion::Interrupted);
             assert_eq!(value["models"], json!([]));
             assert_eq!(value["outcome"]["status"], "incomplete");
-            assert_eq!(
-                value["outcome"]["interruption"]["kind"],
-                if oracle == "closure" {
-                    "oracle"
-                } else {
-                    "countermodel"
-                }
-            );
+            assert_eq!(value["outcome"]["interruption"]["kind"], "preparation");
             assert_eq!(
                 value["outcome"]["interruption"]["code"],
                 if expired { "deadline" } else { "cancelled" }
