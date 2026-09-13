@@ -116,6 +116,24 @@ fn text(path: &std::path::Path) -> Result<String, Error> {
     String::from_utf8(inventory::read(path, 16_777_216)?)
         .map_err(|_| Error::Invalid(format!("invalid UTF-8: {}", path.display())))
 }
+fn proof_record(
+    directory: &std::path::Path,
+    record: &str,
+    live_audit: Option<&std::path::Path>,
+) -> Result<Vec<u8>, Error> {
+    let limits = proofs::Limits::default();
+    let result = if let Some(path) = live_audit {
+        let bytes = inventory::read(path, limits.file_bytes)?;
+        proofs::verify_with_audit(directory, record, &bytes, limits)?
+    } else {
+        proofs::verify(directory, record, limits)?
+    };
+    Ok(format!(
+        "Proof record: PASS: {} theorems; {} semantic modules; {} source/configuration files\n",
+        result.theorems, result.semantic_modules, result.source_files
+    )
+    .into_bytes())
+}
 fn execute(action: Action, output: &mut impl Write) -> Result<(), Error> {
     let value = match action {
         Action::BookLibraries {
@@ -149,16 +167,7 @@ fn execute(action: Action, output: &mut impl Write) -> Result<(), Error> {
             proofs_dir,
             record,
             live_audit,
-        } => {
-            let limits = proofs::Limits::default();
-            let result = if let Some(path) = live_audit {
-                let bytes = inventory::read(&path, limits.file_bytes)?;
-                proofs::verify_with_audit(&proofs_dir, &record, &bytes, limits)?
-            } else {
-                proofs::verify(&proofs_dir, &record, limits)?
-            };
-            format!("Proof record: PASS: {} theorems; {} semantic modules; {} source/configuration files\n", result.theorems, result.semantic_modules, result.source_files).into_bytes()
-        }
+        } => proof_record(&proofs_dir, &record, live_audit.as_deref())?,
         Action::CoverageFloor { mode, path } => {
             let source = text(&path)?;
             Floor::parse(&source)?.admit(Mode::parse(&mode)?)?;
