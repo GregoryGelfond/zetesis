@@ -3100,6 +3100,31 @@
     "line": 305
   },
   {
+    "name": "Zetesis.NormalSupport.propose_monotone",
+    "file": "Zetesis/NormalSupport.lean",
+    "line": 39
+  },
+  {
+    "name": "Zetesis.NormalSupport.restricted_reduct_model",
+    "file": "Zetesis/NormalSupport.lean",
+    "line": 48
+  },
+  {
+    "name": "Zetesis.NormalSupport.projection_compatible",
+    "file": "Zetesis/NormalSupport.lean",
+    "line": 76
+  },
+  {
+    "name": "Zetesis.NormalSupport.projection_compatible_of_coverage",
+    "file": "Zetesis/NormalSupport.lean",
+    "line": 93
+  },
+  {
+    "name": "Zetesis.NormalSupport.answer_set_inside_closed",
+    "file": "Zetesis/NormalSupport.lean",
+    "line": 106
+  },
+  {
     "name": "Zetesis.ObjectiveBounds.mem_prune",
     "file": "Zetesis/ObjectiveBounds.lean",
     "line": 25
@@ -4697,22 +4722,22 @@
   {
     "name": "Zetesis.SourceSupport.unchanged_round_closed",
     "file": "Zetesis/SourceSupport.lean",
-    "line": 56
+    "line": 59
   },
   {
     "name": "Zetesis.SourceSupport.stages_inside_closed",
     "file": "Zetesis/SourceSupport.lean",
-    "line": 66
+    "line": 69
   },
   {
     "name": "Zetesis.SourceSupport.stable_inside_closed",
     "file": "Zetesis/SourceSupport.lean",
-    "line": 99
+    "line": 102
   },
   {
     "name": "Zetesis.SourceSupport.completed_activity_covers",
     "file": "Zetesis/SourceSupport.lean",
-    "line": 119
+    "line": 122
   },
   {
     "name": "Zetesis.StrongNegation.satisfies_rename",

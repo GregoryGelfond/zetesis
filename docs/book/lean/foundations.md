@@ -19,6 +19,13 @@ Lean version. A small consumer file in that directory can be checked with
 `lake env lean Consumer.lean`. Lean declarations are maintained with the semantic
 changes they describe, not generated from the prose in this book.
 
+The [proof-library guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/README.md#build-and-audit)
+describes the strict axiom audit. After source changes, the maintained
+[capture command](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-maintenance/README.md#capture-current-proof-evidence)
+runs the pinned checks, retains their output and publishes a record bound to the
+checked sources. Kernel execution, record consistency and implementation
+refinement are distinct obligations.
+
 ## Interpretations are predicates
 
 [`Zetesis.Core`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Core.lean)

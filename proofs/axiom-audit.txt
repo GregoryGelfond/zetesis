@@ -640,6 +640,11 @@
 'Zetesis.NormalFerraris.applicable_answer_set_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.NormalFerraris.applicable_frozen_subset_model_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.NormalFerraris.ferraris_answer_set_iff_closure' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.NormalSupport.propose_monotone' does not depend on any axioms
+'Zetesis.NormalSupport.restricted_reduct_model' does not depend on any axioms
+'Zetesis.NormalSupport.projection_compatible' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.NormalSupport.projection_compatible_of_coverage' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.NormalSupport.answer_set_inside_closed' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ObjectiveBounds.mem_prune' depends on axioms: [propext]
 'Zetesis.ObjectiveBounds.incumbent_survives' depends on axioms: [propext]
 'Zetesis.ObjectiveBounds.tighten' depends on axioms: [propext]

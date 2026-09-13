@@ -36,8 +36,10 @@ full answer sets.
 `--time-limit SECONDS` requests a cooperative deadline after input loading.
 Whole nonnegative seconds are accepted; zero requests an immediate stop and
 omission imposes no deadline. Search polls the same `Control` used by library
-consumers. An observed deadline produces partial coverage and exit 3; it is not
-a hard process timeout for source I/O, frontend work or a running device kernel.
+consumers. A deadline during search leaves coverage incomplete. A later deadline
+during publication preserves the already established search coverage. Either
+stop returns exit 3; the deadline is not a hard process timeout for source I/O,
+frontend work or a running device kernel.
 `--stats` includes the requested duration. Library callers supply their own
 control; this process option does not override it.
 
@@ -58,14 +60,15 @@ Untagged satisfiability verdicts use bold italic gray. Fatal diagnostics use red
 themelios syntax messages retain source locations and excerpts. ANSI palette
 colors inherit the terminal theme. Styling never changes the semantic result.
 
-A resource stop reports `INCOMPLETE`; it cannot establish UNSAT or optimality.
-Verified incumbents may still carry fully evaluated costs. Exit codes are:
+A resource stop reports `INCOMPLETE`; the stop itself establishes neither UNSAT
+nor optimality. Checked answers, proved optimality and completed search remain
+established if only their later publication stops. Exit codes are:
 
 | Code | Meaning |
 |---|---|
 | 0 | The requested run completed. |
 | 2 | Input, backend, protocol or output failure. |
-| 3 | Search was interrupted. |
+| 3 | Search or publication was interrupted. |
 
 These are zetesis exit codes, not clingo's codes.
 

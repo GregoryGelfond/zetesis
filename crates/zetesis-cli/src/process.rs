@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use zetesis_themelios::{BundleLimits, SourceBundle};
 
 /// Process adapter. Exit 0 means a completed request, 2 an input/backend/output
-/// error, and 3 an interrupted search. Satisfiability and coverage are printed
+/// error, and 3 interrupted search or publication. Satisfiability and coverage are printed
 /// independently; this is not clingo's numeric exit-code protocol.
 /// Standard output is explicitly flushed before returning. A flush failure is
 /// an output error, independently of any established semantic outcome.

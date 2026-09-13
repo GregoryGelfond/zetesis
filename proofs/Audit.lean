@@ -620,6 +620,11 @@ import Zetesis
 #print axioms Zetesis.NormalFerraris.applicable_answer_set_iff
 #print axioms Zetesis.NormalFerraris.applicable_frozen_subset_model_iff
 #print axioms Zetesis.NormalFerraris.ferraris_answer_set_iff_closure
+#print axioms Zetesis.NormalSupport.propose_monotone
+#print axioms Zetesis.NormalSupport.restricted_reduct_model
+#print axioms Zetesis.NormalSupport.projection_compatible
+#print axioms Zetesis.NormalSupport.projection_compatible_of_coverage
+#print axioms Zetesis.NormalSupport.answer_set_inside_closed
 #print axioms Zetesis.ObjectiveBounds.mem_prune
 #print axioms Zetesis.ObjectiveBounds.incumbent_survives
 #print axioms Zetesis.ObjectiveBounds.tighten

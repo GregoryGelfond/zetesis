@@ -84,6 +84,15 @@ locations, counts, hashes and allowed axioms. It does not rerun Lean or establis
 that a command was executed; kernel checking and record consistency are separate
 requirements. `scripts/check.sh proofs` runs both.
 
+After changing proof sources, regenerate the theorem index and Audit with the
+[inventory command](../crates/zetesis-maintenance/README.md#prepare-proof-library-views),
+then use the maintained
+[proof capture](../crates/zetesis-maintenance/README.md#capture-current-proof-evidence)
+to execute the pinned checks and publish their record. It retains the original
+record and bounded command receipts outside the repository and validates current
+source and tool identities before publication. Existing records are observations
+of their recorded sources; they cannot qualify a later edit.
+
 ## Verification boundary
 
 The laws prove their stated mathematical conclusions under explicit premises,
