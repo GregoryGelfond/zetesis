@@ -10,13 +10,28 @@ fn refusal<T>(result: Result<T, Failure>) -> Failure {
     error
 }
 
-fn assert_occurrences(relation: &Relation<'_>, source: &[Atom], indices: &[usize]) {
+fn assert_occurrences(
+    relation: &Relation<'_>,
+    source: &[Atom],
+    indices: &[usize],
+    before: &[[&Value; 2]],
+) {
     for (position, &source_index) in indices.iter().enumerate() {
         let row = relation.row(position).unwrap();
         assert_eq!(row.position(), position);
         assert_eq!(row.source_index(), source_index);
         for (column, value) in source[source_index].values().iter().enumerate() {
-            assert!(std::ptr::eq(row.value(column).unwrap(), value));
+            let representative = row.value(column).unwrap();
+            assert_eq!(representative, value);
+            assert!(std::ptr::eq(representative, before[position][column]));
+            // Equal cells may share a canonical source representative. The
+            // original occurrence identity is retained separately above.
+            assert!(
+                source
+                    .iter()
+                    .flat_map(Atom::values)
+                    .any(|original| std::ptr::eq(representative, original))
+            );
         }
     }
 }
@@ -35,6 +50,9 @@ fn tighter_query_limits_preserve_prepared_occurrences() {
     let indices = [2, 0, 2];
     let relation =
         Relation::from_catalog(&predicate, &source, &indices, Limits::default()).unwrap();
+    let before: [[&Value; 2]; 3] = std::array::from_fn(|position| {
+        std::array::from_fn(|column| relation.row(position).unwrap().value(column).unwrap())
+    });
     let symbol = Value::Symbol("1".into());
     let string = Value::String("1".into());
     let query = relation.query(&[(1, &symbol)], Limits::default()).unwrap();
@@ -94,7 +112,7 @@ fn tighter_query_limits_preserve_prepared_occurrences() {
         assert!(relation.same_owner(query.relation()));
         assert!(relation.same_owner(input.relation()));
         assert_eq!(input.positions(), &[0, 1, 2]);
-        assert_occurrences(&relation, &source, &indices);
+        assert_occurrences(&relation, &source, &indices, &before);
 
         let resumed = relation.query(&[(1, &symbol)], exact).unwrap();
         assert!(relation.same_owner(resumed.relation()));
