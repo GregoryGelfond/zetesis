@@ -15,15 +15,13 @@ use zetesis_core::{Atom, Model, Value};
 use zetesis_cpu::Control;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, ProfileFeature, admit_formula,
+    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
 };
 
 type Records = BTreeSet<(BTreeSet<String>, Option<Vec<i64>>)>;
 struct Case {
     name: String,
     source: String,
-    refusal: Option<ProfileFeature>,
     expected: Records,
 }
 
@@ -32,19 +30,13 @@ fn cases() -> Vec<Case> {
         .lines()
         .map(|line| {
             let row: Json = serde_json::from_str(line).expect("recorded observer case");
+            assert!(
+                row["refusal"].is_null(),
+                "every recorded observer is admitted"
+            );
             Case {
                 name: row["name"].as_str().expect("stable case name").to_owned(),
                 source: row["source"].as_str().expect("unchanged source").to_owned(),
-                refusal: match row["refusal"].as_str() {
-                    None => None,
-                    Some("ObjectiveAggregateDependency") => {
-                        Some(ProfileFeature::ObjectiveAggregateDependency)
-                    }
-                    Some("ObjectiveNegativeDependency") => {
-                        Some(ProfileFeature::ObjectiveNegativeDependency)
-                    }
-                    Some(other) => panic!("unreviewed refusal: {other}"),
-                },
                 expected: row["models"]
                     .as_array()
                     .expect("complete recorded model set")
@@ -139,41 +131,22 @@ fn exhaustive(input: &AdmittedFormula) -> Records {
 fn observer_cases_preserve_recorded_contracts() {
     let cases = cases();
     assert_eq!(cases.len(), 92);
-    let mut admitted = 0;
-    let mut refused = 0;
     for case in cases {
-        let result = admit_formula(
+        let input = admit_formula(
             case.source.clone(),
             AdmissionOptions::default(),
             ExpansionLimits::default(),
             FormulaLimits::default(),
+        )
+        .unwrap_or_else(|error| panic!("{}: {error}", case.name));
+        assert_eq!(
+            exhaustive(&input),
+            case.expected,
+            "{}: {}",
+            case.name,
+            case.source
         );
-        if let Some(expected) = case.refusal {
-            let Err(error) = result else {
-                panic!("{}: expected reviewed refusal", case.name);
-            };
-            assert!(!error.diagnostics().is_empty(), "located refusal");
-            assert!(
-                matches!(error,
-                FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile { feature, .. }))
-                    if feature == expected),
-                "{}: {error}",
-                case.name
-            );
-            refused += 1;
-        } else {
-            let input = result.unwrap_or_else(|error| panic!("{}: {error}", case.name));
-            assert_eq!(
-                exhaustive(&input),
-                case.expected,
-                "{}: {}",
-                case.name,
-                case.source
-            );
-            admitted += 1;
-        }
     }
-    assert_eq!((admitted, refused), (92, 0));
 }
 
 static NEXT: AtomicU64 = AtomicU64::new(0);

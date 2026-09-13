@@ -325,7 +325,6 @@ fn excluded_heads_remain_located_refusals() {
                     ProfileFeature::ConditionalDisjunction
                 }
                 "NegatedHead" => ProfileFeature::NegatedHead,
-                "StrongNegation" => ProfileFeature::StrongNegation,
                 "PooledArguments" => ProfileFeature::PooledArguments,
                 "generated/interval disjunction head" | "generated disjunction head" => {
                     ProfileFeature::Term

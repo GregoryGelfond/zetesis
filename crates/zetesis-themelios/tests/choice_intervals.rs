@@ -329,7 +329,6 @@ fn refused(error: &FormulaFailure, expected: &str) -> bool {
             let predicted = match expected {
                 "Term" => ProfileFeature::Term,
                 "PooledArguments" => ProfileFeature::PooledArguments,
-                "StrongNegation" => ProfileFeature::StrongNegation,
                 _ => return false,
             };
             *feature == predicted

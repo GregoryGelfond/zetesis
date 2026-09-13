@@ -57,8 +57,6 @@ pub enum ProfileFeature {
     ConditionalChoice,
     /// Default negation in a normal or choice head.
     NegatedHead,
-    /// A negative symbolic scalar outside the logical predicate-sign profile.
-    StrongNegation,
     /// An atom argument-list pool.
     PooledArguments,
     /// An anonymous atom position projected before default negation.
@@ -85,20 +83,12 @@ pub enum ProfileFeature {
     ShowTerm,
     /// An optimization form outside the first bounded minimization profile.
     Objective,
-    /// Default-negated logical conditions in an objective-enabled program.
-    ObjectiveNegativeDependency,
     /// An aggregate form outside the bounded finite aggregate profile.
     Aggregate,
     /// A new-variable assignment outside the finite supported binder profile.
     AggregateAssignment,
     /// Pooling survived the bounded normalized analysis boundary.
     AnalysisPool,
-    /// Disjunctive producer simplification cannot yet determine exact objective priority presence.
-    ObjectiveDisjunctionDependency,
-    /// Universal producer simplification cannot yet determine exact objective priority presence.
-    ObjectiveConditionalDependency,
-    /// Aggregate producer support cannot yet determine exact objective priority presence.
-    ObjectiveAggregateDependency,
     /// An objective producer cone lacks the completed finite source-eligibility profile.
     ObjectiveSourceEligibility,
 }
@@ -115,7 +105,6 @@ impl fmt::Display for ProfileFeature {
             Self::ChoiceCardinality => "choice with other than one element",
             Self::ConditionalChoice => "conditional choice element",
             Self::NegatedHead => "default-negated head",
-            Self::StrongNegation => "strong negation",
             Self::PooledArguments => "pooled arguments",
             Self::AnonymousProjection => "anonymous projection under default negation",
             Self::BodyElement => "body element form",
@@ -129,13 +118,9 @@ impl fmt::Display for ProfileFeature {
             Self::NulString => "a string containing NUL",
             Self::ShowTerm => "a term-valued or conditional show directive",
             Self::Objective => "an unsupported optimization objective",
-            Self::ObjectiveNegativeDependency => "a default-negated objective dependency",
             Self::AggregateAssignment => "an unsupported aggregate assignment",
             Self::AnalysisPool => "a pool at the normalized analysis boundary",
             Self::Aggregate => "an unsupported finite aggregate",
-            Self::ObjectiveDisjunctionDependency => "a disjunctive objective dependency",
-            Self::ObjectiveConditionalDependency => "a universal conditional objective dependency",
-            Self::ObjectiveAggregateDependency => "an aggregate objective dependency",
             Self::ObjectiveSourceEligibility => {
                 "an objective dependency without complete source eligibility"
             }

@@ -14,7 +14,7 @@ use zetesis_ferraris::{Interpretation, check};
 use zetesis_themelios::observation::{ErrorKind, Feature, Limits, Resource};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, ProfileFeature, admit_formula,
+    FormulaFailure, FormulaLimits, admit_formula,
 };
 
 type Record = (Vec<String>, Option<Vec<i64>>);
@@ -213,13 +213,6 @@ fn every_outside_profile_source_has_an_explicit_typed_refusal() {
             "Syntax" => assert!(matches!(
                 error,
                 FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Syntax(_)))
-            )),
-            "StrongNegation" => assert!(matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                    feature: ProfileFeature::StrongNegation,
-                    ..
-                }))
             )),
             expected => {
                 let feature = match expected {

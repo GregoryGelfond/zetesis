@@ -1,9 +1,6 @@
 //! Scoped universal body conditionals retain their original implication reducts.
 //! Exact external records complement a separate finite definition evaluator.
 
-#[path = "support/objective_dependency_records.rs"]
-mod objective_dependencies;
-
 use std::collections::BTreeSet;
 use std::fs::{self, File};
 use std::path::PathBuf;
@@ -279,8 +276,7 @@ fn refusal(error: &FormulaFailure, expected: &str) {
 fn original_sources_match_complete_models_or_reviewed_profile_refusals() {
     // The original generative_double_condition source is now admitted by the
     // finite comparison binding plan. The negative anonymous consequent now
-    // admits a complete projection. Objective producer sources now retain their
-    // full scored-family contracts alongside these unchanged model records.
+    // admits a complete projection. These records describe complete model families.
     let cases = cases();
     assert_eq!(cases.len(), 91);
     let mut admitted = 0;
@@ -290,16 +286,13 @@ fn original_sources_match_complete_models_or_reviewed_profile_refusals() {
     for row in cases {
         let source = row["source"].as_str().unwrap();
         let result = input(source);
-        if row["native"] == "admit" || row["native"] == "ObjectiveConditionalDependency" {
+        if row["native"] == "admit" {
             assert_eq!(row["valid"], true);
             let program = result.unwrap_or_else(|error| panic!("{}: {error}", row["name"]));
             assert_eq!(program.source().text(), source);
             let expected = expected(&row);
             assert_eq!(exhaustive(&program), expected, "{}", row["name"]);
             assert_eq!(native(&program), expected, "{}", row["name"]);
-            if row["native"] == "ObjectiveConditionalDependency" {
-                objective_dependencies::check(source);
-            }
             admitted += 1;
             models += expected.len();
         } else {

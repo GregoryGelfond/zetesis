@@ -46,6 +46,13 @@ The command-line adapter makes this selection automatically.
 For an owned retry without copying or reparsing the original input, use
 `ParsedSource` as shown in the [source-admission example](../../docs/book/rust/source.md).
 
+The pre-1.0 Rust API removes the retired `ProfileFeature` variants
+`StrongNegation`, `ObjectiveNegativeDependency`, `ObjectiveDisjunctionDependency`,
+`ObjectiveConditionalDependency` and `ObjectiveAggregateDependency`. Admission
+no longer produced these values; callers that constructed or matched them must
+remove those references. This removal changes the source API, with no change to
+admitted source behavior or the remaining typed refusals.
+
 ## Finite formula language
 
 Formula admission validates source scopes, completes a bounded possible-positive
