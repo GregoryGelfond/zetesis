@@ -63,6 +63,9 @@ pub struct SolveConfig {
     /// Maximum charged CPU oracle work per candidate, or shared host source
     /// work per lazy GPU batch. Shared CPU rounds count record visits plus
     /// antecedent tests per world; independent joins and device units differ.
+    /// Formula execution also applies this ceiling per independent original or
+    /// frozen-reduct verification call, and per certified candidate check. It
+    /// does not replace cumulative `max_search_work` or device propagation limits.
     pub max_work: u64,
     /// Maximum device propagation work per formula candidate, independent of
     /// CPU work. Below mandatory setup work the device refuses before submission.

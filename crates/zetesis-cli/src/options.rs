@@ -184,6 +184,8 @@ pub struct Options {
     /// Maximum charged oracle operations per CPU candidate, or shared source
     /// operations per lazy GPU batch. Shared CPU worlds count record visits
     /// plus antecedent tests. Join/copy and eager scan units differ.
+    /// Also bounds each independent formula verification or certified candidate
+    /// check; formula search and GPU propagation have separate limits.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_work, hide_short_help = true)]
     pub max_work: u64,
     /// Device propagation work per formula candidate, independent of CPU work.

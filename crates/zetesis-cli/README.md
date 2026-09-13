@@ -142,8 +142,12 @@ unsupported.
 
 `--gpu-formula-work` and `--gpu-formula-rounds` independently bound device
 propagation per formula candidate. Their defaults are 100,000,000 charged work
-units and 64 sweeps, matching the device library. `--max-work` retains its CPU
-oracle/source units; it no longer sets a silently saturated formula GPU limit.
+units and 64 sweeps, matching the device library. `--max-work` bounds CPU
+oracle/source work and each independent formula verification call. Formula
+verification evaluates original truth or a frozen-reduct witness; certified
+candidate checks also use this per-call ceiling. These operations retain their
+own charged units. Cumulative encoding/search/certificate work remains bounded
+by `--max-search-work`. Neither host limit sets the device propagation limit.
 Values above `u32::MAX` are argument errors. Zero device work refuses a nonempty
 setup that needs work; zero rounds still checks original truth and sends
 undecided candidates to exact CPU residual search. Neither limit bounds driver

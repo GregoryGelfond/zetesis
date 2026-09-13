@@ -89,7 +89,7 @@ fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
     }
     writeln!(
         sink,
-        "  search limits: candidates={}; candidate restriction/formula work={}; decisions={}; CPU candidate/lazy GPU batch source work={}",
+        "  search limits: candidates={}; candidate restriction/formula work={}; decisions={}; CPU candidate/lazy GPU source batch/formula verification call work={}",
         o.max_candidates, o.max_search_work, o.max_search_decisions, o.max_work
     )?;
     writeln!(

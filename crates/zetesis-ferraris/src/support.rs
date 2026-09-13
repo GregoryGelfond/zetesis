@@ -44,7 +44,9 @@ impl From<Stop> for SupportError {
 }
 
 /// A complete construction or conservative refusal, with work retained on every
-/// path. `None` means an asserted head lies outside the certified grammar.
+/// path. `None` means an asserted head lies outside the certified grammar, or
+/// no asserted head contains a syntactic disjunction. The latter leaves purely
+/// atomic heads to the ordinary atomic specialization.
 #[derive(Debug)]
 pub struct SupportAttempt {
     /// Separate classical restriction over exactly the original atom indices.
@@ -60,6 +62,8 @@ pub struct SupportAttempt {
 /// an implication with such a consequent, a default negation, or falsum. Bodies
 /// may be arbitrary formulas. Choices and other asserted heads decline the
 /// complete certificate. Repeated head atoms count once, including shared DAGs.
+/// A theory with no syntactic disjunction in an asserted head also declines:
+/// the ordinary atomic specialization already handles that case.
 ///
 /// For each atom `a`, require a rule whose body is true and whose other distinct
 /// heads are false whenever `a` is true. This condition is necessary: otherwise
