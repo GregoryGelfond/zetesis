@@ -327,12 +327,17 @@ fn a_cancelled_request_keeps_its_interruption_when_its_summary_sink_fails() {
         &control,
     )
     .unwrap_err();
+    let RunError::Output(error) = failure.cause.as_ref() else {
+        panic!("summary writer remains the primary failure")
+    };
+    assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
+    assert_eq!(error.to_string(), "injected output failure");
     let partial = failure.partial_report.unwrap();
     assert_eq!(partial.completion, Some(Completion::Interrupted));
-    assert!(matches!(
+    assert_eq!(
         partial.interruption,
-        Some(Interruption::Countermodel(_))
-    ));
+        Some(Interruption::Preparation(zetesis_cpu::Stop::Cancelled))
+    );
     assert_eq!(
         (
             partial.published_models,
@@ -342,6 +347,10 @@ fn a_cancelled_request_keeps_its_interruption_when_its_summary_sink_fails() {
         (0, 0, 0)
     );
     assert!(!partial.summary_published);
+    assert!(partial.countermodel_statistics.is_none());
+    assert!(partial.formula_execution.is_none());
+    assert!(partial.lazy_execution.is_none());
+    assert!(partial.shared_execution.is_none());
 }
 
 #[test]

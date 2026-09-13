@@ -112,17 +112,15 @@ fn cancellation_precedes_eager_materialization() {
     let (report, _, _) = solve("a.", &["--max-atoms", "0"], &control);
     assert_eq!(
         report.interruption,
-        Some(Interruption::Countermodel(
-            zetesis_sat::Incomplete::Cancelled
-        ))
+        Some(Interruption::Preparation(zetesis_cpu::Stop::Cancelled))
     );
-    let (report, _, _) = solve("a.", &["--max-atoms", "0"], &control);
-    assert_eq!(
-        report.interruption,
-        Some(Interruption::Countermodel(
-            zetesis_sat::Incomplete::Cancelled
-        ))
-    );
+    assert_eq!(report.completion, Completion::Interrupted);
+    assert_eq!(report.models, 0);
+    assert_eq!(report.checked, 0);
+    assert!(report.countermodel_statistics.is_none());
+    assert!(report.formula_execution.is_none());
+    assert!(report.lazy_execution.is_none());
+    assert!(report.shared_execution.is_none());
 }
 
 #[test]
