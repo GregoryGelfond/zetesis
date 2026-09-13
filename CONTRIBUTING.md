@@ -191,6 +191,11 @@ assertion strength. Selected negative controls, systematic mutation campaigns,
 input fuzzing and mathematical proofs discharge different obligations. Report
 the instrument and scope actually used.
 
+Before adding a test for uncovered code, establish that the code still serves
+an admitted behavior or necessary failure boundary. Remove obsolete states and
+unreachable responsibilities when their absence is justified; retain necessary
+defensive behavior even when exercising it requires a separate qualification.
+
 A test name states one proposition. Split independent claims joined by a
 conjunction into separate tests, with meaningful shared setup where useful.
 Rationale belongs in a comment, not in the identifier. Names over fifty characters
