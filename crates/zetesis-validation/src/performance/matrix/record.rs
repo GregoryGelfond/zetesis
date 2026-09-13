@@ -16,7 +16,7 @@ pub enum Decision {
     Refused,
     /// The native envelope explicitly reports unavailable compiled backend support.
     BackendUnavailable,
-    /// A solver reports incomplete coverage; its interruption remains in raw JSON.
+    /// Search or publication is incomplete; independent coverage remains in raw JSON.
     Incomplete,
     /// Authored process timeout expired.
     Timeout,

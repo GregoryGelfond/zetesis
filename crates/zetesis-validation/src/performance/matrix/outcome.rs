@@ -16,31 +16,33 @@ pub(super) fn check(document: &Value, exit: Option<Exit>) -> Result<(), Failure>
     let error = outcome
         .get("error")
         .ok_or_else(|| invalid("missing native error field"))?;
+    let publication_stopped = publication_stop(outcome)?;
     if matches!(status, Some("satisfiable" | "unsatisfiable")) {
-        if !error.is_null() {
+        if !error.is_null() || publication_stopped {
             return Err(invalid(
-                "successful native status contradicts reported error",
+                "successful native status contradicts reported error or publication stop",
             ));
         }
         return exited(exit, 0);
     }
-    partial(document)?;
+    partial(document, publication_stopped)?;
     match status {
         Some("incomplete") => {
             if !error.is_null()
-                || outcome["completion"] != "interrupted"
-                || outcome["coverage"] != "partial"
-                || outcome["interruption"].is_null()
                 || outcome["verified_models"].as_u64().is_none()
+                || (!publication_stopped
+                    && (outcome["completion"] != "interrupted"
+                        || outcome["coverage"] != "partial"
+                        || outcome["interruption"].is_null()))
             {
                 return Err(invalid(
-                    "incomplete native status lacks coherent partial coverage",
+                    "incomplete native status lacks coherent search or publication evidence",
                 ));
             }
             exited(exit, 3)?;
             Err((
                 Decision::Incomplete,
-                "native reported incomplete coverage; full interruption retained".into(),
+                "native reported incomplete search or publication; full evidence retained".into(),
             ))
         }
         Some("failed") => {
@@ -87,10 +89,10 @@ fn exited(exit: Option<Exit>, expected: i32) -> Result<(), Failure> {
 
 /// Only envelope/count consistency is checked here; partial models are not a
 /// complete answer family and their uninterpreted records remain in the capture.
-fn partial(document: &Value) -> Result<(), Failure> {
+fn partial(document: &Value, publication_stopped: bool) -> Result<(), Failure> {
     let outcome = &document["outcome"];
     let completion = coverage(outcome)?;
-    interruption(outcome, completion)?;
+    interruption(outcome, completion, publication_stopped)?;
     publication(document, completion)?;
     let optimization = outcome
         .get("optimization")
@@ -123,23 +125,48 @@ fn coverage(outcome: &Value) -> Result<&Value, Failure> {
     }
     Ok(completion)
 }
-fn interruption(outcome: &Value, completion: &Value) -> Result<(), Failure> {
+fn interruption(
+    outcome: &Value,
+    completion: &Value,
+    publication_stopped: bool,
+) -> Result<(), Failure> {
     let interruption = outcome
         .get("interruption")
         .ok_or_else(|| invalid("missing interruption"))?;
     if !interruption.is_null()
         && (!matches!(
             interruption["kind"].as_str(),
-            Some("oracle" | "countermodel" | "objective" | "incumbent")
+            Some("preparation" | "oracle" | "countermodel" | "objective" | "incumbent")
         ) || interruption["code"].as_str().is_none_or(str::is_empty)
             || interruption["detail"].as_str().is_none())
     {
         return Err(invalid("malformed native interruption"));
     }
-    if interruption.is_null() == (completion == "interrupted") {
+    // A publication stop can occur while a known search stop still has checked
+    // answers waiting to drain. Null completion preserves that pending state;
+    // it never establishes exhausted or final interrupted coverage.
+    let pending = publication_stopped && completion.is_null() && !interruption.is_null();
+    if !pending && interruption.is_null() == (completion == "interrupted") {
         return Err(invalid("native completion contradicts interruption"));
     }
     Ok(())
+}
+
+fn publication_stop(outcome: &Value) -> Result<bool, Failure> {
+    let Some(stop) = outcome
+        .get("publication_stop")
+        .filter(|stop| !stop.is_null())
+    else {
+        return Ok(false);
+    };
+    if !matches!(
+        stop["phase"].as_str(),
+        Some("observation" | "encoding" | "record_preparation")
+    ) || !matches!(stop["code"].as_str(), Some("cancelled" | "deadline"))
+    {
+        return Err(invalid("malformed cooperative publication stop"));
+    }
+    Ok(true)
 }
 fn publication(document: &Value, completion: &Value) -> Result<(), Failure> {
     let outcome = &document["outcome"];

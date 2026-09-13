@@ -7,6 +7,9 @@ use std::num::NonZeroUsize;
 #[path = "matrix_effects.rs"]
 mod effects;
 
+#[path = "matrix_publication.rs"]
+mod publication;
+
 fn request() -> Request<'static> {
     Request {
         corpus: Path::new("/unused/corpus"),
