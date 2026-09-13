@@ -3,6 +3,13 @@
 use zetesis_core::relation::{Failure, Limits, Relation, Resource};
 use zetesis_core::{Atom, Predicate, Value};
 
+fn refusal<T>(result: Result<T, Failure>) -> Failure {
+    let Err(error) = result else {
+        panic!("a tighter query ceiling must refuse before publishing output");
+    };
+    error
+}
+
 fn assert_occurrences(relation: &Relation<'_>, source: &[Atom], indices: &[usize]) {
     for (position, &source_index) in indices.iter().enumerate() {
         let row = relation.row(position).unwrap();
@@ -75,16 +82,10 @@ fn tighter_query_limits_preserve_prepared_occurrences() {
             observed,
             limit,
         };
+        assert_eq!(refusal(relation.query(&[(1, &symbol)], limits)), expected);
+        assert_eq!(refusal(relation.select(&query, &input, limits)), expected);
         assert_eq!(
-            relation.query(&[(1, &symbol)], limits).unwrap_err(),
-            expected
-        );
-        assert_eq!(
-            relation.select(&query, &input, limits).unwrap_err(),
-            expected
-        );
-        assert_eq!(
-            relation.select_mask(&query, &input, limits).unwrap_err(),
+            refusal(relation.select_mask(&query, &input, limits)),
             expected
         );
 
