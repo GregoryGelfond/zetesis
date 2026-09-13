@@ -9,6 +9,7 @@ use zetesis_cpu::Control;
 use zetesis_themelios::base::source::{Source, SourceId};
 use zetesis_themelios::base::span::Location;
 use zetesis_themelios::logical::program::Program;
+use zetesis_themelios::logical::symbol::{Name, Sign, Symbol};
 use zetesis_themelios::observation::{AdmissionLimits, ErrorKind, Limits, Resource};
 use zetesis_themelios::{
     FormulaFailure, MetadataError, MetadataLimits, MetadataResource, SourceMetadata,
@@ -42,11 +43,20 @@ fn bounded_metadata_preserves_nested_conditions() {
     let data = atom("data", vec![Value::Number(1), Value::Number(2)]);
     let enabled = atom("enabled", vec![Value::Number(2)]);
     let hidden = atom("hidden", vec![Value::Number(1)]);
+    let expected = Symbol::Function {
+        name: Name::new("pair").unwrap(),
+        sign: Sign::Negative,
+        arguments: vec![
+            Symbol::Function {
+                name: Name::new("f").unwrap(),
+                sign: Sign::Positive,
+                arguments: vec![Symbol::Number(1)],
+            },
+            Symbol::Tuple(vec![Symbol::Number(2), Symbol::Number(1)]),
+        ],
+    };
     for (model, expected) in [
-        (
-            Model::new([data.clone(), enabled.clone()]),
-            vec!["-pair(f(1),(2,1))"],
-        ),
+        (Model::new([data.clone(), enabled.clone()]), vec![expected]),
         (Model::new([data.clone()]), vec![]),
         (Model::new([data, enabled, hidden]), vec![]),
     ] {
@@ -54,14 +64,7 @@ fn bounded_metadata_preserves_nested_conditions() {
             .observations()
             .evaluate(&model, Limits::default(), &Control::default())
             .unwrap();
-        assert_eq!(
-            observations
-                .symbols()
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>(),
-            expected,
-        );
+        assert_eq!(observations.symbols(), expected);
     }
 }
 
