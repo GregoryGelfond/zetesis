@@ -173,6 +173,9 @@ instruments both `zetesis-solve` and `zetesis-cli`. `target/coverage/toolchain.j
 per-group logs and status files under `target/coverage/workspace`. Neither floor
 nor filename filters change. Unlisted GPU paths and Vulkan still require their
 own physical qualification.
+After both reports are written, the gate checks both floors even if the first
+fails. `target/coverage/floors.tsv` retains each profile's exit status;
+`target/coverage/status.txt` remains incomplete unless both floors pass.
 Run `scripts/check.sh book` for the checked manual. It requires mdBook 0.5.4;
 Lean uses the toolchain pinned under `proofs`. External comparisons require
 clingo 5.8.2 on `PATH` and its absolute executable path in `CLINGO`, as described

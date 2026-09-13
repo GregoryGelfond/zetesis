@@ -692,6 +692,13 @@ also instruments the selected physical tests, so both its covered lines and its
 instrumented population can differ. Compare like populations on the same source;
 neither report replaces the separate CPU-only gate.
 
+Once both reports are written, the gate runs both 91% floor checks and records
+their exit statuses in `target/coverage/floors.tsv`. A failed workspace floor
+does not skip the CPU-only check. `target/coverage/status.txt` remains
+`incomplete` unless both checks succeed; report completion alone is not a pass.
+If setup, tests or report generation fail earlier, the floor checks are not
+reached. Retain the command log with these files to distinguish those failures.
+
 Keep durable fixtures, source attribution and runnable checks in the repository.
 The manual describes current contracts. Private development history and
 temporary campaign records are not prerequisites for reproducing a public claim.

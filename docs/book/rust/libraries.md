@@ -33,7 +33,8 @@ construction and standalone analysis APIs belong to its own manual.
 | Model-relative objective evaluation | `zetesis_objective` |
 | Source-domain analysis | `zetesis_domain` |
 | Reproducible comparisons and measurements | `zetesis_validation`, `zetesis_experiments` |
-| Repository proof records and qualification policy | `zetesis_maintenance` |
+| Repository proof records and qualification policy | `zetesis_maintenance::proofs::{verify, verify_with_audit}`, `zetesis_maintenance::coverage` |
+| Execute and publish current pinned proof evidence | `zetesis_maintenance::proofs::capture::capture` |
 
 `zetesis-solve` composes ordinary solving without argument parsing, source-file
 loading or output writers. `zetesis-cli` maps arguments, admits sources and
@@ -82,8 +83,15 @@ separate consumers. `Report::to_json` is a fallible presentation view, not the
 source of a comparison decision. The `performance` API similarly separates a
 measurement request and runner from its report views;
 `zetesis_maintenance` checks recorded proof evidence and qualification policy.
-Neither is a production solver dependency. A consistent proof record does not
-establish that Lean ran or that a Rust implementation satisfies its theorems.
+Its separate `proofs::capture::capture` operation runs the pinned proof commands,
+retains their outputs and prior records, and publishes only after validation
+against unchanged source and tool identities. This operation writes proof
+records and build artifacts; it requires explicit tool and evidence owners.
+The [capture contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-maintenance/README.md#capture-current-proof-evidence)
+documents bounded execution and recoverable publication. Neither maintenance
+nor validation is a production solver dependency. Record consistency alone
+does not establish that Lean ran, and successful proof execution does not
+establish that Rust or WGSL satisfies the theorems.
 
 Start with the [runnable tour](../architecture/tour.md) for a complete source-to-answer
 path. The [source preparation example](source.md) separates analysis from eager
