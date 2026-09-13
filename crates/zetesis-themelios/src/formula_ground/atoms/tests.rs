@@ -1,5 +1,8 @@
 //! Atom identity, first-occurrence order and reservation failures.
 
+#[path = "count_capture.rs"]
+mod count_capture;
+
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::hash::{BuildHasher, BuildHasherDefault, Hasher};
