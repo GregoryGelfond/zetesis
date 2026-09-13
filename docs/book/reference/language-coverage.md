@@ -92,6 +92,9 @@ the finite L04–L06 profiles, and self-dependent or mutually dependent bindings
 without an established local evaluation order still need precise classification. Concrete cases can become subcases of an
 existing entry or explicitly identified additions. Unsafe scopes and
 ungroundable cycles require a sound finite binding contract before admission.
+The [whole-value/open-tuple comparison refusal](language.md#rules-terms-and-bindings)
+is one concrete unclassified logical-value boundary. It is separate from L05's
+nested pools and intervals and does not change the classified counts above.
 
 ASPIF import/export and any libclingo interoperability require their own
 interchange contracts; they are not included in the ordinary-language count.

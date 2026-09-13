@@ -58,6 +58,22 @@ For example, `q(X) :- d(X), p(X+1).` checks the complete supporting `p` atom
 after `d(X)` binds `X`. By contrast, `q(X) :- p(X+1).` requires arithmetic
 inversion and receives the typed `UnboundArgumentInput` refusal.
 
+The current flat-tuple comparison profile requires tuple operands on both sides
+when a tuple still contains variables after normalization. It cannot bind that
+whole tuple to a variable, even when a positive atom supplies its component bindings:
+
+```asp
+d(1;2).p(Y):-d(X),Y=(-f(X),(X,))=(-f(2),(2,)).
+```
+
+Parsing and raising accept this program, but formula admission returns the
+located `ProfileFeature::Term` refusal. The same boundary applies when the
+comparison chain is preceded by `not not`. clingo 5.8.2 completes both forms
+with the single answer `{d(1), d(2), p((-f(2),(2,)))}`. This is an existing
+admission limitation, not a disagreement about answer-set semantics. The
+[finite-value controls](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/finite_values.rs)
+check the exact refusal separately from admitted constructor comparisons.
+
 A generating comparison chain may bound several variables before their values
 are known:
 
