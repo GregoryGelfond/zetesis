@@ -5,7 +5,9 @@ use crate::execution_observation::ExecutionSink;
 use std::sync::Arc;
 
 use rayon::prelude::*;
-use zetesis_core::{GroundProgram, Model, Program, SeedSelection, StaticLimits};
+use zetesis_core::{
+    GroundProgram, Model, ModelError, Program, SeedSelection, StaticLimits, WordError,
+};
 use zetesis_cpu::{BatchOracle, Control, Limits, Stop};
 
 use crate::phase_timing::{Recorder, SolvePhase};
@@ -422,7 +424,7 @@ impl Executor {
                 .map_err(SolveError::Batch)?
                 .into_iter()
                 .map(|result| match result {
-                    Ok(check) => decode(ground, check.accepted(), check.closure_words()).map(Ok),
+                    Ok(check) => decode(ground, check.accepted(), check.closure_words()),
                     Err(stop) => Ok(Err(stop)),
                 })
                 .collect(),
@@ -452,7 +454,7 @@ impl Executor {
                 }
                 checks
                     .into_iter()
-                    .map(|check| decode(ground, check.accepted(), check.closure_words()).map(Ok))
+                    .map(|check| decode(ground, check.accepted(), check.closure_words()))
                     .collect()
             }
         }
@@ -500,14 +502,24 @@ fn decode(
     ground: &GroundProgram,
     accepted: bool,
     words: &[u32],
-) -> Result<Option<Model>, SolveError> {
+) -> Result<Result<Option<Model>, Stop>, SolveError> {
     if accepted {
-        ground
-            .model_from_words(words)
-            .map(Some)
-            .map_err(SolveError::Words)
+        materialized(ground.model_from_words(words))
     } else {
-        Ok(None)
+        Ok(Ok(None))
+    }
+}
+
+// Accepted closure words still need an owned model before this candidate can
+// produce an answer. Allocation stops that candidate; malformed words remain
+// an execution failure. Both static backends use this publication boundary.
+fn materialized(
+    result: Result<Model, WordError>,
+) -> Result<Result<Option<Model>, Stop>, SolveError> {
+    match result {
+        Ok(model) => Ok(Ok(Some(model))),
+        Err(WordError::Model(ModelError::Allocation)) => Ok(Err(Stop::Allocation)),
+        Err(error) => Err(SolveError::Words(error)),
     }
 }
 
@@ -539,6 +551,32 @@ mod resource_tests;
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn static_model_allocation_stops_the_candidate() {
+        assert!(matches!(
+            super::materialized(Err(zetesis_core::WordError::Model(
+                zetesis_core::ModelError::Allocation
+            ))),
+            Ok(Err(zetesis_cpu::Stop::Allocation))
+        ));
+    }
+
+    #[test]
+    fn malformed_static_words_remain_execution_failures() {
+        assert!(matches!(
+            super::materialized(Err(zetesis_core::WordError::TailBits)),
+            Err(crate::SolveError::Words(zetesis_core::WordError::TailBits))
+        ));
+    }
+
+    #[test]
+    fn materialized_static_models_keep_their_owner() {
+        let model = zetesis_core::Model::new([]);
+        let owner = model.catalog().clone();
+        let retained = super::materialized(Ok(model)).unwrap().unwrap().unwrap();
+        assert!(retained.catalog().same_owner(&owner));
+    }
+
     #[cfg(feature = "gpu")]
     #[test]
     fn explicit_api_and_vendor_requests_are_preserved() {
