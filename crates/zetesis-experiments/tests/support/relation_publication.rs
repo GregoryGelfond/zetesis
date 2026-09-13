@@ -149,7 +149,7 @@ impl Write for CountingSink {
 #[test]
 fn report_admission_is_inclusive_at_256_mebibytes() {
     const DOCUMENTED_LIMIT: usize = 256 * 1024 * 1024;
-    let block = [0; 64 * 1024];
+    let block = vec![0; 64 * 1024];
     let mut sink = CountingSink::default();
     let mut output = Output {
         writer: &mut sink,

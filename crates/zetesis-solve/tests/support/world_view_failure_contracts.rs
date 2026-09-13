@@ -98,7 +98,7 @@ fn search_refusal_transfers_the_original_checked_prefix() {
     let answers = failure.into_answer_sets();
     drop(owner);
     assert_eq!(answers.len(), 1);
-    assert!(std::ptr::eq(&answers[0], original_answer));
+    assert_eq!(std::ptr::from_ref(&answers[0]), original_answer);
     assert!(std::ptr::eq(
         answers[0].interpretation().atoms().first().unwrap(),
         original_atom
