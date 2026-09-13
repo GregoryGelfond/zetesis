@@ -176,9 +176,17 @@ original answer family. Sessions supplied the same context share the device;
 formula sessions supplied the same compiled profile also reuse that pipeline.
 Their subjects, work budgets, candidate state and outcomes remain independent.
 
+Objective evaluation and bound preparation share checked typed atom lookup.
+Prepared indexes retain original catalog row IDs and borrow their logical values;
+model lookups use the existing selected positions. Preparation and query work
+remain charged. The [library map](docs/book/rust/libraries.md) describes these
+ownership and failure contracts.
+
 The [Lean library](proofs/README.md) develops satisfaction, reducts, minimality,
 normal least closure and their preservation laws. Its normalized-rule translation
-is proved equivalent to Ferraris answer-set semantics. These mathematical laws
+is proved equivalent to Ferraris answer-set semantics. For normalized normal
+rules, possible-head closure is also proved to retain every answer set; richer
+source producers retain explicit coverage obligations. These mathematical laws
 are not yet an end-to-end verification of Rust, source lowering or WGSL. The
 [correspondence chapter](docs/book/lean/correspondence.md) states that boundary.
 An optional [executable refinement](refinement/membership/README.md) proves
