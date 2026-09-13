@@ -3,7 +3,7 @@
 use super::{Document, Progress, summary};
 use crate::{Options, PublicationOutcome, RunError};
 use clap::Parser;
-use std::io;
+use std::io::{self, Write};
 use zetesis_cpu::Control;
 use zetesis_themelios::observation::ViewError;
 
@@ -38,15 +38,23 @@ fn progress(outcome: &PublicationOutcome) -> Progress {
 
 fn checked_footer(outcome: &PublicationOutcome, options: &mut Options) -> serde_json::Value {
     assert_eq!(outcome.publication().models(), 0);
+    checked_footer_records(outcome, options, &[])
+}
+
+fn checked_footer_records(
+    outcome: &PublicationOutcome,
+    options: &mut Options,
+    records: &[u8],
+) -> serde_json::Value {
+    let expected_prefix = [PREFIX, records].concat();
     let expected = summary(&Ok(progress(outcome)), FIXTURE_BYTES).unwrap();
     assert!(!expected.is_empty());
     for maximum in 0..expected.len() {
         options.max_json_record_bytes = maximum;
         let mut sink = Vec::new();
-        let failure = Document::new(&mut sink, true)
-            .unwrap()
-            .finish(Ok(progress(outcome)), options)
-            .unwrap_err();
+        let mut document = Document::new(&mut sink, true).unwrap();
+        document.write_all(records).unwrap();
+        let failure = document.finish(Ok(progress(outcome)), options).unwrap_err();
         assert!(matches!(
             *failure.cause,
             RunError::JsonRecord(ViewError::Bytes)
@@ -65,18 +73,17 @@ fn checked_footer(outcome: &PublicationOutcome, options: &mut Options) -> serde_
         );
         assert!(!failure.publication().unwrap().summary());
         assert_eq!(
-            sink, PREFIX,
+            sink, expected_prefix,
             "footer must be admitted before its first byte"
         );
     }
     options.max_json_record_bytes = expected.len();
     let mut sink = Vec::new();
-    let completed = Document::new(&mut sink, true)
-        .unwrap()
-        .finish(Ok(progress(outcome)), options)
-        .unwrap();
+    let mut document = Document::new(&mut sink, true).unwrap();
+    document.write_all(records).unwrap();
+    let completed = document.finish(Ok(progress(outcome)), options).unwrap();
     assert!(completed.publication().summary());
-    assert_eq!(&sink[PREFIX.len()..], expected);
+    assert_eq!(&sink[expected_prefix.len()..], expected);
     serde_json::from_slice(&sink).unwrap()
 }
 
@@ -107,28 +114,59 @@ fn every_footer_byte_ceiling_preserves_completed_cpu_evidence() {
 
 #[test]
 fn batched_cpu_footer_admission_preserves_exact_completion() {
+    const MARKER: &[u8] = b"],\"outcome\":";
     let mut options = options("countermodel");
     options.completion_workers = std::num::NonZeroUsize::new(2).unwrap();
     options.batch_size = std::num::NonZeroUsize::new(2).unwrap();
-    // Original satisfaction forces a, but the positive self-loop cannot
-    // establish a in the reduct's least model. The full family is empty.
+    // Two singleton answer sets remain after supported-candidate selection.
+    // Both must pass the actual CPU residual-completion owner.
+    let mut original = Vec::new();
     let outcome = crate::run_finalized_with_diagnostics(
-        "a :- a. :- not a.".into(),
+        "a | b.".into(),
         &options,
-        &mut io::sink(),
+        &mut original,
         &mut io::sink(),
         &Control::default(),
     )
     .unwrap();
-    assert!(outcome.semantic().unsatisfiable());
+    assert_eq!(
+        outcome.semantic().completion(),
+        Some(crate::Completion::Exhausted)
+    );
+    assert_eq!(outcome.semantic().verified_models(), 2);
+    assert_eq!(outcome.publication().models(), 2);
+    assert!(!outcome.semantic().unsatisfiable());
+    let parsed: serde_json::Value = serde_json::from_slice(&original).unwrap();
+    let mut models: Vec<_> = parsed["models"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|record| record["model"]["full_model"].clone())
+        .collect();
+    models.sort_by_cached_key(ToString::to_string);
+    assert_eq!(
+        models,
+        vec![
+            serde_json::json!([{"predicate":"a","sign":"positive","arguments":[]}]),
+            serde_json::json!([{"predicate":"b","sign":"positive","arguments":[]}]),
+        ]
+    );
     let execution = outcome.semantic().formula_execution().unwrap();
     assert_eq!(execution.completion.requested_workers, 2);
-    assert!(execution.completion.entered > 0);
+    assert_eq!(execution.completion.entered, 2);
     assert_eq!(execution.completion.completed, execution.completion.entered);
     assert_eq!(execution.completion.failed, 0);
     assert_eq!(execution.gpu_submitted_candidates, 0);
     assert_eq!(execution.gpu_work, 0);
-    let document = checked_footer(&outcome, &mut options);
+    assert_eq!(execution.cpu_residuals, 2);
+    assert!(original.starts_with(PREFIX));
+    let boundary = original
+        .windows(MARKER.len())
+        .position(|bytes| bytes == MARKER)
+        .unwrap();
+    let document =
+        checked_footer_records(&outcome, &mut options, &original[PREFIX.len()..boundary]);
+    assert_eq!(document, parsed);
     let encoded = &document["statistics"]["execution"];
     assert!(encoded["adapter"].is_null());
     assert!(encoded["gpu_limits"].is_null());
@@ -143,7 +181,7 @@ fn batched_cpu_footer_admission_preserves_exact_completion() {
     );
     assert_eq!(encoded["completion"]["failed"], 0);
     assert_eq!(encoded["completion"]["complete"], true);
-    assert_eq!(document["outcome"]["status"], "unsatisfiable");
+    assert_eq!(document["outcome"]["status"], "satisfiable");
 }
 
 #[test]
