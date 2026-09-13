@@ -184,16 +184,19 @@ representation without constructing new semantic evidence.
 
 `PublicationOutcome::Stopped` carries the original control reason, its
 publication phase, the semantic snapshot, and complete record/summary counts.
-Observation stops also retain their located observation evidence. The writer
-remains usable, so the adapter writes an incomplete footer. JSON keeps semantic
+Observation stops also retain their located observation evidence. A cooperative
+stop does not itself invalidate the writer; the adapter attempts an incomplete
+footer, whose write can independently fail. JSON keeps semantic
 `completion` and `optimization.optimal` unchanged and adds `publication_stop`;
 its overall `status` is `incomplete`. For example, cancellation between proved
 optimal ties can leave `completion: "exhausted"`, `optimal: true`, and fewer
 published ties. It does not establish complete delivery.
 
-The process returns exit 3 for a cooperative publication stop. A writer or flush
-failure returns exit 2, retaining a preceding publication stop separately. A
-partial record is never counted. Encoding/resource refusals remain actual
+The process returns exit 3 for a cooperative publication stop. A finalized writer
+failure retains a preceding publication stop separately and returns exit 2.
+A subsequent process flush failure returns exit 2 and emits a flush diagnostic;
+that process boundary has already mapped the publication outcome to an exit code.
+A partial record is never counted. Encoding/resource refusals remain actual
 failures, distinct from a cancellation or deadline.
 
 The finalized API now returns the outcome enum. Match `Completed` or `Stopped`,
