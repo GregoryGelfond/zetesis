@@ -192,8 +192,8 @@ its overall `status` is `incomplete`. For example, cancellation between proved
 optimal ties can leave `completion: "exhausted"`, `optimal: true`, and fewer
 published ties. It does not establish complete delivery.
 
-The process returns exit 3 for a cooperative publication stop. A finalized writer
-failure retains a preceding publication stop separately and returns exit 2.
+The process returns exit 3 for a cooperative publication stop and exit 2 for a
+writer failure. The finalized API retains a preceding publication stop separately.
 A subsequent process flush failure returns exit 2 and emits a flush diagnostic;
 that process boundary has already mapped the publication outcome to an exit code.
 A partial record is never counted. Encoding/resource refusals remain actual
