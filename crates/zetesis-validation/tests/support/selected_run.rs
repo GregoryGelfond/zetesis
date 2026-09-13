@@ -2,6 +2,9 @@
 
 use super::*;
 
+#[path = "selected_sealing.rs"]
+mod sealing;
+
 fn complete(exit: i32) -> InvocationRecord {
     InvocationRecord {
         executable: Path::new("/synthetic/solver").into(),

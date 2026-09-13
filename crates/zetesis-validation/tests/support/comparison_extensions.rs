@@ -88,6 +88,26 @@ fn resource_runs_require_a_fresh_helper() {
 }
 
 #[test]
+fn resource_helper_paths_cannot_use_implicit_search() {
+    let fixture = Fixture::new("", |_| {});
+    let marker = fixture.directory.path().join("must-not-launch");
+    // Even metadata commands must wait until every executable owner is
+    // admitted. This marker distinguishes refusal from a partial campaign.
+    let body = format!("printf launched > {}; exit 0", super::quote(&marker));
+    executable(&fixture.native, &body);
+    executable(&fixture.reference, &body);
+    let mut request = selected(&fixture);
+    request.schedule = request.schedule.with_memory(1).unwrap();
+    let error = performance::run_with_runner(&request, Path::new("zetesis-perf")).unwrap_err();
+    assert!(matches!(
+        error,
+        performance::Error::Configuration("memory helper must be absolute")
+    ));
+    assert!(!marker.exists());
+    assert!(!fixture.report.exists());
+}
+
+#[test]
 fn memory_samples_retain_independent_solver_evidence() {
     let fixture = Fixture::new("", |_| {});
     let mut request = selected(&fixture);
