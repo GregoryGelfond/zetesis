@@ -71,6 +71,8 @@ enum Action {
         #[arg(long)]
         rustc_version: String,
         #[arg(long)]
+        cargo_llvm_cov_version: String,
+        #[arg(long)]
         llvm_cov: PathBuf,
         #[arg(long)]
         llvm_cov_version: String,
@@ -136,6 +138,7 @@ fn execute(action: Action, output: &mut impl Write) -> Result<(), Error> {
             mode,
             floor,
             rustc_version,
+            cargo_llvm_cov_version,
             llvm_cov,
             llvm_cov_version,
             llvm_profdata,
@@ -150,6 +153,7 @@ fn execute(action: Action, output: &mut impl Write) -> Result<(), Error> {
                 physical_table: metal_groups.as_deref(),
                 observation: Observation {
                     rustc: &rustc_version,
+                    cargo_llvm_cov: &cargo_llvm_cov_version,
                     llvm_cov: Tool {
                         path: &cov_path,
                         sha256: &cov_hash,

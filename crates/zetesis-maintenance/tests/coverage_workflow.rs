@@ -629,3 +629,29 @@ fn oracle_setup_refusal_prevents_test_execution() {
         assert!(!fixture.root().join("target/oracle-checks").exists());
     }
 }
+
+#[test]
+fn maintenance_selects_the_repository_toolchain() {
+    let fixture = Fixture::new();
+    let foreign = tempfile::tempdir().unwrap();
+    let script = fixture.root().join("scripts/maintenance.sh");
+    let result = fixture
+        .command(script.to_str().unwrap())
+        .arg("proof-record")
+        .current_dir(foreign.path())
+        .env_remove("ZETESIS_MAINTENANCE")
+        .env("RUSTUP_TOOLCHAIN", "foreign-toolchain")
+        .env("CHECK_TEST_TRACE", fixture.root().join("trace"))
+        .env("CHECK_TEST_EXPECT_DIRECTORY", fixture.root())
+        .bounded_output();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let expected = format!(
+        "cargo +1.97.1 run --quiet --locked --manifest-path {} --package zetesis-maintenance --bin zetesis-maintenance -- proof-record\n",
+        fixture.root().join("Cargo.toml").display()
+    );
+    assert_eq!(fixture.read("trace"), expected);
+}

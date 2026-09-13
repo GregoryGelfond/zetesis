@@ -236,6 +236,14 @@ fn metadata(
     version: &str,
     physical: bool,
 ) -> Result<serde_json::Value, zetesis_maintenance::Error> {
+    metadata_with_cargo(version, physical, "cargo-llvm-cov 0.8.7")
+}
+
+fn metadata_with_cargo(
+    version: &str,
+    physical: bool,
+    cargo_llvm_cov: &str,
+) -> Result<serde_json::Value, zetesis_maintenance::Error> {
     let digest = "a".repeat(64);
     let tool = Tool {
         path: Path::new("/fixture/llvm"),
@@ -248,6 +256,7 @@ fn metadata(
         physical_table: physical.then_some(TABLE),
         observation: Observation {
             rustc: "rustc 1.97.1\nhost: fixture\nLLVM version: 22.1.6",
+            cargo_llvm_cov,
             llvm_cov: tool,
             llvm_profdata: tool,
         },
@@ -399,4 +408,20 @@ fn unknown_test_boundaries_cannot_hide_missing_outcomes() {
         1,
     );
     assert!(coverage::physical_result(&output, &group).is_err());
+}
+
+#[test]
+fn coverage_version_requires_a_current_observation() {
+    for observation in [
+        "",
+        "0.8.7",
+        "cargo-llvm-cov 0.9.1",
+        "cargo-llvm-cov 0.8.7\nextra",
+    ] {
+        assert!(metadata_with_cargo("LLVM version 22.1.6", false, observation).is_err());
+    }
+    let record =
+        metadata_with_cargo("LLVM version 22.1.6", false, "cargo-llvm-cov 0.8.7\n").unwrap();
+    assert_eq!(record["cargo_llvm_cov"], "0.8.7");
+    assert_eq!(record["cargo_llvm_cov_observation"], "cargo-llvm-cov 0.8.7");
 }

@@ -68,7 +68,8 @@ rust_version=$(rustc +1.97.1 -vV)
 cov_version=$("$LLVM_COV" --version)
 profdata_version=$("$LLVM_PROFDATA" --version)
 set -- coverage-metadata --mode "$mode" --floor "$floor" \
-    --rustc-version "$rust_version" --llvm-cov "$LLVM_COV" \
+    --rustc-version "$rust_version" --cargo-llvm-cov-version "$tool_version" \
+    --llvm-cov "$LLVM_COV" \
     --llvm-cov-version "$cov_version" --llvm-profdata "$LLVM_PROFDATA" \
     --llvm-profdata-version "$profdata_version"
 if [ "$metal" = --metal ]; then

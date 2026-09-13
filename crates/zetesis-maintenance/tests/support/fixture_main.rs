@@ -216,6 +216,11 @@ fn cargo(arguments: &[String]) -> Result<(), String> {
 }
 fn execute(role: &str, arguments: &[String]) -> Result<(), String> {
     trace(role, arguments);
+    if let Some(expected) = env::var_os("CHECK_TEST_EXPECT_DIRECTORY")
+        && env::current_dir().map_err(|error| error.to_string())? != Path::new(&expected)
+    {
+        return fail("tool started outside the expected repository");
+    }
     if let Ok(expected) = env::var("CHECK_TEST_BOOK_TOOLCHAIN")
         && ((role == "mdbook" && has(arguments, "test"))
             || (role == "cargo" && has(arguments, "target/book-tests-gpu")))

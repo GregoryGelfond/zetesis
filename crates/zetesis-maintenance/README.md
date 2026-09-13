@@ -31,10 +31,13 @@ fresh cleanup, ordered commands and incomplete status until both floors pass.
 The sixteen physical groups contain 56 exact tests; the Rust checker rejects
 selection drift, zero matches and incomplete individual outcomes.
 
-`scripts/maintenance.sh` launches the current source-tree command. Set
+`scripts/maintenance.sh` enters the repository and selects Cargo 1.97.1 before
+launching the current source-tree command. Set
 `ZETESIS_MAINTENANCE` to an explicit prebuilt executable for frozen engineering
 checks; it is an executable path, not shell text. Version strings are observations
 supplied by the caller, not evidence that this library executed those tools.
+Coverage metadata requires the actual cargo-llvm-cov version observation and
+validates its pin; a direct library caller cannot omit that observation.
 `inventory::sources` hashes the declared Cargo/Rust/WGSL boundary; this is not a
 complete dependency or source-to-binary seal.
 

@@ -24,6 +24,8 @@ pub struct Tool<'a> {
 pub struct Observation<'a> {
     /// Pinned `rustc +1.97.1 -vV` output.
     pub rustc: &'a str,
+    /// Complete observed `cargo +1.97.1 llvm-cov --version` output.
+    pub cargo_llvm_cov: &'a str,
     /// Observed LLVM coverage executable.
     pub llvm_cov: Tool<'a>,
     /// Observed LLVM profile executable.
@@ -85,11 +87,20 @@ pub fn metadata(request: Metadata<'_>) -> Result<Value, Error> {
     for value in [
         request.floor,
         request.observation.rustc,
+        request.observation.cargo_llvm_cov,
         request.observation.llvm_cov.version,
         request.observation.llvm_profdata.version,
     ] {
         super::input_bytes(value.len())?;
     }
+    let cargo_version = request.observation.cargo_llvm_cov.trim();
+    require(
+        cargo_version == "cargo-llvm-cov 0.8.7",
+        "observed cargo-llvm-cov version does not match 0.8.7",
+    )?;
+    let version = cargo_version
+        .strip_prefix("cargo-llvm-cov ")
+        .expect("validated cargo-llvm-cov banner");
     Floor::parse(request.floor)?.admit(request.mode)?;
     let groups: Vec<Group> = request
         .physical_table
@@ -98,7 +109,7 @@ pub fn metadata(request: Metadata<'_>) -> Result<Value, Error> {
     let physical = !tests.is_empty();
     Ok(json!({
         "mode":request.mode.label(),"committed_floor":request.floor,
-        "rustc":request.observation.rustc.trim(),"cargo_llvm_cov":"0.8.7","llvm_tools":tools(request.observation)?,
+        "rustc":request.observation.rustc.trim(),"cargo_llvm_cov":version,"cargo_llvm_cov_observation":cargo_version,"llvm_tools":tools(request.observation)?,
         "primary":"workspace --all-features","supplemental":"--package zetesis-cli --package zetesis-solve --no-default-features",
         "floor_profiles":["workspace","cli-cpu"],
         "default_filename_filters":"cargo-llvm-cov 0.8.7 src/report.rs::ignore_filename_regex",
