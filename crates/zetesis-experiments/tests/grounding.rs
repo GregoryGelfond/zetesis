@@ -3,6 +3,7 @@
 use std::{
     io::{self, Write},
     path::PathBuf,
+    sync::Arc,
 };
 
 use clap::Parser;
@@ -393,6 +394,56 @@ fn model_limit_retains_verified_prefix() {
 }
 
 #[test]
+fn model_capture_refusal_publishes_its_verified_prefix() {
+    let mut config = configuration();
+    config.capture.max_models = 1;
+    let report = profile(source("identity.lp"), config).unwrap();
+    let Some(Error::Limit {
+        resource: "models",
+        limit: 1,
+    }) = report.failure.as_ref()
+    else {
+        panic!("expected an actual model capture refusal")
+    };
+    let models = report.qualification.as_ref().unwrap();
+    assert_eq!(models.interpretations.len(), 1);
+    assert!(matches!(
+        models.interpretations[0].as_slice(),
+        [0, 1] | [0, 1, 2]
+    ));
+    let retained = models.interpretations.as_ptr();
+    let before = serde_json::to_value(&report).unwrap();
+    let record = published_failure(&report);
+    assert_eq!(record, before);
+    assert_eq!(record["complete"], false);
+    assert_eq!(record["failure"]["code"], "capture_limit");
+    assert_eq!(record["failure"]["detail"], "models exceeded 1");
+    assert_eq!(record["atoms"], serde_json::json!(["hidden", "-p", "q"]));
+    assert_eq!(record["qualification"]["verified_models"], 2);
+    assert_eq!(record["qualification"]["exhausted"], false);
+    assert_eq!(
+        record["qualification"]["interpretations"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(record["subject_fingerprint"]["status"], "available");
+    assert_eq!(record["sources"].as_array().unwrap().len(), 2);
+    assert_eq!(record["samples"], serde_json::json!([]));
+    assert_eq!(serde_json::to_value(&report).unwrap(), before);
+    assert_eq!(
+        report
+            .qualification
+            .as_ref()
+            .unwrap()
+            .interpretations
+            .as_ptr(),
+        retained
+    );
+}
+
+#[test]
 fn atom_index_limit_is_inclusive() {
     let mut config = configuration();
     config.capture.max_model_atoms = 5;
@@ -591,13 +642,26 @@ fn report_byte_refusal_publishes_nothing() {
 struct PrefixWriter {
     remaining: usize,
     bytes: Vec<u8>,
+    cause: Arc<SinkClosed>,
 }
+
+#[derive(Debug)]
+struct SinkClosed;
+
+impl std::fmt::Display for SinkClosed {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("test sink closed")
+    }
+}
+
+impl std::error::Error for SinkClosed {}
+
 impl Write for PrefixWriter {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         if self.remaining == 0 {
             return Err(io::Error::new(
                 io::ErrorKind::BrokenPipe,
-                "test sink closed",
+                Arc::clone(&self.cause),
             ));
         }
         let count = self.remaining.min(bytes.len());
@@ -611,18 +675,38 @@ impl Write for PrefixWriter {
 }
 
 #[test]
-fn writer_prefix_failure_is_not_success() {
+fn writer_failure_preserves_the_exact_report_prefix() {
+    use std::error::Error as _;
     let report = qualified_identity();
-    let mut output = PrefixWriter {
-        remaining: 31,
-        bytes: Vec::new(),
-    };
-    assert!(matches!(
-        write_report(&report, &mut output),
-        Err(Error::Output(_))
-    ));
-    assert_eq!(output.bytes.len(), 31);
-    assert!(serde_json::from_slice::<serde_json::Value>(&output.bytes).is_err());
+    let before = serde_json::to_value(&report).unwrap();
+    let mut complete = Vec::new();
+    write_report(&report, &mut complete).unwrap();
+    assert_eq!(complete.last(), Some(&b'\n'));
+    for prefix in [0, 1, 31, complete.len() - 1] {
+        let cause = Arc::new(SinkClosed);
+        let mut output = PrefixWriter {
+            remaining: prefix,
+            bytes: Vec::new(),
+            cause: Arc::clone(&cause),
+        };
+        let error = write_report(&report, &mut output).unwrap_err();
+        let Error::Output(original) = &error else {
+            panic!("expected the original writer failure")
+        };
+        assert_eq!(output.bytes, complete[..prefix]);
+        assert_eq!(original.kind(), io::ErrorKind::BrokenPipe);
+        assert_eq!(error.to_string(), "test sink closed");
+        assert_eq!(error.code(), "output");
+        let exposed = error.source().unwrap().downcast_ref::<io::Error>().unwrap();
+        assert!(std::ptr::eq(exposed, original));
+        let inner = exposed
+            .get_ref()
+            .unwrap()
+            .downcast_ref::<Arc<SinkClosed>>()
+            .unwrap();
+        assert!(Arc::ptr_eq(inner, &cause));
+        assert_eq!(serde_json::to_value(&report).unwrap(), before);
+    }
 }
 
 #[test]
