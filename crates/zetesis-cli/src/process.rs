@@ -159,19 +159,27 @@ fn load_input(options: &Options) -> Result<Input, RunError> {
 }
 
 fn read_source(options: &Options) -> io::Result<String> {
-    let reader = io::stdin().lock();
-    let maximum = u64::try_from(options.max_source_bytes)
-        .unwrap_or(u64::MAX)
-        .saturating_add(1);
-    let mut source = String::new();
-    reader.take(maximum).read_to_string(&mut source)?;
-    if source.len() > options.max_source_bytes {
+    read_text(io::stdin().lock(), options.max_source_bytes)
+}
+
+fn read_text(reader: impl Read, limit: usize) -> io::Result<String> {
+    let maximum = u64::try_from(limit).unwrap_or(u64::MAX).saturating_add(1);
+    let mut source = Vec::new();
+    reader.take(maximum).read_to_end(&mut source)?;
+    // Admission counts bytes. Decoding a truncated multibyte character must not
+    // replace the already established byte-limit refusal with a UTF-8 error.
+    if source.len() > limit {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "source byte limit exceeded",
         ));
     }
-    Ok(source)
+    String::from_utf8(source).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "standard input is not valid UTF-8",
+        )
+    })
 }
 
 #[cfg(test)]

@@ -168,3 +168,36 @@ fn redirected_records_share_bounded_process_staging() {
     assert_eq!(sink.writes, 1);
     assert_eq!(sink.flushes, 1);
 }
+
+#[test]
+fn stdin_admits_bytes_before_decoding_text() {
+    let input = r#"a("é")."#.as_bytes();
+    assert_eq!(super::read_text(input, input.len()).unwrap(), r#"a("é")."#);
+    for limit in [0, 3, 4, input.len() - 1] {
+        let error = super::read_text(input, limit).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+        assert_eq!(error.to_string(), "source byte limit exceeded");
+    }
+    let invalid = super::read_text(&b"\xff"[..], 1).unwrap_err();
+    assert_eq!(invalid.kind(), io::ErrorKind::InvalidData);
+    assert!(invalid.to_string().contains("valid UTF-8"));
+    let too_large = super::read_text(&b"\xff"[..], 0).unwrap_err();
+    assert_eq!(too_large.kind(), io::ErrorKind::InvalidInput);
+    assert_eq!(super::read_text(&b""[..], 0).unwrap(), "");
+}
+
+#[test]
+fn stdin_reader_failure_keeps_its_original_cause() {
+    struct Failing;
+    impl io::Read for Failing {
+        fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+            Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "reader unavailable",
+            ))
+        }
+    }
+    let error = super::read_text(Failing, 8).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+    assert_eq!(error.to_string(), "reader unavailable");
+}
