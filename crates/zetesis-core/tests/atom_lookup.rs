@@ -33,7 +33,10 @@ fn stopped_index_exposes_the_callers_error_cause() {
 fn intrinsic_index_refusals_have_no_underlying_cause() {
     for error in [
         AtomIndexError::<std::io::Error>::Allocation,
-        AtomIndexError::Duplicate { first: 2, second: 7 },
+        AtomIndexError::Duplicate {
+            first: 2,
+            second: 7,
+        },
     ] {
         assert!(std::error::Error::source(&error).is_none());
     }
