@@ -113,7 +113,7 @@ fn admission_errors_keep_source_positions() {
     );
     let message = error.to_string();
     assert!(message.contains("bytes "));
-    assert!(message.contains("unsupported source profile"));
+    assert!(message.contains("source profile does not admit"));
 }
 
 #[test]
