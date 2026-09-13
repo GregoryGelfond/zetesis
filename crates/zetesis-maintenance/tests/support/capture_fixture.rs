@@ -42,6 +42,20 @@ fn lake(root: &Path, arguments: &[String], mode: &str) -> Result<(), String> {
                 .and_then(|mut file| file.write_all(b"-- changed during capture\n"))
                 .map_err(|error| error.to_string())?;
         }
+        if mode == "documentation-change" {
+            fs::write(root.join("proofs/README.md"), b"changed during capture\n")
+                .map_err(|error| error.to_string())?;
+        }
+        if mode == "tool-change" {
+            // Replace only the fixture's lean role, which this stand-in never
+            // executes. Do not modify its shared executable inode in place.
+            let parent = root.parent().ok_or("missing fixture parent")?;
+            let replacement = parent.join("replacement-lean");
+            fs::write(&replacement, b"changed Lean executable input")
+                .map_err(|error| error.to_string())?;
+            fs::rename(replacement, parent.join("tools/lean"))
+                .map_err(|error| error.to_string())?;
+        }
     }
     Ok(())
 }

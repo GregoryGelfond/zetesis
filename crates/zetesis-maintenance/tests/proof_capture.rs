@@ -310,6 +310,95 @@ fn changed_sources_cannot_publish_the_record() {
 }
 
 #[test]
+fn changed_tool_bytes_cannot_publish_the_record() {
+    let fixture = Fixture::new("tool-change");
+    let original = fs::read(fixture.tools.join("lean")).unwrap();
+    let failure = fixture.capture().unwrap_err();
+    assert_eq!(failure.phase(), Phase::Validation);
+    assert!(
+        failure
+            .to_string()
+            .contains("capture tools changed during execution")
+    );
+    fixture.original_remains();
+    assert_eq!(
+        fs::read(fixture.tools.join("lean")).unwrap(),
+        b"changed Lean executable input"
+    );
+    assert_eq!(
+        fs::read(fixture.tools.join("fixture-owner")).unwrap(),
+        original
+    );
+    let inputs: Value =
+        serde_json::from_slice(&fs::read(fixture.evidence.join("inputs.json")).unwrap()).unwrap();
+    assert_eq!(
+        inputs["tool_sha256"]["lean"],
+        format!("{:x}", Sha256::digest(original))
+    );
+    assert!(!fixture.evidence.join("stage/verification.json").exists());
+}
+
+#[test]
+fn changed_documentation_cannot_publish_the_record() {
+    let fixture = Fixture::new("documentation-change");
+    let original = fs::read(fixture.repository.join("proofs/README.md")).unwrap();
+    let failure = fixture.capture().unwrap_err();
+    assert_eq!(failure.phase(), Phase::Validation);
+    assert!(
+        failure
+            .to_string()
+            .contains("proof documentation/views changed during capture")
+    );
+    fixture.original_remains();
+    let inputs: Value =
+        serde_json::from_slice(&fs::read(fixture.evidence.join("inputs.json")).unwrap()).unwrap();
+    assert_eq!(
+        inputs["document_sha256"]["README.md"],
+        format!("{:x}", Sha256::digest(original))
+    );
+    assert_eq!(
+        fs::read(fixture.repository.join("proofs/README.md")).unwrap(),
+        b"changed during capture\n"
+    );
+    assert!(!fixture.evidence.join("stage/verification.json").exists());
+}
+
+#[test]
+fn refused_command_start_retains_its_boundary_receipt() {
+    let fixture = Fixture::new("");
+    let failure = capture::capture(Request {
+        repository: &fixture.repository,
+        evidence: &fixture.evidence,
+        lean_bin: &fixture.tools,
+        rust_bin: &fixture.tools,
+        maintenance: &fixture.tools.join("zetesis-maintenance"),
+        command_limits: zetesis_validation::process::Limits {
+            timeout: Duration::MAX,
+            ..zetesis_validation::process::Limits::default()
+        },
+    })
+    .unwrap_err();
+    assert_eq!(failure.phase(), Phase::Kernel);
+    let start = std::error::Error::source(&failure)
+        .unwrap()
+        .downcast_ref::<zetesis_validation::process::StartError>()
+        .unwrap();
+    assert!(matches!(
+        start,
+        zetesis_validation::process::StartError::DeadlineOverflow
+    ));
+    fixture.original_remains();
+    let command = fixture.evidence.join("commands/version");
+    let receipt: Value =
+        serde_json::from_slice(&fs::read(command.join("result.json")).unwrap()).unwrap();
+    assert_eq!(receipt["start_error"], start.to_string());
+    assert!(receipt.get("exit").is_none());
+    assert!(command.join("invocation.json").is_file());
+    assert!(!command.join("stdout").exists());
+    assert!(!fixture.evidence.join("commands/build").exists());
+}
+
+#[test]
 fn successful_audit_stderr_cannot_publish_the_record() {
     let fixture = Fixture::new("audit-stderr");
     assert_eq!(fixture.capture().unwrap_err().phase(), Phase::Kernel);
