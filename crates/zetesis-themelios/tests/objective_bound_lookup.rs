@@ -338,7 +338,7 @@ fn joined_condition() -> (Vec<Atom>, ObjectiveProgram) {
 }
 
 fn joined_cost(mask: usize) -> i64 {
-    let contains = |position| mask & (1 << position) != 0;
+    let contains = |position: usize| mask & (1 << position) != 0;
     if !contains(2) && contains(3) && (contains(0) || contains(4)) {
         3
     } else {

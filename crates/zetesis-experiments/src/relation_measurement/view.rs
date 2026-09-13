@@ -347,3 +347,7 @@ impl Write for SubjectHash {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/support/relation_subject.rs"]
+mod subject_contracts;

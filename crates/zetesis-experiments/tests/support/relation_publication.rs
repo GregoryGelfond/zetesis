@@ -39,12 +39,13 @@ fn command_publishes_the_complete_cpu_mask_schedule() {
     assert_eq!(events[1]["event"], "subject");
     assert!(events[1]["adapter"].is_null());
     let subject = &events[1]["sha256"];
-    let phases = ["initial", "warmup", "timed", "timed"];
-    for (pair, phase) in events[2..10].chunks_exact(2).zip(phases) {
+    let schedule = [("initial", 0), ("warmup", 0), ("timed", 0), ("timed", 1)];
+    for (pair, (phase, repetition)) in events[2..10].chunks_exact(2).zip(schedule) {
         for (record, route) in pair.iter().zip(["scalar", "rayon"]) {
             assert_eq!(record["event"], "observation");
             assert_eq!(record["route"], route);
             assert_eq!(record["phase"], phase);
+            assert_eq!(record["repetition"], repetition);
             assert_eq!(&record["subject_sha256"], subject);
             // The first authored query is unconstrained; the second is absent.
             // Five original rows require exactly the low five bits, then zero.
