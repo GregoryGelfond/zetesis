@@ -68,6 +68,131 @@ impl Write for CancelAfterRecord {
     }
 }
 
+fn stopped_progress(stopped: &crate::StoppedPublication) -> super::Progress {
+    let mut progress = super::Progress::new();
+    progress.apply(stopped.semantic().clone());
+    progress.stop = Some(stopped.stop().clone());
+    progress.publication = stopped.publication();
+    progress.publication.summary = false;
+    progress.phase_timings = stopped.phase_timings().copied();
+    progress
+}
+
+fn replay_human_footer(stopped: &crate::StoppedPublication) {
+    use crate::test_writer::BoundedWriter;
+
+    let progress = stopped_progress(stopped);
+    let mut reference = Vec::new();
+    crate::driver::finish(&mut reference, &progress, false, crate::ColorMode::Never).unwrap();
+    let text = std::str::from_utf8(&reference).unwrap();
+    assert!(text.starts_with("INCOMPLETE:"));
+    assert!(text.contains("Publication: incomplete; complete model records: 1\n"));
+    assert!(text.ends_with("Optimum proved; delivery incomplete\n"));
+    for maximum in 0..reference.len() {
+        let mut output = BoundedWriter::new(maximum);
+        let error = crate::driver::finish(&mut output, &progress, false, crate::ColorMode::Never)
+            .unwrap_err();
+        assert!(
+            matches!(error, RunError::Output(ref cause) if cause.kind() == io::ErrorKind::BrokenPipe)
+        );
+        assert_eq!(output.bytes(), &reference[..maximum]);
+        assert!(progress.semantic().unwrap().optimum_proved());
+        assert_eq!(
+            progress.semantic().unwrap().completion(),
+            Some(Completion::Exhausted)
+        );
+    }
+    let mut output = BoundedWriter::new(reference.len());
+    crate::driver::finish(&mut output, &progress, false, crate::ColorMode::Never).unwrap();
+    assert_eq!(output.bytes(), reference);
+}
+
+fn replay_json_footer(stopped: &crate::StoppedPublication, original: &[u8]) {
+    const PREFIX: &[u8] = b"{\"schema\":1,\"format\":\"zetesis\",\"models\":[";
+    const MARKER: &[u8] = b"],\"outcome\":";
+    assert!(original.starts_with(PREFIX));
+    let boundary = original
+        .windows(MARKER.len())
+        .position(|bytes| bytes == MARKER)
+        .unwrap();
+    let mut options = options(true);
+    let footer = &original[boundary..];
+    for maximum in 0..footer.len() {
+        options.max_json_record_bytes = maximum;
+        let mut output = Vec::new();
+        let mut document = crate::output::Document::new(&mut output, true).unwrap();
+        // The original complete first model is replayed; no family or record
+        // acknowledgement is invented to exercise the footer in isolation.
+        document
+            .write_all(&original[PREFIX.len()..boundary])
+            .unwrap();
+        let failure = document
+            .finish(Ok(stopped_progress(stopped)), &options)
+            .unwrap_err();
+        assert!(matches!(
+            *failure.cause,
+            RunError::JsonRecord(ViewError::Bytes)
+        ));
+        assert_eq!(output, original[..boundary]);
+        assert_eq!(
+            failure.publication_stop().unwrap().reason(),
+            Stop::Cancelled
+        );
+        assert!(failure.semantic().unwrap().optimum_proved());
+        assert_eq!(
+            failure.semantic().unwrap().completion(),
+            Some(Completion::Exhausted)
+        );
+        assert_eq!(failure.publication().unwrap().models(), 1);
+        assert!(!failure.publication().unwrap().summary());
+    }
+    options.max_json_record_bytes = footer.len();
+    let mut output = Vec::new();
+    let mut document = crate::output::Document::new(&mut output, true).unwrap();
+    document
+        .write_all(&original[PREFIX.len()..boundary])
+        .unwrap();
+    let completed = document
+        .finish(Ok(stopped_progress(stopped)), &options)
+        .unwrap();
+    assert!(matches!(completed, PublicationOutcome::Stopped(_)));
+    assert!(completed.publication().summary());
+    assert_eq!(output, original);
+}
+
+#[test]
+fn stopped_optimum_footer_preserves_every_publication_boundary() {
+    for json in [false, true] {
+        let control = Control::default();
+        let mut output = CancelAfterRecord {
+            bytes: Vec::new(),
+            control: control.clone(),
+            json,
+            fail_footer: false,
+        };
+        let outcome = crate::run_finalized_with_diagnostics(
+            "1 {a;b} 1. #minimize{1,a:a;1,b:b}.".into(),
+            &options(json),
+            &mut output,
+            &mut io::sink(),
+            &control,
+        )
+        .unwrap();
+        let PublicationOutcome::Stopped(stopped) = outcome else {
+            panic!("the actual CPU result must retain a stopped publication");
+        };
+        assert_eq!(stopped.semantic().retained_models(), 2);
+        assert_eq!(stopped.semantic().completion(), Some(Completion::Exhausted));
+        assert!(stopped.semantic().optimum_proved());
+        assert_eq!(stopped.publication().models(), 1);
+        if json {
+            replay_json_footer(&stopped, &output.bytes);
+        } else {
+            replay_human_footer(&stopped);
+        }
+    }
+}
+
 #[test]
 fn cancellation_between_optimal_ties_preserves_exhaustion_and_framing() {
     for json in [false, true] {
