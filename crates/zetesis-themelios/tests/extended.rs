@@ -84,6 +84,65 @@ fn interval_cartesian_products_and_mixed_arity_pools_are_exact() {
 }
 
 #[test]
+fn nonnumeric_fact_ranges_are_empty() {
+    for source in [
+        "p(a..b).",
+        "p(1..a).",
+        "p(a..1).",
+        "p(\"a\"..\"b\").",
+        "p(#inf..#sup).",
+        "p(f(a)..f(b)).",
+    ] {
+        same_facts(source, "");
+    }
+}
+
+#[test]
+fn empty_ranges_preserve_other_fact_alternatives() {
+    same_facts("p(a..b;2..3). q(1,a..2). r.", "p(2).p(3).r.");
+}
+
+#[test]
+fn empty_ranges_preserve_endpoint_errors() {
+    for source in ["p(a..(1/0)).", "p((1/0)..a).", "p(a..b,1/0)."] {
+        assert!(
+            matches!(
+                admit_extended(
+                    source.to_owned(),
+                    AdmissionOptions::default(),
+                    ExpansionLimits::default(),
+                ),
+                Err(ExpansionFailure::Evaluation {
+                    error: EvalError::Undefined,
+                    ..
+                }),
+            ),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn empty_ranges_preserve_variable_errors() {
+    for source in ["p(a..b,X).", "p(a..X).", "p(X..a)."] {
+        assert!(
+            matches!(
+                admit_extended(
+                    source.to_owned(),
+                    AdmissionOptions::default(),
+                    ExpansionLimits::default(),
+                ),
+                Err(ExpansionFailure::Evaluation {
+                    error: EvalError::NotGround { .. },
+                    ..
+                }),
+            ),
+            "{source}"
+        );
+    }
+}
+
+#[test]
 fn scalar_normalization_preserves_relational_bindings_and_frozen_gates() {
     let expanded =
         extended("#const n=2. d(1..n). {p(X)} :- d(X), X != n+1, not q(n+1), not not r(n*2).");

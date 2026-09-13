@@ -52,6 +52,15 @@ fn bound_scalar_equalities_filter_existing_values() {
 }
 
 #[test]
+fn nonnumeric_fact_ranges_match_bound_ranges() {
+    for (lower, upper) in [("a", "b"), ("1", "a"), ("a", "1"), ("#inf", "#sup")] {
+        let facts = format!("n({lower},{upper}).p({lower}..{upper}).");
+        let bound = format!("n({lower},{upper}).p(X):-n(L,U),X=L..U.");
+        assert_eq!(models(&facts), models(&bound), "{facts}");
+    }
+}
+
+#[test]
 fn affine_equalities_generate_exact_integer_bindings() {
     for (source, number) in [
         ("p(X):-X+1=2.", 1),
