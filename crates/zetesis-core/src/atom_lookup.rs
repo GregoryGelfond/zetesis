@@ -151,6 +151,7 @@ fn positions<E>(
     Ok(positions)
 }
 
+#[derive(Clone, Copy)]
 enum SortOrder {
     Identity,
     Predicate,

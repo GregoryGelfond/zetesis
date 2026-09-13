@@ -315,7 +315,15 @@ pub(crate) fn interpretation(
             selected.push(atom);
         }
     }
-    Interpretation::new(theory, selected).map_err(|_| Incomplete::Allocation)
+    Interpretation::new(theory, selected).map_err(|error| match error {
+        zetesis_ferraris::AdmissionError::Allocation => Incomplete::Allocation,
+        // Every selected atom came from the theory's own range. Any other
+        // constructor refusal invalidates that representation argument.
+        zetesis_ferraris::AdmissionError::Atom
+        | zetesis_ferraris::AdmissionError::Edge
+        | zetesis_ferraris::AdmissionError::Root
+        | zetesis_ferraris::AdmissionError::Limit => Incomplete::InvalidWitness,
+    })
 }
 
 use std::collections::HashMap;

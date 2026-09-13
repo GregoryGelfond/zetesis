@@ -85,6 +85,11 @@ fn cover(
     theory: &Theory,
     work: &mut Work,
 ) -> Result<Option<Vec<usize>>, Fault> {
+    // Capture accepts members only through checked Node::Atom lookups in the
+    // grounder's atom catalog. That catalog only appends and transfers its
+    // insertion order unchanged into this final theory, so every member index
+    // is below theory.atom_count(), even if later grounding added more atoms.
+    // Source-formula correspondence still needs validate_source below.
     let global = &groups[global_index];
     let mut covered = work.vector::<bool>(theory.atom_count())?;
     for _ in 0..theory.atom_count() {
