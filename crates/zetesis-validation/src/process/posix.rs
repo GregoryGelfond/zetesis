@@ -416,4 +416,78 @@ mod tests {
         assert_eq!(output, b"prefix");
         assert_eq!(remaining, 10);
     }
+
+    #[test]
+    fn transient_read_errors_preserve_budget_for_the_next_attempt() {
+        struct Interrupted(io::ErrorKind);
+        impl Read for Interrupted {
+            fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+                Err(io::Error::from(self.0))
+            }
+        }
+        for kind in [io::ErrorKind::WouldBlock, io::ErrorKind::Interrupted] {
+            let mut output = b"prefix".to_vec();
+            let mut remaining = 1;
+            let blocked = drain(
+                &mut Interrupted(kind),
+                &mut output,
+                &mut remaining,
+                Operation::ReadStderr,
+            )
+            .unwrap();
+            assert!(matches!(blocked, ReadState::Blocked));
+            assert_eq!(output, b"prefix");
+            assert_eq!(remaining, 1);
+            let resumed = drain(
+                &mut io::Cursor::new(b"x"),
+                &mut output,
+                &mut remaining,
+                Operation::ReadStderr,
+            )
+            .unwrap();
+            assert!(matches!(resumed, ReadState::Progress));
+            assert_eq!(output, b"prefixx");
+            assert_eq!(remaining, 0);
+        }
+    }
+
+    #[test]
+    fn missing_requested_pipe_is_a_setup_error() {
+        let missing: Option<&std::fs::File> = None;
+        let error = configure(missing).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::Other);
+        assert!(error.to_string().contains("missing requested child pipe"));
+    }
+
+    #[test]
+    fn unrepresentable_cleanup_deadline_preserves_child_ownership() {
+        let child = Command::new("/bin/sh")
+            .args(["-c", "exec sleep 5"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        let id = child.id();
+        let first = cleanup(
+            PendingChild {
+                child,
+                group_owned: true,
+            },
+            Duration::MAX,
+        );
+        assert!(first.exit.is_none());
+        let failure = first.failure.unwrap();
+        assert_eq!(failure.operation(), Operation::ReapChild);
+        assert!(failure.cause().to_string().contains("deadline overflow"));
+        let pending = first.pending.expect("failed cleanup retains its child");
+        assert_eq!(pending.id(), id);
+        let second = pending.retry(Duration::from_secs(1));
+        if let Some(pending) = second.pending {
+            panic!("fixture cleanup abandoned child {}", pending.abandon());
+        }
+        assert!(second.failure.is_none());
+        assert_eq!(second.exit.unwrap().signal, Some(9));
+    }
 }

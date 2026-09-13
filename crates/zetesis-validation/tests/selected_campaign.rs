@@ -445,6 +445,37 @@ fn campaign_exposes_its_execution_request() {
     assert!(report.unresolved_children().is_empty());
 }
 
+#[test]
+fn prepared_input_write_failure_keeps_the_completed_case_prefix() {
+    let fixture = Fixture::new(|_, _| {});
+    executable(
+        &fixture.native,
+        "for input do :; done\n/bin/rm \"$input\"\n/bin/mkdir \"$input\"\nprintf retained-diagnostic >&2\nexit 7",
+    );
+    let report = fixture.run();
+    assert!(!report.passed());
+    assert_eq!(report.cases().len(), 1);
+    let first = &report.cases()[0];
+    let corpus = curated::open(&fixture.corpus, curated::Limits::default()).unwrap();
+    assert_eq!(first.id(), corpus.cases()[0].id());
+    assert_eq!(first.reference().exit().unwrap().code, Some(0));
+    assert_eq!(first.decision(), selected::Decision::InvocationFailure);
+    let native = first.native().unwrap();
+    assert_eq!(native.exit().unwrap().code, Some(7));
+    assert_eq!(native.stderr(), b"retained-diagnostic");
+    assert!(matches!(
+        report.faults(),
+        [selected::CampaignFault::InputWrite(_)]
+    ));
+    assert!(report.unresolved_children().is_empty());
+    assert!(report.after().iter().all(selected::Change::unchanged));
+    report.publish().unwrap();
+    let published: Value = serde_json::from_slice(&fs::read(&fixture.report).unwrap()).unwrap();
+    assert_eq!(published["passed"], false);
+    assert_eq!(published["cases"].as_array().unwrap().len(), 1);
+    assert_eq!(published["cases"][0]["id"], corpus.cases()[0].id());
+}
+
 fn changed_input_report(fixture: &Fixture, path: &Path) -> selected::Report {
     let original = fs::read_to_string(&fixture.native).unwrap();
     executable(

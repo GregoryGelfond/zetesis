@@ -165,3 +165,42 @@ fn completed_process_does_not_establish_semantic_completion() {
         .is_err()
     );
 }
+
+#[test]
+fn deadline_range_is_admitted_before_executable_start() {
+    let directory = tempfile::tempdir().unwrap();
+    let absent = directory.path().join("must-not-start");
+    for limits in [
+        Limits {
+            timeout: Duration::MAX,
+            ..Limits::default()
+        },
+        Limits {
+            cleanup_timeout: Duration::MAX,
+            ..Limits::default()
+        },
+    ] {
+        let result = process::invoke(
+            Invocation {
+                executable: &absent,
+                arguments: &[],
+                directory: directory.path(),
+            },
+            limits,
+        );
+        assert!(matches!(result, Err(StartError::DeadlineOverflow)));
+    }
+}
+
+#[test]
+fn relative_working_directory_is_not_resolved_implicitly() {
+    let result = process::invoke(
+        Invocation {
+            executable: Path::new("/bin/sh"),
+            arguments: &[],
+            directory: Path::new("."),
+        },
+        Limits::default(),
+    );
+    assert!(matches!(result, Err(StartError::RelativePath)));
+}
