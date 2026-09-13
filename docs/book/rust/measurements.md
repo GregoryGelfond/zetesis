@@ -84,6 +84,10 @@ failure or a completed result. The affected measurement carries unavailable or
 overflow evidence instead. Timing completeness and semantic completeness remain
 separate questions.
 
-See [`SolveMeasurements`](../../doc/zetesis_solve/struct.SolveMeasurements.html),
-[`PhaseTimings`](../../doc/zetesis_solve/struct.PhaseTimings.html), and the
+The generated API pages for
+[`SolveMeasurements`](../../doc/zetesis_solve/struct.SolveMeasurements.html) and
+[`PhaseTimings`](../../doc/zetesis_solve/struct.PhaseTimings.html) require the
+[combined book/API build](../building.md). Durable source references are
+[`SolveMeasurements`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/measurements.rs),
+[`PhaseTimings`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/phase_timing.rs), and the
 [measurement regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/tests/measurements.rs).

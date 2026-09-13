@@ -556,6 +556,10 @@ It does not ban these integers as ordinary data, later tuple-key components or
 integers nested inside a structured value. The guard applies independently of
 the comparison operator or recursion.
 
+The typed refusal is `AdmissionFailure::ExtremumEndpoint`, with the evaluated
+value and its source location. Its diagnostic code is `zetesis::extremum-endpoint`;
+the message names the numeric endpoint and the zetesis guard.
+
 This is an internal source-admission guard, not a themelios parser rejection.
 Separately, the pinned themelios program raiser cannot represent the unsigned
 magnitude in the literal `-2147483648`; `(-2147483647-1)` can reach that value by

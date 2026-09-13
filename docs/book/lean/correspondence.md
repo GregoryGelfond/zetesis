@@ -115,6 +115,17 @@ gate with a missing slot. Emitted source instances still own their values.
 membership. Rust comparison/hash equivalence, index construction and binding
 lifetimes remain implementation obligations.
 
+The objective consumers use `AtomLookup` over immutable model selections or an
+`AtomIndex` over the original catalog. The index owns permutations of row IDs,
+not additional atoms. Its required laws are exact full-key membership and
+predicate filtering in original row order. Model lookup must additionally
+exclude unselected catalog atoms. The checked value comparison must agree with
+canonical storage identity, which is distinct from ASP term order. Existing
+identity laws explain the denotation; stable merge sorting, binary search,
+lifetimes and their charged failure prefixes remain Rust correspondence
+obligations. Independent scan, shuffled-catalog and work-cutoff tests check
+these concrete boundaries.
+
 `SeedSelections.materialization_exact` shows that ordering and coalescing the
 atom denotations of shared handles preserves their exact true set. Distinct
 handles may denote the same atom. The Rust `SeedSelection` owns canonical shared

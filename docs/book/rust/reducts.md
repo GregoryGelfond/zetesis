@@ -83,3 +83,5 @@ documents the individual admission and query contracts. An error is not the Bool
 `false`. In particular, exhausting the subset
 budget cannot establish an answer set. The source compiler's finite coverage
 and aggregate translations remain separate from this already-admitted DAG API.
+The [formula library source](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/lib.rs)
+provides the same public declarations without a local documentation build.

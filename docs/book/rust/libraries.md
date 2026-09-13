@@ -18,6 +18,7 @@ construction and standalone analysis APIs belong to its own manual.
 | Finite relational templates and atoms | `zetesis_core::{Program, Template, Atom, Seed}` |
 | Shared candidate ownership and borrowed checking | `zetesis_core::{SeedSelection, SeedView}`, `Candidates::next_selection` |
 | Checked borrowed atom identity | `AtomPattern::key`, `BindingView`, `AtomKey` |
+| Predicate ranges and exact typed membership | `Model::lookup`, `AtomIndex`, `AtomLookup`, `Value::compare_identity_with` |
 | Bounded typed column views and equality selection | `zetesis_core::relation::{Relation, Query, Selection, Mask}` |
 | Reusable finite-table row selection and domain projection | `zetesis_cpu::table::{Table, Domain, Selection}` |
 | Explicit complete relational graph | `zetesis_core::GroundProgram::compile` |
@@ -40,6 +41,17 @@ publishes the results of that public session API. Its compatibility exports
 refer to the same solver types. The lower libraries remain usable independently;
 a caller building a theory need not parse source, and a caller preparing a
 program need not search it.
+
+`Model::lookup` borrows the model's existing canonical selection without
+allocation. For an arbitrary immutable atom catalog, `AtomIndex::new_with`
+prepares exact-key and predicate orders while preserving original row IDs.
+Preparation reserves two integer indices and one temporary merge buffer, each
+with the admitted catalog's row count; atoms are borrowed, not copied. Every
+comparison and index write passes through the caller's fallible work callback.
+`Value::compare_identity_with` uses canonical typed identity rather than ASP
+term order. The [lookup implementation](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/atom_lookup.rs)
+and [bounded example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/examples/README.md)
+document construction, reuse and capacity accounting.
 
 For a native application, depend on `zetesis-solve` and the libraries producing
 its chosen input. A source consumer normally also uses `zetesis-themelios` for
@@ -212,3 +224,5 @@ session boundaries are useful without pretending those interfaces are present.
 Generate the [local Rust API reference](../../doc/zetesis_solve/index.html) as
 described in [Building the documentation](../building.md). Public signatures and
 their per-operation cost and error contracts are authoritative.
+The [solver library source](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/lib.rs)
+is also available without a local documentation build.
