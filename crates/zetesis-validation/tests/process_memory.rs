@@ -17,18 +17,33 @@ fn run(
 ) -> (process::Capture, Option<Measurement>) {
     let temporary = tempfile::tempdir().unwrap();
     let record = temporary.path().join("rss.json");
-    let arguments: Vec<OsString> = vec![
-        "__measure-child".into(),
-        record.as_os_str().into(),
-        "/bin/sh".into(),
-        "-c".into(),
-        script.into(),
-    ];
+    let capture = run_helper(
+        temporary.path(),
+        &record,
+        &["/bin/sh".into(), "-c".into(), script.into()],
+        output_bytes,
+        timeout,
+    );
+    let measurement = std::fs::read(record)
+        .ok()
+        .map(|bytes| serde_json::from_slice(&bytes).unwrap());
+    (capture, measurement)
+}
+
+fn run_helper(
+    directory: &Path,
+    record: &Path,
+    child: &[OsString],
+    output_bytes: usize,
+    timeout: Duration,
+) -> process::Capture {
+    let mut arguments = vec!["__measure-child".into(), record.as_os_str().into()];
+    arguments.extend_from_slice(child);
     let outcome = process::invoke_supervised(
         Invocation {
             executable: Path::new(env!("CARGO_BIN_EXE_zetesis-perf")),
             arguments: &arguments,
-            directory: temporary.path(),
+            directory,
         },
         Limits {
             timeout,
@@ -39,10 +54,76 @@ fn run(
     .unwrap();
     let (capture, pending) = outcome.into_parts();
     assert!(pending.is_none(), "{capture:?}");
-    let measurement = std::fs::read(record)
-        .ok()
-        .map(|bytes| serde_json::from_slice(&bytes).unwrap());
-    (capture, measurement)
+    capture
+}
+
+#[test]
+fn absent_child_cannot_publish_a_resource_record() {
+    let directory = tempfile::tempdir().unwrap();
+    let record = directory.path().join("rss.json");
+    let absent = directory.path().join("absent-child");
+    let capture = run_helper(
+        directory.path(),
+        &record,
+        &[absent.into_os_string()],
+        1024,
+        Duration::from_secs(3),
+    );
+    assert_eq!(capture.stop(), Stop::Completed, "{capture:?}");
+    assert_eq!(capture.exit().unwrap().code, Some(2));
+    assert!(capture.stdout().is_empty());
+    assert!(
+        capture
+            .stderr()
+            .starts_with(b"zetesis-perf child RSS: child RSS operation: ")
+    );
+    assert!(!record.exists());
+}
+
+#[test]
+fn relative_child_is_not_resolved_by_the_resource_helper() {
+    let directory = tempfile::tempdir().unwrap();
+    let record = directory.path().join("rss.json");
+    let capture = run_helper(
+        directory.path(),
+        &record,
+        &["sh".into()],
+        1024,
+        Duration::from_secs(3),
+    );
+    assert_eq!(capture.stop(), Stop::Completed, "{capture:?}");
+    assert_eq!(capture.exit().unwrap().code, Some(2));
+    assert_eq!(
+        capture.stderr(),
+        b"zetesis-perf child RSS: child RSS executable and directory must be absolute\n"
+    );
+    assert!(!record.exists());
+}
+
+#[test]
+fn resource_publication_preserves_an_existing_record() {
+    let directory = tempfile::tempdir().unwrap();
+    let record = directory.path().join("rss.json");
+    std::fs::write(&record, b"previous resource evidence").unwrap();
+    let capture = run_helper(
+        directory.path(),
+        &record,
+        &[
+            "/bin/sh".into(),
+            "-c".into(),
+            "printf completed-child; exit 37".into(),
+        ],
+        1024,
+        Duration::from_secs(3),
+    );
+    assert_eq!(capture.stop(), Stop::Completed, "{capture:?}");
+    assert_eq!(capture.exit().unwrap().code, Some(2));
+    assert_eq!(capture.stdout(), b"completed-child");
+    assert!(capture.stderr().starts_with(b"zetesis-perf child RSS: "));
+    assert_eq!(
+        std::fs::read(record).unwrap(),
+        b"previous resource evidence"
+    );
 }
 
 #[test]

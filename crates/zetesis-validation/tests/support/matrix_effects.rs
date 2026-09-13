@@ -195,6 +195,65 @@ fn invalid_native_census_is_retained_and_never_replaced() {
 }
 
 #[test]
+fn failed_reference_census_keeps_native_answers_unqualified() {
+    for (body, expected) in [
+        ("printf '{malformed'".to_owned(), Decision::InvalidReport),
+        (
+            format!("printf '%s' {}; exit 65", quote(UNSAT)),
+            Decision::InvocationFailure,
+        ),
+    ] {
+        let fixture = Fixture::new();
+        executable(&fixture.reference, &body);
+        let report = fixture.run(&fixture.request());
+        assert!(report.accounted());
+        assert!(!report.passed());
+        let samples = report.samples();
+        assert_eq!(samples.len(), 8);
+        let reference = samples
+            .iter()
+            .position(|sample| {
+                sample.slot().phase == Phase::Qualification
+                    && sample.slot().producer == Producer::Reference
+            })
+            .unwrap();
+        let native = samples
+            .iter()
+            .position(|sample| {
+                sample.slot().phase == Phase::Qualification
+                    && matches!(sample.slot().producer, Producer::Native { .. })
+            })
+            .unwrap();
+        assert_eq!(samples[reference].decision(), expected);
+        assert!(samples[reference].capture().is_some());
+        // Its complete native answer and actual route observation are retained,
+        // but cannot establish parity without an independent complete family.
+        assert_eq!(samples[native].decision(), Decision::ReferenceUnavailable);
+        assert_eq!(samples[native].selected_models, Some(0));
+        assert!(samples[native].observation().is_some());
+        assert!(samples[native].capture().unwrap().complete(false));
+        for sample in samples {
+            if sample.slot().phase != Phase::Qualification {
+                assert_eq!(sample.decision(), Decision::NotAttempted);
+                assert!(sample.capture().is_none());
+                let cause = if sample.slot().producer == Producer::Reference {
+                    reference
+                } else {
+                    native
+                };
+                assert_eq!(sample.blocked_by(), Some(cause));
+            }
+        }
+        assert!(report.faults().is_empty());
+        assert!(report.unresolved_children().is_empty());
+        report.publish().unwrap();
+        let published: Value = serde_json::from_slice(&fs::read(&fixture.report).unwrap()).unwrap();
+        assert_eq!(published["passed"], false);
+        assert_eq!(published["accounted"], true);
+    }
+}
+
+#[test]
 fn exact_metadata_budget_cannot_launch_a_replacement_sample() {
     let fixture = Fixture::new();
     let mut request = fixture.request();
