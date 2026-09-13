@@ -1,4 +1,5 @@
 //! Deterministic subprocess fixture for gate tests; never invokes real tools.
+mod capture_fixture;
 use serde_json::json;
 use std::{
     env,
@@ -330,10 +331,20 @@ fn execute(role: &str, arguments: &[String]) -> Result<(), String> {
 }
 fn main() -> ExitCode {
     let arguments: Vec<_> = env::args().skip(1).collect();
-    match arguments.split_first().map_or_else(
-        || fail("missing tool role"),
-        |(role, arguments)| execute(role, arguments),
-    ) {
+    let executable = env::args().next().unwrap();
+    let name = Path::new(&executable)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap();
+    let result = if ["lake", "lean", "rustc", "cargo", "zetesis-maintenance"].contains(&name) {
+        capture_fixture::run(name, &arguments)
+    } else {
+        arguments.split_first().map_or_else(
+            || fail("missing tool role"),
+            |(role, arguments)| execute(role, arguments),
+        )
+    };
+    match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(reason) => {
             eprintln!("{reason}");

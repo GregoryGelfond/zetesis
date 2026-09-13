@@ -1,9 +1,10 @@
 //! Repository assurance, independent of solver execution and answer semantics.
 //!
-//! These APIs inspect retained records and qualification policy. They do not
-//! establish that a recorded command ran, that a proof kernel accepted a theorem,
-//! or that a physical device executed a shader. Execution remains a separate
-//! boundary. All file reads have explicit inclusive resource ceilings.
+//! Record/policy APIs inspect retained observations without establishing their
+//! execution. The separate `proofs::capture` producer invokes pinned tools through
+//! bounded process capture and publishes only validated fresh results. Neither
+//! boundary establishes Rust/WGSL refinement or physical execution. File reads
+//! have explicit inclusive resource ceilings.
 #![forbid(unsafe_code)]
 
 mod files;

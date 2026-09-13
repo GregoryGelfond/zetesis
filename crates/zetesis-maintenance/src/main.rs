@@ -47,6 +47,20 @@ enum Action {
         #[arg(long, value_enum, default_value = "inventory")]
         view: InventoryView,
     },
+    /// Run pinned kernel checks and transactionally refresh their record.
+    ProofCapture {
+        #[arg(long, default_value = ".")]
+        repository: PathBuf,
+        /// Existing empty directory outside the repository, retained on failure.
+        #[arg(long)]
+        evidence: PathBuf,
+        /// Actual Lean toolchain bin directory, not an elan shim directory.
+        #[arg(long)]
+        lean_bin: PathBuf,
+        /// Actual Rust 1.97.1 bin directory, not a rustup shim directory.
+        #[arg(long)]
+        rust_bin: PathBuf,
+    },
     /// Check a retained Lean record; run pinned kernel checks separately.
     ProofRecord {
         #[arg(long, default_value = "proofs")]
@@ -151,6 +165,37 @@ fn book_libraries(
     )
     .into_bytes())
 }
+fn proof_capture(
+    repository: &std::path::Path,
+    evidence: &std::path::Path,
+    lean_bin: &std::path::Path,
+    rust_bin: &std::path::Path,
+) -> Result<Vec<u8>, Error> {
+    let maintenance = std::env::current_exe().map_err(|source| Error::Io {
+        path: "<current executable>".into(),
+        source,
+    })?;
+    let summary = proofs::capture::capture(proofs::capture::Request {
+        repository,
+        evidence,
+        lean_bin,
+        rust_bin,
+        maintenance: &maintenance,
+        command_limits: zetesis_validation::process::Limits {
+            timeout: std::time::Duration::from_secs(300),
+            max_output_bytes: 16 * 1024 * 1024,
+            cleanup_timeout: std::time::Duration::from_secs(2),
+        },
+    })
+    .map_err(|error| Error::Invalid(error.to_string()))?;
+    Ok(format!(
+        "Proof capture: PASS: {} theorems; {} semantic modules; evidence {}\n",
+        summary.theorems,
+        summary.semantic_modules,
+        evidence.display()
+    )
+    .into_bytes())
+}
 fn execute(action: Action, output: &mut impl Write) -> Result<(), Error> {
     let value = match action {
         Action::BookLibraries {
@@ -169,6 +214,12 @@ fn execute(action: Action, output: &mut impl Write) -> Result<(), Error> {
                 InventoryView::Audit => inventory.audit_source().into_bytes(),
             }
         }
+        Action::ProofCapture {
+            repository,
+            evidence,
+            lean_bin,
+            rust_bin,
+        } => proof_capture(&repository, &evidence, &lean_bin, &rust_bin)?,
         Action::ProofRecord {
             proofs_dir,
             record,

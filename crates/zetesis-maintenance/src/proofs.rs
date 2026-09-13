@@ -6,6 +6,7 @@
 //! Actual pinned kernel checking must run independently before record validation.
 //! Hashes establish consistency, not command execution or compiler refinement.
 mod audit;
+pub mod capture;
 mod inventory;
 mod source;
 
