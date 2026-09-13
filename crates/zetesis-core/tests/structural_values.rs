@@ -92,6 +92,66 @@ fn identity_normalization_order_and_spelling_are_distinct_contracts() {
         ordered.len()
     );
 }
+
+#[test]
+fn nested_terms_use_asp_order_at_each_child() {
+    // This is the declared ASP order, not derived Value/ValueNode storage order:
+    // extrema enclose numbers, positive constants, negative constants, strings
+    // and compounds. Equal compound heads compare their complete children.
+    let children = [
+        vec![N::Infimum],
+        vec![N::Number(-7)],
+        vec![N::Number(3)],
+        vec![N::Tuple { arity: 0 }],
+        vec![N::Symbol("a".into())],
+        vec![N::Symbol("z".into())],
+        vec![N::Function {
+            name: "a".into(),
+            sign: Sign::Negative,
+            arity: 0,
+        }],
+        vec![N::String("a".into())],
+        vec![N::String("é".into())],
+        vec![N::Tuple { arity: 1 }, N::Number(0)],
+        vec![fun("g", 1), N::Number(0)],
+        vec![fun("g", 1), N::Number(1)],
+        vec![fun("g", 2), N::Number(-100), N::Number(0)],
+        vec![
+            N::Function {
+                name: "g".into(),
+                sign: Sign::Negative,
+                arity: 1,
+            },
+            N::Number(0),
+        ],
+        vec![N::Supremum],
+    ];
+    let mut ordered = Vec::new();
+    for child in children {
+        // The suffix must decide only after an equal whole first child, even
+        // when that child spans several preorder nodes.
+        for suffix in [-1, 0, 1] {
+            let mut nodes = vec![fun("outer", 2)];
+            nodes.extend(child.clone());
+            nodes.push(N::Number(suffix));
+            ordered.push(value(nodes));
+        }
+    }
+    for (left_position, left) in ordered.iter().enumerate() {
+        for (right_position, right) in ordered.iter().enumerate() {
+            assert_eq!(
+                left.compare_terms(right),
+                left_position.cmp(&right_position),
+                "{left:?} versus {right:?}",
+            );
+        }
+    }
+    assert!(
+        ordered.windows(2).any(|pair| pair[0] > pair[1]),
+        "the specification must distinguish ASP order from storage order"
+    );
+}
+
 #[test]
 fn malformed_trees_and_each_exact_construction_limit_refuse_without_partial_values() {
     for nodes in [
