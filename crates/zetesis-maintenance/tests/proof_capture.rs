@@ -7,7 +7,12 @@
 pub mod subprocess;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::{fs, path::PathBuf, time::Duration};
+use std::{
+    fs,
+    os::unix::fs::{MetadataExt, PermissionsExt},
+    path::{Path, PathBuf},
+    time::Duration,
+};
 use subprocess::{Command, Output};
 use zetesis_maintenance::proofs::{
     self,
@@ -15,7 +20,7 @@ use zetesis_maintenance::proofs::{
 };
 
 struct Fixture {
-    _directory: tempfile::TempDir,
+    directory: Option<tempfile::TempDir>,
     repository: PathBuf,
     evidence: PathBuf,
     tools: PathBuf,
@@ -59,15 +64,9 @@ impl Fixture {
         .unwrap();
         fs::write(proof_root.join("Audit.lean"), inventory.audit_source()).unwrap();
         fs::write(repository.join(".capture-fixture"), mode).unwrap();
-        for name in ["lake", "lean", "rustc", "cargo", "zetesis-maintenance"] {
-            fs::hard_link(
-                env!("CARGO_BIN_EXE_zetesis-maintenance-fixture"),
-                tools.join(name),
-            )
-            .unwrap();
-        }
+        publish_tools(&tools);
         Self {
-            _directory: directory,
+            directory: Some(directory),
             repository,
             evidence,
             tools,
@@ -116,6 +115,59 @@ impl Fixture {
                 .join("proofs/verification/.capture-lock")
                 .exists()
         );
+    }
+}
+
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        if std::thread::panicking()
+            && let Some(directory) = self.directory.take()
+        {
+            eprintln!(
+                "Proof capture fixture retained at {}",
+                directory.keep().display()
+            );
+        }
+    }
+}
+
+fn publish_tools(tools: &Path) {
+    // Every case owns one completed, nonwritable executable inode. Role names
+    // may share that owner, but never the mutable Cargo artifact. Publish only
+    // after the private copy is closed and checked; do not rewrite executables.
+    let source = Path::new(env!("CARGO_BIN_EXE_zetesis-maintenance-fixture"));
+    let admitted = fs::read(source).unwrap();
+    let staging = tools.join(".fixture-pending");
+    fs::copy(source, &staging).unwrap();
+    assert_eq!(fs::read(&staging).unwrap(), admitted);
+    let mut permissions = fs::metadata(&staging).unwrap().permissions();
+    permissions.set_mode(permissions.mode() & !0o222);
+    fs::set_permissions(&staging, permissions).unwrap();
+    let owner = tools.join("fixture-owner");
+    fs::rename(staging, &owner).unwrap();
+    for name in ["lake", "lean", "rustc", "cargo", "zetesis-maintenance"] {
+        fs::hard_link(&owner, tools.join(name)).unwrap();
+    }
+}
+
+#[test]
+fn tool_roles_share_only_the_private_executable_owner() {
+    let fixture = Fixture::new("");
+    let original = Path::new(env!("CARGO_BIN_EXE_zetesis-maintenance-fixture"));
+    let original_metadata = fs::metadata(original).unwrap();
+    let owner = fixture.tools.join("fixture-owner");
+    let metadata = fs::metadata(&owner).unwrap();
+    assert_ne!(
+        (metadata.dev(), metadata.ino()),
+        (original_metadata.dev(), original_metadata.ino())
+    );
+    assert_eq!(fs::read(owner).unwrap(), fs::read(original).unwrap());
+    assert_eq!(metadata.permissions().mode() & 0o222, 0);
+    assert_ne!(metadata.permissions().mode() & 0o111, 0);
+    assert!(!fixture.tools.join(".fixture-pending").exists());
+    for name in ["lake", "lean", "rustc", "cargo", "zetesis-maintenance"] {
+        let role = fs::metadata(fixture.tools.join(name)).unwrap();
+        assert_eq!((role.dev(), role.ino()), (metadata.dev(), metadata.ino()));
     }
 }
 
