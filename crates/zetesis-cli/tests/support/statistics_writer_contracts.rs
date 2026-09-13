@@ -106,6 +106,43 @@ fn every_completed_cpu_statistics_prefix_is_fallible_without_losing_bytes() {
 }
 
 #[test]
+fn shared_cpu_statistics_preserve_every_writer_prefix() {
+    for selection in ["union", "worlds"] {
+        for stop in [None, Some("--max-work"), Some("--max-source-work")] {
+            let mut arguments = vec!["--source-batching", selection];
+            if let Some(limit) = stop {
+                arguments.extend([limit, "0"]);
+            }
+            let options = options(&arguments);
+            let outcome = actual("a.", &options, &Control::default());
+            let report = outcome.as_ref().unwrap();
+            let stats = report.shared_execution.as_ref().unwrap();
+            assert_eq!(stats.submitted_candidates, 1);
+            assert_eq!(stats.completed_candidates, u64::from(stop.is_none()));
+            assert_eq!(stats.stopped_candidates, u64::from(stop.is_some()));
+            assert_eq!(report.models, usize::from(stop.is_none()));
+            assert_eq!(
+                report.completion,
+                if stop.is_some() {
+                    Completion::Interrupted
+                } else {
+                    Completion::Exhausted
+                }
+            );
+            let text = every_prefix(&options, &outcome);
+            assert!(text.contains("  shared CPU: source="));
+            assert!(text.contains("  shared source: rounds="));
+            assert!(text.contains("  CPU world evaluation: record visits plus antecedent tests="));
+            assert!(text.contains("closure result/control records examined=1"));
+            assert_eq!(
+                text.contains("  shared batch interruption:"),
+                stop.is_some()
+            );
+        }
+    }
+}
+
+#[test]
 fn lazy_metadata_rendering_preserves_every_writer_failure() {
     let options = options(&["--grounder", "lazy"]);
     let mut report = actual("p.", &options, &Control::default()).unwrap();

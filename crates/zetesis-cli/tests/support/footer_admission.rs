@@ -36,6 +36,50 @@ fn progress(outcome: &PublicationOutcome) -> Progress {
     progress
 }
 
+fn checked_footer(outcome: &PublicationOutcome, options: &mut Options) -> serde_json::Value {
+    assert_eq!(outcome.publication().models(), 0);
+    let expected = summary(&Ok(progress(outcome)), FIXTURE_BYTES).unwrap();
+    assert!(!expected.is_empty());
+    for maximum in 0..expected.len() {
+        options.max_json_record_bytes = maximum;
+        let mut sink = Vec::new();
+        let failure = Document::new(&mut sink, true)
+            .unwrap()
+            .finish(Ok(progress(outcome)), options)
+            .unwrap_err();
+        assert!(matches!(
+            *failure.cause,
+            RunError::JsonRecord(ViewError::Bytes)
+        ));
+        let semantic = failure.semantic().unwrap();
+        assert_eq!(semantic.completion(), outcome.semantic().completion());
+        assert_eq!(semantic.interruption(), outcome.semantic().interruption());
+        assert_eq!(semantic.unsatisfiable(), outcome.semantic().unsatisfiable());
+        assert_eq!(
+            semantic.candidate_progress(),
+            outcome.semantic().candidate_progress()
+        );
+        assert_eq!(
+            semantic.shared_execution(),
+            outcome.semantic().shared_execution()
+        );
+        assert!(!failure.publication().unwrap().summary());
+        assert_eq!(
+            sink, PREFIX,
+            "footer must be admitted before its first byte"
+        );
+    }
+    options.max_json_record_bytes = expected.len();
+    let mut sink = Vec::new();
+    let completed = Document::new(&mut sink, true)
+        .unwrap()
+        .finish(Ok(progress(outcome)), options)
+        .unwrap();
+    assert!(completed.publication().summary());
+    assert_eq!(&sink[PREFIX.len()..], expected);
+    serde_json::from_slice(&sink).unwrap()
+}
+
 #[test]
 fn every_footer_byte_ceiling_preserves_completed_cpu_evidence() {
     for (source, oracle) in [
@@ -54,42 +98,62 @@ fn every_footer_byte_ceiling_preserves_completed_cpu_evidence() {
         assert!(outcome.semantic().unsatisfiable());
         assert_eq!(outcome.publication().models(), 0);
         assert!(outcome.report().unwrap().phase_timings.is_some());
-        let expected = summary(&Ok(progress(&outcome)), FIXTURE_BYTES).unwrap();
-        assert!(!expected.is_empty());
-        for maximum in 0..expected.len() {
-            options.max_json_record_bytes = maximum;
-            let mut sink = Vec::new();
-            let failure = Document::new(&mut sink, true)
-                .unwrap()
-                .finish(Ok(progress(&outcome)), &options)
-                .unwrap_err();
-            assert!(matches!(
-                *failure.cause,
-                RunError::JsonRecord(ViewError::Bytes)
-            ));
-            assert!(failure.semantic().unwrap().unsatisfiable());
-            assert_eq!(
-                failure.semantic().unwrap().candidate_progress(),
-                outcome.semantic().candidate_progress()
-            );
-            assert!(!failure.publication().unwrap().summary());
-            assert_eq!(
-                sink, PREFIX,
-                "footer must be admitted before its first byte"
-            );
-        }
-        options.max_json_record_bytes = expected.len();
-        let mut sink = Vec::new();
-        let completed = Document::new(&mut sink, true)
-            .unwrap()
-            .finish(Ok(progress(&outcome)), &options)
-            .unwrap();
-        assert!(completed.publication().summary());
-        assert_eq!(&sink[PREFIX.len()..], expected);
-        let document: serde_json::Value = serde_json::from_slice(&sink).unwrap();
+        let document = checked_footer(&outcome, &mut options);
         assert_eq!(document["outcome"]["status"], "unsatisfiable");
         assert_eq!(document["outcome"]["verified_models"], 0);
         assert_eq!(document["models"], serde_json::json!([]));
+    }
+}
+
+#[test]
+fn every_footer_byte_ceiling_preserves_shared_cpu_refusals() {
+    use crate::SourceBatching;
+    use zetesis_cpu::{Stop, lazy::shared::Cause};
+
+    for (selection, source_stop) in [
+        (SourceBatching::Union, false),
+        (SourceBatching::Worlds, true),
+    ] {
+        let mut options = options("closure");
+        options.source_batching = selection;
+        if source_stop {
+            options.max_source_work = 0;
+        } else {
+            options.max_work = 0;
+        }
+        let outcome = crate::run_finalized_with_diagnostics(
+            "a.".into(),
+            &options,
+            &mut io::sink(),
+            &mut io::sink(),
+            &Control::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            outcome.semantic().completion(),
+            Some(crate::Completion::Interrupted)
+        );
+        assert_eq!(outcome.semantic().verified_models(), 0);
+        assert!(!outcome.semantic().unsatisfiable());
+        let stats = outcome.semantic().shared_execution().unwrap();
+        assert_eq!(stats.submitted_candidates, 1);
+        assert_eq!(stats.completed_candidates, 0);
+        assert_eq!(stats.stopped_candidates, 1);
+        let expected = if source_stop {
+            Cause::Source(Stop::WorkLimit)
+        } else {
+            Cause::World {
+                index: 0,
+                stop: Stop::WorkLimit,
+            }
+        };
+        assert_eq!(stats.last_stop, Some(expected));
+        let document = checked_footer(&outcome, &mut options);
+        assert_eq!(document["outcome"]["status"], "incomplete");
+        assert_eq!(document["models"], serde_json::json!([]));
+        let stop = &document["statistics"]["shared_execution"]["last_stop"];
+        assert_eq!(stop["scope"], if source_stop { "source" } else { "world" });
+        assert_eq!(stop["reason"], "work_limit");
     }
 }
 
