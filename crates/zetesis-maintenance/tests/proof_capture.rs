@@ -184,7 +184,12 @@ fn cli_version_refusal_preserves_the_prior_record() {
         b"previous audit"
     );
     assert_eq!(
-        fs::read(fixture.repository.join("proofs/verification/current/build.log")).unwrap(),
+        fs::read(
+            fixture
+                .repository
+                .join("proofs/verification/current/build.log")
+        )
+        .unwrap(),
         b"previous log"
     );
     assert!(!fixture.evidence.join("commands/build").exists());
