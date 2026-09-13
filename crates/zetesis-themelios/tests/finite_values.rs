@@ -7,8 +7,9 @@ use reference::{Models, atom_text, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
+    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
+    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
+    admit_formula,
 };
 
 fn competition_case() -> &'static zetesis_validation::curated::Case {
@@ -115,10 +116,6 @@ const CASES: &[(&str, &str)] = &[
     // An extracted constructor binding remains subject to the whole chain.
     ("d(1;2).p(Y):-d(X),Y=f(X)=f(1).", "d(1;2).p(f(1)):-d(1)."),
     (
-        "d(1;2).p(Y):-d(X),not not Y=(-f(X),(X,))=(-f(2),(2,)).",
-        "d(1;2).p((-f(2),(2,))):-d(2).",
-    ),
-    (
         "d(#inf;#sup).p(f(#inf)).q(X):-d(X),p(f(X)).",
         "d(#inf;#sup).p(f(#inf)).q(#inf):-d(#inf),p(f(#inf)).",
     ),
@@ -135,7 +132,7 @@ fn constructed_models_match_explicit_substitution() {
 }
 
 fn construction_admissions(resource: ExpansionResource) {
-    let source = "d(1;2).p(Y):-d(X),not not Y=(-f(X),(X,))=(-f(2),(2,)).";
+    let source = "d(1;2).p(Y):-d(X),Y=f(X)=f(1).";
     let expected = input(source);
     let mut limit = 0;
     // Follow the next required cumulative amount. This exercises each actual
@@ -188,6 +185,46 @@ fn constructed_guards_respect_each_storage_admission() {
 #[test]
 fn constructed_guards_respect_each_work_admission() {
     construction_admissions(ExpansionResource::TermWork);
+}
+
+#[test]
+fn open_tuple_chains_refuse_whole_value_targets() {
+    // Both programs parse and raise. The current formula comparison profile
+    // treats a syntactic open tuple as destructuring and requires a tuple on
+    // its opposite side too; it cannot bind the whole tuple to Y here. This
+    // boundary is independent of double negation and is not a syntax error.
+    for text in [
+        "d(1;2).p(Y):-d(X),Y=(-f(X),(X,))=(-f(2),(2,)).",
+        "d(1;2).p(Y):-d(X),not not Y=(-f(X),(X,))=(-f(2),(2,)).",
+    ] {
+        let source = zetesis_themelios::base::source::Source::new(
+            AdmissionOptions::default().source_id,
+            text.into(),
+        )
+        .unwrap();
+        let parsed = zetesis_themelios::syntax::parse::parse(
+            &source,
+            zetesis_themelios::syntax::dialect::Dialect::Clingo,
+        );
+        assert!(parsed.diagnostics().is_empty());
+        let raised = zetesis_themelios::logical::raise::raise(&parsed);
+        assert!(raised.diagnostics().is_empty());
+        let error =
+            limited(text, ExpansionLimits::default(), &FormulaLimits::default()).unwrap_err();
+        let FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
+            feature: ProfileFeature::Term,
+            location,
+        })) = &error
+        else {
+            panic!("{text}: {error}");
+        };
+        assert_eq!(location.source, source.id());
+        assert_eq!(error.diagnostics()[0].primary().location, *location);
+        assert_eq!(
+            source.slice(location.span).unwrap(),
+            text.strip_prefix("d(1;2).").unwrap()
+        );
+    }
 }
 
 #[test]
