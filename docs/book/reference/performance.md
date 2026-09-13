@@ -1,230 +1,400 @@
 # Execution performance
 
-These measurements compare two release builds on an Apple M4 Pro running
-macOS 26.6.2, on 12 September 2026. They cover complete enumeration or, for
-optimized programs, all published optimum ties. The
-[preceding comparison](https://github.com/GregoryGelfond/zetesis/blob/8f22c257/docs/book/reference/performance.md)
-and earlier [validation measurements](validation.md#performance-evidence)
-remain separate historical populations.
+The ordinary grounder now offers `--formula-joins table` for eligible positive
+joins over completed eager support. It reuses borrowed relation indices and
+consumes original row positions through the existing matcher. Indexed joins
+remain the default. These measurements establish actual table use and some
+reductions in visited rows; they do not establish a broad application speedup.
 
-Current ordinary CPU time improves on task allocation and Queens 6. Task
-allocation's measured peak RSS falls by 45.7%. Current Metal times improve on
-all eight distinct inputs in the repeated matrix, although the selected CPU
-route remains faster on those inputs. Other ordinary changes are mixed;
-these observations do not establish a general solver ranking.
+The release profile also remains unchanged after a separate normal/thin/fat
+LTO comparison. Smaller binaries and lower sampled RSS did not produce better
+times on all important inputs. New release Metal measurements are not available;
+the earlier Metal and standalone table results below retain their original
+source scope.
 
-The optional finite-table experiment is reported separately. It is not selected
-by ordinary grounding and cannot account for the application improvements.
+## Versions and measurement boundaries
 
-## Versions and inputs
+Measurements ran on an Apple M4 Pro with macOS 26.6.2 on 12 September 2026,
+using Rust 1.97.1 and clingo 5.8.2. The previous implementation is
+[`6bebb980`](https://github.com/GregoryGelfond/zetesis/tree/6bebb980f9c102dbb7f943076d7cde92374841ce);
+the new implementation is
+[`1e5b78ce`](https://github.com/GregoryGelfond/zetesis/tree/1e5b78ce913ab3aeece6ed496f69ca8176f0644d).
+The [preceding complete comparison](https://github.com/GregoryGelfond/zetesis/blob/993a7bbb625ae62ea4ff0ef4510c3d1a8be514ac/docs/book/reference/performance.md)
+retains the earlier CPU, Metal and primitive tables and their reproduction commands.
 
-Both builds use Rust 1.97.1 release settings. “Previous” means source
-[`15e0f77b`](https://github.com/GregoryGelfond/zetesis/tree/15e0f77b2c7b7a1ab0608857265cebf33ec747b7);
-“current” means source
-[`6bebb980`](https://github.com/GregoryGelfond/zetesis/tree/6bebb980f9c102dbb7f943076d7cde92374841ce).
-One preserved `zetesis-perf` build acquires both versions.
-Clingo 5.8.2 supplies the independent reference.
+The canonical release comparison uses the installer's package selection.
+The LTO experiment uses a separate fixed single-binary build recipe; its normal
+binary is not the canonical installer binary. The same preserved `zetesis-perf`
+acquires all ordinary comparisons. Native output is human-readable without
+statistics during timing; clingo emits JSON. Separate diagnostic invocations
+retain actual execution and grounding counters.
+These ordinary comparisons use the CPU backend, eager grounding and automatic
+oracle selection, with one requested closure worker and one completion worker.
 
 | Artifact | SHA-256 |
 | --- | --- |
-| Previous zetesis | `0cc8194e7687c472eb57b09aa8c8ca7f73d0866ddea4e1a55d17b40f876c196f` |
-| Current zetesis | `35b96c837dd5027853c735044e092f9054d63fc516940ec83d10627ecc2cf5d8` |
-| Fixed zetesis-perf | `2fd427ec77ec91faa038fbeddf10e686f2f539cc6c2222c16635a8084a637469` |
-| Current zetesis-bench | `b471d6d4812a68011ef14b3986be307c4ab6a092da0a077bf29d0efb981d6fba` |
+| Previous canonical zetesis | `35b96c837dd5027853c735044e092f9054d63fc516940ec83d10627ecc2cf5d8` |
+| Current canonical zetesis | `0758210934e1a80c350808fc936414c359974a2327119e0af3b3ab5e5f0f79f8` |
+| Fixed zetesis-perf | `5eb1c1d1de5e9076c2d37150dea8d7a869d34468cc88a8fc3627cf1002595e53` |
+| Current grounding-profile zetesis-bench | `33cbe86ea2913d67685ed1bafd0bb97629f86d9f432aff14c269f62c84b92cd1` |
 | clingo 5.8.2 | `31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015` |
-| [Corpus manifest](../../../examples/kr-domains/manifest.json) | `b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958` |
+| Corpus manifest | `b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958` |
 
-All six queens encodings use **N=8**. “Task allocation” is
-[variant04/scenario05](../../../examples/kr-domains/scenarios/task-allocation/variant-04/05-larger-mix.lp);
-“shortest path” is
-[variant01/scenario06](../../../examples/kr-domains/scenarios/shortest-path/variant-01/06-layered-dag.lp).
-The manifest supplies their companion encodings and records their source bytes.
+All six queens encodings use N=8 unless stated otherwise. SEND uses the
+[standalone encoding](../../../examples/kr-domains/standalone/send-money/send-money.lp),
+task allocation uses [variant04/scenario05](../../../examples/kr-domains/scenarios/task-allocation/variant-04/05-larger-mix.lp),
+and shortest path uses [variant01/scenario06](../../../examples/kr-domains/scenarios/shortest-path/variant-01/06-layered-dag.lp).
+Their [manifest](../../../examples/kr-domains/manifest.json) records companion
+sources and their hashes. Unoptimized programs enumerate all answers; optimized
+programs publish every optimum tie. This is neither time to the first answer
+nor a comparison of unpublished nonoptimal interpretations.
 
-Repeated comparisons use previous/current/current/previous blocks. Tables show
-**pooled medians [minimum, maximum]**, not confidence intervals. Process startup
-and output are included; no cold-cache condition is claimed. Timed samples,
-memory samples and diagnostic runs remain separate.
+Each ordinary A/B/B/A comparison has four blocks. A block contains qualification,
+one warmup pair, three timed pairs, one separate memory pair and one native
+statistics run for each of nine cases. All 16 blocks account for 1,872 passing
+positions with no capture faults or unresolved children. Startup and output are
+included; no cold-cache condition or confidence interval is claimed. Block
+medians remain visible because some populations drift substantially.
 
-## Ordinary CPU time and memory
+Memory samples report solver-child peak RSS from a fresh helper; the helper is
+excluded and waited descendants may contribute to child usage. Two samples per
+side of a four-block comparison are a limited observation, not a process-tree
+memory census or device-memory measure. MiB means 1,048,576 bytes.
 
-Ordinary runs request eager grounding, CPU, `--oracle auto`, one closure worker
-and one completion worker. Each block includes qualification and warmup pairs,
-five timed pairs, two separate memory pairs and one separate native statistics
-run per case. All four reports pass, with 684 observations total. Each zetesis
-version has ten timed samples per case; clingo has 20.
+## Canonical release comparison
 
-Timed zetesis output is human-readable without statistics; clingo produces JSON.
-Values are milliseconds.
+The prior binary uses its default joins; the current binary explicitly requests
+Indexed. Current blocks largely resemble the closing prior block, while many
+first prior timings are lower. Matched clingo observations also drift (for
+example task allocation 170.862 to 196.935 ms between prior blocks, with current
+blocks 200.485 and 197.766 ms). Do not attribute that whole shift to the new code.
+SEND still has higher current medians than either prior block, which remains a
+visible result rather than evidence of universal neutrality. These measurements
+show no broad speed or RSS improvement for this release boundary.
 
-| Case | Previous, ms | Current, ms | clingo, ms |
+Native wall time, ms: median [minimum, maximum] of three timed samples per block.
+
+| Case | prior-1 | current-1 | current-2 | prior-2 |
+|---|---:|---:|---:|---:|
+| Queens 1 | 15.302 [14.036, 15.498] | 16.688 [16.451, 16.693] | 16.674 [16.430, 16.698] | 16.694 [16.528, 16.832] |
+| Queens 2 | 90.830 [88.143, 92.014] | 96.748 [96.522, 97.113] | 95.871 [95.738, 97.597] | 96.982 [95.416, 97.047] |
+| Queens 3 | 15.397 [15.395, 15.404] | 16.744 [16.721, 16.752] | 16.715 [16.641, 16.741] | 16.752 [16.680, 16.754] |
+| Queens 4 | 7.819 [7.779, 9.064] | 9.147 [9.138, 9.230] | 9.147 [9.135, 9.161] | 9.036 [8.976, 9.117] |
+| Queens 5 | 10.311 [10.296, 10.414] | 11.487 [11.454, 11.682] | 11.649 [10.337, 11.760] | 11.675 [11.597, 11.713] |
+| Queens 6 | 10.321 [10.307, 10.350] | 11.660 [11.594, 11.731] | 11.638 [11.525, 11.640] | 11.688 [11.659, 11.730] |
+| SEND | 32.871 [32.855, 32.957] | 36.864 [35.559, 36.877] | 36.846 [36.777, 36.862] | 35.530 [35.528, 35.543] |
+| Task allocation | 94.881 [94.600, 96.831] | 99.692 [99.676, 99.701] | 99.762 [99.169, 99.803] | 101.743 [101.006, 102.320] |
+| Shortest path | 7.872 [7.810, 7.899] | 9.214 [9.117, 9.220] | 9.144 [9.103, 9.210] | 9.228 [8.959, 9.236] |
+
+Matched clingo wall time, ms, with the same three-sample notation.
+
+| Case | prior-1 | current-1 | current-2 | prior-2 |
+|---|---:|---:|---:|---:|
+| Queens 1 | 5.228 [5.217, 6.458] | 6.517 [6.514, 6.576] | 6.546 [6.519, 6.585] | 6.527 [6.506, 6.680] |
+| Queens 2 | 120.825 [120.531, 122.078] | 130.939 [130.576, 130.940] | 130.835 [130.720, 130.959] | 130.706 [130.554, 130.716] |
+| Queens 3 | 6.555 [6.479, 6.580] | 6.550 [6.509, 6.571] | 6.556 [6.551, 6.565] | 6.566 [6.529, 6.577] |
+| Queens 4 | 6.460 [5.154, 6.472] | 6.533 [6.468, 6.659] | 6.503 [6.450, 6.511] | 6.514 [6.497, 6.532] |
+| Queens 5 | 6.450 [5.172, 6.458] | 6.492 [6.449, 7.828] | 6.510 [6.485, 6.511] | 6.497 [6.462, 6.556] |
+| Queens 6 | 5.176 [5.156, 6.518] | 6.522 [6.507, 6.559] | 6.507 [6.430, 6.507] | 6.511 [6.465, 6.530] |
+| SEND | 11.604 [11.502, 11.772] | 12.817 [12.785, 12.851] | 12.765 [12.597, 12.825] | 12.822 [12.724, 12.886] |
+| Task allocation | 170.862 [162.112, 178.523] | 200.485 [200.336, 201.329] | 197.766 [175.564, 198.352] | 196.935 [192.598, 200.959] |
+| Shortest path | 5.209 [5.209, 6.569] | 6.497 [6.488, 6.570] | 6.557 [6.506, 6.594] | 6.511 [6.494, 6.541] |
+
+Separate child RSS, MiB. Each cell is **native / clingo**, one fresh-helper observation of each per block.
+
+| Case | prior-1 | current-1 | current-2 | prior-2 |
+|---|---:|---:|---:|---:|
+| Queens 1 | 12.109 / 5.656 | 12.156 / 5.656 | 12.203 / 5.656 | 12.109 / 5.656 |
+| Queens 2 | 12.656 / 9.547 | 12.625 / 10.953 | 12.656 / 10.531 | 12.672 / 10.344 |
+| Queens 3 | 12.078 / 5.656 | 12.250 / 5.953 | 12.234 / 5.656 | 12.094 / 5.656 |
+| Queens 4 | 12.078 / 5.703 | 12.250 / 5.922 | 12.172 / 5.703 | 12.156 / 5.703 |
+| Queens 5 | 12.656 / 5.766 | 12.656 / 5.766 | 12.625 / 5.938 | 12.703 / 5.766 |
+| Queens 6 | 12.750 / 5.813 | 12.797 / 5.813 | 12.750 / 5.813 | 12.813 / 5.813 |
+| SEND | 24.094 / 9.234 | 24.250 / 9.438 | 24.266 / 9.047 | 24.125 / 8.938 |
+| Task allocation | 19.453 / 21.156 | 19.719 / 21.422 | 19.688 / 22.500 | 19.484 / 23.250 |
+| Shortest path | 13.109 / 5.891 | 13.219 / 6.672 | 13.109 / 6.141 | 12.969 / 5.891 |
+
+## Indexed versus Table in ordinary solving
+
+All four blocks use exactly the same canonical binary. Every native invocation
+has its requested strategy flag; no clingo invocation has that flag. Table work
+is observed on every one of the nine inputs in both Table diagnostic blocks.
+Ordinary wall times show small mixed changes and later-block drift, rather than
+a broad application speedup. There is no demonstrated RSS reduction from Table
+on this population. Keeping Indexed as the default is consistent with these
+results; the Table option supplies an applicable, measured alternative.
+
+Native wall time, ms: median [minimum, maximum] of three timed samples per block.
+
+| Case | indexed-1 | table-1 | table-2 | indexed-2 |
+|---|---:|---:|---:|---:|
+| Queens 1 | 13.743 [13.743, 15.275] | 13.725 [13.721, 13.738] | 13.730 [13.713, 13.756] | 15.153 [14.061, 15.415] |
+| Queens 2 | 87.671 [87.548, 89.096] | 88.934 [87.531, 90.587] | 89.086 [87.526, 89.151] | 90.405 [90.326, 90.724] |
+| Queens 3 | 15.340 [13.754, 15.433] | 15.272 [13.713, 15.311] | 15.306 [15.245, 15.409] | 15.397 [15.364, 16.765] |
+| Queens 4 | 7.733 [7.729, 7.738] | 7.715 [7.701, 7.718] | 7.742 [7.723, 7.752] | 7.802 [7.765, 9.229] |
+| Queens 5 | 9.213 [9.210, 9.217] | 9.196 [9.196, 9.202] | 9.234 [9.205, 10.710] | 10.275 [10.275, 10.317] |
+| Queens 6 | 9.199 [9.179, 9.201] | 9.191 [9.178, 9.200] | 10.717 [9.213, 10.767] | 10.293 [10.285, 10.300] |
+| SEND | 31.785 [30.259, 31.847] | 31.803 [31.759, 31.825] | 31.778 [31.767, 33.417] | 32.885 [32.871, 32.901] |
+| Task allocation | 93.930 [92.529, 94.056] | 93.952 [92.450, 93.956] | 93.969 [93.967, 95.584] | 94.851 [93.350, 96.125] |
+| Shortest path | 7.842 [7.779, 7.862] | 7.789 [7.787, 7.867] | 7.862 [7.818, 7.885] | 7.886 [7.856, 9.175] |
+
+Matched clingo wall time, ms, with the same three-sample notation.
+
+| Case | indexed-1 | table-1 | table-2 | indexed-2 |
+|---|---:|---:|---:|---:|
+| Queens 1 | 6.221 [4.654, 6.228] | 6.187 [6.178, 6.216] | 6.219 [6.193, 6.241] | 5.233 [5.197, 6.280] |
+| Queens 2 | 117.564 [116.112, 117.592] | 119.033 [119.003, 119.116] | 119.109 [119.052, 119.173] | 120.612 [120.369, 121.364] |
+| Queens 3 | 6.222 [6.186, 6.224] | 6.166 [6.161, 6.224] | 6.209 [6.194, 6.210] | 6.524 [5.201, 6.534] |
+| Queens 4 | 6.177 [6.158, 6.186] | 6.156 [6.149, 6.171] | 6.176 [6.151, 6.208] | 5.176 [5.154, 6.501] |
+| Queens 5 | 6.162 [6.160, 6.188] | 6.153 [6.144, 6.169] | 6.152 [6.147, 6.168] | 6.302 [5.165, 6.503] |
+| Queens 6 | 6.164 [6.148, 6.176] | 6.151 [6.149, 6.152] | 6.170 [6.166, 6.205] | 5.186 [5.175, 6.495] |
+| SEND | 10.725 [10.661, 10.769] | 10.745 [10.640, 10.807] | 10.781 [10.681, 12.233] | 11.518 [11.445, 11.579] |
+| Task allocation | 177.943 [159.819, 182.149] | 171.897 [162.911, 180.489] | 184.059 [170.342, 185.564] | 179.709 [160.830, 180.513] |
+| Shortest path | 6.240 [4.727, 6.273] | 6.240 [4.736, 6.241] | 6.258 [4.745, 6.259] | 5.270 [5.223, 6.563] |
+
+Separate child RSS, MiB. Each cell is **native / clingo**, one fresh-helper observation of each per block.
+
+| Case | indexed-1 | table-1 | table-2 | indexed-2 |
+|---|---:|---:|---:|---:|
+| Queens 1 | 12.203 / 5.656 | 12.234 / 5.656 | 12.125 / 5.656 | 12.156 / 5.656 |
+| Queens 2 | 12.750 / 8.406 | 12.781 / 8.406 | 12.797 / 9.141 | 12.578 / 10.094 |
+| Queens 3 | 12.203 / 5.656 | 12.250 / 5.656 | 12.297 / 5.656 | 12.188 / 5.656 |
+| Queens 4 | 12.234 / 5.703 | 12.266 / 5.703 | 12.250 / 5.703 | 12.188 / 5.703 |
+| Queens 5 | 12.656 / 5.766 | 12.688 / 5.766 | 12.703 / 5.766 | 12.641 / 5.766 |
+| Queens 6 | 12.859 / 5.813 | 12.766 / 5.813 | 12.906 / 5.813 | 12.844 / 5.813 |
+| SEND | 24.203 / 8.500 | 24.281 / 8.500 | 24.266 / 8.500 | 24.234 / 8.500 |
+| Task allocation | 19.641 / 19.766 | 19.703 / 19.719 | 19.719 / 19.750 | 19.688 / 22.703 |
+| Shortest path | 13.141 / 5.891 | 13.125 / 5.891 | 13.203 / 5.891 | 13.172 / 5.891 |
+
+
+## What the table consumer does
+
+The [library API](../rust/finite-tables.md) separates immutable relation ownership,
+prepared indices and per-query result masks. A selection can outlive its table
+index while borrowing the original relation. Domain restrictions include typed
+constants, already-bound source values and repeated-variable aliases. Each
+probe derives fresh domains; it does not reuse a previous binding's mask.
+
+The completed eager consumer caches tables by signed predicate and canonical
+column scope. Increasing original row positions feed the same whole-row matcher,
+binding extension and authored-body checks used by indexed joins. Possible
+support remains distinct from model truth. Support-growth rounds and structural
+patterns keep indexed matching; this is an explicit scope boundary. Work,
+allocation and capacity failures remain grounding failures. The strategies can
+reach those limits at different points because their charged costs differ.
+
+In both separate Table diagnostic blocks, actual preparation/reuse/probe/row
+counts agree for all nine ordinary inputs. The comparison below uses the same
+current executable for Indexed and Table. All join rows include support-growth
+work, which remains indexed.
+
+| Case | Preparations / reuses | Probes / selected rows | All join rows Indexed → Table | Index bytes | Support peak Indexed → Table |
+|---|---:|---:|---:|---:|---:|
+| Queens 1 | 3 / 145 | 148 / 8464 | 8752 → 8752 | 560 | 10920 → 14376 |
+| Queens 2 | 3 / 267 | 270 / 9608 | 9752 → 9752 | 560 | 11016 → 14376 |
+| Queens 3 | 3 / 154 | 157 / 8536 | 8680 → 8680 | 560 | 11016 → 14452 |
+| Queens 4 | 3 / 54 | 57 / 2136 | 2280 → 2280 | 560 | 11016 → 14452 |
+| Queens 5 | 5 / 198 | 203 / 616 | 1800 → 904 | 1744 | 29064 → 34096 |
+| Queens 6 | 5 / 189 | 194 / 544 | 1872 → 976 | 1744 | 29064 → 34096 |
+| SEND | 6 / 1658 | 1664 / 16404 | 16618 → 16604 | 1320 | 21912 → 26620 |
+| Task allocation | 16 / 483 | 499 / 4767 | 7411 → 7339 | 2504 | 39600 → 45316 |
+| Shortest path | 7 / 293 | 300 / 449 | 1153 → 979 | 2496 | 26600 → 31320 |
+
+Index bytes count retained prepared-index capacity, excluding cache slots.
+Support peak includes admitted support/query capacity, live masks and the
+conservative operation envelope; aggregation takes the maximum. Neither is
+RSS. Table removes many row visits for Queens 5/6 and some for SEND, task
+allocation and shortest path. Queens 1–4 visit the same number. Preparation and
+query work remain, so these counts do not imply shorter grounding time.
+
+The six additional N=8 grounding profiles each compare an indexed reference
+with one unobserved, one boundary-observed and one detailed Table admission.
+Every sample and reference exhausts the same 92 unique full native answer sets;
+atom/formula catalogs, source evidence and available subject fingerprints agree.
+The detailed records independently confirm table use and reuse. These single
+rotated profile rounds are semantic and work-schedule evidence, not a speedup
+estimate.
+
+The mathematical [binding-family laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/table-bindings.md)
+preserve ordered source-row occurrences and binding results under explicit
+matching and completeness premises. They do not verify Rust bitsets,
+allocation/error behavior or the complete grounding translation.
+
+This integration is scalar. Immutable table queries can be independent library
+work, but the current consumer does not parallelize mutable bindings, formula
+emission or source-error order. It launches no GPU table kernel. Useful next
+measurements would separate preparation amortization from query pruning and
+examine larger repeated flat joins. Any parallel consumer or GPU route would
+also need bounded ownership, failure and source-order contracts; independent
+primitive throughput is insufficient to select it automatically.
+
+## Larger queens and complete native families
+
+A separate bounded screen changes only the parsed `n = 8` literal in each
+source closure. It includes all six encodings at N=10 and encodings 3/4 at N=12.
+The N=12 subset was chosen for full-output size before measurement; it is not a
+selection of favorable timings. Previous/default, current/Indexed and
+current/Table use separate CPU/eager JSON/statistics reports, four requested
+closure/completion workers, batch 64, qualification and one timed pair, no
+warmup. Requested worker counts alone establish no parallel work.
+
+| Population | Complete native family | External comparison |
+| --- | ---: | --- |
+| N=10, Queens 1 and 3–6 | 724 answers for each encoding | Qualification and timed pairs pass in all three configurations |
+| N=10, Queens 2 | 724 answers in each native qualification capture | All three clingo qualification calls reach the 10-second limit; no qualified timed pair |
+| N=12, Queens 3 | No complete family | All three native configurations refuse the Work limit |
+| N=12, Queens 4 | 14,200 answers | Qualification and timed pairs pass in all three configurations |
+
+Across 39 complete native captures, comparison resolves shown atom indices
+against full typed models and preserves signs, recursive values, shown terms
+and costs. Families agree across the relevant versions, strategies and repeat
+phases, with no duplicate full models. This independently establishes more
+native identity than the ordinary human-output protocol. It cannot supply
+missing clingo evidence for N=10 Queens 2 or a family after the N=12 refusal.
+
+The N=12 Queens 3 refusal reports Work capacity 1,048,576 with the next required
+amount 1,048,577. Table's added preparation/query charges reach that bound at a
+different partial grounding state; fewer emitted records before failure are
+not a successful pruning result. All 96 scheduled positions remain accounted:
+78 pass, 3 time out, 3 lack the reference, 3 are refused and 9 are blocked.
+The 87 acquired captures have no capture faults or unresolved children.
+
+The one timed native sample for each passing cell is shown below, in ms.
+These are full JSON/statistics process times, not medians or isolated grounding
+times. There is no RSS sample in this screen.
+
+| Population | Previous | Current Indexed | Current Table |
 | --- | ---: | ---: | ---: |
-| Queens 1 | 13.868 [13.651, 15.416] | 13.864 [13.830, 15.355] | 6.245 [6.017, 6.433] |
-| Queens 2 | 90.997 [89.178, 92.434] | 92.183 [90.637, 93.717] | 123.686 [120.668, 126.430] |
-| Queens 3 | 15.379 [15.143, 15.499] | 15.408 [15.147, 15.540] | 6.276 [5.939, 6.353] |
-| Queens 4 | 7.843 [7.782, 7.975] | 7.829 [7.591, 7.986] | 6.216 [5.731, 6.304] |
-| Queens 5 | 9.805 [9.258, 10.863] | 9.326 [9.195, 9.380] | 6.209 [5.758, 6.258] |
-| Queens 6 | 10.814 [10.776, 10.979] | 9.323 [9.257, 10.839] | 6.200 [5.738, 6.264] |
-| SEND + MORE = MONEY | 33.344 [31.630, 33.534] | 33.466 [33.315, 34.714] | 12.321 [12.153, 13.901] |
-| Task allocation | 104.352 [102.641, 106.031] | 98.209 [96.964, 100.069] | 187.152 [182.488, 197.416] |
-| Shortest path | 7.943 [7.814, 7.970] | 7.915 [7.867, 8.112] | 6.291 [6.207, 6.357] |
+| N=10, Queens 1 | 101.33 | 102.51 | 101.04 |
+| N=10, Queens 3 | 91.54 | 101.82 | 100.84 |
+| N=10, Queens 4 | 64.24 | 70.29 | 69.26 |
+| N=10, Queens 5 | 542.37 | 597.19 | 631.96 |
+| N=10, Queens 6 | 551.98 | 604.04 | 642.62 |
+| N=12, Queens 4 | 1822.70 | 1837.12 | 1824.89 |
 
-Task allocation improves 5.9%, with both current block medians below both
-previous blocks. Queens 6 improves 13.8%, also consistent across the blocks.
-Queens 5's pooled decrease is qualified by previous-build drift: its block
-medians move from 9.293 to 10.318 ms, while current medians remain near 9.33 ms.
-Queens 2 increases 1.3% with overlapping ranges; SEND increases 0.4%. Small
-changes on the remaining cases do not establish reliable speedups.
+The N=10 Queens 5/6 Table observations are slower than current Indexed in this
+single fixed sequence. Their fewer row visits do not establish an application
+speedup.
 
-Under this output contract, current zetesis is faster than clingo on Queens 2
-and task allocation. Clingo is faster on the other seven cases.
+Same-build counters at N=10 reduce Queens 5 row visits from 2,750 to 950 and
+Queens 6 from 2,640 to 840, while probe counts remain 293 and 282.
+Each uses five Table preparations. Its reported index capacity is 4,520 bytes;
+support peak rises from 53,576 to 62,024 bytes. N=12 Queens 4 keeps 7,092 visited
+rows and raises support peak from 30,696 to 37,216 bytes. Less row scanning
+does not imply less storage, and one timed pair supplies no reliable trend.
+These reports include full JSON/statistics output and cannot be pooled with
+the ordinary timing tables.
 
-Memory rounds use a fresh helper to measure the solver child's peak resident
-set size, excluding the helper. Waited descendants may contribute to the
-reported child usage. Each zetesis version has four samples per case; clingo
-has eight. MiB means 1,048,576 bytes. These observations are neither simultaneous
-process-tree RSS nor GPU allocations.
+Separate corpus qualification passes all 94 cases with the canonical CPU
+countermodel route. A Table-requested eager CPU matrix also passes all 376
+positions over those 94 cases, using a 16-MiB per-child capture/decoder allowance.
+Actual table probes occur on the twenty task-allocation inputs, including
+aggregate/objective and unsatisfiable cases. These are qualification results,
+not timings acquired in a quiet window. Matching clingo displays and optimum
+ties does not reveal its hidden interpretations.
 
-| Case | Previous, MiB | Current, MiB | clingo, MiB |
-| --- | ---: | ---: | ---: |
-| Queens 1 | 11.969 [11.922, 11.969] | 11.969 [11.922, 12.109] | 5.422 [5.422, 5.547] |
-| Queens 2 | 12.641 [12.547, 12.813] | 12.461 [12.391, 12.563] | 9.414 [9.031, 9.844] |
-| Queens 3 | 12.117 [12.078, 12.250] | 12.016 [12.000, 12.047] | 5.438 [5.438, 5.594] |
-| Queens 4 | 12.078 [12.016, 12.094] | 12.039 [11.938, 12.063] | 5.469 [5.469, 5.547] |
-| Queens 5 | 12.617 [12.594, 12.641] | 12.586 [12.578, 12.609] | 5.570 [5.531, 5.688] |
-| Queens 6 | 12.711 [12.672, 12.781] | 12.656 [12.578, 12.734] | 5.594 [5.563, 5.672] |
-| SEND + MORE = MONEY | 24.078 [24.031, 24.953] | 24.117 [23.984, 24.141] | 8.375 [8.281, 8.891] |
-| Task allocation | 35.797 [35.719, 35.906] | 19.445 [19.391, 19.453] | 21.852 [19.656, 24.000] |
-| Shortest path | 12.906 [12.891, 12.953] | 12.992 [12.953, 13.031] | 5.641 [5.641, 5.672] |
 
-Task allocation's peak RSS median falls from 35.797 to 19.445 MiB, below the
-measured clingo median. Other cases show small increases, decreases or no median
-change. There is no across-the-board RSS reduction. The measurements concern
-the combined implementation, including shared model catalogs and ownership
-changes; they do not isolate one representation's contribution.
+## Link-time optimization
 
-## Instrumented CPU and Metal comparison
+The release profile stays normal. Fat LTO reduced the experimental executable
+by 21.2% and reduced each of the nine observed native RSS pairs, but Queens 2,
+SEND and task allocation were slower in both Fat blocks. Thin LTO showed
+substantial drift and no clear overall benefit. No release setting was changed.
 
-The matrix requests four closure/completion workers, batch size 64,
-`--oracle auto`, and explicit eager and lazy profiles. Each block has
-qualification, one warmup and three timed repetitions per case: six timed
-samples per zetesis version and 12 for clingo. Native output contains full
-JSON model records and statistics; clingo emits its JSON results. CPU and
-Metal ran in separate windows.
+The three single-binary builds use the same source, Rust/Cargo 1.97.1,
+aarch64-apple-darwin target and macOS 26.5 SDK. They build the CLI with its GPU
+feature, separately from the installer package set. Each is one fresh-target
+build in normal/thin/fat order; filesystem caching is uncontrolled. Build times
+therefore do not establish a general compilation-speed ratio. Build peak RSS
+is unavailable.
 
-The following eager wall times are milliseconds. Queens rows use the
-`queens` suite; SEND and task allocation use `baseline`. The baseline suite
-also repeats Queens 2; its observations are retained separately and not pooled
-here. Shortest path has no matrix observation.
+| Variant | Build wall / user / system seconds | Executable bytes | SHA-256 |
+|---|---:|---:|---|
+| Normal (lto=false) | 145.97 / 137.46 / 4.88 | 13,722,232 | `12b5edf96a25ca591ca88a919c6b040474c8597a85da03e6f8cb233214329a8d` |
+| Thin | 154.68 / 145.05 / 6.14 | 13,915,944 | `a0a0f34b3f8d770c196f3090ac72ea681f610c85fe3964db53810d25273e9e13` |
+| Fat | 128.78 / 119.30 / 5.36 | 10,806,616 | `9aa90f55a7fe9c852cc2aece5b3fe32612b74d049e4fe0cfb2e8118629ff7855` |
 
-| Case | Previous Metal | Current Metal | Current CPU, JSON/stats | clingo in Metal window |
-| --- | ---: | ---: | ---: | ---: |
-| Queens 1 | 38.169 [36.868, 38.380] | 33.687 [32.986, 34.529] | 18.018 [17.950, 18.131] | 6.545 [5.160, 6.605] |
-| Queens 2 | 118.541 [117.244, 119.614] | 111.328 [109.660, 112.250] | 95.920 [94.558, 96.870] | 123.295 [123.044, 124.620] |
-| Queens 3 | 38.085 [36.835, 39.358] | 34.296 [34.275, 34.369] | 17.989 [17.723, 18.061] | 6.530 [5.202, 6.548] |
-| Queens 4 | 29.178 [27.975, 29.400] | 26.772 [26.727, 26.906] | 10.479 [10.446, 10.655] | 6.524 [5.158, 6.557] |
-| Queens 5 | 69.450 [68.052, 70.668] | 64.427 [64.086, 64.552] | 47.070 [46.424, 48.028] | 6.519 [5.151, 6.657] |
-| Queens 6 | 72.261 [72.015, 72.324] | 65.100 [64.334, 67.140] | 47.706 [47.455, 47.917] | 6.575 [5.166, 6.633] |
-| SEND + MORE = MONEY | 79.853 [77.079, 83.515] | 65.836 [64.527, 67.240] | 34.359 [34.222, 35.589] | 11.619 [11.518, 12.828] |
-| Task allocation | 628.813 [620.086, 638.016] | 576.636 [565.774, 588.404] | 324.027 [320.635, 325.035] | 173.602 [155.769, 186.196] |
+“Normal” means `lto=false`, which still permits local ThinLTO across codegen
+units; it is distinct from Cargo's `"off"` setting. See the
+[Cargo profile contract](https://doc.rust-lang.org/cargo/reference/profiles.html#lto).
+These settings optimize Rust host code, not the WGSL program.
 
-All nine suite/case populations have lower current Metal medians, with each
-current sample below the previous sample range. SEND improves 17.6%, task
-allocation 8.3%, and queens approximately 5.9–11.7%. The duplicated baseline
-Queens 2 population changes from 117.898 to 110.938 ms. Three repetitions per
-block support this bounded comparison, not a general crossover prediction.
+The following Thin comparison is Normal/Thin/Thin/Normal. Each cell is the
+three-sample wall median [minimum, maximum], in ms.
 
-Every admitted Metal run uses the Apple M4 Pro and the general formula
-countermodel procedure, with positive GPU batch and work counts. CPU matrix
-runs select the certified tight-support procedure and have no residual queries.
-Thus the backend comparison includes a difference in membership procedure.
-The matched CPU route is faster on every measured case. Current Metal is
-faster than clingo on Queens 2; clingo is faster on the other unique inputs.
+| Case | normal-1 | thin-1 | thin-2 | normal-2 |
+|---|---:|---:|---:|---:|
+| Queens 1 | 16.884 [15.389, 16.932] | 16.396 [15.442, 16.615] | 13.753 [13.743, 13.813] | 13.736 [13.732, 13.766] |
+| Queens 2 | 95.221 [93.867, 95.417] | 96.283 [96.207, 97.678] | 87.580 [87.524, 87.586] | 88.763 [87.493, 89.097] |
+| Queens 3 | 16.919 [16.879, 16.979] | 16.979 [16.910, 17.017] | 13.781 [13.718, 15.357] | 15.271 [13.729, 15.306] |
+| Queens 4 | 9.412 [8.995, 9.419] | 9.348 [9.309, 9.480] | 7.725 [7.715, 7.741] | 7.726 [7.716, 7.813] |
+| Queens 5 | 10.859 [10.775, 10.922] | 10.868 [10.841, 10.875] | 9.236 [9.211, 9.241] | 9.239 [9.217, 9.247] |
+| Queens 6 | 10.908 [10.870, 12.382] | 10.912 [10.888, 11.562] | 9.222 [9.211, 9.230] | 9.209 [9.193, 10.745] |
+| SEND | 36.520 [34.973, 36.627] | 35.671 [34.580, 36.402] | 30.304 [30.297, 31.893] | 31.846 [31.815, 31.854] |
+| Task allocation | 101.440 [100.440, 102.423] | 100.974 [100.435, 101.089] | 94.092 [93.958, 95.524] | 94.030 [93.975, 96.915] |
+| Shortest path | 9.468 [9.234, 9.476] | 9.448 [7.884, 9.474] | 7.814 [7.794, 7.880] | 7.840 [7.814, 7.894] |
 
-- SEND sends one candidate in one device batch. Each queens case sends 92
-  candidates in two batches. Metal decides all of them with no CPU residuals,
-  despite four requested workers.
-- Task allocation sends 1,208 candidates in 19 batches. Current observations
-  decide 13–14 on the device and complete 1,194–1,195 exactly on CPU, with four
-  effective completion workers. Every candidate finishes without a failed
-  or pending check. This is hybrid execution.
-- Task allocation publishes 1,176 optimum ties at cost 5. Full output dominates
-  parts of this contract: its Metal observation/output median is about
-  218.815 ms;
-  Queens 5/6 spend roughly 36 ms there. These results cannot be pooled with
-  the ordinary human-output timings.
+The closing Normal block is much faster than its opening block on several
+cases. Matched clingo Queens 2 medians also move from 128.362 to 119.085 ms,
+and task allocation from 194.058 to 180.967 ms. This prevents a clean broad
+Thin-LTO speed claim. Its separate native RSS observations are slightly higher
+on this population.
 
-### Where time changes
+The Fat comparison is Normal/Fat/Fat/Normal, with the same notation.
 
-The exclusive driver stages distinguish grounding, solving and
-observation/output. Two separate CPU diagnostic runs per version show task
-allocation solving decreasing approximately 88.004 → 83.030 ms, while
-observation/output increases 4.549 → 7.285 ms. Its finer objective
-scoring/retention phase decreases 5.372 → 4.287 ms. The ordinary improvement
-does not imply every stage became faster.
+| Case | normal-1 | fat-1 | fat-2 | normal-2 |
+|---|---:|---:|---:|---:|
+| Queens 1 | 13.726 [13.722, 13.779] | 13.720 [13.718, 15.238] | 13.712 [13.711, 13.730] | 13.768 [13.731, 15.307] |
+| Queens 2 | 89.126 [87.539, 89.144] | 101.157 [101.096, 102.533] | 101.086 [101.080, 102.641] | 90.642 [89.048, 90.678] |
+| Queens 3 | 15.347 [13.723, 15.474] | 15.243 [15.237, 15.301] | 15.311 [15.210, 15.324] | 15.301 [15.229, 15.332] |
+| Queens 4 | 7.742 [7.732, 7.764] | 7.713 [7.701, 7.732] | 7.711 [7.217, 7.727] | 7.726 [7.722, 7.799] |
+| Queens 5 | 9.261 [9.214, 9.280] | 9.209 [9.209, 9.215] | 9.203 [9.191, 9.213] | 9.210 [9.209, 9.224] |
+| Queens 6 | 9.220 [9.220, 9.222] | 9.227 [9.176, 10.711] | 9.192 [9.176, 10.715] | 10.376 [9.191, 10.737] |
+| SEND | 32.969 [31.795, 33.368] | 36.323 [34.778, 36.366] | 36.328 [34.755, 36.334] | 33.304 [33.111, 33.394] |
+| Task allocation | 95.516 [94.042, 95.548] | 101.473 [99.989, 101.504] | 99.972 [99.929, 101.493] | 96.977 [95.446, 98.442] |
+| Shortest path | 7.814 [7.798, 7.880] | 7.827 [7.782, 7.844] | 7.804 [7.802, 7.849] | 7.806 [7.782, 7.892] |
 
-In the six-sample CPU JSON/stats population, task allocation's wall median
-decreases 330.311 → 324.027 ms (1.9%). Solving decreases 105.083 → 97.956 ms,
-while output increases 210.145 → 215.040 ms. Output costs explain why this
-contract shows a smaller end-to-end change.
+Queens 2 changes from control medians 89.126/90.642 to 101.157/101.086 ms;
+SEND from 32.969/33.304 to 36.323/36.328 ms; task allocation from 95.516/96.977
+to 101.473/99.972 ms. Matched clingo SEND medians stay near 10.7 ms, while
+task allocation's reference varies from 164.376 to 182.206 ms across the
+control blocks. These are bounded observations, not universal ratios.
 
-Metal task allocation solving decreases 394.023 → 342.623 ms; its host GPU-call
-interval decreases 211.203 → 165.011 ms. SEND's host GPU-call interval decreases
-35.013 → 22.409 ms. Execution setup remains roughly 8.5–8.8 ms in timed runs.
-The host GPU interval includes preparation/lowering performed by the call,
-uploads, dispatch/wait and result handling; it is not kernel-only time.
-No separate CPU-residual wall interval is available here.
+The lower Fat RSS is a separate observed benefit. For example, Queens 2's
+Normal samples are 12.547/12.516 MiB and Fat's 11.938/11.953; task allocation's
+are 19.547/19.484 versus 18.891/18.844 MiB. Binary size alone would not establish
+this result. With only two RSS samples per side and mixed runtime costs, these
+measurements do not justify replacing the normal installation profile. Neither
+LTO comparison measures Table joins, GPU execution or active CPU parallelism.
 
-Exclusive stages partition the driver when complete. Source loading, final
-statistics and the JSON envelope have their own boundaries but remain in
-process wall time. Finer phase intervals are nested and must not be summed
-as another wall partition. Neither matrix measures RSS.
 
-Named GPU accounting is mixed: SEND's peak increases from 1,657,564 to
-1,966,508 bytes; Queens 2 increases from 2,495,592 to 2,511,856 bytes.
-The other measured GPU peaks decrease. These are bounded component-accounting
-receipts, not physical GPU memory or process RSS; lower elapsed time does not
-imply lower storage in every case.
+## Earlier Metal measurements
 
-## Result agreement and applicability
+The new CPU population has no matching new Metal release timing population.
+The [complete previous comparison](https://github.com/GregoryGelfond/zetesis/blob/993a7bbb625ae62ea4ff0ef4510c3d1a8be514ac/docs/book/reference/performance.md#instrumented-cpu-and-metal-comparison)
+compared sources `15e0f77b` and `6bebb980` on the same Apple M4 Pro.
+Its eager Metal SEND median decreased from 79.853 to 65.836 ms, and task
+allocation from 628.813 to 576.636 ms. Those measurements included host candidate
+search, uploads, dispatch/wait, exact CPU residual completion and JSON/statistics
+output. The matched CPU route was faster on every measured case and used a
+different certified membership procedure.
 
-Complete selected displays, symbol/model multiplicities, optimum ties and costs
-agree with clingo for every admitted comparison. This boundary does not expose
-clingo's hidden interpretations. Separately, canonical full typed native models,
-costs and output records agree across both versions and both backends for all
-360 passing native matrix observations, covering eight unique inputs.
-Comparison sorts typed atom records and model records while preserving
-multiplicity. Its scope is all answer sets for nonoptimized inputs and all
-published optimum ties for optimized inputs; it does not compare unpublished
-nonoptimal interpretations.
-
-Both versions refuse explicit lazy execution for these matrix inputs with
-`unsupported_oracle`: automatic oracle admission reaches the formula route,
-which requires eager execution here. Each eight-report CPU or Metal campaign
-accounts for 540 positions: 360 passing executions, 36 refusals and 144 later
-positions blocked by those refusals. There are no capture faults or unresolved
-children. These are applicability outcomes, not lazy timing samples or a claim
-that supported relational lazy execution is unavailable.
-
-This comparison does not include a new 94-case timing survey. The preceding
-revision's broader survey remains historical evidence, not observations of
-the current executable.
+Those values belong to `6bebb980`, not to the new table consumer or an LTO
+variant. Physical regression coverage and release performance are separate
+claims; neither historical throughput nor a requested Metal backend proves
+current device execution.
 
 ## Optional finite-table experiment
 
-The [finite-table library](../rust/finite-tables.md) prepares typed value-to-row
-support bitsets, intersects surviving rows and projects witnessed domains.
-The maintained experiment compares complete outputs with a prepared full-row
-scan and with independent queries sharing one table through Rayon.
+This retained **historical** population measured source `6bebb980`, before
+ordinary eager grounding had a Table consumer. It compared complete row/domain
+projection with a prepared scan and independent scalar/Rayon queries. All
+2,880 query observations across 90 batches agreed with independent whole-row
+reconstruction, including aliases, duplicate occurrences and restored domains.
 
-All **2,880 query observations across 90 batches** agree with an independent
-whole-row reconstruction, including repeated-variable aliases, duplicate row
-occurrences and restored domains. No route refused or failed. There is no GPU
-table implementation in this experiment and no ordinary grounder selects it.
-
-Each entry below is a median [minimum, maximum] in **microseconds for 32
-queries**, from only three timed batches per route. Preparation, independent
-validation and JSON publication are excluded; projection and common-output
-conversion are included.
+Each cell is microseconds for 32 queries: median [minimum, maximum] of three
+timed batches. Preparation and independent validation are excluded; projection
+and common-output conversion are included.
 
 | Fixture | Rows | Prepared scan | Scalar table | Rayon table, 4 workers |
 | --- | ---: | ---: | ---: | ---: |
@@ -235,35 +405,29 @@ conversion are included.
 | Aliased | 128 | 181.875 [180.750, 183.625] | 38.458 [37.417, 45.167] | 30.584 [29.667, 30.917] |
 | Aliased | 1,024 | 1,589.667 [1,570.167, 1,629.708] | 122.417 [121.291, 124.458] | 65.000 [61.041, 115.000] |
 
-The scalar table medians are approximately 1.9–14.5 times faster than scanning.
-Scan/table/Rayon run in that fixed order; overlapping scalar/Rayon ranges
-and three batches do not establish a stable crossover. Worker intervals
-overlap under Rayon, so their sum is not parallel wall time.
+The fixed scan/table/Rayon order and three batches do not establish a stable
+parallel crossover. For the independent 1,024-row fixture, the single measured
+preparations were 546.042 µs for the relation and 274.125 µs for the Table index;
+the index retained 9,080 bytes. Named capacities are not RSS.
 
-Preparation must be amortized. For the independent 1,024-row fixture, the
-single observed preparation costs are 16.416 µs for scan domains, 546.042 µs
-for the typed relation, 274.125 µs for its table index and 35.625 µs for the
-Rayon pool. The table borrows the relation. Its index retains 9,080 bytes,
-and the common complete output uses 91,168 bytes per batch versus 274,304
-for the scan. The index adds retained storage; these are named capacities,
-not RSS or total concurrent memory.
+These earlier projection results motivated the reusable consumer now described
+above. Ordinary grounding uses borrowed row selection, not the experiment's
+complete domain-projection output. Its preparation, live masks and remaining
+grounding work must be measured together. There is still no GPU Table kernel.
+The [historical method and limits](https://github.com/GregoryGelfond/zetesis/blob/993a7bbb625ae62ea4ff0ef4510c3d1a8be514ac/docs/book/reference/performance.md#optional-finite-table-experiment)
+remain available with the original standalone commands.
 
-The operation's limits are 100,000,000 charged work and 128 MiB of live
-table-operation capacity. Caller-owned fixtures and other retained results
-have separate limits. This result supports evaluating a real grounding
-consumer with a proved-complete finite relation. A surviving table row is a
-constraint witness, not ASP producer support or answer-set membership.
 
-## Reproduce the comparisons
+## Reproduce the measurements
 
-Use the [checkout installation instructions](https://github.com/GregoryGelfond/zetesis/blob/main/README.md#install-and-run)
-to prepare the solver and maintained `zetesis-perf` and `zetesis-bench`
-commands. Keep release binaries separate and use one fixed performance tool
-for both solver versions. Rebuilding named source revisions may yield different
-executable hashes; record the binaries actually used.
+Use the [installer](https://github.com/GregoryGelfond/zetesis/blob/main/scripts/install.sh)
+to build canonical commands from separate checkouts of the named sources.
+Preserve each binary, actual build arguments, compiler/SDK identity and hash.
+A rebuild may have different bytes even at the same source commit. Use one fixed
+`zetesis-perf` for every compared solver.
 
-From the checkout root, assign absolute executable paths and create a fresh
-output directory:
+From the checkout root, set absolute executable paths and a fresh output
+directory. The ordinary comparison includes the same nine paths in each call:
 
 ```sh
 perf_command=/absolute/path/to/zetesis-perf
@@ -272,20 +436,18 @@ current_solver=/absolute/path/to/current/zetesis
 clingo_command=/absolute/path/to/clingo
 bench_command=/absolute/path/to/current/zetesis-bench
 results_dir=$(mktemp -d "${TMPDIR:-/tmp}/zetesis-perf.XXXXXX")
-```
 
-The functions below save the real command exit status and return it. Run the
-listed block calls one at a time, rather than pasting them as an unattended
-sequence. Inspect each nonzero report before issuing the next call. Exit 0 means the report
-passes; exit 1 means nonpassing evidence, which can include refusals or operational
-failures. Setup/publication failures exit 2. Check `accounted`, dispositions,
-faults and unresolved children; a refused or uncaptured cell has no solve time.
-
-```sh
 ordinary() {
-    if "$perf_command" examples/kr-domains \
-        --zetesis "$2" --clingo "$clingo_command" \
-        --report "$results_dir/ordinary-$1.json" \
+    comparison_label=$1
+    comparison_solver=$2
+    comparison_joins=$3
+    set -- "$perf_command" examples/kr-domains \
+        --zetesis "$comparison_solver" --clingo "$clingo_command" \
+        --report "$results_dir/$comparison_label.json"
+    if [ "$comparison_joins" != default ]; then
+        set -- "$@" --formula-joins "$comparison_joins"
+    fi
+    set -- "$@" \
         --case standalone/n-queens/variant-01.lp \
         --case standalone/n-queens/variant-02.lp \
         --case standalone/n-queens/variant-03.lp \
@@ -295,94 +457,106 @@ ordinary() {
         --case standalone/send-money/send-money.lp \
         --case scenarios/task-allocation/variant-04/05-larger-mix.lp \
         --case scenarios/shortest-path/variant-01/06-layered-dag.lp \
-        --warmups 1 --repetitions 5 --memory-runs 2 \
-        --timeout-seconds 10 --campaign-seconds 90 \
+        --warmups 1 --repetitions 3 --memory-runs 1 \
+        --timeout-seconds 5 --campaign-seconds 30 \
         --sample-bytes 4194304 --capture-bytes 134217728 \
-        --report-bytes 536870912; then
+        --report-bytes 536870912
+    if /usr/bin/env -i HOME="$HOME" PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+        LC_ALL=C TMPDIR=/private/tmp "$@"; then
         comparison_exit=0
     else
         comparison_exit=$?
     fi
-    printf '%s\n' "$comparison_exit" > "$results_dir/ordinary-$1.exit" || return 2
+    printf '%s\n' "$comparison_exit" > "$results_dir/$comparison_label.exit" || return 2
     return "$comparison_exit"
 }
-ordinary previous-1 "$previous_solver"
-ordinary current-1 "$current_solver"
-ordinary current-2 "$current_solver"
-ordinary previous-2 "$previous_solver"
 ```
 
-Run the CPU and Metal matrices in separate quiet windows. Use
-`comparison_backend=cpu` first, then `comparison_backend=metal` and repeat the
-eight calls. Metal requires an accessible physical adapter; installing the solver
-requires no separate qualification procedure.
+Run each call separately in a quiet window and inspect its report before
+continuing, especially after a nonzero result. The prior solver does not accept
+the new strategy flag, so `default` deliberately omits it.
 
 ```sh
-comparison_backend=cpu
-matrix() {
-    if "$perf_command" examples/kr-domains --suite "$1" \
-        --zetesis "$3" --clingo "$clingo_command" \
-        --report "$results_dir/$comparison_backend-$1-$2.json" \
-        --profile "${comparison_backend}-eager" \
-        --profile "${comparison_backend}-lazy" \
-        --workers 4 --completion-workers 4 --clingo-workers 1 --batch-size 64 \
-        --warmups 1 --repetitions 3 \
-        --timeout-seconds 10 --campaign-seconds 30 \
-        --sample-bytes 33554432 --native-report-bytes 33554432 \
-        --capture-bytes 536870912 --report-bytes 1073741824; then
-        comparison_exit=0
-    else
-        comparison_exit=$?
-    fi
-    printf '%s\n' "$comparison_exit" \
-        > "$results_dir/$comparison_backend-$1-$2.exit" || return 2
-    return "$comparison_exit"
-}
-matrix baseline previous-1 "$previous_solver"
-matrix queens previous-1 "$previous_solver"
-matrix baseline current-1 "$current_solver"
-matrix queens current-1 "$current_solver"
-matrix baseline current-2 "$current_solver"
-matrix queens current-2 "$current_solver"
-matrix baseline previous-2 "$previous_solver"
-matrix queens previous-2 "$previous_solver"
+ordinary release-prior-1 "$previous_solver" default
+ordinary release-current-1 "$current_solver" indexed
+ordinary release-current-2 "$current_solver" indexed
+ordinary release-prior-2 "$previous_solver" default
+
+ordinary joins-indexed-1 "$current_solver" indexed
+ordinary joins-table-1 "$current_solver" table
+ordinary joins-table-2 "$current_solver" table
+ordinary joins-indexed-2 "$current_solver" indexed
 ```
 
-Child and campaign time limits are polling budgets; setup, cleanup and report
-publication have their own scope. The measured matrix profiles use the tool's
-268,435,456-byte completion scratch default. Report records retain that value
-and the complete native arguments.
+The measured acquisition used a clean environment with a fixed locale, absolute
+executables and no inherited solver flags. Exit 0 means all requested positions
+pass; exit 1 retains nonpassing evidence, including refusals or operational
+failures; setup/publication failure exits 2. Preserve actual exits, raw reports
+and all blocked positions. A refused or uncaptured solve has no imputed time.
+Child and campaign deadlines are polling boundaries; cleanup and publication
+may extend process wall time.
 
-The separate table population uses the following six commands, with explicit
-operation limits. This loop attempts all six cases even after a nonzero result
-and records each exit status; inspect every report before interpreting the
-population. Each JSON-lines stream retains its subject, preparation, batch
-results and refusals. These are bounded library experiments, not solver
-invocations.
+For the detailed N=8 profile, run each original source separately:
 
 ```sh
-for table_case in correlated independent aliased; do
-    for table_rows in 128 1024; do
-        if "$bench_command" table --case "$table_case" --rows "$table_rows" \
-            --queries 32 --workers 4 --warmups 1 --repetitions 3 \
-            --max-table-work 100000000 --max-table-bytes 134217728 \
-            > "$results_dir/table-$table_case-$table_rows.jsonl"; then
-            comparison_exit=0
-        else
-            comparison_exit=$?
-        fi
-        printf '%s\n' "$comparison_exit" \
-            > "$results_dir/table-$table_case-$table_rows.exit"
-    done
-done
+"$bench_command" grounding \
+  examples/kr-domains/standalone/n-queens/variant-01.lp \
+  --joins table --repetitions 1 > "$results_dir/grounding-q01.json"
 ```
 
-The recorded table acquisition additionally imposed a 10-second child deadline
-and 64 MiB capture ceiling using the maintained bounded process library.
-The direct commands above reproduce the fixture and algorithm schedule;
-they do not supply that external deadline.
+Repeat for variants 02–06 with distinct output names. Each command performs the
+unmeasured indexed reference and three observed/unobserved admissions; it is not
+a bare table-kernel timer. The [grounding experiment contract](https://github.com/GregoryGelfond/zetesis/tree/main/crates/zetesis-experiments#original-source-grounding)
+defines its default work, capture and complete-model bounds.
 
-The corpus and measurement tools are in the repository. Original raw captures
-are retained privately and are not shipped with this manual. These commands
-generate new self-contained reports containing captured outputs, identities,
-options and result checks; no public download of the original records is claimed.
+The larger screen composes the public
+[`Workload::amended` and `run_workloads` APIs](https://github.com/GregoryGelfond/zetesis/tree/main/crates/zetesis-validation#derive-explicit-parameter-workloads).
+The [runnable workload example](validation.md#compare-a-parameterized-workload)
+shows the acquisition boundary. To reproduce the screen, derive `n: 8→10`
+for all six encodings and `8→12` for variants 03/04, using a separate request for
+prior/default, current/Indexed and current/Table. Keep original files unchanged.
+Use the CPU backend, eager grounding and automatic oracle selection, with four
+requested closure/completion workers, batch size 64, one clingo worker, no
+warmups and one timed pair after qualification.
+
+The screen's child/campaign intervals are 10/90 seconds. It allows 128 MiB
+per captured child, 512 MiB total capture and 1 GiB final report; decoding allows
+16,384 model witnesses, 262,144 shown-symbol occurrences, 1,048,576 native atom
+occurrences and 4,194,304 native value nodes, with 32 MiB shown spelling.
+Those settings are larger than the N=4 example's defaults. One amended workload
+retains at most 16 KiB each of original/derived source, 64 KiB combined source
+closure and 16 KiB metadata. Bounds and workload hashes remain part of each
+report. This is a library client, not an undocumented solver CLI option.
+
+For the separate LTO study, use fresh build targets for each setting. The
+following is the normal single-binary recipe; replace only the final
+`profile.release.lto=false` with `profile.release.lto="thin"` or
+`profile.release.lto="fat"` for the other variants:
+
+```sh
+cargo +1.97.1 build --locked --offline --release \
+  --target aarch64-apple-darwin --target-dir /absolute/path/to/fresh-target \
+  -p zetesis-cli --bin zetesis --features gpu \
+  --config 'profile.release.opt-level=3' \
+  --config 'profile.release.codegen-units=16' \
+  --config 'profile.release.debug=false' \
+  --config 'profile.release.debug-assertions=false' \
+  --config 'profile.release.overflow-checks=false' \
+  --config 'profile.release.panic="unwind"' \
+  --config 'profile.release.strip="none"' \
+  --config 'profile.release.incremental=false' \
+  --config 'profile.release.rpath=false' \
+  --config 'profile.release.lto=false' \
+  --timings --message-format=json -vv
+```
+
+The measurements used one Cargo job, incremental compilation disabled, no Cargo
+configuration overrides beyond those shown, Xcode 26.6 and its macOS 26.5 SDK.
+Preserve build wall/user/system times separately from runtime RSS. Repeat the
+ordinary A/B/B/A method with normal/thin and normal/fat, always requesting
+Indexed. Do not substitute these artifacts into the canonical release table.
+
+The repository supplies corpus sources, contracts and measurement APIs.
+Original raw captures are retained privately, not offered as a public download.
+The commands and API settings above generate new self-contained reports with
+captured outputs, identities and bounded outcomes.

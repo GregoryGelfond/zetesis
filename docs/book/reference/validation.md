@@ -208,9 +208,11 @@ performance trend.
 
 ### Performance evidence
 
-The [current comparison](performance.md) reports CPU time, child peak RSS and
-complete Metal solves for source `6bebb980`. The historical measurements below
-retain their original source and execution scopes.
+The [current comparison](performance.md) reports ordinary CPU time, child peak
+RSS, table-join profiles and separate LTO measurements for source `1e5b78ce`.
+Its earlier Metal and standalone table observations belong to source
+`6bebb980`. The historical measurements below retain their original source and
+execution scopes.
 
 The measurements below apply to their explicitly named revisions. No timing or
 peak-RSS measurements were collected for

@@ -138,6 +138,14 @@ relation library supplies CPU/Rayon/GPU equality-selection
 primitives with checked row reconstruction. It preserves logical values and row
 identity. The eager support consumer currently runs on the host; GPU equality
 selection is a separate library capability.
+For completed eager formula support, `--formula-joins table` selects reusable
+typed support masks for flat positive joins. Prepared tables borrow the source
+relation; selected original row positions feed the existing whole-row matcher.
+Indexed joins remain the default. Growth rounds and structural patterns keep
+indexed matching, and a table resource refusal remains a grounding failure.
+The [finite-table manual](docs/book/rust/finite-tables.md) explains the reusable
+API, shared source budgets and binding-preservation argument. This consumer is
+scalar; it does not launch a GPU table kernel or parallelize mutable grounding.
 Candidate restrictions use necessary conditions witnessed by facts or ordinary
 disjunctive support. They leave the original program and reduct unchanged;
 every retained proposal still requires exact membership checking.
@@ -228,22 +236,18 @@ end-to-end solves from kernel measurements when comparing performance.
 The [validation chapter](docs/book/reference/validation.md) explains which
 claims the corpus, proof and physical execution checks can establish.
 The [current performance comparison](docs/book/reference/performance.md) records
-CPU and Metal solves against the prior implementation and clingo, including all
-six N=8 queens encodings and separate child peak-RSS measurements. Ordinary CPU
-task allocation uses about 46% less peak RSS and 6% less time; queens-6 is about
-14% faster. Other CPU changes are mixed. Eager Metal times decrease across all
-measured inputs, including about 18% for SEND and 8% for task allocation.
-The matched CPU path remains faster on these inputs and uses a different
-certified membership procedure. Results retain explicit lazy refusals and
-distinguish full native model agreement from clingo's observable output.
-The [finite-table library](docs/book/rust/finite-tables.md) also serves completed
-eager support through the optional `--formula-joins table` strategy. It reuses
-prepared indices and consumes ordered row masks without copying the relation.
-Indexed joins remain the default; table preparation and query masks consume the
-same source resource budgets. Separate scalar/Rayon primitive measurements do
-not establish an ordinary grounding speedup.
-Earlier N=10 comparisons
-and isolated GPU measurements remain in the
+ordinary CPU solves, table-join profiles and separate link-time optimization
+experiments. The current application timings drift across blocks and establish
+no broad table-join speedup. The normal release profile remains selected;
+smaller fat-LTO binaries do not compensate for slower measured application
+cases. Reusable table selection is an additional execution choice, not a claim
+that bitsets improve every grounding workload.
+Earlier CPU/Metal comparisons and standalone scalar/Rayon table timings remain
+identified by their measured source revisions. They are not measurements of
+the new ordinary table consumer. Results distinguish complete native model
+agreement from clingo's observable output, and retain timeouts and resource
+refusals explicitly. Earlier N=10 comparisons and isolated GPU measurements
+remain in the
 [historical performance evidence](docs/book/reference/validation.md#performance-evidence).
 
 See [Contributing](CONTRIBUTING.md) for development and verification requirements,

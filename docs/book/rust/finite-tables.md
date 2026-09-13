@@ -173,8 +173,8 @@ for finite populations and report limits. This experiment establishes neither
 source-grounding completeness nor ordinary solver acceleration.
 
 The [measured comparison](../reference/performance.md#optional-finite-table-experiment)
-reports the current fixture timings, preparation costs and retained-capacity
-limitations.
+retains the earlier standalone fixture timings, preparation costs and capacity
+limitations separately from measurements of the ordinary grounding consumer.
 
 ## Preservation argument
 
