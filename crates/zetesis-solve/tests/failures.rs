@@ -1,6 +1,6 @@
 //! Typed failure decomposition preserves input identity and established evidence.
 
-use std::{fmt, sync::Arc};
+use std::{error::Error as _, fmt, sync::Arc};
 
 use zetesis_cpu::Control;
 use zetesis_solve::{
@@ -45,6 +45,19 @@ fn decompose(
     token: &Arc<()>,
 ) -> zetesis_solve::FailureParts {
     assert!(failure.subject().unwrap().same_instance(subject));
+    assert_eq!(
+        failure.to_string(),
+        "execution observer: host observation refused"
+    );
+    let linked = failure
+        .source()
+        .unwrap()
+        .downcast_ref::<SolveError>()
+        .unwrap();
+    assert!(std::ptr::eq(linked, failure.cause.as_ref()));
+    let original = linked.source().unwrap().downcast_ref::<Refusal>().unwrap();
+    assert!(Arc::ptr_eq(&original.0, token));
+    assert!(original.source().is_none());
     let cause = std::ptr::from_ref(failure.cause.as_ref());
     let semantic = failure.semantic().map(std::ptr::from_ref);
     let phases = failure.phase_timings.as_deref().copied();

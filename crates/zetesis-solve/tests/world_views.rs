@@ -850,3 +850,6 @@ fn collection_preserves_deferred_formula_failure() {
     assert_eq!(outcome.completion(), None);
     assert!(!outcome.unsatisfiable());
 }
+
+#[path = "support/world_view_failure_contracts.rs"]
+mod failure_contracts;
