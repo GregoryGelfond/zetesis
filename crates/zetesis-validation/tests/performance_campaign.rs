@@ -15,6 +15,8 @@ use zetesis_validation::{
 
 #[path = "support/comparison_extensions.rs"]
 mod comparison_extensions;
+#[path = "support/comparison_memory_exits.rs"]
+mod comparison_memory_exits;
 
 struct Fixture {
     directory: tempfile::TempDir,
