@@ -263,7 +263,7 @@ fn failed_statistics_preserve_missing_completion() {
     assert_eq!(partial.completion, None);
     assert_eq!(partial.verified_models, 1);
     let view = super::Details::from(partial);
-    assert_eq!(view.completion, None);
+    assert!(!view.optimum_proved);
     assert_eq!(view.interruption, None);
     let text = every_prefix(&options, &Err(failure));
     assert!(text.contains("search completion=None"));
