@@ -440,10 +440,11 @@ fn cancelled_formula_does_not_enter_membership() {
     assert_eq!(outcome.completion(), Some(Completion::Interrupted));
     assert!(matches!(
         outcome.interruption(),
-        Some(Interruption::Countermodel(
-            zetesis_sat::Incomplete::Cancelled
-        ))
+        Some(Interruption::Preparation(zetesis_cpu::Stop::Cancelled))
     ));
+    assert_eq!(outcome.candidate_progress(), 0);
+    assert!(outcome.countermodel_statistics().is_none());
+    assert!(outcome.formula_execution().is_none());
     assert!(!outcome.unsatisfiable());
 }
 
