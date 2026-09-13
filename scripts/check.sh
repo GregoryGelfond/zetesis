@@ -45,9 +45,18 @@ if [ "$mode" = book ] || [ "$mode" = full ]; then
         exit 2
     fi
     mdbook build
-    # Keep one dependency configuration here so example crate lookup is unique.
-    cargo build --locked -p zetesis-cli -p zetesis-solve -p zetesis-validation --lib --all-features --target-dir target/book-tests-gpu
-    mdbook test --library-path target/book-tests-gpu/debug/deps
+    # Reuse incremental compilation, but never expose old rlibs to rustdoc.
+    mkdir -p -- target/book-views
+    book_view=$(mktemp -d "$repo_dir/target/book-views/run.XXXXXXXX")
+    (
+        # Only this freshly created view is removed; Cargo artifacts are retained.
+        trap 'rm -rf -- "$book_view/libraries"' 0
+        cargo build --locked -p zetesis-cli -p zetesis-solve -p zetesis-validation --lib --all-features --target-dir target/book-tests-gpu --message-format=json-render-diagnostics > "$book_view/artifacts.jsonl"
+        scripts/maintenance.sh book-libraries --messages "$book_view/artifacts.jsonl" \
+            --build-directory target/book-tests-gpu --destination "$book_view/libraries" \
+            --crate zetesis_cli --crate zetesis_solve --crate zetesis_validation
+        mdbook test --library-path "$book_view/libraries"
+    )
 fi
 if [ "$mode" = oracle ] || [ "$mode" = full ]; then
     case "${CLINGO:-}" in /*) ;; *)

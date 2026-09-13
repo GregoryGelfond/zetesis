@@ -8,6 +8,7 @@
 
 mod files;
 mod json;
+pub mod book;
 pub mod coverage;
 pub mod inventory;
 pub mod proofs;

@@ -6,7 +6,7 @@ use std::{
     process::ExitCode,
 };
 use zetesis_maintenance::{
-    Error,
+    Error, book,
     coverage::{self, Floor, Metadata, Mode, Observation, Tool},
     inventory, proofs,
 };
@@ -29,6 +29,17 @@ enum InventoryView {
 }
 #[derive(Subcommand)]
 enum Action {
+    /// Publish only libraries named by the current successful Cargo build.
+    BookLibraries {
+        #[arg(long)]
+        messages: PathBuf,
+        #[arg(long)]
+        build_directory: PathBuf,
+        #[arg(long)]
+        destination: PathBuf,
+        #[arg(long = "crate", required = true)]
+        required_crates: Vec<String>,
+    },
     /// Observe Lean source declarations; no proof success is inferred.
     ProofInventory {
         #[arg(long, default_value = "proofs")]
@@ -104,6 +115,23 @@ fn text(path: &std::path::Path) -> Result<String, Error> {
 }
 fn execute(action: Action, output: &mut impl Write) -> Result<(), Error> {
     let value = match action {
+        Action::BookLibraries {
+            messages,
+            build_directory,
+            destination,
+            required_crates,
+        } => {
+            let limits = book::Limits::default();
+            let bytes = inventory::read(&messages, limits.message_bytes)?;
+            let required: Vec<_> = required_crates.iter().map(String::as_str).collect();
+            let libraries = book::select(&bytes, &required, limits)?;
+            libraries.publish(&build_directory, &destination)?;
+            format!(
+                "Book libraries: {} current artifacts\n",
+                libraries.paths().len()
+            )
+            .into_bytes()
+        }
         Action::ProofInventory { proofs_dir, view } => {
             let inventory = proofs::inventory(&proofs_dir, proofs::Limits::default())?;
             match view {

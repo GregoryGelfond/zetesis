@@ -157,6 +157,21 @@ fn cargo(arguments: &[String]) -> Result<(), String> {
         {
             return fail("simulated oracle campaign failure");
         }
+        if has(arguments, "--message-format=json-render-diagnostics") {
+            let directory = env::current_dir()
+                .map_err(|error| error.to_string())?
+                .join("target/book-tests-gpu/debug/deps");
+            fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+            for name in ["zetesis_cli", "zetesis_solve", "zetesis_validation"] {
+                let file = directory.join(format!("lib{name}-current.rlib"));
+                fs::write(&file, b"current").map_err(|error| error.to_string())?;
+                println!(
+                    "{}",
+                    json!({"reason":"compiler-artifact","target":{"name":name,"kind":["lib"]},"filenames":[file],"fresh":true})
+                );
+            }
+            println!("{}", json!({"reason":"build-finished","success":true}));
+        }
         return Ok(());
     }
     if arguments == ["+1.97.1", "llvm-cov", "--version"] {
@@ -273,6 +288,29 @@ fn execute(role: &str, arguments: &[String]) -> Result<(), String> {
         "mdbook" => {
             if arguments == ["--version"] {
                 println!("mdbook v0.5.4");
+            }
+            if has(arguments, "test") && env::var_os("CHECK_TEST_BOOK_ARTIFACTS").is_some() {
+                let path =
+                    Path::new(value(arguments, "--library-path").ok_or("missing book view")?);
+                let entries: std::collections::BTreeSet<_> = fs::read_dir(path)
+                    .map_err(|error| error.to_string())?
+                    .map(|entry| {
+                        entry
+                            .map(|entry| entry.file_name())
+                            .map_err(|error| error.to_string())
+                    })
+                    .collect::<Result<_, _>>()?;
+                let expected = [
+                    "libzetesis_cli-current.rlib",
+                    "libzetesis_solve-current.rlib",
+                    "libzetesis_validation-current.rlib",
+                ]
+                .map(std::ffi::OsString::from)
+                .into_iter()
+                .collect();
+                if entries != expected {
+                    return fail("rustdoc received stale or missing libraries");
+                }
             }
             Ok(())
         }

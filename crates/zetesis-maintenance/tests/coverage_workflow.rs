@@ -655,3 +655,28 @@ fn maintenance_selects_the_repository_toolchain() {
     );
     assert_eq!(fixture.read("trace"), expected);
 }
+
+#[test]
+fn book_rustdoc_receives_only_current_artifacts() {
+    let fixture = Fixture::new();
+    let stale = "target/book-tests-gpu/debug/deps/libzetesis_solve-stale.rlib";
+    fixture.write(stale, b"stale");
+    let result = fixture
+        .command("scripts/check.sh")
+        .arg("book")
+        .env("CHECK_TEST_TRACE", fixture.root().join("trace"))
+        .env("CHECK_TEST_BOOK_ARTIFACTS", "verify")
+        .bounded_output();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert_eq!(fixture.read(stale), "stale");
+    assert!(fixture.read("trace").contains("mdbook test --library-path"));
+    for entry in fs::read_dir(fixture.root().join("target/book-views")).unwrap() {
+        let view = entry.unwrap().path();
+        assert!(view.join("artifacts.jsonl").is_file());
+        assert!(!view.join("libraries").exists());
+    }
+}

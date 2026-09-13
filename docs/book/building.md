@@ -36,24 +36,26 @@ The session, resource-sharing, measurement, source-preparation, objective-select
 reduct and derived-workload examples are
 included from Rust files under `docs/book/examples`; the code displayed in the
 chapters is the code tested by mdBook. Build their dependencies without requiring
-a physical GPU, then run:
+a physical GPU through the maintained command:
 
 ```sh
-book_toolchain=$(rustup show active-toolchain)
-export RUSTUP_TOOLCHAIN=${book_toolchain%% *}
-cargo build --locked -p zetesis-cli -p zetesis-solve -p zetesis-validation --lib --all-features --target-dir target/book-tests-gpu
-mdbook test --library-path target/book-tests-gpu/debug/deps
+scripts/check.sh book
 ```
 
-mdBook invokes rustdoc from a temporary directory. Exporting the toolchain selected
-in the checkout keeps those examples on the same compiler as their dependencies,
-even when the machine's default toolchain differs. `scripts/check.sh book` performs
-this selection automatically.
+mdBook invokes rustdoc from a temporary directory. The command exports the
+checkout's selected toolchain so examples use the same compiler as their
+dependencies, even when the machine's default toolchain differs.
 
-Reserve `target/book-tests-gpu` for this example configuration. Separate storage
-keeps Cargo check/rustdoc metadata and other feature configurations from making
-mdBook's crate lookup ambiguous. The ordinary application and API documentation
-can continue using `target`.
+`scripts/check.sh book` reuses compilation in `target/book-tests-gpu`, but passes
+rustdoc a fresh view containing only libraries named by that successful Cargo
+build's JSON messages. This excludes stale competing rlibs from earlier source
+revisions without deleting the incremental build directory. The maintained
+`book::select` operation checks required crates and complete build output;
+`Libraries::publish` confines the regular files to that build directory and
+hard-links them into the new view. Do not modify build artifacts concurrently
+with the check. The view is removed afterward; its Cargo messages remain under
+`target/book-views/run.*`. The ordinary application and API documentation can
+continue using `target`.
 
 The examples check their stated contracts and propagate typed failures. No GPU
 support or performance claim follows from these portable example tests.
