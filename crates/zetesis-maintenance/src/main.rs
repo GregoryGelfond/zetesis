@@ -53,6 +53,9 @@ enum Action {
         proofs_dir: PathBuf,
         #[arg(long, default_value = "verification.json")]
         record: String,
+        /// Complete stdout of a newly successful strict Audit command.
+        #[arg(long)]
+        live_audit: Option<PathBuf>,
     },
     /// Validate a committed coverage floor.
     CoverageFloor {
@@ -142,8 +145,18 @@ fn execute(action: Action, output: &mut impl Write) -> Result<(), Error> {
                 InventoryView::Audit => inventory.audit_source().into_bytes(),
             }
         }
-        Action::ProofRecord { proofs_dir, record } => {
-            let result = proofs::verify(&proofs_dir, &record, proofs::Limits::default())?;
+        Action::ProofRecord {
+            proofs_dir,
+            record,
+            live_audit,
+        } => {
+            let limits = proofs::Limits::default();
+            let result = if let Some(path) = live_audit {
+                let bytes = inventory::read(&path, limits.file_bytes)?;
+                proofs::verify_with_audit(&proofs_dir, &record, &bytes, limits)?
+            } else {
+                proofs::verify(&proofs_dir, &record, limits)?
+            };
             format!("Proof record: PASS: {} theorems; {} semantic modules; {} source/configuration files\n", result.theorems, result.semantic_modules, result.source_files).into_bytes()
         }
         Action::CoverageFloor { mode, path } => {

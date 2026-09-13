@@ -20,6 +20,11 @@ Record consistency does not establish that commands ran. Run the pinned `lake
 build` and strict `Audit.lean` command independently; neither hashes nor a passing
 maintenance check replace Lean kernel checking or prove a Rust/WGSL refinement.
 The synthetic regression fixtures make no claim of kernel acceptance.
+The maintained proof gate now retains live Audit stdout/stderr and passes the
+successful stdout to `proof-record --live-audit`. `proofs::verify_with_audit`
+checks its exact correspondence with the retained record; nonzero execution,
+Audit stderr or differing live bytes cannot pass. Failed audit output remains
+visible and is retained under a fresh `target/proof-checks/run.*` directory.
 
 ## Coverage and source identity
 

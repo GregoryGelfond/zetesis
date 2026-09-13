@@ -243,6 +243,12 @@ fn execute(role: &str, arguments: &[String]) -> Result<(), String> {
     {
         return fail("temporary book compiler selected a different toolchain");
     }
+    if role == "lake"
+        && has(arguments, "Audit.lean")
+        && env::var_os("CHECK_TEST_AUDIT_STDERR").is_some()
+    {
+        eprintln!("synthetic unexpected Audit stderr");
+    }
     let failure = variable("CHECK_TEST_FAILURE", "");
     if (role == "lake"
         && ((arguments == ["build"] && failure == "build")

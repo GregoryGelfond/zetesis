@@ -121,8 +121,26 @@ if [ "$mode" = oracle ] || [ "$mode" = full ]; then
     printf '%s\n' passed > "$oracle_records/status.txt"
 fi
 if [ "$mode" = proofs ] || [ "$mode" = full ]; then
-    (cd proofs && lake build && lake env lean -DautoImplicit=false -DwarningAsError=true Audit.lean)
-    scripts/maintenance.sh proof-record
+    mkdir -p -- target/proof-checks
+    proof_check=$(mktemp -d "$repo_dir/target/proof-checks/run.XXXXXXXX")
+    : > "$proof_check/audit.stdout"
+    : > "$proof_check/audit.stderr"
+    proof_exit=0
+    if (cd proofs && lake build && lake env lean -DautoImplicit=false -DwarningAsError=true Audit.lean > "$proof_check/audit.stdout" 2> "$proof_check/audit.stderr"); then
+        :
+    else
+        proof_exit=$?
+    fi
+    printf '%s\n' "$proof_exit" > "$proof_check/exit.txt"
+    cat "$proof_check/audit.stdout" "$proof_check/audit.stderr"
+    if [ "$proof_exit" -ne 0 ]; then
+        exit "$proof_exit"
+    fi
+    if [ -s "$proof_check/audit.stderr" ]; then
+        printf '%s\n' 'Strict Audit emitted stderr; its output cannot qualify.' >&2
+        exit 2
+    fi
+    scripts/maintenance.sh proof-record --live-audit "$proof_check/audit.stdout"
 fi
 if [ "$mode" = coverage ] || [ "$mode" = full ]; then
     if [ "$coverage_option" = --metal ]; then

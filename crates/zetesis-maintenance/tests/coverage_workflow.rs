@@ -312,12 +312,18 @@ fn record_gate_follows_actual_lean_commands() {
             );
             let trace = f.read("trace");
             let lines: Vec<_> = trace.lines().collect();
-            let gate = "maintenance proof-record";
+            let gate = "maintenance proof-record --live-audit ";
             if matches!(failure, "build" | "audit") {
-                assert!(!lines.contains(&gate));
+                assert!(!lines.iter().any(|line| line.starts_with(gate)));
             } else {
-                let index = lines.iter().position(|line| *line == gate).unwrap();
-                assert_eq!(lines.iter().filter(|line| **line == gate).count(), 1);
+                let index = lines
+                    .iter()
+                    .position(|line| line.starts_with(gate))
+                    .unwrap();
+                assert_eq!(
+                    lines.iter().filter(|line| line.starts_with(gate)).count(),
+                    1
+                );
                 assert_eq!(
                     lines[index - 1],
                     "lake env lean -DautoImplicit=false -DwarningAsError=true Audit.lean"
@@ -714,4 +720,23 @@ fn coverage_retains_both_independent_floor_failures() {
             assert_eq!(entry["args"].as_array().unwrap().last().unwrap(), "91");
         }
     }
+}
+
+#[test]
+fn live_audit_stderr_prevents_record_acceptance() {
+    let fixture = Fixture::new();
+    fixture.tool("bin/maintenance", "maintenance");
+    let result = fixture
+        .command("scripts/check.sh")
+        .arg("proofs")
+        .env(
+            "ZETESIS_MAINTENANCE",
+            fixture.root().join("bin/maintenance"),
+        )
+        .env("CHECK_TEST_TRACE", fixture.root().join("trace"))
+        .env("CHECK_TEST_AUDIT_STDERR", "present")
+        .bounded_output();
+    assert_eq!(result.status.code(), Some(2));
+    assert!(!fixture.read("trace").contains("maintenance proof-record"));
+    assert!(String::from_utf8_lossy(&result.stdout).contains("synthetic unexpected Audit stderr"));
 }

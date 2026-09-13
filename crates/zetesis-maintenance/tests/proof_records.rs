@@ -526,3 +526,33 @@ fn inventory_cli_renders_each_requested_view() {
         serde_json::to_value(&inventory).unwrap()
     );
 }
+
+#[test]
+fn live_audit_must_match_the_retained_result() {
+    let fixture = Fixture::new();
+    let original = fixture.read("axiom-audit.txt");
+    let summary = proofs::verify_with_audit(
+        fixture.root(),
+        "verification.json",
+        original.as_bytes(),
+        Limits::default(),
+    )
+    .unwrap();
+    assert_eq!(summary.theorems, 2);
+    for changed in [
+        String::new(),
+        original.replace("propext", "sorryAx"),
+        format!("{original}extra\n"),
+    ] {
+        assert!(
+            proofs::verify_with_audit(
+                fixture.root(),
+                "verification.json",
+                changed.as_bytes(),
+                Limits::default()
+            )
+            .is_err()
+        );
+    }
+    assert_eq!(fixture.read("axiom-audit.txt"), original);
+}

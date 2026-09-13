@@ -52,6 +52,40 @@ pub struct Summary {
 /// Refuses malformed, stale, incomplete or unsupported records, escaped paths,
 /// exceeded read budgets and filesystem failures. None of these is a Lean verdict.
 pub fn verify(root: &Path, record_name: &str, limits: Limits) -> Result<Summary, Error> {
+    verify_record(root, record_name, limits, None)
+}
+
+/// Check a retained record against the actual output of a newly executed audit.
+///
+/// `live_audit` must contain complete stdout from the pinned strict Audit command;
+/// the caller separately requires its successful exit and empty stderr. This
+/// operation executes nothing and compares exact bytes as well as the existing
+/// source/index/axiom contracts. The borrowed output has the file-byte ceiling.
+///
+/// # Errors
+/// Refuses every invalid retained record, oversized live output, or a live audit
+/// differing from its retained counterpart. Equality does not attest execution.
+pub fn verify_with_audit(
+    root: &Path,
+    record_name: &str,
+    live_audit: &[u8],
+    limits: Limits,
+) -> Result<Summary, Error> {
+    if live_audit.len() > limits.file_bytes {
+        return Err(Error::Limit {
+            resource: "live audit bytes",
+            limit: limits.file_bytes,
+        });
+    }
+    verify_record(root, record_name, limits, Some(live_audit))
+}
+
+fn verify_record(
+    root: &Path,
+    record_name: &str,
+    limits: Limits,
+    live_audit: Option<&[u8]>,
+) -> Result<Summary, Error> {
     let mut tree = Tree::new(root, limits)?;
     let record = json::parse(&tree.read(record_name)?)?;
     json::object(&record, "verification record")?;
@@ -87,6 +121,12 @@ pub fn verify(root: &Path, record_name: &str, limits: Limits) -> Result<Summary,
     )?;
     index(&mut tree, &entries)?;
     let axioms = audit::check(&mut tree, &names)?;
+    if let Some(live) = live_audit {
+        require(
+            tree.read("axiom-audit.txt")? == live,
+            "live audit differs from the retained kernel output",
+        )?;
+    }
     counts(&record, &entries, modules.len())?;
     require(
         record["transitive_axioms"] == serde_json::to_value(axioms).map_err(Error::Json)?,
