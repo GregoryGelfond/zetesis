@@ -236,18 +236,18 @@ impl PublicationStop {
     pub(crate) fn classify(error: RunError) -> Result<Self, RunError> {
         use zetesis_themelios::observation::{ErrorKind, ViewError};
         match error {
-            RunError::PublicationStopped(reason) => Ok(Self {
+            RunError::PublicationStopped(reason) if cooperative(reason) => Ok(Self {
                 reason,
                 phase: PublicationPhase::RecordPreparation,
                 observation: None,
             }),
-            RunError::JsonRecord(ViewError::Stopped(reason)) => Ok(Self {
+            RunError::JsonRecord(ViewError::Stopped(reason)) if cooperative(reason) => Ok(Self {
                 reason,
                 phase: PublicationPhase::Encoding,
                 observation: None,
             }),
             RunError::Observation(error) => match error.kind() {
-                ErrorKind::Stopped(reason) => Ok(Self {
+                ErrorKind::Stopped(reason) if cooperative(*reason) => Ok(Self {
                     reason: *reason,
                     phase: PublicationPhase::Observation,
                     observation: Some(error),
@@ -258,6 +258,13 @@ impl PublicationStop {
         }
     }
 }
+const fn cooperative(reason: zetesis_cpu::Stop) -> bool {
+    matches!(
+        reason,
+        zetesis_cpu::Stop::Cancelled | zetesis_cpu::Stop::Deadline
+    )
+}
+
 impl fmt::Display for PublicationStop {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(

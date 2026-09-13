@@ -222,6 +222,14 @@ fn cooperative_encoding_stops_are_distinct_from_resource_refusals() {
         assert_eq!(stop.reason(), reason);
         assert_eq!(stop.phase(), PublicationPhase::Encoding);
     }
+    for reason in [Stop::Allocation, Stop::WorkLimit] {
+        assert!(
+            matches!(PublicationStop::classify(RunError::PublicationStopped(reason)), Err(RunError::PublicationStopped(original)) if original == reason)
+        );
+        assert!(
+            matches!(PublicationStop::classify(RunError::JsonRecord(ViewError::Stopped(reason))), Err(RunError::JsonRecord(ViewError::Stopped(original))) if original == reason)
+        );
+    }
     assert!(matches!(
         PublicationStop::classify(RunError::JsonRecord(ViewError::Bytes)),
         Err(RunError::JsonRecord(ViewError::Bytes))
