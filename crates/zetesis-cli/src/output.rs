@@ -980,3 +980,7 @@ mod lazy_tests {
 #[cfg(test)]
 #[path = "../tests/support/json_failures.rs"]
 mod failure_tests;
+
+#[cfg(test)]
+#[path = "../tests/support/footer_admission.rs"]
+mod footer_admission_tests;
