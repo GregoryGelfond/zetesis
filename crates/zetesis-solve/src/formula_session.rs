@@ -182,14 +182,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                     self.fail(error, phases);
                     return self.pending_error.take().map(Err);
                 }
-                None => {
-                    if !models.exhausted() {
-                        self.fail(SolveError::CandidateStreamNotExhausted, phases);
-                        return self.pending_error.take().map(Err);
-                    }
-                    self.complete(SearchState::Exhausted, phases);
-                    return self.next_retained().map(Ok);
-                }
+                None => return self.finish_candidate_stream(phases),
             };
             let model = match Model::from_positions(self.input.atoms, interpretation.atoms()) {
                 Ok(model) => model,
@@ -251,6 +244,23 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                 }
             }
         }
+    }
+
+    fn finish_candidate_stream(
+        &mut self,
+        phases: &Recorder,
+    ) -> Option<Result<(Model, Option<Score>), SolveError>> {
+        if !self
+            .models
+            .as_ref()
+            .expect("unfinished session has a candidate stream")
+            .exhausted()
+        {
+            self.fail(SolveError::CandidateStreamNotExhausted, phases);
+            return self.pending_error.take().map(Err);
+        }
+        self.complete(SearchState::Exhausted, phases);
+        self.next_retained().map(Ok)
     }
 
     fn next_retained(&mut self) -> Option<(Model, Option<Score>)> {
