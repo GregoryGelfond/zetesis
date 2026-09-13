@@ -3,8 +3,12 @@
     feature = "test-fixtures",
     any(target_os = "linux", target_os = "macos")
 ))]
+#[path = "support/process.rs"]
+pub mod subprocess;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::{fs, path::PathBuf, time::Duration};
+use subprocess::{Command, Output};
 use zetesis_maintenance::proofs::{
     self,
     capture::{self, Phase, Request},
@@ -83,6 +87,20 @@ impl Fixture {
             },
         })
     }
+    fn cli(&self) -> Output {
+        Command::new(env!("CARGO_BIN_EXE_zetesis-maintenance"))
+            .arg("proof-capture")
+            .arg("--repository")
+            .arg(&self.repository)
+            .arg("--evidence")
+            .arg(&self.evidence)
+            .arg("--lean-bin")
+            .arg(&self.tools)
+            .arg("--rust-bin")
+            .arg(&self.tools)
+            .current_dir(&self.repository)
+            .bounded_output()
+    }
     fn original_remains(&self) {
         assert_eq!(
             fs::read(self.repository.join("proofs/verification.json")).unwrap(),
@@ -99,6 +117,79 @@ impl Fixture {
                 .exists()
         );
     }
+}
+
+#[test]
+fn cli_publishes_the_record_it_summarizes() {
+    let fixture = Fixture::new("");
+    let output = fixture.cli();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.stderr.is_empty());
+    assert_eq!(
+        output.stdout,
+        format!(
+            "Proof capture: PASS: 1 theorems; 1 semantic modules; evidence {}\n",
+            fixture.evidence.display()
+        )
+        .as_bytes()
+    );
+    // The actual CLI freezes itself; the Lean/Cargo responses remain synthetic.
+    let checker = fs::canonicalize(env!("CARGO_BIN_EXE_zetesis-maintenance")).unwrap();
+    let admitted = fs::read(&checker).unwrap();
+    let frozen = fixture.evidence.join("tools/zetesis-maintenance");
+    assert_eq!(fs::read(&frozen).unwrap(), admitted);
+    let identity: Value =
+        serde_json::from_slice(&fs::read(fixture.evidence.join("tools/identity.json")).unwrap())
+            .unwrap();
+    assert_eq!(identity["original_path"], checker.to_str().unwrap());
+    assert_eq!(identity["frozen_path"], frozen.to_str().unwrap());
+    let digest = format!("{:x}", Sha256::digest(&admitted));
+    assert_eq!(identity["original_sha256"], digest);
+    assert_eq!(identity["frozen_sha256"], digest);
+    let record: Value = serde_json::from_slice(
+        &fs::read(fixture.repository.join("proofs/verification.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(record["platform"], "fixture-host");
+    assert_eq!(record["tool_sha256"]["zetesis-maintenance"], digest);
+    let summary = proofs::verify(
+        &fixture.repository.join("proofs"),
+        "verification.json",
+        proofs::Limits::default(),
+    )
+    .unwrap();
+    assert_eq!(summary.semantic_modules, 1);
+    assert_eq!(summary.theorems, 1);
+    assert_eq!(summary.source_files, 6);
+}
+
+#[test]
+fn cli_version_refusal_preserves_the_prior_record() {
+    let fixture = Fixture::new("lean-version");
+    let output = fixture.cli();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        output.stderr,
+        b"Maintenance: FAIL: proof capture Kernel: wrong pinned Lean identity\n"
+    );
+    fixture.original_remains();
+    assert_eq!(
+        fs::read(fixture.repository.join("proofs/axiom-audit.txt")).unwrap(),
+        b"previous audit"
+    );
+    assert_eq!(
+        fs::read(fixture.repository.join("proofs/verification/current/build.log")).unwrap(),
+        b"previous log"
+    );
+    assert!(!fixture.evidence.join("commands/build").exists());
+    let observed = fs::read_to_string(fixture.evidence.join("commands/version/stdout")).unwrap();
+    assert!(observed.starts_with("Lean (version 4.32.0, fixture-host,"));
 }
 
 #[test]
