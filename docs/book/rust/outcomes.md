@@ -22,7 +22,10 @@ of flushing and durability for their supplied writers.
 `SemanticOutcome::unsatisfiable()` requires exhausted coverage and zero verified
 models. A zero display count, an empty consumer vector, or `completion() == None`
 cannot establish inconsistency. A requested model limit and an interrupted
-search are distinct completion states.
+search are distinct completion states. If membership execution ends without
+an exhausted candidate stream, `SolveError::CandidateStreamNotExhausted` retains
+the checked prefix and leaves coverage unestablished. This check is also active
+in release builds.
 
 `SemanticOutcome::search_state()` carries the status and its reason together.
 `SearchState::PendingInterruption(reason)` records a known batch stop while

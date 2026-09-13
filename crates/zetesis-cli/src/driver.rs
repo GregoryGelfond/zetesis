@@ -147,6 +147,8 @@ pub enum RunError {
     /// A driver requested a successful legacy report before search classified its stop.
     /// This protocol failure establishes neither interruption nor unsatisfiability.
     CompletionUnavailable,
+    /// Membership execution ended without exhausted candidate coverage.
+    CandidateStreamNotExhausted,
     /// An injected batch checker violated its ordered result-count contract.
     FormulaBatchShape {
         /// Number of original candidates supplied.
@@ -216,6 +218,7 @@ impl fmt::Display for RunError {
             Self::CompletionUnavailable => f.write_str("driver report requires established search completion"),
             Self::Words(error) => error.fmt(f),
             Self::Model(error) => error.fmt(f),
+            Self::CandidateStreamNotExhausted => f.write_str("membership execution ended before candidate exhaustion"),
             Self::FormulaBatchShape { expected, actual } => write!(f, "formula checker returned {actual} results for {expected} candidates"),
         }?;
         self.write_diagnostics(f)
@@ -282,7 +285,8 @@ impl std::error::Error for RunError {
             | Self::UnsupportedSourceBatching
             | Self::LazyStatisticsOverflow
             | Self::CompletionUnavailable
-            | Self::FormulaBatchShape { .. } => None,
+            | Self::FormulaBatchShape { .. }
+            | Self::CandidateStreamNotExhausted => None,
             Self::Formula(error) => Some(error),
             Self::FormulaAdmission(error) => Some(error),
             Self::FormulaBundleAdmission(error) => Some(error),
@@ -686,6 +690,7 @@ impl From<zetesis_solve::SolveError> for RunError {
             SolveError::SharedCpu(error) => Self::SharedCpu(error),
             SolveError::Words(error) => Self::Words(error),
             SolveError::Model(error) => Self::Model(error),
+            SolveError::CandidateStreamNotExhausted => Self::CandidateStreamNotExhausted,
             SolveError::UnsupportedOracle { backend, grounder } => {
                 Self::UnsupportedOracle { backend, grounder }
             }

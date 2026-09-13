@@ -301,6 +301,7 @@ fn error_kind(error: &RunError) -> &'static str {
         RunError::Words(_) => "words",
         RunError::Model(_) => "model",
         RunError::FormulaBatchShape { .. } => "formula_batch_shape",
+        RunError::CandidateStreamNotExhausted => "candidate_stream_not_exhausted",
         #[cfg(feature = "gpu")]
         RunError::Gpu(_) => "gpu",
         #[cfg(feature = "gpu")]

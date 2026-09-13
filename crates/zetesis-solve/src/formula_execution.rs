@@ -73,6 +73,9 @@ pub(crate) enum Failure {
 
 /// A stream of original, reduct-checked semantic models, before display or scoring.
 pub(crate) trait MembershipExecution {
+    /// Return `None` only after `models.exhausted()` establishes complete
+    /// candidate coverage. A cooperative stop is an explicit `Failure::Search`;
+    /// an execution failure must not masquerade as end of enumeration.
     fn next(
         &mut self,
         models: &mut StableModels,

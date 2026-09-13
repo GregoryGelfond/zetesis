@@ -183,7 +183,10 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                     return self.pending_error.take().map(Err);
                 }
                 None => {
-                    debug_assert!(models.exhausted());
+                    if !models.exhausted() {
+                        self.fail(SolveError::CandidateStreamNotExhausted, phases);
+                        return self.pending_error.take().map(Err);
+                    }
                     self.complete(SearchState::Exhausted, phases);
                     return self.next_retained().map(Ok);
                 }
@@ -316,3 +319,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
 #[cfg(test)]
 #[path = "../tests/support/formula_timing_contracts.rs"]
 mod timing_tests;
+
+#[cfg(test)]
+#[path = "../tests/support/formula_exhaustion_contracts.rs"]
+mod exhaustion_tests;

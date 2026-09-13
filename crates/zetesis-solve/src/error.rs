@@ -49,6 +49,8 @@ pub enum SolveError {
     Words(zetesis_core::WordError),
     /// An accepted interpretation could not retain its checked atom selection.
     Model(zetesis_core::ModelError),
+    /// Membership execution ended without exhausted candidate coverage.
+    CandidateStreamNotExhausted,
     /// An injected checker violated the ordered result-count contract.
     FormulaBatchShape {
         /// Original candidates supplied.
@@ -79,6 +81,7 @@ impl fmt::Display for SolveError {
             Self::SharedCpu(error) => error.fmt(formatter),
             Self::Words(error) => error.fmt(formatter),
             Self::Model(error) => error.fmt(formatter),
+            Self::CandidateStreamNotExhausted => formatter.write_str("membership execution ended before candidate exhaustion"),
             Self::FormulaBatchShape { expected, actual } => write!(formatter,
                 "formula checker returned {actual} results for {expected} candidates"),
         }
@@ -104,7 +107,8 @@ impl std::error::Error for SolveError {
             | Self::UnsupportedSourceBatching
             | Self::PreparedInput { .. }
             | Self::LazyStatisticsOverflow
-            | Self::FormulaBatchShape { .. } => None,
+            | Self::FormulaBatchShape { .. }
+            | Self::CandidateStreamNotExhausted => None,
         }
     }
 }
