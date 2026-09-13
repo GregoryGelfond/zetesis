@@ -51,3 +51,8 @@ reordered positions refuse table generation. Integer formatting rounds to
 three decimal places with ties to even, without converting raw units through
 floating point. The example also requires equality with the retained published
 table view; its regression checks that view against the manual.
+
+Direct integer rounding corrects eight final displayed digits from the earlier
+presentation of these same observations. For example, 32,871,500 ns is exactly
+32.8715 ms and rounds to 32.872; 6,094,848 bytes is exactly 5.8125 MiB and rounds
+to 5.812. The raw observation and provenance JSON remain unchanged.

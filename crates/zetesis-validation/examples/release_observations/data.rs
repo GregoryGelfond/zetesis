@@ -6,6 +6,8 @@ use zetesis_validation::performance::{Phase, Producer, Schedule};
 
 use super::{OBSERVATIONS, PROVENANCE, Result, require};
 
+const MAX_EMBEDDED_OBSERVATION_BYTES: usize = 1_048_576;
+
 const PATHS: [&str; 9] = [
     "standalone/n-queens/variant-01.lp",
     "standalone/n-queens/variant-02.lp",
@@ -115,7 +117,7 @@ struct ReportIdentity {
 
 pub(super) fn load() -> Result<Observations> {
     require(
-        OBSERVATIONS.len() <= 1_048_576,
+        OBSERVATIONS.len() <= MAX_EMBEDDED_OBSERVATION_BYTES,
         "embedded observation byte bound exceeded",
     )?;
     let observations: Observations = serde_json::from_str(OBSERVATIONS)?;

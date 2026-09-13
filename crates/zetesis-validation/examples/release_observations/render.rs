@@ -114,3 +114,35 @@ fn decimal(value: u64, scale: u64) -> String {
         );
     format!("{}.{:03}", rounded / 1_000, rounded % 1_000)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::decimal;
+
+    #[test]
+    fn exact_time_midpoints_round_to_the_even_final_digit() {
+        for (nanoseconds, below, at, above) in [
+            (32_871_500, "32.871", "32.872", "32.872"),
+            (9_117_500, "9.117", "9.118", "9.118"),
+            (8_958_500, "8.958", "8.958", "8.959"),
+        ] {
+            assert_eq!(decimal(nanoseconds - 1, 1_000_000), below);
+            assert_eq!(decimal(nanoseconds, 1_000_000), at);
+            assert_eq!(decimal(nanoseconds + 1, 1_000_000), above);
+        }
+    }
+
+    #[test]
+    fn exact_memory_midpoints_round_to_the_even_final_digit() {
+        // Both exact fractional MiB values end in .8125. Neither conversion
+        // through f64 nor a half-away rule supplies this table's rounding law.
+        for (bytes, below, above) in [
+            (6_094_848, "5.812", "5.813"),
+            (13_434_880, "12.812", "12.813"),
+        ] {
+            assert_eq!(decimal(bytes - 1, 1_048_576), below);
+            assert_eq!(decimal(bytes, 1_048_576), below);
+            assert_eq!(decimal(bytes + 1, 1_048_576), above);
+        }
+    }
+}
