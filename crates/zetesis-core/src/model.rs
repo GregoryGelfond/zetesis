@@ -176,6 +176,19 @@ impl Model {
         self.atoms().contains(atom)
     }
 
+    /// Borrow checked predicate/key lookup over the existing canonical selection.
+    /// Constant time, no allocation or payload copying. Predicate rows remain
+    /// in canonical atom order; returned positions address the original catalog,
+    /// and unselected catalog atoms never participate in either search.
+    #[must_use]
+    pub fn lookup(&self) -> crate::AtomLookup<'_> {
+        crate::AtomLookup {
+            atoms: self.0.catalog.atoms(),
+            keys: &self.0.positions,
+            rows: &self.0.positions,
+        }
+    }
+
     /// Shared original catalog, including its unselected atoms. Access does not
     /// change the true set. The catalog can outlive the source or solve session.
     #[must_use]

@@ -30,11 +30,14 @@ mod atom_key;
 mod program;
 mod candidate;
 mod model;
+mod identity;
+mod atom_lookup;
 mod carrier;
 mod ground;
 pub mod relation;
 
 pub use atom_key::{AtomKey, BindingView};
+pub use atom_lookup::{AtomIndex, AtomIndexError, AtomLookup, AtomRow, AtomRows};
 pub use candidate::{
     GateAtom, GateAtomError, GateAtoms, Seed, SeedAtom, SeedError, SeedSelection,
     SeedSelectionError, SeedView,
