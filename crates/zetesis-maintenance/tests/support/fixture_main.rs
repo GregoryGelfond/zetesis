@@ -253,7 +253,11 @@ fn execute(role: &str, arguments: &[String]) -> Result<(), String> {
     if (role == "lake"
         && ((arguments == ["build"] && failure == "build")
             || (has(arguments, "Audit.lean") && failure == "audit")))
-        || (role == "maintenance" && failure == "record")
+        || (role == "maintenance"
+            && arguments
+                .first()
+                .is_some_and(|argument| argument == "proof-record")
+            && failure == "record")
     {
         return fail("simulated check failure");
     }

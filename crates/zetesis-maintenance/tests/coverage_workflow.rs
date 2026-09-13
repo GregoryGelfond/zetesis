@@ -319,7 +319,9 @@ fn record_gate_follows_actual_lean_commands() {
                 let index = lines
                     .iter()
                     .position(|line| line.starts_with(gate))
-                    .unwrap();
+                    .unwrap_or_else(|| {
+                        panic!("{mode}/{failure}: missing record command in {trace}")
+                    });
                 assert_eq!(
                     lines.iter().filter(|line| line.starts_with(gate)).count(),
                     1
