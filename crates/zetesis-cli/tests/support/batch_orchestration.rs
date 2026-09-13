@@ -38,6 +38,7 @@ fn run(
     diagnostics: &mut impl Write,
 ) -> Result<PublicationReport, PublicationFailure> {
     run_finalized_with_diagnostics(source.into(), options, output, diagnostics, control)
+        .and_then(crate::PublicationOutcome::into_legacy)
 }
 
 fn require_cpu_batches(statistics: &FormulaExecutionStatistics) {
@@ -384,7 +385,7 @@ fn original_case(root: &std::path::Path, case: &serde_json::Value) {
     )
     .unwrap();
     assert_eq!(
-        captured.report().completion,
+        captured.report().unwrap().completion,
         Completion::Exhausted,
         "{path}"
     );

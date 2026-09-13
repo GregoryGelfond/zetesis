@@ -48,16 +48,21 @@ pub(crate) fn solve(
                         answer.score(),
                     )
                 });
-                if let Err(error) = result {
-                    return Err(progress.fail(error));
+                match result {
+                    Ok(std::ops::ControlFlow::Continue(())) => progress.publication.models += 1,
+                    Ok(std::ops::ControlFlow::Break(stop)) => {
+                        progress.stop = Some(stop);
+                        break;
+                    }
+                    Err(error) => return Err(progress.fail(error)),
                 }
-                progress.publication.models += 1;
             }
             Some(Err(error)) => return Err(progress.fail((*error.cause).into())),
             None => break,
         }
     }
-    if !options.json
+    if progress.stop.is_none()
+        && !options.json
         && let Some(best) = progress
             .semantic()
             .and_then(crate::SemanticOutcome::incumbent)
@@ -83,7 +88,9 @@ fn complete(
     phases: &Recorder,
     options: &Options,
 ) -> Result<Progress, PublicationFailure> {
-    if let Err(cause) = progress.completion() {
+    if progress.stop.is_none()
+        && let Err(cause) = progress.completion()
+    {
         return Err(progress.fail(cause));
     }
     let _output = phases.enter(SolvePhase::ObservationOutput);
@@ -143,3 +150,7 @@ mod partial_publication_tests;
 #[cfg(test)]
 #[path = "../tests/support/prepared_control.rs"]
 mod prepared_control_tests;
+
+#[cfg(test)]
+#[path = "../tests/support/publication_stops.rs"]
+mod stop_tests;

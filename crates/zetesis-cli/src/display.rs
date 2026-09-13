@@ -2,7 +2,7 @@
 
 mod record;
 
-use std::io::Write;
+use std::{io::Write, ops::ControlFlow};
 
 use record::{Contents, Record};
 
@@ -11,7 +11,7 @@ use zetesis_cpu::Control;
 use zetesis_objective::Score;
 use zetesis_themelios::{OutputSelection, observation::ObservationProgram};
 
-use crate::{Options, RunError};
+use crate::{Options, PublicationStop, RunError};
 
 pub(crate) struct Display<'a> {
     pub selection: &'a OutputSelection,
@@ -21,6 +21,19 @@ pub(crate) struct Display<'a> {
 }
 impl Display<'_> {
     pub fn write(
+        &self,
+        output: &mut impl Write,
+        number: usize,
+        model: &Model,
+        score: Option<&Score>,
+    ) -> Result<ControlFlow<PublicationStop>, RunError> {
+        match self.write_record(output, number, model, score) {
+            Ok(()) => Ok(ControlFlow::Continue(())),
+            Err(error) => PublicationStop::classify(error).map(ControlFlow::Break),
+        }
+    }
+
+    fn write_record(
         &self,
         output: &mut impl Write,
         number: usize,

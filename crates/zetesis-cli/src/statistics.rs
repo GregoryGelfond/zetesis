@@ -41,6 +41,56 @@ fn header(sink: &mut impl Write, options: &Options, elapsed: Duration) -> io::Re
     Ok(())
 }
 
+pub(crate) fn write_progress(
+    sink: &mut impl Write,
+    options: &Options,
+    result: Result<&crate::failure::Progress, &PublicationFailure>,
+    elapsed: Duration,
+) -> io::Result<()> {
+    let progress = match result {
+        Ok(progress) => progress,
+        Err(failure) => return write_detailed(sink, options, Err(failure), elapsed),
+    };
+    let semantic = progress
+        .semantic()
+        .ok_or_else(|| io::Error::other("statistics require semantic progress"))?;
+    header(sink, options, elapsed)?;
+    if let Some(stop) = &progress.stop {
+        writeln!(
+            sink,
+            "  publication: incomplete; {stop}; search completion={:?}",
+            semantic.completion()
+        )?;
+    } else {
+        writeln!(
+            sink,
+            "  completion: {}",
+            match progress.completion().map_err(io::Error::other)? {
+                Completion::Exhausted => "exhausted",
+                Completion::RequestedModels => "requested models reached (partial coverage)",
+                Completion::Interrupted => "interrupted (partial coverage)",
+            }
+        )?;
+    }
+    details(
+        sink,
+        options,
+        &Details {
+            models: progress.publication.models,
+            checked: semantic.candidate_progress(),
+            optimum_proved: semantic.optimum_proved(),
+            interruption: semantic.interruption(),
+            discovered_gate_atoms: semantic.discovered_gate_atoms(),
+            candidate_statistics: semantic.candidate_statistics(),
+            countermodel_statistics: semantic.countermodel_statistics(),
+            formula_execution: semantic.formula_execution(),
+            lazy_execution: semantic.lazy_execution(),
+            shared_execution: semantic.shared_execution(),
+            optimization: semantic.incumbent(),
+        },
+    )
+}
+
 pub(crate) fn write_detailed(
     sink: &mut impl Write,
     options: &Options,
@@ -169,7 +219,7 @@ fn completed(sink: &mut impl Write, options: &Options, report: &Report) -> io::R
 struct Details<'a> {
     models: usize,
     checked: u64,
-    completion: Option<Completion>,
+    optimum_proved: bool,
     interruption: Option<crate::Interruption>,
     discovered_gate_atoms: usize,
     candidate_statistics: Option<zetesis_cpu::CandidateStatistics>,
@@ -185,7 +235,7 @@ impl<'a> From<&'a Report> for Details<'a> {
         Self {
             models: report.models,
             checked: report.checked,
-            completion: Some(report.completion),
+            optimum_proved: report.optimum_proved,
             interruption: report.interruption,
             discovered_gate_atoms: report.discovered_gate_atoms,
             candidate_statistics: report.candidate_statistics,
@@ -203,7 +253,7 @@ impl<'a> From<&'a crate::PartialReport> for Details<'a> {
         Self {
             models: report.published_models,
             checked: report.checked,
-            completion: report.completion,
+            optimum_proved: report.optimum_proved,
             interruption: report.interruption,
             discovered_gate_atoms: report.discovered_gate_atoms,
             candidate_statistics: report.candidate_statistics,
@@ -269,7 +319,7 @@ fn details(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
         )?;
     }
     if let Some(optimum) = report.optimization {
-        let qualification = if report.completion == Some(Completion::Exhausted) {
+        let qualification = if report.optimum_proved {
             "optimal"
         } else {
             "incumbent only"

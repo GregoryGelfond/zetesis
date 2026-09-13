@@ -6,7 +6,7 @@ use zetesis_themelios::observation::ViewError;
 
 use crate::failure::Progress;
 use crate::{
-    Completion, Interruption, Options, PhaseTimings, PublicationFailure, PublicationReport,
+    Completion, Interruption, Options, PhaseTimings, PublicationFailure, PublicationOutcome,
     RunError, RunFailure, SolvePhase,
 };
 
@@ -32,7 +32,7 @@ impl<'a, W: Write> Document<'a, W> {
         mut self,
         mut result: Result<Progress, PublicationFailure>,
         options: &Options,
-    ) -> Result<PublicationReport, PublicationFailure> {
+    ) -> Result<PublicationOutcome, PublicationFailure> {
         if self.json && !self.failed {
             let emitted = summary(&result, options.max_json_record_bytes)
                 .and_then(|record| self.write_all(&record).map_err(RunError::Output));
@@ -151,6 +151,7 @@ fn summary(
 ) -> Result<Vec<u8>, RunError> {
     let status = match result {
         Err(_) => "failed",
+        Ok(progress) if progress.stop.is_some() => "incomplete",
         Ok(progress) => {
             let semantic = progress.semantic().ok_or(RunError::CompletionUnavailable)?;
             match progress.completion()? {
@@ -179,6 +180,24 @@ fn summary(
     out.optional_number(view.checked)?;
     out.text(",\"interruption\":")?;
     write_interruption(&mut out, view.interruption)?;
+    out.text(",\"publication_stop\":")?;
+    let stop = match result {
+        Ok(progress) => progress.stop.as_ref(),
+        Err(failure) => failure.publication_stop(),
+    };
+    if let Some(stop) = stop {
+        out.text("{\"phase\":")?;
+        out.string(match stop.phase() {
+            crate::PublicationPhase::Observation => "observation",
+            crate::PublicationPhase::Encoding => "encoding",
+            crate::PublicationPhase::RecordPreparation => "record_preparation",
+        })?;
+        out.text(",\"code\":")?;
+        out.string(control_code(stop.reason()))?;
+        out.text("}")?;
+    } else {
+        out.text("null")?;
+    }
     out.text(",\"optimization\":")?;
     write_optimization(&mut out, view.optimization, view.optimum_proved)?;
     out.text(",\"error\":")?;

@@ -46,8 +46,10 @@ pub struct Report {
     pub lazy_execution: Option<crate::LazyExecutionStatistics>,
     /// Shared CPU source and per-world work, including failed-batch prefixes.
     pub shared_execution: Option<crate::SharedExecutionStatistics>,
+    /// Whether semantic search established an optimum, independently of delivery.
+    pub optimum_proved: bool,
     /// Best retained objective score and tied models found so far.
-    /// Only exhausted coverage establishes that this incumbent is optimal.
+    /// A retained score is optimal only when `optimum_proved` is true.
     pub optimization: Option<crate::Optimization>,
     /// Opt-in attempted host timings; unavailable phases are absent.
     /// A timing snapshot does not establish semantic or output completion.
@@ -320,8 +322,9 @@ impl From<io::Error> for RunError {
 /// # Errors
 /// Returns [`RunError`] for source, backend, observation/view, or output failures.
 /// Search, objective, and incumbent-retention stops produce an interrupted
-/// [`Report`] unless a later reporting operation fails. Cancellation during
-/// observation evaluation or JSON encoding returns a failure instead.
+/// [`Report`] unless a later reporting operation fails. Cooperative publication
+/// stops use the legacy `PublicationStopped` adapter; the finalized API exposes
+/// them directly as `PublicationOutcome::Stopped`.
 pub fn run(
     source: String,
     options: &Options,
@@ -340,7 +343,8 @@ pub fn run(
 /// Returns [`RunError`] for source, backend, observation/view, model-output, or
 /// diagnostics failures. Search, objective, and incumbent-retention stops produce
 /// an interrupted [`Report`] unless a later reporting operation fails.
-/// Cancellation during observation evaluation or JSON encoding returns a failure.
+/// Cooperative publication stops use the legacy `PublicationStopped` error adapter;
+/// the finalized API retains them as `PublicationOutcome::Stopped`.
 pub fn run_with_diagnostics(
     source: String,
     options: &Options,
@@ -358,8 +362,8 @@ pub fn run_with_diagnostics(
 /// # Errors
 /// Returns the original cause plus any available progress and attempted timings.
 /// Search, objective, and incumbent-retention stops return an interrupted report;
-/// observation/view or output failures, including their control refusals, return
-/// a failure with the evidence retained before that operation failed.
+/// observation/view or output failures return a failure with the retained evidence.
+/// Cooperative publication stops use the legacy `PublicationStopped` adapter.
 pub fn run_detailed(
     source: String,
     options: &Options,
@@ -376,8 +380,8 @@ pub fn run_detailed(
 ///
 /// # Errors
 /// Returns [`RunFailure`] for source, backend, observation/view, or output failures.
-/// Cancellation during observation evaluation or JSON encoding is such a failure,
-/// with any preceding search evidence retained independently.
+/// Cooperative publication stops use the legacy `PublicationStopped` error adapter,
+/// with the preceding search evidence retained independently.
 /// A secondary statistics-output error does not replace the original cause.
 pub fn run_detailed_with_diagnostics(
     source: String,
@@ -387,6 +391,7 @@ pub fn run_detailed_with_diagnostics(
     control: &Control,
 ) -> Result<Report, RunFailure> {
     run_finalized_with_diagnostics(source, options, output, diagnostics, control)
+        .and_then(crate::PublicationOutcome::into_legacy)
         .map(crate::PublicationReport::into_report)
         .map_err(crate::PublicationFailure::into_legacy)
 }
@@ -396,13 +401,14 @@ pub fn run_detailed_with_diagnostics(
 /// explicit diagnostics sink. Existing [`run_detailed`] remains compatible.
 ///
 /// # Errors
-/// Returns the typed cause, finalized available semantics and delivery evidence.
+/// Returns actual execution, resource, encoding or writer failures. Cooperative
+/// publication stops are successful `PublicationOutcome::Stopped` values.
 pub fn run_finalized(
     source: String,
     options: &Options,
     output: &mut impl Write,
     control: &Control,
-) -> Result<crate::PublicationReport, crate::PublicationFailure> {
+) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
     run_finalized_with_diagnostics(source, options, output, &mut io::sink(), control)
 }
 
@@ -410,13 +416,14 @@ pub fn run_finalized(
 ///
 /// # Errors
 /// Retains the original cause, semantic outcome, and separate reporting failures.
+/// Cooperative publication stops are returned as `PublicationOutcome::Stopped`.
 pub fn run_finalized_with_diagnostics(
     source: String,
     options: &Options,
     output: &mut impl Write,
     diagnostics: &mut impl Write,
     control: &Control,
-) -> Result<crate::PublicationReport, crate::PublicationFailure> {
+) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
     let mut diagnostics = Diagnostics::new(diagnostics, options.color.human(options.json));
     run_source_with_writer(source, options, output, &mut diagnostics, control)
 }
@@ -427,7 +434,7 @@ pub(crate) fn run_source_with_writer(
     output: &mut impl Write,
     diagnostics: &mut Diagnostics<impl Write>,
     control: &Control,
-) -> Result<crate::PublicationReport, crate::PublicationFailure> {
+) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
     let mut document = crate::output::Document::new(output, options.json)?;
     let phases = Recorder::new(options.stats);
     let result = crate::admission::source(
@@ -454,7 +461,8 @@ pub(crate) fn run_source_with_writer(
 /// Returns [`RunError`] for source, backend, observation/view, model-output, or
 /// diagnostics failures. Search, objective, and incumbent-retention stops produce
 /// an interrupted [`Report`] unless a later reporting operation fails.
-/// Cancellation during observation evaluation or JSON encoding returns a failure.
+/// Cooperative publication stops use the legacy `PublicationStopped` error adapter;
+/// the finalized API retains them as `PublicationOutcome::Stopped`.
 pub fn run_bundle_with_diagnostics(
     bundle: SourceBundle,
     options: &Options,
@@ -472,8 +480,8 @@ pub fn run_bundle_with_diagnostics(
 /// # Errors
 /// Returns the original typed failure with any trustworthy execution evidence.
 /// Search, objective, and incumbent-retention stops return an interrupted report;
-/// observation/view or output failures, including their control refusals, return
-/// a failure with the evidence retained before that operation failed.
+/// observation/view or output failures return a failure with the retained evidence.
+/// Cooperative publication stops use the legacy `PublicationStopped` adapter.
 pub fn run_bundle_detailed_with_diagnostics(
     bundle: SourceBundle,
     options: &Options,
@@ -482,6 +490,7 @@ pub fn run_bundle_detailed_with_diagnostics(
     control: &Control,
 ) -> Result<Report, RunFailure> {
     run_bundle_finalized_with_diagnostics(bundle, options, output, diagnostics, control)
+        .and_then(crate::PublicationOutcome::into_legacy)
         .map(crate::PublicationReport::into_report)
         .map_err(crate::PublicationFailure::into_legacy)
 }
@@ -490,13 +499,14 @@ pub fn run_bundle_detailed_with_diagnostics(
 ///
 /// # Errors
 /// Retains the original cause, semantic outcome, and separate reporting failures.
+/// Cooperative publication stops are returned as `PublicationOutcome::Stopped`.
 pub fn run_bundle_finalized_with_diagnostics(
     bundle: SourceBundle,
     options: &Options,
     output: &mut impl Write,
     diagnostics: &mut impl Write,
     control: &Control,
-) -> Result<crate::PublicationReport, crate::PublicationFailure> {
+) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
     let mut diagnostics = Diagnostics::new(diagnostics, options.color.human(options.json));
     run_bundle_with_writer(bundle, options, output, &mut diagnostics, control)
 }
@@ -507,7 +517,7 @@ pub(crate) fn run_bundle_with_writer(
     output: &mut impl Write,
     diagnostics: &mut Diagnostics<impl Write>,
     control: &Control,
-) -> Result<crate::PublicationReport, crate::PublicationFailure> {
+) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
     let mut document = crate::output::Document::new(output, options.json)?;
     let phases = Recorder::new(options.stats);
     let result = crate::admission::bundle(
@@ -533,29 +543,24 @@ fn report_progress_statistics(
             Ok(progress) => progress.phase_timings = Some(timings),
             Err(failure) => failure.phase_timings = Some(Box::new(timings)),
         }
-        let reported = result.and_then(|progress| match progress.report() {
-            Ok(report) => Ok((progress, report)),
-            Err(cause) => Err(progress.fail(cause)),
-        });
-        let emitted = crate::statistics::write_detailed(
+        let emitted = crate::statistics::write_progress(
             diagnostics,
             options,
-            reported.as_ref().map(|(_, report)| report),
+            result.as_ref(),
             timings.driver_elapsed,
         )
         .and_then(|()| crate::stage_timing::write(diagnostics, &timings.stages))
         .and_then(|()| crate::phase_timing::write(diagnostics, &timings))
         .and_then(|()| crate::grounding_timing::write(diagnostics, &timings.grounding));
         if let Err(error) = emitted {
-            return Err(match reported {
-                Ok((progress, _)) => progress.fail(RunError::Output(error)),
+            return Err(match result {
+                Ok(progress) => progress.fail(RunError::Output(error)),
                 Err(mut failure) => {
                     failure.record_diagnostics(error);
                     failure
                 }
             });
         }
-        result = reported.map(|(progress, _)| progress);
     }
     result
 }
@@ -622,6 +627,21 @@ pub(crate) fn finish(
     color: crate::ColorMode,
 ) -> Result<(), RunError> {
     let semantic = progress.semantic().ok_or(RunError::CompletionUnavailable)?;
+    if let Some(stop) = &progress.stop {
+        if !json {
+            writeln!(output, "INCOMPLETE: {stop}")?;
+            writeln!(
+                output,
+                "Publication: incomplete; complete model records: {}",
+                progress.publication.models
+            )?;
+            writeln!(output, "Search coverage: {:?}", semantic.completion())?;
+            if semantic.optimum_proved() {
+                writeln!(output, "Optimum proved; delivery incomplete")?;
+            }
+        }
+        return Ok(());
+    }
     let state = semantic
         .search_state()
         .ok_or(RunError::CompletionUnavailable)?;

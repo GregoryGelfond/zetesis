@@ -1,5 +1,5 @@
 use crate::presentation::{Diagnostics, Streams};
-use crate::{Command, Completion, Options, Report, RunError, RunFailure, devices};
+use crate::{Command, Completion, Options, PublicationOutcome, RunError, RunFailure, devices};
 use clap::Parser;
 use std::io::{self, BufWriter, IsTerminal, Read, Write};
 use std::process::ExitCode;
@@ -34,15 +34,20 @@ pub fn entry() -> ExitCode {
             .map(|()| ExitCode::SUCCESS)
             .map_err(RunFailure::from)
     } else {
-        run_input(&options, &mut output, &mut diagnostics).map(|report| {
-            if report.completion == Completion::Interrupted {
-                ExitCode::from(3)
-            } else {
-                ExitCode::SUCCESS
-            }
-        })
+        run_input(&options, &mut output, &mut diagnostics)
+            .map(|outcome| publication_status(&outcome))
     };
     finish_output(output, result, &mut diagnostics)
+}
+
+fn publication_status(outcome: &PublicationOutcome) -> ExitCode {
+    if matches!(outcome, PublicationOutcome::Stopped(_))
+        || outcome.semantic().completion() == Some(Completion::Interrupted)
+    {
+        ExitCode::from(3)
+    } else {
+        ExitCode::SUCCESS
+    }
 }
 
 // Fixed process-only staging for redirected output, independent of model count
@@ -84,7 +89,7 @@ fn run_input(
     options: &Options,
     output: &mut impl Write,
     diagnostics: &mut Diagnostics<impl Write>,
-) -> Result<Report, RunFailure> {
+) -> Result<PublicationOutcome, RunFailure> {
     let (input, control) = match load_input(options).and_then(|input| {
         process_control(options.time_limit, Instant::now()).map(|control| (input, control))
     }) {
@@ -106,9 +111,7 @@ fn run_input(
             crate::driver::run_bundle_with_writer(bundle, options, output, diagnostics, &control)
         }
     };
-    result
-        .map(crate::PublicationReport::into_report)
-        .map_err(crate::PublicationFailure::into_legacy)
+    result.map_err(crate::PublicationFailure::into_legacy)
 }
 
 fn process_control(seconds: Option<u64>, start: Instant) -> Result<zetesis_cpu::Control, RunError> {

@@ -69,6 +69,7 @@ pub struct PublicationFailure {
     pub(crate) subject: Option<crate::Subject>,
     pub(crate) semantic: Option<Box<SemanticOutcome>>,
     pub(crate) publication: Option<Publication>,
+    pub(crate) publication_stop: Option<PublicationStop>,
     diagnostics: Option<Arc<io::Error>>,
     summary: Option<Arc<io::Error>>,
 }
@@ -94,6 +95,12 @@ impl PublicationFailure {
     #[must_use]
     pub const fn publication(&self) -> Option<Publication> {
         self.publication
+    }
+
+    /// A cooperative stop preceding this actual writer/reporting failure.
+    #[must_use]
+    pub const fn publication_stop(&self) -> Option<&PublicationStop> {
+        self.publication_stop.as_ref()
     }
 
     pub(crate) fn acknowledge_summary(&mut self) {
@@ -148,6 +155,7 @@ impl From<RunFailure> for PublicationFailure {
             subject: None,
             semantic: None,
             publication: None,
+            publication_stop: None,
             diagnostics: None,
             summary: None,
         }
@@ -187,5 +195,166 @@ impl From<zetesis_solve::SolveFailure> for PublicationFailure {
 impl From<zetesis_solve::SolveError> for PublicationFailure {
     fn from(error: zetesis_solve::SolveError) -> Self {
         Self::from(RunError::from(error))
+    }
+}
+
+/// The operation whose cooperative control check stopped model publication.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PublicationPhase {
+    /// Evaluating the program's output observations over a verified model.
+    Observation,
+    /// Encoding a complete structured model view.
+    Encoding,
+    /// Preparing a complete human record or checking control before emission.
+    RecordPreparation,
+}
+
+/// Cooperative publication stop, independently of semantic search coverage.
+#[derive(Clone, Debug)]
+pub struct PublicationStop {
+    reason: zetesis_cpu::Stop,
+    phase: PublicationPhase,
+    observation: Option<zetesis_themelios::observation::Error>,
+}
+impl PublicationStop {
+    /// Original control reason, without a new poll or inferred clock state.
+    #[must_use]
+    pub const fn reason(&self) -> zetesis_cpu::Stop {
+        self.reason
+    }
+    /// Operation that observed the stop.
+    #[must_use]
+    pub const fn phase(&self) -> PublicationPhase {
+        self.phase
+    }
+    /// Located observation evidence, including any completed observation work.
+    #[must_use]
+    pub const fn observation(&self) -> Option<&zetesis_themelios::observation::Error> {
+        self.observation.as_ref()
+    }
+
+    pub(crate) fn classify(error: RunError) -> Result<Self, RunError> {
+        use zetesis_themelios::observation::{ErrorKind, ViewError};
+        match error {
+            RunError::PublicationStopped(reason) => Ok(Self {
+                reason,
+                phase: PublicationPhase::RecordPreparation,
+                observation: None,
+            }),
+            RunError::JsonRecord(ViewError::Stopped(reason)) => Ok(Self {
+                reason,
+                phase: PublicationPhase::Encoding,
+                observation: None,
+            }),
+            RunError::Observation(error) => match error.kind() {
+                ErrorKind::Stopped(reason) => Ok(Self {
+                    reason: *reason,
+                    phase: PublicationPhase::Observation,
+                    observation: Some(error),
+                }),
+                _ => Err(RunError::Observation(error)),
+            },
+            other => Err(other),
+        }
+    }
+}
+impl fmt::Display for PublicationStop {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "publication {}: {}",
+            match self.phase {
+                PublicationPhase::Observation => "observation",
+                PublicationPhase::Encoding => "encoding",
+                PublicationPhase::RecordPreparation => "record preparation",
+            },
+            self.reason
+        )
+    }
+}
+
+/// Finalized publication either completed or stopped cooperatively.
+/// Writer, encoding-resource and execution failures remain the outer `Err`.
+#[derive(Clone, Debug)]
+pub enum PublicationOutcome {
+    /// The requested publication completed, with independent search coverage.
+    Completed(PublicationReport),
+    /// Publication stopped without invalidating previously established semantics.
+    Stopped(StoppedPublication),
+}
+impl PublicationOutcome {
+    /// Search evidence is retained in both outcomes; delivery cannot revise it.
+    #[must_use]
+    pub const fn semantic(&self) -> &SemanticOutcome {
+        match self {
+            Self::Completed(report) => report.semantic(),
+            Self::Stopped(stopped) => &stopped.semantic,
+        }
+    }
+    /// Complete record and summary acknowledgements.
+    #[must_use]
+    pub const fn publication(&self) -> Publication {
+        match self {
+            Self::Completed(report) => report.publication(),
+            Self::Stopped(stopped) => stopped.publication,
+        }
+    }
+    /// A compatibility report exists only for completed publication.
+    #[must_use]
+    pub const fn report(&self) -> Option<&Report> {
+        match self {
+            Self::Completed(report) => Some(report.report()),
+            Self::Stopped(_) => None,
+        }
+    }
+    /// Adapt a cooperative stop to the original finalized failure shape.
+    /// This adapter does not alter the retained semantic outcome.
+    ///
+    /// # Errors
+    /// A stopped publication becomes the legacy `PublicationStopped` cause.
+    pub fn into_legacy(self) -> Result<PublicationReport, PublicationFailure> {
+        match self {
+            Self::Completed(report) => Ok(report),
+            Self::Stopped(stopped) => {
+                let reason = stopped.stop.reason();
+                let mut progress = crate::failure::Progress::new();
+                progress.apply(stopped.semantic);
+                progress.publication = stopped.publication;
+                progress.phase_timings = stopped.phase_timings;
+                progress.stop = Some(stopped.stop);
+                Err(progress.fail(RunError::PublicationStopped(reason)))
+            }
+        }
+    }
+}
+
+/// A checked semantic prefix with incomplete external publication.
+#[derive(Clone, Debug)]
+pub struct StoppedPublication {
+    pub(crate) stop: PublicationStop,
+    pub(crate) semantic: SemanticOutcome,
+    pub(crate) publication: Publication,
+    pub(crate) phase_timings: Option<PhaseTimings>,
+}
+impl StoppedPublication {
+    /// The operation and original control reason that stopped delivery.
+    #[must_use]
+    pub const fn stop(&self) -> &PublicationStop {
+        &self.stop
+    }
+    /// Established search and optimum evidence, independently of delivery.
+    #[must_use]
+    pub const fn semantic(&self) -> &SemanticOutcome {
+        &self.semantic
+    }
+    /// Complete external acknowledgements; no partial record is counted.
+    #[must_use]
+    pub const fn publication(&self) -> Publication {
+        self.publication
+    }
+    /// Attempted host timings, including interrupted publication work.
+    #[must_use]
+    pub const fn phase_timings(&self) -> Option<&PhaseTimings> {
+        self.phase_timings.as_ref()
     }
 }

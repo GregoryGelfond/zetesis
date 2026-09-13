@@ -201,3 +201,19 @@ fn stdin_reader_failure_keeps_its_original_cause() {
     assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
     assert_eq!(error.to_string(), "reader unavailable");
 }
+
+#[test]
+fn cooperative_publication_has_the_incomplete_process_status() {
+    let mut progress = crate::failure::Progress::new();
+    progress.apply(crate::SemanticOutcome::interrupted_before_start(
+        crate::Interruption::Preparation(zetesis_cpu::Stop::Cancelled),
+    ));
+    progress.stop = Some(
+        crate::PublicationStop::classify(RunError::PublicationStopped(
+            zetesis_cpu::Stop::Cancelled,
+        ))
+        .unwrap(),
+    );
+    let outcome = progress.finalize().unwrap();
+    assert_eq!(super::publication_status(&outcome), ExitCode::from(3));
+}

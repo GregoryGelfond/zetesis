@@ -346,7 +346,7 @@ fn silent_diagnostics_preserve_finalized_evidence() {
     .unwrap();
     let mut output = Vec::new();
     let result = run_finalized("a.".into(), &options, &mut output, &Control::default()).unwrap();
-    let report = result.report();
+    let report = result.report().unwrap();
     assert_eq!(report.completion, Completion::Exhausted);
     assert_eq!(report.models, 1);
     assert_eq!(result.semantic().verified_models(), 1);

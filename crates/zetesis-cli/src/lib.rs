@@ -2,7 +2,7 @@
 //!
 //! [`Session`] is re-exported from the canonical `zetesis-solve` library.
 //! [`run_finalized`] consumes that library and retains semantic evidence separately
-//! from publication in [`PublicationReport`] or [`PublicationFailure`].
+//! from publication in [`PublicationOutcome`] or [`PublicationFailure`].
 //! [`run`] accepts source and an injected output sink. Parsing, exact oracles,
 //! and candidate enumeration remain reusable libraries. [`entry`] adapts these
 //! operations to process arguments, standard streams, and exit codes.
@@ -44,7 +44,10 @@ pub use zetesis_themelios::{GroundingOutcome, GroundingPhase, GroundingWork};
 pub use zetesis_telemetry::{GroundingMode, SolveStage, StageMeasurement, StageTimings};
 
 mod finalized;
-pub use finalized::{Publication, PublicationFailure, PublicationReport};
+pub use finalized::{
+    Publication, PublicationFailure, PublicationOutcome, PublicationPhase, PublicationReport,
+    PublicationStop, StoppedPublication,
+};
 
 // Compatibility exports preserve the canonical solver types, not another implementation.
 pub use zetesis_solve::{

@@ -170,7 +170,9 @@ memory bound covers the entire solver.
 
 Use `Session` when the consumer wants semantic values and owns its presentation.
 Use `zetesis_cli::run_finalized` when it wants the ordinary source driver and an
-injected output sink. `PublicationReport` separates semantic evidence from
+injected output sink. Its finalized result is `Result<PublicationOutcome,
+PublicationFailure>`. `PublicationOutcome::Completed` carries a
+`PublicationReport`, separating semantic evidence from
 `Publication`. A writer failure can coexist with already established exhaustion;
 it cannot retract that proof, and it cannot claim a partially written record as
 fully published. `PublicationFailure` preserves the original cause and available
@@ -178,6 +180,27 @@ semantic, publication and timing evidence. The solver library's `SolveFailure`
 retains only execution cause, subject, semantics and timings. Its owned
 decomposition allows a consumer to preserve those values in its own failure
 representation without constructing new semantic evidence.
+
+`PublicationOutcome::Stopped` carries the original control reason, its
+publication phase, the semantic snapshot, and complete record/summary counts.
+Observation stops also retain their located observation evidence. The writer
+remains usable, so the adapter writes an incomplete footer. JSON keeps semantic
+`completion` and `optimization.optimal` unchanged and adds `publication_stop`;
+its overall `status` is `incomplete`. For example, cancellation between proved
+optimal ties can leave `completion: "exhausted"`, `optimal: true`, and fewer
+published ties. It does not establish complete delivery.
+
+The process returns exit 3 for a cooperative publication stop. A writer or flush
+failure returns exit 2, retaining a preceding publication stop separately. A
+partial record is never counted. Encoding/resource refusals remain actual
+failures, distinct from a cancellation or deadline.
+
+The finalized API now returns the outcome enum. Match `Completed` or `Stopped`,
+or call `semantic()` and `publication()` for their common evidence. `report()`
+returns an optional legacy report. `PublicationOutcome::into_legacy()` is the
+explicit adapter used by `run` and `run_detailed`: it maps a cooperative stop to
+`RunError::PublicationStopped` while preserving semantic and partial-report
+metadata. Those convenience APIs retain their original return shapes.
 
 The driver retains one semantic snapshot and separate publication and timing
 state. Legacy reports, statistics and JSON are derived views; their fields are

@@ -45,6 +45,7 @@ fn actual(
         &mut io::sink(),
         control,
     )
+    .and_then(crate::PublicationOutcome::into_legacy)
     .map(crate::PublicationReport::into_report)
 }
 
@@ -268,4 +269,26 @@ fn failed_statistics_preserve_missing_completion() {
     assert!(text.contains("search completion=None"));
     assert!(!text.contains("  interruption:"));
     assert!(!text.contains("completion: exhausted"));
+}
+
+#[test]
+fn exhausted_coverage_alone_cannot_label_an_incumbent_optimal() {
+    let options = options(&[]);
+    let mut report = actual(
+        "1 {a;b} 1. #minimize{1,a:a;1,b:b}.",
+        &options,
+        &Control::default(),
+    )
+    .unwrap();
+    assert_eq!(report.completion, Completion::Exhausted);
+    assert!(report.optimization.is_some());
+    assert!(report.optimum_proved);
+    // Detached compatibility records can describe an incumbent without the
+    // stronger optimum evidence. The renderer must read that explicit fact.
+    report.optimum_proved = false;
+    let mut bytes = Vec::new();
+    super::write_detailed(&mut bytes, &options, Ok(&report), Duration::ZERO).unwrap();
+    let text = String::from_utf8(bytes).unwrap();
+    assert!(text.contains("objective: incumbent only"));
+    assert!(!text.contains("objective: optimal"));
 }

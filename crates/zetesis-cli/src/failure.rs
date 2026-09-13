@@ -37,6 +37,8 @@ pub struct PartialReport {
     pub lazy_execution: Option<crate::LazyExecutionStatistics>,
     /// Shared CPU source/world work, including incomplete batch progress.
     pub shared_execution: Option<crate::SharedExecutionStatistics>,
+    /// Whether semantic search established an optimum, independently of delivery.
+    pub optimum_proved: bool,
     /// Retained incumbent metadata, independent of how many ties were published.
     pub optimization: Option<Optimization>,
 }
@@ -97,6 +99,7 @@ impl From<io::Error> for RunFailure {
 /// derived only when a consumer needs them, never used as live search state.
 pub(crate) struct Progress {
     semantic: Option<crate::SemanticOutcome>,
+    pub(crate) stop: Option<crate::PublicationStop>,
     pub(crate) publication: crate::Publication,
     pub(crate) phase_timings: Option<PhaseTimings>,
 }
@@ -105,6 +108,7 @@ impl Progress {
     pub(crate) fn new() -> Self {
         Self {
             semantic: None,
+            stop: None,
             publication: crate::Publication {
                 models: 0,
                 summary: false,
@@ -146,22 +150,43 @@ impl Progress {
             formula_execution: semantic.formula_execution().cloned(),
             lazy_execution: semantic.lazy_execution().cloned(),
             shared_execution: semantic.shared_execution().cloned(),
+            optimum_proved: semantic.optimum_proved(),
             optimization: semantic.incumbent().cloned(),
             phase_timings: self.phase_timings,
         })
     }
 
-    pub(crate) fn finalize(self) -> Result<crate::PublicationReport, crate::PublicationFailure> {
+    pub(crate) fn finalize(
+        mut self,
+    ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
+        if self.semantic.is_some()
+            && let Some(stop) = self.stop.take()
+        {
+            let semantic = self
+                .semantic
+                .take()
+                .ok_or_else(|| crate::PublicationFailure::from(RunError::CompletionUnavailable))?;
+            return Ok(crate::PublicationOutcome::Stopped(
+                crate::StoppedPublication {
+                    stop,
+                    semantic,
+                    publication: self.publication,
+                    phase_timings: self.phase_timings,
+                },
+            ));
+        }
         let report = match self.report() {
             Ok(report) => report,
             Err(cause) => return Err(self.fail(cause)),
         };
         match self.semantic {
-            Some(semantic) => Ok(crate::PublicationReport {
-                publication: self.publication,
-                semantic,
-                report,
-            }),
+            Some(semantic) => Ok(crate::PublicationOutcome::Completed(
+                crate::PublicationReport {
+                    publication: self.publication,
+                    semantic,
+                    report,
+                },
+            )),
             None => Err(self.fail(RunError::CompletionUnavailable)),
         }
     }
@@ -190,6 +215,7 @@ impl Progress {
             shared_execution: semantic
                 .and_then(crate::SemanticOutcome::shared_execution)
                 .cloned(),
+            optimum_proved: semantic.is_some_and(crate::SemanticOutcome::optimum_proved),
             optimization: semantic
                 .and_then(crate::SemanticOutcome::incumbent)
                 .cloned(),
@@ -202,6 +228,7 @@ impl Progress {
         });
         failure.semantic = self.semantic.map(Box::new);
         failure.publication = Some(self.publication);
+        failure.publication_stop = self.stop;
         failure
     }
 }
