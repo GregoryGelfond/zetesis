@@ -11,7 +11,6 @@ use source_cases::cases;
 use source_records::{admit, exhaustive};
 use zetesis_themelios::{
     AdmissionFailure, ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource,
-    ProfileFeature,
 };
 
 const HISTORICAL: &str = include_str!("fixtures/objective-extrema-refusals.jsonl");
@@ -133,10 +132,12 @@ fn excluded_weights_do_not_hide_endpoint_refusals() {
     assert!(
         matches!(
             error,
-            FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                feature: ProfileFeature::Aggregate,
-                ..
-            }))
+            FormulaFailure::Expansion(ExpansionFailure::Admission(
+                AdmissionFailure::ExtremumEndpoint {
+                    value: i32::MIN,
+                    ..
+                }
+            ))
         ),
         "{error:?}"
     );

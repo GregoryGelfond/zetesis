@@ -86,8 +86,12 @@ pub(crate) fn values(
 /// Preserve the independently recorded endpoint profile while extending term
 /// classes. Source endpoint behavior is a separate compatibility obligation.
 pub(crate) fn extremum_value(value: &Value, location: Location) -> Result<(), FormulaFailure> {
-    if matches!(value, Value::Number(i32::MIN | i32::MAX)) {
-        return Err(unsupported(ProfileFeature::Aggregate, location).into());
+    if let Value::Number(endpoint @ (i32::MIN | i32::MAX)) = value {
+        return Err(crate::AdmissionFailure::ExtremumEndpoint {
+            value: *endpoint,
+            location,
+        }
+        .into());
     }
     Ok(())
 }

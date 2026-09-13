@@ -173,6 +173,35 @@ fn real_s0_refusals_explain_the_feature_without_discarding_the_source() {
 }
 
 #[test]
+fn profile_diagnostics_do_not_invent_a_source_stage() {
+    let source = "a.p:-#min{:a}=#sup.";
+    let error = formula(source, &FormulaLimits::default()).unwrap_err();
+    let text = error.to_string();
+    assert!(text.contains("source profile does not admit"), "{text}");
+    assert!(!text.contains("S0"), "{text}");
+    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+}
+
+#[test]
+fn extremum_diagnostics_explain_the_retained_guard() {
+    for (endpoint, value) in [("(-2147483647-1)", i32::MIN), ("2147483647", i32::MAX)] {
+        let source = format!("n(N):-N=#min{{{endpoint}:#true}}.");
+        let error = formula(&source, &FormulaLimits::default()).unwrap_err();
+        let FormulaFailure::Expansion(ExpansionFailure::Admission(admission)) = &error else {
+            panic!("expected a located endpoint refusal: {error}")
+        };
+        assert!(matches!(admission, AdmissionFailure::ExtremumEndpoint {
+            value: actual, ..
+        } if *actual == value));
+        located(admission, &source);
+        assert_eq!(
+            admission.to_string(),
+            format!("numeric extremum endpoint {value} is excluded by the zetesis endpoint guard")
+        );
+    }
+}
+
+#[test]
 fn core_shape_and_program_limits_remain_actionable_through_source_admission() {
     let empty = Predicate::new("", 0).unwrap_err();
     assert_eq!(empty, ConstructionError::EmptyPredicateName);

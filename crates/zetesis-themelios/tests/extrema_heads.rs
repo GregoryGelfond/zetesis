@@ -15,7 +15,7 @@ use themelios_base::source::SourceId;
 use themelios_program::term::EvalError;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_formula, prepare_formula,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(179);
@@ -132,24 +132,6 @@ fn original_sources_match_clingo_full_models() {
         total += count;
     }
     println!("complete_sources={} full_models={total}", sources().len());
-}
-
-fn profile(source: &str, expected: ProfileFeature) {
-    let error = prepare_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .and_then(zetesis_themelios::PreparedFormula::ground)
-    .unwrap_err();
-    assert!(
-        matches!(error,
-        FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {feature, ..}))
-        if feature == expected),
-        "{source}: {error}"
-    );
-    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
 }
 
 #[test]
@@ -434,12 +416,23 @@ fn predecessor_rows_keep_separate_activated_groups() {
 #[test]
 fn numeric_endpoints_retain_the_zetesis_boundary() {
     for function in ["#min", "#max"] {
-        for endpoint in ["(-2147483647-1)", "2147483647"] {
+        for (endpoint, expected) in [("(-2147483647-1)", i32::MIN), ("2147483647", i32::MAX)] {
             for source in [
                 format!("0<={function}{{{endpoint}:a}}."),
                 format!("{function}{{0:a}}<={endpoint}."),
             ] {
-                profile(&source, ProfileFeature::Aggregate);
+                let error = admit_formula(
+                    source,
+                    options(),
+                    ExpansionLimits::default(),
+                    FormulaLimits::default(),
+                )
+                .unwrap_err();
+                assert!(matches!(error,
+                    FormulaFailure::Expansion(ExpansionFailure::Admission(
+                        AdmissionFailure::ExtremumEndpoint { value, location }
+                    )) if value == expected && location.source == SOURCE
+                ));
             }
         }
     }

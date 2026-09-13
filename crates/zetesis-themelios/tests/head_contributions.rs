@@ -276,10 +276,9 @@ fn missing_measures_do_not_hide_invalid_present_values() {
             .expect_err("complete values keep the existing endpoint profile");
             assert!(matches!(
                 error,
-                FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                    feature: ProfileFeature::Aggregate,
-                    ..
-                }))
+                FormulaFailure::Expansion(ExpansionFailure::Admission(
+                    AdmissionFailure::ExtremumEndpoint { .. }
+                ))
             ));
             assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
         }

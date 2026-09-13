@@ -33,7 +33,10 @@ impl fmt::Display for InputLimit {
     }
 }
 
-/// A source construct outside the finite relational S0 profile.
+/// A construct excluded by the source admission operation that reports it.
+///
+/// Relational and formula admission share these feature names. The enclosing
+/// operation identifies the profile; this value does not imply an S0 refusal.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ProfileFeature {
     /// Any non-rule statement, including an erased program delimiter.
@@ -218,6 +221,14 @@ pub enum AdmissionFailure {
         /// Its source position.
         location: Location,
     },
+    /// A finite numeric endpoint excluded by the extremum representation guard.
+    /// This is a zetesis admission policy, not a parser or resource failure.
+    ExtremumEndpoint {
+        /// The evaluated endpoint, either `i32::MIN` or `i32::MAX`.
+        value: i32,
+        /// Source position of the guarded extremum expression.
+        location: Location,
+    },
     /// A core atom or predicate constructor refused its checked shape.
     Construction {
         /// The typed core refusal.
@@ -252,7 +263,14 @@ impl AdmissionFailure {
                 vec![diagnostic("source-limit", self.to_string(), *location)]
             }
             Self::Profile { location, .. } => {
-                vec![diagnostic("unsupported-s0", self.to_string(), *location)]
+                vec![diagnostic(
+                    "unsupported-profile",
+                    self.to_string(),
+                    *location,
+                )]
+            }
+            Self::ExtremumEndpoint { location, .. } => {
+                vec![diagnostic("extremum-endpoint", self.to_string(), *location)]
             }
             Self::Construction { location, .. } => {
                 vec![diagnostic("invalid-shape", self.to_string(), *location)]
@@ -283,7 +301,11 @@ impl fmt::Display for AdmissionFailure {
             Self::Raise(errors) => {
                 write!(f, "source raising reported {} diagnostic(s)", errors.len())
             }
-            Self::Profile { feature, .. } => write!(f, "S0 does not admit {feature}"),
+            Self::Profile { feature, .. } => write!(f, "source profile does not admit {feature}"),
+            Self::ExtremumEndpoint { value, .. } => write!(
+                f,
+                "numeric extremum endpoint {value} is excluded by the zetesis endpoint guard"
+            ),
             Self::Construction { error, .. } => error.fmt(f),
             Self::Core { error, .. } => error.fmt(f),
         }
