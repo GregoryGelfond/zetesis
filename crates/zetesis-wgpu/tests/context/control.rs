@@ -119,8 +119,8 @@ fn settled_stops(context: &GpuContext, ordinary: &mut GpuOracle, formula: &mut G
     .unwrap();
     let candidates = [Interpretation::new(&theory, []).unwrap()];
     for stop in [zetesis_cpu::Stop::Cancelled, zetesis_cpu::Stop::Deadline] {
-        for boundary in [2, 3] {
-            settled_read(&ordinary.runtime, stop, boundary);
+        for after_decode in [false, true] {
+            settled_read(&ordinary.runtime, stop, after_decode);
             context.check_health().unwrap();
             assert!(ordinary.context().same_instance(context));
             assert!(formula.context().same_instance(context));
@@ -138,10 +138,10 @@ fn settled_stops(context: &GpuContext, ordinary: &mut GpuOracle, formula: &mut G
     }
 }
 
-fn settled_read(runtime: &crate::runtime::Runtime, stop: zetesis_cpu::Stop, boundary: usize) {
+fn settled_read(runtime: &crate::runtime::Runtime, stop: zetesis_cpu::Stop, after_decode: bool) {
     // A real submission/map is settled before deterministic control injection.
-    // Boundary 2 is after polling, boundary 3 after decoding. No clock race or
-    // test-only production hook decides when a shader is likely to have ended.
+    // Inject either at decoder entry or after decoding. A poll can legitimately
+    // require multiple quanta, so counting control calls cannot locate settlement.
     let _lease = runtime.context.lease().unwrap();
     let scopes = crate::runtime::ErrorScopes::new(runtime.device());
     let source = crate::runtime::initialized(
@@ -163,36 +163,35 @@ fn settled_read(runtime: &crate::runtime::Runtime, stop: zetesis_cpu::Stop, boun
         });
     encoder.copy_buffer_to_buffer(&source, 0, &readback, 0, 4);
     let submission = runtime.queue().submit([encoder.finish()]);
-    let mut controls = 0;
-    let mut decoded = false;
+    let decoded = std::cell::Cell::new(false);
     let result = crate::runtime::read_polled(
         runtime.device(),
         &readback,
         submission,
         std::time::Duration::from_secs(10),
         || {
-            controls += 1;
-            if controls == boundary {
+            if decoded.get() {
                 Err(crate::GpuError::interrupted(stop))
             } else {
                 Ok(())
             }
         },
         |words| {
+            if !after_decode {
+                return Err(crate::GpuError::interrupted(stop));
+            }
             assert_eq!(words, &[42]);
-            decoded = true;
+            decoded.set(true);
             Ok(())
         },
     );
-    assert_eq!(decoded, boundary == 3);
+    assert_eq!(decoded.get(), after_decode);
     assert!(!result.is_ok());
     let error = runtime.complete(scopes, Ok(result)).unwrap_err();
     assert_eq!(error.interruption(), Some(stop));
     assert_eq!(error.kind(), GpuErrorKind::Interrupted);
     runtime.check_health().unwrap();
-    println!(
-        "settled readback stop={stop:?} boundary={boundary} decoded={decoded} context=reusable"
-    );
+    println!("settled readback stop={stop:?} after_decode={after_decode} context=reusable");
 }
 
 fn entry_precedence(
