@@ -153,8 +153,9 @@ work polls again. A deadline is therefore not a hard process-kill guarantee.
 The installed CLI maps `--time-limit SECONDS` to this existing `Control`.
 The duration is a nonnegative whole number of seconds, measured from completion
 of input loading. Zero requests an immediate stop; omission sets no deadline.
-`--stats` reports the requested process duration. An observed search deadline
-retains partial coverage and exits with code 3, in both human and JSON output.
+`--stats` reports the requested process duration. A deadline during search leaves
+its coverage incomplete. A later deadline during publication preserves already
+established coverage. Either stop exits with code 3, in both human and JSON output.
 Input, device and output errors remain distinct failures. Source loading,
 frontend operations, blocking output and a running device kernel are not
 preempted. Rust library consumers construct and supply their own `Control`;
