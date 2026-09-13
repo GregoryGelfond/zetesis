@@ -764,4 +764,55 @@ mod value_output_tests {
             "p(#inf) p(\"#inf\") p(\"#sup\") p(#sup)\n"
         );
     }
+
+    #[test]
+    fn complete_typed_atom_spelling_preserves_every_writer_prefix() {
+        use crate::test_writer::BoundedWriter;
+        use zetesis_core::{Sign, ValueLimits, ValueNode};
+
+        let nested = Value::from_nodes(
+            vec![
+                ValueNode::Function {
+                    name: "f".into(),
+                    sign: Sign::Negative,
+                    arity: 1,
+                },
+                ValueNode::Tuple { arity: 1 },
+                ValueNode::Number(2),
+            ],
+            ValueLimits::default(),
+        )
+        .unwrap();
+        let model = Model::new([
+            Atom::new(Predicate::new("z", 0).unwrap(), vec![]).unwrap(),
+            Atom::new(
+                Predicate::with_sign("p", 6, Sign::Negative).unwrap(),
+                vec![
+                    Value::Infimum,
+                    Value::Number(-7),
+                    Value::String("quote\" backslash\\ newline\n tab\tλ".into()),
+                    Value::Symbol("s".into()),
+                    nested,
+                    Value::Supremum,
+                ],
+            )
+            .unwrap(),
+            Atom::new(Predicate::new("a", 0).unwrap(), vec![]).unwrap(),
+        ]);
+        let expected =
+            "a -p(#inf,-7,\"quote\\\" backslash\\\\ newline\\n tab\tλ\",s,-f((2,)),#sup) z\n";
+        let mut complete = Vec::new();
+        write_atoms(&mut complete, &model, &OutputSelection::default()).unwrap();
+        assert_eq!(complete, expected.as_bytes());
+        for capacity in 0..expected.len() {
+            let mut output = BoundedWriter::new(capacity);
+            let error = write_atoms(&mut output, &model, &OutputSelection::default()).unwrap_err();
+            assert_eq!(error.kind(), std::io::ErrorKind::BrokenPipe);
+            assert_eq!(error.to_string(), "diagnostic sink closed");
+            assert_eq!(output.bytes(), &expected.as_bytes()[..capacity]);
+        }
+        let mut output = BoundedWriter::new(expected.len());
+        write_atoms(&mut output, &model, &OutputSelection::default()).unwrap();
+        assert_eq!(output.bytes(), expected.as_bytes());
+    }
 }
