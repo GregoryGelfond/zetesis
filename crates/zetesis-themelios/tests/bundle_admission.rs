@@ -216,7 +216,9 @@ fn repeated_identical_include_paths_are_not_duplicate_definitions() {
 }
 
 #[test]
-fn canonical_aliases_fail_before_losing_repeated_definition_semantics() {
+fn lexical_aliases_preserve_the_native_refusal_contract() {
+    // External include-alias handling differs across clingo installations.
+    // Assert the native contract directly, including its source provenance.
     let fixture = Fixture::new();
     fs::create_dir(fixture.path("sub")).expect("alias parent");
     fixture.write(
@@ -226,7 +228,7 @@ fn canonical_aliases_fail_before_losing_repeated_definition_semantics() {
     fixture.write("shared.lp", "#const n=2. p(n).");
     let error = fixture
         .admit()
-        .expect_err("clingo parses these lexical paths separately");
+        .expect_err("distinct lexical paths must not be silently merged");
     assert_eq!(
         error.bundle().sources().len(),
         2,
@@ -517,28 +519,4 @@ fn accepted_original_include_graphs_match_complete_clingo_models() {
     fixture.write("entry.lp", "#include \"data.lp\". :- p(1).");
     fixture.write("data.lp", "p(1..2).");
     compare(&fixture);
-}
-
-#[test]
-#[ignore = "requires an independently installed clingo executable"]
-fn lexical_alias_constant_regression_is_an_external_parse_failure() {
-    let fixture = Fixture::new();
-    fs::create_dir(fixture.path("sub")).expect("alias directory");
-    fixture.write(
-        "entry.lp",
-        "#include \"shared.lp\". #include \"sub/../shared.lp\".",
-    );
-    fixture.write("shared.lp", "#const n=2. p(n).");
-    assert!(matches!(
-        fixture.admit().expect_err("native alias refusal").error(),
-        BundleAdmissionError::IncludeAlias { .. }
-    ));
-    let output = Command::new("clingo")
-        .arg(fixture.path("entry.lp"))
-        .args(["0", "--outf=2"])
-        .output()
-        .expect("clingo alias regression");
-    let json: Json = serde_json::from_slice(&output.stdout).expect("oracle refusal JSON");
-    assert_eq!(json["Result"], "UNKNOWN");
-    assert!(String::from_utf8_lossy(&output.stderr).contains("redefinition of constant"));
 }

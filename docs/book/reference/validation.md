@@ -84,6 +84,15 @@ applicable. Use the original source in external clingo comparisons. A rewritten
 input can test a proposed equivalence, but cannot by itself establish support
 for the original construct.
 
+Keep native admission policies separate from external parser behavior. For example,
+zetesis refuses distinct lexical include paths that resolve to the same source,
+while accepting a repeated identical include path. Clingo 5.8.2 installations
+have produced different results for a lexical-alias fixture: a redefinition
+error on macOS and an already-included warning with a model on Linux. The native
+alias regression therefore checks its typed refusal and source provenance;
+original-source oracle comparisons cover admitted include graphs. The oracle
+version alone does not establish a portable parser-diagnostic contract.
+
 Tests of lowering should inspect satisfaction in an interpretation and in a
 subset of the frozen candidate where the claimed law requires both. Keep source
 correspondence separate from an already-proved formula identity. A new fast path
