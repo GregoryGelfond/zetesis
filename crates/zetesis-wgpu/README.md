@@ -139,8 +139,16 @@ uncommitted and does not retry a stopped operation on another backend.
 Relation preparation releases mapped host access without submitting queue work.
 Cancellation or deadline expiry during that copy returns no prepared view but
 leaves the context reusable after successful scope and device-health settlement.
-Scope/device failures retain priority and invalidate it. Cancellation during a
-submitted operation remains uncertain and invalidates the shared context.
+Scope/device failures retain priority and invalidate it. A submitted cancellation
+or deadline also preserves context reuse when the runtime observed queue
+completion and successful mapping, released every mapped view and unmapped the
+buffer, then drained scopes and checked device health. A late stop still returns
+its original interruption and discards output; it is never a successful result.
+Unknown completion after an interrupted wait, failed mapping/decoding, device
+faults and other errors retain conservative invalidation. The private completion
+envelope carries these effects through every primitive's common readback path;
+the error kind alone cannot justify reuse. Resident buffers may still be dropped
+by their primitive after a failed call, independently of shared context health.
 
 ## Native numeric aggregates
 

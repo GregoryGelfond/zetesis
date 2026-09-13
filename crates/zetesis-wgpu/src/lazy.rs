@@ -304,8 +304,8 @@ impl GpuLazyOracle {
         let outcome = self.dispatch(chunk, limits, &plan, control, transport);
         let result = self.runtime.complete(scopes, outcome);
         if result.is_err() {
-            // A failed or interrupted read can still have live device work.
-            // The invalidated runtime must never reuse its mapped storage.
+            // Discard this transport after any failed read. A pending wait also
+            // invalidates the shared context; a settled caller stop need not.
             *transport = None;
         }
         result
@@ -318,7 +318,7 @@ impl GpuLazyOracle {
         plan: &Plan,
         control: &Control,
         cached: &mut Option<Transport>,
-    ) -> Result<Vec<u32>, GpuError> {
+    ) -> Result<runtime::Completion<Vec<u32>>, GpuError> {
         let device = self.runtime.device();
         let mut selection = Selection::new(
             cached.as_ref().map(|transport| transport.capacity),
@@ -370,7 +370,7 @@ impl GpuLazyOracle {
                     )
                 })?;
         }
-        result
+        Ok(result)
     }
 }
 

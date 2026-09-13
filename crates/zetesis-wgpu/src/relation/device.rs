@@ -254,14 +254,14 @@ impl<'owner, 'source> PreparedGpuRelation<'_, 'owner, 'source> {
             self.activity.submitted_workgroups =
                 u64::from(plan.workgroups[0]) * u64::from(plan.workgroups[1]);
             self.activity.scheduled_work = plan.work;
-            runtime::read_polled(
+            Ok(runtime::read_polled(
                 runtime.device(),
                 &transport.readback,
                 submission,
                 limits.timeout,
                 || poll(control),
                 |words| plan.decode(self.relation, queries, words, packed.masks, control),
-            )
+            ))
         });
         let masks = runtime.complete(scopes, outcome)?;
         self.activity.completed_queries = u64::from(plan.queries);

@@ -96,13 +96,14 @@ impl Runtime {
     pub(crate) fn complete<T>(
         &self,
         scopes: ErrorScopes,
-        outcome: Result<T, GpuError>,
+        outcome: Result<Completion<T>, GpuError>,
     ) -> Result<T, GpuError> {
-        self.context.complete(
-            pollster::block_on(scopes.finish()),
-            outcome,
-            Effects::MayBeLive,
-        )
+        let Completion { outcome, effects } = outcome.unwrap_or_else(|error| Completion {
+            outcome: Err(error),
+            effects: Effects::MayBeLive,
+        });
+        self.context
+            .complete(pollster::block_on(scopes.finish()), outcome, effects)
     }
 
     /// For operations that submitted no queue work and released mapped access.
@@ -118,6 +119,20 @@ impl Runtime {
             outcome,
             Effects::NoSubmission,
         )
+    }
+}
+
+/// Readback outcome plus private evidence about released device effects.
+/// Only the shared readback boundary can construct this envelope. Successful
+/// queue polling alone does not establish mapping success or released access.
+#[derive(Debug)]
+pub(crate) struct Completion<T> {
+    outcome: Result<T, GpuError>,
+    effects: Effects,
+}
+impl<T> Completion<T> {
+    pub(crate) fn is_ok(&self) -> bool {
+        self.outcome.is_ok()
     }
 }
 
@@ -160,9 +175,9 @@ pub(crate) fn submit(
     queue.submit([encoder.finish()])
 }
 
-// Poll control between bounded waits. The caller invalidates the shared context
-// on failure, preventing reuse while a submission may remain live. Resident
-// buffer handles can remain owned until explicit release or owner destruction.
+// Poll control between bounded waits. Keep settled effects distinct from the
+// caller outcome: cancellation is never converted to success for reuse. Resident
+// buffer handles may remain owned until explicit release or owner destruction.
 pub(crate) fn read_polled<T>(
     device: &wgpu::Device,
     readback: &wgpu::Buffer,
@@ -170,7 +185,7 @@ pub(crate) fn read_polled<T>(
     timeout: Duration,
     mut control: impl FnMut() -> Result<(), GpuError>,
     decode: impl FnOnce(&[u32]) -> Result<T, GpuError>,
-) -> Result<T, GpuError> {
+) -> Completion<T> {
     let (sender, receiver) = mpsc::sync_channel(1);
     readback
         .slice(..)
@@ -179,46 +194,84 @@ pub(crate) fn read_polled<T>(
         });
     let started = std::time::Instant::now();
     let submission = Some(submission);
-    let outcome = (|| {
-        wait_for_submission(
-            timeout,
-            &mut control,
-            |wait| {
-                device
-                    .poll(wgpu::PollType::Wait {
-                        submission_index: submission.clone(),
-                        timeout: Some(wait),
-                    })
-                    .map(|_| ())
-            },
-            || started.elapsed(),
-        )?;
-        receiver
-            .try_recv()
-            .map_err(|error| {
-                GpuError::new(
-                    GpuErrorKind::Readback,
-                    format!("mapping callback absent after completed poll: {error}"),
-                )
-            })?
-            .map_err(|error| GpuError::new(GpuErrorKind::Readback, error.to_string()))?;
-        let decoded = readback
-            .slice(..)
-            .get_mapped_range()
-            .map_err(|error| GpuError::new(GpuErrorKind::Readback, error.to_string()))
-            .and_then(|mapped| {
-                bytemuck::try_cast_slice::<u8, u32>(&mapped)
-                    .map_err(|error| GpuError::new(GpuErrorKind::Readback, error.to_string()))
-                    .and_then(decode)
-            })?;
-        control()?;
-        Ok(decoded)
-    })();
-    // Also terminate a pending map on interruption or poll failure. This does
-    // not cancel queue execution; the default completion path still invalidates
-    // the context. Every mapped range has left scope before unmapping.
-    readback.unmap();
-    outcome
+    let wait = wait_for_submission(
+        timeout,
+        &mut control,
+        |wait| {
+            device.poll(wgpu::PollType::Wait {
+                submission_index: submission.clone(),
+                timeout: Some(wait),
+            })
+        },
+        || started.elapsed(),
+    );
+    finish_read(
+        wait,
+        || {
+            receiver
+                .try_recv()
+                .map_err(|error| {
+                    GpuError::new(
+                        GpuErrorKind::Readback,
+                        format!("mapping callback absent after completed poll: {error}"),
+                    )
+                })?
+                .map_err(|error| GpuError::new(GpuErrorKind::Readback, error.to_string()))
+        },
+        || {
+            readback
+                .slice(..)
+                .get_mapped_range()
+                .map_err(|error| GpuError::new(GpuErrorKind::Readback, error.to_string()))
+                .and_then(|mapped| {
+                    bytemuck::try_cast_slice::<u8, u32>(&mapped)
+                        .map_err(|error| GpuError::new(GpuErrorKind::Readback, error.to_string()))
+                        .and_then(decode)
+                })
+        },
+        // Also terminate a pending map after an interrupted wait. Unmapping
+        // alone does not establish queue completion or permit context reuse.
+        || readback.unmap(),
+        &mut control,
+    )
+}
+
+struct SubmissionWait {
+    outcome: Result<(), GpuError>,
+    completed: bool,
+}
+
+// The actual production cleanup sequence, factored so deterministic controls
+// exercise mapping/decoding/control/release ordering without a physical device.
+fn finish_read<T>(
+    wait: SubmissionWait,
+    mapping: impl FnOnce() -> Result<(), GpuError>,
+    decode: impl FnOnce() -> Result<T, GpuError>,
+    release: impl FnOnce(),
+    mut control: impl FnMut() -> Result<(), GpuError>,
+) -> Completion<T> {
+    // A completed wait can have returned a late control stop. Inspect its map
+    // callback for health evidence, but preserve that original stop and skip
+    // decoding. An absent/failed callback prevents reuse even in that case.
+    let mapped = if wait.completed { mapping() } else { Ok(()) };
+    let mapped_successfully = wait.completed && mapped.is_ok();
+    let outcome = wait
+        .outcome
+        .and(mapped)
+        .and_then(|()| decode())
+        .and_then(|value| {
+            control()?;
+            Ok(value)
+        });
+    release(); // Every mapped view has left the decode closure before this call.
+    Completion {
+        outcome,
+        effects: if mapped_successfully {
+            Effects::SubmittedAndReleased
+        } else {
+            Effects::MayBeLive
+        },
+    }
 }
 
 // The production wait loop; injected poll/elapsed operations let controls cover
@@ -226,24 +279,46 @@ pub(crate) fn read_polled<T>(
 fn wait_for_submission(
     timeout: Duration,
     mut control: impl FnMut() -> Result<(), GpuError>,
-    mut poll: impl FnMut(Duration) -> Result<(), wgpu::PollError>,
+    mut poll: impl FnMut(Duration) -> Result<wgpu::PollStatus, wgpu::PollError>,
     mut elapsed: impl FnMut() -> Duration,
-) -> Result<(), GpuError> {
+) -> SubmissionWait {
     loop {
-        control()?;
+        if let Err(error) = control() {
+            return SubmissionWait {
+                outcome: Err(error),
+                completed: false,
+            };
+        }
         let remaining = timeout.saturating_sub(elapsed());
         match poll(remaining.min(Duration::from_millis(50))) {
-            Ok(()) => return control(),
+            Ok(status) if status.wait_finished() => {
+                return SubmissionWait {
+                    outcome: control(),
+                    completed: true,
+                };
+            }
+            Ok(_) => {
+                return SubmissionWait {
+                    outcome: Err(GpuError::new(
+                        GpuErrorKind::Device,
+                        "device wait did not establish submission completion",
+                    )),
+                    completed: false,
+                };
+            }
             Err(wgpu::PollError::Timeout) if elapsed() < timeout => {}
             Err(error) => {
-                return Err(GpuError::new(
-                    if matches!(error, wgpu::PollError::Timeout) {
-                        GpuErrorKind::Timeout
-                    } else {
-                        GpuErrorKind::Device
-                    },
-                    error.to_string(),
-                ));
+                return SubmissionWait {
+                    outcome: Err(GpuError::new(
+                        if matches!(error, wgpu::PollError::Timeout) {
+                            GpuErrorKind::Timeout
+                        } else {
+                            GpuErrorKind::Device
+                        },
+                        error.to_string(),
+                    )),
+                    completed: false,
+                };
             }
         }
     }

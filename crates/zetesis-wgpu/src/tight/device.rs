@@ -274,8 +274,6 @@ impl GpuTightOracle {
         });
         if result.is_ok() {
             self.last = Some(stats);
-        } else {
-            self.runtime.invalidate();
         }
         result
     }

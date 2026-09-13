@@ -102,7 +102,97 @@ fn controlled_calls(backend: GpuBackendPreference) {
             .collect::<Vec<_>>(),
         [FormulaVerdict::NotModel, FormulaVerdict::NoProperSubset]
     );
+    settled_stops(&context, &mut ordinary, &mut formula);
     entry_precedence(&context, &mut ordinary, &mut formula, &ground, &theory);
+}
+
+fn settled_stops(context: &GpuContext, ordinary: &mut GpuOracle, formula: &mut GpuFormulaOracle) {
+    let program = Program::new(vec![], AdmissionLimits::default()).unwrap();
+    let ground = GroundProgram::compile(&program, StaticLimits::default()).unwrap();
+    let seeds = [Seed::new(&program, []).unwrap()];
+    let theory = Theory::new(
+        0,
+        vec![],
+        vec![],
+        zetesis_ferraris::AdmissionLimits::default(),
+    )
+    .unwrap();
+    let candidates = [Interpretation::new(&theory, []).unwrap()];
+    for stop in [zetesis_cpu::Stop::Cancelled, zetesis_cpu::Stop::Deadline] {
+        for boundary in [2, 3] {
+            settled_read(&ordinary.runtime, stop, boundary);
+            context.check_health().unwrap();
+            assert!(ordinary.context().same_instance(context));
+            assert!(formula.context().same_instance(context));
+            let checks = ordinary
+                .check_batch(&ground, &seeds, GpuLimits::default())
+                .unwrap();
+            assert_eq!(checks.len(), 1);
+            assert!(checks[0].accepted());
+            let checks = formula
+                .propagate_batch(&theory, &candidates, FormulaLimits::default())
+                .unwrap();
+            assert_eq!(checks.len(), 1);
+            assert_eq!(checks[0].verdict(), FormulaVerdict::NoProperSubset);
+        }
+    }
+}
+
+fn settled_read(runtime: &crate::runtime::Runtime, stop: zetesis_cpu::Stop, boundary: usize) {
+    // A real submission/map is settled before deterministic control injection.
+    // Boundary 2 is after polling, boundary 3 after decoding. No clock race or
+    // test-only production hook decides when a shader is likely to have ended.
+    let _lease = runtime.context.lease().unwrap();
+    let scopes = crate::runtime::ErrorScopes::new(runtime.device());
+    let source = crate::runtime::initialized(
+        runtime.device(),
+        "settled stop source",
+        &[42],
+        wgpu::BufferUsages::COPY_SRC,
+    );
+    let readback = crate::runtime::buffer(
+        runtime.device(),
+        "settled stop readback",
+        4,
+        wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+    );
+    let mut encoder = runtime
+        .device()
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("settled stop copy"),
+        });
+    encoder.copy_buffer_to_buffer(&source, 0, &readback, 0, 4);
+    let submission = runtime.queue().submit([encoder.finish()]);
+    let mut controls = 0;
+    let mut decoded = false;
+    let result = crate::runtime::read_polled(
+        runtime.device(),
+        &readback,
+        submission,
+        std::time::Duration::from_secs(10),
+        || {
+            controls += 1;
+            if controls == boundary {
+                Err(crate::GpuError::interrupted(stop))
+            } else {
+                Ok(())
+            }
+        },
+        |words| {
+            assert_eq!(words, &[42]);
+            decoded = true;
+            Ok(())
+        },
+    );
+    assert_eq!(decoded, boundary == 3);
+    assert!(!result.is_ok());
+    let error = runtime.complete(scopes, Ok(result)).unwrap_err();
+    assert_eq!(error.interruption(), Some(stop));
+    assert_eq!(error.kind(), GpuErrorKind::Interrupted);
+    runtime.check_health().unwrap();
+    println!(
+        "settled readback stop={stop:?} boundary={boundary} decoded={decoded} context=reusable"
+    );
 }
 
 fn entry_precedence(

@@ -21,8 +21,10 @@ use std::sync::{
 /// execution leave it reusable. A fresh context is required after invalidation.
 /// Relation preparation submits no queue work: cancellation after its mapped
 /// host access is released leaves the context reusable only if scope settlement
-/// and device health checks both succeed. Interrupted submitted work remains
-/// uncertain and invalidates the context.
+/// and device health checks both succeed. Submitted cancellation/deadline stops
+/// may also preserve reuse when queue completion, successful mapping and released
+/// mapped access are established. An interrupted wait with unknown completion,
+/// mapping failure or any other execution failure still invalidates the context.
 /// Per-primitive byte limits retain their documented scope; they do not sum other
 /// live primitives, device infrastructure or deferred driver retirement.
 #[derive(Clone)]
@@ -39,10 +41,13 @@ struct Resources {
 }
 
 /// Effect information at scope settlement, never inferred from an error kind.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Effects {
     /// No queue work was submitted and all mapped host access has been released.
     NoSubmission,
+    /// Queue completion and successful mapping were observed, and every mapped
+    /// view was dropped and the buffer unmapped before scope settlement.
+    SubmittedAndReleased,
     /// A submission may remain live, including after an interrupted wait.
     MayBeLive,
 }
@@ -261,7 +266,7 @@ impl Faults {
         effects: Effects,
     ) -> Result<T, GpuError> {
         let health = self.check();
-        let settled_interruption = effects == Effects::NoSubmission
+        let settled_interruption = effects != Effects::MayBeLive
             && validation.is_ok()
             && health.is_ok()
             && outcome.as_ref().is_err_and(|error| {

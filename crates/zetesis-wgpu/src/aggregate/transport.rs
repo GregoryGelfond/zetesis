@@ -61,7 +61,7 @@ impl Resident {
         timeout: Duration,
         control: &Control,
         activity: &mut AggregateGpuActivity,
-    ) -> Result<Vec<AggregateGpuReduction>, GpuError> {
+    ) -> Result<runtime::Completion<Vec<AggregateGpuReduction>>, GpuError> {
         let uploaded = activity
             .uploaded_bytes
             .checked_add(PARAM_BYTES)
@@ -110,7 +110,7 @@ impl Resident {
             activity.completed_work = plan.total_work;
             activity.downloaded_bytes = plan.results;
         }
-        result
+        Ok(result)
     }
 }
 

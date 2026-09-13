@@ -136,8 +136,12 @@ fn cancellation_survives_successful_scope_completion() {
 }
 
 #[test]
-fn only_settled_unsubmitted_interruption_preserves_context_health() {
-    for effects in [Effects::NoSubmission, Effects::MayBeLive] {
+fn only_released_interruption_preserves_context_health() {
+    for effects in [
+        Effects::NoSubmission,
+        Effects::SubmittedAndReleased,
+        Effects::MayBeLive,
+    ] {
         for stop in [zetesis_cpu::Stop::Cancelled, zetesis_cpu::Stop::Deadline] {
             for scope_failed in [false, true] {
                 for device_failed in [false, true] {
@@ -160,8 +164,7 @@ fn only_settled_unsubmitted_interruption_preserves_context_health() {
                     } else {
                         assert_eq!(failure.interruption, Some(stop));
                     }
-                    let reusable =
-                        effects == Effects::NoSubmission && !scope_failed && !device_failed;
+                    let reusable = effects != Effects::MayBeLive && !scope_failed && !device_failed;
                     assert_eq!(faults.check().is_ok(), reusable);
                 }
             }
@@ -170,21 +173,23 @@ fn only_settled_unsubmitted_interruption_preserves_context_health() {
 }
 
 #[test]
-fn unsubmitted_completion_does_not_exempt_other_failures() {
-    for failure in [
-        error(GpuErrorKind::Allocation, "allocation"),
-        error(GpuErrorKind::Capacity, "unexpected copy shape"),
-        error(GpuErrorKind::Readback, "unexpected output"),
-        GpuError::interrupted(zetesis_cpu::Stop::WorkLimit),
-    ] {
-        let (_, mut faults) = state();
-        let expected = failure.clone();
-        let actual = faults
-            .complete::<()>(Ok(()), Err(failure), Effects::NoSubmission)
-            .unwrap_err();
-        assert_eq!(actual.kind(), expected.kind());
-        assert_eq!(actual.detail(), expected.detail());
-        assert!(faults.check().is_err());
+fn released_completion_does_not_exempt_other_failures() {
+    for effects in [Effects::NoSubmission, Effects::SubmittedAndReleased] {
+        for failure in [
+            error(GpuErrorKind::Allocation, "allocation"),
+            error(GpuErrorKind::Capacity, "unexpected copy shape"),
+            error(GpuErrorKind::Readback, "unexpected output"),
+            GpuError::interrupted(zetesis_cpu::Stop::WorkLimit),
+        ] {
+            let (_, mut faults) = state();
+            let expected = failure.clone();
+            let actual = faults
+                .complete::<()>(Ok(()), Err(failure), effects)
+                .unwrap_err();
+            assert_eq!(actual.kind(), expected.kind());
+            assert_eq!(actual.detail(), expected.detail());
+            assert!(faults.check().is_err());
+        }
     }
 }
 

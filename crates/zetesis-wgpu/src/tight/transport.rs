@@ -51,7 +51,7 @@ impl Resident {
         seeds: &[u32],
         plan: &Plan,
         activity: &mut TightGpuActivity,
-    ) -> Result<Vec<TightGpuCheck>, GpuError> {
+    ) -> Result<runtime::Completion<Vec<TightGpuCheck>>, GpuError> {
         let Execution {
             device,
             queue,
@@ -104,7 +104,7 @@ impl Resident {
             activity.completed_work = activity.scheduled_work;
             activity.downloaded_bytes = plan.results;
         }
-        result
+        Ok(result)
     }
 }
 

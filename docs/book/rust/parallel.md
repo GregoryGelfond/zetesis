@@ -168,7 +168,11 @@ batch and snapshots for that round. The private batch-owned transport combines
 this index with word width, world count and actual buffer retention. Growth or
 replacement forces fresh writes. No pointer, global index or copied host mask
 serves as a cache key. The upload receipt is installed after queue submission;
-an interrupted read invalidates the context and discards that transport. Each
+an interrupted read discards that transport. Unknown queue completion or failed
+mapping invalidates the context; a late cancellation/deadline after established
+completion, successful mapping and released access preserves a healthy context
+only after scopes drain and device health is checked. It still returns the
+original stop without successful output. Each
 new public batch starts fresh, even when its round numbers and layout match.
 
 Actual upload-byte statistics omit those reused prefixes; the byte ceiling

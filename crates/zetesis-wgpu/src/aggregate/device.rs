@@ -212,7 +212,8 @@ impl GpuAggregateOracle {
             self.last = Some(stats);
         } else {
             self.resident = None;
-            self.runtime.invalidate();
+            // Runtime settlement already invalidates uncertain/failed device
+            // state. A later caller stop must not discard a healthy context.
         }
         result
     }
