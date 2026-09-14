@@ -23,3 +23,7 @@ workspace = true
 [[example]]
 name = "book-finite-tables"
 path = "../../docs/book/examples/finite-tables.rs"
+
+[[example]]
+name = "book-prepared-queries"
+path = "../../docs/book/examples/prepared-queries.rs"

@@ -24,6 +24,7 @@ construction and standalone analysis APIs belong to its own manual.
 | Reusable finite-table row selection and domain projection | `zetesis_cpu::table::{Table, Domain, Selection}` |
 | Explicit complete relational graph | `zetesis_core::GroundProgram::compile` |
 | Normal reduct membership | `zetesis_cpu::{check, check_static, BatchOracle}` |
+| Reuse scalar closure preparation across frozen seeds | `zetesis_cpu::{PreparedQueries, PreparationLimits, PreparationStatistics, ClosureWorkspace}` |
 | Finite formula construction and reference membership | `zetesis_ferraris::{Theory, Node, Interpretation, check}` |
 | Repeated queries against one candidate's reduct | `zetesis_ferraris::FrozenReduct` |
 | Native formula candidate/countermodel search | `zetesis_sat` |
@@ -114,6 +115,15 @@ The formula owner keeps the theory, atom indexing, objective program and
 observations together. Do not build a session by independently pairing a theory
 with an atom table from another admission.
 
+`PreparedQueries` shares one exact native `Program` and retains its join
+dimensions under independent preparation limits. A `ClosureWorkspace` reuses
+empty catalog metadata and reference-free join buffers across scalar seed
+checks; returned closures own their atoms independently. It retains no completed
+candidate truth and retires old capacity when used with a different program
+instance. The [checked preparation example](parallel.md#reuse-preparation-across-scalar-checks)
+shows the same completed semantic results as one-shot checking. Preparation work
+is reported separately; per-check limits and work still apply to each seed.
+
 `AtomPattern::key` provides a checked, borrowed atom identity over a
 `BindingView`. Complete values, partial owned slots and partial borrowed slots
 use the same lookup boundary. Unreferenced variables may remain absent; a missing
@@ -188,8 +198,14 @@ retained capacity. Failed operations return `CatalogFailure` with completed work
 and any capacity retained before refusal. They publish no new tuple or equality
 ID. Nested atom payload storage remains the source caller's separate charge.
 A catalog view reports only its own object; callers retaining the catalog must
-also account for `Catalog::retained_bytes` once. Sorted membership and dictionary
-indexes can still require linear ID shifts on insertion.
+also account for `Catalog::retained_bytes` once. Appendable catalog membership
+and dictionary lookup use checked AVL indexes containing only IDs and links;
+insertion does not shift a historical sorted ID sequence. Typed comparisons,
+transactional index updates and column/vector growth still have admitted costs.
+Canonical row access uses an explicitly prepared ordered view, invalidated by a
+successful append. Standalone immutable `Relation::from_atoms` and `from_catalog`
+instead build a sorted dictionary index for binary search; those relations do
+not offer append operations.
 
 `Relation::columns()` yields an exact-size iterator of argument-column slices;
 `column(i)` borrows one slice. Each slice has the relation's row count. This

@@ -4,6 +4,48 @@ There are two different opportunities to share work: execute independent checks
 concurrently, or share source traversal while preserving independent worlds.
 Choose a library boundary that makes the distinction explicit.
 
+## Reuse preparation across scalar checks
+
+`PreparedQueries::new` inspects one admitted relational `Program` and retains
+its shared immutable owner plus the dimensions needed by the closure joins.
+It does not enumerate the program's ground carrier or hold candidate truth.
+Each `check_view` still computes the least closure of its own frozen seed's
+reduct and checks the constraints and gate agreement.
+
+This program has the two answer sets `{d(1), left(1)}` and `{d(1), right(1)}`.
+The seeds contain only the selected gate atoms. One workspace serves both
+checks; the first returned closure remains valid after the second check.
+The example compares both complete results with the one-shot checker and the
+explicit expected models:
+
+```rust
+# extern crate zetesis_core;
+# extern crate zetesis_cpu;
+{{#include ../examples/prepared-queries.rs:example}}
+```
+
+`PreparationLimits` bounds the initial dimension inspections and named retained
+preparation bytes; `prepared.statistics()` returns their
+`PreparationStatistics` receipt. Each check has its own `Limits` and work
+receipt. The one-shot `check` charges preparation and evaluation together, so
+equal completed results do not imply identical resource cutoffs. These separate
+per-call limits do not bound an entire sequence of checks.
+
+`ClosureWorkspace` retains empty catalog metadata, predicate owners and
+reference-free cursor/undo capacity. Candidate atoms transfer to the returned
+`Check`; no previous candidate truth is reused. Failed evaluation discards dirty
+workspace state, and a different program instance retires the old workspace.
+Its `retained_bytes()` reports named workspace capacity, excluding shared source,
+prepared storage, returned models and documented container/allocator overhead;
+it is not RSS. Retained capacity is admitted again under each check's limits.
+Independent workers need separate mutable workspaces and may share the immutable
+prepared owner. This example executes serially and makes no speed claim.
+
+The [CPU API reference](../../doc/zetesis_cpu/index.html) and
+[prepared-query implementation](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/oracle/prepared.rs)
+give the preparation, identity and failure contracts. Run the example directly
+with `cargo run --locked -p zetesis-cpu --example book-prepared-queries`.
+
 ## Independent candidate checks
 
 `zetesis_cpu::BatchOracle::new` takes nonzero worker and maximum-batch counts and
@@ -14,7 +56,9 @@ input order. Duplicate seeds are separate submitted occurrences.
 The result has two error layers. An outer `BatchError` can refuse an oversized
 submission or a concurrent caller before work starts. Inside an admitted batch,
 each candidate has its own `Result<Check, Stop>`. Do not convert failed members
-into rejected candidates. There is no unbounded waiting queue: a busy pool
+into rejected candidates. `BatchError::Preparation` separately reports a stop
+while preparing the shared queries; no candidate result follows from it.
+There is no unbounded waiting queue: a busy pool
 refuses another simultaneous batch. The static variant accepts an already
 compiled graph and does not compile one implicitly.
 
@@ -22,10 +66,19 @@ The scalar `check_view` and `check_static_view` operations borrow either an owne
 `Seed` or a `SeedSelection`. Their batch counterparts, `check_batch_views` and
 `check_static_batch_views`, accept indexed Rayon iterators such as
 `selections.par_iter().map(SeedSelection::view)`. The oracle runs them on its
-owned pool and collects in input order. These doors share the existing checker
-and budgets; they create neither a seed tree nor a temporary view vector.
+owned pool and collects in input order. These doors share the existing checker;
+they create neither a seed tree nor a temporary view vector.
 The owned-seed methods delegate through views. Derived closures retain their
 existing output allocation and ownership contracts.
+
+Relational batches retain query preparation for the exact program and use
+`with_preparation_limits` to bound it separately from candidate work.
+`query_statistics()` reports completed preparation and workspace assignment;
+reused slots are not a count of successfully checked candidates. At most one
+contiguous range per configured worker owns a reusable workspace. Candidates
+inside a range run sequentially, so uneven costs can balance differently from
+per-candidate work stealing. Static and shared-round checks retain their separate
+preparation and resource contracts.
 
 `Candidates::next_selection` retains opaque gate atoms minted in canonical
 carrier order. The complete graph's gate-ID list has that same order, so a
