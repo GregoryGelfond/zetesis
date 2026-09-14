@@ -5,10 +5,10 @@ use std::fmt::Write;
 use zetesis_validation::performance::{Phase, Producer};
 
 use super::data::{self, Block, Observation, Observations};
-use super::{Result, require};
+use super::{Result, dataset::Dataset, require};
 
-pub(super) fn tables(data: &Observations) -> Result<String> {
-    data::validate(data)?;
+pub(super) fn tables(data: &Observations, dataset: &Dataset<'_>) -> Result<String> {
+    data::validate(data, dataset)?;
     let mut output = String::new();
     for (producer, caption) in [
         (

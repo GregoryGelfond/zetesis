@@ -9,6 +9,8 @@
 
 #[path = "release_observations/data.rs"]
 mod data;
+#[path = "release_observations/dataset.rs"]
+mod dataset;
 #[path = "release_observations/render.rs"]
 mod render;
 #[cfg(test)]
@@ -17,14 +19,6 @@ mod tests;
 
 use std::error::Error;
 use std::io::{self, Write};
-
-const OBSERVATIONS: &str =
-    include_str!("../../../docs/book/reference/observations/release-6bebb980-1e5b78ce.json");
-const PROVENANCE: &str = include_str!(
-    "../../../docs/book/reference/observations/release-6bebb980-1e5b78ce-provenance.json"
-);
-const TABLES: &str =
-    include_str!("../../../docs/book/reference/observations/release-6bebb980-1e5b78ce-tables.md");
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
@@ -35,10 +29,11 @@ fn main() -> Result<()> {
         (Some(arg), None) if arg == "--check" => true,
         _ => return Err("usage: release_observations [--check]".into()),
     };
-    let observations = data::load()?;
-    let tables = render::tables(&observations)?;
+    let dataset = &dataset::HISTORICAL;
+    let observations = data::load(dataset)?;
+    let tables = render::tables(&observations, dataset)?;
     require(
-        tables == TABLES,
+        tables == dataset.tables,
         "rendered values differ from the published tables",
     )?;
     if !check {

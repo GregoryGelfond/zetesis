@@ -4,7 +4,7 @@ use serde::{Deserialize, Deserializer, de::Error as _};
 use sha2::{Digest, Sha256};
 use zetesis_validation::performance::{Phase, Producer, Schedule};
 
-use super::{OBSERVATIONS, PROVENANCE, Result, require};
+use super::{Result, dataset::Dataset, require};
 
 const MAX_EMBEDDED_OBSERVATION_BYTES: usize = 1_048_576;
 
@@ -18,14 +18,6 @@ const PATHS: [&str; 9] = [
     "standalone/send-money/send-money.lp",
     "scenarios/task-allocation/variant-04/05-larger-mix.lp",
     "scenarios/shortest-path/variant-01/06-layered-dag.lp",
-];
-const SOURCES: [&str; 2] = [
-    "6bebb980f9c102dbb7f943076d7cde92374841ce",
-    "1e5b78ce913ab3aeece6ed496f69ca8176f0644d",
-];
-const BINARIES: [&str; 2] = [
-    "35b96c837dd5027853c735044e092f9054d63fc516940ec83d10627ecc2cf5d8",
-    "0758210934e1a80c350808fc936414c359974a2327119e0af3b3ab5e5f0f79f8",
 ];
 
 #[derive(Deserialize)]
@@ -115,26 +107,26 @@ struct ReportIdentity {
     sha256: String,
 }
 
-pub(super) fn load() -> Result<Observations> {
+pub(super) fn load(dataset: &Dataset<'_>) -> Result<Observations> {
     require(
-        OBSERVATIONS.len() <= MAX_EMBEDDED_OBSERVATION_BYTES,
+        dataset.observations.len() <= MAX_EMBEDDED_OBSERVATION_BYTES,
         "embedded observation byte bound exceeded",
     )?;
-    let observations: Observations = serde_json::from_str(OBSERVATIONS)?;
-    validate(&observations)?;
+    let observations: Observations = serde_json::from_str(dataset.observations)?;
+    validate(&observations, dataset)?;
     Ok(observations)
 }
 
-pub(super) fn validate(data: &Observations) -> Result<()> {
+pub(super) fn validate(data: &Observations, dataset: &Dataset<'_>) -> Result<()> {
     require(
         data.schema == 1 && data.kind == "derived_historical_observation_view",
         "unknown observation schema or scope",
     )?;
     require(
-        data.provenance_sha256 == format!("{:x}", Sha256::digest(PROVENANCE)),
+        data.provenance_sha256 == format!("{:x}", Sha256::digest(dataset.provenance)),
         "provenance digest differs",
     )?;
-    let provenance: Provenance = serde_json::from_str(PROVENANCE)?;
+    let provenance: Provenance = serde_json::from_str(dataset.provenance)?;
     require(
         data.cases.len() == PATHS.len() && data.blocks.len() == 4,
         "expected nine cases and four blocks",
@@ -158,12 +150,12 @@ pub(super) fn validate(data: &Observations) -> Result<()> {
         let version = usize::from(index == 1 || index == 2);
         require(
             block.label == label
-                && block.source == SOURCES[version]
-                && block.binary_sha256 == BINARIES[version],
+                && block.source == dataset.sources[version]
+                && block.binary_sha256 == dataset.binaries[version],
             "historical block or executable identity differs",
         )?;
         require(
-            block.formula_joins.as_deref() == (version == 1).then_some("indexed"),
+            block.formula_joins.as_deref() == dataset.joins[version],
             "historical join strategy differs",
         )?;
         require(

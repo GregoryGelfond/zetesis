@@ -2,22 +2,26 @@
 
 use serde_json::Value;
 
-use super::{OBSERVATIONS, TABLES, data, render};
+use super::{data, dataset::HISTORICAL, render};
 
 fn changed(change: impl FnOnce(&mut Value)) -> data::Observations {
-    let mut document: Value = serde_json::from_str(OBSERVATIONS).unwrap();
+    let mut document: Value = serde_json::from_str(HISTORICAL.observations).unwrap();
     change(&mut document);
     serde_json::from_value(document).unwrap()
 }
 
 #[test]
 fn historical_samples_reproduce_the_published_tables() {
-    let data = data::load().unwrap();
-    assert_eq!(render::tables(&data).unwrap(), TABLES);
+    let data = data::load(&HISTORICAL).unwrap();
+    assert_eq!(
+        render::tables(&data, &HISTORICAL).unwrap(),
+        HISTORICAL.tables
+    );
     // The retained table fixture is the actual public section, not an unrelated
     // expectation that can drift independently of the manual's numbers.
     assert!(
-        include_str!("../../../../docs/book/reference/performance.md").contains(TABLES.trim_end())
+        include_str!("../../../../docs/book/reference/performance.md")
+            .contains(HISTORICAL.tables.trim_end())
     );
 }
 
@@ -35,7 +39,7 @@ fn missing_or_extra_observations_refuse_table_publication() {
             }
         });
         assert!(
-            render::tables(&data)
+            render::tables(&data, &HISTORICAL)
                 .unwrap_err()
                 .to_string()
                 .contains("missing or extra observation")
@@ -49,7 +53,7 @@ fn a_duplicate_position_cannot_replace_another_observation() {
         document["blocks"][0]["observations"][1] = document["blocks"][0]["observations"][0].clone();
     });
     assert!(
-        render::tables(&data)
+        render::tables(&data, &HISTORICAL)
             .unwrap_err()
             .to_string()
             .contains("schedule position")
@@ -69,7 +73,7 @@ fn case_changes_refuse_table_publication() {
                 _ => cases[0]["path"] = "standalone/foreign.lp".into(),
             }
         });
-        assert!(render::tables(&data).is_err());
+        assert!(render::tables(&data, &HISTORICAL).is_err());
     }
 }
 
@@ -85,7 +89,7 @@ fn incomplete_capture_is_not_a_timed_sample() {
         sample["capture"]["stop"] = "deadline".into();
     });
     assert!(
-        render::tables(&data)
+        render::tables(&data, &HISTORICAL)
             .unwrap_err()
             .to_string()
             .contains("capture is incomplete")
@@ -98,7 +102,7 @@ fn changed_reported_cost_refuses_table_publication() {
         document["blocks"][0]["observations"][0]["cost"] = serde_json::json!([99]);
     });
     assert!(
-        render::tables(&data)
+        render::tables(&data, &HISTORICAL)
             .unwrap_err()
             .to_string()
             .contains("display/cost qualification")
@@ -118,7 +122,7 @@ fn helper_success_does_not_replace_the_memory_child_exit() {
         sample["memory"]["exit_code"] = 0.into();
     });
     assert!(
-        render::tables(&data)
+        render::tables(&data, &HISTORICAL)
             .unwrap_err()
             .to_string()
             .contains("child-RSS receipt")
@@ -131,9 +135,35 @@ fn changed_executable_identity_refuses_table_publication() {
         document["blocks"][1]["binary_sha256"] = "0".repeat(64).into();
     });
     assert!(
-        render::tables(&data)
+        render::tables(&data, &HISTORICAL)
             .unwrap_err()
             .to_string()
             .contains("executable identity")
+    );
+}
+
+#[test]
+fn source_identity_is_checked_against_the_selected_dataset() {
+    let data = data::load(&HISTORICAL).unwrap();
+    let mut foreign = HISTORICAL;
+    foreign.sources.swap(0, 1);
+    assert!(
+        render::tables(&data, &foreign)
+            .unwrap_err()
+            .to_string()
+            .contains("executable identity")
+    );
+}
+
+#[test]
+fn join_policy_is_checked_against_the_selected_dataset() {
+    let data = data::load(&HISTORICAL).unwrap();
+    let mut foreign = HISTORICAL;
+    foreign.joins = [Some("indexed"), Some("indexed")];
+    assert!(
+        render::tables(&data, &foreign)
+            .unwrap_err()
+            .to_string()
+            .contains("join strategy")
     );
 }
