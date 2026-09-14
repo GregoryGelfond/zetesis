@@ -36,7 +36,7 @@ mod storage;
 mod selection;
 mod catalog;
 
-pub use catalog::{Catalog, CatalogFailure, Insertion, Lookup, OrderedRows};
+pub use catalog::{Catalog, CatalogFailure, ExtractedAtoms, Insertion, Lookup, OrderedRows};
 
 pub use selection::{Equality, Mask, Query, Selection};
 

@@ -20,8 +20,8 @@ use super::{
 ///
 /// The catalog owns every atom once; dictionary entries are stable source-cell
 /// positions. An immutable view borrows both owners, preventing mutation while
-/// any query, row or selection is live. Existing rows and equality IDs survive
-/// insertion; query identity remains the particular immutable Relation object.
+/// any query, row or selection is live. Within one extent, rows and equality IDs
+/// survive insertion; query identity remains the particular immutable Relation object.
 ///
 /// Byte limits cover the catalog object, atom-vector cells, row index, equality
 /// layout and operation scratch. The supplied atoms' nested payload allocations
@@ -46,6 +46,16 @@ pub struct Catalog {
     layout: Layout,
     payload: u128,
     construction: Storage,
+}
+
+/// Atoms transferred from a catalog, with its remaining reusable capacity.
+/// The vector retains insertion order and its exact original payload allocation.
+pub struct ExtractedAtoms {
+    /// The sole transferred atom owner. No atom or nested payload is cloned.
+    pub atoms: Vec<Atom>,
+    /// Remaining empty-catalog capacity and this extraction's charged work.
+    /// The transferred atom vector and payload now belong to the caller.
+    pub storage: Storage,
 }
 
 /// The outcome and operation-scoped accounting of one complete insertion.
@@ -171,6 +181,44 @@ impl Catalog {
     #[must_use]
     pub fn into_atoms(self) -> Vec<Atom> {
         self.atoms
+    }
+
+    /// Transfer all atoms and begin a new empty catalog extent.
+    ///
+    /// This retains only empty index, dictionary, column and ordered-view
+    /// capacities. The returned vector preserves original atom/value addresses.
+    /// Old row and equality IDs describe the extracted extent; subsequent inserts
+    /// assign IDs afresh. The exclusive borrow prevents any old view from living
+    /// across this boundary. No truth or identity is inherited by the new extent.
+    ///
+    /// Work is O(arity) buffer/root resets: ID metadata has no destructors, and
+    /// the atom vector is moved. Every check precedes the indivisible transfer.
+    ///
+    /// # Errors
+    /// Current shape/capacity and reset work must satisfy `limits`. On refusal,
+    /// atoms, IDs, indexes and the previous prepared view remain unchanged.
+    pub fn take_atoms(&mut self, limits: Limits) -> Result<ExtractedAtoms, CatalogFailure> {
+        let mut work = self.work(limits)?;
+        work.tick(self.layout.columns.len() as u128 + 11)
+            .map_err(|error| self.failed(error, &work))?;
+        let DictionaryIndex::Append(index) = &mut self.layout.index else {
+            unreachable!("catalog owns an append index");
+        };
+        let atoms = std::mem::take(&mut self.atoms);
+        self.rows.nodes.clear();
+        self.rows.path.clear();
+        self.rows.root = None;
+        index.nodes.clear();
+        index.path.clear();
+        index.root = None;
+        self.layout.dictionary.clear();
+        for column in &mut self.layout.columns {
+            column.clear();
+        }
+        self.ordered.clear();
+        self.ordered_valid = true;
+        self.payload = 0;
+        Ok(ExtractedAtoms { atoms, storage: self.receipt(&work) })
     }
 
     /// Borrow the current layout without rebuilding its dictionary or columns.

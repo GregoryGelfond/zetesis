@@ -588,3 +588,50 @@ fn nested_capacity_includes_owned_spare_storage() {
         atom.checked_payload_capacity_bytes().unwrap() > atom.values()[0].payload_bytes() as u128
     );
 }
+
+#[test]
+fn extraction_starts_a_new_catalog_extent() {
+    let mut catalog = owner();
+    catalog.insert(atom(9, 3), Limits::default()).unwrap();
+    catalog.insert(atom(1, 8), Limits::default()).unwrap();
+    catalog.prepare_ordered(Limits::default()).unwrap();
+    let address = catalog.atoms().as_ptr();
+    let extracted = catalog.take_atoms(Limits::default()).unwrap();
+    assert_eq!(extracted.atoms.as_ptr(), address);
+    assert_eq!(extracted.atoms, [atom(9, 3), atom(1, 8)]);
+    assert!(catalog.atoms().is_empty());
+    assert!(catalog.ordered().unwrap().is_empty());
+    assert!(catalog.view().columns().all(<[u32]>::is_empty));
+    assert_eq!(catalog.lookup(&atom(9, 3), Limits::default()).unwrap().row, None);
+    let empty_capacity = catalog.retained_bytes();
+    assert_eq!(extracted.storage.retained_bytes, empty_capacity);
+    assert!(empty_capacity > owner().retained_bytes());
+    let inserted = catalog.insert(atom(7, 2), Limits::default()).unwrap();
+    assert_eq!(inserted.row, 0);
+    assert_eq!(catalog.view().column(0), Some([0].as_slice()));
+    assert_eq!(catalog.view().column(1), Some([1].as_slice()));
+    assert_eq!(extracted.atoms, [atom(9, 3), atom(1, 8)]);
+}
+
+#[test]
+fn refused_extraction_preserves_the_prepared_extent() {
+    let mut catalog = owner();
+    catalog.insert(atom(9, 3), Limits::default()).unwrap();
+    catalog.prepare_ordered(Limits::default()).unwrap();
+    let required = 13;
+    let failure = match catalog.take_atoms(Limits {
+        max_work: required - 1, ..Limits::default()
+    }) {
+        Err(failure) => failure,
+        Ok(_) => panic!("reset must be admitted before moving atoms"),
+    };
+    assert_eq!(failure.error, Failure::Limit {
+        resource: Resource::Work, observed: required.into(), limit: (required - 1).into()
+    });
+    assert_eq!(catalog.atoms(), [atom(9, 3)]);
+    assert_eq!(catalog.ordered().unwrap().get(0), Some(&atom(9, 3)));
+    assert_eq!(catalog.view().column(0), Some([0].as_slice()));
+    assert_eq!(catalog.view().column(1), Some([1].as_slice()));
+    assert_eq!(catalog.take_atoms(Limits { max_work: required, ..Limits::default() })
+        .unwrap().atoms, [atom(9, 3)]);
+}
