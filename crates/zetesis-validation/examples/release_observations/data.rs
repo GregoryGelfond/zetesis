@@ -141,12 +141,7 @@ pub(super) fn validate(data: &Observations, dataset: &Dataset<'_>) -> Result<()>
     let schedule = Schedule::for_cases(PATHS.iter().map(|path| (*path).into()).collect(), 1, 3)?
         .with_memory(1)?;
     let slots = schedule.slots();
-    for (index, (block, label)) in data
-        .blocks
-        .iter()
-        .zip(dataset.labels)
-        .enumerate()
-    {
+    for (index, (block, label)) in data.blocks.iter().zip(dataset.labels).enumerate() {
         let version = usize::from(index == 1 || index == 2);
         require(
             block.label == label
