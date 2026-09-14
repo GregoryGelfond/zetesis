@@ -586,7 +586,7 @@ fn prepare_snapshot<'a>(
     let bounds = transport.catalog_limits(limits, catalog.len(), transport.payload_bytes)?;
     let ordered = catalog
         .ordered_ids_with(bounds, || work.tick())
-        .map_err(intern_stop)?;
+        .map_err(|error| intern_stop(&error))?;
     let available = transport.source_bytes(limits, catalog.storage_bytes(), catalog.len())?;
     let (committed, appender) = catalog.split();
     let rows = worlds::Rows::select(
@@ -792,7 +792,7 @@ impl State {
             .and_then(|bounds| {
                 self.catalog
                     .commit_with(bounds, || work.tick())
-                    .map_err(intern_stop)
+                    .map_err(|error| intern_stop(&error))
             });
         progress.record_source(work.source_statistics(0));
         // Pending published identities count even if vector-transfer admission
@@ -881,7 +881,7 @@ impl State {
         let atoms = self
             .catalog
             .into_atoms_with(bounds, || work.tick())
-            .map_err(intern_stop);
+            .map_err(|error| intern_stop(&error));
         progress.record_source(work.source_statistics(0));
         let catalog = AtomCatalog::new(atoms?);
         let transport = self.transport;
@@ -1032,7 +1032,7 @@ impl Transport {
         let bounds = self.catalog_limits(limits, count, self.payload_bytes)?;
         let entry = appender
             .entry_atom_with(atom, bounds, || work.tick())
-            .map_err(intern_stop)?;
+            .map_err(|error| intern_stop(&error))?;
         if let Some(id) = entry.position() {
             return u32::try_from(id).map_err(|_| Stop::CarrierLimit);
         }
@@ -1048,7 +1048,7 @@ impl Transport {
         let bounds = self.catalog_limits(limits, count + 1, total)?;
         let id = entry
             .insert_with(bounds, || work.tick())
-            .map_err(intern_stop)?;
+            .map_err(|error| intern_stop(&error))?;
         self.payload_bytes = total;
         u32::try_from(id).map_err(|_| Stop::CarrierLimit)
     }
@@ -1229,9 +1229,9 @@ fn zeros(length: usize) -> Result<Vec<u32>, Stop> {
     Ok(words)
 }
 
-fn intern_stop(error: InternFailure<Stop>) -> Stop {
+fn intern_stop(error: &InternFailure<Stop>) -> Stop {
     match error {
-        InternFailure::Stopped(stop) => stop,
+        InternFailure::Stopped(stop) => *stop,
         InternFailure::Atoms { .. } => Stop::CarrierLimit,
         InternFailure::Bytes { .. } | InternFailure::Allocation(_) | InternFailure::Overflow => {
             Stop::Allocation
