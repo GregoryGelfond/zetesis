@@ -117,6 +117,23 @@ theorem finite_sweeps_models_iff (cs : List (Constraint α)) (n : Nat)
     change Fits (sweeps cs n (sweep cs D)) v ∧ Models cs v ↔ _
     rw [ih, sweep_models_iff]
 
+/-- Intersecting candidate domains with any finite unconditional propagation
+    prefix preserves exactly their completions of the same immutable query.
+    Every query model fits the prefix by `finite_sweeps_models_iff` from `full`;
+    the converse discards only that additional domain condition. -/
+theorem unconditional_sweeps_models_iff (cs : List (Constraint α)) (n : Nat)
+    (D : Domains α) (v : Valuation α) :
+    Fits (fun a b => D a b ∧ sweeps cs n full a b) v ∧ Models cs v ↔
+      Fits D v ∧ Models cs v := by
+  constructor
+  · rintro ⟨fits, valid⟩
+    exact ⟨fun a => (fits a).1, valid⟩
+  · rintro ⟨fits, valid⟩
+    have baseFits : Fits (sweeps cs n full) v :=
+      ((finite_sweeps_models_iff cs n full v).mpr
+        ⟨fun _ => True.intro, valid⟩).1
+    exact ⟨fun a => ⟨fits a, baseFits a⟩, valid⟩
+
 theorem empty_domain_refutes (cs : List (Constraint α)) (n : Nat) (D : Domains α)
     (a : α) (empty : ∀ b, ¬ sweeps cs n D a b) :
     ¬ ∃ v, Fits D v ∧ Models cs v := by

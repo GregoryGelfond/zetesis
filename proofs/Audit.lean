@@ -822,6 +822,7 @@ import Zetesis
 #print axioms Zetesis.Propagation.sweep_retains_completion
 #print axioms Zetesis.Propagation.sweep_models_iff
 #print axioms Zetesis.Propagation.finite_sweeps_models_iff
+#print axioms Zetesis.Propagation.unconditional_sweeps_models_iff
 #print axioms Zetesis.Propagation.empty_domain_refutes
 #print axioms Zetesis.Propagation.parallel_round_models_iff
 #print axioms Zetesis.Propagation.stale_projection_retains_completion

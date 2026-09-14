@@ -506,7 +506,8 @@ fn search_assuming(
     search_seeded(state, cnf, assumptions, budget)
 }
 
-// The current CNF's unit clauses have been replayed. Both callers preserve
+// The current CNF's unit clauses are assigned, either freshly replayed or
+// retained with their unconditional propagation closure. Both callers preserve
 // independent clause and assumption validation at the completed witness boundary.
 fn search_seeded(
     state: &mut State,

@@ -45,11 +45,12 @@ pub struct ReductQueryStatistics {
     pub retained_bytes: u128,
 }
 
-/// Reusable worker allocations, without a second CNF or any retained truth claim.
+/// Reusable worker allocations and unconditional consequences of one exact CNF.
 ///
 /// Before each entered subset search, original truth is recomputed, parameters
-/// are replaced, and search truth and decisions are reset. A complete watch
-/// index is retained only for the exact prepared owner; a previous stop or candidate never authorizes logical reuse.
+/// are replaced, and candidate search truth and decisions are reset. A complete
+/// watch index and the CNF's unconditional unit-propagation closure are retained
+/// only for the exact prepared owner. No candidate-derived assignment is reused.
 /// Workspaces can move between owners and invalidate the index on every change.
 /// The weak identity retains no theory/CNF payload; its allocation control block
 /// remains outside named vector capacity, like the prepared owner's Arc metadata.

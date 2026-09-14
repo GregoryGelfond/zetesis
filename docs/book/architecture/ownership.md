@@ -71,12 +71,19 @@ restrictions. A scalar check reuses its `ReductWorkspace`; concurrent completion
 workers borrow the same encoding and own disjoint evaluation, parameter and
 search storage. Each worker reuses that storage within its batch; completion
 workers are currently created afresh for subsequent batches. Before each subset
-search, the worker clears candidate truth, decisions and ordering. A complete
-watch index can remain for the exact immutable encoding: after truth is cleared,
-its two distinct positions
-per non-unit clause are still valid. The prepared CNF's unit clauses and
-authenticated candidate parameters are assigned again. An interrupted index
-construction cannot be reused, and a different owner requires a new index.
+search, the worker clears candidate-dependent truth, decisions and ordering.
+It retains a complete watch index and a completed unconditional propagation
+prefix for the exact immutable encoding. These assignments follow from the
+encoded query's unit clauses before any candidate parameters are supplied;
+they need not be facts of the original ASP program. New authenticated parameters
+extend that prefix. A watch false in the prefix remains protected by another
+watch true there, so completed prefix events need not be replayed.
+
+An interrupted index construction cannot be reused. Interrupted unconditional
+propagation publishes no reusable prefix; a retry undoes it before recomputing.
+A completed unconditional conflict refutes every parameterization of this
+encoding, whereas a candidate conflict refutes only that query. A different
+owner invalidates both the index and the unconditional result.
 
 Every returned subset is independently checked against the original frozen
 reduct. Candidate restrictions do not change the theory whose answer sets are

@@ -1,4 +1,4 @@
-//! Assignment-independent watch topology for an authenticated immutable CNF.
+//! Retained watch topology and unconditional consequences of one immutable CNF.
 
 use std::mem::size_of;
 
@@ -8,16 +8,31 @@ use crate::{Assignment, Cnf, Incomplete, Literal};
 /// The caller binds this workspace to an exact immutable CNF owner and must
 /// invalidate it before changing owners. Shape equality is insufficient.
 /// `indexed` certifies that every nonunit clause has two distinct positions and
-/// exactly one list node for each position. It never certifies an assignment.
+/// exactly one list node for each position. The separate base capability records
+/// only unit consequences of that immutable CNF, before any query parameters.
 #[derive(Debug, Default)]
 pub(crate) struct PreparedWorkspace {
     workspace: Workspace,
     indexed: bool,
+    base: BaseClosure,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum BaseClosure {
+    /// No completed unconditional propagation result may be reused.
+    #[default]
+    Unprepared,
+    /// All assignments in this prefix follow from the immutable CNF alone.
+    /// Quiescence does not assert that every clause is satisfied.
+    Closed { trail_len: usize },
+    /// The immutable CNF's unit propagation contradicts, without parameters.
+    Refuted,
 }
 
 impl PreparedWorkspace {
     pub(crate) fn invalidate(&mut self) {
         self.indexed = false;
+        self.base = BaseClosure::Unprepared;
     }
 
     pub(crate) fn reserve(&mut self, variables: usize, clauses: usize) -> Result<(), Incomplete> {
@@ -61,9 +76,30 @@ impl PreparedWorkspace {
         budget: &mut Budget<'_, impl Quota>,
     ) -> Result<Option<Assignment>, Incomplete> {
         self.reset(cnf, budget)?;
-        if has_empty_clause {
+        if !self.prepare_base(cnf, units, has_empty_clause, budget)? {
+            // Each query encountering a retained contradiction records that
+            // conflict outcome; work/propagations count only executed steps.
             increment(&mut budget.statistics.conflicts)?;
             return Ok(None);
+        }
+        search_seeded(&mut self.workspace.0, cnf, assumptions, budget)
+    }
+
+    fn prepare_base(
+        &mut self,
+        cnf: &Cnf,
+        units: &[usize],
+        has_empty_clause: bool,
+        budget: &mut Budget<'_, impl Quota>,
+    ) -> Result<bool, Incomplete> {
+        match self.base {
+            BaseClosure::Closed { .. } => return Ok(true),
+            BaseClosure::Refuted => return Ok(false),
+            BaseClosure::Unprepared => (),
+        }
+        if has_empty_clause {
+            self.base = BaseClosure::Refuted;
+            return Ok(false);
         }
         let state = &mut self.workspace.0;
         for &clause in units {
@@ -73,11 +109,20 @@ impl PreparedWorkspace {
                 increment(&mut budget.statistics.propagations)?;
             }
             if !state.assign(literal) {
-                increment(&mut budget.statistics.conflicts)?;
-                return Ok(None);
+                self.base = BaseClosure::Refuted;
+                return Ok(false);
             }
         }
-        search_seeded(state, cnf, assumptions, budget)
+        // No candidate parameter has been assigned. A stopped propagation keeps
+        // Unprepared; reset must undo its whole unfinished trail before retry.
+        if !state.propagate(cnf, budget)? {
+            self.base = BaseClosure::Refuted;
+            return Ok(false);
+        }
+        self.base = BaseClosure::Closed {
+            trail_len: state.trail.len(),
+        };
+        Ok(true)
     }
 
     fn reset(&mut self, cnf: &Cnf, budget: &mut Budget<'_, impl Quota>) -> Result<(), Incomplete> {
@@ -96,19 +141,28 @@ impl PreparedWorkspace {
             return Ok(());
         }
         budget.tick()?;
+        let base_len = match self.base {
+            BaseClosure::Closed { trail_len } => trail_len,
+            BaseClosure::Unprepared => 0,
+            BaseClosure::Refuted => return Ok(()),
+        };
         // Every Some value has exactly one live trail entry. Admission precedes
-        // each pop/clear pair, so a stop preserves the remaining undo work.
-        // Never clear the trail while any corresponding truth remains assigned.
-        while let Some(&literal) = state.trail.last() {
+        // each pop/clear pair, preserving unfinished suffix undo on a stop.
+        // The completed base prefix is never a candidate's truth assumption.
+        while state.trail.len() > base_len {
             budget.tick()?;
+            let literal = state.trail.pop().ok_or(Incomplete::InvalidWitness)?;
             state.values[literal.variable()] = None;
-            state.trail.pop();
         }
         state.decisions.clear();
         state.order.clear();
         state.ranks.clear();
         state.ordering.clear();
-        state.propagation_head = 0;
+        // At the base fixpoint, a base-false watch is protected by a base-true
+        // other watch. That true watch never moves; later moved watches were
+        // nonfalse under a stronger query assignment and remain nonfalse after
+        // suffix undo. Thus no completed base event needs to be replayed.
+        state.propagation_head = base_len;
         state.next_position = 0;
         Ok(())
     }
@@ -117,3 +171,7 @@ impl PreparedWorkspace {
 #[cfg(test)]
 #[path = "../../tests/support/prepared_search.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "../../tests/support/prepared_base.rs"]
+mod base_tests;

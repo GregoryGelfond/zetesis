@@ -4112,97 +4112,102 @@
     },
     {
       "file": "Zetesis/Propagation.lean",
-      "line": 120,
+      "line": 124,
+      "name": "Zetesis.Propagation.unconditional_sweeps_models_iff"
+    },
+    {
+      "file": "Zetesis/Propagation.lean",
+      "line": 137,
       "name": "Zetesis.Propagation.empty_domain_refutes"
     },
     {
       "file": "Zetesis/Propagation.lean",
-      "line": 131,
+      "line": 148,
       "name": "Zetesis.Propagation.parallel_round_models_iff"
     },
     {
       "file": "Zetesis/Propagation.lean",
-      "line": 144,
+      "line": 161,
       "name": "Zetesis.Propagation.stale_projection_retains_completion"
     },
     {
       "file": "Zetesis/Propagation.lean",
-      "line": 165,
+      "line": 182,
       "name": "Zetesis.Propagation.enabled_gate_full_equivalence"
     },
     {
       "file": "Zetesis/Propagation.lean",
-      "line": 169,
+      "line": 186,
       "name": "Zetesis.Propagation.disabled_gate_leaves_inputs_free"
     },
     {
       "file": "Zetesis/Propagation.lean",
-      "line": 173,
+      "line": 190,
       "name": "Zetesis.Propagation.disabled_implication_must_not_be_enforced"
     },
     {
       "file": "Zetesis/Propagation.lean",
-      "line": 184,
+      "line": 201,
       "name": "Zetesis.Propagation.gate_rows_exact"
     },
     {
       "file": "Zetesis/Propagation.lean",
-      "line": 194,
+      "line": 211,
       "name": "Zetesis.Propagation.gate_constraint_exact"
     },
     {
       "file": "Zetesis/Propagation.lean",
-      "line": 200,
+      "line": 217,
       "name": "Zetesis.Propagation.full_and_equivalence_propagates_backwards"
     },
     {
       "file": "Zetesis/Propagation.lean",
-      "line": 213,
+      "line": 230,
       "name": "Zetesis.Propagation.subset_domains_exact"
     },
     {
       "file": "Zetesis/Propagation.lean",
-      "line": 218,
+      "line": 235,
       "name": "Zetesis.Propagation.strict_drop_exact"
     },
     {
       "file": "Zetesis/Propagation.lean",
-      "line": 235,
+      "line": 252,
       "name": "Zetesis.Propagation.proper_subset_domains_exact"
     },
     {
       "file": "Zetesis/Propagation.lean",
-      "line": 241,
+      "line": 258,
       "name": "Zetesis.Propagation.empty_candidate_has_no_proper_tested_world"
     },
     {
       "file": "Zetesis/Propagation.lean",
-      "line": 253,
+      "line": 270,
       "name": "Zetesis.Propagation.inner_query_exact"
     },
     {
       "file": "Zetesis/Propagation.lean",
-      "line": 265,
+      "line": 282,
       "name": "Zetesis.Propagation.propagated_conflict_establishes_stability"
     },
     {
       "file": "Zetesis/Propagation.lean",
-      "line": 286,
+      "line": 303,
       "name": "Zetesis.Propagation.propagated_conflict_with_auxiliaries"
     },
     {
       "file": "Zetesis/Propagation.lean",
-      "line": 311,
+      "line": 328,
       "name": "Zetesis.Propagation.parity_projection_is_quiescent"
     },
     {
       "file": "Zetesis/Propagation.lean",
-      "line": 327,
+      "line": 344,
       "name": "Zetesis.Propagation.quiescent_unknown_can_be_unsatisfiable"
     },
     {
       "file": "Zetesis/Propagation.lean",
-      "line": 341,
+      "line": 358,
       "name": "Zetesis.Propagation.unsupported_self_implication_is_not_stable"
     },
     {
@@ -6041,7 +6046,7 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "52deb9cad4d45b072bdbab210e5142e561b5330265c2ae26991421a0db34fdd5",
+    "Audit.lean": "9fb5606019c89f5f9bf41bb88a5cafb26ea53e40d3be5d68d6ac814cbf37fe32",
     "Zetesis.lean": "bfdab7379697a86c7b94c86f4bc2facd9556ce7f9fd62415c0506c2bfa803310",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
@@ -6138,7 +6143,7 @@
     "Zetesis/PositiveTheory.lean": "f0168dab6f0bba3a7df30abe4130871d99fff83d1aa0b2c9879530422f0d8a7a",
     "Zetesis/ProducerScheduling.lean": "2ebb6a591a9d6d22a5b43227e61c6a78c9bd2d7fc50b75c718fe1ce4ef1a6adb",
     "Zetesis/ProjectedConditionals.lean": "a420d26c76215b77f75cf33831dce80055a5d6cdb448db53f83c8951bf06dc4b",
-    "Zetesis/Propagation.lean": "f6b516c7a9f15e58f78342b47f96990a0a9e5a18a5df962ed8367e47fdad3368",
+    "Zetesis/Propagation.lean": "fc62487ece686b02daf4f2b229e90b266e09e624f8236fc70076ac427a2a745b",
     "Zetesis/QueryCompaction.lean": "47e08ca3b250dd8c0099635a836a7a3953cfb55863da57ac00324fa010b56c53",
     "Zetesis/RelationExtension.lean": "b14a16ce85275538d71b742aa5889f2c4fd0fbf27710b3b4de4f1b6cb14be2f0",
     "Zetesis/RuleFactorization.lean": "1fcd20b2f23dc91c91f9d2a7af2c47df212ef001815e868762c74de6e37b658c",

@@ -35,13 +35,23 @@ inputs represent M and original implication truth. It asserts N ⊆ M, at least
 one M atom absent from N, and every network root. A successful
 `EvaluationWorkspace` evaluation authenticates the original-truth parameters for
 the exact candidate and theory. Before each subset search, a worker replaces
-assumptions and clears its assignment, decision and ordering state. It can retain
-a completed watch index for the exact unchanged owner: clearing truth makes both
-valid watched positions available again. The prepared CNF's unit clauses and
-candidate parameters are then replayed.
+assumptions and clears its candidate-dependent assignment, decision and ordering
+state. It retains a completed watch index and unconditional unit-propagation
+prefix for the exact unchanged owner. Every prefix assignment follows from the
+encoded query before candidate parameters. A false prefix watch remains blocked
+by a true prefix watch after the candidate suffix is undone. Candidate parameters
+are supplied afresh; no candidate-derived truth enters the retained prefix.
 An incomplete index must be rebuilt; interruption during later propagation may
 preserve it only if each completed watch update leaves its links consistent.
+An unfinished unconditional prefix must be undone and recomputed. Only an
+unconditional conflict can refute later parameterizations without search.
 Returned subsets are checked independently against the original frozen reduct.
+
+`Propagation.unconditional_sweeps_models_iff` gives the domain-level preservation
+argument. Any model of the unchanged query fits its unconditional narrowing, so
+intersecting that narrowing with candidate restrictions preserves precisely the
+restricted models. This law does not establish the concrete unit-propagation
+schedule or its watch invariants.
 
 For A atoms, N DAG nodes, I implication nodes and R roots, conservative submitted
 bounds are 3A + N + 2I variables, 3N + 3I + 4A + R + 1 clauses, and

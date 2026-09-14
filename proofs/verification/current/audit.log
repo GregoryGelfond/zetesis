@@ -856,6 +856,7 @@
 'Zetesis.Propagation.sweep_retains_completion' depends on axioms: [propext]
 'Zetesis.Propagation.sweep_models_iff' depends on axioms: [propext]
 'Zetesis.Propagation.finite_sweeps_models_iff' depends on axioms: [propext]
+'Zetesis.Propagation.unconditional_sweeps_models_iff' depends on axioms: [propext]
 'Zetesis.Propagation.empty_domain_refutes' depends on axioms: [propext]
 'Zetesis.Propagation.parallel_round_models_iff' does not depend on any axioms
 'Zetesis.Propagation.stale_projection_retains_completion' does not depend on any axioms

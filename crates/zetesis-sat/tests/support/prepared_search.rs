@@ -4,7 +4,7 @@ use super::*;
 use crate::search::LocalQuota;
 use crate::{AdmissionLimits, Control, SearchLimits, SearchStatistics};
 
-fn budget(control: &Control, max_work: u64) -> Budget<'_, LocalQuota> {
+pub(super) fn budget(control: &Control, max_work: u64) -> Budget<'_, LocalQuota> {
     Budget {
         quota: LocalQuota,
         control,
@@ -25,7 +25,7 @@ fn disjunction() -> Cnf {
     .unwrap()
 }
 
-fn verify_registry(workspace: &PreparedWorkspace, cnf: &Cnf) {
+pub(super) fn verify_registry(workspace: &PreparedWorkspace, cnf: &Cnf) {
     assert!(workspace.indexed);
     let state = &workspace.workspace.0;
     let mut seen = vec![false; state.next.len()];
@@ -60,7 +60,7 @@ fn verify_registry(workspace: &PreparedWorkspace, cnf: &Cnf) {
     }
 }
 
-fn query(
+pub(super) fn query(
     workspace: &mut PreparedWorkspace,
     cnf: &Cnf,
     assumptions: &[Literal],
@@ -78,7 +78,7 @@ fn query(
     (result, meter.statistics)
 }
 
-fn assert_sat(result: &Solve, cnf: &Cnf, assumptions: &[Literal]) {
+pub(super) fn assert_sat(result: &Solve, cnf: &Cnf, assumptions: &[Literal]) {
     let Solve::Sat(assignment) = result else {
         panic!("expected SAT: {result:?}")
     };

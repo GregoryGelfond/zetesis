@@ -418,10 +418,16 @@ independent witness check and shared/worker storage accounting remain concrete
 obligations. Retaining a watch index additionally requires exact immutable-owner
 identity, valid distinct watched positions, complete indexing before reuse, and
 structurally complete watch updates at every interruption point. The prepared
-CNF's unit clauses and parameters must be replayed after clearing truth. The
-formula laws do not prove that registry lifecycle. Neither retained capacity nor
-reuse authenticates stale
-parameters.
+CNF's completed unconditional unit consequences may be retained while only the
+candidate-dependent assignment suffix is cleared. Interrupted unconditional
+propagation must publish no reusable result, and a candidate conflict must not
+become an unconditional refutation. A base-false watched literal must remain
+protected by a base-true other watch after suffix undo.
+`Propagation.unconditional_sweeps_models_iff` proves the abstract composition:
+intersecting arbitrary candidate domains with unconditional narrowing preserves
+exactly their completions of the same query. It does not prove the Rust unit
+propagator, its quiescence or the watch registry lifecycle. Neither retained
+capacity nor reuse authenticates stale parameters.
 
 [`PositiveTheory`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/PositiveTheory.lean)
 characterizes complete atomic-head theories with monotone bodies, including

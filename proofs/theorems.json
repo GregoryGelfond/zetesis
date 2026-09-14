@@ -4110,99 +4110,104 @@
     "line": 111
   },
   {
+    "name": "Zetesis.Propagation.unconditional_sweeps_models_iff",
+    "file": "Zetesis/Propagation.lean",
+    "line": 124
+  },
+  {
     "name": "Zetesis.Propagation.empty_domain_refutes",
     "file": "Zetesis/Propagation.lean",
-    "line": 120
+    "line": 137
   },
   {
     "name": "Zetesis.Propagation.parallel_round_models_iff",
     "file": "Zetesis/Propagation.lean",
-    "line": 131
+    "line": 148
   },
   {
     "name": "Zetesis.Propagation.stale_projection_retains_completion",
     "file": "Zetesis/Propagation.lean",
-    "line": 144
+    "line": 161
   },
   {
     "name": "Zetesis.Propagation.enabled_gate_full_equivalence",
     "file": "Zetesis/Propagation.lean",
-    "line": 165
+    "line": 182
   },
   {
     "name": "Zetesis.Propagation.disabled_gate_leaves_inputs_free",
     "file": "Zetesis/Propagation.lean",
-    "line": 169
+    "line": 186
   },
   {
     "name": "Zetesis.Propagation.disabled_implication_must_not_be_enforced",
     "file": "Zetesis/Propagation.lean",
-    "line": 173
+    "line": 190
   },
   {
     "name": "Zetesis.Propagation.gate_rows_exact",
     "file": "Zetesis/Propagation.lean",
-    "line": 184
+    "line": 201
   },
   {
     "name": "Zetesis.Propagation.gate_constraint_exact",
     "file": "Zetesis/Propagation.lean",
-    "line": 194
+    "line": 211
   },
   {
     "name": "Zetesis.Propagation.full_and_equivalence_propagates_backwards",
     "file": "Zetesis/Propagation.lean",
-    "line": 200
+    "line": 217
   },
   {
     "name": "Zetesis.Propagation.subset_domains_exact",
     "file": "Zetesis/Propagation.lean",
-    "line": 213
+    "line": 230
   },
   {
     "name": "Zetesis.Propagation.strict_drop_exact",
     "file": "Zetesis/Propagation.lean",
-    "line": 218
+    "line": 235
   },
   {
     "name": "Zetesis.Propagation.proper_subset_domains_exact",
     "file": "Zetesis/Propagation.lean",
-    "line": 235
+    "line": 252
   },
   {
     "name": "Zetesis.Propagation.empty_candidate_has_no_proper_tested_world",
     "file": "Zetesis/Propagation.lean",
-    "line": 241
+    "line": 258
   },
   {
     "name": "Zetesis.Propagation.inner_query_exact",
     "file": "Zetesis/Propagation.lean",
-    "line": 253
+    "line": 270
   },
   {
     "name": "Zetesis.Propagation.propagated_conflict_establishes_stability",
     "file": "Zetesis/Propagation.lean",
-    "line": 265
+    "line": 282
   },
   {
     "name": "Zetesis.Propagation.propagated_conflict_with_auxiliaries",
     "file": "Zetesis/Propagation.lean",
-    "line": 286
+    "line": 303
   },
   {
     "name": "Zetesis.Propagation.parity_projection_is_quiescent",
     "file": "Zetesis/Propagation.lean",
-    "line": 311
+    "line": 328
   },
   {
     "name": "Zetesis.Propagation.quiescent_unknown_can_be_unsatisfiable",
     "file": "Zetesis/Propagation.lean",
-    "line": 327
+    "line": 344
   },
   {
     "name": "Zetesis.Propagation.unsupported_self_implication_is_not_stable",
     "file": "Zetesis/Propagation.lean",
-    "line": 341
+    "line": 358
   },
   {
     "name": "Zetesis.QueryCompaction.literal_negated_eval",
