@@ -96,6 +96,8 @@ struct Data {
     theory: Theory,
     cnf: Cnf,
     implications: Vec<usize>,
+    units: Vec<usize>,
+    has_empty_clause: bool,
     statistics: ReductPreparationStatistics,
 }
 
@@ -107,7 +109,9 @@ impl PreparedReduct {
     /// 7N+7I+10A+R literals. CNF reservations are clipped to declared admission
     /// limits; actual submissions remain checked. Metadata reservations are
     /// finite and byte-admitted before allocation, then checked against actual
-    /// capacities. No construction vector grows after this reservation stage.
+    /// capacities. After encoding, a charged scan counts the actual unit clauses
+    /// before reserving their shared index, followed by a charged collection scan.
+    /// The resulting unit indices and empty-clause fact refer to that exact CNF.
     ///
     /// Failure publishes no prepared owner and retains consumed work and
     /// observed capacities. Arc allocation follows the existing infallible
@@ -173,6 +177,8 @@ impl PreparedReduct {
                 theory: theory.clone(),
                 cnf: Cnf::empty(shape.inputs, limits.admission)?,
                 implications: Vec::new(),
+                units: Vec::new(),
+                has_empty_clause: false,
                 statistics: ReductPreparationStatistics::default(),
             },
             nodes: Vec::new(),
@@ -181,7 +187,8 @@ impl PreparedReduct {
         };
         let result = builder
             .reserve(&shape, limits, statistics)
-            .and_then(|()| builder.encode(budget));
+            .and_then(|()| builder.encode(budget))
+            .and_then(|()| builder.initial_clauses(limits.max_bytes, budget, statistics));
         // A partially failed reservation still exposes actual retained capacity.
         builder.record(statistics);
         result?;
@@ -220,7 +227,8 @@ impl Data {
     fn bytes(&self) -> u128 {
         size_of::<Self>() as u128
             + self.cnf.retained_bytes()
-            + self.implications.capacity() as u128 * size_of::<usize>() as u128
+            + (self.implications.capacity() as u128 + self.units.capacity() as u128)
+                * size_of::<usize>() as u128
     }
 }
 
@@ -313,10 +321,46 @@ impl Builder {
     fn bytes(&self) -> u128 {
         size_of::<Self>() as u128
             + self.data.cnf.retained_bytes()
-            + self.data.implications.capacity() as u128 * size_of::<usize>() as u128
+            + (self.data.implications.capacity() as u128 + self.data.units.capacity() as u128)
+                * size_of::<usize>() as u128
             + self.nodes.capacity() as u128 * size_of::<Encoded>() as u128
             + self.strict.capacity() as u128 * size_of::<Literal>() as u128
             + self.gates.capacity() as u128 * size_of::<((usize, usize), Literal)>() as u128
+    }
+
+    fn initial_clauses(
+        &mut self,
+        max_bytes: u64,
+        budget: &mut Budget<'_, impl Quota>,
+        statistics: &mut ReductPreparationStatistics,
+    ) -> Result<(), Incomplete> {
+        let mut count = 0_usize;
+        for clause in self.data.cnf.clauses() {
+            budget.tick()?;
+            if clause.len() == 1 {
+                count = count.checked_add(1).ok_or(Incomplete::CounterOverflow)?;
+            }
+        }
+        // This vector is still empty: requested slots are checked before growth,
+        // and actual allocator capacity is recorded before any later refusal.
+        bound(
+            self.bytes() + count as u128 * size_of::<usize>() as u128,
+            max_bytes,
+        )?;
+        self.data
+            .units
+            .try_reserve_exact(count)
+            .map_err(|_| Incomplete::Allocation)?;
+        self.observe(max_bytes, statistics)?;
+        for (index, clause) in self.data.cnf.clauses().enumerate() {
+            budget.tick()?;
+            match clause.len() {
+                0 => self.data.has_empty_clause = true,
+                1 => self.data.units.push(index),
+                _ => (),
+            }
+        }
+        Ok(())
     }
 
     fn record(&self, statistics: &mut ReductPreparationStatistics) {
@@ -419,3 +463,7 @@ fn bound(required: u128, limit: u64) -> Result<(), Incomplete> {
 pub(crate) const fn retained_header_bytes() -> u128 {
     size_of::<Data>() as u128
 }
+
+#[cfg(test)]
+#[path = "../tests/support/prepared_units.rs"]
+mod unit_tests;

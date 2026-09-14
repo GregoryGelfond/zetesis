@@ -34,9 +34,14 @@ and exact immutable theory owner. Original atom slots represent N; separate
 inputs represent M and original implication truth. It asserts N ⊆ M, at least
 one M atom absent from N, and every network root. A successful
 `EvaluationWorkspace` evaluation authenticates the original-truth parameters for
-the exact candidate and theory. Each worker replaces assumptions and resets its
-search arrays. Returned subsets are checked independently against the original
-frozen reduct.
+the exact candidate and theory. Before each subset search, a worker replaces
+assumptions and clears its assignment, decision and ordering state. It can retain
+a completed watch index for the exact unchanged owner: clearing truth makes both
+valid watched positions available again. The prepared CNF's unit clauses and
+candidate parameters are then replayed.
+An incomplete index must be rebuilt; interruption during later propagation may
+preserve it only if each completed watch update leaves its links consistent.
+Returned subsets are checked independently against the original frozen reduct.
 
 For A atoms, N DAG nodes, I implication nodes and R roots, conservative submitted
 bounds are 3A + N + 2I variables, 3N + 3I + 4A + R + 1 clauses, and
@@ -47,7 +52,8 @@ returned-witness verification retain their independent per-call ceilings.
 
 The Lean laws concern formulas and interpretations. They do not prove Rust DAG
 indices, checked dimensions, Tseitin clauses, assumption/backtracking behavior,
-owner authentication, allocation, quotas or the SAT implementation. Those remain
+watch-index retention, owner authentication, allocation, quotas or the SAT
+implementation. Those remain
 representation/execution obligations, with differential and failure controls.
 The fixed network may be larger and propagate more slowly than a freshly
 simplified reduct; reuse alone proves no performance gain.

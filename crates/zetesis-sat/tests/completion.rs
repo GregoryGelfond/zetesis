@@ -111,6 +111,49 @@ fn collect(
     (result, search.statistics())
 }
 
+// Worker chunks can retain different moved watches and perform different cold
+// indexing, undo, propagation and branching work. Compare the semantic receipts
+// across routes; exact operational counters require the same chunk schedule.
+fn assert_same_family_accounting(
+    actual: &(Vec<Vec<usize>>, zetesis_sat::Statistics),
+    reference: &(Vec<Vec<usize>>, zetesis_sat::Statistics),
+) {
+    assert_eq!(actual.0, reference.0);
+    let (actual, reference) = (&actual.1, &reference.1);
+    assert_eq!(actual.projections, reference.projections);
+    assert_eq!(
+        (
+            actual.candidate_queries,
+            actual.candidate_restrictions,
+            actual.candidates,
+            actual.countermodel_queries,
+            actual.countermodels,
+            actual.stable_models
+        ),
+        (
+            reference.candidate_queries,
+            reference.candidate_restrictions,
+            reference.candidates,
+            reference.countermodel_queries,
+            reference.countermodels,
+            reference.stable_models
+        ),
+    );
+    assert_eq!(actual.support, reference.support);
+    assert_eq!(actual.certified, reference.certified);
+    assert_eq!(actual.reduct.preparation, reference.reduct.preparation);
+    assert_eq!(actual.reduct.original_work, reference.reduct.original_work);
+    assert_eq!(
+        actual.reduct.parameter_work,
+        reference.reduct.parameter_work
+    );
+    // These fixtures admit the same shape, so retained capacity must agree too.
+    assert_eq!(
+        actual.reduct.peak_workspace_bytes,
+        reference.reduct.peak_workspace_bytes
+    );
+}
+
 #[test]
 fn parallel_completion_matches_reference_and_scalar_order_across_reused_theories_and_batches() {
     let mut parallel = executor(3);
@@ -156,7 +199,7 @@ fn parallel_completion_matches_reference_and_scalar_order_across_reused_theories
                         })
                         .collect();
                     let actual = collect(&t, 3, &mut parallel);
-                    assert_eq!(actual, collect(&t, 3, &mut scalar));
+                    assert_same_family_accounting(&actual, &collect(&t, 3, &mut scalar));
                     assert_eq!(actual.0.into_iter().collect::<BTreeSet<_>>(), expected);
                 }
             }
@@ -168,9 +211,9 @@ fn parallel_completion_matches_reference_and_scalar_order_across_reused_theories
         theory(0, vec![Node::False], vec![0]),
     ] {
         for count in [1, 3, 8, 32] {
-            assert_eq!(
-                collect(&t, count, &mut parallel),
-                collect(&t, count, &mut scalar)
+            assert_same_family_accounting(
+                &collect(&t, count, &mut parallel),
+                &collect(&t, count, &mut scalar),
             );
         }
     }
@@ -188,12 +231,14 @@ fn partial(limits: Limits, executor: &mut CompletionExecutor) -> StableModels {
 
 #[test]
 fn shared_work_ceiling_counts_preparation_before_residual_workers() {
-    let mut scalar = executor(1);
-    let mut complete = partial(Limits::default(), &mut scalar);
+    // Measure the exact same four-worker, three-candidate cold prestate that
+    // each limited replay uses. A one-worker chunk has a different warm cost.
+    let mut parallel = executor(4);
+    let mut complete = partial(Limits::default(), &mut parallel);
     let proposed = complete.statistics().search;
     assert_eq!(
         complete
-            .next_batch_with_completion(batch(3), &mut scalar, residual)
+            .next_batch_with_completion(batch(3), &mut parallel, residual)
             .unwrap()
             .len(),
         3
@@ -202,7 +247,8 @@ fn shared_work_ceiling_counts_preparation_before_residual_workers() {
     let cold = complete.statistics().reduct.preparation.unwrap();
     assert!(cold.work > 0);
     assert!(finished.work > proposed.work);
-    let mut parallel = executor(4);
+    let progress = parallel.last_statistics().unwrap();
+    assert_eq!((progress.workers, progress.effective_workers), (4, 3));
     for repeat in 0..8 {
         for extra in [
             0,
@@ -543,8 +589,16 @@ fn fixed_scratch_envelopes_cap_concurrency_and_release_between_irregular_calls()
             )
             .unwrap();
             let reference = collect(&t, 3, &mut executor(1));
+            let mut previous = None;
             for _ in 0..2 {
-                assert_eq!(collect(&t, 3, &mut pool), reference);
+                let actual = collect(&t, 3, &mut pool);
+                assert_same_family_accounting(&actual, &reference);
+                if let Some(previous) = &previous {
+                    // Same worker/byte envelope and batch sequence: retain the
+                    // exact work, decisions, propagations and conflict receipt.
+                    assert_eq!(&actual, previous);
+                }
+                previous = Some(actual);
                 let progress = pool.last_statistics().unwrap();
                 assert!(progress.peak_scratch_bytes <= ceiling);
                 assert!(

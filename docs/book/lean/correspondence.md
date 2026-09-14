@@ -413,9 +413,15 @@ subset; implication retains its original candidate-truth guard. The countermodel
 law covers every asserted root and a proper subset, while original candidate
 satisfaction remains separate. Rust `PreparedReduct` binds one immutable theory
 and takes parameters from its authenticated `FormulaEvaluation`. Its CNF
-encoding, subset/properness clauses, replaced assumptions, search reset,
+encoding, subset/properness clauses, replaced assumptions, assignment reset,
 independent witness check and shared/worker storage accounting remain concrete
-obligations. Neither retained capacity nor reuse authenticates stale parameters.
+obligations. Retaining a watch index additionally requires exact immutable-owner
+identity, valid distinct watched positions, complete indexing before reuse, and
+structurally complete watch updates at every interruption point. The prepared
+CNF's unit clauses and parameters must be replayed after clearing truth. The
+formula laws do not prove that registry lifecycle. Neither retained capacity nor
+reuse authenticates stale
+parameters.
 
 [`PositiveTheory`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/PositiveTheory.lean)
 characterizes complete atomic-head theories with monotone bodies, including

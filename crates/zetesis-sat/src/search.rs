@@ -1,5 +1,7 @@
 mod cursor;
 mod probe;
+mod prepared;
+pub(crate) use prepared::PreparedWorkspace;
 mod quota;
 mod shared_budget;
 mod watch_node;
@@ -282,18 +284,21 @@ impl State {
                         return Ok(false);
                     }
                 }
-                _ => {
-                    self.positions[clause] = [0, 1];
-                    // CNF admission bounds twice the submitted clause count.
-                    // Thus both node indices and their successors fit usize.
-                    let first = WatchNode::new(clause * 2)?;
-                    let second = WatchNode::new(clause * 2 + 1)?;
-                    self.link(first, cnf.clause_at(clause).at(0));
-                    self.link(second, cnf.clause_at(clause).at(1));
-                }
+                _ => self.index_clause(cnf, clause)?,
             }
         }
         Ok(true)
+    }
+
+    fn index_clause(&mut self, cnf: &Cnf, clause: usize) -> Result<(), Incomplete> {
+        // Only clauses with at least two distinct literals receive watches.
+        // Admission bounds twice the submitted clause count and its successors.
+        let first = WatchNode::new(clause * 2)?;
+        let second = WatchNode::new(clause * 2 + 1)?;
+        self.positions[clause] = [0, 1];
+        self.link(first, cnf.clause_at(clause).at(0));
+        self.link(second, cnf.clause_at(clause).at(1));
+        Ok(())
     }
 
     fn propagate(
@@ -498,6 +503,17 @@ fn search_assuming(
         increment(&mut budget.statistics.conflicts)?;
         return Ok(None);
     }
+    search_seeded(state, cnf, assumptions, budget)
+}
+
+// The current CNF's unit clauses have been replayed. Both callers preserve
+// independent clause and assumption validation at the completed witness boundary.
+fn search_seeded(
+    state: &mut State,
+    cnf: &Cnf,
+    assumptions: &[Literal],
+    budget: &mut Budget<'_, impl Quota>,
+) -> Result<Option<Assignment>, Incomplete> {
     // Parameters are level-zero assignments: every decision starts after them
     // on the trail, so chronological backtracking never retracts a parameter.
     for &literal in assumptions {

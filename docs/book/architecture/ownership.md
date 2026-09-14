@@ -69,9 +69,19 @@ mask cannot parameterize the query.
 The coordinator owns this prepared encoding across batches and candidate
 restrictions. A scalar check reuses its `ReductWorkspace`; concurrent completion
 workers borrow the same encoding and own disjoint evaluation, parameter and
-search storage. Every query resets logical state, and every returned subset is
-independently checked against the original frozen reduct. Candidate restrictions
-do not change the theory whose answer sets are being sought.
+search storage. Each worker reuses that storage within its batch; completion
+workers are currently created afresh for subsequent batches. Before each subset
+search, the worker clears candidate truth, decisions and ordering. A complete
+watch index can remain for the exact immutable encoding: after truth is cleared,
+its two distinct positions
+per non-unit clause are still valid. The prepared CNF's unit clauses and
+authenticated candidate parameters are assigned again. An interrupted index
+construction cannot be reused, and a different owner requires a new index.
+
+Every returned subset is independently checked against the original frozen
+reduct. Candidate restrictions do not change the theory whose answer sets are
+being sought. Retained watch positions carry structural information, not a truth
+claim about a previous candidate.
 
 The original candidate encoding and the reduct encoding have independent
 dimension limits. Their work shares the enumeration's cumulative search budget.

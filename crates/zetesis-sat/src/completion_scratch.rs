@@ -122,6 +122,7 @@ fn counts(
     // Every node may be an implication. Bounds cover the parametric builder,
     // not the former candidate-simplified encoder. Shape admission can refuse
     // before these upper bounds are reached; no preparation occurs here.
+    // At most every retained clause contributes one shared unit index.
     let variables = (3 * atoms + 3 * nodes).min(limits.reduct_admission.max_variables as u128);
     let clauses =
         (6 * nodes + 4 * atoms + roots + 1).min(limits.reduct_admission.max_clauses as u128);
@@ -130,7 +131,7 @@ fn counts(
     Ok(CompletionScratch {
         shared_bytes: narrow(
             crate::prepared_reduct::retained_header_bytes()
-                + (clauses + literals + nodes) * size_of::<usize>() as u128,
+                + (2 * clauses + literals + nodes) * size_of::<usize>() as u128,
         )?,
         query_bytes: narrow(query_bytes(atoms, nodes, atoms + nodes, variables, clauses))?,
         result_bytes: narrow(result_bytes(u128::from(candidates)))?,

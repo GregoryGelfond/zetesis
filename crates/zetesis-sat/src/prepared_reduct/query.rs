@@ -1,6 +1,9 @@
 //! Per-worker parameter, truth and search ownership for one immutable query.
 
-use std::mem::size_of;
+use std::{
+    mem::size_of,
+    sync::{Arc, Weak},
+};
 
 use zetesis_ferraris::{
     EvaluationError, EvaluationLimits, EvaluationWorkspace, FormulaEvaluation, Interpretation,
@@ -44,15 +47,18 @@ pub struct ReductQueryStatistics {
 
 /// Reusable worker allocations, without a second CNF or any retained truth claim.
 ///
-/// Every query recomputes original truth, replaces parameters, and resets search
-/// state. A previous stop, candidate, or even theory does not authorize reuse of
-/// its logical state. Workspaces can move between prepared owners; each check
-/// authenticates the candidate against the owner it actually receives.
+/// Before each entered subset search, original truth is recomputed, parameters
+/// are replaced, and search truth and decisions are reset. A complete watch
+/// index is retained only for the exact prepared owner; a previous stop or candidate never authorizes logical reuse.
+/// Workspaces can move between owners and invalidate the index on every change.
+/// The weak identity retains no theory/CNF payload; its allocation control block
+/// remains outside named vector capacity, like the prepared owner's Arc metadata.
 #[derive(Debug, Default)]
 pub struct ReductWorkspace {
     evaluation: EvaluationWorkspace,
     parameters: Vec<Literal>,
-    search: search::Workspace,
+    search: search::PreparedWorkspace,
+    owner: Weak<super::Data>,
 }
 
 impl ReductWorkspace {
@@ -229,10 +235,18 @@ impl PreparedReduct {
                 .ok_or(Incomplete::CounterOverflow)?;
             parameters?;
             increment(&mut statistics.countermodel_queries)?;
-            let result =
-                workspace
-                    .search
-                    .query_assuming(&prepared.cnf, &workspace.parameters, budget);
+            let owner = Arc::downgrade(prepared);
+            if !workspace.owner.ptr_eq(&owner) {
+                workspace.search.invalidate();
+                workspace.owner = owner;
+            }
+            let result = workspace.search.query(
+                &prepared.cnf,
+                &prepared.units,
+                prepared.has_empty_clause,
+                &workspace.parameters,
+                budget,
+            );
             ferraris::checked_reduct_result(
                 self.theory(),
                 candidate,
@@ -279,11 +293,11 @@ fn header_bytes() -> u128 {
     // Nested workspace methods already include their headers.
     (size_of::<ReductWorkspace>()
         - size_of::<EvaluationWorkspace>()
-        - size_of::<search::Workspace>()) as u128
+        - size_of::<search::PreparedWorkspace>()) as u128
 }
 
 fn reserve_query(
-    search: &mut search::Workspace,
+    search: &mut search::PreparedWorkspace,
     parameters: &mut Vec<Literal>,
     prepared: &super::Data,
     base: u128,
@@ -313,3 +327,7 @@ fn reserve_query(
         max_bytes,
     )
 }
+
+#[cfg(test)]
+#[path = "../../tests/support/prepared_identity.rs"]
+mod tests;

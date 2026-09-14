@@ -252,7 +252,7 @@ fn refused_preparation_capacity_is_not_reported_as_allocated_peak() {
 }
 
 #[test]
-fn every_query_work_stop_allows_a_fresh_complete_retry() {
+fn every_cold_query_work_stop_allows_a_complete_retry() {
     let input = theory(
         2,
         vec![Node::Atom(0), Node::Atom(1), Node::Or(0, 1)],
@@ -274,6 +274,9 @@ fn every_query_work_stop_allows_a_fresh_complete_retry() {
     assert!(matches!(complete, Check::NonMinimal(_)));
     let retained = workspace.retained_bytes();
     for max_work in 0..full.statistics.search.work {
+        // Cold and warm queries deliberately perform different work. Recreate
+        // the same cold prestate for each exact refusal boundary.
+        let mut workspace = ReductWorkspace::default();
         let (result, prefix) = prepared.check(
             &current,
             &mut workspace,
@@ -305,7 +308,7 @@ fn every_query_work_stop_allows_a_fresh_complete_retry() {
     }
     let (exact, receipt) = prepared.check(
         &current,
-        &mut workspace,
+        &mut ReductWorkspace::default(),
         Limits {
             search: SearchLimits {
                 max_work: full.statistics.search.work,

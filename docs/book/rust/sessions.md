@@ -112,8 +112,13 @@ General completion lazily constructs one `PreparedReduct` for the exact original
 theory. Subsequent candidates supply membership and authenticated original-truth
 parameters, rather than rebuilding the encoding. Scalar checking reuses one
 workspace; Rayon workers borrow the shared encoding with disjoint query state.
-Returned countermodels still undergo independent frozen-reduct validation.
-Candidate restrictions do not replace this original owner.
+A workspace retains a complete watch index only for the exact prepared owner.
+Before each subset search, it clears assignments and decisions and supplies the
+prepared CNF's unit clauses and candidate parameters anew. Workers reuse their
+index within a completion batch; the coordinator retains the encoding across
+batches. Returned countermodels
+still undergo independent frozen-reduct validation. Candidate restrictions do
+not replace this original owner.
 
 `SolveConfig::max_reduct_bytes` bounds cold preparation and each query's named
 storage separately. `max_completion_scratch_bytes` bounds the shared prepared
