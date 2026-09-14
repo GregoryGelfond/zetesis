@@ -46,16 +46,18 @@ mdBook invokes rustdoc from a temporary directory. The command exports the
 checkout's selected toolchain so examples use the same compiler as their
 dependencies, even when the machine's default toolchain differs.
 
-`scripts/check.sh book` reuses compilation in `target/book-tests-gpu`, but passes
-rustdoc a fresh view containing only libraries named by that successful Cargo
-build's JSON messages. This excludes stale competing rlibs from earlier source
-revisions without deleting the incremental build directory. The maintained
+`scripts/check.sh book` explicitly reuses the checkout's ordinary `target`
+directory and passes rustdoc a fresh view containing only libraries named by that
+successful Cargo build's JSON messages. This excludes stale competing rlibs from
+earlier source revisions without deleting the shared build cache. The maintained
 `book::select` operation checks required crates and complete build output;
 `Libraries::publish` confines the regular files to that build directory and
 hard-links them into the new view. Do not modify build artifacts concurrently
 with the check. The view is removed afterward; its Cargo messages remain under
-`target/book-views/run.*`. The ordinary application and API documentation can
-continue using `target`.
+`target/book-views/run.*`. Application, API documentation and book checks can
+reuse this checkout's ordinary target. Other source checkouts and the independent
+instrumented coverage populations keep separate build directories, as described
+in the [build storage policy](https://github.com/GregoryGelfond/zetesis/blob/main/CONTRIBUTING.md#build-storage).
 
 The examples check their stated contracts and propagate typed failures. No GPU
 support or performance claim follows from these portable example tests.

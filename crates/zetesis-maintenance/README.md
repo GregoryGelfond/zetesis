@@ -161,8 +161,9 @@ hard-links the set into a fresh destination. Existing views are never overwritte
 a linking failure leaves an incomplete view that must not be used. This validates
 the artifact list, not compiler execution or concurrent filesystem stability.
 
-The book gate uses this library through `book-libraries`, keeping its incremental
-build directory while excluding stale libraries from rustdoc's search path.
+The book gate uses this library through `book-libraries`, reusing the checkout's
+ordinary Cargo target while excluding stale libraries from rustdoc's search path.
+Other source checkouts and instrumented coverage populations keep separate targets.
 The caller must leave artifacts immutable during the check. The serialized input
 and path-count limits bound representation size, not artifact payload size or RSS;
 hard-link publication does not read or duplicate those payloads.

@@ -161,7 +161,7 @@ fn cargo(arguments: &[String]) -> Result<(), String> {
         if has(arguments, "--message-format=json-render-diagnostics") {
             let directory = env::current_dir()
                 .map_err(|error| error.to_string())?
-                .join("target/book-tests-gpu/debug/deps");
+                .join("target/debug/deps");
             fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
             for name in ["zetesis_cli", "zetesis_solve", "zetesis_validation"] {
                 let file = directory.join(format!("lib{name}-current.rlib"));
@@ -239,7 +239,7 @@ fn execute(role: &str, arguments: &[String]) -> Result<(), String> {
     }
     if let Ok(expected) = env::var("CHECK_TEST_BOOK_TOOLCHAIN")
         && ((role == "mdbook" && has(arguments, "test"))
-            || (role == "cargo" && has(arguments, "target/book-tests-gpu")))
+            || (role == "cargo" && has(arguments, "--message-format=json-render-diagnostics")))
         && env::var("RUSTUP_TOOLCHAIN").ok().as_deref() != Some(expected.as_str())
     {
         return fail("temporary book compiler selected a different toolchain");
