@@ -33,6 +33,29 @@ without an acceptance check.
 See [the restriction API](../src/ferraris.rs) and
 [transaction tests](../tests/restrictions.rs).
 
+## Initial necessary support
+
+Before candidate enumeration, the optional complete-theory support attempt can
+combine ordinary disjunctive producers with exact atomic choices. It requires
+at least one ordinary disjunctive head. An ordinary producer witnesses one true
+head with a true body and false other distinct heads; a choice witnesses its
+own atom whenever its original body is true. A single opaque asserted head
+declines the whole attempt. Choice-only theories keep their existing route.
+
+`statistics().support` distinguishes Applied, NotApplicable, FormulaLimit and
+EncodingLimit and records construction/encoding work within cumulative search
+work. Formula/encoding dimension refusal retains the original query; work,
+allocation or control failure stops instead of silently resetting the quota.
+Encoding rollback preserves the original CNF prefix. No restriction is inserted
+into the original theory or its reduct, and supported positive cycles still need
+exact minimality checks. This extension reduces proposals on some mixed-choice
+families; it does not establish a general runtime improvement or eliminate the
+separate relational powerset candidate path.
+
+See [construction](../../zetesis-ferraris/src/support.rs),
+[route/family controls](../tests/candidate_support.rs) and
+[accounted optional admission](../src/candidate_support.rs).
+
 ## Failed-literal probing
 
 The initial candidate region skips probing. After a successful restriction,

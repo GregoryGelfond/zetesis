@@ -1,4 +1,4 @@
-//! Necessary support for complete theories with ordinary disjunctive heads.
+//! Necessary support for complete mixed ordinary/atomic-choice theories.
 
 use crate::{AdmissionError, AdmissionLimits, Node, Theory};
 use zetesis_cpu::{Control, Stop};
@@ -6,6 +6,7 @@ use zetesis_cpu::{Control, Stop};
 /// Bounds for constructing a candidate-only support restriction. Formula
 /// dimensions bound retained nodes, roots and atom-indexed scratch. Work counts
 /// original-node/root visits, head traversal, construction and final validation.
+/// A root visit includes bounded exact atomic-choice recognition.
 #[derive(Clone, Copy, Debug)]
 pub struct SupportLimits {
     /// Bounds on the resulting restriction, including copied original nodes.
@@ -45,8 +46,8 @@ impl From<Stop> for SupportError {
 
 /// A complete construction or conservative refusal, with work retained on every
 /// path. `None` means an asserted head lies outside the certified grammar, or
-/// no asserted head contains a syntactic disjunction. The latter leaves purely
-/// atomic heads to the ordinary atomic specialization.
+/// no ordinary asserted head contains a syntactic disjunction. Choices alone
+/// do not trigger this optional construction.
 #[derive(Debug)]
 pub struct SupportAttempt {
     /// Separate classical restriction over exactly the original atom indices.
@@ -56,17 +57,21 @@ pub struct SupportAttempt {
     pub work: u64,
 }
 
-/// Construct necessary supportedness for an ordinary disjunctive theory.
+/// Construct necessary supportedness for a complete mixed disjunctive theory.
 ///
 /// Every asserted root must be a disjunction of atoms (possibly with falsum),
-/// an implication with such a consequent, a default negation, or falsum. Bodies
-/// may be arbitrary formulas. Choices and other asserted heads decline the
-/// complete certificate. Repeated head atoms count once, including shared DAGs.
-/// A theory with no syntactic disjunction in an asserted head also declines:
-/// the ordinary atomic specialization already handles that case.
+/// an exact atomic choice `a or not a`, an implication with either consequent,
+/// a default negation, or falsum. Bodies may be arbitrary formulas. Choices
+/// accept either operand order and separate occurrences of the same semantic
+/// atom; richer or cross-atom alternatives decline the complete certificate.
+/// Repeated ordinary head atoms count once, including shared DAGs. A theory
+/// without an ordinary syntactic disjunction in a head also declines; choices
+/// alone do not introduce this extra construction path.
 ///
 /// For each atom `a`, require a rule whose body is true and whose other distinct
-/// heads are false whenever `a` is true. This condition is necessary: otherwise
+/// heads are false whenever `a` is true, or an atomic choice for `a` whose body
+/// is true. An unconditional choice supplies true support; its chosen atom is
+/// not a positive body premise. This condition is necessary: otherwise
 /// removing `a` preserves every original root's frozen reduct, contradicting
 /// minimality. Independent rules can support several heads simultaneously.
 /// Neither ranks nor head exclusivity across the whole program are assumed.
@@ -150,10 +155,10 @@ impl Builder<'_> {
                 Node::Implies(_, head) => head,
                 _ => root,
             };
-            if !ordinary[head] {
+            if !ordinary[head] && crate::atomic_choice::atom(theory, head).is_none() {
                 return Ok(false);
             }
-            disjunctive |= matches!(theory.nodes()[head], Node::Or(_, _));
+            disjunctive |= ordinary[head] && matches!(theory.nodes()[head], Node::Or(_, _));
         }
         Ok(disjunctive)
     }
@@ -179,6 +184,12 @@ impl Builder<'_> {
                 Node::Implies(body, head) => (body, head),
                 _ => (verum, root),
             };
+            if let Some(atom) = crate::atomic_choice::atom(theory, head) {
+                // A selected choice head needs its original body's permission,
+                // independently of any other ordinary producer's true heads.
+                support[atom] = self.push(Node::Or(support[atom], body))?;
+                continue;
+            }
             heads.clear();
             stack.clear();
             stack.push(head);

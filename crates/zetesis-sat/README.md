@@ -61,6 +61,11 @@ After any successful restriction, exhaustion covers only their intersection.
 An optimizer must separately prove that excluded stable candidates are dominated
 by an already verified incumbent, and use a non-strict bound to preserve ties.
 
+The initial optional [necessary support filter](docs/candidate-pruning.md#initial-necessary-support)
+recognizes complete mixed ordinary-disjunctive and exact atomic-choice producers.
+Its status and setup work are recorded separately; original reduct checking
+remains authoritative even when necessary support removes proposals.
+
 `StableModels::next_batch(BatchLimits, checker)` separates complete original-model
 proposals from membership checking. The checker receives the immutable original
 theory and an ordered, bounded slice, and returns one `BatchVerdict` per candidate.

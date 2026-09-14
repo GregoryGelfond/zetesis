@@ -17,6 +17,7 @@ mod aggregate;
 mod tight;
 mod checked;
 mod support;
+mod atomic_choice;
 pub mod partition;
 
 pub use checked::{CheckedInterpretation, StableInterpretation, check_interpretation};

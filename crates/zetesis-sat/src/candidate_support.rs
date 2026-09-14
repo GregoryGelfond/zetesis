@@ -1,4 +1,4 @@
-//! Necessary ordinary disjunctive support constrains only the outer query.
+//! Necessary mixed disjunctive/atomic-choice support constrains only the outer query.
 
 use zetesis_ferraris::{SupportError, SupportLimits, Theory, support_restriction};
 
@@ -107,6 +107,12 @@ mod tests {
         .unwrap()
     }
 
+    fn mixed_input() -> Theory {
+        Theory::new(3, vec![Node::Atom(0), Node::Atom(1), Node::Atom(2),
+            Node::False, Node::Or(0, 1), Node::Implies(2, 3), Node::Or(2, 5)],
+            vec![4, 6], zetesis_ferraris::AdmissionLimits::default()).unwrap()
+    }
+
     fn budget(control: &Control) -> Budget<'_> {
         Budget {
             quota: crate::search::LocalQuota,
@@ -118,7 +124,7 @@ mod tests {
 
     #[test]
     fn every_interrupted_support_attempt_keeps_spent_work() {
-        let theory = input();
+        for theory in [input(), mixed_input()] {
         let control = Control::default();
         let limits = Limits::default();
         let mut complete = budget(&control);
@@ -154,6 +160,7 @@ mod tests {
                     .map(|clause| clause.iter().collect::<Vec<_>>())
                     .eq(clauses.iter().cloned())
             );
+        }
         }
     }
 

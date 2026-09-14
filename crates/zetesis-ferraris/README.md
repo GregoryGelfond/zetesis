@@ -75,6 +75,30 @@ Normal runs use Proptest's default case count; `PROPTEST_CASES` can increase it.
 Focused deterministic tests also exercise shared DAG slots, sparse subset carries
 across three machine words, exact work/subset limits, and all identity checks.
 
+## Necessary mixed-head support
+
+`support_restriction` recognizes every asserted root before constructing a
+candidate-only supportedness theory. Ordinary positive disjunctive heads may
+coexist with exact atomic choices `a or not a`, in either branch order and
+optionally under an arbitrary original body. The choice reader is shared with
+tight-plan extraction. Choices nested inside richer heads, cross-atom
+alternatives and opaque asserted roots decline the complete specialization.
+At least one ordinary syntactic disjunctive head is required; choices alone do
+not trigger this optional construction.
+
+An ordinary producer supports a true atom when its body is true and its other
+distinct heads are false. An atomic choice contributes its body's permission
+for its own atom; an unconditional choice contributes truth. Witnesses from
+independent producers are combined. This is necessary support without a rank
+premise, not a stability test or global exclusivity condition. Positive cycles
+can remain and require the unchanged original reduct membership check.
+
+Construction retains the existing finite formula/work limits and charged
+failure prefix. No partial restriction escapes opaque-root, resource or control
+refusal. The separate restriction still copies original DAG descriptors before
+adding support nodes; repeated encoding of that copy remains a preparation cost.
+See [support API](src/support.rs) and [complete small-family controls](tests/support.rs).
+
 ## Checked tight producer plans
 
 `TightPlan::compile` extracts normal and atomic-choice producers from every

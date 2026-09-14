@@ -104,23 +104,6 @@ fn classify(theory: &Theory, work: &mut Work<'_>) -> Result<Vec<Body>, TightErro
     Ok(classes)
 }
 
-fn choice(theory: &Theory, root: usize) -> Option<usize> {
-    let Node::Or(a, b) = theory.nodes()[root] else {
-        return None;
-    };
-    choice_pair(theory, a, b).or_else(|| choice_pair(theory, b, a))
-}
-
-fn choice_pair(theory: &Theory, positive: usize, negative: usize) -> Option<usize> {
-    let Node::Atom(atom) = theory.nodes()[positive] else {
-        return None;
-    };
-    let Node::Implies(a, b) = theory.nodes()[negative] else {
-        return None;
-    };
-    (theory.nodes()[a] == Node::Atom(atom) && theory.nodes()[b] == Node::False).then_some(atom)
-}
-
 fn producer(
     theory: &Theory,
     root: usize,
@@ -135,7 +118,7 @@ fn producer(
     let (head, kind) = match theory.nodes()[head] {
         Node::Atom(atom) => (atom, TightProducerKind::Normal),
         _ => (
-            choice(theory, head).ok_or(TightError::UnsupportedRoot { root })?,
+            crate::atomic_choice::atom(theory, head).ok_or(TightError::UnsupportedRoot { root })?,
             TightProducerKind::Choice,
         ),
     };

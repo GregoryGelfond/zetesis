@@ -15,6 +15,73 @@ use zetesis_themelios::{AdmissionFailure, ExpansionFailure, ProfileFeature};
 use zetesis_validation::answers;
 
 const NUMERIC_SHOW_NEGATION: &str = "p(1). #show -X:p(X).";
+const MIXED_CHOICES: &str = "d(1..3). {c(X)} :- d(X). p(X) | q(X) :- c(X).";
+
+fn mixed_choice_atoms(selection: usize) -> Vec<Atom> {
+    let mut atoms = Vec::new();
+    let mut choices = selection;
+    for number in 1..=3 {
+        let mut names = vec!["d"];
+        match choices % 3 {
+            1 => names.extend(["c", "p"]),
+            2 => names.extend(["c", "q"]),
+            _ => {}
+        }
+        choices /= 3;
+        atoms.extend(names.into_iter().map(|name| Atom::new(
+            Predicate::new(name, 1).unwrap(), vec![Value::Number(number)],
+        ).unwrap()));
+    }
+    atoms.sort();
+    atoms
+}
+
+#[test]
+fn conditional_choices_preserve_the_complete_supported_family() {
+    let (report, output, _) = solve(MIXED_CHOICES, &[
+        "--backend", "cpu", "--oracle", "countermodel", "--grounder", "eager", "--json",
+    ]);
+    let report = report.unwrap();
+    assert_eq!(report.completion, Completion::Exhausted);
+    assert_eq!(report.models, 27);
+    let statistics = report.countermodel_statistics.unwrap();
+    assert_eq!(statistics.support.unwrap().status, zetesis_sat::SupportStatus::Applied);
+    assert_eq!(statistics.candidates, 27);
+    assert_eq!(statistics.countermodel_queries, 27);
+    assert_eq!(statistics.countermodels, 0);
+    let answers = answers::native_json::parse(output.as_bytes(),
+        answers::native_json::Limits::default()).unwrap();
+    let mut actual = answers.records().iter().map(|answer| answer.full_model().to_vec())
+        .collect::<Vec<_>>();
+    actual.sort();
+    let mut expected = (0..27).map(mixed_choice_atoms).collect::<Vec<_>>();
+    expected.sort();
+    assert_eq!(actual, expected);
+}
+
+#[test]
+#[ignore = "requires independently installed clingo"]
+fn mixed_choice_support_matches_complete_original_references() {
+    for source in [MIXED_CHOICES,
+        "d(1;\"x\";f(1)). {-c(X)} :- d(X). p(X) | q(X) :- -c(X)."]
+    {
+        let (report, output, _) = solve(source, &[
+            "--backend", "cpu", "--oracle", "countermodel", "--grounder", "eager",
+        ]);
+        let report = report.unwrap();
+        assert_eq!(report.completion, Completion::Exhausted);
+        assert_eq!(report.models, 27);
+        let statistics = report.countermodel_statistics.unwrap();
+        assert_eq!(statistics.support.unwrap().status, zetesis_sat::SupportStatus::Applied);
+        assert_eq!(statistics.candidates, 27);
+        let reference = clingo_report::complete(source, AnswerSelection::All);
+        let actual = displays(&output).into_iter().map(|atoms|
+            (atoms.into_iter().map(str::to_owned).collect::<Vec<_>>(), 1_u64))
+            .collect::<Vec<_>>();
+        assert_eq!(reference.model_count(), 27);
+        assert_eq!(reference.displays(), actual.as_slice());
+    }
+}
 
 fn solve(source: &str, arguments: &[&str]) -> (Result<Report, RunError>, String, String) {
     let options = Options::try_parse_from(
