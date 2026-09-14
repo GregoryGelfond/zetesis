@@ -115,8 +115,9 @@ shared owner. It does not retain the original checked candidate or create an
 atom/value dictionary. Finite defaults allow eight guards, 256 nodes each, 2,048
 total retained nodes, 64 KiB construction capacity, 256 KiB retained-plus-building
 capacity and one million cumulative construction steps. Reservations and actual
-vector capacity are checked before publication. Peak envelopes include proposed
-refused reservations and are maxima, not sums. Native candidate/CNF/projection
+vector capacity are checked before publication. Peak receipts contain observed vector capacity, excluding refused reservation
+proposals; actual allocator slack is recorded before any readback refusal. These
+are maxima, not sums. Native candidate/CNF/projection
 and evaluation limits are independent and recorded in the start event.
 
 Named guard capacity includes guard-entry, node, root, map and witness vectors.

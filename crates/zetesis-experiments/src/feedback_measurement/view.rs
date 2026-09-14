@@ -45,10 +45,10 @@ pub struct Construction {
     pub nodes: usize,
     /// Retained entry/node/root/witness vector capacity; no native/Arc/RSS claim.
     pub retained_bytes: usize,
-    /// Maximum requested or actual single-build vector-capacity envelope considered.
-    /// A refusal can report a proposed envelope above its ceiling.
+    /// Greatest observed actual single-build vector capacity. Refused proposals
+    /// are excluded; allocated capacity is retained in the receipt on readback refusal.
     pub peak_build_bytes: usize,
-    /// Maximum retained-plus-build envelope considered; never add it to retained.
+    /// Greatest observed retained-plus-build capacity; never add it to retained.
     pub peak_live_bytes: usize,
 }
 

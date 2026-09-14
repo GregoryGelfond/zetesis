@@ -513,3 +513,19 @@ fn refused_installation_retains_the_first_answer() {
     assert_eq!(progress.native.unwrap().projection_entries, 1);
     assert!(!progress.exhausted);
 }
+
+#[test]
+fn refused_capacity_proposal_does_not_raise_a_peak() {
+    let source = Case::Loops.theory().unwrap();
+    let checked = checked(&source, 1);
+    let control = Control::default();
+    let mut budget = guard::Budget::new(ConstructionLimits::default(), &control);
+    let mut store = guard::Store::new(&mut budget).unwrap();
+    let peak_build = budget.peak_build_bytes;
+    let peak_live = budget.peak_live_bytes;
+    budget.limits.max_retained_bytes = budget.retained_bytes;
+    assert!(matches!(store.learn(&checked, &mut budget), Err(Error::Limit(Resource::LiveBytes))));
+    assert_eq!(budget.peak_build_bytes, peak_build);
+    assert_eq!(budget.peak_live_bytes, peak_live);
+    assert!(store.guards.is_empty());
+}

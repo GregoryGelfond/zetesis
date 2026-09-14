@@ -100,13 +100,8 @@ impl<'a> Budget<'a> {
         Ok(())
     }
 
-    fn capacity(&mut self, build: usize) -> Result<(), Error> {
-        self.peak_build_bytes = self.peak_build_bytes.max(build);
-        let live = self
-            .retained_bytes
-            .checked_add(build)
-            .ok_or(Error::Overflow)?;
-        self.peak_live_bytes = self.peak_live_bytes.max(live);
+    fn admit_capacity(&self, build: usize) -> Result<(), Error> {
+        let live = self.retained_bytes.checked_add(build).ok_or(Error::Overflow)?;
         if build > self.limits.max_build_bytes {
             return Err(Error::Limit(Resource::BuildBytes));
         }
@@ -116,10 +111,20 @@ impl<'a> Budget<'a> {
         Ok(())
     }
 
+    fn observe_capacity(&mut self, build: usize) -> Result<(), Error> {
+        // A refused proposal never allocated storage and cannot raise a peak.
+        // Actual allocator capacity is evidence even when its readback exceeds
+        // the admitted request and the operation must now refuse publication.
+        self.peak_build_bytes = self.peak_build_bytes.max(build);
+        let live = self.retained_bytes.checked_add(build).ok_or(Error::Overflow)?;
+        self.peak_live_bytes = self.peak_live_bytes.max(live);
+        self.admit_capacity(build)
+    }
+
     fn reserve<T>(&mut self, count: usize, live: &mut usize) -> Result<Vec<T>, Error> {
         self.tick()?;
         let requested = count.checked_mul(size_of::<T>()).ok_or(Error::Overflow)?;
-        self.capacity(live.checked_add(requested).ok_or(Error::Overflow)?)?;
+        self.admit_capacity(live.checked_add(requested).ok_or(Error::Overflow)?)?;
         let mut values = Vec::new();
         values
             .try_reserve_exact(count)
@@ -129,7 +134,7 @@ impl<'a> Budget<'a> {
             .checked_mul(size_of::<T>())
             .ok_or(Error::Overflow)?;
         *live = live.checked_add(actual).ok_or(Error::Overflow)?;
-        self.capacity(*live)?;
+        self.observe_capacity(*live)?;
         Ok(values)
     }
 }
