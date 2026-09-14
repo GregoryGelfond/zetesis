@@ -16,6 +16,8 @@ use super::GroundingObserver;
 pub enum GroundingPhase {
     /// Complete the finite possible-support relation, including its indices.
     SupportCompletion,
+    /// Attempt optional domains over the exact normalized positive source.
+    DomainAnalysis,
     /// Determine active objective templates and construct their program.
     ObjectiveActivation,
     /// Initialize formula storage and the false/true nodes.
@@ -35,8 +37,9 @@ impl GroundingPhase {
     ///
     /// This supports fixed-size caller aggregation without enum discriminants
     /// or retention of the individual per-rule callbacks.
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::SupportCompletion,
+        Self::DomainAnalysis,
         Self::ObjectiveActivation,
         Self::FormulaInitialization,
         Self::RuleInstantiation,
@@ -50,6 +53,7 @@ impl GroundingPhase {
     pub const fn label(self) -> &'static str {
         match self {
             Self::SupportCompletion => "support_completion",
+            Self::DomainAnalysis => "domain_analysis",
             Self::ObjectiveActivation => "objective_activation",
             Self::FormulaInitialization => "formula_initialization",
             Self::RuleInstantiation => "rule_instantiation",
@@ -120,7 +124,8 @@ pub struct GroundingWork {
     pub table_reuses: Option<u64>,
     /// Finite-table selections attempted over complete possible support.
     pub table_probes: Option<u64>,
-    /// Table-selected row occurrences visited by the unchanged full matcher.
+    /// Table-selected row occurrences visited by the join, before any optional
+    /// necessary-domain guard and the unchanged full matcher.
     pub table_rows: Option<u64>,
     /// Completed charged work inside finite-table index preparation.
     pub table_prepare_work: Option<u64>,
@@ -132,6 +137,16 @@ pub struct GroundingWork {
     /// and conservative operation peaks. Refused proposals do not contribute;
     /// actual allocator slack can. Not process RSS or a complete stack measure.
     pub support_peak_bytes: Option<u64>,
+    /// Charged optional applicability, analysis and guard-preparation work.
+    /// Includes completed logical work before a conservative analysis stop.
+    pub domain_prepare_work: Option<u64>,
+    /// Original rows inspected by a prepared final-rule domain guard.
+    pub domain_guard_rows: Option<u64>,
+    /// Domain equality-ID membership comparisons performed on those rows.
+    pub domain_guard_checks: Option<u64>,
+    /// Rows rejected before binding by a necessary-domain guard. These rows
+    /// have no complete positive continuation in the admitted pure profile.
+    pub domain_rejected_rows: Option<u64>,
     /// Existing support rows selected for an attempted pattern match.
     pub join_rows: Option<u64>,
     /// Base relational binding snapshots successfully copied by the join cursor.
@@ -174,6 +189,10 @@ impl Default for GroundingWork {
             table_query_work: Some(0),
             table_index_bytes: Some(0),
             support_peak_bytes: Some(0),
+            domain_prepare_work: Some(0),
+            domain_guard_rows: Some(0),
+            domain_guard_checks: Some(0),
+            domain_rejected_rows: Some(0),
             join_rows: Some(0),
             binding_snapshots: Some(0),
             readiness_nodes: Some(0),
@@ -204,6 +223,10 @@ pub(crate) enum Event {
     TableQueryWork(u64),
     TableIndexBytes(usize),
     SupportPeakBytes(u128),
+    DomainPrepareWork(u64),
+    DomainGuardRow,
+    DomainGuardCheck,
+    DomainRejectedRow,
     JoinRow,
     BindingSnapshot,
     ReadinessNode,
@@ -250,6 +273,10 @@ impl GroundingWork {
                 .zip(other.support_peak_bytes)
                 .map(|(a, b)| a.max(b)),
             join_rows: sum(self.join_rows, other.join_rows),
+            domain_prepare_work: sum(self.domain_prepare_work, other.domain_prepare_work),
+            domain_guard_rows: sum(self.domain_guard_rows, other.domain_guard_rows),
+            domain_guard_checks: sum(self.domain_guard_checks, other.domain_guard_checks),
+            domain_rejected_rows: sum(self.domain_rejected_rows, other.domain_rejected_rows),
             binding_snapshots: sum(self.binding_snapshots, other.binding_snapshots),
             readiness_nodes: sum(self.readiness_nodes, other.readiness_nodes),
             expression_evaluations: sum(self.expression_evaluations, other.expression_evaluations),
@@ -264,7 +291,7 @@ impl GroundingWork {
 
     fn record(&mut self, event: Event) {
         let amount = match event {
-            Event::TablePrepareWork(work) | Event::TableQueryWork(work) => Some(work),
+            Event::TablePrepareWork(work) | Event::TableQueryWork(work) | Event::DomainPrepareWork(work) => Some(work),
             Event::TableIndexBytes(bytes) => u64::try_from(bytes).ok(),
             Event::SupportPeakBytes(bytes) => u64::try_from(bytes).ok(),
             _ => Some(1),
@@ -288,6 +315,10 @@ impl GroundingWork {
             Event::TableQueryWork(_) => &mut self.table_query_work,
             Event::TableIndexBytes(_) => &mut self.table_index_bytes,
             Event::SupportPeakBytes(_) => &mut self.support_peak_bytes,
+            Event::DomainPrepareWork(_) => &mut self.domain_prepare_work,
+            Event::DomainGuardRow => &mut self.domain_guard_rows,
+            Event::DomainGuardCheck => &mut self.domain_guard_checks,
+            Event::DomainRejectedRow => &mut self.domain_rejected_rows,
             Event::JoinRow => &mut self.join_rows,
             Event::BindingSnapshot => &mut self.binding_snapshots,
             Event::ReadinessNode => &mut self.readiness_nodes,
@@ -321,14 +352,22 @@ impl Work {
 
 pub(crate) struct Profile<'a> {
     observer: Option<&'a dyn GroundingObserver>,
+    source_observer: Option<&'a dyn GroundingObserver>,
     work: Work,
 }
 
 impl<'a> Profile<'a> {
     pub(crate) fn new(observer: Option<&'a dyn GroundingObserver>) -> Self {
+        let source_observer = observer;
         let observer = observer.filter(|observer| observer.details_enabled());
         let work = Work(observer.map(|_| Rc::new(RefCell::new(GroundingWork::default()))));
-        Self { observer, work }
+        Self { observer, source_observer, work }
+    }
+
+    pub(crate) fn domain_analysis(&self, observation: super::DomainObservation<'_, '_>) {
+        if let Some(observer) = self.source_observer {
+            observer.domain_analysis(observation);
+        }
     }
 
     pub(crate) fn work(&self) -> Work {

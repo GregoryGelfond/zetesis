@@ -48,7 +48,7 @@ pub(crate) fn ground(
     location: Location,
     observer: Option<&dyn crate::GroundingObserver>,
     count_plan: Option<crate::formula_count_plan::Request<'_>>,
-    options: crate::GroundingOptions,
+    options: crate::grounding_options::Execution,
 ) -> Result<Compiled, FormulaFailure> {
     use crate::GroundingPhase;
 
@@ -112,7 +112,7 @@ fn instantiate<'a>(
     location: Location,
     profile: &Profile<'_>,
     count_plan: Option<crate::formula_count_plan::Request<'_>>,
-    options: crate::GroundingOptions,
+    options: crate::grounding_options::Execution,
 ) -> Result<Instantiation<'a>, FormulaFailure> {
     use crate::GroundingPhase;
 
@@ -127,6 +127,14 @@ fn instantiate<'a>(
         completed.queries(options.joins, limits, &counters, location)
     })?;
     let support = queries.support();
+    let domains = if options.domains.is_some() {
+        profile.phase(GroundingPhase::DomainAnalysis, None, || {
+            crate::formula_domains::analyze(&prepared, options.domains, limits, &mut counters, profile, location)
+        })?
+    } else {
+        profile.domain_analysis(crate::DomainObservation::Disabled);
+        None
+    };
     let (objectives, objective_origins) =
         profile.phase(GroundingPhase::ObjectiveActivation, None, || {
             objectives::prepare(&prepared, &queries, limits, budget, &mut counters, location)
@@ -142,7 +150,7 @@ fn instantiate<'a>(
         builder.initialize(location)?;
         Ok::<_, FormulaFailure>(builder)
     })?;
-    for rule in &prepared.rules {
+    for (index, rule) in prepared.rules.iter().enumerate() {
         profile.phase(
             GroundingPhase::RuleInstantiation,
             Some(rule.location),
@@ -150,7 +158,10 @@ fn instantiate<'a>(
                 if crate::formula_factor::rule(&mut builder, rule, support)? {
                     return Ok(());
                 }
-                let mut outer = Join::rule(rule, support, builder.budget)?;
+                let guards = if let Some(domains) = &domains {
+                    support.domain_guards(rule, domains.for_rule(index, rule)?, limits, builder.budget, &mut builder.counters)?
+                } else { None };
+                let mut outer = Join::domain_rule(rule, support, guards.as_ref(), builder.budget)?;
                 while let Some(row) =
                     outer.next_row(limits, builder.budget, &mut builder.counters, rule.location)?
                 {
@@ -164,6 +175,7 @@ fn instantiate<'a>(
             },
         )?;
     }
+    drop(domains);
     Ok(Instantiation {
         builder,
         objectives,

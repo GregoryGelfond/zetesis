@@ -7,6 +7,21 @@ use themelios_base::span::Location;
 pub(crate) use profile::{Event, Profile, Work};
 pub use profile::{GroundingOutcome, GroundingPhase, GroundingWork};
 
+/// Outcome of the optional finite-domain attempt over the exact normalized
+/// source owner. This synchronous borrowed view cannot outlive that attempt.
+/// Completed analysis is an upper bound, not a source or answer-set certificate.
+#[derive(Clone, Copy, Debug)]
+pub enum DomainObservation<'a, 'source> {
+    /// No domain analysis was requested.
+    Disabled,
+    /// The complete normalized source/IR profile was not applicable.
+    Inapplicable,
+    /// Actual analysis, including its exact owner, status, context and logical
+    /// statistics. Unknown/Stopped supplies no narrowing. Retaining consumers
+    /// copy the specific owned status/statistics they need during the callback.
+    Analyzed(&'a zetesis_domain::Analysis<'source>),
+}
+
 /// Observe only complete formula materialization after source preparation.
 ///
 /// Every `enter` has a matching `exit`, including a failed or unwinding attempt.
@@ -27,6 +42,11 @@ pub trait GroundingObserver {
     fn details_enabled(&self) -> bool {
         false
     }
+
+    /// Observe the actual optional domain attempt before final rule guards.
+    /// Called synchronously, independently of detailed work-counter opt-in.
+    /// A prior grounding failure may prevent the attempt and this callback.
+    fn domain_analysis(&self, _observation: DomainObservation<'_, '_>) {}
 
     /// Begin one coarse phase after its counter bank has been reset.
     ///

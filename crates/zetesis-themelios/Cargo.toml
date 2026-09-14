@@ -11,6 +11,7 @@ zetesis-core.workspace = true
 zetesis-ferraris.workspace = true
 zetesis-objective.workspace = true
 zetesis-cpu.workspace = true
+zetesis-domain = { path = "../zetesis-domain" }
 themelios-base.workspace = true
 themelios-syntax.workspace = true
 themelios-program.workspace = true

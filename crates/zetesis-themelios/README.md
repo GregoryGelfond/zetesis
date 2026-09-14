@@ -79,6 +79,20 @@ atom/value payloads, allocator/tree overhead and unrelated grounding state have
 separate bounds. Construction and lookup consume grounding work; this ceiling
 is not a process-memory measurement.
 
+Prepared formula and bundle values can additionally request
+`with_domain_analysis(Some(DomainLimits { .. }))`, disabled by default. The
+initial consumer requires the exact normalized whole positive flat program;
+unsupported profiles, Unknown and Stopped retain complete fallback. It resolves
+necessary variable meets through the existing completed-support dictionary and
+filters final-rule rows before binding/deeper probes. It does not narrow support
+discovery or dependency projections, and preserves authored-error validation.
+Analyzer logical populations and bounded standard allocations are separate from
+named support/guard byte accounting; actual analysis and guard work consume the
+original cumulative formula budget. No new cancellation, allocator or RSS cap
+is implied. `DomainObservation` and grounding counters report the actual attempt.
+See [optional domain guards](../../docs/book/rust/finite-tables.md#optional-argument-domain-guards)
+for applicability, accounting, observation and proof boundaries.
+
 ### Values and bindings
 
 Logical values include integers, symbols, strings, closed functions, tuples and

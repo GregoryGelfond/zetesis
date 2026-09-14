@@ -113,8 +113,9 @@ pub use formula_count_plan::{
     CountPlanStatistics, CountPlanStatus,
 };
 mod grounding_options;
-pub use grounding_observer::{GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork};
-pub use grounding_options::{GroundingOptions, JoinStrategy};
+mod formula_domains;
+pub use grounding_observer::{DomainObservation, GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork};
+pub use grounding_options::{DomainLimits, GroundingOptions, JoinStrategy};
 pub use metadata::{
     AtomSelection, AtomSelectionError, AtomSelectionLimits, LocatedDirective, MetadataError,
     MetadataFeature, MetadataLimits, MetadataResource, OutputSelection, SourceDirective,

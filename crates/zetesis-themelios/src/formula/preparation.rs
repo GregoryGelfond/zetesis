@@ -14,7 +14,7 @@ pub(super) struct Preparation {
     program: formula_ir::Prepared,
     budget: Budget,
     limits: FormulaLimits,
-    options: crate::GroundingOptions,
+    options: crate::grounding_options::Execution,
     location: Location,
 }
 
@@ -31,7 +31,7 @@ impl Preparation {
             // The deferred receipt owns one immutable snapshot; its later
             // compilation and grounding helpers borrow this configuration.
             limits: *limits,
-            options: crate::GroundingOptions::default(),
+            options: crate::grounding_options::Execution::default(),
             location,
         }
     }
@@ -123,7 +123,23 @@ impl PreparedFormula {
     /// materialization doors, including count planning, use this policy.
     #[must_use]
     pub const fn with_grounding_options(mut self, options: crate::GroundingOptions) -> Self {
-        self.preparation.options = options;
+        self.preparation.options.joins = options.joins;
+        self
+    }
+
+    /// Attempt finite-domain guards during final instantiation of an exact
+    /// normalized positive flat program. Disabled by default. Inapplicable,
+    /// Unknown or Stopped analysis leaves the complete join unchanged.
+    ///
+    /// The analysis borrows this exact normalized source and keeps its logical
+    /// population limits separate from support/guard capacity. Its work and all
+    /// bridge/guard work consume the original cumulative formula budget.
+    /// Analysis uses bounded infallible collections and has no cancellation or
+    /// deadline polling; this does not strengthen eager materialization's
+    /// existing control/allocation contract. Observers receive its typed outcome.
+    #[must_use]
+    pub const fn with_domain_analysis(mut self, limits: Option<crate::DomainLimits>) -> Self {
+        self.preparation.options.domains = limits;
         self
     }
 
@@ -253,7 +269,16 @@ impl PreparedFormulaBundle {
     /// materialization doors, including count planning, use this policy.
     #[must_use]
     pub const fn with_grounding_options(mut self, options: crate::GroundingOptions) -> Self {
-        self.preparation.options = options;
+        self.preparation.options.joins = options.joins;
+        self
+    }
+
+    /// Configure the optional final-instantiation analysis with the same owner,
+    /// fallback, work and allocation boundaries as
+    /// [`PreparedFormula::with_domain_analysis`]. `None` disables the attempt.
+    #[must_use]
+    pub const fn with_domain_analysis(mut self, limits: Option<crate::DomainLimits>) -> Self {
+        self.preparation.options.domains = limits;
         self
     }
 

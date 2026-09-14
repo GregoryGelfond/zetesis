@@ -25,3 +25,16 @@ pub struct GroundingOptions {
     /// Positive-join execution strategy; independent of formula/reduct solving.
     pub joins: JoinStrategy,
 }
+
+/// Logical bounds on an optional conservative domain-analysis attempt.
+///
+/// These are distinct from the named support/query byte ceiling. Analysis uses
+/// bounded standard collections and has no allocation-failure or caller-control
+/// API; it is an uninterruptible operation inside existing eager materialization.
+pub use zetesis_domain::Limits as DomainLimits;
+
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Execution {
+    pub joins: JoinStrategy,
+    pub domains: Option<DomainLimits>,
+}

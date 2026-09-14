@@ -2079,6 +2079,7 @@ dependencies = [
  "themelios-syntax",
  "zetesis-core",
  "zetesis-cpu",
+ "zetesis-domain",
  "zetesis-ferraris",
  "zetesis-objective",
  "zetesis-sat",

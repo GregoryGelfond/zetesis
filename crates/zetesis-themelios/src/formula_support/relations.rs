@@ -385,7 +385,7 @@ fn failure(error: Failure, location: Location) -> FormulaFailure {
 
 /// Shared ceilings retain their formula-wide resource and cumulative amount.
 /// Other core refusals retain their typed cause at the source location.
-fn relation_failure(
+pub(super) fn relation_failure(
     error: Failure,
     limits: &FormulaLimits,
     base_work: u64,

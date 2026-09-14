@@ -409,6 +409,7 @@ pub(crate) struct Join<'a, 'source> {
     head_slots: std::ops::Range<usize>,
     patterns: Vec<PatternOccurrence<'a>>,
     delta: Option<usize>,
+    domains: Option<&'a queries::Guards<'a, 'source>>,
     support: &'a Support<'source>,
     values: Vec<Option<Value>>,
     slots: Vec<Slot>,
@@ -478,6 +479,23 @@ impl<'a, 'source> Join<'a, 'source> {
         )?;
         join.bindings = rule.bindings.as_ref();
         join.stage_head(rule.body_variables..rule.variables);
+        Ok(join)
+    }
+
+    /// Attach necessary domains only to their exact final rule and support owner.
+    pub(super) fn domain_rule(
+        rule: &'a crate::formula_ir::RuleIr,
+        support: &'a Support<'source>,
+        domains: Option<&'a queries::Guards<'a, 'source>>,
+        budget: &mut Budget,
+    ) -> Result<Self, FormulaFailure> {
+        if domains.is_some_and(|guards| !guards.belongs_to(rule, support)) {
+            return Err(FormulaFailure::SupportRelation {
+                error: zetesis_core::relation::Failure::Owner, location: rule.location,
+            });
+        }
+        let mut join = Self::rule(rule, support, budget)?;
+        join.domains = domains;
         Ok(join)
     }
 
@@ -628,6 +646,7 @@ impl<'a, 'source> Join<'a, 'source> {
             evaluation: Evaluation::default(),
             patterns,
             delta: None,
+            domains: None,
             support,
             values,
             slots,
@@ -890,6 +909,11 @@ impl<'a, 'source> Join<'a, 'source> {
                 continue;
             };
             counters.record(Event::JoinRow);
+            if let Some(domains) = self.domains
+                && !domains.permits(pattern.source, atom.position(), limits, counters, location)?
+            {
+                continue;
+            }
             let matches =
                 self.match_row(pattern.pattern, atom, limits, budget, counters, location)?;
             if matches

@@ -20,6 +20,9 @@ use crate::formula::ceiling;
 use crate::grounding_observer::Event;
 use crate::{FormulaFailure, FormulaLimits, FormulaResource, JoinStrategy};
 
+mod domains;
+pub(crate) use domains::Guards;
+
 /// Query state is separate from both the catalog and its immutable row views.
 /// The single-threaded source builder owns this workspace; table indices are
 /// immutable after publication, while every query owns its independent mask.

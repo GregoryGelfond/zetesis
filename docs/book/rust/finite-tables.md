@@ -184,6 +184,59 @@ The [measured comparison](../reference/performance.md#optional-finite-table-expe
 retains the earlier standalone fixture timings, preparation costs and capacity
 limitations separately from measurements of the ordinary grounding consumer.
 
+## Optional argument-domain guards
+
+Prepared formula and bundle values also expose
+`with_domain_analysis(Some(DomainLimits { .. }))`; `None` is the default and
+turns the attempt off. This library option adds a final-instantiation consumer
+for the exact normalized whole program. It is independent of `Indexed` or
+`Table` row selection and has no CLI enabling flag.
+
+The initial profile admits ordinary positive flat rules and constraints over
+whole named variables and atomic logical values. It excludes arithmetic,
+generators, negative body literals, structured terms, local scopes and richer
+heads from the complete attempt. A dependency projection cannot qualify.
+Unsupported profiles use the existing complete path; they receive no new
+language refusal. A global Unknown or Stopped analysis supplies no narrowing.
+An individually Unknown argument supplies no restriction.
+
+For each eligible final rule, the consumer intersects the finite domains of
+all positive argument occurrences naming one variable. Borrowed source values
+are resolved through the completed support owner's existing equality dictionary;
+no second dictionary assigns IDs. A row failing a necessary domain is rejected
+before binding copies and deeper probes. Surviving rows keep their original
+positions, matcher and emission order. Support completion, objective joins and
+existing factorized rule plans retain their existing paths. The analyzer is an
+upper-bound producer, not a candidate-truth or answer-set certificate.
+
+`DomainObservation` exposes Disabled, Inapplicable or the actual borrowed
+`Analysis`, including its owner, status, context and logical statistics. Detailed
+observation emits a sequential `domain_analysis` phase only when requested.
+`domain_prepare_work` includes charged applicability, analysis and guard
+preparation, including a stopped or failed prefix. `domain_guard_rows`,
+`domain_guard_checks` and `domain_rejected_rows` count actual row visits,
+dictionary-ID comparisons and rejections. Visited rows remain in `join_rows`
+and `table_rows`; avoided deeper work appears in the existing probe counts.
+
+Analyzer populations and inspected source bytes have separate finite
+`DomainLimits`. Its admitted work is capped by and charged to the remaining
+cumulative formula work budget, with no refund on Stopped. It uses bounded
+standard collections and has no fallible-allocation or caller-control API.
+This is an uninterruptible operation under the existing eager contract, not a
+new cancellation/deadline guarantee. Its heap is outside `max_support_bytes`.
+Rule guards separately charge their named headers, preparation scratch, actual
+vector capacities and temporary atomic conversion payload beside retained
+support, table indices and live masks. Query-attempt receipts retain original
+failed work and actual capacity peaks. These capacities exclude allocator
+metadata, analyzer heap and a complete stack/RSS measure. Additional analysis,
+guard and mask costs may outweigh avoided bindings or probes.
+
+The [domain-binding guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/domain-bindings.md)
+states the necessary argument-coverage and complete-continuation premises.
+Source controls compare enabled/disabled complete atoms, theories and provenance,
+plus actual row/probe counts and failure receipts. They do not prove a general
+source-to-Rust refinement or a performance improvement.
+
 ## Preservation argument
 
 A selected row belongs to every variable's union of permitted supports, hence
