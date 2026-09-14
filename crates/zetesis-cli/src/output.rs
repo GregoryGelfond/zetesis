@@ -302,6 +302,7 @@ fn error_kind(error: &RunError) -> &'static str {
         RunError::BundleLoad(_) => "bundle_load",
         RunError::BundleAdmission(_) => "bundle_admission",
         RunError::Batch(_) => "batch",
+        RunError::QueryObservation(_) => "query_observation",
         RunError::CompletionPool(_) => "completion_pool",
         RunError::CompletionUnavailable => "completion_unavailable",
         RunError::BackendUnavailable => "backend_unavailable",
@@ -525,6 +526,8 @@ fn statistics(out: &mut Buffer, view: &SummaryView<'_>) -> Result<(), RunError> 
         lazy_statistics(out, view.lazy_execution)?;
         out.text(",\"shared_execution\":")?;
         shared_statistics(out, view.shared_execution)?;
+        out.text(",\"query_execution\":")?;
+        query_statistics(out, view.query_execution)?;
         out.text(",\"phase_timings\":")?;
         phases(out, view.timings)?;
         out.text(",\"stage_timings\":")?;
@@ -627,6 +630,7 @@ struct SummaryView<'a> {
     execution: Option<&'a crate::FormulaExecutionStatistics>,
     lazy_execution: Option<&'a crate::LazyExecutionStatistics>,
     shared_execution: Option<&'a crate::SharedExecutionStatistics>,
+    query_execution: Option<&'a crate::QueryExecutionObservation>,
     timings: Option<&'a PhaseTimings>,
 }
 impl<'a> SummaryView<'a> {
@@ -647,6 +651,7 @@ impl<'a> SummaryView<'a> {
                     execution: semantic.and_then(crate::SemanticOutcome::formula_execution),
                     lazy_execution: semantic.and_then(crate::SemanticOutcome::lazy_execution),
                     shared_execution: semantic.and_then(crate::SemanticOutcome::shared_execution),
+                    query_execution: semantic.and_then(crate::SemanticOutcome::query_execution),
                     timings: progress.phase_timings.as_ref(),
                 }
             }
@@ -667,6 +672,7 @@ impl<'a> SummaryView<'a> {
                     execution: partial.and_then(|p| p.formula_execution.as_ref()),
                     lazy_execution: partial.and_then(|p| p.lazy_execution.as_ref()),
                     shared_execution: partial.and_then(|p| p.shared_execution.as_ref()),
+                    query_execution: partial.and_then(|p| p.query_execution.as_ref()),
                     timings: failure.phase_timings.as_deref(),
                 }
             }
@@ -781,6 +787,62 @@ fn execution_statistics(
     out.text(",\"complete\":")?;
     out.text(if stats.overflowed { "false" } else { "true" })?;
     out.text("}}")
+}
+
+fn query_statistics(out: &mut Buffer, observation: Option<&crate::QueryExecutionObservation>) -> Result<(), RunError> {
+    let Some(observation) = observation else { return out.text("null"); };
+    out.text("{\"backend\":\"cpu\",\"source_batching\":\"independent\",\"snapshot\":")?;
+    if let Some(stats) = observation.statistics {
+        out.text("{\"preparation\":")?;
+        if let Some(preparation) = stats.preparation {
+            out.text("{\"work\":")?;
+            out.text(&preparation.work.to_string())?;
+            out.number_field("retained_bytes", preparation.retained_bytes)?;
+            out.text("}")?;
+        } else { out.text("null")?; }
+        out.number_field("preparation_builds", stats.preparation_builds)?;
+        out.number_field("retained_workspaces", stats.retained_workspaces)?;
+        out.number_field("active_workspaces", stats.active_workspaces)?;
+        out.number_field("reused_workspaces", stats.reused_workspaces)?;
+        out.number_field("retained_bytes", stats.retained_bytes)?;
+        out.number_field("reserved_bytes", stats.reserved_bytes)?;
+        out.text("}")?;
+    } else { out.text("null")?; }
+    out.text(",\"fault\":")?;
+    if let Some(fault) = &observation.fault { query_fault(out, fault)?; }
+    else { out.text("null")?; }
+    out.text("}")
+}
+
+fn query_fault(out: &mut Buffer, fault: &zetesis_cpu::BatchError) -> Result<(), RunError> {
+    use zetesis_cpu::BatchError;
+    out.text("{\"kind\":")?;
+    out.string(match fault {
+        BatchError::Pool(_) => "pool",
+        BatchError::Busy => "busy",
+        BatchError::Poisoned => "poisoned",
+        BatchError::Preparation(_) => "preparation",
+        BatchError::ClosureStorage { .. } => "closure_storage",
+        BatchError::Capacity { .. } => "capacity",
+    })?;
+    match fault {
+        BatchError::Preparation(stop) => {
+            out.text(",\"reason\":")?;
+            out.string(control_code(*stop))?;
+        }
+        BatchError::ClosureStorage { required, limit } => {
+            out.number_field("required", *required)?;
+            out.number_field("limit", *limit)?;
+        }
+        BatchError::Capacity { limit, actual } => {
+            out.number_field("limit", *limit)?;
+            out.number_field("actual", *actual)?;
+        }
+        _ => {}
+    }
+    out.text(",\"detail\":")?;
+    out.string(&fault.to_string())?;
+    out.text("}")
 }
 
 fn shared_statistics(

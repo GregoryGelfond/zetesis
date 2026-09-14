@@ -37,6 +37,8 @@ pub struct PartialReport {
     pub lazy_execution: Option<crate::LazyExecutionStatistics>,
     /// Shared CPU source/world work, including incomplete batch progress.
     pub shared_execution: Option<crate::SharedExecutionStatistics>,
+    /// Prepared independent CPU ownership receipts and any snapshot fault.
+    pub query_execution: Option<crate::QueryExecutionObservation>,
     /// Whether semantic search established an optimum, independently of delivery.
     pub optimum_proved: bool,
     /// Retained incumbent metadata, independent of how many ties were published.
@@ -150,6 +152,7 @@ impl Progress {
             formula_execution: semantic.formula_execution().cloned(),
             lazy_execution: semantic.lazy_execution().cloned(),
             shared_execution: semantic.shared_execution().cloned(),
+            query_execution: semantic.query_execution().cloned(),
             optimum_proved: semantic.optimum_proved(),
             optimization: semantic.incumbent().cloned(),
             phase_timings: self.phase_timings,
@@ -215,6 +218,7 @@ impl Progress {
             shared_execution: semantic
                 .and_then(crate::SemanticOutcome::shared_execution)
                 .cloned(),
+            query_execution: semantic.and_then(crate::SemanticOutcome::query_execution).cloned(),
             optimum_proved: semantic.is_some_and(crate::SemanticOutcome::optimum_proved),
             optimization: semantic
                 .and_then(crate::SemanticOutcome::incumbent)

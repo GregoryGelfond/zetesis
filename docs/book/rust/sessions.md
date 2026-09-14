@@ -51,6 +51,33 @@ outcome's `optimum_proved()` and interruption information to distinguish proved
 ties from an interrupted incumbent. Yielded tie limits also affect how much of
 the selected family a consumer receives.
 
+## Prepared independent CPU execution
+
+An independent relational CPU session retains one `PreparedQueries` owner for its exact
+program and a bounded set of empty `ClosureWorkspace` capacities. Each submitted
+batch assigns disjoint candidate ranges to those workspaces. Candidate truth is
+reset between checks; returned models own their atoms independently of later
+workspace reuse. Preparation and retained capacity reuse do not change the
+original full-round closure or answer membership.
+
+`SolveConfig::max_source_work` bounds immutable query preparation, separately
+from each candidate's `max_work`. `max_closure_batch_bytes` supplies the shared
+preparation and workspace allowance, while `max_closure_bytes` bounds each
+candidate's named closure storage. Preparation refusal appears as
+`Interruption::Preparation`; a stopped individual check remains
+`Interruption::Oracle`. Successful earlier answers remain valid after either
+stop, but the search has not established exhaustion.
+
+`SemanticOutcome::query_execution()` exposes the latest captured CPU
+`QueryStatistics` and any typed snapshot fault. Its preparation work is separate
+from candidate work, and its reuse counts refer to assigned workspace slots,
+not successful candidates. No snapshot is inferred for another execution route.
+A snapshot failure preserves the last successful observation and is reported as
+an execution error after the already checked prefix; it cannot manufacture a
+completion result. The ordinary CLI's `--stats`, JSON `query_execution` object
+and failure reports view this same receipt. These named capacity observations
+are not process RSS or evidence of a speedup.
+
 ## Collecting the original world view
 
 `WorldView::collect(input, config, limits, control)` owns a fresh unrestricted

@@ -216,7 +216,8 @@ pub struct Options {
     /// Maximum named storage bytes per independent lazy CPU closure.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_closure_bytes, hide_short_help = true)]
     pub max_closure_bytes: usize,
-    /// Collective reservation for simultaneously active independent CPU closures.
+    /// Collective independent CPU preparation, idle cache and assigned closure
+    /// storage allowance. Also bounds immutable query preparation bytes.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_closure_batch_bytes, hide_short_help = true)]
     pub max_closure_batch_bytes: usize,
     /// Device propagation work per formula candidate, independent of CPU work.
@@ -227,8 +228,8 @@ pub struct Options {
     /// setup and sends undecided candidates to exact CPU residual search.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.gpu_formula_rounds, hide_short_help = true)]
     pub gpu_formula_rounds: u32,
-    /// Collective source work per shared CPU batch. Separate from max-work,
-    /// which bounds record visits plus antecedent tests per shared CPU world.
+    /// Shared CPU source work per batch or independent CPU query preparation
+    /// work. Candidate/world execution has the separate max-work allowance.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_source_work, hide_short_help = true)]
     pub max_source_work: u64,
     /// Maximum derived independent CPU atoms, shared CPU/GPU catalog atoms or

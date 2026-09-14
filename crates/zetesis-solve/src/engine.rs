@@ -8,7 +8,7 @@ use rayon::prelude::*;
 use zetesis_core::{
     GroundProgram, Model, ModelError, Program, SeedSelection, StaticLimits, WordError,
 };
-use zetesis_cpu::{BatchOracle, Control, Limits, Stop};
+use zetesis_cpu::{BatchOracle, Control, Limits, PreparationLimits, Stop};
 
 use crate::phase_timing::{Recorder, SolvePhase};
 use crate::{
@@ -46,6 +46,12 @@ pub(crate) struct Engine {
 }
 
 impl Engine {
+    pub(crate) fn query_observation(&self) -> Option<&crate::QueryExecutionObservation> {
+        match &self.executor {
+            Executor::Cpu(executor) => Some(&executor.observation),
+            _ => None,
+        }
+    }
     pub(crate) fn shared_statistics(&self) -> Option<crate::SharedExecutionStatistics> {
         match &self.executor {
             Executor::SharedCpu { statistics, .. } => Some(statistics.clone()),
@@ -138,7 +144,7 @@ impl Engine {
 }
 
 enum Executor {
-    Cpu(BatchOracle),
+    Cpu(IndependentCpu),
     SharedCpu {
         oracle: BatchOracle,
         statistics: crate::SharedExecutionStatistics,
@@ -154,6 +160,28 @@ enum Executor {
     },
     #[cfg(feature = "gpu")]
     LazyGpu(Box<LazyGpu>),
+}
+
+struct IndependentCpu {
+    oracle: BatchOracle,
+    observation: crate::QueryExecutionObservation,
+}
+
+impl IndependentCpu {
+    fn check(&mut self, program: &Program, seeds: &[SeedSelection], limits: Limits, control: &Control)
+        -> Result<Vec<Result<Option<Model>, Stop>>, SolveError>
+    {
+        let result = self.oracle.check_batch_views(program, seeds.par_iter().map(SeedSelection::view), limits, control);
+        self.observation.capture(self.oracle.query_statistics());
+        // A snapshot fault is retained separately and delivered by the session
+        // after these already-checked results. No membership is discarded here.
+        Ok(result.map_err(SolveError::Batch)?.into_iter().map(|result| {
+            result.map(|check| match check.into_stable_interpretation() {
+                Ok(accepted) => Some(accepted.into_interpretation()),
+                Err(_) => None,
+            })
+        }).collect())
+    }
 }
 
 /// Keep device execution and its cumulative observations under one owner.
@@ -221,7 +249,11 @@ impl Executor {
     ) -> Result<Self, SolveError> {
         let oracle = BatchOracle::new(options.workers, options.batch_size)
             .map_err(SolveError::Batch)?
-            .with_closure_storage_limit(options.max_closure_batch_bytes);
+            .with_closure_storage_limit(options.max_closure_batch_bytes)
+            .with_preparation_limits(PreparationLimits {
+                max_work: options.max_source_work,
+                max_bytes: options.max_closure_batch_bytes,
+            });
         if options.grounder == Grounder::Eager {
             let ground = match cached {
                 Some(ground) => ground,
@@ -255,7 +287,7 @@ impl Executor {
                     batching: options.source_batching,
                     workers: options.workers,
                 })?;
-                Ok(Self::Cpu(oracle))
+                Ok(Self::Cpu(IndependentCpu { oracle, observation: crate::QueryExecutionObservation::default() }))
             }
         }
     }
@@ -400,22 +432,7 @@ impl Executor {
             }
             #[cfg(feature = "gpu")]
             Self::LazyGpu(executor) => executor.check(options, program, seeds, control),
-            Self::Cpu(oracle) => Ok(oracle
-                .check_batch_views(
-                    program,
-                    seeds.par_iter().map(SeedSelection::view),
-                    limits,
-                    control,
-                )
-                .map_err(SolveError::Batch)?
-                .into_iter()
-                .map(|result| {
-                    result.map(|check| match check.into_stable_interpretation() {
-                        Ok(accepted) => Some(accepted.into_interpretation()),
-                        Err(_) => None,
-                    })
-                })
-                .collect()),
+            Self::Cpu(executor) => executor.check(program, seeds, limits, control),
             Self::StaticCpu { oracle, ground } => oracle
                 .check_static_batch_views(
                     ground,

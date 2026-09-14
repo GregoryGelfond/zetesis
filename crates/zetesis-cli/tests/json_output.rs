@@ -666,7 +666,7 @@ fn resource_stops_encode_partial_coverage() {
                 "--max-closure-bytes",
                 "0",
             ],
-            "oracle",
+            "preparation",
             "storage_limit",
         ),
         (

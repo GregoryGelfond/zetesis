@@ -171,14 +171,39 @@ account for the capacity actually retained, including simultaneously live
 packing, output and transport storage within its stated scope.
 
 Independent scalar closure construction has a per-candidate named-capacity
-allowance, `Limits::max_closure_bytes`. `BatchOracle` reserves it for
-`min(submitted candidates, worker count)` simultaneous owners against its
-collective closure allowance before entering the pool. Small batches reserve
-only their possible active owners; an empty batch reserves none. Returned
-models, input seeds, worker stacks and allocator overhead are separate owners.
-Ordinary sessions expose these allowances through `SolveConfig` and the CLI's
-`--max-closure-bytes` and `--max-closure-batch-bytes` options. A reservation refusal
-submits no candidate and releases the pool's admission slot.
+allowance, `Limits::max_closure_bytes`. `BatchOracle` retains one preparation
+for its exact `Program` and reuses empty query workspaces across submissions.
+Before executing a batch it admits the shared cache, idle retained workspaces,
+and the allowance for each assigned workspace against its collective limit.
+If `C` is the cache and spare slot capacity, `P` the prepared header already
+included in `C`, `R_i` a workspace's retained capacity, and `L` the per-candidate
+allowance, the required envelope is
+`C + sum(idle R_i) + sum(assigned max(R_i, L - P))`. Every assigned workspace
+requires `L >= P`. At most `min(submitted candidates, worker count)` workspaces
+are assigned, each to a contiguous candidate range; candidates inside one range
+run sequentially. An empty batch admits only retained collective capacity and
+does not prepare a program. Returned models, input seeds, worker stacks and
+allocator overhead are separate owners.
+
+Ordinary sessions map `SolveConfig::max_source_work` to immutable preparation
+work and `max_closure_batch_bytes` to both preparation storage and the collective
+owner allowance. Candidate closure work retains its separate `max_work` counter.
+The existing CLI options expose these bounds without a combined work quota.
+A preparation stop is distinct from an individual candidate stop; neither
+establishes candidate exhaustion. A collective reservation refusal starts no
+candidate and releases the admission slot.
+
+`SemanticOutcome::query_execution()` retains the CPU producer's typed
+`QueryStatistics` snapshot for independent relational execution. Preparation
+builds are cumulative; active and reused workspace counts describe the latest
+independent attempt that acquired admission. They count assigned owners, not
+completed candidates. Retained bytes describe the current cache. Reserved bytes
+are the latest attempt's admitted envelope, or zero if it admitted none.
+Text statistics, JSON and failure
+reports use this same observation. If reading the snapshot fails, the original
+typed fault and any earlier successful snapshot remain distinguishable; checked
+models are retained without a coverage claim. Shared CPU, static and device
+routes expose their own execution receipts instead.
 
 [`StorageOwners`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StorageOwners.lean)
 proves the natural-number bound obtained by summing independently bounded

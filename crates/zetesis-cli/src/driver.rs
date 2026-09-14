@@ -46,6 +46,8 @@ pub struct Report {
     pub lazy_execution: Option<crate::LazyExecutionStatistics>,
     /// Shared CPU source and per-world work, including failed-batch prefixes.
     pub shared_execution: Option<crate::SharedExecutionStatistics>,
+    /// Prepared independent CPU ownership receipts and any snapshot fault.
+    pub query_execution: Option<crate::QueryExecutionObservation>,
     /// Whether semantic search established an optimum, independently of delivery.
     pub optimum_proved: bool,
     /// Best retained objective score and tied models found so far.
@@ -89,6 +91,8 @@ pub enum RunError {
     BundleAdmission(BundleAdmissionFailure),
     /// Owned CPU pool or batch could not be admitted.
     Batch(BatchError),
+    /// Reading prepared CPU ownership receipts failed after candidate execution.
+    QueryObservation(std::sync::Arc<BatchError>),
     /// Dedicated exact-completion pool construction failed.
     CompletionPool(rayon::ThreadPoolBuildError),
     /// Requested backend was not compiled into this binary.
@@ -179,6 +183,7 @@ impl fmt::Display for RunError {
             ),
             Self::Admission(error) => error.fmt(f),
             Self::Batch(error) => error.fmt(f),
+            Self::QueryObservation(error) => write!(f, "query observation: {error}"),
             Self::CompletionPool(error) => write!(f, "completion worker pool: {error}"),
             Self::BundleLoad(error) => write!(f, "source loading: {error}"),
             Self::BundleAdmission(error) => error.fmt(f),
@@ -273,6 +278,7 @@ impl std::error::Error for RunError {
             Self::BundleLoad(error) => Some(error),
             Self::BundleAdmission(error) => Some(error),
             Self::Batch(error) => Some(error),
+            Self::QueryObservation(error) => Some(error.as_ref()),
             Self::CompletionPool(error) => Some(error),
             Self::Output(error) => Some(error),
             Self::ExecutionObservation(error) => Some(error.as_ref()),
@@ -702,6 +708,7 @@ impl From<zetesis_solve::SolveError> for RunError {
         use zetesis_solve::SolveError;
         match error {
             SolveError::Batch(error) => Self::Batch(error),
+            SolveError::QueryObservation(error) => Self::QueryObservation(error),
             SolveError::CompletionPool(error) => Self::CompletionPool(error),
             SolveError::BackendUnavailable => Self::BackendUnavailable,
             SolveError::UnsupportedSourceBatching => Self::UnsupportedSourceBatching,

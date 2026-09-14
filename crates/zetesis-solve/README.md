@@ -47,6 +47,14 @@ budgets, counters and incumbents. Shared infrastructure does not share truth or
 resume a previous search. Adapter policy, device health and contention are
 checked when execution uses the resource.
 
+Independent relational CPU sessions retain one exact-program query preparation
+and reuse empty workspaces across submitted batches. `max_source_work` bounds
+preparation; candidate work remains separately bounded by `max_work`.
+`SemanticOutcome::query_execution()` retains the CPU producer's actual ownership
+receipt and any snapshot fault. Preparation and candidate stops remain distinct,
+and previously checked answers remain valid. Reused capacity is neither shared
+candidate truth nor a performance guarantee.
+
 `AnswerSet` retains its original subject and optional objective score.
 `SemanticOutcome` records verified membership and search coverage independently
 of consumer output. `Session::progress` snapshots current evidence without

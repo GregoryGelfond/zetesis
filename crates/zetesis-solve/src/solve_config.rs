@@ -77,8 +77,9 @@ pub struct SolveConfig {
     /// Named storage for one independent lazy CPU closure construction.
     /// Input seeds and completed model retention belong to separate owners.
     pub max_closure_bytes: usize,
-    /// Sum of reserved closure allowances for simultaneously active CPU workers.
-    /// This is separate from shared-round and GPU batch storage.
+    /// Collective independent CPU preparation, cached workspace and active
+    /// closure allowance. Also bounds immutable query preparation bytes.
+    /// Shared-round and GPU batch storage remain separate.
     pub max_closure_batch_bytes: usize,
     /// Maximum device propagation work per formula candidate, independent of
     /// CPU work. Below mandatory setup work the device refuses before submission.
@@ -86,7 +87,8 @@ pub struct SolveConfig {
     /// Maximum device propagation sweeps per formula candidate. Zero performs
     /// original-truth setup and leaves undecided candidates to exact CPU search.
     pub gpu_formula_rounds: u32,
-    /// Collective source work per shared CPU batch, distinct from per-world work.
+    /// Collective source work per shared CPU batch, or immutable query
+    /// preparation work for independent CPU closure. Candidate work is separate.
     pub max_source_work: u64,
     /// Maximum derived independent CPU atoms, demanded shared CPU/GPU batch
     /// catalog atoms, eager atoms, or copied candidate restriction atom occurrences.

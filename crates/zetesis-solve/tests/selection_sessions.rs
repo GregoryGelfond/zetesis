@@ -201,6 +201,19 @@ fn sessions_preserve_the_complete_typed_family() {
         assert_eq!(outcome.candidate_progress(), PERMITTED_CANDIDATES);
         assert_eq!(outcome.discovered_gate_atoms(), CARRIER_ATOMS);
         assert_eq!(outcome.verified_models(), u64::try_from(ANSWERS).unwrap());
+        if config.grounder == Grounder::Lazy {
+            let observation = outcome.query_execution().expect("independent prepared CPU route");
+            assert!(observation.fault.is_none());
+            let queries = observation.statistics.unwrap();
+            assert_eq!(queries.preparation_builds, 1);
+            assert!(queries.preparation.unwrap().work > 0);
+            assert!(queries.reused_workspaces > 0);
+            assert!(queries.retained_workspaces <= config.workers.get());
+            assert!(queries.retained_bytes > 0);
+            assert!(queries.reserved_bytes >= queries.retained_bytes);
+        } else {
+            assert!(outcome.query_execution().is_none());
+        }
     }
 }
 
@@ -325,4 +338,22 @@ fn batch_storage_refusal_preserves_the_already_checked_prefix() {
             assert!(session.next().is_none());
         }
     }
+}
+
+#[test]
+fn query_preparation_uses_the_source_work_boundary() {
+    let fixture = Fixture::new();
+    let config = SolveConfig { backend: Backend::Cpu, grounder: Grounder::Lazy,
+        models: 0, max_source_work: 0, ..Default::default() };
+    let (answers, outcome) = run(&fixture, config);
+    assert!(answers.is_empty());
+    assert_eq!(outcome.verified_models(), 0);
+    assert_eq!(outcome.interruption(), Some(Interruption::Preparation(Stop::WorkLimit)));
+    assert_eq!(outcome.completion(), Some(Completion::Interrupted));
+    let observation = outcome.query_execution().unwrap();
+    assert!(observation.fault.is_none());
+    let queries = observation.statistics.unwrap();
+    assert_eq!(queries.preparation, None);
+    assert_eq!(queries.preparation_builds, 0);
+    assert_eq!(queries.active_workspaces, 0);
 }

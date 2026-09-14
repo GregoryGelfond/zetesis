@@ -78,6 +78,8 @@ mod solve_config;
 mod semantic_outcome;
 mod lazy_execution;
 mod shared_execution;
+mod query_observation;
+pub use query_observation::QueryExecutionObservation;
 mod closure_session;
 mod formula_session;
 mod session;

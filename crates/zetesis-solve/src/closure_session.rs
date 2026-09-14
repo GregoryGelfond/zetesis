@@ -19,6 +19,7 @@ pub(crate) struct ClosureSession<'a> {
     ready: std::vec::IntoIter<Result<Option<Model>, Stop>>,
     finished_batch: bool,
     pending_stop: Option<Stop>,
+    pending_query_fault: Option<Arc<zetesis_cpu::BatchError>>,
     verified: u64,
     checked: u64,
     yielded: usize,
@@ -64,6 +65,7 @@ impl<'a> ClosureSession<'a> {
             ready: Vec::new().into_iter(),
             finished_batch: false,
             pending_stop: None,
+            pending_query_fault: None,
             verified: 0,
             checked: 0,
             yielded: 0,
@@ -87,7 +89,7 @@ impl<'a> ClosureSession<'a> {
         }
         if config.models != 0 && self.yielded >= config.models {
             self.complete(SearchState::RequestedModels);
-            return None;
+            return self.query_fault();
         }
         // All ready results are already checked. Consuming their prefix changes
         // neither verified membership nor the pending end-of-batch stop.
@@ -102,18 +104,19 @@ impl<'a> ClosureSession<'a> {
                     Ok(None) => continue,
                     Err(stop) => {
                         self.complete(SearchState::Interrupted(Interruption::Oracle(stop)));
-                        return None;
+                        return self.query_fault();
                     }
                 }
             }
             if let Some(stop) = self.pending_stop {
                 self.complete(SearchState::Interrupted(Interruption::Oracle(stop)));
-                return None;
+                return self.query_fault();
             }
             if self.finished_batch {
                 self.complete(SearchState::Exhausted);
-                return None;
+                return self.query_fault();
             }
+            if let Some(error) = self.query_fault() { return Some(error); }
             let count = if self.checked == 0 {
                 1
             } else {
@@ -146,11 +149,17 @@ impl<'a> ClosureSession<'a> {
                 Err(_) if seeds.is_empty() => Ok(Vec::new()),
                 Err(stop) => Ok(vec![Err(*stop)]),
             };
+            self.pending_query_fault = self.engine.as_ref().ok()
+                .and_then(Engine::query_observation).and_then(|observation| observation.fault.clone());
             match results {
                 Ok(results) => {
                     self.verified +=
                         results.iter().filter(|r| matches!(r, Ok(Some(_)))).count() as u64;
                     self.ready = results.into_iter();
+                }
+                Err(SolveError::Batch(zetesis_cpu::BatchError::Preparation(stop))) => {
+                    self.complete(SearchState::Interrupted(Interruption::Preparation(stop)));
+                    return self.query_fault();
                 }
                 Err(error) => {
                     self.terminal = true;
@@ -158,6 +167,13 @@ impl<'a> ClosureSession<'a> {
                 }
             }
         }
+    }
+
+    fn query_fault(&mut self) -> Option<Result<Model, SolveError>> {
+        self.pending_query_fault.take().map(|error| {
+            self.terminal = true;
+            Err(SolveError::QueryObservation(error))
+        })
     }
 
     fn complete(&mut self, search_state: SearchState) {
@@ -186,6 +202,7 @@ impl<'a> ClosureSession<'a> {
             candidate_statistics: Some(self.candidates.statistics()),
             countermodel_statistics: None,
             formula_execution: None,
+            query_execution: self.engine.as_ref().ok().and_then(Engine::query_observation).cloned(),
             shared_execution: self
                 .engine
                 .as_ref()
@@ -248,3 +265,6 @@ mod storage_tests {
         assert!(batch_storage(3, &Control::default()).unwrap().capacity() >= 3);
     }
 }
+
+#[cfg(test)]
+mod query_tests;

@@ -86,6 +86,7 @@ pub(crate) fn write_progress(
             formula_execution: semantic.formula_execution(),
             lazy_execution: semantic.lazy_execution(),
             shared_execution: semantic.shared_execution(),
+            query_execution: semantic.query_execution(),
             optimization: semantic.incumbent(),
         },
     )
@@ -154,8 +155,8 @@ fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
     )?;
     writeln!(
         sink,
-        "  independent CPU closure limits: named bytes/owner={}; collective reservation bytes={}; returned models and allocator overhead excluded",
-        o.max_closure_bytes, o.max_closure_batch_bytes
+        "  independent CPU closure limits: named bytes/owner={}; preparation/cache/collective reservation bytes={}; query preparation work={}; returned models and allocator overhead excluded",
+        o.max_closure_bytes, o.max_closure_batch_bytes, o.max_source_work
     )?;
     writeln!(
         sink,
@@ -243,6 +244,7 @@ struct Details<'a> {
     formula_execution: Option<&'a crate::FormulaExecutionStatistics>,
     lazy_execution: Option<&'a crate::LazyExecutionStatistics>,
     shared_execution: Option<&'a crate::SharedExecutionStatistics>,
+    query_execution: Option<&'a crate::QueryExecutionObservation>,
     optimization: Option<&'a crate::Optimization>,
 }
 
@@ -259,6 +261,7 @@ impl<'a> From<&'a Report> for Details<'a> {
             formula_execution: report.formula_execution.as_ref(),
             lazy_execution: report.lazy_execution.as_ref(),
             shared_execution: report.shared_execution.as_ref(),
+            query_execution: report.query_execution.as_ref(),
             optimization: report.optimization.as_ref(),
         }
     }
@@ -277,6 +280,7 @@ impl<'a> From<&'a crate::PartialReport> for Details<'a> {
             formula_execution: report.formula_execution.as_ref(),
             lazy_execution: report.lazy_execution.as_ref(),
             shared_execution: report.shared_execution.as_ref(),
+            query_execution: report.query_execution.as_ref(),
             optimization: report.optimization.as_ref(),
         }
     }
@@ -295,6 +299,7 @@ fn details(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
             stats.restriction_peak_bytes
         )?;
     }
+    if let Some(observation) = report.query_execution { query(sink, observation)?; }
     if let Some(stats) = report.shared_execution {
         shared(sink, stats)?;
     }
@@ -354,6 +359,25 @@ fn details(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
             "  objective: no retained score; evaluation counters=unavailable"
         )?;
     }
+    Ok(())
+}
+
+fn query(sink: &mut impl Write, observation: &crate::QueryExecutionObservation) -> io::Result<()> {
+    if observation.fault.is_some() && observation.statistics.is_some() {
+        writeln!(sink, "  query statistics: retaining last successful snapshot; current snapshot failed")?;
+    }
+    if let Some(stats) = observation.statistics {
+        writeln!(sink, "  prepared CPU queries: builds={}; retained workspaces={}; active ranges={}; reused slots={}; retained bytes={}; reserved envelope bytes={}",
+            stats.preparation_builds, stats.retained_workspaces, stats.active_workspaces,
+            stats.reused_workspaces, stats.retained_bytes, stats.reserved_bytes)?;
+        if let Some(preparation) = stats.preparation {
+            writeln!(sink, "  query preparation: work={}; retained bytes={}; separate from candidate work; capacities are not RSS",
+                preparation.work, preparation.retained_bytes)?;
+        }
+    } else {
+        writeln!(sink, "  prepared CPU queries: no successful ownership snapshot")?;
+    }
+    if let Some(fault) = &observation.fault { writeln!(sink, "  query observation fault: {fault}")?; }
     Ok(())
 }
 

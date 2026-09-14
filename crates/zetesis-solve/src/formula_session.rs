@@ -312,6 +312,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             countermodel_statistics: statistics,
             lazy_execution: None,
             shared_execution: None,
+                    query_execution: None,
             formula_execution: self
                 .models
                 .as_ref()

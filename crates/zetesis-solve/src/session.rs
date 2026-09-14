@@ -566,6 +566,7 @@ impl<'a> Session<'a> {
                     formula_execution: None,
                     lazy_execution: None,
                     shared_execution: None,
+                    query_execution: None,
                 })),
                 config,
             ));

@@ -190,11 +190,27 @@ backend; explicit sharing resolves automatic hardware to CPU.
 Source and per-world work have distinct ceilings. A stopped world makes the
 whole batch incomplete. See [parallel execution](../../docs/book/rust/parallel.md).
 
+Independent relational CPU execution prepares query dimensions once per session
+and retains empty workspace capacities across batches. `--max-source-work` bounds
+that preparation separately from candidate `--max-work`.
+`--max-closure-bytes` bounds one candidate's named storage;
+`--max-closure-batch-bytes` admits preparation, idle retained workspaces and
+assigned candidate allowances together. Preparation refusal and individual
+candidate refusal retain different interruption kinds. See the
+[ownership contract](../../docs/book/architecture/ownership.md#memory-contracts).
+
 ## Statistics and resource limits
 
 `--stats` leaves answer stdout unchanged and adds configured limits, actual
 execution counters, completion and host timings to stderr. JSON exposes typed
 views of the same information. Unavailable counters remain unavailable, not zero.
+
+For independent relational CPU execution, `query_execution` reports actual
+preparation builds/work, assigned and reused workspace slots, current retained
+capacity and the latest reservation envelope. These are ownership receipts, not
+completed candidate counts or RSS. Reports retain a typed snapshot fault
+separately from any earlier successful snapshot and any checked answers. Other
+execution routes leave this observation absent.
 
 Stage timings separate source preparation, eager grounding, solving and output.
 Lazy joins are interleaved with solving, so a separate lazy grounding duration

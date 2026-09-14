@@ -9,6 +9,8 @@ use crate::{Backend, Grounder, Oracle, PhaseTimings, PreparedProfile, SemanticOu
 pub enum SolveError {
     /// The owned CPU pool or batch could not be admitted.
     Batch(zetesis_cpu::BatchError),
+    /// A prepared CPU receipt could not be read; checked models remain retained.
+    QueryObservation(std::sync::Arc<zetesis_cpu::BatchError>),
     /// The exact-completion worker pool could not be constructed.
     CompletionPool(rayon::ThreadPoolBuildError),
     /// The requested device backend was not compiled.
@@ -64,6 +66,7 @@ impl fmt::Display for SolveError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Batch(error) => error.fmt(formatter),
+            Self::QueryObservation(error) => write!(formatter, "query observation: {error}"),
             Self::CompletionPool(error) => write!(formatter, "completion worker pool: {error}"),
             Self::BackendUnavailable => formatter.write_str("GPU support was not compiled"),
             Self::UnsupportedOracle { backend, grounder } => write!(formatter,
@@ -92,6 +95,7 @@ impl std::error::Error for SolveError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Batch(error) => Some(error),
+            Self::QueryObservation(error) => Some(error.as_ref()),
             Self::CompletionPool(error) => Some(error),
             Self::ExecutionObservation(error) => Some(error.as_ref()),
             Self::Static(error) => Some(error),
