@@ -2,6 +2,7 @@ use super::*;
 use zetesis_core::{Atom, Predicate, Value};
 
 mod allocations;
+mod receipts;
 
 #[test]
 fn relation_dispatch_requires_a_positive_wait() {
@@ -68,12 +69,16 @@ fn records(
         .iter()
         .enumerate()
         .flat_map(|(index, mask)| {
-            let mut record = vec![
-                RECEIPT_MARKER,
-                1,
-                u32::try_from(index).unwrap(),
-                packed.records[index * 4 + 3],
-            ];
+            let mut record = Vec::new();
+            for tile in 0..plan.workgroups[0] {
+                record.extend_from_slice(&[
+                    RECEIPT_MARKER,
+                    1,
+                    u32::try_from(index).unwrap(),
+                    tile,
+                    packed.records[index * 4 + 3],
+                ]);
+            }
             record.extend_from_slice(mask);
             record
         })
@@ -175,30 +180,6 @@ fn decoding_requires_the_complete_query_population() {
 }
 
 #[test]
-fn query_receipts_require_each_expected_field() {
-    let (predicate, atoms) = source(1);
-    let relation = Relation::from_atoms(&predicate, &atoms, relation::Limits::default()).unwrap();
-    let queries = [relation.query(&[], relation::Limits::default()).unwrap()];
-    let mut plan = plan(&relation, &queries);
-    let input = records(&mut plan, &queries, &[vec![1]]);
-    for field in 0..RECEIPT_WORDS as usize {
-        let mut changed = input.clone();
-        changed[field] ^= 1;
-        let error = plan
-            .decode(
-                &relation,
-                &queries,
-                &changed,
-                output(&plan),
-                &Control::default(),
-            )
-            .err()
-            .unwrap();
-        assert_eq!(error.kind(), GpuErrorKind::Readback);
-    }
-}
-
-#[test]
 fn nonzero_mask_padding_is_refused() {
     for rows in [1, 31, 33, 63, 65] {
         let (predicate, atoms) = source(rows);
@@ -227,7 +208,7 @@ fn nonzero_mask_padding_is_refused() {
 
 #[test]
 fn row_tiles_preserve_mask_word_boundaries() {
-    for rows in [31, 32, 33, 63, 64, 65] {
+    for rows in [31, 32, 33, 63, 64, 65, 127, 128, 129] {
         let (predicate, atoms) = source(rows);
         let relation =
             Relation::from_atoms(&predicate, &atoms, relation::Limits::default()).unwrap();

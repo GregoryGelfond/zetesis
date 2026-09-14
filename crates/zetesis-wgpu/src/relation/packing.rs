@@ -50,6 +50,15 @@ fn cells(left: u32, right: u32) -> Result<u32, GpuError> {
         .ok_or_else(|| capacity("relation cell offset exceeds u32"))
 }
 
+// Each query owns all tile receipts followed by its packed mask words. Admit
+// the full population as well as its per-query stride before any allocation.
+fn result_layout(words: u32, tiles: u32, queries: u32) -> Result<(u32, u64), GpuError> {
+    let stride = cells(tiles, RECEIPT_WORDS)?
+        .checked_add(words)
+        .ok_or_else(|| capacity("relation result stride exceeds u32"))?;
+    Ok((stride, u64::from(cells(queries, stride)?) * 4))
+}
+
 fn host_words(bytes: u64) -> Result<usize, GpuError> {
     usize::try_from(bytes / 4).map_err(|_| capacity("relation buffer exceeds host indexing"))
 }
@@ -99,6 +108,7 @@ pub(super) struct Plan {
     pub(super) work: u64,
     columns: u32,
     epoch: u32,
+    result_stride: u32,
 }
 
 impl Plan {
@@ -145,6 +155,7 @@ impl Plan {
                 work: 0,
                 columns,
                 epoch,
+                result_stride: 0,
             });
         }
         let equalities = queries.iter().try_fold(0u32, |count, query| {
@@ -155,10 +166,7 @@ impl Plan {
         crate::runtime::positive_timeout(limits.timeout)?;
         let query_bytes = u64::from(cells(count, 4)?.max(4)) * 4;
         let equality_bytes = u64::from(cells(equalities, 2)?.max(2)) * 4;
-        let stride = words
-            .checked_add(RECEIPT_WORDS)
-            .ok_or_else(|| capacity("relation result stride exceeds u32"))?;
-        let result_bytes = u64::from(cells(count, stride)?.max(1)) * 4;
+        let (result_stride, result_bytes) = result_layout(words, groups[0], count)?;
         let mask_bytes = u64::from(cells(count, words)?) * 4;
         for bytes in [query_bytes, equality_bytes, result_bytes] {
             buffer(bytes, device)?;
@@ -191,6 +199,7 @@ impl Plan {
             work: 0,
             columns,
             epoch,
+            result_stride,
         };
         for query in queries {
             plan.work = plan
@@ -211,7 +220,7 @@ impl Plan {
             self.queries,
             self.words,
             self.epoch,
-            0,
+            self.workgroups[0],
             0,
             0,
         ]
@@ -234,7 +243,7 @@ impl Plan {
         }
         let work = u64::from(self.workgroups[0]) * u64::from(ROWS_PER_GROUP)
             + u64::from(self.words) * u64::from(BITS_PER_WORD)
-            + 1
+            + u64::from(self.workgroups[0])
             + u64::from(self.rows)
                 * u64::try_from(query.equalities().len())
                     .map_err(|_| capacity("relation equality count exceeds u64"))?;
@@ -335,26 +344,8 @@ impl Plan {
                 "relation result length differs from complete query population",
             ));
         }
-        let stride = (RECEIPT_WORDS + self.words) as usize;
-        for (index, (record, query)) in input.chunks_exact(stride).zip(queries).enumerate() {
-            poll(control)?;
-            if record[..RECEIPT_WORDS as usize]
-                != [
-                    RECEIPT_MARKER,
-                    self.epoch,
-                    address(index)?,
-                    self.query_work(query)?,
-                ]
-            {
-                return Err(readback("relation query receipt identity or work differs"));
-            }
-            let mask = &record[RECEIPT_WORDS as usize..];
-            let tail = self.rows % BITS_PER_WORD;
-            if tail != 0 && mask.last().is_some_and(|word| word >> tail != 0) {
-                return Err(readback("relation mask has nonzero unused tail bits"));
-            }
-            let start = index * self.words as usize;
-            words[start..start + mask.len()].copy_from_slice(mask);
+        if self.result_bytes != 0 {
+            self.decode_records(queries, input, &mut words, control)?;
         }
         Ok(RelationGpuMasks {
             relation,
@@ -362,6 +353,39 @@ impl Plan {
             words_per_query: self.words as usize,
             words,
         })
+    }
+
+    fn decode_records(
+        &self,
+        queries: &[Query<'_, '_>],
+        input: &[u32],
+        words: &mut [u32],
+        control: &Control,
+    ) -> Result<(), GpuError> {
+        let stride = self.result_stride as usize;
+        // The checked layout established this prefix and the complete input
+        // length above prevents a short final query from disappearing in zip.
+        let receipts = stride - self.words as usize;
+        for (index, (record, query)) in input.chunks_exact(stride).zip(queries).enumerate() {
+            let work = self.query_work(query)?;
+            for (tile, receipt) in record[..receipts]
+                .chunks_exact(RECEIPT_WORDS as usize)
+                .enumerate()
+            {
+                poll(control)?;
+                if receipt != [RECEIPT_MARKER, self.epoch, address(index)?, address(tile)?, work] {
+                    return Err(readback("relation tile receipt identity or work differs"));
+                }
+            }
+            let mask = &record[receipts..];
+            let tail = self.rows % BITS_PER_WORD;
+            if tail != 0 && mask.last().is_some_and(|word| word >> tail != 0) {
+                return Err(readback("relation mask has nonzero unused tail bits"));
+            }
+            let start = index * self.words as usize;
+            words[start..start + mask.len()].copy_from_slice(mask);
+        }
+        Ok(())
     }
 }
 
@@ -387,3 +411,7 @@ pub(super) fn workgroups(groups: [u32; 3], limit: u32) -> Result<u64, GpuError> 
 fn readback(detail: &str) -> GpuError {
     GpuError::new(GpuErrorKind::Readback, detail)
 }
+
+#[cfg(test)]
+#[path = "../../tests/relation/layout.rs"]
+mod tests;

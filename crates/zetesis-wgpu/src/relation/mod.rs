@@ -17,8 +17,8 @@ pub use device::{GpuRelationExecutor, PreparedGpuRelation};
 const SHADER: &str = include_str!("filter.wgsl");
 const ROWS_PER_GROUP: u32 = 64;
 const BITS_PER_WORD: u32 = 32;
-const RECEIPT_WORDS: u32 = 4;
-const RECEIPT_MARKER: u32 = 0x434f_4c31;
+const RECEIPT_WORDS: u32 = 5;
+const RECEIPT_MARKER: u32 = 0x434f_4c32;
 const PARAM_BYTES: u64 = 32;
 
 /// Inclusive bounds for a prepared view and one equality-filter invocation.
@@ -35,7 +35,9 @@ pub struct RelationGpuLimits {
     pub max_bytes: u64,
     /// Scheduled row flags, equality comparisons, bit-fold steps and receipts.
     /// For R rows, Q queries, T=ceil(R/64), W=ceil(R/32), and E total query
-    /// equalities, the nonempty schedule charges Q*(64*T+32*W+1)+R*E.
+    /// equalities, the nonempty schedule charges Q*(64*T+32*W+T)+R*E.
+    /// Each tile has one fixed-size completion/identity receipt unit. These are
+    /// policy units, not a measured GPU instruction count.
     pub max_work: u64,
     /// Bounded wait for submitted work; control is polled between short waits.
     /// Device creation, shader compilation and driver allocations are outside it.

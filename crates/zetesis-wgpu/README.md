@@ -193,6 +193,25 @@ patterns and binding. Preparation, filtering and reconstruction each have
 explicit limits; the enclosing caller accounts for simultaneously retained views.
 These operations do not replace ordinary source grounding.
 
+The COL2 completion/identity protocol returns a receipt from every row tile.
+For `T=ceil(rows/64)` and `W=ceil(rows/32)`, each query occupies `5*T + W` words:
+one five-word marker/epoch/query/tile/work receipt per tile, followed by its mask.
+All lanes, including padded final-tile lanes, reach a storage barrier after mask
+writes and before lane zero writes that tile's receipt. The host validates every
+tile and the mask tail before returning a complete batch. Missing, stale or
+misplaced receipts refuse the batch; they never publish a decoded prefix.
+The previous COL1 receipt identified tile zero's dispatch only.
+
+The full result and readback payloads each contain `4*Q*(5*T+W)` bytes for `Q`
+queries. Scheduled work is `Q*(64*T+32*W+T) + rows*E`, where `E` is the total
+number of compiled query equalities. The last `T` charges one fixed receipt unit
+per tile; these are policy units, not measured device instructions. Filtering
+still uses exactly `[T,Q,1]` workgroups. Fresh transport is allocated per invocation;
+the prepared column owner survives successful calls. An unwritten zeroed receipt
+cannot match COL2 and the nonzero invocation epoch. These checks are a
+completion/identity protocol, not a proof of semantic mask correctness or a
+guarantee against arbitrary driver faults.
+
 Filtering first checks the minimum payload, then fallibly reserves host query,
 equality and complete output-mask vectors before any invocation device effects.
 All retained element capacity, including allocator-provided spare slots, is

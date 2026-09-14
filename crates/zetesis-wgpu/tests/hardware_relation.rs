@@ -61,7 +61,7 @@ fn compare_rows(executor: &mut GpuRelationExecutor, rows: usize) {
     }
     specifications.push(vec![(0, values[0].clone()), (0, values[1].clone())]);
     specifications.push(Vec::new());
-    let queries: Vec<_> = specifications
+    let mut queries: Vec<_> = specifications
         .iter()
         .map(|items| {
             let keys: Vec<_> = items
@@ -75,28 +75,22 @@ fn compare_rows(executor: &mut GpuRelationExecutor, rows: usize) {
         .prepare(&relation, RelationGpuLimits::default(), &Control::default())
         .unwrap();
     let input = relation.all(Limits::default()).unwrap();
-    for _ in 0..2 {
+    for round in 0..2 {
+        if round != 0 {
+            queries.reverse();
+            specifications.reverse();
+        }
         let masks = prepared
             .filter(&queries, RelationGpuLimits::default(), &Control::default())
             .unwrap();
         assert_eq!(masks.query_count(), queries.len());
         assert!(relation.same_owner(masks.relation()));
-        let expected_submissions = u64::from(rows != 0);
-        let activity = prepared.activity();
-        assert_eq!(activity.submissions, expected_submissions);
-        assert_eq!(
-            activity.submitted_queries,
-            expected_submissions * queries.len() as u64
+        assert_completed_tiles(
+            &prepared.activity(),
+            rows,
+            queries.len(),
+            queries.iter().map(|query| query.equalities().len()).sum(),
         );
-        assert_eq!(activity.completed_queries, activity.submitted_queries);
-        assert_eq!(
-            activity.submitted_workgroups,
-            rows.div_ceil(64) as u64 * queries.len() as u64
-        );
-        assert_eq!(activity.completed_work, activity.scheduled_work);
-        if rows != 0 {
-            assert!(activity.downloaded_bytes > 0);
-        }
         for (query, specification) in specifications.iter().enumerate() {
             let expected: Vec<_> = indices
                 .iter()
@@ -124,9 +118,33 @@ fn compare_rows(executor: &mut GpuRelationExecutor, rows: usize) {
     }
 }
 
+fn assert_completed_tiles(
+    activity: &RelationGpuActivity,
+    rows: usize,
+    queries: usize,
+    equalities: usize,
+) {
+    let rows = u64::try_from(rows).unwrap();
+    let queries = u64::try_from(queries).unwrap();
+    let equalities = u64::try_from(equalities).unwrap();
+    let tiles = rows.div_ceil(64);
+    let words = rows.div_ceil(32);
+    assert_eq!(activity.submissions, u64::from(rows != 0));
+    assert_eq!(activity.submitted_queries, u64::from(rows != 0) * queries);
+    assert_eq!(activity.completed_queries, activity.submitted_queries);
+    assert_eq!(activity.submitted_workgroups, tiles * queries);
+    assert_eq!(
+        activity.scheduled_work,
+        queries * (64 * tiles + 32 * words + tiles) + rows * equalities
+    );
+    assert_eq!(activity.completed_work, activity.scheduled_work);
+    // COL2 returns one five-word receipt for every tile, then complete masks.
+    assert_eq!(activity.downloaded_bytes, 4 * queries * (5 * tiles + words));
+}
+
 fn qualify_masks(backend: physical::Backend) {
     let mut executor = executor(backend);
-    for rows in [0, 1, 31, 32, 33, 63, 64, 65] {
+    for rows in [0, 1, 31, 32, 33, 63, 64, 65, 127, 128, 129] {
         compare_rows(&mut executor, rows);
     }
     compare_catalog_growth(&mut executor);

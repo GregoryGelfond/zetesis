@@ -150,14 +150,16 @@ fn decode_preserves_the_preallocated_mask_storage() {
     // Each query scans 64 padded rows, 32 mask bits, one receipt, and
     // four row equalities: 101 work units, independently of packed records.
     let input = [
-        0x434f_4c31,
+        0x434f_4c32,
         1,
+        0,
         0,
         101,
         0b0101,
-        0x434f_4c31,
+        0x434f_4c32,
         1,
         1,
+        0,
         101,
         0b0010,
     ];
