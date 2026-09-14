@@ -2,7 +2,7 @@ use super::{NodeId, Projections, suffix_size};
 use crate::search::cursor::tests::budget;
 use crate::{AdmissionError, Assignment, Control, Incomplete};
 
-fn blocked(index: &Projections) -> Vec<usize> {
+fn blocked(index: &mut Projections) -> Vec<usize> {
     let control = Control::default();
     (0..1_usize << index.width)
         .filter(|bits| {
@@ -17,7 +17,7 @@ fn blocked(index: &Projections) -> Vec<usize> {
 }
 
 fn first_key() -> Projections {
-    let mut index = Projections::new(4);
+    let mut index = Projections::new(4, crate::ProjectionLimits::default()).unwrap();
     index
         .insert(4, |_| false, &mut budget(&Control::default()))
         .unwrap();
@@ -55,14 +55,14 @@ fn the_last_representable_suffix_is_admitted() {
 fn host_length_overflow_precedes_key_reads() {
     let control = Control::default();
     let mut charged = budget(&control);
-    let mut index = Projections::new(usize::MAX);
+    let mut index = Projections::new(usize::MAX, crate::ProjectionLimits::default()).unwrap();
     assert_eq!(
         index.insert(usize::MAX, |_| panic!("no suffix read"), &mut charged),
         Err(Incomplete::CounterOverflow)
     );
     assert_eq!(charged.statistics.work, 1);
     assert_eq!(index.nodes.capacity(), 0);
-    assert!(!index.empty_blocked);
+    assert_eq!(index.entries, 0);
 }
 
 #[test]
@@ -71,7 +71,7 @@ fn compact_index_overflow_precedes_allocation() {
     let control = Control::default();
     let mut charged = budget(&control);
     let width = usize::try_from(u32::MAX).unwrap();
-    let mut index = Projections::new(width);
+    let mut index = Projections::new(width, crate::ProjectionLimits::default()).unwrap();
     // Host arithmetic fits, but width + the root exceeds compact node IDs.
     assert_eq!(
         index.insert(width, |_| panic!("no suffix read"), &mut charged),
@@ -79,7 +79,7 @@ fn compact_index_overflow_precedes_allocation() {
     );
     assert_eq!(charged.statistics.work, 1);
     assert_eq!(index.nodes.capacity(), 0);
-    assert!(!index.empty_blocked);
+    assert_eq!(index.entries, 0);
 }
 
 #[test]
@@ -87,7 +87,7 @@ fn cancellation_precedes_suffix_shape_refusal() {
     let control = Control::default();
     control.cancel();
     let mut charged = budget(&control);
-    let mut index = Projections::new(usize::MAX);
+    let mut index = Projections::new(usize::MAX, crate::ProjectionLimits::default()).unwrap();
     assert_eq!(
         index.insert(usize::MAX, |_| panic!("no key read"), &mut charged),
         Err(Incomplete::Cancelled)
@@ -112,10 +112,10 @@ fn every_interrupted_suffix_preserves_the_old_key_set() {
             if ceiling < 6 {
                 assert_eq!(result, Err(Incomplete::WorkLimit));
                 assert_eq!(index.nodes, before);
-                assert_eq!(blocked(&index), [0]);
+                assert_eq!(blocked(&mut index), [0]);
             } else {
                 assert_eq!(result, Ok(()));
-                assert_eq!(blocked(&index), [0, key]);
+                assert_eq!(blocked(&mut index), [0, key]);
             }
         }
     }
@@ -143,7 +143,7 @@ fn cancellation_discards_a_partially_built_suffix() {
     // Insertion, the root branch, then two appended bits were charged.
     assert_eq!(charged.statistics.work, 4);
     assert_eq!(index.nodes, before);
-    assert_eq!(blocked(&index), [0]);
+    assert_eq!(blocked(&mut index), [0]);
 }
 
 #[test]
@@ -155,5 +155,5 @@ fn duplicate_keys_do_not_grow_the_arena() {
     index.insert(4, |_| false, &mut charged).unwrap();
     assert_eq!(charged.statistics.work, 5);
     assert_eq!(index.nodes, before);
-    assert_eq!(blocked(&index), [0]);
+    assert_eq!(blocked(&mut index), [0]);
 }

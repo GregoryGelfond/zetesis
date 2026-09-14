@@ -64,14 +64,20 @@ See [restriction and projection contracts](candidate-pruning.md).
 
 ## Work and retained storage
 
-The original state, accumulated restrictions and logical exclusions share the
-query's shape ceilings. Each exclusion admits one clause unit and its semantic
-width in literal units; only the trie retains its key. Those logical units do
-not claim that blocking literals occupy CNF storage.
+The original CNF and accumulated restrictions share `AdmissionLimits`.
+The exact exclusion owner separately admits distinct entries, logical nodes
+and named header/vector capacity through `ProjectionLimits`. Exclusions consume
+no submitted clause or literal units. A duplicate key needs no new entry; the
+empty projection uses one entry and zero nodes. Capacity includes actual spare
+vector slots and conservative old/new overlap during growth, excluding allocator
+metadata and other SAT owners. A failed insertion changes no complete key or
+logical node count, although its enlarged capacity can remain retained.
 The retained outer state stays live while an inner query runs, and each owns
 bounded variable/watch/trail arrays. No additional base-clause copy is required.
 Resumption, undo, complete-leaf validation and exact-index operations charge
 the cumulative work counter and poll control.
+The history work receipt counts the trie part of those same steps, including
+incomplete attempts; it must not be added to the search total a second time.
 
 Exact blocks act at completed leaves. This mechanism does not add clause
 learning, propagated incremental nogoods or a guaranteed speedup. Retaining a

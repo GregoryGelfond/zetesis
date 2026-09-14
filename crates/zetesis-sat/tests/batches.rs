@@ -238,7 +238,7 @@ fn short_and_excess_checker_results_are_retryable_but_not_model_is_an_invariant_
 }
 
 #[test]
-fn candidate_limit_and_late_block_failure_preserve_the_checked_prefix_and_delayed_stop() {
+fn candidate_limit_preserves_the_checked_batch_prefix() {
     let t = choices();
     let mut search = StableModels::new(
         &t,
@@ -255,29 +255,37 @@ fn candidate_limit_and_late_block_failure_preserve_the_checked_prefix_and_delaye
         search.next_batch(limits(3), residual),
         Err(BatchError::Search(Incomplete::CandidateLimit))
     ));
+}
+
+#[test]
+fn history_limit_preserves_the_checked_batch_prefix() {
     // A zero-atom stable theory has no encoding clauses; its exact empty block
-    // cannot be stored under max_clauses=0, after the candidate is already owned.
+    // cannot be stored under max_entries=0, after the candidate is already owned.
     let empty = theory(0, vec![], vec![]);
     let bounded = Limits {
-        admission: zetesis_sat::AdmissionLimits {
-            max_clauses: 0,
+        projections: zetesis_sat::ProjectionLimits {
+            max_entries: 0,
             ..Default::default()
         },
         ..Default::default()
     };
     let mut search = StableModels::new(&empty, bounded, Control::default()).unwrap();
-    assert_eq!(
-        search
+    let batch = search
             .next_batch(limits(2), |_, c| Ok::<_, Infallible>(
                 vec![BatchVerdict::NoProperSubset; c.len()]
             ))
-            .unwrap()
-            .len(),
-        1
-    );
+            .unwrap();
+    assert_eq!(batch.len(), 1);
+    assert!(batch[0].theory().same_instance(&empty));
+    assert_eq!(batch[0].atoms().count(), 0);
+    assert_eq!(search.statistics().stable_models, 1);
+    assert_eq!(search.statistics().projections.entries, 0);
+    assert_eq!(search.batch_statistics().committed, 1);
     assert!(matches!(
         search.next_batch(limits(2), residual),
-        Err(BatchError::Search(Incomplete::Admission(_)))
+        Err(BatchError::Search(Incomplete::ProjectionLimit {
+            resource: zetesis_sat::ProjectionResource::Entries, required: 1, limit: 0,
+        }))
     ));
     assert!(!search.exhausted());
 }

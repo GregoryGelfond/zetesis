@@ -277,7 +277,7 @@ impl StableModels {
         while self.batch.pending.len() < limits.max_candidates.get() {
             match proposal(
                 &self.theory,
-                &mut self.candidate_cnf,
+                &self.candidate_cnf,
                 &mut self.candidate_cursor,
                 self.limits,
                 &mut budget,
@@ -287,7 +287,7 @@ impl StableModels {
                     // The interpretation is retained even if its exact block cannot fit.
                     let started = timing::start(self.statistics.phase_timings.as_ref());
                     let block = self.candidate_cursor.exclude(
-                        &mut self.candidate_cnf,
+                        &self.candidate_cnf,
                         &candidate,
                         &mut budget,
                     );
@@ -384,7 +384,7 @@ impl StableModels {
 
 fn proposal(
     theory: &Theory,
-    cnf: &mut crate::Cnf,
+    cnf: &crate::Cnf,
     cursor: &mut crate::search::Cursor,
     limits: super::Limits,
     budget: &mut Budget<'_>,

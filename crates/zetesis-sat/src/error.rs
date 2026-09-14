@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::AdmissionError;
+use crate::{AdmissionError, ProjectionResource};
 use zetesis_cpu::Stop;
 
 /// Why no logical decision is available. Every variant leaves coverage open.
@@ -26,8 +26,17 @@ pub enum Incomplete {
     PendingBatch,
     /// Fallible storage reservation failed.
     Allocation,
-    /// A finite encoding or blocking clause exceeded admission limits.
+    /// A finite encoding or index exceeded admission or representation limits.
     Admission(AdmissionError),
+    /// Exact exclusion history exceeded its own inclusive resource ceiling.
+    ProjectionLimit {
+        /// Refused history dimension.
+        resource: ProjectionResource,
+        /// Proposed count or named byte capacity, before publishing a key.
+        required: u128,
+        /// Inclusive configured ceiling.
+        limit: u128,
+    },
     /// A candidate belongs to a different admitted theory instance.
     WrongTheory,
     /// A candidate-only restriction declares a different semantic atom count.
@@ -80,6 +89,11 @@ impl fmt::Display for Incomplete {
             Self::PendingBatch => f.write_str("an unresolved candidate batch remains"),
             Self::Allocation => f.write_str("SAT storage reservation failed"),
             Self::Admission(error) => error.fmt(f),
+            Self::ProjectionLimit {
+                resource,
+                required,
+                limit,
+            } => write!(f, "projection history {resource:?} requires {required}; limit is {limit}"),
             Self::WrongTheory => f.write_str("candidate belongs to a different theory"),
             Self::RestrictionUniverse { expected, actual } => write!(
                 f,

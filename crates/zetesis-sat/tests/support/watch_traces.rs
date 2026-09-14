@@ -125,8 +125,8 @@ fn trace(source: &str, refined: bool, limits: SearchLimits) -> String {
         control: &control,
         statistics: SearchStatistics::default(),
     };
-    let mut cnf = encoding::encode(theory, None, AdmissionLimits::default(), &mut charged).unwrap();
-    let mut cursor = Cursor::projected(theory.atom_count());
+    let cnf = encoding::encode(theory, None, AdmissionLimits::default(), &mut charged).unwrap();
+    let mut cursor = Cursor::projected(theory.atom_count(), crate::ProjectionLimits::default()).unwrap();
     if refined {
         cursor.restart();
     }
@@ -156,7 +156,7 @@ fn trace(source: &str, refined: bool, limits: SearchLimits) -> String {
                     reference_statistics(charged.statistics, theory.atom_count(), excluded)
                 )
                 .unwrap();
-                if let Err(error) = cursor.exclude(&mut cnf, &candidate, &mut charged) {
+                if let Err(error) = cursor.exclude(&cnf, &candidate, &mut charged) {
                     writeln!(
                         record,
                         "block {error:?}; {:?}",

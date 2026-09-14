@@ -92,7 +92,8 @@ fn refinements_accumulate_and_restarts_preserve_exact_previous_blocks() {
 fn a_late_capacity_failure_restores_auxiliary_ids_clauses_and_live_cursor() {
     let original = choices(2);
     let mut limits = Limits::default();
-    limits.admission.max_clauses = 4;
+    // The actual disjunction restriction needs four clauses; history is separate.
+    limits.admission.max_clauses = 3;
     let mut search = StableModels::new(&original, limits, Control::default()).unwrap();
     assert!(key(&search.next().unwrap().unwrap()).is_empty());
     let before = search.statistics();

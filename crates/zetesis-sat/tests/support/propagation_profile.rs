@@ -135,12 +135,12 @@ fn profile_finite_candidate_prefixes() {
             control: &control,
             statistics: SearchStatistics::default(),
         };
-        let mut cnf =
+        let cnf =
             encoding::encode(theory, None, AdmissionLimits::default(), &mut budget).unwrap();
         let clauses = cnf.clauses().len();
         let binary = cnf.clauses().filter(|clause| clause.len() == 2).count();
         reset();
-        let mut cursor = Cursor::projected(theory.atom_count());
+        let mut cursor = Cursor::projected(theory.atom_count(), crate::ProjectionLimits::default()).unwrap();
         let mut candidates = 0;
         let mut end = End::CandidatePrefix;
         for _ in 0..CANDIDATES {
@@ -149,7 +149,7 @@ fn profile_finite_candidate_prefixes() {
                     candidates += 1;
                     let candidate =
                         encoding::interpretation(theory, &assignment, &mut budget).unwrap();
-                    if let Err(error) = cursor.exclude(&mut cnf, &candidate, &mut budget) {
+                    if let Err(error) = cursor.exclude(&cnf, &candidate, &mut budget) {
                         end = End::Incomplete(error);
                         break;
                     }

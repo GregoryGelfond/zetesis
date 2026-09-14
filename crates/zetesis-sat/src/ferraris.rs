@@ -3,7 +3,10 @@ use zetesis_ferraris::{Interpretation, Theory, TightVerdict, models, models_redu
 use crate::encoding;
 use crate::search::{Budget, Cursor, Quota, increment};
 use crate::timing::{self, Phase};
-use crate::{AdmissionLimits, Cnf, Control, Incomplete, SearchLimits, SearchStatistics, Solve};
+use crate::{
+    AdmissionLimits, Cnf, Control, Incomplete, ProjectionLimits, ProjectionStatistics,
+    SearchLimits, SearchStatistics, Solve,
+};
 
 #[path = "batch.rs"]
 mod batch;
@@ -27,10 +30,11 @@ mod reduct_query;
 /// Whole-operation ceilings for a membership check or stable-model enumeration.
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {
-    /// Each candidate/reduct CNF and accumulated logical candidate exclusions.
-    /// Exclusions consume one clause unit and their semantic width in literal
-    /// units, but are retained only in the exact projection index.
+    /// Each candidate/reduct CNF, including submitted candidate restrictions.
+    /// Exact candidate exclusions have their own `projections` population.
     pub admission: AdmissionLimits,
+    /// Distinct exclusion keys, logical trie nodes and named retained capacity.
+    pub projections: ProjectionLimits,
     /// Cumulative encoding, certificate and search work/decisions across a run.
     pub search: SearchLimits,
     /// Maximum classical candidates checked during enumeration; not model count.
@@ -42,6 +46,7 @@ impl Default for Limits {
     fn default() -> Self {
         Self {
             admission: AdmissionLimits::default(),
+            projections: ProjectionLimits::default(),
             search: SearchLimits::default(),
             max_candidates: 1_000_000,
             max_verification_work: 100_000_000,
@@ -78,6 +83,9 @@ impl Check {
 pub struct Statistics {
     /// Encoding, certificate and Boolean-kernel work, including incomplete attempts.
     pub search: SearchStatistics,
+    /// Exact history retained across candidate queries and restrictions.
+    /// Its work is included in `search.work`, never added to it.
+    pub projections: ProjectionStatistics,
     /// Outer classical SAT queries started, including a final UNSAT query.
     pub candidate_queries: u64,
     /// Successfully appended candidate-only restrictions. Exhaustion then
@@ -242,7 +250,7 @@ impl StableModels {
     /// Original-model and frozen-reduct checks always use the original theory.
     ///
     /// # Errors
-    /// Refuses encoding admission, work limits, cancellation or allocation.
+    /// Refuses encoding/history admission, work limits, cancellation or allocation.
     pub fn new(theory: &Theory, limits: Limits, control: Control) -> Result<Self, Incomplete> {
         let mut budget = Budget {
             quota: crate::search::LocalQuota,
@@ -260,7 +268,7 @@ impl StableModels {
         Ok(Self {
             theory: theory.clone(),
             candidate_cnf,
-            candidate_cursor: Cursor::projected(theory.atom_count()),
+            candidate_cursor: Cursor::projected(theory.atom_count(), limits.projections)?,
             limits,
             control,
             statistics,
@@ -342,8 +350,11 @@ impl StableModels {
     }
     /// Cumulative work, including an incomplete terminal attempt.
     #[must_use]
-    pub const fn statistics(&self) -> Statistics {
-        self.statistics
+    pub fn statistics(&self) -> Statistics {
+        Statistics {
+            projections: self.candidate_cursor.projection_statistics(),
+            ..self.statistics
+        }
     }
 
     fn advance(&mut self) -> Result<Option<Interpretation>, Incomplete> {
@@ -360,7 +371,7 @@ impl StableModels {
                 certificate: self.certification.as_ref(),
                 workspace: &mut self.reduct_workspace,
             },
-            &mut self.candidate_cnf,
+            &self.candidate_cnf,
             &mut self.candidate_cursor,
             &mut budget,
             &mut self.statistics,
@@ -410,7 +421,7 @@ struct Membership<'a> {
 
 fn advance(
     membership_input: Membership<'_>,
-    cnf: &mut Cnf,
+    cnf: &Cnf,
     cursor: &mut Cursor,
     budget: &mut Budget<'_>,
     statistics: &mut Statistics,

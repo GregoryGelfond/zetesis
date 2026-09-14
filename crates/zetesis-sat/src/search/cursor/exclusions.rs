@@ -4,14 +4,14 @@ use std::collections::BTreeSet;
 
 use super::Cursor;
 use super::tests::{budget, exclude};
-use crate::{AdmissionError, AdmissionLimits, Cnf, Control, Incomplete, Literal, Resource, Solve};
+use crate::{AdmissionLimits, Cnf, Control, Incomplete, Literal, ProjectionLimits, Solve};
 
 #[test]
 fn restarts_preserve_exclusions_without_watching_their_literals() {
     let control = Control::default();
     let mut charged = budget(&control);
     let mut cnf = Cnf::new(5, vec![], AdmissionLimits::default()).unwrap();
-    let mut cursor = Cursor::projected(3);
+    let mut cursor = Cursor::projected(3, crate::ProjectionLimits::default()).unwrap();
     let mut seen = BTreeSet::new();
     loop {
         match cursor.query(&cnf, &mut charged) {
@@ -22,7 +22,7 @@ fn restarts_preserve_exclusions_without_watching_their_literals() {
                     cursor.state.as_ref().unwrap().base_clauses,
                     cnf.clauses().len()
                 );
-                exclude(&mut cursor, &mut cnf, key, &mut charged).unwrap();
+                exclude(&mut cursor, &cnf, key, &mut charged).unwrap();
                 // A real restriction changes the auxiliary universe's models,
                 // but neither the semantic width nor the retained exclusions.
                 if seen.len() == 1 {
@@ -47,12 +47,12 @@ fn restarts_preserve_exclusions_without_watching_their_literals() {
 fn final_membership_rejects_a_revisited_traversal_leaf() {
     let control = Control::default();
     let mut charged = budget(&control);
-    let mut cnf = Cnf::new(3, vec![], AdmissionLimits::default()).unwrap();
-    let mut cursor = Cursor::projected(2);
+    let cnf = Cnf::new(3, vec![], AdmissionLimits::default()).unwrap();
+    let mut cursor = Cursor::projected(2, crate::ProjectionLimits::default()).unwrap();
     let Solve::Sat(first) = cursor.query(&cnf, &mut charged) else {
         panic!("first leaf")
     };
-    exclude(&mut cursor, &mut cnf, &first.0[..2], &mut charged).unwrap();
+    exclude(&mut cursor, &cnf, &first.0[..2], &mut charged).unwrap();
     // Disable normal traversal advancement. The independent final exact
     // membership check must still reject the same completed assignment.
     cursor.after_model = false;
@@ -64,94 +64,63 @@ fn final_membership_rejects_a_revisited_traversal_leaf() {
 }
 
 #[test]
-fn logical_history_admission_keeps_inclusive_clause_and_literal_limits() {
+fn exclusion_history_does_not_consume_cnf_admission() {
     let control = Control::default();
-    for (clauses, literals, expected) in [
-        (0, 3, Some(Resource::Clauses)),
-        (1, 2, Some(Resource::Literals)),
-        (1, 3, None),
-    ] {
-        let mut cnf = Cnf::new(
-            3,
-            vec![],
-            AdmissionLimits {
-                max_variables: 3,
-                max_clauses: clauses,
-                max_literals: literals,
-            },
-        )
-        .unwrap();
-        let mut cursor = Cursor::projected(3);
-        let result = exclude(
-            &mut cursor,
-            &mut cnf,
-            &[false, true, false],
-            &mut budget(&control),
-        );
-        if let Some(resource) = expected {
-            assert_eq!(
-                result,
-                Err(Incomplete::Admission(AdmissionError::Limit {
-                    resource,
-                    observed: if resource == Resource::Clauses { 1 } else { 3 },
-                    limit: if resource == Resource::Clauses {
-                        clauses
-                    } else {
-                        literals
-                    }
-                }))
-            );
-        } else {
-            result.unwrap();
-            assert!(matches!(
-                exclude(
-                    &mut cursor,
-                    &mut cnf,
-                    &[true, false, false],
-                    &mut budget(&control)
-                ),
-                Err(Incomplete::Admission(AdmissionError::Limit {
-                    resource: Resource::Clauses,
-                    observed: 2,
-                    limit: 1
-                }))
-            ));
+    let mut cnf = Cnf::new(
+        3,
+        vec![],
+        AdmissionLimits { max_variables: 3, max_clauses: 1, max_literals: 1 },
+    ).unwrap();
+    let mut cursor = Cursor::projected(3, ProjectionLimits::default()).unwrap();
+    let mut charged = budget(&control);
+    let mut seen = BTreeSet::new();
+    loop {
+        match cursor.query(&cnf, &mut charged) {
+            Solve::Sat(assignment) => {
+                assert!(seen.insert(assignment.0.clone()));
+                exclude(&mut cursor, &cnf, &assignment.0, &mut charged).unwrap();
+            }
+            Solve::Unsat => break,
+            Solve::Inconclusive(error) => panic!("independent history budget: {error}"),
         }
-        assert!(cnf.clauses().is_empty());
     }
+    assert_eq!(seen.len(), 8);
+    assert_eq!(cursor.projection_statistics().entries, 8);
+    assert!(cnf.clauses().is_empty());
+    // All authored CNF capacity remains available after the eight exclusions.
+    cnf.append(vec![Literal::new(0, true)]).unwrap();
+    assert_eq!(cnf.clauses().len(), 1);
 }
 
 #[test]
-fn interrupted_insertion_restores_history_and_admission() {
+fn interrupted_insertion_preserves_the_only_entry_slot() {
     let control = Control::default();
-    let mut measured_cnf = Cnf::new(3, vec![], AdmissionLimits::default()).unwrap();
+    let measured_cnf = Cnf::new(3, vec![], AdmissionLimits::default()).unwrap();
     let mut measured = budget(&control);
     exclude(
-        &mut Cursor::projected(3),
-        &mut measured_cnf,
+        &mut Cursor::projected(3, crate::ProjectionLimits::default()).unwrap(),
+        &measured_cnf,
         &[false; 3],
         &mut measured,
     )
     .unwrap();
     for ceiling in 0..measured.statistics.work {
-        let limits = AdmissionLimits {
-            max_clauses: 1,
-            max_literals: 3,
-            ..AdmissionLimits::default()
-        };
-        let mut cnf = Cnf::new(3, vec![], limits).unwrap();
-        let mut cursor = Cursor::projected(3);
+        let cnf = Cnf::new(3, vec![], AdmissionLimits::default()).unwrap();
+        let mut cursor = Cursor::projected(3, ProjectionLimits {
+            max_entries: 1, ..ProjectionLimits::default()
+        }).unwrap();
         let mut short = budget(&control);
         short.limits.max_work = ceiling;
         assert_eq!(
-            exclude(&mut cursor, &mut cnf, &[false; 3], &mut short),
+            exclude(&mut cursor, &cnf, &[false; 3], &mut short),
             Err(Incomplete::WorkLimit)
         );
         assert_eq!(short.statistics.work, ceiling);
+        assert_eq!(cursor.projection_statistics().entries, 0);
         // A retry must fit the only logical history slot. An unfinished suffix
         // must not reject any of the remaining, independently enumerated keys.
         let mut complete = budget(&control);
-        exclude(&mut cursor, &mut cnf, &[false; 3], &mut complete).unwrap();
+        exclude(&mut cursor, &cnf, &[false; 3], &mut complete).unwrap();
         let mut seen = BTreeSet::new();
         loop {
             match cursor.query(&cnf, &mut complete) {
@@ -172,15 +141,15 @@ fn interrupted_insertion_restores_history_and_admission() {
 #[test]
 fn projection_width_is_fixed_across_restart() {
     let control = Control::default();
-    let mut cnf = Cnf::new(3, vec![], AdmissionLimits::default()).unwrap();
-    let mut cursor = Cursor::projected(2);
+    let cnf = Cnf::new(3, vec![], AdmissionLimits::default()).unwrap();
+    let mut cursor = Cursor::projected(2, crate::ProjectionLimits::default()).unwrap();
     cursor.restart();
     assert_eq!(
-        exclude(&mut cursor, &mut cnf, &[false; 3], &mut budget(&control)),
+        exclude(&mut cursor, &cnf, &[false; 3], &mut budget(&control)),
         Err(Incomplete::InvalidWitness)
     );
     assert_eq!(
-        exclude(&mut cursor, &mut cnf, &[false; 1], &mut budget(&control)),
+        exclude(&mut cursor, &cnf, &[false; 1], &mut budget(&control)),
         Err(Incomplete::InvalidWitness)
     );
 }
@@ -189,13 +158,13 @@ fn projection_width_is_fixed_across_restart() {
 fn distinct_projection_insertion_has_exact_partitioned_work() {
     let control = Control::default();
     for width in 0..=4 {
-        let mut cnf = Cnf::new(width, vec![], AdmissionLimits::default()).unwrap();
-        let mut cursor = Cursor::projected(width);
+        let cnf = Cnf::new(width, vec![], AdmissionLimits::default()).unwrap();
+        let mut cursor = Cursor::projected(width, crate::ProjectionLimits::default()).unwrap();
         let mut charged = budget(&control);
         for mask in 0..1 << width {
             let values: Vec<_> = (0..width).map(|bit| mask & (1 << bit) != 0).collect();
             let before = charged.statistics.work;
-            exclude(&mut cursor, &mut cnf, &values, &mut charged).unwrap();
+            exclude(&mut cursor, &cnf, &values, &mut charged).unwrap();
             assert_eq!(
                 charged.statistics.work - before,
                 if width == 0 {
@@ -213,7 +182,7 @@ fn distinct_projection_insertion_has_exact_partitioned_work() {
 fn interrupted_suffix_never_changes_an_existing_key() {
     let control = Control::default();
     for ceiling in 0..6 {
-        let mut cnf = Cnf::new(
+        let cnf = Cnf::new(
             3,
             vec![],
             AdmissionLimits {
@@ -223,17 +192,17 @@ fn interrupted_suffix_never_changes_an_existing_key() {
             },
         )
         .unwrap();
-        let mut cursor = Cursor::projected(3);
-        exclude(&mut cursor, &mut cnf, &[false; 3], &mut budget(&control)).unwrap();
+        let mut cursor = Cursor::projected(3, crate::ProjectionLimits::default()).unwrap();
+        exclude(&mut cursor, &cnf, &[false; 3], &mut budget(&control)).unwrap();
         let mut short = budget(&control);
         short.limits.max_work = ceiling;
         assert_eq!(
-            exclude(&mut cursor, &mut cnf, &[false, true, true], &mut short),
+            exclude(&mut cursor, &cnf, &[false, true, true], &mut short),
             Err(Incomplete::WorkLimit)
         );
         // Existing exact membership survives; the incomplete suffix does not
         // become a second key. The same trie is read without a search cursor.
-        let index = cursor.projections.as_ref().unwrap();
+        let index = cursor.projections.as_mut().unwrap();
         for mask in 0..8 {
             let assignment = crate::Assignment((0..3).map(|bit| mask & (1 << bit) != 0).collect());
             assert_eq!(
@@ -243,7 +212,7 @@ fn interrupted_suffix_never_changes_an_existing_key() {
         }
         exclude(
             &mut cursor,
-            &mut cnf,
+            &cnf,
             &[false, true, true],
             &mut budget(&control),
         )

@@ -255,7 +255,7 @@ fn exact_candidate_ceiling_allows_final_unsat_query_and_failure_is_fused() {
 }
 
 #[test]
-fn verified_model_precedes_blocking_capacity_failure_without_claiming_exhaustion() {
+fn empty_theory_exhausts_with_one_cnf_clause() {
     // Empty theory uses no original clauses; its reduct needs one empty clause.
     let input = theory(0, vec![], vec![]);
     let limits = Limits {
@@ -269,9 +269,14 @@ fn verified_model_precedes_blocking_capacity_failure_without_claiming_exhaustion
     assert!(exact.next().unwrap().unwrap().atoms().next().is_none());
     assert!(exact.next().is_none());
     assert!(exact.exhausted());
+    assert_eq!(exact.statistics().projections.entries, 1);
+    assert_eq!(exact.statistics().projections.nodes, 0);
+}
 
+#[test]
+fn verified_models_precede_the_history_limit_stop() {
     // Two independent choices compact to no outer clauses. Three clauses
-    // admit every reduct query and three blocks, but not the fourth block.
+    // admit every reduct query. A separate history limit admits three keys.
     let choice = theory(
         2,
         vec![
@@ -292,18 +297,33 @@ fn verified_model_precedes_blocking_capacity_failure_without_claiming_exhaustion
                 max_clauses: 3,
                 ..Default::default()
             },
+            projections: zetesis_sat::ProjectionLimits {
+                max_entries: 3,
+                ..Default::default()
+            },
             ..Default::default()
         },
         Control::default(),
     )
     .unwrap();
+    let mut family = BTreeSet::new();
     for _ in 0..4 {
-        assert!(capped.next().unwrap().is_ok());
+        let model = capped.next().unwrap().unwrap();
+        assert!(model.theory().same_instance(&choice));
+        assert!(family.insert(key(&model)));
     }
-    assert!(matches!(capped.next(), Some(Err(Incomplete::Admission(_)))));
+    assert_eq!(family, BTreeSet::from([vec![], vec![0], vec![1], vec![0, 1]]));
+    assert_eq!(capped.statistics().stable_models, 4);
+    assert_eq!(capped.statistics().projections.entries, 3);
+    assert!(matches!(capped.next(), Some(Err(Incomplete::ProjectionLimit {
+        resource: zetesis_sat::ProjectionResource::Entries, required: 4, limit: 3,
+    }))));
     assert!(!capped.exhausted());
     assert!(capped.next().is_none());
+}
 
+#[test]
+fn verified_model_precedes_the_final_exclusion_work_stop() {
     let input = theory(2, vec![], vec![]);
     let complete = Limits::default();
     let mut reference = StableModels::new(&input, complete, Control::default()).unwrap();

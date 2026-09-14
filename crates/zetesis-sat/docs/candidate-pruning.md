@@ -63,14 +63,18 @@ Each exclusion is the fixed-width Boolean key of one original interpretation.
 The cursor inserts that key directly into a binary trie; no equivalent blocking
 clause is allocated. A complete leaf is rejected exactly when its semantic
 prefix is already indexed. Auxiliary variables never enter the key. The
-zero-atom case has one empty key, represented by an explicit exclusion flag.
+zero-atom case has one empty key, represented by the published-entry count.
 
-Lookup examines at most the semantic width. Admission charges one logical clause
-unit and the key width in literal units; the arena contains at most one node per
-admitted exclusion bit plus its root. These are shape bounds, not byte limits.
+Lookup examines at most the semantic width. `ProjectionLimits` admits distinct
+entries and logical trie nodes separately from authored CNF clauses/literals.
+`max_nodes` counts the root, internal nodes and terminal nodes actually present;
+shared prefixes consume no duplicate nodes. `max_bytes` bounds the header and
+actual node-vector capacity, including conservative old/new overlap on growth.
 Growth is fallible and amortized. A new suffix is attached only after all its
-nodes are constructed. Failure restores the previous key set and admission
-counts while retaining spent work; insertion and lookup poll control.
+nodes are constructed. Entry and node counts publish only with a complete key.
+Failure restores the previous key set while retaining spent work and any grown
+capacity; insertion and lookup poll control. Duplicate keys remain admissible
+at the entry ceiling because no new key is published.
 
 Each node contains two optional 32-bit child links, occupying eight bytes.
 A present link stores the positive successor of its zero-based arena position;
@@ -82,13 +86,24 @@ raises the logical admission limits. Host arithmetic overflow is still reported
 as `CounterOverflow`, and a representable but failed reservation as `Allocation`.
 Control is checked before these bounds; prior prefix work remains charged.
 
-The default 12,582,912 literal units bound the arena to at most 12,582,913 nodes,
-so the compact representation adds no restriction within that default. This
-does not change how many logical exclusions the literal limit admits or create
-an allocated-byte ceiling. Spare capacity and allocator overhead remain outside
-those logical units; a failed insertion can retain newly reserved capacity even
-though its unpublished nodes and admission counts are rolled back. Smaller
-nodes do not by themselves establish a whole-solver memory or runtime gain.
+The finite defaults are 1,000,000 keys, 12,582,913 nodes and 128 MiB of named
+history capacity. These constants are independent of `AdmissionLimits`.
+The minimum requested growth is admitted before reservation; actual vector
+capacity is then read back and its conservative overlap admitted before any
+key is published. Amortized growth or allocator rounding can therefore cause a
+typed byte refusal that retains larger capacity. This is an admission contract,
+not an OS allocation quota. Allocation metadata, bounded stack locals and other
+SAT workspaces are excluded. The peak receipt takes a maximum across attempts,
+not a sum of repeated failures; it is not process RSS.
+
+The preservation argument is local: traversal follows existing links without
+changing them; a missing suffix is completely shape/capacity admitted before
+construction; a stopped construction truncates only its own unpublished tail.
+Only success attaches the suffix and increments the distinct-key count. The
+zero-width case admits its single entry before publishing that count. Thus
+resource refusal cannot exclude a new candidate, and all prior exclusions keep
+the same denotation. Limits change how long enumeration can continue, never the
+original reduct membership test or the meaning of a completed candidate family.
 
 After a successful restriction, the same index still excludes every earlier
 projection. Only traversal state is rebuilt. Final exact membership is checked

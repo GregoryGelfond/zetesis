@@ -1,7 +1,7 @@
 //! Retained candidate traversal with persistent exact semantic exclusions.
 
 use super::{Budget, State, increment};
-use crate::{Assignment, Cnf, Incomplete, Solve};
+use crate::{Assignment, Cnf, Incomplete, ProjectionLimits, ProjectionStatistics, Solve};
 use zetesis_ferraris::Interpretation;
 
 mod projections;
@@ -26,12 +26,21 @@ pub(crate) struct Cursor {
 impl Cursor {
     /// This mode admits exact, complete semantic-prefix exclusions separately
     /// from the CNF. Initial regions skip the optional root precheck.
-    pub(crate) fn projected(semantic_prefix: usize) -> Self {
-        Self {
+    pub(crate) fn projected(
+        semantic_prefix: usize,
+        limits: ProjectionLimits,
+    ) -> Result<Self, Incomplete> {
+        Ok(Self {
             semantic_prefix: Some(semantic_prefix),
-            projections: Some(Projections::new(semantic_prefix)),
+            projections: Some(Projections::new(semantic_prefix, limits)?),
             ..Self::default()
-        }
+        })
+    }
+
+    pub(crate) fn projection_statistics(&self) -> ProjectionStatistics {
+        self.projections
+            .as_ref()
+            .map_or_else(ProjectionStatistics::default, Projections::statistics)
     }
 
     /// A successfully strengthened candidate query runs the bounded root probe.
@@ -45,7 +54,7 @@ impl Cursor {
 
     pub(crate) fn exclude(
         &mut self,
-        cnf: &mut Cnf,
+        cnf: &Cnf,
         candidate: &Interpretation,
         budget: &mut Budget<'_>,
     ) -> Result<(), Incomplete> {
@@ -58,13 +67,7 @@ impl Cursor {
             .projections
             .as_mut()
             .ok_or(Incomplete::InvalidWitness)?;
-        let checkpoint = cnf.checkpoint();
-        cnf.admit_exclusion(width)?;
-        let result = projections.insert(width, |atom| candidate.contains(atom), budget);
-        if result.is_err() {
-            cnf.rollback(checkpoint);
-        }
-        result
+        projections.insert(width, |atom| candidate.contains(atom), budget)
     }
 
     pub(crate) fn query(&mut self, cnf: &Cnf, budget: &mut Budget<'_>) -> Solve {
@@ -136,7 +139,7 @@ impl Cursor {
                 // Base clauses are independently validated by finish; all
                 // semantic exclusions are separately tested before projection.
                 let assignment = state.finish(cnf, budget)?;
-                let allowed = if let Some(projections) = &self.projections {
+                let allowed = if let Some(projections) = &mut self.projections {
                     projections.permits(&assignment, budget)?
                 } else {
                     permitted(cnf, state.base_clauses, &assignment, budget)?

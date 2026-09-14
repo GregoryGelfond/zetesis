@@ -10,6 +10,7 @@
 mod cnf;
 mod clauses;
 mod error;
+mod projection;
 mod search;
 mod ordering;
 mod encoding;
@@ -23,6 +24,7 @@ pub use checked::{CheckedInterpretation, StableInterpretation, check_interpretat
 pub use clauses::{Clause, Clauses};
 pub use cnf::{AdmissionError, AdmissionLimits, Assignment, Cnf, Literal, Resource};
 pub use error::Incomplete;
+pub use projection::{ProjectionLimits, ProjectionResource, ProjectionStatistics};
 pub use ferraris::{
     BatchError, BatchLimits, BatchStatistics, BatchVerdict, CertifiedStatistics, Check,
     CompletionExecutor, CompletionScratch, CompletionStatistics, Limits, StableModels, Statistics,

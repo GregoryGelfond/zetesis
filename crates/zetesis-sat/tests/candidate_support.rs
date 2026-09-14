@@ -138,17 +138,23 @@ fn optional_formula_limit_preserves_the_original_query() {
     let input = disjunctions(1);
     let mut limits = Limits::default();
     // Eight occurrences admit the original a-or-b encoding. They do not admit
-    // the separately bounded support formula; later exclusions may still stop.
+    // the separately bounded support formula. Full two-atom reduct encoding
+    // still needs ten literal occurrences; exclusion history is independent.
     limits.admission.max_literals = 8;
     let mut models = StableModels::new(&input, limits, Control::default()).unwrap();
     let support = models.statistics().support.unwrap();
     assert_eq!(support.status, SupportStatus::FormulaLimit);
     assert!(support.construction_work > 0);
     assert_eq!(support.encoding_work, 0);
-    assert!(models.next().unwrap().is_ok());
+    let family: BTreeSet<Vec<_>> = (0..2)
+        .map(|_| models.next().unwrap().unwrap().atoms().collect())
+        .collect();
+    assert_eq!(family, BTreeSet::from([vec![0], vec![1]]));
     assert!(matches!(
         models.next().unwrap(),
-        Err(Incomplete::Admission(_))
+        Err(Incomplete::Admission(zetesis_sat::AdmissionError::Limit {
+            resource: zetesis_sat::Resource::Literals, observed: 10, limit: 8,
+        }))
     ));
     assert!(!models.exhausted());
 }

@@ -67,7 +67,8 @@ fn mismatched_restriction_error_does_not_consume_the_live_enumerator() {
 fn late_restriction_capacity_error_keeps_its_cause_and_previous_model_block() {
     let original = choices();
     let mut limits = Limits::default();
-    limits.admission.max_clauses = 4;
+    // Refuse the four-clause restriction itself, independently of history.
+    limits.admission.max_clauses = 3;
     let mut search = StableModels::new(&original, limits, Control::default()).unwrap();
     assert_eq!(search.next().unwrap().unwrap().atoms().count(), 0);
     let guard = Theory::new(

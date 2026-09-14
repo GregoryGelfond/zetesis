@@ -246,22 +246,50 @@ countermodel validation are unchanged.
 
 `AdmissionLimits` bounds variables, submitted clauses and submitted literal
 occurrences, including duplicates and tautologies before canonicalization.
-An exact exclusion consumes one logical clause unit and its semantic width in
-literal units, preserving the joint admission ceiling without retaining those
-literal occurrences. These units do not describe allocated CNF storage.
+Candidate restrictions consume this actual CNF population. Exact exclusions
+instead use `Limits::projections`, independently of each candidate/reduct CNF.
 Arithmetic and watch-index representability are checked. Storage reservations
 are fallible. These are shape bounds, not a claim that a configured count is a
 particular number of bytes or that allocator bookkeeping is measured as work.
+
+`ProjectionLimits` independently bounds distinct complete keys, logical trie
+nodes and named history capacity. Defaults are 1,000,000 entries, 12,582,913 nodes
+and 128 MiB. Duplicate insertion consumes no new entry. The zero-atom universe
+has one possible excluded key and needs no nodes. Bytes include the history
+header and actual node-vector capacity; growth conservatively admits the old
+and new capacities together. The minimum requested capacity is checked before
+reservation and actual capacity is checked afterward, before key publication.
+A refusal can retain enlarged capacity, but never a partial key. Allocator
+metadata, bounded local variables and other SAT owners are excluded: this is
+not RSS or an operating-system allocation quota.
+
+`Incomplete::ProjectionLimit` names the refused dimension and its required and
+allowed quantities. A scalar answer whose membership was already checked is
+returned before a delayed history stop. A batch likewise keeps its proposed
+candidates available for checking before surfacing the original history stop.
+Neither behavior establishes exhaustion. `Statistics::projections` derives
+entry/node counts, current capacity, conservative peak capacity and trie work
+from the single history owner; failed attempts retain spent work and capacity,
+but do not increment published-key counts. Standalone membership owns no history
+and reports none of that work.
 
 `SearchLimits` bounds charged work and fresh decision frames. Work includes
 initializing each search-state entry, watched-clause and literal examination,
 occurrence counting, merge-sort output cells, branch scans, trail undo and witness
 validation, resumption, failed-literal trial propagation and undo, projection
-index insertion and lookup. The trie has at most one node per admitted exclusion
-bit plus its root; amortized growth is fallible. Formula runs also charge
+index insertion and lookup. Trie work in the projection receipt is a subset of
+the cumulative search work, not another allowance or an amount to add again.
+Amortized trie growth is fallible. Formula runs also charge
 encoding-node and literal operations, fixed-size gate-key lookups, semantic
 projection and exact exclusion. No work is charged for copying nonexistent
 blocking literals.
+
+For Rust callers migrating from the earlier joint CNF/history limit, set
+`Limits::projections` explicitly when a nondefault history population is needed;
+lowering CNF clauses or literals no longer limits the number of excluded keys.
+`ProjectionLimits::DEFAULT` is also available in constant configurations.
+The history receipt is derived on read, so `StableModels::statistics` is no
+longer a `const` method.
 The fallibly grown gate map retains at most one entry per fresh auxiliary;
 hash-table allocation and collision handling are shape-bounded library operations.
 Allocation, sorting inside CNF admission and allocator overhead are governed
