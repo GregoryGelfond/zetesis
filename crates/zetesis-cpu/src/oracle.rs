@@ -11,6 +11,8 @@ use crate::{Control, Stop};
 
 mod window;
 mod relations;
+mod prepared;
+pub use prepared::{ClosureWorkspace, PreparationLimits, PreparationStatistics, PreparedQueries};
 use relations::{Catalogs, Relational};
 pub(crate) mod restrictions;
 pub mod source;
@@ -40,9 +42,10 @@ pub struct Limits {
     /// tuples and operation scratch/growth overlap. Shared structural buffers
     /// are counted per occurrence. Tree-container allocations (including vacant
     /// slots), allocator metadata and Arc-counter overhead,
-    /// template binding/cursor frames and final `Model` retention are excluded.
-    /// Actual allocator slack can exceed the proposed reservation before refusal.
-    /// A stopped scalar check returns no completed statistics.
+    /// and final `Model` retention are excluded. Prepared scalar checks include
+    /// query-owner headers and assignment/cursor/undo capacities.
+    /// Actual allocator slack can exceed the proposed reservation before refusal;
+    /// only completed checks publish their observed peak statistics.
     /// This is an independent finite allowance, not a process RSS ceiling.
     pub max_closure_bytes: usize,
 }
@@ -266,18 +269,9 @@ pub fn check_view(
         pruned_prefixes: 0,
         mask_bytes: 0,
     };
-    let completed = least_closure(program, seed, &mut work)?;
-    let seed_mismatch = !gate_agreement(program, seed, completed.atoms.atoms(), &mut work)?;
-    work.statistics.derived_atoms = completed.atoms.atoms().len();
-    let closure = completed.atoms;
-    control.poll()?;
-    Ok(Check {
-        program: program.clone(),
-        closure,
-        constraint_violated: completed.constraint_violated,
-        seed_mismatch,
-        statistics: work.statistics,
-    })
+    let prepared = PreparedQueries::prepare(program, &mut work)?;
+    prepared.check_with(seed, &mut ClosureWorkspace::default(), &mut work)
+
 }
 
 // Construction establishes a complete no-delta source scan, not constraint
@@ -294,23 +288,43 @@ struct CompletedClosure {
 // Every pending insertion is charged and bounded before publication; a stop
 // cannot construct CompletedClosure. Constraint failure never truncates a scan.
 // Each growing round adds an atom, so the derived-atom ceiling bounds growth.
+#[cfg(test)]
 fn least_closure(
     program: &Program,
     seed: SeedView<'_>,
     work: &mut Work<'_>,
 ) -> Result<CompletedClosure, Stop> {
-    let mut closure = Catalogs::default();
+    let prepared = PreparedQueries::prepare(program, work)?;
+    let check = prepared.check_with(seed, &mut ClosureWorkspace::default(), work)?;
+    Ok(CompletedClosure { atoms: check.closure, constraint_violated: check.constraint_violated })
+}
+
+fn least_closure_with(
+    program: &Program,
+    seed: SeedView<'_>,
+    closure: &mut Catalogs,
+    buffers: &mut prepared::Buffers,
+    dimensions: &prepared::Dimensions,
+    overhead: u128,
+    work: &mut Work<'_>,
+) -> Result<CompletedClosure, Stop> {
     let mut constraint_violated = false;
     loop {
         work.tick()?;
         closure.prepare(work)?;
         let mut delta = BTreeSet::new();
         let mut pending_bytes = 0_u128;
+        // Bindings borrow this round's immutable catalog extent only. The
+        // reference-free cursor/undo buffers survive after these bindings drop.
+        {
+        let (mut assignment, bytes) = prepared::assignment(dimensions,
+            closure.owned_bytes().checked_add(overhead).ok_or(Stop::StorageLimit)?, work)?;
+        closure.set_overhead(overhead.checked_add(bytes).ok_or(Stop::StorageLimit)?, work)?;
         for template in program.templates() {
             work.tick()?;
-            visit(
+            visit_with(
                 template,
-                &closure,
+                &*closure,
                 Some(seed),
                 None,
                 work,
@@ -340,8 +354,11 @@ fn least_closure(
                     }
                     Ok(())
                 },
+                Frame { assignment: &mut assignment, buffers: &mut *buffers },
             )?;
         }
+        }
+        closure.set_overhead(overhead, work)?;
         work.statistics.rounds += 1;
         if delta.is_empty() {
             break;
@@ -355,7 +372,7 @@ fn least_closure(
         }
     }
     Ok(CompletedClosure {
-        atoms: closure.into_model(),
+        atoms: closure.take_model(work)?,
         constraint_violated,
     })
 }
@@ -385,18 +402,40 @@ fn gate_agreement(
     Ok(agreement)
 }
 
+struct Frame<'frame, 'source> {
+    assignment: &'frame mut [Option<&'source Value>],
+    buffers: &'frame mut prepared::Buffers,
+}
+
 fn visit<'source, E: From<Stop>>(
+    template: &Template,
+    relations: &'source impl Relational,
+    seed: Option<SeedView<'_>>,
+    membership: Option<&mut worlds::Join<'_>>,
+    work: &mut Work<'_>,
+    emit: impl FnMut(&[Option<&'source Value>], &mut Work<'_>) -> Result<(), E>,
+) -> Result<(), E> {
+    let mut assignment = vec![None; template.variable_count()];
+    let mut buffers = prepared::Buffers::local(template.positive().len());
+    visit_with(template, relations, seed, membership, work, emit,
+        Frame { assignment: &mut assignment, buffers: &mut buffers })
+}
+
+fn visit_with<'source, E: From<Stop>>(
     template: &Template,
     relations: &'source impl Relational,
     seed: Option<SeedView<'_>>,
     mut membership: Option<&mut worlds::Join<'_>>,
     work: &mut Work<'_>,
     mut emit: impl FnMut(&[Option<&'source Value>], &mut Work<'_>) -> Result<(), E>,
+    frame: Frame<'_, 'source>,
 ) -> Result<(), E> {
-    // The immutable relation snapshot owns every bound value. Backtracking
-    // changes only these references; owned values are constructed at emission.
-    let mut assignment = vec![None; template.variable_count()];
-    if !guards(template, &assignment, seed, work)? {
+    // Reset all query state before this source occurrence. No binding survives
+    // template reuse; positive matching still returns original borrowed values.
+    let assignment = &mut frame.assignment[..template.variable_count()];
+    work.charge(assignment.len())?;
+    assignment.fill(None);
+    if !guards(template, assignment, seed, work)? {
         return Ok(());
     }
     let count = template.positive().len();
@@ -405,15 +444,18 @@ fn visit<'source, E: From<Stop>>(
             return Err(Stop::InvalidProgram.into());
         }
         work.statistics.bindings += 1;
-        return emit(&assignment, work);
+        return emit(assignment, work);
     }
     if let Some(membership) = membership.as_mut() {
         membership.reset(template, work)?;
     }
     // None means this depth has not yet been opened for the current parent
     // assignment. A retained range advances in the original relation order.
-    let mut cursors = vec![None; count];
-    let mut undo: Vec<Vec<usize>> = vec![Vec::new(); count];
+    let cursors = &mut frame.buffers.cursors[..count];
+    let undo = &mut frame.buffers.undo[..count];
+    work.charge(count)?;
+    cursors.fill(None);
+    for row in undo.iter_mut() { work.tick()?; row.clear(); }
     let mut depth = 0;
     loop {
         work.tick()?;
@@ -422,16 +464,16 @@ fn visit<'source, E: From<Stop>>(
                 return Err(Stop::InvalidProgram.into());
             }
             work.statistics.bindings += 1;
-            emit(&assignment, work)?;
+            emit(assignment, work)?;
             depth -= 1;
-            clear(&mut assignment, &mut undo[depth]);
+            clear(assignment, &mut undo[depth]);
             continue;
         }
         let pattern = &template.positive()[depth];
         let tuples = relations.rows(pattern.predicate());
         let cursor = &mut cursors[depth];
         if cursor.is_none() {
-            *cursor = Some(window::matching_prefix(pattern, tuples, &assignment, work)?);
+            *cursor = Some(window::matching_prefix(pattern, tuples, assignment, work)?);
         }
         let Some(index) = cursor.as_mut().and_then(Iterator::next) else {
             *cursor = None;
@@ -439,12 +481,12 @@ fn visit<'source, E: From<Stop>>(
                 return Ok(());
             }
             depth -= 1;
-            clear(&mut assignment, &mut undo[depth]);
+            clear(assignment, &mut undo[depth]);
             continue;
         };
         let atom = tuples.get(index).ok_or(Stop::InvalidProgram)?;
-        if bind(pattern, atom, &mut assignment, &mut undo[depth], work)?
-            && guards(template, &assignment, seed, work)?
+        if bind(pattern, atom, assignment, &mut undo[depth], work)?
+            && guards(template, assignment, seed, work)?
             && match membership.as_mut() {
                 Some(membership) => membership.extend(depth, index, work)?,
                 None => true,
@@ -452,7 +494,7 @@ fn visit<'source, E: From<Stop>>(
         {
             depth += 1;
         } else {
-            clear(&mut assignment, &mut undo[depth]);
+            clear(assignment, &mut undo[depth]);
         }
     }
 }

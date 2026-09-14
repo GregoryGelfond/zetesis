@@ -316,18 +316,37 @@ existing prepared extent; a successful append invalidates it. This changes the
 physical identity representation, not the full-round least-consequence schedule,
 frozen candidate, constraint check or answer-set definition.
 
-`zetesis_cpu::oracle::Limits::max_closure_bytes` bounds each scalar closure's
+`zetesis_cpu::PreparedQueries` inspects one exact admitted `Program` once to
+bound the assignment, cursor and undo buffers used by its joins. Its preparation
+work and bytes have independent finite limits and a separate receipt. A
+`ClosureWorkspace` retains the actual empty catalog metadata, predicate owners
+and reference-free cursor/undo buffers between candidates. Assignments borrow
+only the current immutable round; no candidate truth survives completion.
+`Catalog::take_atoms` transfers the completed atom vector without copying its
+payload and invalidates its old row/equality IDs. The exported result owns its
+atoms while the empty indexes can serve another candidate. Any failed check
+discards dirty workspace state before reuse. A different program instance retires
+the old workspace, even when its source text is equal.
+
+The one-shot `check_view` uses the same evaluator and charges preparation plus
+candidate work to its existing cumulative work limit. Reused preparation has a
+separate work receipt, so exact resource cutoffs can differ while completed
+closures, constraints and seed checks agree. Retained capacities are admitted
+under each call's current limits. This removes repeated allocation and dimension
+inspection; it does not establish a timing gain or replace full-round closure.
+
+`zetesis_cpu::Limits::max_closure_bytes` bounds each scalar closure's
 named predicate/catalog cells, atom and value buffers, nested payload, prepared
-order and pending tuples, including operation scratch and conservative buffer
+order, query-owner/assignment/cursor/undo capacities and pending tuples, including operation scratch and conservative buffer
 growth overlap. Its default is 128 MiB; zero is a zero-byte allowance. Pending
 atoms use fallible buffer reservation, and moving them into catalogs transfers
 their payload charge rather than counting a second payload owner. The reported
 `peak_closure_bytes` is a maximum for this named envelope. Shared structural
 buffers are conservatively counted per occurrence. Tree-container allocations
-(including vacant slots), allocator metadata, Arc counters, template binding/cursor
-frames and final `Model` retention are excluded. Actual allocator slack can exceed
-the proposed reservation before refusal. A scalar stop returns no completed
-`Check` or statistics. This is a composable admission allowance, not a bound on all transient
+(including vacant slots), allocator metadata, Arc counters and final `Model`
+retention are excluded. Actual allocator slack can exceed the proposed reservation
+before refusal. Completed checks report their observed peak; a scalar refusal
+returns no `Check` or statistics. This is a composable admission allowance, not a bound on all transient
 allocator memory or total RSS. Collective worker admission and result retention
 have separate owners.
 `FormulaLimits::max_support_bytes` bounds the catalog's atom-vector cells,

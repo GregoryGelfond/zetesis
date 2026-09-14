@@ -20,8 +20,9 @@ use super::{
 ///
 /// The catalog owns every atom once; dictionary entries are stable source-cell
 /// positions. An immutable view borrows both owners, preventing mutation while
-/// any query, row or selection is live. Within one extent, rows and equality IDs
-/// survive insertion; query identity remains the particular immutable Relation object.
+/// any query, row or selection is live. Rows and equality IDs survive append;
+/// [`Self::take_atoms`] invalidates them. Query identity remains the particular
+/// immutable Relation object.
 ///
 /// Byte limits cover the catalog object, atom-vector cells, row index, equality
 /// layout and operation scratch. The supplied atoms' nested payload allocations
@@ -187,9 +188,9 @@ impl Catalog {
     ///
     /// This retains only empty index, dictionary, column and ordered-view
     /// capacities. The returned vector preserves original atom/value addresses.
-    /// Old row and equality IDs describe the extracted extent; subsequent inserts
-    /// assign IDs afresh. The exclusive borrow prevents any old view from living
-    /// across this boundary. No truth or identity is inherited by the new extent.
+    /// Row and equality IDs survive append, but this operation invalidates them;
+    /// subsequent inserts assign IDs afresh. The exclusive borrow prevents any old view from living
+    /// across this boundary. No truth or identity is inherited by the empty catalog.
     ///
     /// Work is O(arity) buffer/root resets: ID metadata has no destructors, and
     /// the atom vector is moved. Every check precedes the indivisible transfer.
@@ -199,7 +200,10 @@ impl Catalog {
     /// atoms, IDs, indexes and the previous prepared view remain unchanged.
     pub fn take_atoms(&mut self, limits: Limits) -> Result<ExtractedAtoms, CatalogFailure> {
         let mut work = self.work(limits)?;
-        work.tick(self.layout.columns.len() as u128 + 11)
+        // Atom-vector transfer; three row-index resets; three dictionary-index
+        // resets; dictionary, ordered rows, prepared flag and payload counter.
+        const RESET_BOOKKEEPING: u128 = 11;
+        work.tick(self.layout.columns.len() as u128 + RESET_BOOKKEEPING)
             .map_err(|error| self.failed(error, &work))?;
         let DictionaryIndex::Append(index) = &mut self.layout.index else {
             unreachable!("catalog owns an append index");

@@ -9,7 +9,7 @@ use std::{
     mem::size_of,
 };
 
-mod storage;
+pub(super) mod storage;
 pub(super) use storage::atom_bytes;
 
 use zetesis_core::{
@@ -62,6 +62,7 @@ pub(super) struct Catalogs {
     relations: BTreeMap<Predicate, Catalog>,
     atoms: usize,
     bytes: u128,
+    overhead: u128,
 }
 
 impl Default for Catalogs {
@@ -70,6 +71,7 @@ impl Default for Catalogs {
             relations: BTreeMap::new(),
             atoms: 0,
             bytes: (size_of::<Self>() + size_of::<BTreeSet<Atom>>()) as u128,
+            overhead: 0,
         }
     }
 }
@@ -250,13 +252,46 @@ impl Catalogs {
         account(work, insertion.storage.construction_work)
     }
 
-    pub(super) fn into_model(self) -> Model {
-        // Move the completed closure into its shared model catalog. No second
-        // live tuple owner is kept. Model's final O(n log n) canonicalization
-        // and catalog/selection allocation are not in
-        // the source operation schedule; input atom count is already bounded.
-        Model::new(self.relations.into_values().flat_map(Catalog::into_atoms))
+    pub(super) fn owned_bytes(&self) -> u128 {
+        self.bytes - self.overhead
     }
+
+    pub(super) fn set_overhead(&mut self, bytes: u128, work: &mut Work<'_>) -> Result<(), Stop> {
+        let total = self.owned_bytes().checked_add(bytes).ok_or(Stop::StorageLimit)?;
+        storage::admit(work, total)?;
+        storage::record(work, total)?;
+        self.bytes = total;
+        self.overhead = bytes;
+        Ok(())
+    }
+
+    pub(super) fn take_model(&mut self, work: &mut Work<'_>) -> Result<Model, Stop> {
+        // Final interpretation assembly owns these headers; its allocation and
+        // canonicalization remain separate from the closure capacity allowance.
+        // Each payload is moved once. Empty indexes and predicate owners remain.
+        let mut atoms = Vec::new();
+        atoms.try_reserve_exact(self.atoms).map_err(|_| Stop::Allocation)?;
+        for catalog in self.relations.values_mut() {
+            work.tick()?;
+            let mut payload = 0_u128;
+            for atom in catalog.atoms() {
+                payload = payload.checked_add(atom_bytes(atom, work)? - size_of::<Atom>() as u128)
+                    .ok_or(Stop::StorageLimit)?;
+            }
+            let old = catalog.retained_bytes() as u128;
+            let other = self.bytes.checked_sub(old).ok_or(Stop::InvalidProgram)?;
+            let result = catalog.take_atoms(limits(work, other)?);
+            self.bytes = other.checked_add(catalog.retained_bytes() as u128)
+                .ok_or(Stop::StorageLimit)?;
+            let extracted = completed(result, other, work)?;
+            self.bytes = self.bytes.checked_sub(payload).ok_or(Stop::InvalidProgram)?;
+            account_storage(work, other, extracted.storage)?;
+            atoms.extend(extracted.atoms);
+        }
+        self.atoms = 0;
+        Ok(Model::new(atoms))
+    }
+
 }
 
 fn limits(work: &Work<'_>, other: u128) -> Result<Limits, Stop> {
