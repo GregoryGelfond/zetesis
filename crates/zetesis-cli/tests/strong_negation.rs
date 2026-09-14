@@ -28,9 +28,13 @@ fn mixed_choice_atoms(selection: usize) -> Vec<Atom> {
             _ => {}
         }
         choices /= 3;
-        atoms.extend(names.into_iter().map(|name| Atom::new(
-            Predicate::new(name, 1).unwrap(), vec![Value::Number(number)],
-        ).unwrap()));
+        atoms.extend(names.into_iter().map(|name| {
+            Atom::new(
+                Predicate::new(name, 1).unwrap(),
+                vec![Value::Number(number)],
+            )
+            .unwrap()
+        }));
     }
     atoms.sort();
     atoms
@@ -38,20 +42,36 @@ fn mixed_choice_atoms(selection: usize) -> Vec<Atom> {
 
 #[test]
 fn conditional_choices_preserve_the_complete_supported_family() {
-    let (report, output, _) = solve(MIXED_CHOICES, &[
-        "--backend", "cpu", "--oracle", "countermodel", "--grounder", "eager", "--json",
-    ]);
+    let (report, output, _) = solve(
+        MIXED_CHOICES,
+        &[
+            "--backend",
+            "cpu",
+            "--oracle",
+            "countermodel",
+            "--grounder",
+            "eager",
+            "--json",
+        ],
+    );
     let report = report.unwrap();
     assert_eq!(report.completion, Completion::Exhausted);
     assert_eq!(report.models, 27);
     let statistics = report.countermodel_statistics.unwrap();
-    assert_eq!(statistics.support.unwrap().status, zetesis_sat::SupportStatus::Applied);
+    assert_eq!(
+        statistics.support.unwrap().status,
+        zetesis_sat::SupportStatus::Applied
+    );
     assert_eq!(statistics.candidates, 27);
     assert_eq!(statistics.countermodel_queries, 27);
     assert_eq!(statistics.countermodels, 0);
-    let answers = answers::native_json::parse(output.as_bytes(),
-        answers::native_json::Limits::default()).unwrap();
-    let mut actual = answers.records().iter().map(|answer| answer.full_model().to_vec())
+    let answers =
+        answers::native_json::parse(output.as_bytes(), answers::native_json::Limits::default())
+            .unwrap();
+    let mut actual = answers
+        .records()
+        .iter()
+        .map(|answer| answer.full_model().to_vec())
         .collect::<Vec<_>>();
     actual.sort();
     let mut expected = (0..27).map(mixed_choice_atoms).collect::<Vec<_>>();
@@ -62,21 +82,39 @@ fn conditional_choices_preserve_the_complete_supported_family() {
 #[test]
 #[ignore = "requires independently installed clingo"]
 fn mixed_choice_support_matches_complete_original_references() {
-    for source in [MIXED_CHOICES,
-        "d(1;\"x\";f(1)). {-c(X)} :- d(X). p(X) | q(X) :- -c(X)."]
-    {
-        let (report, output, _) = solve(source, &[
-            "--backend", "cpu", "--oracle", "countermodel", "--grounder", "eager",
-        ]);
+    for source in [
+        MIXED_CHOICES,
+        "d(1;\"x\";f(1)). {-c(X)} :- d(X). p(X) | q(X) :- -c(X).",
+    ] {
+        let (report, output, _) = solve(
+            source,
+            &[
+                "--backend",
+                "cpu",
+                "--oracle",
+                "countermodel",
+                "--grounder",
+                "eager",
+            ],
+        );
         let report = report.unwrap();
         assert_eq!(report.completion, Completion::Exhausted);
         assert_eq!(report.models, 27);
         let statistics = report.countermodel_statistics.unwrap();
-        assert_eq!(statistics.support.unwrap().status, zetesis_sat::SupportStatus::Applied);
+        assert_eq!(
+            statistics.support.unwrap().status,
+            zetesis_sat::SupportStatus::Applied
+        );
         assert_eq!(statistics.candidates, 27);
         let reference = clingo_report::complete(source, AnswerSelection::All);
-        let actual = displays(&output).into_iter().map(|atoms|
-            (atoms.into_iter().map(str::to_owned).collect::<Vec<_>>(), 1_u64))
+        let actual = displays(&output)
+            .into_iter()
+            .map(|atoms| {
+                (
+                    atoms.into_iter().map(str::to_owned).collect::<Vec<_>>(),
+                    1_u64,
+                )
+            })
             .collect::<Vec<_>>();
         assert_eq!(reference.model_count(), 27);
         assert_eq!(reference.displays(), actual.as_slice());

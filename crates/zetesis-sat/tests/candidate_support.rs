@@ -137,15 +137,29 @@ fn mixed_choices_generate_only_supported_candidates() {
 fn opaque_choice_heads_retain_general_candidate_search() {
     // The conjunction is classically the same choice, but deliberately outside
     // the exact head grammar. No recognized-prefix support restriction escapes.
-    let input = theory(3, vec![Node::Atom(0), Node::Atom(1), Node::Atom(2),
-        Node::False, Node::Or(0, 1), Node::Implies(2, 3), Node::Or(2, 5),
-        Node::And(6, 6)], vec![4, 7]);
+    let input = theory(
+        3,
+        vec![
+            Node::Atom(0),
+            Node::Atom(1),
+            Node::Atom(2),
+            Node::False,
+            Node::Or(0, 1),
+            Node::Implies(2, 3),
+            Node::Or(2, 5),
+            Node::And(6, 6),
+        ],
+        vec![4, 7],
+    );
     let mut models = StableModels::new(&input, Limits::default(), Control::default()).unwrap();
     let support = models.statistics().support.unwrap();
     assert_eq!(support.status, SupportStatus::NotApplicable);
     assert_eq!(support.construction_work, 10); // Eight nodes, two roots.
     assert_eq!(support.encoding_work, 0);
-    assert_eq!(collect(&mut models), BTreeSet::from([vec![0], vec![1], vec![0, 2], vec![1, 2]]));
+    assert_eq!(
+        collect(&mut models),
+        BTreeSet::from([vec![0], vec![1], vec![0, 2], vec![1, 2]])
+    );
     assert_eq!(models.statistics().candidates, 6);
     assert_eq!(models.statistics().countermodels, 2);
 }
@@ -154,12 +168,30 @@ fn opaque_choice_heads_retain_general_candidate_search() {
 fn mixed_support_keeps_positive_cycle_minimality_checks() {
     // d supports itself, alongside a-or-b and a choice of c. Necessary support
     // retains candidates containing d; exact reduct checking must reject them.
-    let input = theory(4, vec![Node::Atom(0), Node::Atom(1), Node::Atom(2),
-        Node::Atom(3), Node::False, Node::Or(0, 1), Node::Implies(2, 4),
-        Node::Or(2, 6), Node::Implies(3, 3)], vec![5, 7, 8]);
+    let input = theory(
+        4,
+        vec![
+            Node::Atom(0),
+            Node::Atom(1),
+            Node::Atom(2),
+            Node::Atom(3),
+            Node::False,
+            Node::Or(0, 1),
+            Node::Implies(2, 4),
+            Node::Or(2, 6),
+            Node::Implies(3, 3),
+        ],
+        vec![5, 7, 8],
+    );
     let mut models = StableModels::new(&input, Limits::default(), Control::default()).unwrap();
-    assert_eq!(models.statistics().support.unwrap().status, SupportStatus::Applied);
-    assert_eq!(collect(&mut models), BTreeSet::from([vec![0], vec![1], vec![0, 2], vec![1, 2]]));
+    assert_eq!(
+        models.statistics().support.unwrap().status,
+        SupportStatus::Applied
+    );
+    assert_eq!(
+        collect(&mut models),
+        BTreeSet::from([vec![0], vec![1], vec![0, 2], vec![1, 2]])
+    );
     assert_eq!(models.statistics().candidates, 8);
     assert_eq!(models.statistics().countermodel_queries, 8);
     assert_eq!(models.statistics().countermodels, 4);

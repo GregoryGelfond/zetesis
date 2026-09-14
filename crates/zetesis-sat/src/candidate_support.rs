@@ -108,9 +108,21 @@ mod tests {
     }
 
     fn mixed_input() -> Theory {
-        Theory::new(3, vec![Node::Atom(0), Node::Atom(1), Node::Atom(2),
-            Node::False, Node::Or(0, 1), Node::Implies(2, 3), Node::Or(2, 5)],
-            vec![4, 6], zetesis_ferraris::AdmissionLimits::default()).unwrap()
+        Theory::new(
+            3,
+            vec![
+                Node::Atom(0),
+                Node::Atom(1),
+                Node::Atom(2),
+                Node::False,
+                Node::Or(0, 1),
+                Node::Implies(2, 3),
+                Node::Or(2, 5),
+            ],
+            vec![4, 6],
+            zetesis_ferraris::AdmissionLimits::default(),
+        )
+        .unwrap()
     }
 
     fn budget(control: &Control) -> Budget<'_> {
@@ -125,42 +137,42 @@ mod tests {
     #[test]
     fn every_interrupted_support_attempt_keeps_spent_work() {
         for theory in [input(), mixed_input()] {
-        let control = Control::default();
-        let limits = Limits::default();
-        let mut complete = budget(&control);
-        let mut cnf = encoding::encode(&theory, None, limits.admission, &mut complete).unwrap();
-        let before = complete.statistics.work;
-        let clauses: Vec<Vec<_>> = cnf
-            .clauses()
-            .map(|clause| clause.iter().collect())
-            .collect();
-        let variables = cnf.variables();
-        let statistics = restrict(&mut cnf, &theory, limits, &mut complete).unwrap();
-        assert_eq!(statistics.status, SupportStatus::Applied);
-        assert_eq!(
-            complete.statistics.work - before,
-            statistics.construction_work + statistics.encoding_work
-        );
-        // Fail at every construction/encoding step. The coordinator records
-        // exactly its inclusive quota even when construction cannot return a
-        // formula or the appended encoding is rolled back.
-        for max_work in before..complete.statistics.work {
-            let mut interrupted = budget(&control);
-            let mut cnf =
-                encoding::encode(&theory, None, limits.admission, &mut interrupted).unwrap();
-            interrupted.limits.max_work = max_work;
+            let control = Control::default();
+            let limits = Limits::default();
+            let mut complete = budget(&control);
+            let mut cnf = encoding::encode(&theory, None, limits.admission, &mut complete).unwrap();
+            let before = complete.statistics.work;
+            let clauses: Vec<Vec<_>> = cnf
+                .clauses()
+                .map(|clause| clause.iter().collect())
+                .collect();
+            let variables = cnf.variables();
+            let statistics = restrict(&mut cnf, &theory, limits, &mut complete).unwrap();
+            assert_eq!(statistics.status, SupportStatus::Applied);
             assert_eq!(
-                restrict(&mut cnf, &theory, limits, &mut interrupted),
-                Err(Incomplete::WorkLimit)
+                complete.statistics.work - before,
+                statistics.construction_work + statistics.encoding_work
             );
-            assert_eq!(interrupted.statistics.work, max_work);
-            assert_eq!(cnf.variables(), variables);
-            assert!(
-                cnf.clauses()
-                    .map(|clause| clause.iter().collect::<Vec<_>>())
-                    .eq(clauses.iter().cloned())
-            );
-        }
+            // Fail at every construction/encoding step. The coordinator records
+            // exactly its inclusive quota even when construction cannot return a
+            // formula or the appended encoding is rolled back.
+            for max_work in before..complete.statistics.work {
+                let mut interrupted = budget(&control);
+                let mut cnf =
+                    encoding::encode(&theory, None, limits.admission, &mut interrupted).unwrap();
+                interrupted.limits.max_work = max_work;
+                assert_eq!(
+                    restrict(&mut cnf, &theory, limits, &mut interrupted),
+                    Err(Incomplete::WorkLimit)
+                );
+                assert_eq!(interrupted.statistics.work, max_work);
+                assert_eq!(cnf.variables(), variables);
+                assert!(
+                    cnf.clauses()
+                        .map(|clause| clause.iter().collect::<Vec<_>>())
+                        .eq(clauses.iter().cloned())
+                );
+            }
         }
     }
 
