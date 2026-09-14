@@ -3,7 +3,14 @@
 use clap::Parser;
 use serde_json::Value;
 
-use super::{Options, catalog_dataset::ATOM_CATALOG, data, dataset::HISTORICAL, render};
+use super::{
+    Options,
+    catalog_dataset::ATOM_CATALOG,
+    data,
+    dataset::HISTORICAL,
+    prepared_dataset::{PREPARED_ALGORITHMS, PREPARED_GROUNDING},
+    render,
+};
 
 fn changed(change: impl FnOnce(&mut Value)) -> data::Observations {
     let mut document: Value = serde_json::from_str(HISTORICAL.observations).unwrap();
@@ -37,6 +44,104 @@ fn catalog_samples_reproduce_the_published_tables() {
         include_str!("../../../../docs/book/reference/performance.md")
             .contains(ATOM_CATALOG.tables.trim_end())
     );
+}
+
+#[test]
+fn prepared_grounding_samples_reproduce_the_published_tables() {
+    let data = data::load(&PREPARED_GROUNDING).unwrap();
+    assert_eq!(
+        render::tables(&data, &PREPARED_GROUNDING).unwrap(),
+        PREPARED_GROUNDING.tables
+    );
+    assert!(
+        include_str!("../../../../docs/book/reference/performance.md")
+            .contains(PREPARED_GROUNDING.tables.trim_end())
+    );
+}
+
+#[test]
+fn prepared_algorithm_samples_reproduce_the_published_tables() {
+    let data = data::load(&PREPARED_ALGORITHMS).unwrap();
+    assert_eq!(
+        render::tables(&data, &PREPARED_ALGORITHMS).unwrap(),
+        PREPARED_ALGORITHMS.tables
+    );
+    assert!(
+        include_str!("../../../../docs/book/reference/performance.md")
+            .contains(PREPARED_ALGORITHMS.tables.trim_end())
+    );
+}
+
+#[test]
+fn prepared_selectors_reproduce_their_own_observations() {
+    for (name, expected) in [
+        ("release-ca10a5e7-679ca856", &PREPARED_GROUNDING),
+        ("release-f56a5a24-679ca856", &PREPARED_ALGORITHMS),
+    ] {
+        for checked in [false, true] {
+            let mut arguments = vec!["release_observations", "--dataset", name];
+            if checked {
+                arguments.push("--check");
+            }
+            let options = Options::try_parse_from(arguments).unwrap();
+            assert_eq!(options.check, checked);
+            let selected = options.dataset.dataset();
+            assert_eq!(selected.sources, expected.sources);
+            assert_eq!(selected.labels, expected.labels);
+            let data = data::load(selected).unwrap();
+            assert_eq!(render::tables(&data, selected).unwrap(), expected.tables);
+        }
+    }
+}
+
+#[test]
+fn prepared_views_preserve_six_unique_observation_populations() {
+    let first: Value = serde_json::from_str(PREPARED_GROUNDING.observations).unwrap();
+    let second: Value = serde_json::from_str(PREPARED_ALGORITHMS.observations).unwrap();
+    let mut unique = std::collections::BTreeMap::new();
+    for document in [&first, &second] {
+        for block in document["blocks"].as_array().unwrap() {
+            let hash = block["original_report_sha256"].as_str().unwrap();
+            if let Some(previous) = unique.insert(hash, block) {
+                assert_eq!(
+                    previous, block,
+                    "shared reports must retain identical observations"
+                );
+            }
+        }
+    }
+    assert_eq!(unique.len(), 6);
+    assert_eq!(
+        unique
+            .values()
+            .map(|block| block["observations"].as_array().unwrap().len())
+            .sum::<usize>(),
+        702
+    );
+}
+
+#[test]
+fn prepared_provenance_preserves_the_full_acquisition_order() {
+    let first: Value = serde_json::from_str(PREPARED_GROUNDING.provenance).unwrap();
+    let second: Value = serde_json::from_str(PREPARED_ALGORITHMS.provenance).unwrap();
+    let labels = serde_json::json!([
+        "ca10a5e7-1",
+        "f56a5a24-1",
+        "679ca856-1",
+        "679ca856-2",
+        "f56a5a24-2",
+        "ca10a5e7-2"
+    ]);
+    assert_eq!(first["acquisition_order"], labels);
+    assert_eq!(second["acquisition_order"], labels);
+    assert_eq!(first["acquisition_reports"], second["acquisition_reports"]);
+    let actual: Vec<_> = first["acquisition_reports"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|report| report["label"].clone())
+        .collect();
+    assert_eq!(Value::Array(actual), labels);
 }
 
 #[test]

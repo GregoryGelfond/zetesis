@@ -255,21 +255,15 @@ answer multisets, model counts, objective costs and optimum ties. Reproduce comp
 end-to-end solves from kernel measurements when comparing performance.
 The [validation chapter](docs/book/reference/validation.md) explains which
 claims the corpus, proof and physical execution checks can establish.
-The [current performance comparison](docs/book/reference/performance.md) records
-ordinary CPU solves, matched eager CPU/Metal solves, table-join profiles and
-separate link-time optimization experiments. The application timings establish
-no broad table-join speedup; CPU is faster than Metal on the matched inputs.
-The normal release profile remains selected;
-smaller fat-LTO binaries do not compensate for slower measured application
-cases. Reusable table selection is an additional execution choice, not a claim
-that bitsets improve every grounding workload.
-The current Metal comparison spans two acquisition windows, whose block results
-remain separate. Earlier CPU/Metal comparisons and standalone scalar/Rayon table
-timings retain their measured source revisions. Results distinguish complete native model
-agreement from clingo's observable output, and retain timeouts and resource
-refusals explicitly. Earlier N=10 comparisons and isolated GPU measurements
-remain in the
-[historical performance evidence](docs/book/reference/validation.md#performance-evidence).
+The [performance comparisons](docs/book/reference/performance.md) separate the
+latest prepared-grounding CPU observations from earlier atom-catalog, Table,
+LTO and Metal results. The latest ordinary timings are mixed and RSS changes
+little. Independent scalar and domain fixtures demonstrate less grounding work,
+with setup costs and small timing regressions retained; they establish no general
+speedup or current GPU gain. Selected-output qualification, complete native
+records, timeouts and resource refusals have explicit scopes. The normal release
+profile remains selected. Earlier matched CPU/Metal and standalone table results
+retain their actual source revisions and acquisition windows.
 
 See [Contributing](CONTRIBUTING.md) for development and verification requirements,
 and [build the book](docs/book/building.md) to read the complete manual locally.

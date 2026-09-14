@@ -13,6 +13,8 @@ mod data;
 mod catalog_dataset;
 #[path = "release_observations/dataset.rs"]
 mod dataset;
+#[path = "release_observations/prepared_dataset.rs"]
+mod prepared_dataset;
 #[path = "release_observations/render.rs"]
 mod render;
 #[cfg(test)]
@@ -41,6 +43,10 @@ struct Options {
 enum Comparison {
     TableGrounding,
     AtomCatalog,
+    #[value(name = "release-ca10a5e7-679ca856")]
+    PreparedGrounding,
+    #[value(name = "release-f56a5a24-679ca856")]
+    PreparedAlgorithms,
 }
 
 impl Comparison {
@@ -48,6 +54,8 @@ impl Comparison {
         match self {
             Self::TableGrounding => &dataset::HISTORICAL,
             Self::AtomCatalog => &catalog_dataset::ATOM_CATALOG,
+            Self::PreparedGrounding => &prepared_dataset::PREPARED_GROUNDING,
+            Self::PreparedAlgorithms => &prepared_dataset::PREPARED_ALGORITHMS,
         }
     }
 }

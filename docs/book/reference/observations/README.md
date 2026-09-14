@@ -1,8 +1,8 @@
 # Recorded release observations
 
-Two fixed datasets reproduce the ordinary release comparisons in the
+Four fixed datasets reproduce the ordinary release comparisons in the
 [performance reference](../performance.md). Each retains its own sources,
-executable identities, observations and completion limits. Neither qualifies a
+executable identities, observations and completion limits. None qualifies a
 later implementation.
 
 ## Table-grounding comparison
@@ -24,8 +24,34 @@ The [observation data](release-1e5b78ce-ca10a5e7.json),
 `ca10a5e7ec84e13fbcc4a23bd0de8b0232c53fe1`, observed on 14 September 2026
 from 03:42:07 to 03:43:27 UTC. Both native versions explicitly use Indexed joins.
 Task allocation uses less sampled child RSS, SEND takes longer, and the other
-workloads have mixed results. The [current comparison](../performance.md#atom-catalog-cpu-comparison)
+workloads have mixed results. The [earlier atom-catalog comparison](../performance.md#earlier-atom-catalog-cpu-comparison)
 keeps all four block medians and ranges visible.
+
+## Prepared-grounding comparisons
+
+Two views select from one six-block acquisition on 14 September 2026:
+
+| Comparison | Observations | Provenance | Tables |
+|---|---|---|---|
+| `ca10a5e7` → `679ca856` | [data](release-ca10a5e7-679ca856.json) | [receipts](release-ca10a5e7-679ca856-provenance.json) | [table view](release-ca10a5e7-679ca856-tables.md) |
+| `f56a5a24` → `679ca856` | [data](release-f56a5a24-679ca856.json) | [receipts](release-f56a5a24-679ca856-provenance.json) | [table view](release-f56a5a24-679ca856-tables.md) |
+
+The full source identities are `ca10a5e7ec84e13fbcc4a23bd0de8b0232c53fe1`,
+`f56a5a2496f519d7b71b7c4c8fdc166c355874ff` and
+`679ca8568a6fd8577d9b944fbd99d7c54f666601`. The actual block order was
+`ca10a5e7-1`, `f56a5a24-1`, `679ca856-1`, `679ca856-2`, `f56a5a24-2`,
+`ca10a5e7-2`. Each view retains its four blocks in that order, with 468
+observations. Both contain the same two `679ca856` reports: the acquisition has
+**702 unique observations**, not 936 independent observations. Each provenance
+records all six report identities and timestamps, its selected order and the
+shared reports. The report timestamps do not measure outer publication duration.
+
+All three versions explicitly request Indexed joins. The first comparison covers
+the integrated changes from the atom-catalog release; the second compares the
+prepared-owner implementation with the subsequent algorithm changes. These are
+application comparisons. The provenance preserves the native versus explicit
+Apple target/package recipe distinction; matching top-level GPU features does
+not establish full transitive build equivalence or isolate one change's effect.
 
 ## What the views preserve
 
@@ -37,7 +63,8 @@ source and executable identities, corpus files and the actual observation
 limits. The Table-grounding provenance also records its build recipe and
 platform; the atom-catalog provenance states the external source/binary binding
 and its observation interval without reconstructing compiler lineage.
-The original reports remain retained separately.
+The prepared-grounding provenance also retains the shared acquisition and build
+recipe limits described above. The original reports remain retained separately.
 Machine-local paths, process IDs, output streams and diagnostic payloads are
 omitted. These files do not publish the other Metal, LTO, shared-lazy or matrix
 comparisons.
@@ -67,13 +94,18 @@ cargo run --locked -p zetesis-validation --example release_observations
 cargo run --locked -p zetesis-validation --example release_observations -- --check
 cargo run --locked -p zetesis-validation --example release_observations -- --dataset atom-catalog
 cargo run --locked -p zetesis-validation --example release_observations -- --dataset atom-catalog --check
+cargo run --locked -p zetesis-validation --example release_observations -- --dataset release-ca10a5e7-679ca856
+cargo run --locked -p zetesis-validation --example release_observations -- --dataset release-ca10a5e7-679ca856 --check
+cargo run --locked -p zetesis-validation --example release_observations -- --dataset release-f56a5a24-679ca856
+cargo run --locked -p zetesis-validation --example release_observations -- --dataset release-f56a5a24-679ca856 --check
 ```
 
 The default remains the historical Table-grounding comparison; explicit
 `--dataset table-grounding` selects the same data. `--dataset atom-catalog`
-selects the second compiled dataset. Each prints its three published Markdown
+selects the atom-catalog dataset. The two source-pair names select the corresponding
+prepared-grounding views. Each prints its three published Markdown
 tables; `--check` validates without writing them. Unknown names, repeated
-options and arbitrary file paths are refused. Both use only embedded data and
+options and arbitrary file paths are refused. All use only embedded data and
 one shared validator/renderer: they check the linked provenance digest, exact
 selected source/binary bindings and join policies, all positions
 against `zetesis_validation::performance::Schedule`, recorded completion and

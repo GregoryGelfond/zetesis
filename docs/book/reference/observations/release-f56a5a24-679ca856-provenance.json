@@ -1,0 +1,325 @@
+{
+  "acquisition_observations": 702,
+  "acquisition_order": [
+    "ca10a5e7-1",
+    "f56a5a24-1",
+    "679ca856-1",
+    "679ca856-2",
+    "f56a5a24-2",
+    "ca10a5e7-2"
+  ],
+  "acquisition_reports": [
+    {
+      "binary_sha256": "fd19a078e99c75c1bbaf30e437f5da02aa621fd595554b079bb3bc0b078dae0e",
+      "bytes": 25636174,
+      "finished_unix_ns": 1789395547400722000,
+      "label": "ca10a5e7-1",
+      "original_schema": 2,
+      "sha256": "c5c24dc1f5ceb818dc8438872b812a715c0fda986d51c5b8a3f64fc81df8a03f",
+      "source": "ca10a5e7ec84e13fbcc4a23bd0de8b0232c53fe1",
+      "started_unix_ns": 1789395543140936000
+    },
+    {
+      "binary_sha256": "fb4d784313f4b0c9a5078712728e70f17d44c545eae4a6ea67180ec7a49bbb29",
+      "bytes": 25658374,
+      "finished_unix_ns": 1789395601237252000,
+      "label": "f56a5a24-1",
+      "original_schema": 2,
+      "sha256": "71ae3f806d488f7174048725dbe6db52ed6e51e04ad069b8b88a41e5c7562ee0",
+      "source": "f56a5a2496f519d7b71b7c4c8fdc166c355874ff",
+      "started_unix_ns": 1789395596590207000
+    },
+    {
+      "binary_sha256": "a1d8cd7c640bab9b2a57f2e9dd612ff391c39b77f6dc9be95dbea0f890c13bd2",
+      "bytes": 25680574,
+      "finished_unix_ns": 1789395685884098000,
+      "label": "679ca856-1",
+      "original_schema": 2,
+      "sha256": "2b0495b1443b87e08a8b198759bd18352d8b38f75f00c7f2923e07170823991b",
+      "source": "679ca8568a6fd8577d9b944fbd99d7c54f666601",
+      "started_unix_ns": 1789395681759625000
+    },
+    {
+      "binary_sha256": "a1d8cd7c640bab9b2a57f2e9dd612ff391c39b77f6dc9be95dbea0f890c13bd2",
+      "bytes": 25680773,
+      "finished_unix_ns": 1789395705341143000,
+      "label": "679ca856-2",
+      "original_schema": 2,
+      "sha256": "fd87375fd6b5b4289b8ccc0899aed7e59c05304c3d4d55b9e9c8df88e425daeb",
+      "source": "679ca8568a6fd8577d9b944fbd99d7c54f666601",
+      "started_unix_ns": 1789395701122706000
+    },
+    {
+      "binary_sha256": "fb4d784313f4b0c9a5078712728e70f17d44c545eae4a6ea67180ec7a49bbb29",
+      "bytes": 25657990,
+      "finished_unix_ns": 1789395725002249000,
+      "label": "f56a5a24-2",
+      "original_schema": 2,
+      "sha256": "ba34d4e2cdb17bf43c88d44e99f5a068bdc4937d3015128b1d918db01b63170e",
+      "source": "f56a5a2496f519d7b71b7c4c8fdc166c355874ff",
+      "started_unix_ns": 1789395720742808000
+    },
+    {
+      "binary_sha256": "fd19a078e99c75c1bbaf30e437f5da02aa621fd595554b079bb3bc0b078dae0e",
+      "bytes": 25635995,
+      "finished_unix_ns": 1789395744737261000,
+      "label": "ca10a5e7-2",
+      "original_schema": 2,
+      "sha256": "7c6a19637aad6408d91072901f0bc58bbdb7df662edaf07e2c370f8684c14f0d",
+      "source": "ca10a5e7ec84e13fbcc4a23bd0de8b0232c53fe1",
+      "started_unix_ns": 1789395740437111000
+    }
+  ],
+  "build_scope": "Rust 1.97.1, ordinary release. ca10a5e7 selected CLI/experiments/validation with defaults and explicit aarch64-apple-darwin target. f56a5a24 selected CLI/experiments --bins --all-features with the native Apple target. 679ca856 selected CLI/experiments/validation --bins --all-features with explicit aarch64-apple-darwin target. Top-level GPU features agree; retained earlier evidence does not establish full transitive build equivalence. These are integrated application comparisons, not isolated algorithm or compiler-option effects.",
+  "clock_scope": "Per-report start/finish fields are retained from the runner; these are not outer wrapper or publication durations.",
+  "comparison_scope": "complete_selected_displays_with_symbol_and_model_multiplicities; final_optimum_ties_and_costs; hidden_interpretations_unavailable",
+  "corpus_files": [
+    {
+      "bytes": 176545,
+      "path": "examples/kr-domains/manifest.json",
+      "sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958"
+    },
+    {
+      "bytes": 1072,
+      "path": "examples/kr-domains/LICENSE",
+      "sha256": "663fd58c4daf8c2247da12c61b73474ee7a5f79f884c6f16d785a725fe9bfe99"
+    },
+    {
+      "bytes": 2115,
+      "path": "examples/kr-domains/encodings/shortest-path/variant-01.lp",
+      "sha256": "ee593089ab5ecfa2cf1a1cef152686f9b5d99c2ab08d126f212050568f1179e7"
+    },
+    {
+      "bytes": 3672,
+      "path": "examples/kr-domains/encodings/task-allocation/variant-04.lp",
+      "sha256": "7a16f9cb73d644ea061ee71a8aed3a5686f5dce3dc6e1015cdf83c603305e421"
+    },
+    {
+      "bytes": 837,
+      "path": "examples/kr-domains/scenarios/shortest-path/variant-01/06-layered-dag.lp",
+      "sha256": "8c19d1d8dd791a19f235ce4e07d57becadc753c9e15a5cc264adfaef171b001e"
+    },
+    {
+      "bytes": 898,
+      "path": "examples/kr-domains/scenarios/task-allocation/variant-04/05-larger-mix.lp",
+      "sha256": "a7d80af4886cff9c7a0b592f51f95afdf5943af5ebcbeadd57b4a650082393fe"
+    },
+    {
+      "bytes": 858,
+      "path": "examples/kr-domains/standalone/n-queens/variant-01.lp",
+      "sha256": "c43d5ddf900ce2fd1d3328f2df337f1c1e8b85b63255473713b16a2dfd0dc1fd"
+    },
+    {
+      "bytes": 960,
+      "path": "examples/kr-domains/standalone/n-queens/variant-02.lp",
+      "sha256": "b6e636c06664e0e3b1a34b883e342f9c7b599f8625e154adb1927d41442fca02"
+    },
+    {
+      "bytes": 878,
+      "path": "examples/kr-domains/standalone/n-queens/variant-03.lp",
+      "sha256": "6e04e47594fd44b6ed2e17370f81ad3ae9db684af9e5aa4a85c7e1d98a5f5dd6"
+    },
+    {
+      "bytes": 919,
+      "path": "examples/kr-domains/standalone/n-queens/variant-04.lp",
+      "sha256": "d599e4b8e68f0b68df20bfaefb0a9916da69c6829cd340de301b08997cfb9295"
+    },
+    {
+      "bytes": 1078,
+      "path": "examples/kr-domains/standalone/n-queens/variant-05.lp",
+      "sha256": "42475b96940e06b957f45441cb5de66681a509d35f1c41ddc72fc36899cbfaaa"
+    },
+    {
+      "bytes": 1116,
+      "path": "examples/kr-domains/standalone/n-queens/variant-06.lp",
+      "sha256": "9d6ff26ac9bec747f4a237145ea732fd689d065545254186375afc682604fc3c"
+    },
+    {
+      "bytes": 1954,
+      "path": "examples/kr-domains/standalone/send-money/send-money.lp",
+      "sha256": "de33a9970b578cf06fa42a85b55aaefaea2fd12b6d78ae051a6654875cd9e704"
+    }
+  ],
+  "corpus_manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+  "curation_scope": "Each selected view retains 468 ordered receipts with raw integer elapsed nanoseconds and separate child-RSS bytes. Machine-local paths, process IDs, output streams and diagnostic payloads are omitted. Pass decisions are recorded selected-display/cost qualification, not a new comparison of outputs or hidden interpretations. Original reports remain separately retained and hashed. This is a derived view of the identified CPU observations, not a byte-identical archive, qualification of a later source, or publication of Metal/LTO measurements. Both views select from one six-block acquisition of 702 unique receipts and share the two 679ca856 reports; their 936 displayed positions are not independent observations.",
+  "execution": {
+    "backend": "cpu",
+    "clingo_workers": 1,
+    "closure_workers": 1,
+    "completion_workers": 1,
+    "current_formula_joins": "indexed",
+    "grounding": "eager",
+    "native_output": "human; separate statistics observations",
+    "oracle": "auto",
+    "prior_formula_joins": "indexed",
+    "reference_output": "JSON; exhaustive optN"
+  },
+  "gpu_measurement": "unavailable: this fixed CPU campaign is not the full94 eager/lazy CPU/Metal matrix",
+  "kind": "derived_historical_observation_view",
+  "limits": {
+    "answers": {
+      "max_cost_dimensions": 8388608,
+      "max_input_bytes": 8388608,
+      "max_symbols": 8388608,
+      "max_witnesses": 8388608
+    },
+    "campaign_timeout": {
+      "nanos": 0,
+      "secs": 30
+    },
+    "corpus": {
+      "cases": 94,
+      "contract_symbols": 65536,
+      "files": 108,
+      "manifest_bytes": 1048576,
+      "source_bytes": 1048576,
+      "total_source_bytes": 4194304
+    },
+    "max_executable_bytes": 268435456,
+    "max_report_bytes": 536870912,
+    "max_total_capture_bytes": 134217728,
+    "process": {
+      "cleanup_timeout": {
+        "nanos": 0,
+        "secs": 1
+      },
+      "max_output_bytes": 4194304,
+      "timeout": {
+        "nanos": 0,
+        "secs": 5
+      }
+    }
+  },
+  "native_versions": [
+    {
+      "binary_sha256": "fb4d784313f4b0c9a5078712728e70f17d44c545eae4a6ea67180ec7a49bbb29",
+      "source": "f56a5a2496f519d7b71b7c4c8fdc166c355874ff"
+    },
+    {
+      "binary_sha256": "a1d8cd7c640bab9b2a57f2e9dd612ff391c39b77f6dc9be95dbea0f890c13bd2",
+      "source": "679ca8568a6fd8577d9b944fbd99d7c54f666601"
+    }
+  ],
+  "original_reports": [
+    {
+      "binary_sha256": "fb4d784313f4b0c9a5078712728e70f17d44c545eae4a6ea67180ec7a49bbb29",
+      "bytes": 25658374,
+      "finished_unix_ns": 1789395601237252000,
+      "label": "f56a5a24-1",
+      "original_schema": 2,
+      "sha256": "71ae3f806d488f7174048725dbe6db52ed6e51e04ad069b8b88a41e5c7562ee0",
+      "source": "f56a5a2496f519d7b71b7c4c8fdc166c355874ff",
+      "started_unix_ns": 1789395596590207000
+    },
+    {
+      "binary_sha256": "a1d8cd7c640bab9b2a57f2e9dd612ff391c39b77f6dc9be95dbea0f890c13bd2",
+      "bytes": 25680574,
+      "finished_unix_ns": 1789395685884098000,
+      "label": "679ca856-1",
+      "original_schema": 2,
+      "sha256": "2b0495b1443b87e08a8b198759bd18352d8b38f75f00c7f2923e07170823991b",
+      "source": "679ca8568a6fd8577d9b944fbd99d7c54f666601",
+      "started_unix_ns": 1789395681759625000
+    },
+    {
+      "binary_sha256": "a1d8cd7c640bab9b2a57f2e9dd612ff391c39b77f6dc9be95dbea0f890c13bd2",
+      "bytes": 25680773,
+      "finished_unix_ns": 1789395705341143000,
+      "label": "679ca856-2",
+      "original_schema": 2,
+      "sha256": "fd87375fd6b5b4289b8ccc0899aed7e59c05304c3d4d55b9e9c8df88e425daeb",
+      "source": "679ca8568a6fd8577d9b944fbd99d7c54f666601",
+      "started_unix_ns": 1789395701122706000
+    },
+    {
+      "binary_sha256": "fb4d784313f4b0c9a5078712728e70f17d44c545eae4a6ea67180ec7a49bbb29",
+      "bytes": 25657990,
+      "finished_unix_ns": 1789395725002249000,
+      "label": "f56a5a24-2",
+      "original_schema": 2,
+      "sha256": "ba34d4e2cdb17bf43c88d44e99f5a068bdc4937d3015128b1d918db01b63170e",
+      "source": "f56a5a2496f519d7b71b7c4c8fdc166c355874ff",
+      "started_unix_ns": 1789395720742808000
+    }
+  ],
+  "rss_scope": "separate_fresh_helper_RUSAGE_CHILDREN; excludes_helper; may_include_usage_propagated_by_waited_descendants; not_simultaneous_tree_RSS_or_device_memory; macOS_bytes_Linux_KiB_converted_to_bytes",
+  "schedule": {
+    "memory_runs": 1,
+    "repetitions": 3,
+    "selected": [
+      {
+        "selected": "standalone/n-queens/variant-01.lp"
+      },
+      {
+        "selected": "standalone/n-queens/variant-02.lp"
+      },
+      {
+        "selected": "standalone/n-queens/variant-03.lp"
+      },
+      {
+        "selected": "standalone/n-queens/variant-04.lp"
+      },
+      {
+        "selected": "standalone/n-queens/variant-05.lp"
+      },
+      {
+        "selected": "standalone/n-queens/variant-06.lp"
+      },
+      {
+        "selected": "standalone/send-money/send-money.lp"
+      },
+      {
+        "selected": "scenarios/task-allocation/variant-04/05-larger-mix.lp"
+      },
+      {
+        "selected": "scenarios/shortest-path/variant-01/06-layered-dag.lp"
+      }
+    ],
+    "warmups": 1
+  },
+  "schema": 1,
+  "selected_observations": 468,
+  "selected_order": [
+    "f56a5a24-1",
+    "679ca856-1",
+    "679ca856-2",
+    "f56a5a24-2"
+  ],
+  "shared_reports": [
+    {
+      "binary_sha256": "a1d8cd7c640bab9b2a57f2e9dd612ff391c39b77f6dc9be95dbea0f890c13bd2",
+      "bytes": 25680574,
+      "finished_unix_ns": 1789395685884098000,
+      "label": "679ca856-1",
+      "original_schema": 2,
+      "sha256": "2b0495b1443b87e08a8b198759bd18352d8b38f75f00c7f2923e07170823991b",
+      "source": "679ca8568a6fd8577d9b944fbd99d7c54f666601",
+      "started_unix_ns": 1789395681759625000
+    },
+    {
+      "binary_sha256": "a1d8cd7c640bab9b2a57f2e9dd612ff391c39b77f6dc9be95dbea0f890c13bd2",
+      "bytes": 25680773,
+      "finished_unix_ns": 1789395705341143000,
+      "label": "679ca856-2",
+      "original_schema": 2,
+      "sha256": "fd87375fd6b5b4289b8ccc0899aed7e59c05304c3d4d55b9e9c8df88e425daeb",
+      "source": "679ca8568a6fd8577d9b944fbd99d7c54f666601",
+      "started_unix_ns": 1789395701122706000
+    }
+  ],
+  "source_binding_scope": "Compiled source identities are bound by retained source/executable acquisition manifests; this receipt view does not reconstruct compiler lineage.",
+  "summary_scope": "Rendered raw observations are reconciled with each report's own maintained summary. The jq analysis projections are not qualification inputs.",
+  "tools": [
+    {
+      "bytes": 2196192,
+      "name": "zetesis-perf",
+      "sha256": "c83264ce4f459287d79042061a0320884117385ff876185373ae5ba168594d89"
+    },
+    {
+      "bytes": 341232,
+      "name": "clingo",
+      "sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015"
+    }
+  ],
+  "wall_scope": "fresh_process_spawn_capture_reap; output_included; comparison_hashing_excluded; no_cold_cache_claim"
+}
