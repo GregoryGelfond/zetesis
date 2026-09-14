@@ -16,7 +16,7 @@ mod verified;
 pub mod lazy;
 pub mod table;
 
-pub use batch::{BatchError, BatchOracle};
+pub use batch::{BatchError, BatchOracle, QueryStatistics};
 pub use candidates::{
     CandidateLimits, CandidateRestrictionLimits, CandidateStatistics, CandidateTermination,
     Candidates,

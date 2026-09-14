@@ -7,7 +7,9 @@ use std::sync::{Mutex, TryLockError};
 use rayon::prelude::*;
 use zetesis_core::{GroundProgram, Program, Seed, SeedView};
 
-use crate::{Check, Control, Limits, StaticCheck, Stop, check_static_view, check_view};
+use crate::{Check, Control, Limits, PreparationLimits, PreparationStatistics, StaticCheck, Stop, check_static_view};
+
+mod prepared;
 
 /// A fixed worker pool with an explicit maximum admitted batch size. Each
 /// invocation is synchronous; no unbounded background submission queue exists.
@@ -15,7 +17,8 @@ pub struct BatchOracle {
     pool: rayon::ThreadPool,
     max_candidates: usize,
     max_closure_bytes: usize,
-    admission: Mutex<()>,
+    preparation_limits: PreparationLimits,
+    admission: Mutex<prepared::Cache>,
 }
 
 impl BatchOracle {
@@ -36,20 +39,44 @@ impl BatchOracle {
             pool,
             max_candidates: max_candidates.get(),
             max_closure_bytes: Self::DEFAULT_CLOSURE_BYTES,
-            admission: Mutex::new(()),
+            preparation_limits: PreparationLimits::default(),
+            admission: Mutex::new(prepared::Cache::default()),
         })
     }
 
     /// Set the collective storage allowance for independent lazy closures.
     ///
-    /// Admission reserves the per-closure limit for each worker that may be
-    /// active in this submission. Static and shared-round execution retain
+    /// Admission counts shared preparation/cache headers, idle retained
+    /// workspaces and the assigned active workspace allowances, without counting
+    /// a shared preparation header twice. Retained capacity under tighter
+    /// candidate limits remains counted until a refused check discards it.
+    /// Static and shared-round execution retain
     /// their separate storage limits. Input seeds, completed returned models,
     /// allocator overhead and worker stacks are excluded; this is not RSS.
     #[must_use]
     pub fn with_closure_storage_limit(mut self, bytes: usize) -> Self {
         self.max_closure_bytes = bytes;
         self
+    }
+
+    /// Set independent immutable query-preparation bounds. Existing preparation
+    /// can be reused for the exact program; work is charged only when built.
+    /// Cached preparation bytes must still satisfy a changed byte allowance.
+    #[must_use]
+    pub fn with_preparation_limits(mut self, limits: PreparationLimits) -> Self {
+        self.preparation_limits = limits;
+        self
+    }
+
+    /// Actual preparation and assigned-owner reuse receipts. This read neither
+    /// prepares a program nor starts oracle work. Reused owners are assigned
+    /// slots retained from an earlier submission, not successful candidate counts.
+    ///
+    /// # Errors
+    /// Returns Busy or Poisoned when the shared admission owner is unavailable,
+    /// or a checked named-storage sum cannot be represented.
+    pub fn query_statistics(&self) -> Result<QueryStatistics, BatchError> {
+        self.admission.try_lock().map_err(admission_error)?.statistics()
     }
 
     /// Check a bounded slice and return results in input order. Limits apply
@@ -73,10 +100,15 @@ impl BatchOracle {
     /// A slice's `par_iter().map(Seed::view)` or
     /// `par_iter().map(SeedSelection::view)` borrows its owners without a
     /// temporary view vector or seed materialization. Limits and admission are
-    /// identical to [`Self::check_batch`].
+    /// identical to [`Self::check_batch`]. Each of at most `workers` contiguous
+    /// ranges uses one exclusive persistent workspace; Rayon can steal ranges,
+    /// but candidates inside a range run sequentially. Uneven candidate costs
+    /// can therefore balance differently from per-candidate work stealing.
     ///
     /// # Errors
     /// Refuses over-capacity or occupied submissions before oracle work.
+    /// Preparation failures are batch errors; per-candidate stops remain ordered
+    /// item results. Empty submissions do not prepare a program.
     pub fn check_batch_views<'seed>(
         &self,
         program: &Program,
@@ -90,23 +122,17 @@ impl BatchOracle {
                 actual: seeds.len(),
             });
         }
-        let _admission = self.admission.try_lock().map_err(|error| match error {
-            TryLockError::WouldBlock => BatchError::Busy,
-            TryLockError::Poisoned(_) => BatchError::Poisoned,
-        })?;
-        let active = seeds.len().min(self.pool.current_num_threads());
-        let required = (active as u128) * (limits.max_closure_bytes as u128);
-        if required > self.max_closure_bytes as u128 {
-            return Err(BatchError::ClosureStorage {
-                required,
-                limit: self.max_closure_bytes as u128,
-            });
+        let mut cache = self.admission.try_lock().map_err(admission_error)?;
+        let length = seeds.len();
+        let active = length.min(self.pool.current_num_threads());
+        if active == 0 {
+            cache.admit(0, limits, self.max_closure_bytes)?;
+            return Ok(Vec::new());
         }
-        Ok(self.pool.install(|| {
-            seeds
-                .map(|seed| check_view(program, seed, limits, control))
-                .collect()
-        }))
+        cache.prepare(program, active, self.preparation_limits, self.max_closure_bytes, control)?;
+        cache.admit(active, limits, self.max_closure_bytes)?;
+        let execution = cache.execution(length, active, limits, control);
+        Ok(self.pool.install(|| seeds.with_producer(execution)))
     }
 
     /// Share source traversal across ordered candidate occurrences, evaluating
@@ -215,6 +241,27 @@ impl BatchOracle {
     }
 }
 
+/// Actual immutable preparation and fixed workspace ownership receipts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct QueryStatistics {
+    /// Most recent completed preparation, absent before any nonempty lazy batch.
+    pub preparation: Option<PreparationStatistics>,
+    /// Completed preparation builds over this oracle's lifetime.
+    pub preparation_builds: u128,
+    /// Persistent slots, including idle slots from a previously larger batch.
+    pub retained_workspaces: usize,
+    /// Slots assigned to the last admitted nonempty lazy submission.
+    pub active_workspaces: usize,
+    /// Assigned slots retained from an earlier submission.
+    pub reused_workspaces: usize,
+    /// Actual named cache envelope, excluding returned results and source payload.
+    pub retained_bytes: u128,
+    /// Collective active/idle/preparation envelope admitted most recently.
+    /// This reserves configured capacity; it is not an observed allocation peak.
+    /// Zero means no successful reservation or the latest admission was refused.
+    pub reserved_bytes: u128,
+}
+
 /// A batch was not submitted; individual oracle stops are separate results.
 #[derive(Debug)]
 pub enum BatchError {
@@ -224,9 +271,11 @@ pub enum BatchError {
     Busy,
     /// A previous panic poisoned the batch admission state.
     Poisoned,
+    /// Immutable query or workspace preparation stopped before candidate work.
+    Preparation(Stop),
     /// Simultaneously active independent closures cannot reserve their limits.
     ClosureStorage {
-        /// Sum of per-worker allowances for this submission.
+        /// Shared preparation, idle cache and assigned active-owner envelope.
         required: u128,
         /// Collective named-storage allowance.
         limit: u128,
@@ -246,6 +295,7 @@ impl fmt::Display for BatchError {
             Self::Pool(error) => error.fmt(f),
             Self::Busy => f.write_str("another batch currently occupies the owned pool"),
             Self::Poisoned => f.write_str("the owned pool's admission state is poisoned"),
+            Self::Preparation(stop) => write!(f, "query preparation stopped: {stop}"),
             Self::ClosureStorage { required, limit } => {
                 write!(
                     f,
@@ -263,10 +313,18 @@ impl std::error::Error for BatchError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Pool(error) => Some(error),
+            Self::Preparation(stop) => Some(stop),
             Self::Capacity { .. } | Self::ClosureStorage { .. } | Self::Busy | Self::Poisoned => {
                 None
             }
         }
+    }
+}
+
+fn admission_error<T>(error: TryLockError<T>) -> BatchError {
+    match error {
+        TryLockError::WouldBlock => BatchError::Busy,
+        TryLockError::Poisoned(_) => BatchError::Poisoned,
     }
 }
 
@@ -285,7 +343,7 @@ mod tests {
     use super::{BatchError, BatchOracle};
     use crate::{Control, Limits};
 
-    fn fixture() -> (GroundProgram, Vec<Seed>) {
+    pub(super) fn fixture() -> (GroundProgram, Vec<Seed>) {
         let [a, b, c] = ["a", "b", "c"]
             .map(|name| AtomPattern::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap());
         let program = Program::new(
@@ -478,3 +536,6 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod reuse_tests;

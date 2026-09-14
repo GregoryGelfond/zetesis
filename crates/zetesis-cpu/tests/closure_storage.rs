@@ -22,10 +22,12 @@ fn worker_reservations_obey_the_collective_ceiling() {
         Seed::new(&program, []).unwrap(),
     ];
     let limits = Limits::default();
-    let required = limits.max_closure_bytes * 2;
-    let pool = BatchOracle::new(NonZeroUsize::new(2).unwrap(), NonZeroUsize::new(2).unwrap())
-        .unwrap()
-        .with_closure_storage_limit(required - 1);
+    let pool = BatchOracle::new(NonZeroUsize::new(2).unwrap(), NonZeroUsize::new(2).unwrap()).unwrap();
+    let initial = pool.check_batch(&program, &seeds, limits, &Control::default()).unwrap();
+    assert!(initial.iter().all(|result| result.as_ref().unwrap().accepted()));
+    let required = usize::try_from(pool.query_statistics().unwrap().reserved_bytes).unwrap();
+    assert!(required > usize::try_from(pool.query_statistics().unwrap().retained_bytes).unwrap());
+    let pool = pool.with_closure_storage_limit(required - 1);
     assert!(matches!(
         pool.check_batch(&program, &seeds, limits, &Control::default()),
         Err(BatchError::ClosureStorage { required: observed, limit })
@@ -45,21 +47,23 @@ fn worker_reservations_obey_the_collective_ceiling() {
 }
 
 #[test]
-fn a_small_batch_reserves_only_active_owners() {
+fn small_batches_account_for_their_retained_owner() {
     let program = program();
     let seed = Seed::new(&program, []).unwrap();
     let limits = Limits::default();
     let pool = BatchOracle::new(NonZeroUsize::new(4).unwrap(), NonZeroUsize::new(4).unwrap())
-        .unwrap()
-        .with_closure_storage_limit(limits.max_closure_bytes);
+        .unwrap();
     let results = pool
         .check_batch(&program, &[seed], limits, &Control::default())
         .unwrap();
     assert_eq!(results.len(), 1);
     assert!(results[0].as_ref().unwrap().accepted());
-    let empty = pool
-        .with_closure_storage_limit(0)
-        .check_batch(&program, &[], limits, &Control::default())
-        .unwrap();
-    assert!(empty.is_empty());
+    let statistics = pool.query_statistics().unwrap();
+    assert_eq!(statistics.active_workspaces, 1);
+    assert_eq!(statistics.retained_workspaces, 1);
+    assert!(statistics.reserved_bytes < 4 * limits.max_closure_bytes as u128);
+    let retained = statistics.retained_bytes;
+    assert!(matches!(pool.with_closure_storage_limit(0)
+        .check_batch(&program, &[], limits, &Control::default()),
+        Err(BatchError::ClosureStorage { required, limit: 0 }) if required == retained));
 }

@@ -337,6 +337,30 @@ one-shot empty-program path constructs no preparation or workspace and retains
 its vacuous zero-round result. This removes repeated allocation and dimension
 inspection; it does not establish a timing gain or replace full-round closure.
 
+`BatchOracle` retains that preparation and a bounded set of workspaces across
+independent batches. Its indexed borrowed seed producer is divided into at most
+one contiguous range per configured worker. Each range has one exclusive
+workspace and its candidates run sequentially; range tasks may be stolen by
+Rayon. Result order and candidate occurrences are preserved without materializing
+seed views. This schedule bounds owners directly, independently of worker thread
+identities. It can balance uneven candidate costs differently from per-candidate
+work stealing. Shared-round and static execution keep their separate algorithms
+and the same nonblocking batch admission slot.
+
+Batch preparation uses `PreparationLimits`; a preparation stop is distinct from
+an individual candidate stop. `query_statistics` reports completed preparation
+builds, assigned slots retained from earlier submissions, actual cached capacity
+and the latest admitted collective envelope. The envelope counts shared cache
+and preparation headers once, all idle workspace capacity, and each assigned
+workspace's maximum of retained capacity and its remaining per-closure allowance.
+A workspace's per-closure allowance already counts the prepared header, so that
+header is subtracted before combining owners. Actual unused workspace-vector
+capacity and conservative replacement overlap are included. Lowering a limit
+can refuse already-retained capacity; even an empty batch checks an existing
+cache, while an empty batch never creates preparation. Final result retention,
+source payload, allocator/tree overhead and worker stacks remain separate. These
+receipts describe bounded ownership and reuse, not timing or process RSS.
+
 `zetesis_cpu::Limits::max_closure_bytes` bounds each scalar closure's
 named predicate/catalog cells, atom and value buffers, nested payload, prepared
 order, query-owner/assignment/cursor/undo capacities and pending tuples, including operation scratch and conservative buffer
