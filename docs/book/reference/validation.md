@@ -225,12 +225,13 @@ performance trend.
 
 ### Performance evidence
 
-The [current comparison](performance.md) reports ordinary CPU time, child peak
-RSS, matched eager CPU/Metal solves, table-join profiles and separate LTO
-measurements for source `1e5b78ce`. Its Metal comparison retains two acquisition
-windows separately and includes no RSS measurements. The earlier Metal and
-standalone table observations belong to source `6bebb980`. The historical
-measurements below retain their original source and execution scopes.
+The [current comparison](performance.md) reports ordinary CPU wall time and
+child peak RSS for source `ca10a5e7`, alongside separate shared lazy CPU
+measurements and the accounted eager/lazy matrix. It also retains the earlier
+`6bebb980` → `1e5b78ce` release, Table, Metal and LTO comparisons under their
+original source identities. Those historical Metal measurements retain two
+acquisition windows separately and include no RSS observations. Physical
+regression qualification does not supply new GPU timing measurements.
 
 The measurements below apply to their explicitly named revisions. No timing or
 peak-RSS measurements were collected for
@@ -711,30 +712,31 @@ status. A newer source remains unqualified until its own checks complete.
 
 | Population | Covered / instrumented lines | Coverage |
 | --- | ---: | ---: |
-| Workspace, all features, portable tests plus 56 physical Metal tests | 57,986 / 61,484 | 94.31% |
-| CPU-only solver library and CLI, separate instrumentation | 4,884 / 5,185 | 94.19% |
+| Workspace, all features, portable tests plus 56 physical Metal tests | 61,396 / 64,728 | 94.85% |
+| CPU-only solver library and CLI, separate instrumentation | 5,260 / 5,516 | 95.36% |
 
-This snapshot was qualified on 12 September 2026 for
-compiled source
-[`1e5b78ce`](https://github.com/GregoryGelfond/zetesis/tree/1e5b78ce913ab3aeece6ed496f69ca8176f0644d),
-with documentation
-[`d190abd0`](https://github.com/GregoryGelfond/zetesis/tree/d190abd0bd28f4788cf57d9999d97ab3f2bbede7),
-using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS 26.6.2 with Apple M4 Pro
-Metal. Both populations passed their independent 91% floor. The workspace
-combines 2,068 portable profiles with 16 physical profiles from 56 tests in
-16 groups; the 267-profile CPU-only population remains separate. Before physical
-profile import, the portable-only workspace report covered 55,471 of 61,484
-lines (90.2202%), below the workspace floor. A separate explicit-GPU
+This snapshot was qualified on 14 September 2026 for compiled source
+[`527af50b`](https://github.com/GregoryGelfond/zetesis/tree/527af50bf63d14b1f1eb1a73346b392908c7990a),
+using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS 26.6.2 with
+Apple M4 Pro Metal. Later corrections to this coverage description and the
+README badge do not change the measured source or its compiled documentation
+and data inputs. The CPU performance measurements remain attached to their
+separate source `ca10a5e7` in the [comparison](performance.md).
+
+Both populations passed their independent 91% floor. The workspace contains
+2,221 profiles: 2,205 portable profiles plus 16 physical profiles from 56 tests
+in 16 groups. The unchanged 268-profile CPU-only population remains separate.
+Before physical profile import, the portable-only workspace report already
+passed its floor at 58,938 of 64,728 lines (91.0549%). A separate explicit-GPU
 device-failure check also passed; its profile and the 17 test-listing profiles
 are excluded from both coverage populations.
 
-The same compiled source passed the portable and external-oracle gates and
-all 94 CPU countermodel corpus cases. A separate Table-requested eager CPU
-matrix passed 376 observations across those 94 cases, retaining complete
-displayed families, costs and optimum ties under the corpus contracts. The
-Lean build, axiom audit and source-record checks cover 118 modules and 1,136
-declarations. Those counts describe the checked mathematical library; they
-do not certify the Rust grounder, masks or GPU execution.
+The portable and external-oracle gates passed for the implementation in this
+checkpoint. The Lean build, axiom audit and source-record checks cover 120
+semantic modules and 1,146 audited theorems. Those counts describe the checked
+mathematical library; they do not certify the Rust grounder, masks or GPU
+execution. Historical corpus and performance results retain their original
+source identities in the [comparison](performance.md).
 
 The static closure comparison checked 53 candidate executions against an
 independent ordered-set reference. Owned seeds, indexed selections and manual
