@@ -224,7 +224,9 @@ fn bundle_failure(mut failure: PublicationFailure, bundle: &SourceBundle) -> Pub
 
 pub(crate) fn expansion_limits(options: &Options) -> ExpansionLimits {
     ExpansionLimits {
-        max_term_work: options.max_expansion_work,
+        max_term_work: options
+            .max_expansion_work
+            .unwrap_or_else(|| ExpansionLimits::default().max_term_work),
         max_templates: options.max_expanded_templates,
         max_values: options.max_expansion_values,
         ..Default::default()
@@ -241,7 +243,10 @@ pub(crate) fn formula_limits(options: &Options) -> zetesis_themelios::FormulaLim
     zetesis_themelios::FormulaLimits {
         max_support_bytes: options.max_support_bytes,
         max_substitutions: u64::try_from(options.max_substitutions).unwrap_or(u64::MAX),
-        max_work: u64::try_from(options.max_expansion_work).unwrap_or(u64::MAX),
+        max_work: options.max_expansion_work.map_or_else(
+            || zetesis_themelios::FormulaLimits::default().max_work,
+            |work| u64::try_from(work).unwrap_or(u64::MAX),
+        ),
         theory: zetesis_ferraris::AdmissionLimits {
             max_atoms: options
                 .max_atoms

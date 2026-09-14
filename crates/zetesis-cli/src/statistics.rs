@@ -159,12 +159,13 @@ fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
     let formula = crate::admission::formula_limits(o);
     writeln!(
         sink,
-        "  formula profile ceilings: atoms={}; roots={}; nodes={}; source values={}; support rounds={} (applicable when formula admission is selected)",
+        "  formula profile ceilings: atoms={}; roots={}; nodes={}; source values={}; support rounds={}; work={} (applicable when formula admission is selected)",
         formula.theory.max_atoms,
         formula.theory.max_roots,
         formula.theory.max_nodes,
         formula.max_domain_values,
-        formula.max_support_rounds
+        formula.max_support_rounds,
+        formula.max_work
     )?;
     writeln!(
         sink,
@@ -178,7 +179,10 @@ fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
     writeln!(
         sink,
         "  expansion limits: work={}; templates={}; values={}; eager support bytes={}",
-        o.max_expansion_work, o.max_expanded_templates, o.max_expansion_values, o.max_support_bytes
+        crate::admission::expansion_limits(o).max_term_work,
+        o.max_expanded_templates,
+        o.max_expansion_values,
+        o.max_support_bytes
     )?;
     writeln!(
         sink,

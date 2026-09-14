@@ -215,6 +215,89 @@ fn support_byte_default_matches_formula_admission() {
 }
 
 #[test]
+fn explicit_work_override_bounds_formula_admission() {
+    let source = "a|b. c:-a. c:-b.";
+    let attempt = |work: usize| {
+        run(
+            source,
+            &options(&[
+                "--oracle",
+                "countermodel",
+                "--stats",
+                "--max-expansion-work",
+                &work.to_string(),
+            ]),
+        )
+    };
+    let (mut low, mut high) = (
+        0,
+        usize::try_from(zetesis_themelios::FormulaLimits::default().max_work).unwrap(),
+    );
+    assert!(attempt(high).0.is_ok());
+    // Locate this actual small admission's inclusive ceiling, without assuming
+    // an interner layout, work schedule or literal default operation count.
+    while low < high {
+        let middle = low + (high - low) / 2;
+        let (result, output, _) = attempt(middle);
+        match result {
+            Ok(report) => {
+                assert_eq!(report.completion, Completion::Exhausted);
+                high = middle;
+            }
+            Err(RunError::FormulaAdmission(error)) => {
+                assert!(output.is_empty());
+                let (observed, limit) = match error {
+                    FormulaFailure::Limit {
+                        resource: FormulaResource::Work,
+                        observed,
+                        limit,
+                        ..
+                    }
+                    | FormulaFailure::Expansion(ExpansionFailure::Limit {
+                        resource: zetesis_themelios::ExpansionResource::TermWork,
+                        observed,
+                        limit,
+                        ..
+                    }) => (observed, limit),
+                    other => panic!("unexpected source refusal: {other:?}"),
+                };
+                assert_eq!(limit, middle as u128);
+                assert!(observed > limit);
+                low = middle + 1;
+            }
+            other => panic!("unexpected admission result: {other:?}"),
+        }
+    }
+    assert!(low > 0);
+    let (result, output, diagnostics) = attempt(low);
+    assert_eq!(result.unwrap().completion, Completion::Exhausted);
+    let models = answers(&output);
+    assert_eq!(models.len(), 2);
+    assert_eq!(
+        models.into_iter().collect::<BTreeSet<_>>(),
+        BTreeSet::from([BTreeSet::from(["a", "c"]), BTreeSet::from(["b", "c"]),])
+    );
+    assert!(
+        diagnostics.contains(&format!("expansion limits: work={low};")),
+        "{diagnostics}"
+    );
+    assert!(
+        diagnostics.contains(&format!(
+            "; work={low} (applicable when formula admission is selected)"
+        )),
+        "{diagnostics}"
+    );
+    let (result, output, _) = attempt(low - 1);
+    assert!(output.is_empty());
+    assert!(
+        matches!(result, Err(RunError::FormulaAdmission(FormulaFailure::Limit {
+        resource: FormulaResource::Work, observed, limit, location,
+    })) if observed == low as u128 && limit == (low - 1) as u128
+        && location.source == zetesis_themelios::AdmissionOptions::default().source_id)
+    );
+}
+
+#[test]
 fn support_byte_limit_is_inclusive() {
     let source = "1 {a;b} 1.";
     let attempt = |bytes: usize| {

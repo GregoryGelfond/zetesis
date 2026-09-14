@@ -26,6 +26,13 @@ The compact help lists everyday input, enumeration, backend, grounder and output
 options. `--help-all` additionally describes oracle selection, workers, batching
 and resource ceilings. Both views describe the same solver.
 
+Omitting `--max-expansion-work` preserves independent library defaults for
+source-term expansion and eager formula grounding. An explicit value sets both
+ceilings; `--stats` reports their effective values. This pre-1.0 configuration API
+change makes `Options::max_expansion_work` an `Option<usize>`: use `None` for those
+defaults and `Some(limit)` for the shared override. Library admission continues
+to accept separate `ExpansionLimits` and `FormulaLimits` without a CLI adapter.
+
 Without objectives, the default returns one answer set; `--models 0` requests
 exhaustive enumeration. With an active objective, the search phase ends before
 retained incumbents are displayed. Exhaustion establishes optimality; an

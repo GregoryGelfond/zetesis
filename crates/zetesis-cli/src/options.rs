@@ -98,13 +98,14 @@ pub struct Options {
     /// Cumulative branch decisions for the countermodel oracle.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_search_decisions, hide_short_help = true)]
     pub max_search_decisions: u64,
-    /// Maximum source-expansion and eager formula-grounding work.
+    /// Override source-expansion and eager formula-grounding work ceilings.
     ///
-    /// Each counter uses this ceiling independently. The default matches the
-    /// formula library's finite work policy. Formula grounding includes checked
-    /// typed lookup, index construction, copying and commit work.
-    #[arg(long, default_value_t = usize::try_from(zetesis_themelios::FormulaLimits::default().max_work).expect("default formula work fits supported address widths"), hide_short_help = true)]
-    pub max_expansion_work: usize,
+    /// Omission preserves each library default: 1,048,576 source-term operations
+    /// and 10,000,000 formula-grounding operations. An explicit value applies
+    /// independently to both counters. Formula work includes checked typed
+    /// lookup, index construction, copying and commit work.
+    #[arg(long, hide_short_help = true)]
+    pub max_expansion_work: Option<usize>,
     /// Maximum authored bytes for eager formula support views, indexes and queries.
     ///
     /// Source atoms, allocator/tree overhead and other grounding state are excluded.

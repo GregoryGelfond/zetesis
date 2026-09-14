@@ -61,6 +61,20 @@ fn statistics_distinguish_formula_profile_limits() {
         assert!(diagnostics.contains(&format!(
             "formula profile ceilings: atoms={expected_atoms}; roots={expected_roots}; nodes=1048576; source values=1024; support rounds=1024"
         )), "{diagnostics}");
+        assert!(
+            diagnostics.contains(&format!(
+                "; work={} (applicable when formula admission is selected)",
+                zetesis_themelios::FormulaLimits::default().max_work
+            )),
+            "{diagnostics}"
+        );
+        assert!(
+            diagnostics.contains(&format!(
+                "expansion limits: work={};",
+                zetesis_themelios::ExpansionLimits::default().max_term_work
+            )),
+            "{diagnostics}"
+        );
     }
 }
 

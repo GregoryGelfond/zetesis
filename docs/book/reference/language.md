@@ -33,15 +33,16 @@ rounds. A round that establishes no change is included; this is not a direct
 recursion-depth measure. Exhaustion refuses admission and cannot establish
 completed support or unsatisfiability.
 
-The ordinary `--max-expansion-work` ceiling defaults to 10,000,000, matching
-the formula library's default work policy. Source-term expansion and eager
-formula grounding each apply this setting to their own cumulative counter.
-Checked atom comparisons, index construction, copying and commit work are
-included in formula grounding. Accounting these operations changes the work
-needed to admit a source; the ordinary default replaces the earlier 1,048,576
-ceiling. Explicit lower overrides remain effective. These finite operation
-ceilings are neither elapsed-time limits nor performance measurements, and do
-not replace the separate source, value, atom and storage bounds.
+Without `--max-expansion-work`, ordinary admission preserves the independent
+library defaults: 1,048,576 source-term expansion operations and 10,000,000 eager
+formula-grounding operations. An explicit value overrides both ceilings; each
+counter applies it independently. `--stats` reports both effective limits.
+Formula work includes checked atom comparisons, index construction, copying and
+commit operations. Accounting these operations changes the work needed to admit
+a source; formula admission now uses its library default instead of the earlier
+shared 1,048,576 default. Explicit lower overrides remain effective. These finite
+operation ceilings are neither a summed request budget, elapsed-time limits nor
+performance measurements. Separate source, value, atom and storage bounds remain.
 
 `--stats` reports both requested grounding limits and formula profile ceilings.
 The CLI has no independent source-value or support-round option. Library callers
