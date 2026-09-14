@@ -154,7 +154,10 @@ fn finite_meets_avoid_real_prefixes_and_probes() {
 }
 
 #[test]
-fn typed_aliases_cycles_and_provenance_survive() {
+fn eligible_domain_guards_preserve_complete_grounding() {
+    // The same complete-theory and provenance contract covers typed and signed
+    // values, aliases and repeated rule occurrences, seeded and unseeded cycles,
+    // swapped columns, and equal argument domains.
     for source in [
         "p(1).p(\"1\").p(a).q(\"1\").-q(1).r(X):-p(X),q(X).s(X):-p(X),-q(X).",
         "p(1,1).p(1,2).q(1).r(X):-p(X,X),q(X).r(X):-p(X,X),q(X).",
@@ -181,7 +184,7 @@ fn typed_aliases_cycles_and_provenance_survive() {
 }
 
 #[test]
-fn widened_arguments_and_stopped_analysis_preserve_fallback() {
+fn widened_arguments_leave_grounding_unrestricted() {
     let source = selective();
     let ordinary = ground(
         &source,
@@ -190,33 +193,46 @@ fn widened_arguments_and_stopped_analysis_preserve_fallback() {
         &Observation::default(),
     )
     .unwrap();
-    for limits in [
-        DomainLimits {
-            max_values_per_argument: 0,
-            ..DomainLimits::default()
-        },
-        DomainLimits {
-            max_work: 7,
-            ..DomainLimits::default()
-        },
-    ] {
-        let observation = Observation::default();
-        equal(
-            &ordinary,
-            &ground(&source, JoinStrategy::Indexed, Some(limits), &observation).unwrap(),
-        );
-        if limits.max_work == 7 {
-            assert!(
-                matches!(observation.status.get(), Some(Status::Stopped(stop))
-                if stop.resource == zetesis_domain::Resource::Work && stop.limit == 7 && stop.observed == 8)
-            );
-            assert!(observation.work.get().domain_prepare_work.unwrap() >= 7);
-        } else {
-            assert_eq!(observation.status.get(), Some(Status::FixedPoint));
-        }
-        assert_eq!(observation.work.get().domain_guard_rows, Some(0));
-        assert_eq!(observation.work.get().domain_rejected_rows, Some(0));
-    }
+    let limits = DomainLimits {
+        max_values_per_argument: 0,
+        ..DomainLimits::default()
+    };
+    let observation = Observation::default();
+    equal(
+        &ordinary,
+        &ground(&source, JoinStrategy::Indexed, Some(limits), &observation).unwrap(),
+    );
+    assert_eq!(observation.status.get(), Some(Status::FixedPoint));
+    assert_eq!(observation.work.get().domain_guard_rows, Some(0));
+    assert_eq!(observation.work.get().domain_rejected_rows, Some(0));
+}
+
+#[test]
+fn stopped_domain_analysis_preserves_complete_fallback() {
+    let source = selective();
+    let ordinary = ground(
+        &source,
+        JoinStrategy::Indexed,
+        None,
+        &Observation::default(),
+    )
+    .unwrap();
+    let limits = DomainLimits {
+        max_work: 7,
+        ..DomainLimits::default()
+    };
+    let observation = Observation::default();
+    equal(
+        &ordinary,
+        &ground(&source, JoinStrategy::Indexed, Some(limits), &observation).unwrap(),
+    );
+    assert!(
+        matches!(observation.status.get(), Some(Status::Stopped(stop))
+        if stop.resource == zetesis_domain::Resource::Work && stop.limit == 7 && stop.observed == 8)
+    );
+    assert!(observation.work.get().domain_prepare_work.unwrap() >= 7);
+    assert_eq!(observation.work.get().domain_guard_rows, Some(0));
+    assert_eq!(observation.work.get().domain_rejected_rows, Some(0));
 }
 
 #[test]
