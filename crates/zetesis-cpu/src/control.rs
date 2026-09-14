@@ -57,6 +57,10 @@ pub enum Stop {
     Deadline,
     /// The per-oracle charged work ceiling was reached.
     WorkLimit,
+    /// Another complete source round would exceed the round ceiling.
+    RoundLimit,
+    /// Named live closure storage would exceed its byte ceiling.
+    StorageLimit,
     /// Adding another distinct consequence would exceed the atom ceiling.
     DerivedAtomLimit,
     /// Producing another candidate would exceed the candidate ceiling.
@@ -77,6 +81,8 @@ impl fmt::Display for Stop {
             Self::Cancelled => "operation cancelled",
             Self::Deadline => "operation deadline expired",
             Self::WorkLimit => "oracle work limit reached",
+            Self::RoundLimit => "source round limit reached",
+            Self::StorageLimit => "closure storage limit reached",
             Self::DerivedAtomLimit => "derived atom limit reached",
             Self::CandidateLimit => "candidate limit reached",
             Self::CarrierLimit => "candidate carrier atom limit reached",

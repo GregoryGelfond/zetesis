@@ -214,7 +214,8 @@ pub struct Statistics {
 }
 
 /// Located source failure or runtime refusal with partial accounting.
-/// The default human view contains the typed cause. [`Self::retain_source`]
+/// The default human view contains the cause and any known source identity and
+/// byte span. [`Self::retain_source`]
 /// adds an original source excerpt through themelios's canonical plain view;
 /// terminal styling and publication remain the consumer's responsibility.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -289,6 +290,14 @@ impl fmt::Display for Error {
             && let Some(diagnostic) = self.diagnostic()
         {
             context.write(f, &diagnostic)?;
+        } else if let Some(location) = self.location {
+            write!(
+                f,
+                " at source {}, bytes {}..{}",
+                location.source.get(),
+                location.span.start().get(),
+                location.span.end().get(),
+            )?;
         }
         Ok(())
     }

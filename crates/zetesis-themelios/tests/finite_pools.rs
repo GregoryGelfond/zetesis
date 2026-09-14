@@ -399,7 +399,7 @@ fn include_origins_survive_duplicate_rules_and_choice_groups() {
 }
 
 #[test]
-fn large_products_generated_carriers_and_recursive_growth_refuse_before_publication() {
+fn oversized_pool_products_refuse_before_publication() {
     let arguments = ["(1;2)"; 140].join(",");
     let source = format!("p({arguments});q.");
     assert!(matches!(
@@ -414,20 +414,28 @@ fn large_products_generated_carriers_and_recursive_growth_refuse_before_publicat
             ..
         }))
     ));
+}
+
+#[test]
+fn pooled_head_values_obey_the_cumulative_limit() {
     assert!(matches!(
         limited(
             "p(X):-X=(1;2).",
             ExpansionLimits::default(),
             &FormulaLimits {
-                max_assignment_values: 1,
+                max_generated_values: 1,
                 ..FormulaLimits::default()
             }
         ),
         Err(FormulaFailure::Limit {
-            resource: FormulaResource::AssignmentValues,
+            resource: FormulaResource::GeneratedValues,
             ..
         })
     ));
+}
+
+#[test]
+fn recursive_pool_growth_obeys_the_round_limit() {
     assert!(matches!(
         limited(
             "p(0).p(Y):-p(X),Y=(X+1;X+2).",
@@ -442,6 +450,10 @@ fn large_products_generated_carriers_and_recursive_growth_refuse_before_publicat
             ..
         })
     ));
+}
+
+#[test]
+fn pooled_scalar_equality_preserves_explicit_facts() {
     assert_eq!(
         native(&input("p(X):-X=(1;2).")),
         native(&input("p(1).p(2)."))

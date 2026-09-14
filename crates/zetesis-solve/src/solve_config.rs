@@ -26,6 +26,13 @@ pub struct SolveConfig {
     pub max_search_work: u64,
     /// Cumulative formula branch decisions.
     pub max_search_decisions: u64,
+    /// Distinct candidate projections retained to exclude previously visited keys.
+    pub max_projection_entries: u64,
+    /// Logical nodes in the retained candidate-projection trie.
+    pub max_projection_nodes: usize,
+    /// Named projection-history capacity and conservative growth overlap.
+    /// This excludes allocator overhead and the separate authored CNF encoding.
+    pub max_projection_bytes: usize,
     /// Cumulative objective evaluation work.
     pub max_objective_work: u64,
     /// Cumulative optional objective-bound work; zero disables pruning.
@@ -67,6 +74,12 @@ pub struct SolveConfig {
     /// frozen-reduct verification call, and per certified candidate check. It
     /// does not replace cumulative `max_search_work` or device propagation limits.
     pub max_work: u64,
+    /// Named storage for one independent lazy CPU closure construction.
+    /// Input seeds and completed model retention belong to separate owners.
+    pub max_closure_bytes: usize,
+    /// Sum of reserved closure allowances for simultaneously active CPU workers.
+    /// This is separate from shared-round and GPU batch storage.
+    pub max_closure_batch_bytes: usize,
     /// Maximum device propagation work per formula candidate, independent of
     /// CPU work. Below mandatory setup work the device refuses before submission.
     pub gpu_formula_work: u32,
@@ -104,6 +117,9 @@ impl SolveConfig {
         models: 1,
         max_search_work: 10_000_000_000,
         max_search_decisions: 10_000_000,
+        max_projection_entries: zetesis_sat::ProjectionLimits::DEFAULT.max_entries,
+        max_projection_nodes: zetesis_sat::ProjectionLimits::DEFAULT.max_nodes,
+        max_projection_bytes: zetesis_sat::ProjectionLimits::DEFAULT.max_bytes,
         max_objective_work: 100_000_000,
         max_objective_bound_work: 10_000_000,
         max_objective_bindings: 1_000_000,
@@ -120,6 +136,8 @@ impl SolveConfig {
         max_carrier_atoms: 4_096,
         max_candidate_bytes: 67_108_864,
         max_work: 100_000_000,
+        max_closure_bytes: 134_217_728,
+        max_closure_batch_bytes: zetesis_cpu::BatchOracle::DEFAULT_CLOSURE_BYTES,
         gpu_formula_work: 100_000_000,
         gpu_formula_rounds: 64,
         max_source_work: 10_000_000,

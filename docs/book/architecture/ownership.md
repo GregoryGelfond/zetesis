@@ -170,6 +170,24 @@ avoid reallocation while increasing retained storage. An admission limit must
 account for the capacity actually retained, including simultaneously live
 packing, output and transport storage within its stated scope.
 
+Independent scalar closure construction has a per-candidate named-capacity
+allowance, `Limits::max_closure_bytes`. `BatchOracle` reserves it for
+`min(submitted candidates, worker count)` simultaneous owners against its
+collective closure allowance before entering the pool. Small batches reserve
+only their possible active owners; an empty batch reserves none. Returned
+models, input seeds, worker stacks and allocator overhead are separate owners.
+Ordinary sessions expose these allowances through `SolveConfig` and the CLI's
+`--max-closure-bytes` and `--max-closure-batch-bytes` options. A reservation refusal
+submits no candidate and releases the pool's admission slot.
+
+[`StorageOwners`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StorageOwners.lean)
+proves the natural-number bound obtained by summing independently bounded
+owners. Its premise is admitted capacity: allocator slack can exceed a proposed
+reservation before the actual-capacity check refuses it. The recorded failed
+peak can therefore exceed the allowance. This is not a hard bound on transient
+allocator or process memory. Concrete capacity measurement, worker scheduling
+and checked arithmetic remain implementation obligations.
+
 The lazy coordinator's `max_host_bytes` is a mixed, explicitly scoped envelope.
 It includes actual committed/pending catalog, AVL/path and ordered-ID capacities,
 their named growth overlap, nested atom payload measures, and requested packed

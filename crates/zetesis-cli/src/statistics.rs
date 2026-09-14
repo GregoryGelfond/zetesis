@@ -149,6 +149,16 @@ fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
     )?;
     writeln!(
         sink,
+        "  projection history limits: entries={}; nodes={}; named capacity/overlap bytes={}; work shares the search allowance",
+        o.max_projection_entries, o.max_projection_nodes, o.max_projection_bytes
+    )?;
+    writeln!(
+        sink,
+        "  independent CPU closure limits: named bytes/owner={}; collective reservation bytes={}; returned models and allocator overhead excluded",
+        o.max_closure_bytes, o.max_closure_batch_bytes
+    )?;
+    writeln!(
+        sink,
         "  requested grounding limits: atoms={}; carrier atoms={}; substitutions={}; ground rules={}; GPU batch bytes={}",
         o.max_atoms,
         o.max_carrier_atoms,
@@ -159,11 +169,13 @@ fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
     let formula = crate::admission::formula_limits(o);
     writeln!(
         sink,
-        "  formula profile ceilings: atoms={}; roots={}; nodes={}; source values={}; support rounds={}; work={} (applicable when formula admission is selected)",
+        "  formula profile ceilings: atoms={}; roots={}; nodes={}; source values={}; assignment values/operation={}; generated binding values={}; support rounds={}; work={} (applicable when formula admission is selected)",
         formula.theory.max_atoms,
         formula.theory.max_roots,
         formula.theory.max_nodes,
         formula.max_domain_values,
+        formula.max_assignment_values,
+        formula.max_generated_values,
         formula.max_support_rounds,
         formula.max_work
     )?;
@@ -477,6 +489,15 @@ fn countermodel(
         stats.candidate_restrictions,
         stats.candidate_queries,
         stats.stable_models
+    )?;
+    writeln!(
+        sink,
+        "  projection history: entries={}; nodes={}; retained bytes={}; peak bytes={}; work={} (included in search work)",
+        stats.projections.entries,
+        stats.projections.nodes,
+        stats.projections.retained_bytes,
+        stats.projections.peak_bytes,
+        stats.projections.work,
     )?;
     if let Some(certified) = stats.certified {
         writeln!(

@@ -8,7 +8,8 @@ mod receipts;
 fn relation_dispatch_requires_a_positive_wait() {
     for rows in [0, 1] {
         let (predicate, atoms) = source(rows);
-        let relation = Relation::from_atoms(&predicate, &atoms, relation::Limits::default()).unwrap();
+        let relation =
+            Relation::from_atoms(&predicate, &atoms, relation::Limits::default()).unwrap();
         let queries = [relation.query(&[], relation::Limits::default()).unwrap()];
         for count in [0, 1] {
             for timeout in [Duration::ZERO, Duration::from_nanos(1)] {

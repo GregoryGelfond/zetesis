@@ -36,6 +36,7 @@ pub(crate) fn source(
     }
     let admission = AdmissionOptions {
         max_source_bytes: options.max_source_bytes,
+        core_limits: core_limits(options),
         ..Default::default()
     };
     let source = if options.oracle == Oracle::Countermodel {
@@ -136,11 +137,7 @@ pub(crate) fn bundle(
         bundle
     } else {
         match phases.measure(SolvePhase::AdmissionMaterialization, || {
-            admit_bundle_extended(
-                bundle,
-                BundleAdmissionOptions::default(),
-                expansion_limits(options),
-            )
+            admit_bundle_extended(bundle, bundle_options(options), expansion_limits(options))
         }) {
             Ok(admitted) => {
                 diagnostics.metadata(Label::Oracle, format_args!("reduct closure"))?;
@@ -175,7 +172,7 @@ pub(crate) fn bundle(
         .measure(SolvePhase::AdmissionMaterialization, || {
             zetesis_themelios::prepare_bundle_formula(
                 bundle,
-                BundleAdmissionOptions::default(),
+                bundle_options(options),
                 expansion_limits(options),
                 formula_limits(options),
             )?
@@ -241,6 +238,12 @@ fn grounding_options(options: &Options) -> zetesis_themelios::GroundingOptions {
 
 pub(crate) fn formula_limits(options: &Options) -> zetesis_themelios::FormulaLimits {
     zetesis_themelios::FormulaLimits {
+        max_domain_values: options
+            .max_domain_values
+            .unwrap_or_else(|| zetesis_themelios::FormulaLimits::default().max_domain_values),
+        max_assignment_values: options.max_assignment_values,
+        max_generated_values: options.max_generated_values,
+        max_support_rounds: options.max_support_rounds,
         max_support_bytes: options.max_support_bytes,
         max_substitutions: u64::try_from(options.max_substitutions).unwrap_or(u64::MAX),
         max_work: options.max_expansion_work.map_or_else(
@@ -248,14 +251,26 @@ pub(crate) fn formula_limits(options: &Options) -> zetesis_themelios::FormulaLim
             |work| u64::try_from(work).unwrap_or(u64::MAX),
         ),
         theory: zetesis_ferraris::AdmissionLimits {
-            max_atoms: options
-                .max_atoms
-                .min(zetesis_ferraris::AdmissionLimits::default().max_atoms),
-            max_roots: options
-                .max_ground_rules
-                .min(zetesis_ferraris::AdmissionLimits::default().max_roots),
+            max_atoms: options.max_atoms,
+            max_roots: options.max_ground_rules,
             ..Default::default()
         },
+        ..Default::default()
+    }
+}
+
+fn core_limits(options: &Options) -> zetesis_core::AdmissionLimits {
+    zetesis_core::AdmissionLimits {
+        max_domain_values: options
+            .max_domain_values
+            .unwrap_or_else(|| zetesis_core::AdmissionLimits::default().max_domain_values),
+        ..Default::default()
+    }
+}
+
+fn bundle_options(options: &Options) -> BundleAdmissionOptions {
+    BundleAdmissionOptions {
+        core_limits: core_limits(options),
         ..Default::default()
     }
 }

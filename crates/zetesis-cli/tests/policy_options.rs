@@ -65,6 +65,16 @@ fn nondefault_options_preserve_each_solver_field() {
         "33",
         "--max-candidate-bytes",
         "34",
+        "--max-projection-entries",
+        "35",
+        "--max-projection-nodes",
+        "36",
+        "--max-projection-bytes",
+        "37",
+        "--max-closure-bytes",
+        "38",
+        "--max-closure-batch-bytes",
+        "39",
     ])
     .unwrap();
     let config = SolveConfig::from(&options);
@@ -97,6 +107,11 @@ fn nondefault_options_preserve_each_solver_field() {
     assert_eq!(config.max_ground_rules, 32);
     assert_eq!(config.max_batch_bytes, 33);
     assert_eq!(config.max_candidate_bytes, 34);
+    assert_eq!(config.max_projection_entries, 35);
+    assert_eq!(config.max_projection_nodes, 36);
+    assert_eq!(config.max_projection_bytes, 37);
+    assert_eq!(config.max_closure_bytes, 38);
+    assert_eq!(config.max_closure_batch_bytes, 39);
 }
 
 #[test]

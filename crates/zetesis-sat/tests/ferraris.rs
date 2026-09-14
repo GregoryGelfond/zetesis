@@ -312,12 +312,20 @@ fn verified_models_precede_the_history_limit_stop() {
         assert!(model.theory().same_instance(&choice));
         assert!(family.insert(key(&model)));
     }
-    assert_eq!(family, BTreeSet::from([vec![], vec![0], vec![1], vec![0, 1]]));
+    assert_eq!(
+        family,
+        BTreeSet::from([vec![], vec![0], vec![1], vec![0, 1]])
+    );
     assert_eq!(capped.statistics().stable_models, 4);
     assert_eq!(capped.statistics().projections.entries, 3);
-    assert!(matches!(capped.next(), Some(Err(Incomplete::ProjectionLimit {
-        resource: zetesis_sat::ProjectionResource::Entries, required: 4, limit: 3,
-    }))));
+    assert!(matches!(
+        capped.next(),
+        Some(Err(Incomplete::ProjectionLimit {
+            resource: zetesis_sat::ProjectionResource::Entries,
+            required: 4,
+            limit: 3,
+        }))
+    ));
     assert!(!capped.exhausted());
     assert!(capped.next().is_none());
 }

@@ -325,9 +325,11 @@ their payload charge rather than counting a second payload owner. The reported
 `peak_closure_bytes` is a maximum for this named envelope. Shared structural
 buffers are conservatively counted per occurrence. Tree-container allocations
 (including vacant slots), allocator metadata, Arc counters, template binding/cursor
-frames and final Model
-retention are excluded. This is a composable closure allowance, not total RSS;
-collective worker admission and result retention have separate owners.
+frames and final `Model` retention are excluded. Actual allocator slack can exceed
+the proposed reservation before refusal; that capacity remains in the reported
+peak. This is a composable admission allowance, not a bound on all transient
+allocator memory or total RSS. Collective worker admission and result retention
+have separate owners.
 `FormulaLimits::max_support_bytes` bounds the catalog's atom-vector cells,
 equality layout, postings, borrowed snapshot objects and query capacity,
 including construction scratch. Nested atom payloads, allocator/tree overhead

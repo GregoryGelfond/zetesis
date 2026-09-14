@@ -53,6 +53,7 @@ fn empty_program_completes_with_zero_work_and_storage() {
         Limits {
             max_work: 0,
             max_derived_atoms: 0,
+            ..Limits::default()
         },
         &Control::default(),
     )
@@ -229,6 +230,7 @@ fn a_large_symbolic_carrier_does_not_delay_the_first_check() {
         Limits {
             max_work: 100 + key_scan_work,
             max_derived_atoms: 2,
+            ..Limits::default()
         },
         &Control::default(),
     )

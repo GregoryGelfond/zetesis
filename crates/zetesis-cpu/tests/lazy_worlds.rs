@@ -557,7 +557,7 @@ fn catalog_refusal_retains_live_mask_progress() {
         lazy::evaluate,
     )
     .unwrap_err();
-    assert!(matches!(exact.cause, lazy::Cause::Source(Stop::WorkLimit)));
+    assert!(matches!(exact.cause, lazy::Cause::Source(Stop::RoundLimit)));
     assert_eq!(exact.progress.rounds, 1);
     let below = lazy::check_with_source(
         &program,

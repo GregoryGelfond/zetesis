@@ -47,9 +47,10 @@ fn solve(source: &str, options: &Options) -> (Report, Vec<u8>, String) {
 
 #[test]
 fn statistics_distinguish_formula_profile_limits() {
-    for (atoms, roots, expected_atoms, expected_roots) in
-        [(1_000_000, 1_000_000, 65_536, 262_144), (11, 13, 11, 13)]
-    {
+    for (atoms, roots, expected_atoms, expected_roots) in [
+        (1_000_000, 1_000_000, 1_000_000, 1_000_000),
+        (11, 13, 11, 13),
+    ] {
         let mut configured = options(&["--stats", "--oracle", "countermodel"]);
         configured.max_atoms = atoms;
         configured.max_ground_rules = roots;
@@ -59,7 +60,7 @@ fn statistics_distinguish_formula_profile_limits() {
             "{diagnostics}"
         );
         assert!(diagnostics.contains(&format!(
-            "formula profile ceilings: atoms={expected_atoms}; roots={expected_roots}; nodes=1048576; source values=1024; support rounds=1024"
+            "formula profile ceilings: atoms={expected_atoms}; roots={expected_roots}; nodes=1048576; source values=1024; assignment values/operation=1024; generated binding values=1024; support rounds=1024"
         )), "{diagnostics}");
         assert!(
             diagnostics.contains(&format!(

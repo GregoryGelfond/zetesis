@@ -24,14 +24,26 @@ answer-set semantics of the resulting program. See
 [`SourceBundle`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/bundle.rs)
 for canonical identity, path and resource requirements.
 
-Formula admission has independent inclusive ceilings. The ordinary CLI uses at
-most 65,536 atoms and 262,144 formula roots, further reduced by `--max-atoms` and
-`--max-ground-rules`. Raising either option above that profile's ceiling does not
-raise the formula ceiling. Formula nodes are bounded by 1,048,576, distinct
-source values by 1,024, and possible-support construction by 1,024 complete
-rounds. A round that establishes no change is included; this is not a direct
-recursion-depth measure. Exhaustion refuses admission and cannot establish
-completed support or unsatisfiability.
+Formula admission has independent inclusive ceilings. `--max-atoms` and
+`--max-ground-rules` set the ordinary CLI's formula atom and theory-root limits
+directly, each defaulting to 1,000,000. They can raise or lower those limits;
+there is no hidden clamp to the standalone formula library's defaults of 65,536
+atoms and 262,144 roots. Formula nodes retain their independent 1,048,576 limit.
+
+Value and round limits count different populations:
+
+| Option | Population and lifetime | Default |
+| --- | --- | --- |
+| `--max-domain-values` | Distinct source values across the selected admission profile | 1,024 for formulas; 1,000,000 for relational admission |
+| `--max-assignment-values` | Candidate values in one formula assignment, range or objective-presence subset | 1,024 per operation |
+| `--max-generated-values` | Distinct generated binding values across formula grounding: support, objective preparation and final instantiation | 1,024 cumulatively |
+| `--max-support-rounds` | Complete eager possible-support rounds, including the final no-change round | 1,024 |
+
+An explicit domain override applies to both profiles. The assignment and
+generated-value limits are independent: many small assignments can exceed the
+cumulative generated-value limit. Support rounds are not a direct recursion-depth
+measure. Exhaustion refuses admission and cannot establish completed support or
+unsatisfiability. Zero is a real limit for every resource.
 
 Without `--max-expansion-work`, ordinary admission preserves the independent
 library defaults: 1,048,576 source-term expansion operations and 10,000,000 eager
@@ -45,8 +57,7 @@ operation ceilings are neither a summed request budget, elapsed-time limits nor
 performance measurements. Separate source, value, atom and storage bounds remain.
 
 `--stats` reports both requested grounding limits and formula profile ceilings.
-The CLI has no independent source-value or support-round option. Library callers
-can configure these fields through
+Library callers configure formula limits through
 [`FormulaLimits`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula.rs),
 with the same checked refusal contracts. Relational lazy execution has its own
 source-work and derived-atom limits; these formula limits do not describe it.

@@ -373,7 +373,15 @@ impl Plan {
                 .enumerate()
             {
                 poll(control)?;
-                if receipt != [RECEIPT_MARKER, self.epoch, address(index)?, address(tile)?, work] {
+                if receipt
+                    != [
+                        RECEIPT_MARKER,
+                        self.epoch,
+                        address(index)?,
+                        address(tile)?,
+                        work,
+                    ]
+                {
                     return Err(readback("relation tile receipt identity or work differs"));
                 }
             }

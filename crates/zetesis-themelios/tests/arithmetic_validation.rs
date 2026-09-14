@@ -352,7 +352,7 @@ fn staged_head_families_match_clingo() {
 #[test]
 fn head_generation_charges_only_selected_rows() {
     let limits = FormulaLimits {
-        max_assignment_values: 0,
+        max_generated_values: 0,
         ..FormulaLimits::default()
     };
     for source in ["d(0).p(X+1):-d(X),1=2.", "d(0).{p(X+1):d(X),1=2}."] {
@@ -372,7 +372,7 @@ fn head_generation_charges_only_selected_rows() {
             matches!(
                 source_records::admit(source, &limits),
                 Err(FormulaFailure::Limit {
-                    resource: zetesis_themelios::FormulaResource::AssignmentValues,
+                    resource: zetesis_themelios::FormulaResource::GeneratedValues,
                     limit: 0,
                     observed: 1,
                     ..

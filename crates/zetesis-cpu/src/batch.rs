@@ -14,10 +14,15 @@ use crate::{Check, Control, Limits, StaticCheck, Stop, check_static_view, check_
 pub struct BatchOracle {
     pool: rayon::ThreadPool,
     max_candidates: usize,
+    max_closure_bytes: usize,
     admission: Mutex<()>,
 }
 
 impl BatchOracle {
+    /// Default named storage reservation across simultaneously active closures.
+    /// Four workers can each use the default 128 MiB independent closure limit.
+    pub const DEFAULT_CLOSURE_BYTES: usize = 536_870_912;
+
     /// Build an owned worker pool; zero worker or queue sizes are unrepresentable.
     ///
     /// # Errors
@@ -30,8 +35,21 @@ impl BatchOracle {
         Ok(Self {
             pool,
             max_candidates: max_candidates.get(),
+            max_closure_bytes: Self::DEFAULT_CLOSURE_BYTES,
             admission: Mutex::new(()),
         })
+    }
+
+    /// Set the collective storage allowance for independent lazy closures.
+    ///
+    /// Admission reserves the per-closure limit for each worker that may be
+    /// active in this submission. Static and shared-round execution retain
+    /// their separate storage limits. Input seeds, completed returned models,
+    /// allocator overhead and worker stacks are excluded; this is not RSS.
+    #[must_use]
+    pub fn with_closure_storage_limit(mut self, bytes: usize) -> Self {
+        self.max_closure_bytes = bytes;
+        self
     }
 
     /// Check a bounded slice and return results in input order. Limits apply
@@ -76,6 +94,14 @@ impl BatchOracle {
             TryLockError::WouldBlock => BatchError::Busy,
             TryLockError::Poisoned(_) => BatchError::Poisoned,
         })?;
+        let active = seeds.len().min(self.pool.current_num_threads());
+        let required = (active as u128) * (limits.max_closure_bytes as u128);
+        if required > self.max_closure_bytes as u128 {
+            return Err(BatchError::ClosureStorage {
+                required,
+                limit: self.max_closure_bytes as u128,
+            });
+        }
         Ok(self.pool.install(|| {
             seeds
                 .map(|seed| check_view(program, seed, limits, control))
@@ -198,6 +224,13 @@ pub enum BatchError {
     Busy,
     /// A previous panic poisoned the batch admission state.
     Poisoned,
+    /// Simultaneously active independent closures cannot reserve their limits.
+    ClosureStorage {
+        /// Sum of per-worker allowances for this submission.
+        required: u128,
+        /// Collective named-storage allowance.
+        limit: u128,
+    },
     /// A submitted slice exceeded the explicit batch bound.
     Capacity {
         /// Maximum admitted candidates.
@@ -213,6 +246,12 @@ impl fmt::Display for BatchError {
             Self::Pool(error) => error.fmt(f),
             Self::Busy => f.write_str("another batch currently occupies the owned pool"),
             Self::Poisoned => f.write_str("the owned pool's admission state is poisoned"),
+            Self::ClosureStorage { required, limit } => {
+                write!(
+                    f,
+                    "closure storage reservation {required} exceeds byte limit {limit}"
+                )
+            }
             Self::Capacity { limit, actual } => {
                 write!(f, "batch of {actual} exceeds capacity {limit}")
             }
@@ -224,7 +263,9 @@ impl std::error::Error for BatchError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Pool(error) => Some(error),
-            Self::Capacity { .. } | Self::Busy | Self::Poisoned => None,
+            Self::Capacity { .. } | Self::ClosureStorage { .. } | Self::Busy | Self::Poisoned => {
+                None
+            }
         }
     }
 }
@@ -334,6 +375,7 @@ mod tests {
                 let limits = Limits {
                     max_work: 0,
                     max_derived_atoms: 0,
+                    ..Limits::default()
                 };
                 let lazy = pool.check_batch(graph.program(), seeds, limits, &cancelled);
                 let dense = pool.check_static_batch(graph, seeds, limits, &cancelled);

@@ -39,8 +39,13 @@ pub struct FormulaLimits {
     pub max_objective_formula_nodes: usize,
     /// Distinct scalar values in the logical source, independent of join work.
     pub max_domain_values: usize,
-    /// Distinct values in one generated assignment row and across generated heads.
+    /// Candidate values retained while evaluating one assignment, range or
+    /// objective-presence subset. Applies independently to each such operation.
     pub max_assignment_values: usize,
+    /// Distinct values emitted by binding generators across formula grounding,
+    /// including support construction, objective preparation and final rule/local
+    /// instantiation. This cumulative population is independent of one assignment.
+    pub max_generated_values: usize,
     /// Distinct owned elements in one unconditional disjunctive head.
     pub max_disjunction_elements: usize,
     /// Retained row identifiers across bound-column support indexes, plus
@@ -101,6 +106,7 @@ impl Default for FormulaLimits {
             max_objective_formula_nodes: 1_048_576,
             max_domain_values: 1_024,
             max_assignment_values: 1_024,
+            max_generated_values: 1_024,
             max_disjunction_elements: 1_024,
             max_support_index_entries: 1_000_000,
             max_support_bytes: 134_217_728,
@@ -135,8 +141,10 @@ pub enum FormulaResource {
     ObjectivePresenceEntries,
     /// Distinct finite scalar values.
     DomainValues,
-    /// Generated scalar assignment values.
+    /// Candidate values in one assignment, range or presence subset.
     AssignmentValues,
+    /// Distinct generated binding values across formula grounding.
+    GeneratedValues,
     /// Row identifiers retained in positive-support column indexes.
     SupportIndexEntries,
     /// Live authored support snapshot, membership-index and query capacity.

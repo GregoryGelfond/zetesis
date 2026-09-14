@@ -98,6 +98,15 @@ pub struct Options {
     /// Cumulative branch decisions for the countermodel oracle.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_search_decisions, hide_short_help = true)]
     pub max_search_decisions: u64,
+    /// Maximum distinct projections retained during formula candidate enumeration.
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_projection_entries, hide_short_help = true)]
+    pub max_projection_entries: u64,
+    /// Maximum logical nodes in retained formula projection history.
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_projection_nodes, hide_short_help = true)]
+    pub max_projection_nodes: usize,
+    /// Maximum named projection-history capacity, including growth overlap.
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_projection_bytes, hide_short_help = true)]
+    pub max_projection_bytes: usize,
     /// Override source-expansion and eager formula-grounding work ceilings.
     ///
     /// Omission preserves each library default: 1,048,576 source-term operations
@@ -117,6 +126,19 @@ pub struct Options {
     /// Maximum scalar alternatives/emitted arguments in source expansion.
     #[arg(long, default_value_t = 1_000_000, hide_short_help = true)]
     pub max_expansion_values: usize,
+    /// Override distinct source-domain values in each selected admission profile.
+    /// Omission preserves the relational and formula library defaults.
+    #[arg(long, hide_short_help = true)]
+    pub max_domain_values: Option<usize>,
+    /// Candidate values in one eager formula assignment, range or presence subset.
+    #[arg(long, default_value_t = zetesis_themelios::FormulaLimits::default().max_assignment_values, hide_short_help = true)]
+    pub max_assignment_values: usize,
+    /// Distinct generated binding values across eager formula grounding.
+    #[arg(long, default_value_t = zetesis_themelios::FormulaLimits::default().max_generated_values, hide_short_help = true)]
+    pub max_generated_values: usize,
+    /// Complete eager possible-support rounds, including the final no-change round.
+    #[arg(long, default_value_t = zetesis_themelios::FormulaLimits::default().max_support_rounds, hide_short_help = true)]
+    pub max_support_rounds: u64,
     /// Maximum models to display; 0 requests all.
     ///
     /// Without objectives this stops
@@ -191,6 +213,12 @@ pub struct Options {
     /// check; formula search and GPU propagation have separate limits.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_work, hide_short_help = true)]
     pub max_work: u64,
+    /// Maximum named storage bytes per independent lazy CPU closure.
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_closure_bytes, hide_short_help = true)]
+    pub max_closure_bytes: usize,
+    /// Collective reservation for simultaneously active independent CPU closures.
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_closure_batch_bytes, hide_short_help = true)]
+    pub max_closure_batch_bytes: usize,
     /// Device propagation work per formula candidate, independent of CPU work.
     /// A budget below mandatory setup work refuses before device submission.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.gpu_formula_work, hide_short_help = true)]
@@ -205,7 +233,7 @@ pub struct Options {
     pub max_source_work: u64,
     /// Maximum derived independent CPU atoms, shared CPU/GPU catalog atoms or
     /// eager atoms. A shared catalog cap is collective across the batch.
-    /// Formula admission also applies its independent 65,536-atom profile cap.
+    /// Also sets the eager formula atom ceiling.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_atoms, hide_short_help = true)]
     pub max_atoms: usize,
     /// Maximum bytes in each original file or standard input before parsing.
@@ -223,11 +251,11 @@ pub struct Options {
     /// Maximum include edges from any explicit input root.
     #[arg(long, default_value_t = 32, hide_short_help = true)]
     pub max_include_depth: usize,
-    /// Maximum source substitutions inspected during eager CPU/GPU lowering.
+    /// Maximum substitutions inspected in eager lowering or formula admission.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_substitutions, hide_short_help = true)]
     pub max_substitutions: usize,
     /// Maximum rules retained during eager CPU/GPU lowering.
-    /// Formula admission also applies its independent 262,144-root profile cap.
+    /// Also sets the eager formula theory-root ceiling.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_ground_rules, hide_short_help = true)]
     pub max_ground_rules: usize,
     /// Maximum accounted batch bytes, excluding allocator/driver overhead.
@@ -248,6 +276,9 @@ impl From<&Options> for crate::SolveConfig {
             models: options.models,
             max_search_work: options.max_search_work,
             max_search_decisions: options.max_search_decisions,
+            max_projection_entries: options.max_projection_entries,
+            max_projection_nodes: options.max_projection_nodes,
+            max_projection_bytes: options.max_projection_bytes,
             max_objective_work: options.max_objective_work,
             max_objective_bound_work: options.max_objective_bound_work,
             max_objective_bindings: options.max_objective_bindings,
@@ -264,6 +295,8 @@ impl From<&Options> for crate::SolveConfig {
             max_candidate_bytes: options.max_candidate_bytes,
             max_carrier_atoms: options.max_carrier_atoms,
             max_work: options.max_work,
+            max_closure_bytes: options.max_closure_bytes,
+            max_closure_batch_bytes: options.max_closure_batch_bytes,
             gpu_formula_work: options.gpu_formula_work,
             gpu_formula_rounds: options.gpu_formula_rounds,
             max_source_work: options.max_source_work,

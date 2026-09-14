@@ -310,6 +310,7 @@ fn sparse_first_candidate_precedes_carrier_expansion() {
         Limits {
             max_work: 100,
             max_derived_atoms: 2,
+            ..Limits::default()
         },
         &Control::default(),
     )

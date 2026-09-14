@@ -66,6 +66,23 @@ fn options(arguments: &[&str]) -> Options {
 const MALFORMED_CHOICE: &str = "{a,b :- q.\nq :- c.\n";
 
 #[test]
+fn include_depth_option_bounds_the_loaded_graph() {
+    let fixture = Fixture::new();
+    fixture.write("entry.lp", "#include \"child.lp\".");
+    fixture.write("child.lp", "#include \"leaf.lp\".");
+    fixture.write("leaf.lp", "a.");
+    let refused = fixture.process(&["--max-include-depth", "1", "--color", "never"]);
+    assert_eq!(refused.status.code(), Some(2));
+    assert!(refused.stdout.is_empty());
+    let diagnostic = String::from_utf8(refused.stderr).unwrap();
+    assert!(diagnostic.contains("IncludeDepth"), "{diagnostic}");
+    let complete = fixture.process(&["--max-include-depth", "2", "--color", "never"]);
+    assert!(complete.status.success());
+    let output = String::from_utf8(complete.stdout).unwrap();
+    assert!(output.contains("a\n"), "{output}");
+}
+
+#[test]
 fn stdin_syntax_failure_renders_each_diagnostic_once() {
     for arguments in [
         vec!["--backend", "cpu", "--color", "never"],

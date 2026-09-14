@@ -3,8 +3,9 @@
 mod transport;
 pub use transport::{LazyBufferUsage, LazyTransportUsage};
 
-/// Cumulative work from the lazy device executor, including automatic selection
-/// and attempts followed by CPU fallback. A selected
+/// Cumulative work from an explicitly requested lazy device executor.
+/// Automatic backend selection currently keeps lazy execution on the CPU;
+/// a failed explicit device execution does not fall back. A selected
 /// adapter does not establish execution: actual dispatch and transfer counts do.
 /// Source work is shared across candidate occurrences, not a per-world CPU cost.
 #[derive(Clone, Debug, PartialEq, Eq)]

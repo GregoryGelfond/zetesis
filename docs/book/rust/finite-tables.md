@@ -134,6 +134,14 @@ For R rows and E indexed variable/value entries, support storage uses
 larger than the original columns. Repeated queries may amortize preparation;
 that is a measurement question, not a guarantee of the API.
 
+Every probe first copies the coherent-row mask: `ceil(R / 32)` words even when
+all supplied domains are unrestricted. A singleton domain then intersects one
+support mask; a finite domain unions its matching support masks before that
+intersection. Finite domains reuse one union buffer within the probe. Thus a
+retained table removes repeated index construction but does not remove per-probe
+mask initialization and traversal. Result and union masks belong to that query;
+they cannot be shared as mutable truth across bindings or workers.
+
 `Limits` bounds support entries, live operation capacity and charged work.
 Cancellation, exhausted limits and allocation failures return no partial table,
 selection or projection. `Statistics` distinguishes retained capacity from the

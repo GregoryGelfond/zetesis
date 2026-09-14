@@ -340,6 +340,11 @@ fn reason_code(reason: Interruption) -> &'static str {
                 Incomplete::WorkLimit => "work_limit",
                 Incomplete::DecisionLimit => "decision_limit",
                 Incomplete::CandidateLimit => "candidate_limit",
+                Incomplete::ProjectionLimit { resource, .. } => match resource {
+                    zetesis_sat::ProjectionResource::Entries => "projection_entries",
+                    zetesis_sat::ProjectionResource::Nodes => "projection_nodes",
+                    zetesis_sat::ProjectionResource::Bytes => "projection_bytes",
+                },
                 Incomplete::PendingBytes => "pending_bytes",
                 Incomplete::CompletionScratch => "completion_scratch",
                 Incomplete::BatchCandidateLimit => "batch_candidate_limit",
@@ -391,6 +396,8 @@ fn control_code(reason: zetesis_cpu::Stop) -> &'static str {
         Stop::Cancelled => "cancelled",
         Stop::Deadline => "deadline",
         Stop::WorkLimit => "work_limit",
+        Stop::RoundLimit => "round_limit",
+        Stop::StorageLimit => "storage_limit",
         Stop::DerivedAtomLimit => "derived_atom_limit",
         Stop::CandidateLimit => "candidate_limit",
         Stop::CarrierLimit => "carrier_limit",
@@ -483,13 +490,14 @@ fn write_interruption(
     interruption: Option<Interruption>,
 ) -> Result<(), RunError> {
     if let Some(reason) = interruption {
-        let (kind, detail) = match reason {
-            Interruption::Preparation(error) => ("preparation", format!("{error:?}")),
-            Interruption::Oracle(error) => ("oracle", format!("{error:?}")),
-            Interruption::Countermodel(error) => ("countermodel", format!("{error:?}")),
-            Interruption::Objective(error) => ("objective", format!("{:?}", error.kind())),
-            Interruption::Incumbent(error) => ("incumbent", format!("{error:?}")),
+        let kind = match reason {
+            Interruption::Preparation(_) => "preparation",
+            Interruption::Oracle(_) => "oracle",
+            Interruption::Countermodel(_) => "countermodel",
+            Interruption::Objective(_) => "objective",
+            Interruption::Incumbent(_) => "incumbent",
         };
+        let detail = reason.to_string();
         out.text("{\"kind\":")?;
         out.string(kind)?;
         out.text(",\"code\":")?;
@@ -682,6 +690,13 @@ fn search_statistics(
     out.number_field("countermodel_queries", stats.countermodel_queries)?;
     out.number_field("countermodels", stats.countermodels)?;
     out.number_field("stable_models", stats.stable_models)?;
+    out.text(",\"projection_history\":{\"entries\":")?;
+    out.text(&stats.projections.entries.to_string())?;
+    out.number_field("nodes", stats.projections.nodes)?;
+    out.number_field("retained_bytes", stats.projections.retained_bytes)?;
+    out.number_field("peak_bytes", stats.projections.peak_bytes)?;
+    out.number_field("work", stats.projections.work)?;
+    out.text("}")?;
     out.text(",\"necessary_support\":")?;
     support_statistics(out, stats.support)?;
     out.text("}")

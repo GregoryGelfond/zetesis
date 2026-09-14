@@ -160,8 +160,8 @@ fn tile_receipt_costs_are_inclusively_admitted() {
             max_work: work,
             ..RelationGpuLimits::default()
         };
-        let plan = packing::Plan::new(&relation, &queries, exact, &wgpu::Limits::default(), 1)
-            .unwrap();
+        let plan =
+            packing::Plan::new(&relation, &queries, exact, &wgpu::Limits::default(), 1).unwrap();
         assert_eq!(plan.result_bytes, result);
         assert_eq!(plan.transport_bytes, transport);
         assert_eq!(plan.accounted_bytes, accounted);

@@ -271,10 +271,10 @@ fn history_limit_preserves_the_checked_batch_prefix() {
     };
     let mut search = StableModels::new(&empty, bounded, Control::default()).unwrap();
     let batch = search
-            .next_batch(limits(2), |_, c| Ok::<_, Infallible>(
-                vec![BatchVerdict::NoProperSubset; c.len()]
-            ))
-            .unwrap();
+        .next_batch(limits(2), |_, c| {
+            Ok::<_, Infallible>(vec![BatchVerdict::NoProperSubset; c.len()])
+        })
+        .unwrap();
     assert_eq!(batch.len(), 1);
     assert!(batch[0].theory().same_instance(&empty));
     assert_eq!(batch[0].atoms().count(), 0);
@@ -284,7 +284,9 @@ fn history_limit_preserves_the_checked_batch_prefix() {
     assert!(matches!(
         search.next_batch(limits(2), residual),
         Err(BatchError::Search(Incomplete::ProjectionLimit {
-            resource: zetesis_sat::ProjectionResource::Entries, required: 1, limit: 0,
+            resource: zetesis_sat::ProjectionResource::Entries,
+            required: 1,
+            limit: 0,
         }))
     ));
     assert!(!search.exhausted());

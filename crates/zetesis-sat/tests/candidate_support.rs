@@ -153,7 +153,9 @@ fn optional_formula_limit_preserves_the_original_query() {
     assert!(matches!(
         models.next().unwrap(),
         Err(Incomplete::Admission(zetesis_sat::AdmissionError::Limit {
-            resource: zetesis_sat::Resource::Literals, observed: 10, limit: 8,
+            resource: zetesis_sat::Resource::Literals,
+            observed: 10,
+            limit: 8,
         }))
     ));
     assert!(!models.exhausted());

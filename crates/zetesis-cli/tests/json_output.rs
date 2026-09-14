@@ -762,6 +762,40 @@ fn objective_refusals_publish_no_incumbent() {
 }
 
 #[test]
+fn projection_limits_preserve_checked_partial_answers() {
+    for (flag, code) in [
+        ("--max-projection-entries", "projection_entries"),
+        ("--max-projection-nodes", "projection_nodes"),
+    ] {
+        let (result, value) = solve(
+            "{a;b}.",
+            &options(&["--oracle", "countermodel", "--stats", flag, "0"]),
+        );
+        let report = result.unwrap();
+        assert_eq!(report.completion, Completion::Interrupted);
+        assert_eq!(report.models, 1);
+        assert_eq!(value["outcome"]["coverage"], "partial");
+        assert_eq!(value["outcome"]["interruption"]["code"], code);
+        assert_eq!(value["outcome"]["verified_models"], 1);
+        assert_eq!(value["models"].as_array().unwrap().len(), 1);
+        let owner = &value["statistics"]["search"]["projection_history"];
+        let receipt = report.countermodel_statistics.unwrap().projections;
+        assert_eq!(receipt.entries, 0);
+        assert_eq!(owner["entries"], receipt.entries);
+        assert_eq!(owner["nodes"], receipt.nodes);
+        assert_eq!(
+            owner["retained_bytes"].as_u64().map(u128::from),
+            Some(receipt.retained_bytes)
+        );
+        assert_eq!(
+            owner["peak_bytes"].as_u64().map(u128::from),
+            Some(receipt.peak_bytes)
+        );
+        assert_eq!(owner["work"], receipt.work);
+    }
+}
+
+#[test]
 fn incumbent_refusals_publish_no_model() {
     for (flag, code) in [
         ("--max-optimal-models", "models"),

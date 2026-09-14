@@ -584,5 +584,7 @@ fn nested_capacity_includes_owned_spare_storage() {
     values.push(Value::String(text));
     let atom = Atom::new(Predicate::new(name, 1).unwrap(), values).unwrap();
     assert_eq!(atom.checked_payload_capacity_bytes(), Some(expected));
-    assert!(atom.checked_payload_capacity_bytes().unwrap() > atom.values()[0].payload_bytes() as u128);
+    assert!(
+        atom.checked_payload_capacity_bytes().unwrap() > atom.values()[0].payload_bytes() as u128
+    );
 }

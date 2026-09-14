@@ -81,7 +81,10 @@ impl Projections {
     }
 
     fn tick(&mut self, budget: &mut Budget<'_>) -> Result<(), Incomplete> {
-        let work = self.work.checked_add(1).ok_or(Incomplete::CounterOverflow)?;
+        let work = self
+            .work
+            .checked_add(1)
+            .ok_or(Incomplete::CounterOverflow)?;
         budget.tick()?;
         self.work = work;
         Ok(())

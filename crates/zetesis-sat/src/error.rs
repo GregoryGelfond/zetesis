@@ -93,7 +93,10 @@ impl fmt::Display for Incomplete {
                 resource,
                 required,
                 limit,
-            } => write!(f, "projection history {resource:?} requires {required}; limit is {limit}"),
+            } => write!(
+                f,
+                "projection history {resource:?} requires {required}; limit is {limit}"
+            ),
             Self::WrongTheory => f.write_str("candidate belongs to a different theory"),
             Self::RestrictionUniverse { expected, actual } => write!(
                 f,

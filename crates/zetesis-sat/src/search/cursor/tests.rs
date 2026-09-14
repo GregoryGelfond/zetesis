@@ -59,7 +59,11 @@ fn models(cnf: &Cnf) -> BTreeSet<Vec<bool>> {
 }
 
 fn enumerate(cnf: &Cnf, budget: &mut Budget<'_>) -> (BTreeSet<Vec<bool>>, Solve) {
-    enumerate_with_cursor(cnf, budget, Cursor::projected(cnf.variables(), crate::ProjectionLimits::default()).unwrap())
+    enumerate_with_cursor(
+        cnf,
+        budget,
+        Cursor::projected(cnf.variables(), crate::ProjectionLimits::default()).unwrap(),
+    )
 }
 
 fn enumerate_with_cursor(
@@ -402,7 +406,10 @@ fn interrupted_exclusions_preserve_history_capacity() {
     let control = Control::default();
     let first = [false; 4];
     let second = [true, false, false, false];
-    for resource in [crate::ProjectionResource::Entries, crate::ProjectionResource::Nodes] {
+    for resource in [
+        crate::ProjectionResource::Entries,
+        crate::ProjectionResource::Nodes,
+    ] {
         // Two complete exclusions fit exactly. A failed insertion must not
         // consume the second slot, for either independent logical dimension.
         let limits = crate::ProjectionLimits {
@@ -437,7 +444,12 @@ fn interrupted_exclusions_preserve_history_capacity() {
                 (12, 9)
             };
             assert_eq!(
-                exclude(&mut cursor, &cnf, &[false, true, false, false], &mut budget(&control)),
+                exclude(
+                    &mut cursor,
+                    &cnf,
+                    &[false, true, false, false],
+                    &mut budget(&control)
+                ),
                 Err(Incomplete::ProjectionLimit {
                     resource,
                     required,
@@ -508,8 +520,11 @@ fn refined_regions_probe_while_initial_regions_keep_indexed_complete_search() {
     .unwrap();
     let mut initial_budget = budget(&control);
     let mut refined_budget = budget(&control);
-    let (initial, initial_end) =
-        enumerate_with_cursor(&cnf, &mut initial_budget, Cursor::projected(2, crate::ProjectionLimits::default()).unwrap());
+    let (initial, initial_end) = enumerate_with_cursor(
+        &cnf,
+        &mut initial_budget,
+        Cursor::projected(2, crate::ProjectionLimits::default()).unwrap(),
+    );
     let (refined, refined_end) =
         enumerate_with_cursor(&cnf, &mut refined_budget, refined_cursor(2));
     assert!(matches!(initial_end, Solve::Unsat));

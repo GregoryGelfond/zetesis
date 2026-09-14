@@ -69,8 +69,13 @@ fn exclusion_history_does_not_consume_cnf_admission() {
     let mut cnf = Cnf::new(
         3,
         vec![],
-        AdmissionLimits { max_variables: 3, max_clauses: 1, max_literals: 1 },
-    ).unwrap();
+        AdmissionLimits {
+            max_variables: 3,
+            max_clauses: 1,
+            max_literals: 1,
+        },
+    )
+    .unwrap();
     let mut cursor = Cursor::projected(3, ProjectionLimits::default()).unwrap();
     let mut charged = budget(&control);
     let mut seen = BTreeSet::new();
@@ -106,9 +111,14 @@ fn interrupted_insertion_preserves_the_only_entry_slot() {
     .unwrap();
     for ceiling in 0..measured.statistics.work {
         let cnf = Cnf::new(3, vec![], AdmissionLimits::default()).unwrap();
-        let mut cursor = Cursor::projected(3, ProjectionLimits {
-            max_entries: 1, ..ProjectionLimits::default()
-        }).unwrap();
+        let mut cursor = Cursor::projected(
+            3,
+            ProjectionLimits {
+                max_entries: 1,
+                ..ProjectionLimits::default()
+            },
+        )
+        .unwrap();
         let mut short = budget(&control);
         short.limits.max_work = ceiling;
         assert_eq!(

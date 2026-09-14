@@ -569,10 +569,10 @@ fn constructed_keys_retain_objective_contributions() {
 }
 
 #[test]
-fn constructed_assignment_limit_is_inclusive() {
+fn generated_head_value_limit_is_inclusive() {
     let source = "d(1..2).p(f(X)):-d(X).";
     let limits = FormulaLimits {
-        max_assignment_values: 2,
+        max_generated_values: 2,
         ..FormulaLimits::default()
     };
     assert_eq!(
@@ -580,13 +580,13 @@ fn constructed_assignment_limit_is_inclusive() {
         native(&input(source))
     );
     let limits = FormulaLimits {
-        max_assignment_values: 1,
+        max_generated_values: 1,
         ..FormulaLimits::default()
     };
     assert!(matches!(
         limited(source, ExpansionLimits::default(), &limits),
         Err(FormulaFailure::Limit {
-            resource: FormulaResource::AssignmentValues,
+            resource: FormulaResource::GeneratedValues,
             observed: 2,
             limit: 1,
             ..

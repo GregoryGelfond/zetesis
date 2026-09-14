@@ -41,6 +41,22 @@ closure oracle, countermodel search or device that was never entered. JSON
 uses the interruption kind `preparation`, with `cancelled` or `deadline` as
 its control code.
 
+JSON interruption `kind` and `code` classify the outcome for machine consumers.
+`detail` is its human-readable explanation and may change as diagnostics improve;
+consumers should not parse Rust debug spellings or infer completion from that text.
+The public lazy source API reports exhausted rounds as `Stop::RoundLimit`,
+separately from charged-work exhaustion. A stopped round sequence has not
+established its final least consequence set.
+
+Formula enumeration bounds retained projection history separately from authored
+encoding. `max_projection_entries` counts distinct excluded keys;
+`max_projection_nodes` counts logical trie nodes; `max_projection_bytes` admits
+named capacity and its conservative growth overlap. The same fields are available
+as advanced CLI options. `statistics.search.projection_history` reports entries,
+nodes, retained/peak bytes and its subtotal of cumulative search work. A history
+refusal retains any already checked answer prefix and reports incomplete coverage;
+it does not turn a completed answer into a rejected candidate.
+
 `SemanticOutcome::selection()` identifies the family requested by the session.
 `All` ranges over the original program; `Optimal` permits sound exclusion of
 worse candidates. `Completion::Exhausted` therefore does not by itself identify

@@ -214,6 +214,7 @@ fn limits_identity_and_control_remain_incomplete_stops() {
     let exact = Limits {
         max_work: completed.statistics().work,
         max_derived_atoms: 33,
+        ..Limits::default()
     };
     assert!(check_static(&graph, &seed, exact, &Control::default()).is_ok());
     assert_eq!(
@@ -265,7 +266,8 @@ fn limits_identity_and_control_remain_incomplete_stops() {
             &empty(&source),
             Limits {
                 max_work: 0,
-                max_derived_atoms: 0
+                max_derived_atoms: 0,
+                ..Limits::default()
             },
             &Control::default(),
         )

@@ -219,8 +219,9 @@ impl Executor {
         observations: &mut impl ExecutionSink,
         phases: &Recorder,
     ) -> Result<Self, SolveError> {
-        let oracle =
-            BatchOracle::new(options.workers, options.batch_size).map_err(SolveError::Batch)?;
+        let oracle = BatchOracle::new(options.workers, options.batch_size)
+            .map_err(SolveError::Batch)?
+            .with_closure_storage_limit(options.max_closure_batch_bytes);
         if options.grounder == Grounder::Eager {
             let ground = match cached {
                 Some(ground) => ground,
@@ -371,6 +372,7 @@ impl Executor {
         let limits = Limits {
             max_work: options.max_work,
             max_derived_atoms: options.max_atoms,
+            max_closure_bytes: options.max_closure_bytes,
         };
         match self {
             Self::SharedCpu { oracle, statistics } => {

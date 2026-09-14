@@ -24,12 +24,12 @@ pub use checked::{CheckedInterpretation, StableInterpretation, check_interpretat
 pub use clauses::{Clause, Clauses};
 pub use cnf::{AdmissionError, AdmissionLimits, Assignment, Cnf, Literal, Resource};
 pub use error::Incomplete;
-pub use projection::{ProjectionLimits, ProjectionResource, ProjectionStatistics};
 pub use ferraris::{
     BatchError, BatchLimits, BatchStatistics, BatchVerdict, CertifiedStatistics, Check,
     CompletionExecutor, CompletionScratch, CompletionStatistics, Limits, StableModels, Statistics,
     SupportStatistics, SupportStatus, check,
 };
+pub use projection::{ProjectionLimits, ProjectionResource, ProjectionStatistics};
 pub use search::{SearchLimits, SearchStatistics, Solve, solve, solve_with_statistics};
 pub use zetesis_cpu::Control;
 

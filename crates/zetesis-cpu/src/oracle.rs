@@ -40,7 +40,9 @@ pub struct Limits {
     /// tuples and operation scratch/growth overlap. Shared structural buffers
     /// are counted per occurrence. Tree-container allocations (including vacant
     /// slots), allocator metadata and Arc-counter overhead,
-    /// template binding/cursor frames and final Model retention are excluded.
+    /// template binding/cursor frames and final `Model` retention are excluded.
+    /// Actual allocator slack can exceed the proposed reservation before refusal;
+    /// the reported peak retains that attempted capacity.
     /// This is an independent finite allowance, not a process RSS ceiling.
     pub max_closure_bytes: usize,
 }
@@ -317,7 +319,9 @@ fn least_closure(
                     if let Some(head) = template.head() {
                         work.charge(head.terms().len())?;
                         let key = head.key(assignment).map_err(|_| Stop::InvalidProgram)?;
-                        if !closure.contains(&key, pending_bytes, work)? && key.get(&delta).is_none() {
+                        if !closure.contains(&key, pending_bytes, work)?
+                            && key.get(&delta).is_none()
+                        {
                             if closure
                                 .len()
                                 .checked_add(delta.len())
@@ -328,7 +332,8 @@ fn least_closure(
                             }
                             let (atom, bytes) = closure.pending(key, pending_bytes, work)?;
                             delta.insert(atom);
-                            pending_bytes = pending_bytes.checked_add(bytes).ok_or(Stop::StorageLimit)?;
+                            pending_bytes =
+                                pending_bytes.checked_add(bytes).ok_or(Stop::StorageLimit)?;
                         }
                     } else {
                         constraint_violated = true;
@@ -343,7 +348,9 @@ fn least_closure(
         }
         for atom in delta {
             let bytes = relations::atom_bytes(&atom, work)?;
-            pending_bytes = pending_bytes.checked_sub(bytes).ok_or(Stop::InvalidProgram)?;
+            pending_bytes = pending_bytes
+                .checked_sub(bytes)
+                .ok_or(Stop::InvalidProgram)?;
             closure.insert(atom, pending_bytes, work)?;
         }
     }

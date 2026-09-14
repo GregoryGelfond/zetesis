@@ -273,6 +273,7 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<(), BenchmarkEr
             let limits = Limits {
                 max_work: options.max_work,
                 max_derived_atoms: graph.atom_count(),
+                ..Limits::default()
             };
             let control = Control::default();
             for batch in &options.batches {

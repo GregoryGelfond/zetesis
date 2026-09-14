@@ -109,7 +109,7 @@ fn round_limit_does_not_establish_a_final_closure() {
     )
     .unwrap_err();
     assert_eq!(failure.progress.rounds, 1);
-    assert_eq!(failure.to_string(), Stop::WorkLimit.to_string());
+    assert_eq!(failure.to_string(), Stop::RoundLimit.to_string());
     assert_eq!(
         failure
             .source()
@@ -117,8 +117,27 @@ fn round_limit_does_not_establish_a_final_closure() {
             .source()
             .unwrap()
             .downcast_ref::<Stop>(),
-        Some(&Stop::WorkLimit)
+        Some(&Stop::RoundLimit)
     );
+}
+
+#[test]
+fn a_final_unchanged_round_establishes_closure() {
+    let program = program();
+    let completed = lazy::check_with(
+        &program,
+        &[Seed::new(&program, []).unwrap()],
+        lazy::Limits {
+            max_rounds: 2,
+            ..Default::default()
+        },
+        &Control::default(),
+        lazy::evaluate,
+    )
+    .unwrap();
+    assert_eq!(completed.progress.rounds, 2);
+    assert_eq!(completed.checks.len(), 1);
+    assert_eq!(completed.checks[0].closure().atoms().len(), 1);
 }
 
 #[test]

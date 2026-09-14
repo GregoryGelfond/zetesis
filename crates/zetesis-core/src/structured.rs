@@ -289,7 +289,8 @@ impl Value {
                     .checked_add(std::mem::size_of::<String>() as u128)?;
                 value.nodes.iter().try_fold(fixed, |bytes, node| {
                     let capacity = match node {
-                        ValueNode::String(text) | ValueNode::Symbol(text)
+                        ValueNode::String(text)
+                        | ValueNode::Symbol(text)
                         | ValueNode::Function { name: text, .. } => text.capacity() as u128,
                         _ => 0,
                     };

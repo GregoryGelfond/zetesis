@@ -260,9 +260,15 @@ fn source_attachment_preserves_the_library_refusal() {
         .unwrap_err();
     let original = error.clone();
     assert!(original.diagnostic_source().is_none());
+    let location = original.location().unwrap();
     assert_eq!(
         original.to_string(),
-        "observation refused: Evaluation(Undefined)"
+        format!(
+            "observation refused: Evaluation(Undefined) at source {}, bytes {}..{}",
+            location.source.get(),
+            location.span.start().get(),
+            location.span.end().get(),
+        )
     );
     error.retain_source("input.lp", admitted.source());
     assert_eq!(error.kind(), original.kind());

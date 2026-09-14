@@ -669,7 +669,7 @@ fn run<'seed, E>(
     loop {
         progress.catalog_atoms = state.catalog.len();
         if progress.rounds >= limits.max_rounds {
-            return Err(Stop::WorkLimit.into());
+            return Err(Stop::RoundLimit.into());
         }
         control.poll()?;
         state.transport.pending.fill(0);

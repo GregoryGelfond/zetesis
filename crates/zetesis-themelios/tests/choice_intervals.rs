@@ -399,7 +399,7 @@ fn limited(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, Form
     )
 }
 #[test]
-fn fresh_slots_and_generated_values_obey_inclusive_cumulative_limits() {
+fn interval_slots_obey_the_variable_limit() {
     let mut options = AdmissionOptions::default();
     options.core_limits.max_variables_per_template = 2;
     let admit = |source: &str| {
@@ -419,9 +419,13 @@ fn fresh_slots_and_generated_values_obey_inclusive_cumulative_limits() {
             ..
         })
     ));
+}
+
+#[test]
+fn generated_choice_values_obey_the_cumulative_limit() {
     let source = "{p(1..2)}.{q(3..4)}.";
     let limits = FormulaLimits {
-        max_assignment_values: 4,
+        max_generated_values: 4,
         ..FormulaLimits::default()
     };
     assert!(limited(source, &limits).is_ok());
@@ -429,16 +433,21 @@ fn fresh_slots_and_generated_values_obey_inclusive_cumulative_limits() {
         limited(
             source,
             &FormulaLimits {
-                max_assignment_values: 3,
+                max_generated_values: 3,
                 ..limits
             }
         ),
         Err(FormulaFailure::Limit {
-            resource: FormulaResource::AssignmentValues,
+            resource: FormulaResource::GeneratedValues,
             observed: 4,
             ..
         })
     ));
+}
+
+#[test]
+fn oversized_choice_range_is_refused_before_generation() {
+    let limits = FormulaLimits::default();
     assert!(
         matches!(
             limited(
@@ -456,12 +465,16 @@ fn fresh_slots_and_generated_values_obey_inclusive_cumulative_limits() {
         ),
         "the full i32 range width refuses before allocating its denotation"
     );
+}
+
+#[test]
+fn empty_joins_do_not_enumerate_choice_ranges() {
     assert!(
         limited(
             "{p((-2147483647-1)..2147483647)}:-missing.",
             &FormulaLimits {
                 max_assignment_values: 0,
-                ..limits
+                ..FormulaLimits::default()
             }
         )
         .is_ok(),

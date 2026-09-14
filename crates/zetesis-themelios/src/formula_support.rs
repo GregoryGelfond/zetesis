@@ -145,9 +145,9 @@ impl Counters {
     ) -> Result<(), FormulaFailure> {
         if !self.generated_values.contains(value) {
             ceiling(
-                FormulaResource::AssignmentValues,
+                FormulaResource::GeneratedValues,
                 self.generated_values.len() as u128 + 1,
-                limits.max_assignment_values as u128,
+                limits.max_generated_values as u128,
                 location,
             )?;
             self.generated_values.insert(copy(value, budget, location)?);

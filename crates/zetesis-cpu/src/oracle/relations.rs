@@ -4,14 +4,19 @@
 //! and after each whole catalog operation, rather than within its comparisons,
 //! reservations and index planning. A stopped operation never returns a closure.
 
-use std::{collections::{BTreeMap, BTreeSet, btree_map::Entry}, mem::size_of};
+use std::{
+    collections::{BTreeMap, BTreeSet, btree_map::Entry},
+    mem::size_of,
+};
 
 mod storage;
 pub(super) use storage::atom_bytes;
 
 use zetesis_core::{
     Atom, AtomKey, Model, Predicate,
-    relation::{Catalog, CatalogFailure, Failure, Insertion, Limits, OrderedRows, Resource, Storage},
+    relation::{
+        Catalog, CatalogFailure, Failure, Insertion, Limits, OrderedRows, Resource, Storage,
+    },
 };
 
 use super::{Relations, Work};
@@ -61,8 +66,11 @@ pub(super) struct Catalogs {
 
 impl Default for Catalogs {
     fn default() -> Self {
-        Self { relations: BTreeMap::new(), atoms: 0,
-            bytes: (size_of::<Self>() + size_of::<BTreeSet<Atom>>()) as u128 }
+        Self {
+            relations: BTreeMap::new(),
+            atoms: 0,
+            bytes: (size_of::<Self>() + size_of::<BTreeSet<Atom>>()) as u128,
+        }
     }
 }
 
@@ -92,77 +100,142 @@ impl Catalogs {
             work.control.poll()?;
             let old = catalog.retained_bytes() as u128;
             let other = self.bytes.checked_sub(old).ok_or(Stop::InvalidProgram)?;
-            let result = catalog.prepare_ordered(limits(work, other)?).map(|rows| rows.storage());
-            self.bytes = other.checked_add(catalog.retained_bytes() as u128).ok_or(Stop::StorageLimit)?;
+            let result = catalog
+                .prepare_ordered(limits(work, other)?)
+                .map(|rows| rows.storage());
+            self.bytes = other
+                .checked_add(catalog.retained_bytes() as u128)
+                .ok_or(Stop::StorageLimit)?;
             let receipt = completed(result, other, work)?;
             account_storage(work, other, receipt)?;
         }
         Ok(())
     }
 
-    pub(super) fn contains(&self, key: &AtomKey<'_>, pending: u128, work: &mut Work<'_>) -> Result<bool, Stop> {
+    pub(super) fn contains(
+        &self,
+        key: &AtomKey<'_>,
+        pending: u128,
+        work: &mut Work<'_>,
+    ) -> Result<bool, Stop> {
         work.control.poll()?;
         let Some(catalog) = self.relations.get(key.predicate()) else {
             return Ok(false);
         };
-        let other = self.bytes.checked_sub(catalog.retained_bytes() as u128)
-            .and_then(|bytes| bytes.checked_add(pending)).ok_or(Stop::StorageLimit)?;
+        let other = self
+            .bytes
+            .checked_sub(catalog.retained_bytes() as u128)
+            .and_then(|bytes| bytes.checked_add(pending))
+            .ok_or(Stop::StorageLimit)?;
         let lookup = completed(catalog.lookup_key(key, limits(work, other)?), other, work)?;
         account_storage(work, other, lookup.storage)?;
         Ok(lookup.row.is_some())
     }
 
-    pub(super) fn pending(&self, key: AtomKey<'_>, pending: u128, work: &mut Work<'_>) -> Result<(Atom, u128), Stop> {
-        storage::pending(key, self.bytes.checked_add(pending).ok_or(Stop::StorageLimit)?, work)
+    pub(super) fn pending(
+        &self,
+        key: AtomKey<'_>,
+        pending: u128,
+        work: &mut Work<'_>,
+    ) -> Result<(Atom, u128), Stop> {
+        storage::pending(
+            key,
+            self.bytes.checked_add(pending).ok_or(Stop::StorageLimit)?,
+            work,
+        )
     }
 
-    pub(super) fn insert(&mut self, atom: Atom, pending: u128, work: &mut Work<'_>) -> Result<(), Stop> {
+    pub(super) fn insert(
+        &mut self,
+        atom: Atom,
+        pending: u128,
+        work: &mut Work<'_>,
+    ) -> Result<(), Stop> {
         work.control.poll()?;
         let input = atom_bytes(&atom, work)?;
         let held = pending.checked_add(input).ok_or(Stop::StorageLimit)?;
-        storage::admit(work, self.bytes.checked_add(held).ok_or(Stop::StorageLimit)?)?;
-        storage::record(work, self.bytes.checked_add(held).ok_or(Stop::StorageLimit)?)?;
+        storage::admit(
+            work,
+            self.bytes.checked_add(held).ok_or(Stop::StorageLimit)?,
+        )?;
+        storage::record(
+            work,
+            self.bytes.checked_add(held).ok_or(Stop::StorageLimit)?,
+        )?;
         if !self.relations.contains_key(atom.predicate()) {
             self.create(atom.predicate(), held, work)?;
         }
-        let catalog = self.relations.get_mut(atom.predicate()).ok_or(Stop::InvalidProgram)?;
+        let catalog = self
+            .relations
+            .get_mut(atom.predicate())
+            .ok_or(Stop::InvalidProgram)?;
         let old = catalog.retained_bytes() as u128;
-        let other = self.bytes.checked_sub(old).and_then(|bytes| bytes.checked_add(held))
+        let other = self
+            .bytes
+            .checked_sub(old)
+            .and_then(|bytes| bytes.checked_add(held))
             .ok_or(Stop::StorageLimit)?;
         let result = catalog.insert(atom, limits(work, other)?);
-        self.bytes = self.bytes.checked_sub(old)
+        self.bytes = self
+            .bytes
+            .checked_sub(old)
             .and_then(|bytes| bytes.checked_add(catalog.retained_bytes() as u128))
             .ok_or(Stop::StorageLimit)?;
         if let Ok(insertion) = &result {
             if insertion.inserted {
-                self.bytes = self.bytes.checked_add(input - size_of::<Atom>() as u128)
+                self.bytes = self
+                    .bytes
+                    .checked_add(input - size_of::<Atom>() as u128)
                     .ok_or(Stop::StorageLimit)?;
             }
         }
         let insertion = completed(result, other, work)?;
-        storage::record(work, other.checked_add(insertion.storage.peak_construction_bytes as u128)
-            .ok_or(Stop::StorageLimit)?)?;
+        storage::record(
+            work,
+            other
+                .checked_add(insertion.storage.peak_construction_bytes as u128)
+                .ok_or(Stop::StorageLimit)?,
+        )?;
         self.publish(insertion, work)
     }
 
-    fn create(&mut self, predicate: &Predicate, held: u128, work: &mut Work<'_>) -> Result<(), Stop> {
-        let base = self.bytes.checked_add(held)
+    fn create(
+        &mut self,
+        predicate: &Predicate,
+        held: u128,
+        work: &mut Work<'_>,
+    ) -> Result<(), Stop> {
+        let base = self
+            .bytes
+            .checked_add(held)
             .and_then(|bytes| bytes.checked_add(size_of::<Predicate>() as u128))
             .ok_or(Stop::StorageLimit)?;
-        let headers = base.checked_add(size_of::<Catalog>() as u128).ok_or(Stop::StorageLimit)?;
+        let headers = base
+            .checked_add(size_of::<Catalog>() as u128)
+            .ok_or(Stop::StorageLimit)?;
         let key = storage::predicate(predicate, headers, work)?;
         let key_bytes = key.payload_capacity_bytes() as u128;
-        let signature = storage::predicate(predicate, headers.checked_add(key_bytes).ok_or(Stop::StorageLimit)?, work)?;
-        let names = key_bytes.checked_add(signature.payload_capacity_bytes() as u128).ok_or(Stop::StorageLimit)?;
+        let signature = storage::predicate(
+            predicate,
+            headers.checked_add(key_bytes).ok_or(Stop::StorageLimit)?,
+            work,
+        )?;
+        let names = key_bytes
+            .checked_add(signature.payload_capacity_bytes() as u128)
+            .ok_or(Stop::StorageLimit)?;
         let other = base.checked_add(names).ok_or(Stop::StorageLimit)?;
         let catalog = completed(Catalog::new(signature, limits(work, other)?), other, work)?;
         account_storage(work, other, catalog.construction())?;
-        self.bytes = self.bytes.checked_add(size_of::<Predicate>() as u128)
+        self.bytes = self
+            .bytes
+            .checked_add(size_of::<Predicate>() as u128)
             .and_then(|bytes| bytes.checked_add(names))
             .and_then(|bytes| bytes.checked_add(catalog.retained_bytes() as u128))
             .ok_or(Stop::StorageLimit)?;
         match self.relations.entry(key) {
-            Entry::Vacant(entry) => { entry.insert(catalog); }
+            Entry::Vacant(entry) => {
+                entry.insert(catalog);
+            }
             Entry::Occupied(_) => unreachable!("exclusive absent predicate remains absent"),
         }
         Ok(())
@@ -187,7 +260,9 @@ impl Catalogs {
 }
 
 fn limits(work: &Work<'_>, other: u128) -> Result<Limits, Stop> {
-    let remaining = (work.limits.max_closure_bytes as u128).checked_sub(other).ok_or(Stop::StorageLimit)?;
+    let remaining = (work.limits.max_closure_bytes as u128)
+        .checked_sub(other)
+        .ok_or(Stop::StorageLimit)?;
     Ok(Limits {
         max_rows: work.limits.max_derived_atoms,
         max_columns: usize::MAX,
@@ -198,7 +273,12 @@ fn limits(work: &Work<'_>, other: u128) -> Result<Limits, Stop> {
 }
 
 fn account_storage(work: &mut Work<'_>, other: u128, receipt: Storage) -> Result<(), Stop> {
-    storage::record(work, other.checked_add(receipt.peak_construction_bytes as u128).ok_or(Stop::StorageLimit)?)?;
+    storage::record(
+        work,
+        other
+            .checked_add(receipt.peak_construction_bytes as u128)
+            .ok_or(Stop::StorageLimit)?,
+    )?;
     account(work, receipt.construction_work)
 }
 
@@ -220,11 +300,20 @@ fn account(work: &mut Work<'_>, amount: u128) -> Result<(), Stop> {
     work.control.poll()
 }
 
-fn completed<T>(result: Result<T, CatalogFailure>, other: u128, work: &mut Work<'_>) -> Result<T, Stop> {
+fn completed<T>(
+    result: Result<T, CatalogFailure>,
+    other: u128,
+    work: &mut Work<'_>,
+) -> Result<T, Stop> {
     match result {
         Ok(value) => Ok(value),
         Err(failure) => {
-            storage::record(work, other.checked_add(failure.peak_construction_bytes as u128).ok_or(Stop::StorageLimit)?)?;
+            storage::record(
+                work,
+                other
+                    .checked_add(failure.peak_construction_bytes as u128)
+                    .ok_or(Stop::StorageLimit)?,
+            )?;
             account(work, failure.work)?;
             Err(match failure.error {
                 Failure::Limit {
@@ -235,7 +324,10 @@ fn completed<T>(result: Result<T, CatalogFailure>, other: u128, work: &mut Work<
                     resource: Resource::Rows,
                     ..
                 } => Stop::DerivedAtomLimit,
-                Failure::Limit { resource: Resource::Bytes, .. } => Stop::StorageLimit,
+                Failure::Limit {
+                    resource: Resource::Bytes,
+                    ..
+                } => Stop::StorageLimit,
                 Failure::Allocation | Failure::Overflow | Failure::Limit { .. } => Stop::Allocation,
                 _ => Stop::InvalidProgram,
             })

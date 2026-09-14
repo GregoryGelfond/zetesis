@@ -54,6 +54,11 @@ pub(crate) fn search_limits(options: &SolveConfig) -> zetesis_sat::Limits {
             max_work: options.max_search_work,
             max_decisions: options.max_search_decisions,
         },
+        projections: zetesis_sat::ProjectionLimits {
+            max_entries: options.max_projection_entries,
+            max_nodes: options.max_projection_nodes,
+            max_bytes: options.max_projection_bytes,
+        },
         max_candidates: options.max_candidates,
         max_verification_work: options.max_work,
         ..Default::default()

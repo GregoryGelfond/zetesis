@@ -126,7 +126,8 @@ fn trace(source: &str, refined: bool, limits: SearchLimits) -> String {
         statistics: SearchStatistics::default(),
     };
     let cnf = encoding::encode(theory, None, AdmissionLimits::default(), &mut charged).unwrap();
-    let mut cursor = Cursor::projected(theory.atom_count(), crate::ProjectionLimits::default()).unwrap();
+    let mut cursor =
+        Cursor::projected(theory.atom_count(), crate::ProjectionLimits::default()).unwrap();
     if refined {
         cursor.restart();
     }
