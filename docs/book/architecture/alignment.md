@@ -277,6 +277,15 @@ cannot share truth by accident. A rejected proposal, a pending query and a commi
 different states. General subset blocking is not licensed merely by finding an
 answer: for example, `{a}.` admits both the empty answer and `{a}`.
 
+The bounded [`feedback` experiment](../../../crates/zetesis-experiments/README.md#conditional-countermodel-feedback)
+constructs conditional restrictions from actual checked reduct countermodels.
+Its guard tests both proper inclusion and satisfaction of that particular frozen
+reduct witness. Complete tiny families check the compiler against the
+[`Feedback` laws](../../../proofs/Zetesis/Feedback.lean); the laws do not establish
+Rust compilation or restart correctness. Fixed-candidate replay measures avoided
+membership calls, while a separate pre-acquired-guard replay counts actual native
+restriction restarts. Neither changes the ordinary search protocol.
+
 Objective selection and display follow checked answers. Complete unrestricted
 enumeration plus complete retention can construct a `WorldView`; optimal ties
 and projected displays have different contracts. Batched execution must account

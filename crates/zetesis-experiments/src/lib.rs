@@ -25,6 +25,7 @@ pub mod grounding;
 pub mod lazy_measurement;
 pub mod tight_measurement;
 pub mod aggregate_measurement;
+pub mod feedback_measurement;
 
 pub use backend::Backend;
 pub use fixtures::{BenchmarkFixture, Family};
@@ -55,6 +56,8 @@ pub struct CommandOptions {
 pub enum Experiment {
     /// Compare complete finite-table row survival and projected typed domains on CPU.
     Table(table_measurement::Options),
+    /// Study finite conditional countermodel guards without changing ordinary search.
+    Feedback(feedback_measurement::Options),
     /// Compare packed relation equality masks on the same typed rows and keys.
     Relation(relation_measurement::Options),
     /// Compare exact native aggregate reductions on matched original/frozen masks.

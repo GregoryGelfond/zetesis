@@ -16,6 +16,10 @@ fn main() -> std::process::ExitCode {
                 }
             };
         }
+        Some(zetesis_experiments::Experiment::Feedback(options)) => {
+            zetesis_experiments::feedback_measurement::run(&options, &mut output)
+                .map_err(|error| error.to_string())
+        }
         Some(zetesis_experiments::Experiment::Relation(options)) => {
             zetesis_experiments::relation_measurement::run(&options, &mut output)
                 .map_err(|error| error.to_string())

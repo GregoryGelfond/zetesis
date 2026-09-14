@@ -24,10 +24,11 @@ these operations fit into the solver. Public interfaces start in
 | `relation` | Equality masks over one retained typed column view | `relation_measurement` |
 | `table` | Complete surviving rows and projected domains on CPU | `table_measurement::measure` |
 | `grounding` | Fresh original-source formula admission | `grounding::profile`, `write_report` |
+| `feedback` | Finite conditional-witness replay and native restriction restarts | `feedback_measurement::measure` |
 
 Device profiles accept physical Metal or Vulkan. CPU mode explicitly omits the
 device; `formula-projection` requires a physical device, and `grounding` is
-CPU-only, as is `table`. An explicit API never silently falls back to another API, CPU or a
+CPU-only, as are `table` and `feedback`. An explicit API never silently falls back to another API, CPU or a
 software adapter. Device metadata records selection, not platform-wide
 qualification. The default static command requires Metal.
 
@@ -48,6 +49,8 @@ zetesis-bench table --case aliased --rows 1024 --queries 32 \
   --workers 4 --warmups 1 --repetitions 3
 zetesis-bench grounding examples/kr-domains/standalone/send-money/send-money.lp \
   --repetitions 3
+zetesis-bench feedback --check
+zetesis-bench feedback --warmups 1 --repetitions 3
 ```
 
 Use each profile's `--help` for its independent dimensions and resource limits.
@@ -56,6 +59,74 @@ record the command's exit status. Reports are profile-specific TSV, JSON or
 JSON-lines views, not a single interchangeable timing schema.
 
 ## What each measurement includes
+
+### Conditional countermodel feedback
+
+`feedback` is an experiment over eight fixed finite theories, with at most six
+atoms, 64 original DAG nodes and sixteen roots. The [fixtures](src/feedback_measurement/fixtures.rs)
+cover empty roots, falsum, one/four atomic choices, six self-loops, mixed
+ordinary disjunction and choices, nested implication, and shared/repeated roots
+with an unused universe atom. Their complete population has 116 interpretations.
+The JSON-lines schema 1 serializes each exact original DAG and semantic atom
+universe, its complete reference family, actual bounds and route receipts.
+
+For each owner the experiment first checks all ordered witness/candidate pairs
+against independent frozen-reduct evaluation: 4,742 pairs across the study,
+including witnesses that are not subsets. The compiler implements
+`Allow(J, X) = not (J proper-subset X and J models the reduct of T frozen at X)`.
+A guard uses the original candidate truth at each formula node; it is not an
+unconditional superset exclusion. For instance a witness `{a}` may reject
+`{a,b}` while preserving a stable extension `{a,c}` selected by a choice.
+[`Feedback.witness_exact`, `stable_allows` and `all_feedback_preserves_stability`](../../proofs/Zetesis/Feedback.lean)
+state the semantic laws. They do not prove the Rust DAG compiler, allocation
+admission or SAT restart implementation.
+
+The four routes run in fixed order on each same-owner observation:
+
+- `direct` checks every interpretation in bit order through the original native
+  membership operation.
+- `feedback` visits that same complete sequence, first testing retained guards.
+  It learns only from `NonMinimal` in a real opaque native checked-subject record.
+  A filtered interpretation saves one native membership call; it does not save
+  candidate generation. This route has zero SAT restarts.
+- `search` runs the unmodified native stable-model iterator.
+- `restricted` uses the preceding feedback route's already acquired guards.
+  After its first delivered answer it installs them through `restrict_candidates`.
+  Successful installations are actual restarts retaining prior exact exclusions.
+  This is pre-acquired replay, not online learning inside ordinary search. An
+  iterator that delivers no answer installs no guard.
+
+Every complete route must match the entire independent exhaustive Ferraris
+family with exact atom IDs and no repeated models. Bitset outputs are lossless
+within the recorded universe, not displayed projections. `--check` performs
+qualification only (32 route observations). Warmup and timed populations are
+separate; fixed route order and tiny inputs limit comparative claims. Stage
+intervals separate native calls, guard construction/application, search setup and
+restriction installation. Total route time also includes orchestration and its
+receipt/vector setup. Fixture construction, reference qualification, final family
+comparison and JSON publication are outside those clocks. Standalone native
+checks expose call counts, not SAT work receipts; only iterator routes report
+actual cumulative SAT work and projection storage.
+
+Guard construction reserves a linear bound of `3*N + 2*U + R + 5` nodes, with one
+original-node map and canonical witness-ID vector. It copies original node
+**descriptors into each guard**, preserving the original theory/reduct and its
+shared owner. It does not retain the original checked candidate or create an
+atom/value dictionary. Finite defaults allow eight guards, 256 nodes each, 2,048
+total retained nodes, 64 KiB construction capacity, 256 KiB retained-plus-building
+capacity and one million cumulative construction steps. Reservations and actual
+vector capacity are checked before publication. Peak envelopes include proposed
+refused reservations and are maxima, not sums. Native candidate/CNF/projection
+and evaluation limits are independent and recorded in the start event.
+
+Named guard capacity includes guard-entry, node, root, map and witness vectors.
+Original source/Arc storage, the temporary native checked record and evaluation
+scratch, native CNF/search storage, output vectors, allocator metadata and stack
+locals are excluded. Pre-acquired retained guard bytes and native projection
+bytes have separate receipts; none is process RSS. Construction or installation
+refusal stops the observation with its completed prefix, original error and no
+completion record. A failure-publication error retains both causes. No ordinary
+solver policy or performance improvement is established by saved-check counts.
 
 ### Finite-table domain projection
 

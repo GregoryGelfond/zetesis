@@ -10,7 +10,7 @@ fn backend(options: &CommandOptions) -> Backend {
         Some(Experiment::Lazy(value)) => value.backend,
         Some(Experiment::Tight(value)) => value.backend,
         Some(Experiment::Aggregate(value)) => value.backend,
-        Some(Experiment::Grounding(_) | Experiment::Table(_)) => {
+        Some(Experiment::Grounding(_) | Experiment::Table(_) | Experiment::Feedback(_)) => {
             panic!("this experiment has no device backend")
         }
         Some(Experiment::Relation(value)) => value.backend,
