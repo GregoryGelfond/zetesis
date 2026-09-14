@@ -1,0 +1,213 @@
+{
+  "comparison_scope": "complete_selected_displays_with_symbol_and_model_multiplicities; final_optimum_ties_and_costs; hidden_interpretations_unavailable",
+  "corpus_files": [
+    {
+      "bytes": 176545,
+      "path": "examples/kr-domains/manifest.json",
+      "sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958"
+    },
+    {
+      "bytes": 1072,
+      "path": "examples/kr-domains/LICENSE",
+      "sha256": "663fd58c4daf8c2247da12c61b73474ee7a5f79f884c6f16d785a725fe9bfe99"
+    },
+    {
+      "bytes": 2115,
+      "path": "examples/kr-domains/encodings/shortest-path/variant-01.lp",
+      "sha256": "ee593089ab5ecfa2cf1a1cef152686f9b5d99c2ab08d126f212050568f1179e7"
+    },
+    {
+      "bytes": 3672,
+      "path": "examples/kr-domains/encodings/task-allocation/variant-04.lp",
+      "sha256": "7a16f9cb73d644ea061ee71a8aed3a5686f5dce3dc6e1015cdf83c603305e421"
+    },
+    {
+      "bytes": 837,
+      "path": "examples/kr-domains/scenarios/shortest-path/variant-01/06-layered-dag.lp",
+      "sha256": "8c19d1d8dd791a19f235ce4e07d57becadc753c9e15a5cc264adfaef171b001e"
+    },
+    {
+      "bytes": 898,
+      "path": "examples/kr-domains/scenarios/task-allocation/variant-04/05-larger-mix.lp",
+      "sha256": "a7d80af4886cff9c7a0b592f51f95afdf5943af5ebcbeadd57b4a650082393fe"
+    },
+    {
+      "bytes": 858,
+      "path": "examples/kr-domains/standalone/n-queens/variant-01.lp",
+      "sha256": "c43d5ddf900ce2fd1d3328f2df337f1c1e8b85b63255473713b16a2dfd0dc1fd"
+    },
+    {
+      "bytes": 960,
+      "path": "examples/kr-domains/standalone/n-queens/variant-02.lp",
+      "sha256": "b6e636c06664e0e3b1a34b883e342f9c7b599f8625e154adb1927d41442fca02"
+    },
+    {
+      "bytes": 878,
+      "path": "examples/kr-domains/standalone/n-queens/variant-03.lp",
+      "sha256": "6e04e47594fd44b6ed2e17370f81ad3ae9db684af9e5aa4a85c7e1d98a5f5dd6"
+    },
+    {
+      "bytes": 919,
+      "path": "examples/kr-domains/standalone/n-queens/variant-04.lp",
+      "sha256": "d599e4b8e68f0b68df20bfaefb0a9916da69c6829cd340de301b08997cfb9295"
+    },
+    {
+      "bytes": 1078,
+      "path": "examples/kr-domains/standalone/n-queens/variant-05.lp",
+      "sha256": "42475b96940e06b957f45441cb5de66681a509d35f1c41ddc72fc36899cbfaaa"
+    },
+    {
+      "bytes": 1116,
+      "path": "examples/kr-domains/standalone/n-queens/variant-06.lp",
+      "sha256": "9d6ff26ac9bec747f4a237145ea732fd689d065545254186375afc682604fc3c"
+    },
+    {
+      "bytes": 1954,
+      "path": "examples/kr-domains/standalone/send-money/send-money.lp",
+      "sha256": "de33a9970b578cf06fa42a85b55aaefaea2fd12b6d78ae051a6654875cd9e704"
+    }
+  ],
+  "corpus_manifest_sha256": "b43df1adf17ae0c035f1e310a5c15345c26cbcad8b59596932627c46fd1c6958",
+  "curation_scope": "All 468 ordered receipts retain raw integer elapsed nanoseconds and separate child-RSS bytes. Machine-local paths, process IDs, output streams and diagnostic payloads are omitted. Pass decisions are recorded selected-display/cost qualification, not a new comparison of outputs or hidden interpretations. Original reports remain separately retained and hashed. This is a derived view of the identified CPU observations, not a byte-identical archive, qualification of a later source, or publication of Metal/LTO measurements.",
+  "execution": {
+    "backend": "cpu",
+    "clingo_workers": 1,
+    "closure_workers": 1,
+    "completion_workers": 1,
+    "current_formula_joins": "indexed",
+    "grounding": "eager",
+    "native_output": "human; separate statistics observations",
+    "oracle": "auto",
+    "prior_formula_joins": "indexed",
+    "reference_output": "JSON; exhaustive optN"
+  },
+  "gpu_measurement": "unavailable: this fixed CPU campaign is not the full94 eager/lazy CPU/Metal matrix",
+  "kind": "derived_historical_observation_view",
+  "limits": {
+    "answers": {
+      "max_cost_dimensions": 8388608,
+      "max_input_bytes": 8388608,
+      "max_symbols": 8388608,
+      "max_witnesses": 8388608
+    },
+    "campaign_timeout": {
+      "nanos": 0,
+      "secs": 30
+    },
+    "corpus": {
+      "cases": 94,
+      "contract_symbols": 65536,
+      "files": 108,
+      "manifest_bytes": 1048576,
+      "source_bytes": 1048576,
+      "total_source_bytes": 4194304
+    },
+    "max_executable_bytes": 268435456,
+    "max_report_bytes": 536870912,
+    "max_total_capture_bytes": 134217728,
+    "process": {
+      "cleanup_timeout": {
+        "nanos": 0,
+        "secs": 1
+      },
+      "max_output_bytes": 4194304,
+      "timeout": {
+        "nanos": 0,
+        "secs": 5
+      }
+    }
+  },
+  "native_versions": [
+    {
+      "binary_sha256": "0758210934e1a80c350808fc936414c359974a2327119e0af3b3ab5e5f0f79f8",
+      "label": "prior",
+      "source": "1e5b78ce913ab3aeece6ed496f69ca8176f0644d"
+    },
+    {
+      "binary_sha256": "fd19a078e99c75c1bbaf30e437f5da02aa621fd595554b079bb3bc0b078dae0e",
+      "label": "current",
+      "source": "ca10a5e7ec84e13fbcc4a23bd0de8b0232c53fe1"
+    }
+  ],
+  "observed_utc_interval": [
+    "2026-09-14T03:42:07Z",
+    "2026-09-14T03:43:27Z"
+  ],
+  "original_reports": [
+    {
+      "bytes": 25603372,
+      "label": "prior-1",
+      "original_schema": 2,
+      "sha256": "0de7ff9a46e6b38beb73be0f1dbe93201a7dd5d87ae3b2f69a6ff8b5f70bf0ef"
+    },
+    {
+      "bytes": 25605487,
+      "label": "current-1",
+      "original_schema": 2,
+      "sha256": "d2bb68b185af858bd81116ae0a5c79b8183069a10b434501a402805bbdc69c04"
+    },
+    {
+      "bytes": 25606065,
+      "label": "current-2",
+      "original_schema": 2,
+      "sha256": "bd94d59e033f26ade15bd996d3bd4e2312027eff89326fc419e099d8e8edc298"
+    },
+    {
+      "bytes": 25603001,
+      "label": "prior-2",
+      "original_schema": 2,
+      "sha256": "419b174432dbe4018b3f9c83c32bde22d289c7a9d5ea3f1f543161b9a600b02a"
+    }
+  ],
+  "reconciliation_summary_sha256": "1f14b3fc4507350e01e830a4277fa0a1303f8fd3315ed82a4b4988120faa35ab",
+  "rss_scope": "separate_fresh_helper_RUSAGE_CHILDREN; excludes_helper; may_include_usage_propagated_by_waited_descendants; not_simultaneous_tree_RSS_or_device_memory; macOS_bytes_Linux_KiB_converted_to_bytes",
+  "schedule": {
+    "memory_runs": 1,
+    "repetitions": 3,
+    "selected": [
+      {
+        "selected": "standalone/n-queens/variant-01.lp"
+      },
+      {
+        "selected": "standalone/n-queens/variant-02.lp"
+      },
+      {
+        "selected": "standalone/n-queens/variant-03.lp"
+      },
+      {
+        "selected": "standalone/n-queens/variant-04.lp"
+      },
+      {
+        "selected": "standalone/n-queens/variant-05.lp"
+      },
+      {
+        "selected": "standalone/n-queens/variant-06.lp"
+      },
+      {
+        "selected": "standalone/send-money/send-money.lp"
+      },
+      {
+        "selected": "scenarios/task-allocation/variant-04/05-larger-mix.lp"
+      },
+      {
+        "selected": "scenarios/shortest-path/variant-01/06-layered-dag.lp"
+      }
+    ],
+    "warmups": 1
+  },
+  "schema": 1,
+  "source_binding_scope": "Compiled source identities are bound by retained source/executable acquisition manifests; this receipt view does not reconstruct compiler lineage.",
+  "tools": [
+    {
+      "bytes": 2196016,
+      "name": "zetesis-perf",
+      "sha256": "7c05900d8f3e5c0d05224742c5713bfbe37b64198cff8ef986c1f141356ba9f5"
+    },
+    {
+      "bytes": 341232,
+      "name": "clingo",
+      "sha256": "31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015"
+    }
+  ],
+  "wall_scope": "fresh_process_spawn_capture_reap; output_included; comparison_hashing_excluded; no_cold_cache_claim"
+}

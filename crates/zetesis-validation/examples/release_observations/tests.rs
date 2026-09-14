@@ -1,8 +1,9 @@
-//! Reproduction and refusal controls over the fixed historical record view.
+//! Reproduction and refusal controls over the fixed comparison record views.
 
+use clap::Parser;
 use serde_json::Value;
 
-use super::{data, dataset::HISTORICAL, render};
+use super::{Options, catalog_dataset::ATOM_CATALOG, data, dataset::HISTORICAL, render};
 
 fn changed(change: impl FnOnce(&mut Value)) -> data::Observations {
     let mut document: Value = serde_json::from_str(HISTORICAL.observations).unwrap();
@@ -22,6 +23,82 @@ fn historical_samples_reproduce_the_published_tables() {
     assert!(
         include_str!("../../../../docs/book/reference/performance.md")
             .contains(HISTORICAL.tables.trim_end())
+    );
+}
+
+#[test]
+fn catalog_samples_reproduce_the_published_tables() {
+    let data = data::load(&ATOM_CATALOG).unwrap();
+    assert_eq!(
+        render::tables(&data, &ATOM_CATALOG).unwrap(),
+        ATOM_CATALOG.tables
+    );
+    assert!(
+        include_str!("../../../../docs/book/reference/performance.md")
+            .contains(ATOM_CATALOG.tables.trim_end())
+    );
+}
+
+#[test]
+fn the_default_selection_preserves_the_historical_comparison() {
+    for arguments in [
+        vec!["release_observations"],
+        vec!["release_observations", "--check"],
+        vec!["release_observations", "--dataset", "table-grounding"],
+    ] {
+        let options = Options::try_parse_from(arguments).unwrap();
+        assert_eq!(options.dataset.dataset().sources, HISTORICAL.sources);
+    }
+}
+
+#[test]
+fn the_catalog_selector_renders_its_own_observations() {
+    for checked in [false, true] {
+        let mut arguments = vec!["release_observations", "--dataset", "atom-catalog"];
+        if checked {
+            arguments.push("--check");
+        }
+        let options = Options::try_parse_from(arguments).unwrap();
+        assert_eq!(options.check, checked);
+        let dataset = options.dataset.dataset();
+        assert_eq!(dataset.sources, ATOM_CATALOG.sources);
+        let data = data::load(dataset).unwrap();
+        let tables = render::tables(&data, dataset).unwrap();
+        assert_eq!(tables, ATOM_CATALOG.tables);
+        assert_ne!(tables, HISTORICAL.tables);
+    }
+}
+
+#[test]
+fn an_unrecognized_or_ambiguous_selection_refuses() {
+    use clap::error::ErrorKind;
+
+    for (arguments, expected) in [
+        (vec!["--dataset", "foreign"], ErrorKind::InvalidValue),
+        (
+            vec!["--dataset", "table-grounding", "--dataset", "atom-catalog"],
+            ErrorKind::ArgumentConflict,
+        ),
+        (vec!["--check", "--check"], ErrorKind::ArgumentConflict),
+        (vec!["report.json"], ErrorKind::UnknownArgument),
+    ] {
+        let result =
+            Options::try_parse_from(std::iter::once("release_observations").chain(arguments));
+        let Err(error) = result else {
+            panic!("invalid comparison selection accepted");
+        };
+        assert_eq!(error.kind(), expected);
+    }
+}
+
+#[test]
+fn catalog_receipts_cannot_be_relabelled_as_the_historical_comparison() {
+    let data = data::load(&ATOM_CATALOG).unwrap();
+    assert!(
+        render::tables(&data, &HISTORICAL)
+            .unwrap_err()
+            .to_string()
+            .contains("provenance digest")
     );
 }
 

@@ -1,4 +1,11 @@
-# Historical release observations
+# Recorded release observations
+
+Two fixed datasets reproduce the ordinary release comparisons in the
+[performance reference](../performance.md). Each retains its own sources,
+executable identities, observations and completion limits. Neither qualifies a
+later implementation.
+
+## Table-grounding comparison
 
 The [observation data](release-6bebb980-1e5b78ce.json),
 [provenance](release-6bebb980-1e5b78ce-provenance.json) and
@@ -8,14 +15,32 @@ They describe source `6bebb980f9c102dbb7f943076d7cde92374841ce` versus
 `1e5b78ce913ab3aeece6ed496f69ca8176f0644d`, measured on 12 September 2026.
 They do not qualify a later implementation.
 
-This is a derived observation view, not a byte-identical archive of the original
-reports. It retains all 468 ordered observation receipts across nine workloads
+## Atom-catalog comparison
+
+The [observation data](release-1e5b78ce-ca10a5e7.json),
+[provenance](release-1e5b78ce-ca10a5e7-provenance.json) and
+[table view](release-1e5b78ce-ca10a5e7-tables.md) describe source
+`1e5b78ce913ab3aeece6ed496f69ca8176f0644d` versus
+`ca10a5e7ec84e13fbcc4a23bd0de8b0232c53fe1`, observed on 14 September 2026
+from 03:42:07 to 03:43:27 UTC. Both native versions explicitly use Indexed joins.
+Task allocation uses less sampled child RSS, SEND takes longer, and the other
+workloads have mixed results. The [current comparison](../performance.md#atom-catalog-cpu-comparison)
+keeps all four block medians and ranges visible.
+
+## What the views preserve
+
+These are derived observation views, not byte-identical archives of the original
+reports. Each retains all 468 ordered observation receipts across nine workloads
 and four blocks, including qualification, warmup, timing, diagnostics and memory
 positions. The provenance records original report hashes and byte lengths,
-source and executable identities, corpus files, the build recipe, platform and
-the actual observation limits. The original reports remain retained separately.
+source and executable identities, corpus files and the actual observation
+limits. The Table-grounding provenance also records its build recipe and
+platform; the atom-catalog provenance states the external source/binary binding
+and its observation interval without reconstructing compiler lineage.
+The original reports remain retained separately.
 Machine-local paths, process IDs, output streams and diagnostic payloads are
-omitted. These files do not publish the other Metal or LTO comparisons.
+omitted. These files do not publish the other Metal, LTO, shared-lazy or matrix
+comparisons.
 
 `decision: "pass"` records the original comparison's conclusion: complete
 selected displays, including symbol and model multiplicities, final costs and
@@ -40,11 +65,17 @@ Run the maintained Rust view from the repository root:
 ```sh
 cargo run --locked -p zetesis-validation --example release_observations
 cargo run --locked -p zetesis-validation --example release_observations -- --check
+cargo run --locked -p zetesis-validation --example release_observations -- --dataset atom-catalog
+cargo run --locked -p zetesis-validation --example release_observations -- --dataset atom-catalog --check
 ```
 
-The default command prints the three published Markdown tables. `--check`
-validates without writing them. Both use only the embedded data: they check the
-linked provenance digest, exact historical source/binary bindings, all positions
+The default remains the historical Table-grounding comparison; explicit
+`--dataset table-grounding` selects the same data. `--dataset atom-catalog`
+selects the second compiled dataset. Each prints its three published Markdown
+tables; `--check` validates without writing them. Unknown names, repeated
+options and arbitrary file paths are refused. Both use only embedded data and
+one shared validator/renderer: they check the linked provenance digest, exact
+selected source/binary bindings and join policies, all positions
 against `zetesis_validation::performance::Schedule`, recorded completion and
 cost consistency, and the separate RSS receipts. Missing, extra, duplicate or
 reordered positions refuse table generation. Integer formatting rounds to
@@ -52,7 +83,7 @@ three decimal places with ties to even, without converting raw units through
 floating point. The example also requires equality with the retained published
 table view; its regression checks that view against the manual.
 
-Direct integer rounding corrects eight final displayed digits from the earlier
-presentation of these same observations. For example, 32,871,500 ns is exactly
+For the historical Table-grounding comparison, direct integer rounding corrects
+eight final displayed digits from its earlier presentation. For example, 32,871,500 ns is exactly
 32.8715 ms and rounds to 32.872; 6,094,848 bytes is exactly 5.8125 MiB and rounds
 to 5.812. The raw observation and provenance JSON remain unchanged.

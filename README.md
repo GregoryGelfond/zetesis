@@ -184,7 +184,7 @@ model lookups use the existing selected positions. Preparation and query work
 remain charged. The [library map](docs/book/rust/libraries.md) describes these
 ownership and failure contracts.
 
-Formula construction and lazy source rounds use the same appendable atom
+Formula construction and batched lazy source rounds use the same appendable atom
 interner. One owner stores each typed atom; its checked index stores positions.
 Lazy snapshots borrow a committed prefix while new identities accumulate in a
 separate suffix. Committing that suffix preserves IDs and candidate truth.

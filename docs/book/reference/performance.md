@@ -1,5 +1,245 @@
 # Execution performance
 
+The latest CPU comparison shows lower task-allocation memory use, a slower
+SEND solve and mostly slower shared lazy checks. The common atom interner
+removes duplicated atom ownership in batched lazy grounding and consolidates
+checked identity operations. Those improvements in representation do not
+establish a general speedup. The results below compare complete implementations,
+not the isolated effect of one data structure.
+
+## Atom catalog CPU comparison
+
+This comparison is
+[`1e5b78ce`](https://github.com/GregoryGelfond/zetesis/tree/1e5b78ce913ab3aeece6ed496f69ca8176f0644d)
+against
+[`ca10a5e7`](https://github.com/GregoryGelfond/zetesis/tree/ca10a5e7ec84e13fbcc4a23bd0de8b0232c53fe1),
+recorded on arm64 macOS 26.6.2 on 14 September 2026. The ordinary acquisition
+ran from 03:42:07 to 03:43:27 UTC. Both versions use the canonical package build
+recipe without an LTO override, and the same fixed performance runner and
+clingo 5.8.2. Source and binary identities are retained together; rebuilding a
+named source need not reproduce the same executable bytes.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Prior canonical zetesis | `0758210934e1a80c350808fc936414c359974a2327119e0af3b3ab5e5f0f79f8` |
+| Atom-catalog canonical zetesis | `fd19a078e99c75c1bbaf30e437f5da02aa621fd595554b079bb3bc0b078dae0e` |
+| Fixed zetesis-perf | `7c05900d8f3e5c0d05224742c5713bfbe37b64198cff8ef986c1f141356ba9f5` |
+| clingo | `31e738a632a8053eef1604c150f4d6418ff1dd8a9a3d5a8c1d594d6d30b67015` |
+
+The [observation data](observations/release-1e5b78ce-ca10a5e7.json) and
+[provenance](observations/release-1e5b78ce-ca10a5e7-provenance.json) retain all
+468 ordered positions, exact integer timing/RSS samples, source and executable
+identities, and the original report hashes. This is a derived receipt view;
+output streams and machine-local paths are omitted. It preserves the recorded
+selected-display/cost comparisons, not an independent comparison of hidden
+full interpretations. The [observation guide](observations/README.md) states
+that boundary and reproduces the three tables below without running a solver:
+
+```sh
+cargo run --locked -p zetesis-validation --example release_observations -- --dataset atom-catalog
+cargo run --locked -p zetesis-validation --example release_observations -- --dataset atom-catalog --check
+```
+
+The four blocks run prior/current/current/prior. Each contains all nine original
+workloads: six N=8 queens encodings, SEND, task allocation variant 04/scenario 05,
+and shortest path variant 01/scenario 06. Each producer/case/block has
+qualification, one warmup, three timed runs and one separate child-RSS run;
+native diagnostics are separate. All positions pass, with no capture faults or
+unresolved children. Recorded selected families contain 92 models for queens,
+one for SEND, 1,176 optimum ties at cost `[5]` for task allocation, and one at
+`[4,4]` for shortest path.
+
+Both natives use CPU/eager/Indexed with automatic oracle selection and one
+requested closure and completion worker. All 36 diagnostics identify actual
+`tight-support`, indexed probes and zero Table probes. Native timed output is
+human-readable without statistics; clingo emits JSON. Timers include process
+startup, capture and reaping, with output comparison outside the interval.
+The limits are five seconds per child, 30 seconds per campaign, 4 MiB per
+capture, 128 MiB total capture and 512 MiB per report. No cold-cache condition or
+confidence interval is claimed. Timed samples do not measure Table joins,
+shared lazy grounding, parallel residual completion or GPU execution.
+
+Task allocation uses 16.016 MiB in both current RSS samples versus
+19.641/19.531 MiB previously: an 18.23% decrease between the two sample means.
+Its mean block-median wall time decreases 1.60%, with overlapping ranges;
+matched clingo decreases 0.60%. SEND instead increases 7.91%, and every current
+timed value exceeds every prior value in this acquisition. Matched clingo is
+nearly unchanged. These percentages compare the mean of the two current block
+medians with the mean of the two prior block medians, not a pooled population.
+
+The apparent 7.25% shortest-path decrease depends on the final prior block's
+9.193 ms median; the other three are about 7.92–7.94 ms. Several queens and
+reference blocks also drift. Separate diagnostics locate higher SEND and task
+grounding times and lower task solving times, but do not isolate a cause.
+Neither these stage observations nor unchanged source-event counts enumerate
+every comparison, allocation or copy. All block ranges remain visible below.
+
+RSS measures a separate solver child's peak, excluding the resource helper;
+waited descendants can contribute. It is neither simultaneous process-tree
+RSS nor a measurement of one index's capacity. The two samples per version
+support the stated task observation, not a general memory-scaling claim.
+MiB means 1,048,576 bytes.
+
+Native wall time, ms: median [minimum, maximum] of three timed samples per block.
+
+| Case | prior-1 | current-1 | current-2 | prior-2 |
+|---|---:|---:|---:|---:|
+| Queens 1 | 14.102 [14.054, 15.545] | 15.459 [15.346, 15.464] | 15.367 [15.356, 16.644] | 15.236 [15.144, 15.323] |
+| Queens 2 | 89.576 [89.556, 89.769] | 90.657 [90.404, 92.048] | 91.815 [91.779, 92.996] | 91.885 [91.517, 91.980] |
+| Queens 3 | 15.430 [15.387, 15.480] | 16.722 [16.604, 16.810] | 16.687 [16.616, 16.756] | 16.667 [15.470, 16.763] |
+| Queens 4 | 7.812 [7.799, 9.183] | 7.899 [7.834, 9.096] | 9.148 [7.836, 9.165] | 9.114 [9.080, 9.214] |
+| Queens 5 | 10.350 [8.980, 10.387] | 10.428 [10.053, 11.668] | 10.301 [10.290, 10.365] | 10.402 [10.298, 11.711] |
+| Queens 6 | 10.322 [10.276, 11.698] | 11.432 [10.404, 11.671] | 11.658 [11.630, 11.670] | 11.622 [10.325, 11.627] |
+| SEND | 33.847 [32.902, 34.132] | 36.700 [36.449, 36.800] | 36.821 [36.765, 36.851] | 34.285 [34.201, 35.516] |
+| Task allocation | 94.253 [93.360, 94.554] | 93.412 [93.307, 93.548] | 93.406 [93.212, 93.666] | 95.599 [93.591, 95.827] |
+| Shortest path | 7.921 [7.835, 7.951] | 7.935 [7.866, 9.202] | 7.938 [7.938, 9.165] | 9.193 [7.881, 9.229] |
+
+Matched clingo wall time, ms, with the same three-sample notation.
+
+| Case | prior-1 | current-1 | current-2 | prior-2 |
+|---|---:|---:|---:|---:|
+| Queens 1 | 6.526 [6.493, 6.532] | 6.513 [5.244, 6.519] | 6.562 [6.511, 6.577] | 5.221 [5.180, 6.677] |
+| Queens 2 | 121.563 [120.676, 121.624] | 121.586 [121.522, 123.060] | 123.265 [122.855, 123.400] | 123.990 [123.318, 124.397] |
+| Queens 3 | 6.590 [6.586, 6.596] | 6.590 [6.584, 6.604] | 6.549 [6.507, 6.579] | 6.517 [6.459, 6.579] |
+| Queens 4 | 6.479 [5.180, 6.532] | 6.520 [6.456, 6.520] | 6.510 [6.477, 6.513] | 6.442 [5.179, 6.461] |
+| Queens 5 | 6.521 [6.445, 6.529] | 6.506 [6.495, 6.518] | 6.501 [6.428, 6.506] | 6.506 [5.159, 6.560] |
+| Queens 6 | 5.247 [5.185, 6.442] | 6.494 [6.444, 6.499] | 6.480 [6.282, 6.521] | 5.213 [5.187, 6.633] |
+| SEND | 11.589 [11.403, 11.605] | 11.600 [11.448, 11.613] | 11.563 [11.448, 12.680] | 11.556 [11.494, 12.875] |
+| Task allocation | 186.945 [182.191, 188.547] | 187.135 [175.736, 188.596] | 183.200 [181.927, 186.255] | 185.619 [181.670, 190.859] |
+| Shortest path | 5.298 [5.209, 6.508] | 5.198 [5.195, 5.253] | 6.508 [5.183, 6.566] | 6.358 [5.262, 6.569] |
+
+Separate child RSS, MiB. Each cell is **native / clingo**, one fresh-helper observation of each per block.
+
+| Case | prior-1 | current-1 | current-2 | prior-2 |
+|---|---:|---:|---:|---:|
+| Queens 1 | 12.109 / 5.656 | 12.109 / 5.656 | 12.156 / 5.656 | 12.125 / 5.656 |
+| Queens 2 | 12.672 / 11.000 | 12.781 / 10.000 | 12.812 / 10.016 | 12.703 / 9.688 |
+| Queens 3 | 12.234 / 5.656 | 12.219 / 5.656 | 12.172 / 5.672 | 12.172 / 5.656 |
+| Queens 4 | 12.219 / 5.703 | 12.250 / 5.703 | 12.234 / 5.922 | 12.281 / 5.703 |
+| Queens 5 | 12.625 / 5.766 | 12.719 / 5.766 | 12.594 / 5.766 | 12.688 / 5.766 |
+| Queens 6 | 12.703 / 5.812 | 12.844 / 5.812 | 12.922 / 5.812 | 12.719 / 5.812 |
+| SEND | 24.188 / 8.500 | 24.250 / 8.500 | 24.297 / 8.500 | 24.172 / 8.500 |
+| Task allocation | 19.641 / 22.750 | 16.016 / 22.375 | 16.016 / 22.516 | 19.531 / 21.688 |
+| Shortest path | 13.156 / 6.062 | 13.234 / 5.891 | 13.344 / 5.891 | 13.156 / 5.891 |
+
+### Shared lazy CPU checks
+
+A separate four-block comparison of the same two sources directly exercises
+shared lazy checking through the maintained `zetesis-bench lazy` command. The
+prior bench hash is `e720983506475d7059198ebf0856e8617eff2e8888a838fd6a33954e42786a9a`;
+the ca10 bench hash is `ecb21a65cf618bf56f75dc62a165d3b83d8bf61f7856eeec4659805e00cbfad8`.
+The acquisition ran from 03:46:21 to 03:46:31 UTC, separately from ordinary
+process timings. It covers sparse/dense fixtures, widths 4/8 and batches
+1/32/128, with Scalar, Rayon, PortableUnion and PortableWorlds routes. Every
+block completes all 720 positions: one initial, two warmup and twelve timed
+checks per case/route, rotating route order. All 2,880 samples pass the
+producer's comparison of complete ordered closures, constraint verdicts and
+seed mismatches against an independent scalar reference after the timer.
+The records retain counts and progress, not full closure payloads for another
+cross-version reconstruction. Repeated seeds are occurrence checks, not unique
+answer sets or an outer enumeration/clingo comparison.
+
+PortableUnion and PortableWorlds actually call the shared source/catalog
+consumer with serial portable consequence evaluation. The four-worker Rayon
+pool runs the independent route; its presence does not mean shared grounding
+runs in parallel. Device fields are null. Batch construction and finalization
+are inside the shared timer; fixture/reference construction, pool setup,
+comparison and JSON publication are outside it. No RSS was sampled here.
+
+Most shared cases slow down: 11 of 12 Union cases and 10 of 12 Worlds cases.
+Changes below compare the two current block medians with the two prior block
+medians. Each block median uses twelve timed observations; this is descriptive,
+not a confidence interval or an average across unrelated fixtures.
+
+| Family / width / worlds | Union change | Worlds change |
+| --- | ---: | ---: |
+| sparse / 4 / 1 | +14.45% | +12.91% |
+| sparse / 4 / 32 | +12.72% | +5.78% |
+| sparse / 4 / 128 | +9.82% | +4.78% |
+| sparse / 8 / 1 | +4.85% | +11.67% |
+| sparse / 8 / 32 | +11.62% | +4.59% |
+| sparse / 8 / 128 | +12.91% | +2.32% |
+| dense / 4 / 1 | +4.68% | +6.02% |
+| dense / 4 / 32 | +2.08% | -2.04% |
+| dense / 4 / 128 | -2.34% | -1.62% |
+| dense / 8 / 1 | +3.85% | +12.97% |
+| dense / 8 / 32 | +3.04% | +2.08% |
+| dense / 8 / 128 | +2.49% | +0.24% |
+
+For example, sparse width-8/128 Union medians rise from 1.0335/1.0891 ms to
+1.2000/1.1967 ms. Dense width-8/1 Worlds rises from 0.7848/0.7751 ms to
+0.8836/0.8786 ms. The small improvements occur in some dense width-4 cases;
+there is no general shared-source speedup. The prior/current change includes
+more than the interner, so these timings do not assign a cause to one operation.
+In particular, formula grounding already owned each emitted atom once before
+its index changed; the removal of duplicated payload applies to the batched
+lazy owner. [Ownership and cost contracts](../architecture/ownership.md) describe
+these different populations and the remaining per-call preparation.
+
+Use each source's matching bench in prior/current/current/prior order, retaining
+all four outputs, with this same command suffix:
+
+```sh
+zetesis-bench lazy --backend cpu --widths 4,8 --batches 1,32,128 \
+  --families sparse,dense --workers 4 --warmups 2 --repetitions 12 \
+  --chunk-rules 256 --max-work 100000000
+```
+
+The recorded shared-source limits also include 1,024 candidates, 4,096 atoms,
+4,097 rounds, 16,384 chunk words, 1 MiB per copied instance and 128 MiB host
+storage. The named host envelope is not RSS. Work counters count documented
+operations, not machine instructions. Fixed interner probes provide separate
+preparation, lookup, append and capacity observations; they cannot substitute
+for the whole-solve or shared-consumer results above.
+
+### Explicit CPU profile matrix
+
+A separate N=8 queens matrix requests eager and lazy profiles, four closure and
+completion workers, and batch size 64. Across four prior/current/current/prior
+blocks, all 360 positions are accounted: 240 pass, 24 return typed
+`unsupported_oracle`, and 96 successors are blocked by those refusals. Every
+report therefore exits 1. Both revisions refuse the same CPU/lazy requests
+because the selected countermodel route requires eager or automatic grounding.
+There are no capture faults or unresolved children. A refusal is an incomplete
+outcome, not UNSAT or a successful zero-time sample.
+
+All 120 successful native observations actually use CPU/eager/Indexed and
+`tight_support`, exhaust their search and check, verify and publish 92 models.
+The paired references have 92 selected displays. Completion records zero
+residuals and zero effective completion workers, despite four requested workers;
+there is no actual GPU activity. Counts and recorded passing comparisons are
+not a new independent hidden-family reconstruction. These JSON/statistics
+process timings form a different population from ordinary human-output times;
+no RSS or successful lazy timing is available from this matrix. It neither
+qualifies shared lazy performance nor establishes a parallel or GPU gain.
+
+### Reproducing the ordinary comparison
+
+The [ordinary comparison function below](#reproduce-the-measurements) uses the
+same nine cases and limits. For this atom-catalog comparison, select the named
+1e5b78ce and ca10a5e7 binaries and the runner hash above, and pass `indexed` for
+both versions. After defining that function, run the following calls separately,
+retaining and inspecting every report before continuing:
+
+```sh
+ordinary catalog-prior-1 "$previous_solver" indexed
+ordinary catalog-current-1 "$current_solver" indexed
+ordinary catalog-current-2 "$current_solver" indexed
+ordinary catalog-prior-2 "$previous_solver" indexed
+```
+
+The new public dataset contains only the ordinary 468-position comparison.
+Shared-lazy and matrix summaries retain their distinct methods and completion
+limits. These CPU acquisitions do not qualify Metal or imply a performance
+claim for later sources.
+
+## Earlier Table-grounding comparisons
+
+The sections below retain their original 6bebb980 → 1e5b78ce release, Table,
+LTO and Metal evidence. Their previous/current labels refer to those sources,
+not to the atom-catalog comparison above. The historical ordinary artifacts and
+their three published tables are unchanged.
+
 The ordinary grounder now offers `--formula-joins table` for eligible positive
 joins over completed eager support. It reuses borrowed relation indices and
 consumes original row positions through the existing matcher. Indexed joins
