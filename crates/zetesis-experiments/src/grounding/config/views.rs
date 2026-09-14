@@ -169,6 +169,8 @@ struct Observation {
 pub(super) struct Search {
     #[serde(with = "Cnf")]
     admission: zetesis_sat::AdmissionLimits,
+    #[serde(with = "Projection")]
+    projections: zetesis_sat::ProjectionLimits,
     #[serde(with = "SearchWork")]
     #[expect(
         clippy::struct_field_names,
@@ -209,4 +211,50 @@ pub(super) struct Certificate {
     max_dependencies: usize,
     max_bytes: u64,
     max_work: u64,
+}
+
+#[derive(Serialize)]
+#[serde(remote = "zetesis_sat::ProjectionLimits")]
+#[expect(
+    clippy::struct_field_names,
+    reason = "Serde must access the native ProjectionLimits max_ field names."
+)]
+struct Projection {
+    max_entries: u64,
+    max_nodes: usize,
+    max_bytes: usize,
+}
+
+#[derive(Serialize)]
+#[serde(remote = "zetesis_themelios::DomainLimits")]
+#[expect(
+    clippy::struct_field_names,
+    reason = "Serde must access the native domain Limits max_ field names."
+)]
+struct Domain {
+    max_work: u64,
+    max_predicates: usize,
+    max_positions: usize,
+    max_links: usize,
+    max_values_per_argument: usize,
+    max_value_entries: usize,
+    max_rounds: u64,
+    max_inspected_bytes: u64,
+    max_symbol_nodes: usize,
+    max_symbol_depth: usize,
+    max_symbol_bytes: u64,
+}
+
+#[derive(Serialize)]
+struct DomainView<'a>(#[serde(with = "Domain")] &'a zetesis_themelios::DomainLimits);
+
+#[expect(
+    clippy::ref_option,
+    reason = "Serde's field serializer borrows the native optional request; the wrapper only renders it."
+)]
+pub(super) fn domain_request<S: serde::Serializer>(
+    request: &Option<zetesis_themelios::DomainLimits>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    request.as_ref().map(DomainView).serialize(serializer)
 }

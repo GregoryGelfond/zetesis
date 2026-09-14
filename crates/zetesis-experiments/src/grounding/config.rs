@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 use zetesis_themelios::{
-    BundleAdmissionOptions, BundleLimits, ExpansionLimits, FormulaLimits, GroundingOptions,
+    BundleAdmissionOptions, BundleLimits, DomainLimits, ExpansionLimits, FormulaLimits, GroundingOptions,
     JoinStrategy,
 };
 
@@ -71,6 +71,12 @@ pub struct Configuration {
     /// Positive-join execution for timed admissions; the reference always uses indexed joins.
     #[serde(with = "views::Grounding")]
     pub grounding: GroundingOptions,
+    /// Optional domain analysis in measured admissions, disabled by default.
+    /// The independent reference always disables it. Inapplicable, widened or
+    /// stopped analysis retains the frontend's complete-join fallback contract.
+    /// These logical analysis limits are not allocated-byte or deadline bounds.
+    #[serde(serialize_with = "views::domain_request")]
+    pub domain_analysis: Option<DomainLimits>,
     /// Native complete-model enumeration ceilings, outside admission timing.
     #[serde(with = "views::Search")]
     pub search: zetesis_sat::Limits,
@@ -90,6 +96,7 @@ impl Default for Configuration {
             expansion: ExpansionLimits::default(),
             formula: FormulaLimits::default(),
             grounding: GroundingOptions::default(),
+            domain_analysis: None,
             search: zetesis_sat::Limits::default(),
             certificate: zetesis_ferraris::TightPlanLimits::default(),
             capture: CaptureLimits::default(),

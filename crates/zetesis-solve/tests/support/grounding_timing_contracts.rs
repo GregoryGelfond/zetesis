@@ -113,3 +113,28 @@ fn poisoned_grounding_bookkeeping_stays_unavailable_without_stopping_work() {
         assert!(snapshot.get(phase).is_none());
     }
 }
+
+#[test]
+fn domain_aggregation_preserves_unavailable_work() {
+    // Aggregation scope: supplied observer fields test arithmetic/absence, not
+    // a claim that these counts came from a domain-analysis execution.
+    let mut measurement = GroundingMeasurement::default();
+    let mut first = GroundingWork::default();
+    first.domain_prepare_work = Some(11);
+    first.domain_guard_rows = Some(7);
+    first.domain_guard_checks = Some(u64::MAX);
+    first.domain_rejected_rows = Some(3);
+    measurement.record(Duration::ZERO, GroundingOutcome::Completed, &first);
+    let mut second = GroundingWork::default();
+    second.domain_prepare_work = Some(5);
+    second.domain_guard_rows = Some(2);
+    second.domain_guard_checks = Some(1);
+    second.domain_rejected_rows = None;
+    measurement.record(Duration::ZERO, GroundingOutcome::Failed, &second);
+    assert_eq!(measurement.work.domain_prepare_work, Some(16));
+    assert_eq!(measurement.work.domain_guard_rows, Some(9));
+    assert_eq!(measurement.work.domain_guard_checks, None);
+    assert_eq!(measurement.work.domain_rejected_rows, None);
+    assert_eq!(measurement.count(GroundingOutcome::Completed), Some(1));
+    assert_eq!(measurement.count(GroundingOutcome::Failed), Some(1));
+}

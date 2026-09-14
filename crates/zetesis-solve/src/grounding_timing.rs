@@ -45,6 +45,9 @@ impl Default for GroundingMeasurement {
 /// Rule locations are available to custom frontend observers but are not retained
 /// here. Durations include counter/timer overhead and are not GPU kernel times.
 /// This view does not attribute relational eager or interleaved lazy grounding.
+/// An unrequested frontend domain-analysis phase is absent. When requested by a
+/// library preparation, its actual work is aggregated through the same observer;
+/// a completed optional attempt need not have reached an analysis fixed point.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct GroundingTimings {
     invalid: bool,

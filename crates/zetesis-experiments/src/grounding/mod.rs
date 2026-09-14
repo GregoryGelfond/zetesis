@@ -49,7 +49,8 @@ impl Mode {
 
 /// Profile an original source file and its native include graph.
 ///
-/// One unmeasured indexed-join admission and complete native solve establish the reference.
+/// One unmeasured indexed-join admission with domain analysis disabled and a
+/// complete native solve establish the reference.
 /// Each round then loads/parses the original graph again, verifies exact bytes
 /// and include identities, preallocates observer records, and times admission.
 /// A failed timed attempt retains its duration and phase prefix. Objective
@@ -88,6 +89,7 @@ fn qualify(path: &Path, report: &mut Report) -> Result<(), Error> {
             grounding: GroundingOptions {
                 joins: JoinStrategy::Indexed,
             },
+            domain_analysis: None,
             ..config
         },
         None,
@@ -126,6 +128,7 @@ fn admit(
             .map_err(|error| Error::Admission(Box::new(error)))?;
     preparation
         .with_grounding_options(config.grounding)
+        .with_domain_analysis(config.domain_analysis)
         .ground_with_observer(observer)
         .map_err(|error| Error::Admission(Box::new(error)))
 }

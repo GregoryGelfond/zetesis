@@ -41,8 +41,12 @@ fn json_attribution_preserves_typed_measurements() {
     let view = &document["statistics"]["grounding_attribution"];
     assert_eq!(view["scope"], "eager_formula");
     for phase in GroundingPhase::ALL {
-        let measurement = typed.get(phase).expect("all formula phases entered");
         let json = &view["measurements"][phase.label()];
+        let Some(measurement) = typed.get(phase) else {
+            assert_eq!(phase, GroundingPhase::DomainAnalysis);
+            assert!(json.is_null());
+            continue;
+        };
         assert_eq!(
             json["elapsed_ns"].as_u64().map(u128::from),
             measurement.elapsed.map(|value| value.as_nanos())
@@ -54,6 +58,9 @@ fn json_attribution_preserves_typed_measurements() {
             );
         }
         assert_eq!(json["work"]["roots"].as_u64(), measurement.work.roots);
+        for name in ["domain_prepare_work", "domain_guard_rows", "domain_guard_checks", "domain_rejected_rows"] {
+            assert_eq!(json["work"][name], 0, "ordinary CLI leaves optional domains disabled");
+        }
         assert_eq!(
             json["work"]["expression_nodes"].as_u64(),
             measurement.work.expression_nodes
@@ -90,7 +97,10 @@ fn ordinary_formula_solving_uses_requested_table_joins() {
     assert!(work.table_rows.unwrap() > 0);
     let document: Value = serde_json::from_slice(&output).unwrap();
     for phase in GroundingPhase::ALL {
-        let measurement = grounding.get(phase).unwrap();
+        let Some(measurement) = grounding.get(phase) else {
+            assert_eq!(phase, GroundingPhase::DomainAnalysis);
+            continue;
+        };
         let view =
             &document["statistics"]["grounding_attribution"]["measurements"][phase.label()]["work"];
         assert_eq!(

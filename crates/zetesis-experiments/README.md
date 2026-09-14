@@ -342,7 +342,8 @@ measure full tuple matching, source grounding or answer-set solving. See the
 ### Original-source grounding
 
 The grounding profile loads the original include graph and performs unmeasured
-indexed-join reference admission and complete native solving. It then rotates fresh admission
+indexed-join reference admission with domain analysis disabled, followed by
+complete native solving. It then rotates fresh admission
 with no observer, boundary observation and detailed observation. File loading
 and initial parsing lie outside the admission timer. Admission includes native
 raising, normalization, analysis and materialization; observer grounding spans
@@ -355,6 +356,28 @@ the report records both choices. Detailed counters distinguish preparation,
 reuse, actual table/indexed probes, query work and accounted support peak. Other
 contexts retain indexed matching, and resource exhaustion remains a failure.
 Compare preparation and query costs together before inferring a grounding gain.
+
+Library callers may set `grounding::Configuration.domain_analysis` to
+`Some(DomainLimits)` for measured admissions. The default is `None`; the command
+adapter leaves it disabled. The unmeasured reference always uses `None` and
+Indexed joins, independently of the measured request. The report serializes all
+requested domain limits and the reference policy, as well as the independent
+SAT projection-history limits. A domain request does not expand source admission.
+Only the frontend's checked normalized positive profile may narrow final-rule
+join prefixes; inapplicable, widened or logically stopped analysis keeps the
+complete-join fallback. Enclosing formula work or storage refusal still fails
+the measured admission and preserves its report prefix.
+
+Detailed observations retain the optional `domain_analysis` phase and the actual
+frontend counters: `domain_prepare_work` covers applicability, analysis and guard
+preparation, including attempted prefixes; `domain_guard_rows`,
+`domain_guard_checks` and `domain_rejected_rows` count final-rule row visits,
+comparisons and rejections. These do not claim fewer completed-support rounds or
+fewer final formulas. Domain preparation is included in admission timing;
+successful fallback does not establish an analysis fixed point. An unrequested
+phase is absent, unused detailed counters are zero, and unavailable work remains
+null and refuses complete attribution. Logical limits and named support capacity
+are not allocator or RSS measurements, nor a wall-clock deadline.
 
 After timing, each result is checked against the reference atom/formula catalog,
 source evidence and complete native model collection. A fingerprint is available

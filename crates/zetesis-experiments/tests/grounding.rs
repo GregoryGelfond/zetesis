@@ -1,5 +1,8 @@
 //! Public profiling contracts, independent of any performance threshold.
 
+#[path = "grounding/domains.rs"]
+mod domains;
+
 use std::{
     io::{self, Write},
     path::PathBuf,
@@ -163,6 +166,7 @@ fn table_strategy_is_recorded_in_the_report() {
         panic!("grounding command expected");
     };
     let config = options.configuration();
+    assert!(config.domain_analysis.is_none());
     assert_eq!(
         config.grounding.joins,
         zetesis_themelios::JoinStrategy::Table

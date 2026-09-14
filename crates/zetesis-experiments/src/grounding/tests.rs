@@ -254,3 +254,22 @@ fn objectives_cannot_be_omitted_from_fingerprint_claims() {
         }
     );
 }
+
+#[test]
+fn unavailable_domain_work_refuses_complete_capture() {
+    // Observer-only absence control; no fabricated domain execution is claimed.
+    let observer = Observer::new(Mode::Detailed, 1).unwrap();
+    let mut work = GroundingWork::default();
+    work.domain_prepare_work = None;
+    observer.enter();
+    observer.phase_enter(GroundingPhase::DomainAnalysis, None);
+    observer.phase_exit(GroundingPhase::DomainAnalysis, None, GroundingOutcome::Failed, work);
+    observer.exit();
+    let (_, records, refusal) = observer.finish();
+    assert_eq!(refusal, Some(CaptureRefusal::WorkUnavailable));
+    assert_eq!(records[0].work.domain_prepare_work, None);
+    assert_eq!(records[0].outcome, GroundingOutcome::Failed);
+    let json = serde_json::to_value(records[0]).unwrap();
+    assert_eq!(json["phase"], "domain_analysis");
+    assert!(json["work"]["domain_prepare_work"].is_null());
+}

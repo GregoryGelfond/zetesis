@@ -56,7 +56,7 @@ fn outcome_label<S: serde::Serializer>(value: &GroundingOutcome, s: S) -> Result
 
 fn serialize_work<S: serde::Serializer>(work: &GroundingWork, s: S) -> Result<S::Ok, S::Error> {
     use serde::ser::SerializeStruct;
-    let mut fields = s.serialize_struct("GroundingWork", 24)?;
+    let mut fields = s.serialize_struct("GroundingWork", 28)?;
     fields.serialize_field("support_rounds", &work.support_rounds)?;
     fields.serialize_field("support_atoms", &work.support_atoms)?;
     fields.serialize_field("support_index_entries", &work.support_index_entries)?;
@@ -72,6 +72,10 @@ fn serialize_work<S: serde::Serializer>(work: &GroundingWork, s: S) -> Result<S:
     fields.serialize_field("table_query_work", &work.table_query_work)?;
     fields.serialize_field("table_index_bytes", &work.table_index_bytes)?;
     fields.serialize_field("support_peak_bytes", &work.support_peak_bytes)?;
+    fields.serialize_field("domain_prepare_work", &work.domain_prepare_work)?;
+    fields.serialize_field("domain_guard_rows", &work.domain_guard_rows)?;
+    fields.serialize_field("domain_guard_checks", &work.domain_guard_checks)?;
+    fields.serialize_field("domain_rejected_rows", &work.domain_rejected_rows)?;
     fields.serialize_field("binding_snapshots", &work.binding_snapshots)?;
     fields.serialize_field("readiness_nodes", &work.readiness_nodes)?;
     fields.serialize_field("expression_evaluations", &work.expression_evaluations)?;
@@ -213,6 +217,10 @@ impl GroundingObserver for Observer {
             work.table_query_work,
             work.table_index_bytes,
             work.support_peak_bytes,
+            work.domain_prepare_work,
+            work.domain_guard_rows,
+            work.domain_guard_checks,
+            work.domain_rejected_rows,
             work.binding_snapshots,
             work.readiness_nodes,
             work.expression_evaluations,

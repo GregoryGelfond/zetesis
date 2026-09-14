@@ -219,6 +219,14 @@ objective work and output. GPU host-call time includes transport, submission,
 waits and readback; it is not shader time. Worker intervals can overlap and are
 reported separately from coordinator wall time.
 
+Eager formula attribution renders the frontend's optional `domain_analysis`
+phase and domain preparation, guard-row, comparison and rejection counters.
+The ordinary command leaves this library option disabled: its phase is absent
+and entered phases have zero domain work. A caller that prepares source through
+the frontend's opt-in API may use the same `SolveMeasurements` observer to retain
+actual domain work. These counters describe final-rule guards, not support
+completion savings; unavailable values remain distinct from zero.
+
 Failed attempts retain available timing/accounting. Timing completeness does not
 prove semantic completeness. Instrumentation is optional and adds overhead.
 See [telemetry](../zetesis-telemetry/README.md) and

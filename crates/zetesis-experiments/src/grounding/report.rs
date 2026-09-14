@@ -59,10 +59,13 @@ pub struct Report {
     pub schema_version: u32,
     /// Timer boundary identifier, fixed by this driver version.
     pub timing_scope: &'static str,
-    /// Exact native and capture ceilings used throughout this run.
+    /// Native/capture ceilings and the measured join/domain request. Reference
+    /// join/domain overrides are recorded separately below.
     pub configuration: Configuration,
     /// Unmeasured reference strategy, independent of the timed request.
     pub reference_join_strategy: &'static str,
+    /// Whether domain analysis is requested for the reference; always false.
+    pub reference_domain_analysis: bool,
     /// Original source catalog; files are loaded anew before each admission.
     pub sources: Vec<SourceIdentity>,
     /// Full signed atom identities in native theory index order, without #show.
@@ -91,6 +94,7 @@ impl Report {
             timing_scope: "fresh_bundle_formula_admission_excluding_load_parse_and_observer_setup",
             configuration: *configuration,
             reference_join_strategy: "indexed",
+            reference_domain_analysis: false,
             sources: Vec::new(),
             atoms: Vec::new(),
             nodes: None,
