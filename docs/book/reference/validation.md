@@ -226,8 +226,9 @@ performance trend.
 ### Performance evidence
 
 The [current comparison](performance.md) reports ordinary CPU wall time and
-child peak RSS for source `ca10a5e7`, alongside separate shared lazy CPU
-measurements and the accounted eager/lazy matrix. It also retains the earlier
+child peak RSS for sources `ca10a5e7`, `f56a5a24` and `679ca856`, alongside
+separate lazy CPU work and timing observations and larger queens screens.
+The measured executables report version `0.1.0`. It also retains the earlier
 `6bebb980` → `1e5b78ce` release, Table, Metal and LTO comparisons under their
 original source identities. Those historical Metal measurements retain two
 acquisition windows separately and include no RSS observations. Physical

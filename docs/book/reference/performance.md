@@ -9,7 +9,9 @@ do not qualify the latest source.
 
 ## Prepared-grounding CPU comparison
 
-Three compiled sources were measured on arm64 macOS on 14 September 2026:
+Three compiled sources were measured on arm64 macOS on 14 September 2026.
+Each measured executable reports version `0.1.0`; these measurements identify
+the binaries below, not a later build carrying version `0.1.1`.
 
 | Role | Source | Native executable SHA-256 |
 | --- | --- | --- |
