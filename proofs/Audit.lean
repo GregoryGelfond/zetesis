@@ -59,6 +59,11 @@ import Zetesis
 #print axioms Zetesis.AggregateReduct.frozen
 #print axioms Zetesis.AggregateReduct.direct_reduct
 #print axioms Zetesis.AggregateReduct.evaluator_refinement
+#print axioms Zetesis.AtomCatalogs.commit_preserves_lookup
+#print axioms Zetesis.AtomCatalogs.append_preserves_identity
+#print axioms Zetesis.AtomCatalogs.commit_preserves_interpretation
+#print axioms Zetesis.AtomCatalogs.discovery_preserves_interpretation
+#print axioms Zetesis.AtomCatalogs.identity_determines_position
 #print axioms Zetesis.AtomKeys.missing_blocks_tuple
 #print axioms Zetesis.AtomKeys.tuple_agrees
 #print axioms Zetesis.AtomKeys.key_identity

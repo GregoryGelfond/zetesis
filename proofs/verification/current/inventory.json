@@ -296,6 +296,31 @@
       "name": "Zetesis.AggregateReduct.evaluator_refinement"
     },
     {
+      "file": "Zetesis/AtomCatalogs.lean",
+      "line": 30,
+      "name": "Zetesis.AtomCatalogs.commit_preserves_lookup"
+    },
+    {
+      "file": "Zetesis/AtomCatalogs.lean",
+      "line": 35,
+      "name": "Zetesis.AtomCatalogs.append_preserves_identity"
+    },
+    {
+      "file": "Zetesis/AtomCatalogs.lean",
+      "line": 43,
+      "name": "Zetesis.AtomCatalogs.commit_preserves_interpretation"
+    },
+    {
+      "file": "Zetesis/AtomCatalogs.lean",
+      "line": 53,
+      "name": "Zetesis.AtomCatalogs.discovery_preserves_interpretation"
+    },
+    {
+      "file": "Zetesis/AtomCatalogs.lean",
+      "line": 63,
+      "name": "Zetesis.AtomCatalogs.identity_determines_position"
+    },
+    {
       "file": "Zetesis/AtomKeys.lean",
       "line": 45,
       "name": "Zetesis.AtomKeys.missing_blocks_tuple"
@@ -5714,6 +5739,7 @@
     "Zetesis/AggregateInvariants.lean",
     "Zetesis/AggregateRanges.lean",
     "Zetesis/AggregateReduct.lean",
+    "Zetesis/AtomCatalogs.lean",
     "Zetesis/AtomKeys.lean",
     "Zetesis/BatchAccounting.lean",
     "Zetesis/BinaryWatch.lean",
@@ -5828,8 +5854,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "479ff3a0146db90efdd987537943b29149f79dd0ccbfd34327282df0f145f4ed",
-    "Zetesis.lean": "bc635c5da4146089f903026b1771418e3c325b9fe2001d51651439e9dfd26846",
+    "Audit.lean": "46360758ae5c80e19c3176a14949f553d46b5107c6b3a3660196d42d314931fa",
+    "Zetesis.lean": "56b4a50339374c5b839854643a690aab15efbfcd1e832178501a6411bfbe9cf0",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
     "Zetesis/AggregateConsumers.lean": "41aded89dbfaa79833ed3b336030ef4b08afa5be8e7029060416c2f8de59ef97",
@@ -5837,6 +5863,7 @@
     "Zetesis/AggregateInvariants.lean": "10325fff693ad5da094baed2303c68de4b1b09a0208c88df38b38981d226036e",
     "Zetesis/AggregateRanges.lean": "d19d56b57cd98e862e730f498441c5e94d41c679d170d187f0726897b7b4e64f",
     "Zetesis/AggregateReduct.lean": "c5901d211c3bd3fffe388d87fa77efd1b66a79c3024cdec6dd63b7e77521a556",
+    "Zetesis/AtomCatalogs.lean": "2a90dd7c129290ffc3f9609f51378e6e45014a55f31b74cca9e7284a4e320eec",
     "Zetesis/AtomKeys.lean": "0188ea220bf8484db130ea674d01bad0db3db80f62678cbb0fcd930403cf1ae0",
     "Zetesis/BatchAccounting.lean": "c6ff03ea70ee1eb9afbbba472bfe10c0bd77e231b8623c4157da91fbb5a5c615",
     "Zetesis/BinaryWatch.lean": "c6391510df44d983c95f3c084aaba1336fdf88c47eded51b16e193ccd88110b4",

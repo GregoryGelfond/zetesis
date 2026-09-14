@@ -169,6 +169,17 @@ The retained-byte limit conservatively charges the entire catalog for each
 retained answer, including unselected atoms; it is neither unique allocation
 accounting nor process memory.
 
+[`AtomCatalogs`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AtomCatalogs.lean)
+describes a catalog split into a committed prefix and a pending suffix.
+`commit_preserves_lookup` equates split lookup with lookup after concatenation;
+`discovery_preserves_interpretation` shows that new identities add no truth to an
+old selection. Successful equal lookups have the same position when the complete
+catalog is unique. This last premise applies to unique builders, not arbitrary
+public `AtomCatalog` inputs, which can retain duplicate dense slots. Index
+ordering, transactional publication, allocation, machine bounds and Rust borrows
+remain implementation obligations. These representation laws do not replace the
+reduct or establish answer-set membership.
+
 [`PartitionedScan`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/PartitionedScan.lean)
 proves that exact finite partitioning preserves an eligible-atom count and maximum
 index. Zero availability excludes a fitting strict-subset completion; one

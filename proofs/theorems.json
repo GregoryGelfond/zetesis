@@ -295,6 +295,31 @@
     "line": 224
   },
   {
+    "name": "Zetesis.AtomCatalogs.commit_preserves_lookup",
+    "file": "Zetesis/AtomCatalogs.lean",
+    "line": 30
+  },
+  {
+    "name": "Zetesis.AtomCatalogs.append_preserves_identity",
+    "file": "Zetesis/AtomCatalogs.lean",
+    "line": 35
+  },
+  {
+    "name": "Zetesis.AtomCatalogs.commit_preserves_interpretation",
+    "file": "Zetesis/AtomCatalogs.lean",
+    "line": 43
+  },
+  {
+    "name": "Zetesis.AtomCatalogs.discovery_preserves_interpretation",
+    "file": "Zetesis/AtomCatalogs.lean",
+    "line": 53
+  },
+  {
+    "name": "Zetesis.AtomCatalogs.identity_determines_position",
+    "file": "Zetesis/AtomCatalogs.lean",
+    "line": 63
+  },
+  {
     "name": "Zetesis.AtomKeys.missing_blocks_tuple",
     "file": "Zetesis/AtomKeys.lean",
     "line": 45
