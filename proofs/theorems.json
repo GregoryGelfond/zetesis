@@ -4767,12 +4767,22 @@
   {
     "name": "Zetesis.StorageOwners.sum_within_reservations",
     "file": "Zetesis/StorageOwners.lean",
-    "line": 20
+    "line": 26
   },
   {
     "name": "Zetesis.StorageOwners.active_storage_within_limit",
     "file": "Zetesis/StorageOwners.lean",
-    "line": 36
+    "line": 42
+  },
+  {
+    "name": "Zetesis.StorageOwners.sum_within_component_bounds",
+    "file": "Zetesis/StorageOwners.lean",
+    "line": 60
+  },
+  {
+    "name": "Zetesis.StorageOwners.shared_idle_active_within_limit",
+    "file": "Zetesis/StorageOwners.lean",
+    "line": 87
   },
   {
     "name": "Zetesis.StrongNegation.satisfies_rename",

@@ -1001,6 +1001,8 @@
 'Zetesis.SourceSupport.completed_activity_covers' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.StorageOwners.sum_within_reservations' depends on axioms: [propext, Quot.sound]
 'Zetesis.StorageOwners.active_storage_within_limit' depends on axioms: [propext, Quot.sound]
+'Zetesis.StorageOwners.sum_within_component_bounds' depends on axioms: [propext, Quot.sound]
+'Zetesis.StorageOwners.shared_idle_active_within_limit' depends on axioms: [propext, Quot.sound]
 'Zetesis.StrongNegation.satisfies_rename' does not depend on any axioms
 'Zetesis.StrongNegation.reduct_rename' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.StrongNegation.frozen_rename' depends on axioms: [propext, Classical.choice, Quot.sound]

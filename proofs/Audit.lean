@@ -955,6 +955,8 @@ import Zetesis
 #print axioms Zetesis.SourceSupport.completed_activity_covers
 #print axioms Zetesis.StorageOwners.sum_within_reservations
 #print axioms Zetesis.StorageOwners.active_storage_within_limit
+#print axioms Zetesis.StorageOwners.sum_within_component_bounds
+#print axioms Zetesis.StorageOwners.shared_idle_active_within_limit
 #print axioms Zetesis.StrongNegation.satisfies_rename
 #print axioms Zetesis.StrongNegation.reduct_rename
 #print axioms Zetesis.StrongNegation.frozen_rename
