@@ -11,17 +11,14 @@ fn limits() -> Limits {
         max_bytes: 16 * 1024 * 1024,
     }
 }
-fn checked() -> Result<(), Infallible> {
-    Ok(())
-}
 fn atom(number: i32) -> Atom {
     Atom::new(Predicate::new("p", 1).unwrap(), vec![Value::Number(number)]).unwrap()
 }
 fn insert(owner: &mut AtomInterner, atom: &Atom) -> usize {
     owner
-        .entry_atom_with(atom, limits(), checked)
+        .entry_atom_with(atom, limits(), || Ok::<(), Infallible>(()))
         .unwrap()
-        .insert_with(limits(), checked)
+        .insert_with(limits(), || Ok::<(), Infallible>(()))
         .unwrap()
 }
 fn owner(values: &[i32]) -> AtomInterner {
@@ -81,8 +78,8 @@ proptest! {
             validate(&owner);
             for (id, expected) in expected.iter().enumerate() { prop_assert_eq!(owner.get(id), Some(expected)); }
         }
-        owner.commit_with(limits(), checked).unwrap();
-        let order = owner.ordered_ids_with(limits(), checked).unwrap();
+        owner.commit_with(limits(), || Ok::<(), Infallible>(())).unwrap();
+        let order = owner.ordered_ids_with(limits(), || Ok::<(), Infallible>(())).unwrap();
         let actual: Vec<_> = order.iter().map(|&id| owner.get(id).unwrap().clone()).collect();
         expected.sort();
         prop_assert_eq!(actual, expected);
@@ -94,8 +91,12 @@ fn every_rotation_preserves_original_positions() {
     for values in [[3, 2, 1], [1, 2, 3], [3, 1, 2], [1, 3, 2]] {
         let mut owner = owner(&values);
         validate(&owner);
-        owner.commit_with(limits(), checked).unwrap();
-        let order = owner.ordered_ids_with(limits(), checked).unwrap();
+        owner
+            .commit_with(limits(), || Ok::<(), Infallible>(()))
+            .unwrap();
+        let order = owner
+            .ordered_ids_with(limits(), || Ok::<(), Infallible>(()))
+            .unwrap();
         let mut expected: Vec<_> = (0..values.len()).collect();
         expected.sort_by_key(|&id| values[id]);
         assert_eq!(order, expected);
@@ -120,12 +121,12 @@ fn refused_insert_preserves_the_published_tree() {
         complete
             .entry_atom_with(&added, limits(), || {
                 operations += 1;
-                checked()
+                Ok::<(), Infallible>(())
             })
             .unwrap()
             .insert_with(limits(), || {
                 operations += 1;
-                checked()
+                Ok::<(), Infallible>(())
             })
             .unwrap();
         for limit in 0..operations {
@@ -158,21 +159,29 @@ fn refused_insert_preserves_the_published_tree() {
 #[test]
 fn committed_rows_survive_pending_growth() {
     let mut owner = owner(&[17]);
-    owner.commit_with(limits(), checked).unwrap();
+    owner
+        .commit_with(limits(), || Ok::<(), Infallible>(()))
+        .unwrap();
     {
         let (committed, mut append) = owner.split();
         let original = committed.get(0).unwrap();
         for value in 0..96 {
             let atom = atom(value);
-            let entry = append.entry_atom_with(&atom, limits(), checked).unwrap();
-            let id = entry.insert_with(limits(), checked).unwrap();
+            let entry = append
+                .entry_atom_with(&atom, limits(), || Ok::<(), Infallible>(()))
+                .unwrap();
+            let id = entry
+                .insert_with(limits(), || Ok::<(), Infallible>(()))
+                .unwrap();
             assert_eq!(append.get(id), Some(&atom));
             assert_eq!(committed.len(), 1);
             assert!(std::ptr::eq(original, committed.get(0).unwrap()));
             assert_eq!(committed.get(1), None);
         }
     }
-    owner.commit_with(limits(), checked).unwrap();
+    owner
+        .commit_with(limits(), || Ok::<(), Infallible>(()))
+        .unwrap();
     assert_eq!(owner.len(), 96);
     assert_eq!(owner.get(0), Some(&atom(17)));
     validate(&owner);
@@ -181,10 +190,14 @@ fn committed_rows_survive_pending_growth() {
 #[test]
 fn final_transfer_keeps_identity_only_tail() {
     let mut owner = owner(&[7]);
-    owner.commit_with(limits(), checked).unwrap();
+    owner
+        .commit_with(limits(), || Ok::<(), Infallible>(()))
+        .unwrap();
     insert(&mut owner, &atom(-1));
     assert_eq!(owner.committed.len(), 1);
-    let atoms = owner.into_atoms_with(limits(), checked).unwrap();
+    let atoms = owner
+        .into_atoms_with(limits(), || Ok::<(), Infallible>(()))
+        .unwrap();
     assert_eq!(atoms, [atom(7), atom(-1)]);
     let pointer = atoms.as_ptr();
     let catalog = AtomCatalog::new(atoms);
@@ -200,7 +213,9 @@ fn duplicate_at_population_limit_copies_no_payload() {
         ..limits()
     };
     let duplicate = atom(1);
-    let entry = owner.entry_atom_with(&duplicate, bounds, checked).unwrap();
+    let entry = owner
+        .entry_atom_with(&duplicate, bounds, || Ok::<(), Infallible>(()))
+        .unwrap();
     assert_eq!(entry.position(), Some(0));
     assert_eq!(
         entry
@@ -210,9 +225,9 @@ fn duplicate_at_population_limit_copies_no_payload() {
     );
     let absent = atom(3);
     let result = owner
-        .entry_atom_with(&absent, bounds, checked)
+        .entry_atom_with(&absent, bounds, || Ok::<(), Infallible>(()))
         .unwrap()
-        .insert_with(bounds, checked);
+        .insert_with(bounds, || Ok::<(), Infallible>(()));
     assert!(matches!(
         result,
         Err(Failure::Atoms {
@@ -228,7 +243,9 @@ fn refused_work_retains_actual_reserved_capacity() {
     let mut owner = AtomInterner::new();
     let old = owner.storage_bytes();
     let atom = atom(1);
-    let entry = owner.entry_atom_with(&atom, limits(), checked).unwrap();
+    let entry = owner
+        .entry_atom_with(&atom, limits(), || Ok::<(), Infallible>(()))
+        .unwrap();
     let mut work = 0;
     let result = entry.insert_with(limits(), || {
         if work == 1 {
@@ -301,23 +318,28 @@ fn borrowed_keys_preserve_structural_signed_identity() {
             let key = pattern.key(assignment.as_slice()).unwrap();
             let materialized = key.to_atom();
             let id = owner
-                .entry_key_with(key, limits(), checked)
+                .entry_key_with(key, limits(), || Ok::<(), Infallible>(()))
                 .unwrap()
-                .insert_with(limits(), checked)
+                .insert_with(limits(), || Ok::<(), Infallible>(()))
                 .unwrap();
             assert_eq!(id, expected.len());
             expected.push(materialized.clone());
             assert_eq!(insert(&mut owner, &materialized), id);
             for actual in &expected {
                 assert_eq!(
-                    key.compare_identity_with(actual, checked).unwrap(),
+                    key.compare_identity_with(actual, || Ok::<(), Infallible>(()))
+                        .unwrap(),
                     materialized.cmp(actual)
                 );
             }
         }
     }
-    owner.commit_with(limits(), checked).unwrap();
-    let ids = owner.ordered_ids_with(limits(), checked).unwrap();
+    owner
+        .commit_with(limits(), || Ok::<(), Infallible>(()))
+        .unwrap();
+    let ids = owner
+        .ordered_ids_with(limits(), || Ok::<(), Infallible>(()))
+        .unwrap();
     let actual: Vec<_> = ids
         .iter()
         .map(|&id| owner.get(id).unwrap().clone())
@@ -332,7 +354,7 @@ fn occupied_entry_rechecks_a_changed_population_limit() {
     let mut owner = owner(&[1, 2]);
     let duplicate = atom(1);
     let entry = owner
-        .entry_atom_with(&duplicate, limits(), checked)
+        .entry_atom_with(&duplicate, limits(), || Ok::<(), Infallible>(()))
         .unwrap();
     assert_eq!(entry.position(), Some(0));
     let result = entry.insert_with(
@@ -357,7 +379,9 @@ fn occupied_entry_rechecks_a_changed_population_limit() {
 
 fn staged() -> AtomInterner {
     let mut owner = owner(&[5, 1, 9]);
-    owner.commit_with(limits(), checked).unwrap();
+    owner
+        .commit_with(limits(), || Ok::<(), Infallible>(()))
+        .unwrap();
     for value in [7, 3, 11, 0] {
         insert(&mut owner, &atom(value));
     }
@@ -371,7 +395,7 @@ fn refused_commit_keeps_the_original_prefix() {
     complete
         .commit_with(limits(), || {
             operations += 1;
-            checked()
+            Ok::<(), Infallible>(())
         })
         .unwrap();
     for limit in 0..operations {
@@ -390,7 +414,9 @@ fn refused_commit_keeps_the_original_prefix() {
         assert_eq!(owner.committed, [atom(5), atom(1), atom(9)]);
         assert_eq!(owner.pending, [atom(7), atom(3), atom(11), atom(0)]);
         validate(&owner);
-        owner.commit_with(limits(), checked).unwrap();
+        owner
+            .commit_with(limits(), || Ok::<(), Infallible>(()))
+            .unwrap();
         assert_eq!(owner.committed, [5, 1, 9, 7, 3, 11, 0].map(atom));
         assert!(owner.pending.is_empty());
     }
@@ -404,7 +430,7 @@ fn refused_order_exposes_no_partial_selection() {
         complete
             .ordered_ids_with(limits(), || {
                 operations += 1;
-                checked()
+                Ok::<(), Infallible>(())
             })
             .unwrap(),
         [1, 0, 2]
@@ -424,7 +450,9 @@ fn refused_order_exposes_no_partial_selection() {
         assert_eq!(spent, limit);
         validate(&owner);
         assert_eq!(
-            owner.ordered_ids_with(limits(), checked).unwrap(),
+            owner
+                .ordered_ids_with(limits(), || Ok::<(), Infallible>(()))
+                .unwrap(),
             [1, 0, 2]
         );
         assert_eq!(owner.committed, [atom(5), atom(1), atom(9)]);
@@ -442,7 +470,9 @@ fn first_commit_transfers_the_pending_buffer() {
         max_bytes: live,
         ..limits()
     };
-    owner.commit_with(bounds, checked).unwrap();
+    owner
+        .commit_with(bounds, || Ok::<(), Infallible>(()))
+        .unwrap();
     assert_eq!(owner.committed.as_ptr(), pointer);
     assert_eq!(owner.committed.capacity(), capacity);
     assert_eq!(owner.committed, [atom(5), atom(1), atom(9)]);
