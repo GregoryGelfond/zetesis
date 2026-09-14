@@ -110,7 +110,7 @@ impl fmt::Display for AdmissionError {
             } => {
                 write!(f, "SAT variable {variable} is outside universe {variables}")
             }
-            Self::Overflow => f.write_str("SAT shape arithmetic overflow"),
+            Self::Overflow => f.write_str("SAT shape or index exceeds its representation"),
             Self::Allocation => f.write_str("SAT storage reservation failed"),
         }
     }
