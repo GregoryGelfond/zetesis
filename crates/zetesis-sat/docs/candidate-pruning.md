@@ -72,6 +72,24 @@ Growth is fallible and amortized. A new suffix is attached only after all its
 nodes are constructed. Failure restores the previous key set and admission
 counts while retaining spent work; insertion and lookup poll control.
 
+Each node contains two optional 32-bit child links, occupying eight bytes.
+A present link stores the positive successor of its zero-based arena position;
+absence remains `None`. Neither semantic atom IDs nor key width are narrowed.
+The complete planned arena length must fit `u32::MAX` nodes before suffix
+reservation or publication. A larger length is a typed shape refusal
+(`Incomplete::Admission(AdmissionError::Overflow)`), including when the caller
+raises the logical admission limits. Host arithmetic overflow is still reported
+as `CounterOverflow`, and a representable but failed reservation as `Allocation`.
+Control is checked before these bounds; prior prefix work remains charged.
+
+The default 12,582,912 literal units bound the arena to at most 12,582,913 nodes,
+so the compact representation adds no restriction within that default. This
+does not change how many logical exclusions the literal limit admits or create
+an allocated-byte ceiling. Spare capacity and allocator overhead remain outside
+those logical units; a failed insertion can retain newly reserved capacity even
+though its unpublished nodes and admission counts are rolled back. Smaller
+nodes do not by themselves establish a whole-solver memory or runtime gain.
+
 After a successful restriction, the same index still excludes every earlier
 projection. Only traversal state is rebuilt. Final exact membership is checked
 on the completed assignment independently of DPLL state, over the same stored
@@ -94,6 +112,17 @@ that finite recursive trie insertion/lookup agrees with all exact blocks,
 preserves unseen keys and treats equal projections identically. Its refuted-trial
 law permits forcing the opposite literal after an actual refutation. That is
 a certificate law, not a proof that Rust unit propagation produces the certificate.
+
+[OptionalIndex.lean](../../../proofs/Zetesis/OptionalIndex.lean) proves bounded
+successor encoding preserves index identity and absence, and that replacing a
+link commutes with the representation. For the compact arena, the implementation
+must additionally establish that each decoded link is allocated, complete paths
+have the fixed semantic width, and failed suffix construction changes no old
+link. Starting at the same root, induction on the remaining key width then
+relates represented link traversal to the same exact-key lookup. The laws do not
+prove Rust layout, reservation, rollback or work/cancellation behavior. Retained
+cursor coverage is separately specified in
+[CandidateCursor.lean](../../../proofs/Zetesis/CandidateCursor.lean).
 
 [ObjectiveBounds.lean](../../../proofs/Zetesis/ObjectiveBounds.lean) proves scalar
 incumbent dominance and complete optimum-tie coverage from a verified original

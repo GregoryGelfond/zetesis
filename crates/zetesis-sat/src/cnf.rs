@@ -87,7 +87,9 @@ pub enum AdmissionError {
         /// Declared variable count.
         variables: usize,
     },
-    /// A count or internal watch index cannot be represented on this host.
+    /// Shape arithmetic or an internal index exceeds its representation.
+    /// Projection exclusions use at most `u32::MAX` trie nodes; other indices
+    /// retain their host-sized representation bounds.
     Overflow,
     /// Storage reservation was refused.
     Allocation,

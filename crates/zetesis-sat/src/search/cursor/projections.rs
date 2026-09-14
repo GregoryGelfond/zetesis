@@ -1,12 +1,49 @@
 //! Exact complete semantic projections, indexed by a bounded binary trie.
 
+use std::num::NonZeroU32;
+
 use crate::search::Budget;
-use crate::{Assignment, Incomplete};
+use crate::{AdmissionError, Assignment, Incomplete};
+
+/// A zero-based arena position represented by its positive successor.
+/// Absence belongs to Option; neither root zero nor a valid child is a sentinel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(transparent)]
+struct NodeId(NonZeroU32);
+
+impl NodeId {
+    fn new(index: usize) -> Result<Self, Incomplete> {
+        u32::try_from(index)
+            .ok()
+            .and_then(|value| value.checked_add(1))
+            .and_then(NonZeroU32::new)
+            .map(Self)
+            .ok_or(Incomplete::Admission(AdmissionError::Overflow))
+    }
+
+    fn index(self) -> Result<usize, Incomplete> {
+        usize::try_from(self.0.get() - 1).map_err(|_| AdmissionError::Overflow.into())
+    }
+}
+
+/// Admit the complete suffix before reserving or publishing any part of it.
+/// Its last zero-based index must have a representable positive successor.
+fn suffix_size(width: usize, depth: usize, start: usize) -> Result<usize, Incomplete> {
+    let additional = width
+        .checked_sub(depth)
+        .and_then(|n| n.checked_add(1))
+        .ok_or(Incomplete::CounterOverflow)?;
+    let length = start
+        .checked_add(additional)
+        .ok_or(Incomplete::CounterOverflow)?;
+    u32::try_from(length).map_err(|_| AdmissionError::Overflow)?;
+    Ok(additional)
+}
 
 #[derive(Debug)]
 pub(super) struct Projections {
     width: usize,
-    nodes: Vec<[Option<usize>; 2]>,
+    nodes: Vec<[Option<NodeId>; 2]>,
     empty_blocked: bool,
 }
 impl Projections {
@@ -44,7 +81,7 @@ impl Projections {
             budget.tick()?;
             let branch = usize::from(value(variable));
             if let Some(child) = self.nodes[node][branch] {
-                node = child;
+                node = child.index()?;
             } else {
                 let child = self.suffix(variable + 1, &value, budget)?;
                 self.nodes[node][branch] = Some(child);
@@ -64,16 +101,10 @@ impl Projections {
         depth: usize,
         value: &impl Fn(usize) -> bool,
         budget: &mut Budget<'_>,
-    ) -> Result<usize, Incomplete> {
+    ) -> Result<NodeId, Incomplete> {
         let start = self.nodes.len();
-        let additional = self
-            .width
-            .checked_sub(depth)
-            .and_then(|n| n.checked_add(1))
-            .ok_or(Incomplete::CounterOverflow)?;
-        start
-            .checked_add(additional)
-            .ok_or(Incomplete::CounterOverflow)?;
+        let additional = suffix_size(self.width, depth, start)?;
+        let first = NodeId::new(start)?;
         self.nodes
             .try_reserve(additional)
             .map_err(|_| Incomplete::Allocation)?;
@@ -81,12 +112,13 @@ impl Projections {
             for variable in depth..self.width {
                 budget.tick()?;
                 let mut children = [None, None];
-                children[usize::from(value(variable))] = Some(self.nodes.len() + 1);
+                // The preflight covers this forward link and the terminal node.
+                children[usize::from(value(variable))] = Some(NodeId::new(self.nodes.len() + 1)?);
                 self.nodes.push(children);
             }
             budget.tick()?;
             self.nodes.push([None, None]);
-            Ok(start)
+            Ok(first)
         })();
         if result.is_err() {
             self.nodes.truncate(start);
@@ -120,33 +152,11 @@ impl Projections {
             let Some(child) = self.nodes[node][value] else {
                 return Ok(true);
             };
-            node = child;
+            node = child.index()?;
         }
         Ok(false)
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::Projections;
-    use crate::search::cursor::tests::budget;
-    use crate::{Control, Incomplete};
-
-    #[test]
-    fn unrepresentable_node_reservation_keeps_the_index_empty() {
-        let control = Control::default();
-        // Real non-ZST trie nodes require more than isize::MAX bytes. Vec's
-        // fallible reservation must refuse before allocating or reading bits.
-        let mut index = Projections::new(isize::MAX as usize);
-        assert_eq!(
-            index.insert(
-                isize::MAX as usize,
-                |_| panic!("no key read before reservation"),
-                &mut budget(&control)
-            ),
-            Err(Incomplete::Allocation)
-        );
-        assert!(index.nodes.is_empty());
-        assert!(!index.empty_blocked);
-    }
-}
+mod tests;

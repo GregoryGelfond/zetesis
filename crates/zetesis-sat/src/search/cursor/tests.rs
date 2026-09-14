@@ -398,6 +398,63 @@ fn exact_projection_index_including_empty_key_agrees_with_linear_clause_filter()
 }
 
 #[test]
+fn interrupted_exclusions_restore_logical_admission() {
+    let control = Control::default();
+    let first = [false; 4];
+    let second = [true, false, false, false];
+    for resource in [crate::Resource::Clauses, crate::Resource::Literals] {
+        // Two complete exclusions fit exactly. A failed insertion must not
+        // consume the second slot, for either independent logical dimension.
+        let limits = AdmissionLimits {
+            max_clauses: if resource == crate::Resource::Clauses {
+                2
+            } else {
+                100
+            },
+            max_literals: if resource == crate::Resource::Literals {
+                8
+            } else {
+                100
+            },
+            ..AdmissionLimits::default()
+        };
+        // Cursor admission adds one tick to the trie insertion's six ticks.
+        for ceiling in 0..7 {
+            let mut cnf = Cnf::new(4, vec![], limits).unwrap();
+            let mut cursor = Cursor::projected(4);
+            exclude(&mut cursor, &mut cnf, &first, &mut budget(&control)).unwrap();
+            let mut bounded = budget(&control);
+            bounded.limits.max_work = ceiling;
+            assert_eq!(
+                exclude(&mut cursor, &mut cnf, &second, &mut bounded),
+                Err(Incomplete::WorkLimit)
+            );
+            assert_eq!(bounded.statistics.work, ceiling);
+            exclude(&mut cursor, &mut cnf, &second, &mut budget(&control)).unwrap();
+            let (observed, limit) = if resource == crate::Resource::Clauses {
+                (3, 2)
+            } else {
+                (12, 8)
+            };
+            assert_eq!(
+                exclude(&mut cursor, &mut cnf, &first, &mut budget(&control)),
+                Err(Incomplete::Admission(crate::AdmissionError::Limit {
+                    resource,
+                    observed,
+                    limit,
+                }))
+            );
+            let mut expected = models(&cnf);
+            expected.remove(first.as_slice());
+            expected.remove(second.as_slice());
+            let (remaining, end) = enumerate_with_cursor(&cnf, &mut budget(&control), cursor);
+            assert_eq!(remaining, expected);
+            assert!(matches!(end, Solve::Unsat));
+        }
+    }
+}
+
+#[test]
 fn interrupted_probe_or_index_never_claims_exhaustion() {
     let control = Control::default();
     let cnf = Cnf::new(
