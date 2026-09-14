@@ -72,7 +72,12 @@ fn selected(rule: &RuleIr, support: &Support<'_>, pivot: Option<usize>) -> Vec<V
     join.delta = pivot;
     let mut bindings = Vec::new();
     while let Some(binding) = join
-        .next(&FormulaLimits::default(), &mut budget, &mut counters, location())
+        .next(
+            &FormulaLimits::default(),
+            &mut budget,
+            &mut counters,
+            location(),
+        )
         .unwrap()
     {
         bindings.push(
@@ -89,7 +94,9 @@ fn noninputs_preserve_disjoint_source_occurrences() {
     let catalog = catalog();
     let limits = FormulaLimits::default();
     let mut counters = Counters::default();
-    let relations = catalog.snapshot(&limits, &mut counters, location()).unwrap();
+    let relations = catalog
+        .snapshot(&limits, &mut counters, location())
+        .unwrap();
     let support = Support::indexed(&relations, &limits, &counters, location()).unwrap();
     let rule = rule(
         vec![
@@ -126,12 +133,17 @@ fn negative_only_producers_require_only_bootstrap() {
     let catalog = SupportCatalog::default();
     let limits = FormulaLimits::default();
     let mut counters = Counters::default();
-    let relations = catalog.snapshot(&limits, &mut counters, location()).unwrap();
+    let relations = catalog
+        .snapshot(&limits, &mut counters, location())
+        .unwrap();
     let support = Support::indexed(&relations, &limits, &counters, location()).unwrap();
     for negation in [DefaultNegation::Not, DefaultNegation::NotNot] {
         let rule = rule(vec![literal(negation, "absent", &[])], 0);
         let mut first = variants(&rule, &support, true, &limits, &mut counters).unwrap();
-        assert!(matches!(first.next(&limits, &mut counters).unwrap(), Some(Variant::Full)));
+        assert!(matches!(
+            first.next(&limits, &mut counters).unwrap(),
+            Some(Variant::Full)
+        ));
         assert!(first.next(&limits, &mut counters).unwrap().is_none());
         let mut later = variants(&rule, &support, false, &limits, &mut counters).unwrap();
         assert!(later.next(&limits, &mut counters).unwrap().is_none());
@@ -144,7 +156,9 @@ fn disjunctive_producers_retain_complete_rounds() {
     let catalog = catalog();
     let limits = FormulaLimits::default();
     let mut counters = Counters::default();
-    let relations = catalog.snapshot(&limits, &mut counters, location()).unwrap();
+    let relations = catalog
+        .snapshot(&limits, &mut counters, location())
+        .unwrap();
     let support = Support::indexed(&relations, &limits, &counters, location()).unwrap();
     let mut rule = rule(vec![literal(DefaultNegation::None, "p", &[0])], 1);
     rule.head = HeadIr::Disjunction(
@@ -156,7 +170,10 @@ fn disjunctive_producers_retain_complete_rounds() {
             .into(),
     );
     let mut schedule = variants(&rule, &support, false, &limits, &mut counters).unwrap();
-    assert!(matches!(schedule.next(&limits, &mut counters).unwrap(), Some(Variant::Full)));
+    assert!(matches!(
+        schedule.next(&limits, &mut counters).unwrap(),
+        Some(Variant::Full)
+    ));
     assert!(schedule.next(&limits, &mut counters).unwrap().is_none());
     assert_eq!(selected(&rule, &support, None).len(), 2);
 }

@@ -130,7 +130,8 @@ impl GroundingObserver for SupportObservation {
         work: GroundingWork,
     ) {
         if phase == GroundingPhase::SupportCompletion {
-            self.work.set(Some(self.work.get().unwrap_or_default().checked_sum(work)));
+            self.work
+                .set(Some(self.work.get().unwrap_or_default().checked_sum(work)));
             self.outcome.set(Some(outcome));
         }
     }
@@ -138,14 +139,14 @@ impl GroundingObserver for SupportObservation {
 
 fn observed(
     source: &str,
-    limits: FormulaLimits,
+    limits: &FormulaLimits,
     observation: &SupportObservation,
 ) -> Result<zetesis_themelios::AdmittedFormula, FormulaFailure> {
     admit_formula_with_grounding_observer(
         source.into(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        limits,
+        *limits,
         Some(observation),
     )
 }
@@ -157,13 +158,13 @@ fn negative_noninputs_preserve_positive_delta_work() {
     let prefix = "p(0). p(1):-p(0). blocked(1). picked(0).";
     let full = observed(
         &format!("{prefix}r(X,Y):-p(X),p(Y)."),
-        FormulaLimits::default(),
+        &FormulaLimits::default(),
         &positive,
     )
     .unwrap();
     let gated = observed(
         &format!("{prefix}r(X,Y):-not blocked(X),p(X),not not picked(Y),p(Y)."),
-        FormulaLimits::default(),
+        &FormulaLimits::default(),
         &negative,
     )
     .unwrap();
@@ -177,7 +178,10 @@ fn negative_noninputs_preserve_positive_delta_work() {
     assert_eq!(negative.join_rows, positive.join_rows);
     assert_eq!(negative.binding_snapshots, positive.binding_snapshots);
     // The same possible support does not mean the original formulas agree.
-    assert_ne!(source_records::exhaustive(&gated), source_records::exhaustive(&full));
+    assert_ne!(
+        source_records::exhaustive(&gated),
+        source_records::exhaustive(&full)
+    );
 }
 
 #[test]
@@ -196,8 +200,12 @@ fn negative_delta_retains_duplicate_source_origins() {
         })
         .collect();
     assert_eq!(starts.len(), 2);
-    let expected = source_records::admit("p(0).p(1).r(0).r(1).", &FormulaLimits::default()).unwrap();
-    assert_eq!(source_records::exhaustive(&admitted), source_records::exhaustive(&expected));
+    let expected =
+        source_records::admit("p(0).p(1).r(0).r(1).", &FormulaLimits::default()).unwrap();
+    assert_eq!(
+        source_records::exhaustive(&admitted),
+        source_records::exhaustive(&expected)
+    );
 }
 
 #[test]
@@ -205,7 +213,7 @@ fn negative_delta_cannot_publish_a_refused_support_prefix() {
     let observation = SupportObservation::default();
     let result = observed(
         "p(0).p(1):-p(0).r(X,Y):-p(X),not blocked(X),p(Y).",
-        FormulaLimits {
+        &FormulaLimits {
             theory: zetesis_ferraris::AdmissionLimits {
                 max_atoms: 3,
                 ..zetesis_ferraris::AdmissionLimits::default()
