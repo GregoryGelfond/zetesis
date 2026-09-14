@@ -45,5 +45,6 @@
 [Language coverage obligations](reference/language-coverage.md)
 [Validating an implementation change](reference/validation.md)
 [Performance comparisons](reference/performance.md)
+[Prepared grounding: CPU and Metal](reference/prepared-metal.md)
 [Vocabulary](vocabulary.md)
 [Building the documentation](building.md)

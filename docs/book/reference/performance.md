@@ -4,8 +4,11 @@ The latest prepared-grounding comparison demonstrates reused query capacity and
 less repeated scalar grounding work. Ordinary CPU timings are mixed, with little
 RSS change and some small library regressions. Representation and work reductions
 do not establish a general speedup. The observations below distinguish complete
-implementations, execution routes and source revisions; earlier Metal results
-do not qualify the latest source.
+implementations, execution routes and source revisions. The separate
+[prepared-grounding CPU/Metal comparison](prepared-metal.md) retains complete
+instrumented solves, exact timing observations and lazy-library work. It shows
+mixed timings and no general GPU gain; its frozen 0.1.0 subjects remain distinct
+from the independently qualified 0.1.1 release.
 
 ## Prepared-grounding CPU comparison
 

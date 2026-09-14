@@ -228,7 +228,10 @@ performance trend.
 The [current comparison](performance.md) reports ordinary CPU wall time and
 child peak RSS for sources `ca10a5e7`, `f56a5a24` and `679ca856`, alongside
 separate lazy CPU work and timing observations and larger queens screens.
-The measured executables report version `0.1.0`. It also retains the earlier
+The [matched CPU/Metal comparison](prepared-metal.md) adds 810 complete eager
+positions and 4,320 lazy-library observations, with exact timed data and the
+actual device-work scope. The measured executables report version `0.1.0`.
+The performance chapter also retains the earlier
 `6bebb980` → `1e5b78ce` release, Table, Metal and LTO comparisons under their
 original source identities. Those historical Metal measurements retain two
 acquisition windows separately and include no RSS observations. Physical
@@ -713,29 +716,34 @@ status. A newer source remains unqualified until its own checks complete.
 
 | Population | Covered / instrumented lines | Coverage |
 | --- | ---: | ---: |
-| Workspace, all features, portable tests plus 56 physical Metal tests | 61,396 / 64,728 | 94.85% |
-| CPU-only solver library and CLI, separate instrumentation | 5,260 / 5,516 | 95.36% |
+| Workspace, all features, portable tests plus 56 physical Metal tests | 64,769 / 68,278 | 94.86% |
+| CPU-only solver library and CLI, separate instrumentation | 5,426 / 5,732 | 94.66% |
 
-This snapshot was qualified on 14 September 2026 for compiled source
-[`527af50b`](https://github.com/GregoryGelfond/zetesis/tree/527af50bf63d14b1f1eb1a73346b392908c7990a),
+This snapshot was qualified on 14 September 2026 for version `0.1.1`, compiled
+source [`1918da37`](https://github.com/GregoryGelfond/zetesis/tree/1918da37f552b649f5a2e4ecf55ba8e069076475),
 using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS 26.6.2 with
-Apple M4 Pro Metal. Later corrections to this coverage description and the
-README badge do not change the measured source or its compiled documentation
-and data inputs. The CPU performance measurements remain attached to their
-separate source `ca10a5e7` in the [comparison](performance.md).
+Apple M4 Pro Metal. Later updates to this description and the README badge do
+not change that measured source or its compiled documentation and data inputs.
+The CPU performance measurements remain attached to `ca10a5e7`, `f56a5a24` and
+`679ca856`, whose measured executables all report `0.1.0`, in the
+[comparison](performance.md).
 
 Both populations passed their independent 91% floor. The workspace contains
-2,221 profiles: 2,205 portable profiles plus 16 physical profiles from 56 tests
-in 16 groups. The unchanged 268-profile CPU-only population remains separate.
+2,230 profiles: 2,214 portable profiles plus 16 physical profiles from 56 tests
+in 16 groups. The unchanged 272-profile CPU-only population remains separate.
 Before physical profile import, the portable-only workspace report already
-passed its floor at 58,938 of 64,728 lines (91.0549%). A separate explicit-GPU
+passed its floor at 62,323 of 68,278 lines (91.2783%). One separate explicit-GPU
 device-failure check also passed; its profile and the 17 test-listing profiles
 are excluded from both coverage populations.
 
 The portable and external-oracle gates passed for the implementation in this
-checkpoint. The Lean build, axiom audit and source-record checks cover 120
-semantic modules and 1,146 audited theorems. Those counts describe the checked
-mathematical library; they do not certify the Rust grounder, masks or GPU
+checkpoint. The existing Lean 4.33.1 build, axiom audit and source-record checks
+cover 123 semantic modules and 1,160 audited theorems, as recorded with their
+source hashes in the
+[verification record](https://github.com/GregoryGelfond/zetesis/blob/1918da37f552b649f5a2e4ecf55ba8e069076475/proofs/verification.json).
+The workspace version update leaves those captured Lean sources unchanged; it does
+not represent another proof execution. These counts describe the checked
+mathematical library, not verification of the Rust grounder, masks or GPU
 execution. Historical corpus and performance results retain their original
 source identities in the [comparison](performance.md).
 

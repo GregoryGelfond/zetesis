@@ -5,6 +5,17 @@ Four fixed datasets reproduce the ordinary release comparisons in the
 executable identities, observations and completion limits. None qualifies a
 later implementation.
 
+The [prepared-grounding CPU/Metal comparison](../prepared-metal.md) also retains
+plain timing data: [eager intervals](prepared-metal-eager-20260914.tsv),
+[lazy intervals](prepared-metal-lazy-20260914.tsv) and
+[lazy provenance](prepared-metal-lazy-provenance-20260914.tsv). These contain
+486 eager and 3,456 lazy timed observations, preserving block/source identities
+and raw report or stream hashes. Eager rows retain the six original intervals
+and each block's median/range; lazy rows retain one original interval each.
+Qualification and warmup results belong to the acquisition review described in
+the chapter, rather than being inferred from these timed-only files. These
+TSV views are separate from the four fixed JSON datasets and their renderer.
+
 ## Table-grounding comparison
 
 The [observation data](release-6bebb980-1e5b78ce.json),

@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 ![Rust 1.97+](https://img.shields.io/badge/rust-1.97%2B-orange?style=flat-square)
-[![Line coverage: 94.85% (CPU + Metal)](https://img.shields.io/badge/coverage-94.85%25%20%28CPU%20%2B%20Metal%29-brightgreen?style=flat-square)](docs/book/reference/validation.md#coverage)
+[![Line coverage: 94.86% (CPU + Metal)](https://img.shields.io/badge/coverage-94.86%25%20%28CPU%20%2B%20Metal%29-brightgreen?style=flat-square)](docs/book/reference/validation.md#coverage)
 
 ζήτησις, *inquiry/search* — candidate-directed answer-set solving through the reduct.
 
@@ -256,14 +256,16 @@ end-to-end solves from kernel measurements when comparing performance.
 The [validation chapter](docs/book/reference/validation.md) explains which
 claims the corpus, proof and physical execution checks can establish.
 The [performance comparisons](docs/book/reference/performance.md) separate the
-latest prepared-grounding CPU observations from earlier atom-catalog, Table,
-LTO and Metal results. The latest ordinary timings are mixed and RSS changes
-little. Independent scalar and domain fixtures demonstrate less grounding work,
-with setup costs and small timing regressions retained; they establish no general
-speedup or current GPU gain. Selected-output qualification, complete native
-records, timeouts and resource refusals have explicit scopes. The normal release
-profile remains selected. Earlier matched CPU/Metal and standalone table results
-retain their actual source revisions and acquisition windows.
+latest prepared-grounding CPU observations from earlier atom-catalog, Table
+and LTO results. A [matched CPU/Metal comparison](docs/book/reference/prepared-metal.md)
+adds complete instrumented solves and lazy-library observations with exact
+timing data. The latest ordinary CPU timings are mixed and RSS changes little;
+the separate instrumented comparison retains a SEND regression and block drift.
+Independent scalar and domain fixtures demonstrate less grounding work, with
+setup costs and small timing regressions retained. There is no general speedup
+or current GPU gain. Selected-output qualification, complete native records,
+timeouts and resource refusals have explicit scopes. The normal release profile
+remains selected. Earlier results retain their source revisions and windows.
 
 See [Contributing](CONTRIBUTING.md) for development and verification requirements,
 and [build the book](docs/book/building.md) to read the complete manual locally.
