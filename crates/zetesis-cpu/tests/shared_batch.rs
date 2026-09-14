@@ -440,7 +440,7 @@ fn incomplete_cause(error: &shared::Error) -> &shared::Failure {
         .unwrap()
         .downcast_ref::<shared::Cause>()
         .unwrap();
-    assert!(std::ptr::eq(cause, &failure.cause));
+    assert!(std::ptr::eq(cause, std::ptr::from_ref(&failure.cause)));
     let stop = match &failure.cause {
         shared::Cause::Source(stop) | shared::Cause::World { stop, .. } => stop,
         shared::Cause::InvalidOutput => panic!("expected an actual source or world stop"),
