@@ -27,6 +27,30 @@ pub struct Limits {
     pub max_bytes: u128,
 }
 
+impl Limits {
+    /// Derive a finite named-storage envelope from an admitted population.
+    ///
+    /// Uses the actual Atom, AVL-node and path-step layouts: three n-cell atom
+    /// buffers, two n-cell node buffers, two bounded AVL paths, one n-cell order
+    /// and its header, plus the owner header. This conservatively includes
+    /// geometric old/new-buffer overlap; it is not a requirement to allocate all
+    /// those buffers. The AVL path bound is twice the population bit width plus
+    /// one, including the planned leaf. Actual allocator slack is rechecked and
+    /// can still refuse. Nested payload and caller storage remain excluded.
+    #[must_use]
+    pub fn for_atoms(max_atoms: usize) -> Self {
+        Self {
+            max_atoms,
+            max_bytes: size_of::<AtomInterner>() as u128
+                + 3 * cells::<Atom>(max_atoms)
+                + 2 * cells::<Node>(max_atoms)
+                + 2 * cells::<Step>(path_bound(max_atoms))
+                + cells::<usize>(max_atoms)
+                + size_of::<Vec<usize>>() as u128,
+        }
+    }
+}
+
 /// Refusal to complete an index operation; never absence or logical rejection.
 #[derive(Debug)]
 pub enum Failure<E> {
@@ -136,6 +160,14 @@ impl AtomInterner {
     #[must_use]
     pub fn storage_peak_bytes(&self) -> u128 {
         self.index.peak.max(self.storage_bytes())
+    }
+
+    /// Borrow the current committed prefix without mutating the owner.
+    #[must_use]
+    pub fn committed(&self) -> CommittedAtoms<'_> {
+        CommittedAtoms {
+            atoms: &self.committed,
+        }
     }
 
     /// Split committed rows from a disjoint append capability. Neither borrow

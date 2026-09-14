@@ -7,11 +7,8 @@ use std::num::NonZeroUsize;
 
 pub(super) type Link = Option<NonZeroUsize>;
 
-pub(super) fn link(position: usize) -> Link {
-    Some(
-        NonZeroUsize::new(position.checked_add(1).expect("admitted position"))
-            .expect("positive ID"),
-    )
+pub(super) fn encoded(position: usize) -> NonZeroUsize {
+    NonZeroUsize::new(position.checked_add(1).expect("admitted position")).expect("positive ID")
 }
 
 pub(super) fn position(value: NonZeroUsize) -> usize {
@@ -49,7 +46,7 @@ impl Index {
         id: usize,
         before: &mut impl FnMut() -> Result<(), E>,
     ) -> Result<Link, E> {
-        let mut child = link(id);
+        let mut child = Some(encoded(id));
         for level in (0..self.path.len() - 1).rev() {
             before()?;
             let step = &mut self.path[level];
@@ -57,7 +54,7 @@ impl Index {
             step.node.children[side] = child;
             step.node.balance += if step.right { 1 } else { -1 };
             step.changed = true;
-            child = link(step.id);
+            child = Some(encoded(step.id));
             if step.node.balance == 0 {
                 return Ok(self.root);
             }
@@ -92,19 +89,19 @@ impl Index {
         if child.node.balance == sign {
             before()?;
             root.node.children[side] = child.node.children[opposite];
-            child.node.children[opposite] = link(root.id);
+            child.node.children[opposite] = Some(encoded(root.id));
             root.node.balance = 0;
             child.node.balance = 0;
             self.path[level] = root;
             self.path[level + 1] = child;
-            return Ok(link(child.id));
+            return Ok(Some(encoded(child.id)));
         }
         before()?;
         let mut pivot = self.path[level + 2];
         root.node.children[side] = pivot.node.children[opposite];
         child.node.children[opposite] = pivot.node.children[side];
-        pivot.node.children[opposite] = link(root.id);
-        pivot.node.children[side] = link(child.id);
+        pivot.node.children[opposite] = Some(encoded(root.id));
+        pivot.node.children[side] = Some(encoded(child.id));
         root.node.balance = if pivot.node.balance == sign { -sign } else { 0 };
         child.node.balance = if pivot.node.balance == -sign { sign } else { 0 };
         pivot.node.balance = 0;
@@ -112,7 +109,7 @@ impl Index {
         self.path[level] = root;
         self.path[level + 1] = child;
         self.path[level + 2] = pivot;
-        Ok(link(pivot.id))
+        Ok(Some(encoded(pivot.id)))
     }
 
     /// All writes below are pre-admitted as one indivisible publication. A
