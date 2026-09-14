@@ -39,11 +39,15 @@ pub(super) struct Directions {
 impl Directions {
     pub(super) fn push(&mut self, right: bool) -> Option<()> {
         let next = self.length.checked_add(1)?;
-        let (word, mask) = Self::position(self.length)?;
-        let slot = self.words.get_mut(word)?;
-        if right {
-            *slot |= mask;
+        if next > self.words.len() * usize::BITS as usize {
+            return None;
         }
+        // The newest direction occupies bit zero. Transfer the low word's
+        // oldest bit before shifting; the admitted length ensures that no
+        // recorded bit can leave the high word. Decode positions only on replay.
+        let carry = self.words[0] >> (usize::BITS - 1);
+        self.words[0] = (self.words[0] << 1) | usize::from(right);
+        self.words[1] = (self.words[1] << 1) | carry;
         self.length = next;
         Some(())
     }
@@ -56,7 +60,7 @@ impl Directions {
         if position >= self.length {
             return None;
         }
-        let (word, mask) = Self::position(position)?;
+        let (word, mask) = Self::position(self.length - 1 - position)?;
         Some(*self.words.get(word)? & mask != 0)
     }
 
