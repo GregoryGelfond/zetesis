@@ -19,6 +19,7 @@ construction and standalone analysis APIs belong to its own manual.
 | Shared candidate ownership and borrowed checking | `zetesis_core::{SeedSelection, SeedView}`, `Candidates::next_selection` |
 | Checked borrowed atom identity | `AtomPattern::key`, `BindingView`, `AtomKey` |
 | Predicate ranges and exact typed membership | `Model::lookup`, `AtomIndex`, `AtomLookup`, `Value::compare_identity_with` |
+| Append-only atom identity during synchronous grounding | `atom_interner::AtomInterner`, `CommittedAtoms`, `AtomAppender` |
 | Bounded typed column views and equality selection | `zetesis_core::relation::{Relation, Query, Selection, Mask}` |
 | Reusable finite-table row selection and domain projection | `zetesis_cpu::table::{Table, Domain, Selection}` |
 | Explicit complete relational graph | `zetesis_core::GroundProgram::compile` |

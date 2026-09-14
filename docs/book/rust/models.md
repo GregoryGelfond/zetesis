@@ -34,6 +34,39 @@ The implementation is in
 The library has one retained model representation; it does not construct a second
 hidden tree for observation or interoperability.
 
+## Building a catalog during grounding
+
+`zetesis_core::atom_interner::AtomInterner` owns distinct atoms in first-insertion
+order. Lookup returns the existing local position or a checked vacant entry;
+only inserting a vacant entry materializes an atom. Its index contains integer
+positions and links, rather than a second collection of atom keys. Complete typed
+identity still decides equality. The index is an execution representation, not
+an alternative meaning for an atom.
+
+During a synchronous round, `split` lends an immutable committed prefix and a
+disjoint append capability. A source scan can borrow committed atoms while its
+callback discovers new identities in the pending suffix. `commit_with` joins the
+two regions only after those borrows end, preserving every dense position.
+Canonical order is an ordered position view; it never renumbers the owner.
+Committing an atom does not select it as true in any candidate interpretation.
+
+The builder uses an iterative AVL index: lookup and insertion visit logarithmic
+search paths, with charged comparisons of the actual predicate and value prefixes.
+Canonical traversal visits the index once. Fallible reservations and work checks
+precede publication, so a stopped insertion changes neither membership nor old
+links. Already acquired capacity can remain after failure. The builder's byte
+measure covers its documented vector/index/scratch capacities and conservative
+growth overlap; nested atom payload and process RSS are separate measures.
+
+This unique-builder contract is deliberately narrower than `AtomCatalog::new`.
+The public immutable constructor can retain duplicate dense slots in arbitrary
+order. Consuming an interner transfers its completed vector into that existing
+representation; it does not introduce another retained-model type. Positions
+belong to their owner and must not be compared across unrelated catalogs as
+semantic identities. The
+[`implementation`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/atom_interner.rs)
+documents the entry, borrowing, allocation and final-transfer contracts.
+
 ## Borrowing and explicit copies
 
 `model.atoms()` returns `ModelAtoms`, an immutable semantic collection view.
@@ -93,3 +126,8 @@ when each replacement position decodes to the same original atom.
 formulates these laws. Runtime index checks, canonical Rust comparisons, Arc
 lifetimes and resource accounting remain separate refinement obligations.
 These representation laws do not establish answer-set membership themselves.
+
+[`AtomCatalogs`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AtomCatalogs.lean)
+adds the split/commit correspondence and preservation of an old selection during
+discovery. Unique local IDs require complete atom uniqueness; the laws do not
+assume that arbitrary immutable catalog inputs satisfy that extra premise.
