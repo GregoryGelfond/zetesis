@@ -128,13 +128,23 @@ fn finite_meets_avoid_real_prefixes_and_probes() {
         let before = *off.rules.borrow().last().unwrap();
         let after = *on.rules.borrow().last().unwrap();
         // Eight a/b values, but only four occur in the corresponding c columns.
-        // c is the last (64-row) input; its 16 successful rows are unchanged.
-        assert_eq!(before.join_rows, Some(8 + 8 * 8 + 16));
-        assert_eq!(after.join_rows, Some(8 + 4 * 8 + 16));
+        // Only 16 c probes have nonempty postings. Indexed offers one eight-row
+        // posting per probe, then checks the full row; Table intersects both
+        // equalities before offering its one row. A complete c match is not an
+        // Indexed offered-row count. Its guard rejects four marginal rows per
+        // posting; three other locally permitted rows still fail the matcher.
+        let (c_rows, c_rejected) = match strategy {
+            JoinStrategy::Indexed => (16 * 8, 16 * 4),
+            JoinStrategy::Table => (16, 0),
+        };
+        assert_eq!(before.join_rows, Some(8 + 8 * 8 + c_rows));
+        assert_eq!(after.join_rows, Some(8 + 4 * 8 + c_rows));
         assert_eq!(before.join_probes, Some(1 + 8 + 8 * 8));
         assert_eq!(after.join_probes, Some(1 + 4 + 4 * 4));
-        assert_eq!(after.domain_rejected_rows, Some(4 + 4 * 4));
-        assert_eq!(after.binding_snapshots, before.binding_snapshots);
+        assert_eq!(after.domain_rejected_rows, Some(4 + 4 * 4 + c_rejected));
+        assert_eq!(after.domain_guard_rows, after.join_rows);
+        assert_eq!(before.binding_snapshots, Some(16));
+        assert_eq!(after.binding_snapshots, Some(16));
         assert!(after.domain_guard_checks.unwrap() > 0);
         assert!(on.work.get().domain_prepare_work.unwrap() > after.domain_prepare_work.unwrap());
         if strategy == JoinStrategy::Table {
