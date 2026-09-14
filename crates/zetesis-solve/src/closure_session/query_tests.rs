@@ -6,7 +6,9 @@ use zetesis_core::{AdmissionLimits, Atom, AtomPattern, Predicate, Program, Templ
 use zetesis_cpu::{BatchError, Control, Stop};
 
 use super::ClosureSession;
-use crate::{Backend, ExecutionResources, Grounder, Interruption, SearchState, SolveConfig, SolveError};
+use crate::{
+    Backend, ExecutionResources, Grounder, Interruption, SearchState, SolveConfig, SolveError,
+};
 use crate::{execution_observation::Ignore, phase_timing::Recorder};
 
 fn pattern(name: &str) -> AtomPattern {
@@ -14,36 +16,66 @@ fn pattern(name: &str) -> AtomPattern {
 }
 
 fn program(choice: bool) -> Program {
-    let mut templates = vec![Template::new(Some(pattern("a")), vec![], vec![], vec![], vec![])];
+    let mut templates = vec![Template::new(
+        Some(pattern("a")),
+        vec![],
+        vec![],
+        vec![],
+        vec![],
+    )];
     if choice {
-        templates.push(Template::new(Some(pattern("b")), vec![], vec![pattern("b")], vec![], vec![]));
+        templates.push(Template::new(
+            Some(pattern("b")),
+            vec![],
+            vec![pattern("b")],
+            vec![],
+            vec![],
+        ));
     }
     Program::new(templates, AdmissionLimits::default()).unwrap()
 }
 
-fn checked_prefix<'a>(program: &'a Program, config: &SolveConfig, control: &Control,
-    phases: &Recorder) -> ClosureSession<'a>
-{
-    let mut session = ClosureSession::with_resources(program, None, config,
-        &ExecutionResources::default(), &mut Ignore, control, phases).unwrap();
+fn checked_prefix<'a>(
+    program: &'a Program,
+    config: &SolveConfig,
+    control: &Control,
+    phases: &Recorder,
+) -> ClosureSession<'a> {
+    let mut session = ClosureSession::with_resources(
+        program,
+        None,
+        config,
+        &ExecutionResources::default(),
+        &mut Ignore,
+        control,
+        phases,
+    )
+    .unwrap();
     let answer = session.next(config, control, phases).unwrap().unwrap();
-    assert_eq!(answer.atoms().iter().cloned().collect::<Vec<_>>(),
-        vec![Atom::new(Predicate::new("a", 0).unwrap(), vec![]).unwrap()]);
+    assert_eq!(
+        answer.atoms().iter().cloned().collect::<Vec<_>>(),
+        vec![Atom::new(Predicate::new("a", 0).unwrap(), vec![]).unwrap()]
+    );
     assert!(session.ready.as_slice().is_empty());
     assert_eq!(session.verified, 1);
     session
 }
 
-fn fail_snapshot(session: &mut ClosureSession<'_>, config: &SolveConfig,
-    control: &Control, phases: &Recorder)
-{
+fn fail_snapshot(
+    session: &mut ClosureSession<'_>,
+    config: &SolveConfig,
+    control: &Control,
+    phases: &Recorder,
+) {
     // Exercise only the private notification/state seam after real membership
     // and prefix delivery. This does not assert that the CPU lock failed or
     // fabricate candidate work, preparation or ownership receipts.
     let fault = Arc::new(BatchError::Busy);
     session.pending_query_fault = Some(Arc::clone(&fault));
     let error = session.next(config, control, phases).unwrap().unwrap_err();
-    let SolveError::QueryObservation(original) = error else { panic!("lost snapshot cause"); };
+    let SolveError::QueryObservation(original) = error else {
+        panic!("lost snapshot cause");
+    };
     assert!(Arc::ptr_eq(&original, &fault));
     assert_eq!(session.outcome().verified_models(), 1);
     assert_eq!(session.outcome().candidate_progress(), 1);
@@ -52,12 +84,19 @@ fn fail_snapshot(session: &mut ClosureSession<'_>, config: &SolveConfig,
 
 #[test]
 fn snapshot_failure_preserves_known_search_state() {
-    for expected in [SearchState::RequestedModels, SearchState::Exhausted,
-        SearchState::Interrupted(Interruption::Oracle(Stop::CandidateLimit))]
-    {
-        let config = SolveConfig { backend: Backend::Cpu, grounder: Grounder::Lazy,
+    for expected in [
+        SearchState::RequestedModels,
+        SearchState::Exhausted,
+        SearchState::Interrupted(Interruption::Oracle(Stop::CandidateLimit)),
+    ] {
+        let config = SolveConfig {
+            backend: Backend::Cpu,
+            grounder: Grounder::Lazy,
             models: usize::from(expected == SearchState::RequestedModels),
-            max_candidates: 1, workers: NonZeroUsize::MIN, ..Default::default() };
+            max_candidates: 1,
+            workers: NonZeroUsize::MIN,
+            ..Default::default()
+        };
         let owner = program(expected != SearchState::Exhausted);
         let control = Control::default();
         let phases = Recorder::new(false);
@@ -82,8 +121,13 @@ fn snapshot_failure_preserves_known_search_state() {
 
 #[test]
 fn snapshot_failure_does_not_infer_coverage() {
-    let config = SolveConfig { backend: Backend::Cpu, grounder: Grounder::Lazy,
-        models: 0, workers: NonZeroUsize::MIN, ..Default::default() };
+    let config = SolveConfig {
+        backend: Backend::Cpu,
+        grounder: Grounder::Lazy,
+        models: 0,
+        workers: NonZeroUsize::MIN,
+        ..Default::default()
+    };
     let owner = program(true);
     let control = Control::default();
     let phases = Recorder::new(false);

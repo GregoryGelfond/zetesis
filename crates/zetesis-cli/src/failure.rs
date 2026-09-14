@@ -218,7 +218,9 @@ impl Progress {
             shared_execution: semantic
                 .and_then(crate::SemanticOutcome::shared_execution)
                 .cloned(),
-            query_execution: semantic.and_then(crate::SemanticOutcome::query_execution).cloned(),
+            query_execution: semantic
+                .and_then(crate::SemanticOutcome::query_execution)
+                .cloned(),
             optimum_proved: semantic.is_some_and(crate::SemanticOutcome::optimum_proved),
             optimization: semantic
                 .and_then(crate::SemanticOutcome::incumbent)

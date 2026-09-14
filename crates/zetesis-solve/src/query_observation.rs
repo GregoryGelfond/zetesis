@@ -25,8 +25,13 @@ pub struct QueryExecutionObservation {
 impl QueryExecutionObservation {
     pub(crate) fn capture(&mut self, result: Result<QueryStatistics, BatchError>) {
         match result {
-            Ok(statistics) => { self.statistics = Some(statistics); self.fault = None; }
-            Err(error) => { self.fault = Some(Arc::new(error)); }
+            Ok(statistics) => {
+                self.statistics = Some(statistics);
+                self.fault = None;
+            }
+            Err(error) => {
+                self.fault = Some(Arc::new(error));
+            }
         }
     }
 }

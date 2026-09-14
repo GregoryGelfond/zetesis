@@ -116,7 +116,9 @@ impl<'a> ClosureSession<'a> {
                 self.complete(SearchState::Exhausted);
                 return self.query_fault();
             }
-            if let Some(error) = self.query_fault() { return Some(error); }
+            if let Some(error) = self.query_fault() {
+                return Some(error);
+            }
             let count = if self.checked == 0 {
                 1
             } else {
@@ -149,8 +151,12 @@ impl<'a> ClosureSession<'a> {
                 Err(_) if seeds.is_empty() => Ok(Vec::new()),
                 Err(stop) => Ok(vec![Err(*stop)]),
             };
-            self.pending_query_fault = self.engine.as_ref().ok()
-                .and_then(Engine::query_observation).and_then(|observation| observation.fault.clone());
+            self.pending_query_fault = self
+                .engine
+                .as_ref()
+                .ok()
+                .and_then(Engine::query_observation)
+                .and_then(|observation| observation.fault.clone());
             match results {
                 Ok(results) => {
                     self.verified +=
@@ -202,7 +208,12 @@ impl<'a> ClosureSession<'a> {
             candidate_statistics: Some(self.candidates.statistics()),
             countermodel_statistics: None,
             formula_execution: None,
-            query_execution: self.engine.as_ref().ok().and_then(Engine::query_observation).cloned(),
+            query_execution: self
+                .engine
+                .as_ref()
+                .ok()
+                .and_then(Engine::query_observation)
+                .cloned(),
             shared_execution: self
                 .engine
                 .as_ref()

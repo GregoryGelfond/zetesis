@@ -299,7 +299,9 @@ fn details(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
             stats.restriction_peak_bytes
         )?;
     }
-    if let Some(observation) = report.query_execution { query(sink, observation)?; }
+    if let Some(observation) = report.query_execution {
+        query(sink, observation)?;
+    }
     if let Some(stats) = report.shared_execution {
         shared(sink, stats)?;
     }
@@ -364,20 +366,38 @@ fn details(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
 
 fn query(sink: &mut impl Write, observation: &crate::QueryExecutionObservation) -> io::Result<()> {
     if observation.fault.is_some() && observation.statistics.is_some() {
-        writeln!(sink, "  query statistics: retaining last successful snapshot; current snapshot failed")?;
+        writeln!(
+            sink,
+            "  query statistics: retaining last successful snapshot; current snapshot failed"
+        )?;
     }
     if let Some(stats) = observation.statistics {
-        writeln!(sink, "  prepared CPU queries: builds={}; retained workspaces={}; active ranges={}; reused slots={}; retained bytes={}; reserved envelope bytes={}",
-            stats.preparation_builds, stats.retained_workspaces, stats.active_workspaces,
-            stats.reused_workspaces, stats.retained_bytes, stats.reserved_bytes)?;
+        writeln!(
+            sink,
+            "  prepared CPU queries: builds={}; retained workspaces={}; active ranges={}; reused slots={}; retained bytes={}; reserved envelope bytes={}",
+            stats.preparation_builds,
+            stats.retained_workspaces,
+            stats.active_workspaces,
+            stats.reused_workspaces,
+            stats.retained_bytes,
+            stats.reserved_bytes
+        )?;
         if let Some(preparation) = stats.preparation {
-            writeln!(sink, "  query preparation: work={}; retained bytes={}; separate from candidate work; capacities are not RSS",
-                preparation.work, preparation.retained_bytes)?;
+            writeln!(
+                sink,
+                "  query preparation: work={}; retained bytes={}; separate from candidate work; capacities are not RSS",
+                preparation.work, preparation.retained_bytes
+            )?;
         }
     } else {
-        writeln!(sink, "  prepared CPU queries: no successful ownership snapshot")?;
+        writeln!(
+            sink,
+            "  prepared CPU queries: no successful ownership snapshot"
+        )?;
     }
-    if let Some(fault) = &observation.fault { writeln!(sink, "  query observation fault: {fault}")?; }
+    if let Some(fault) = &observation.fault {
+        writeln!(sink, "  query observation fault: {fault}")?;
+    }
     Ok(())
 }
 

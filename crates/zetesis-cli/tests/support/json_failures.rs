@@ -75,7 +75,7 @@ fn source_stops_have_distinct_machine_codes() {
         let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
         assert_eq!(value["kind"], "oracle");
         assert_eq!(value["code"], code);
-        assert_eq!(value["detail"], format!("{stop:?}"));
+        assert_eq!(value["detail"], stop.to_string());
     }
 }
 
@@ -104,7 +104,7 @@ fn countermodel_stops_have_distinct_machine_codes() {
         let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
         assert_eq!(value["kind"], "countermodel");
         assert_eq!(value["code"], code);
-        assert_eq!(value["detail"], format!("{stop:?}"));
+        assert_eq!(value["detail"], stop.to_string());
     }
 }
 

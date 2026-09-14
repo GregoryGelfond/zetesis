@@ -202,7 +202,9 @@ fn sessions_preserve_the_complete_typed_family() {
         assert_eq!(outcome.discovered_gate_atoms(), CARRIER_ATOMS);
         assert_eq!(outcome.verified_models(), u64::try_from(ANSWERS).unwrap());
         if config.grounder == Grounder::Lazy {
-            let observation = outcome.query_execution().expect("independent prepared CPU route");
+            let observation = outcome
+                .query_execution()
+                .expect("independent prepared CPU route");
             assert!(observation.fault.is_none());
             let queries = observation.statistics.unwrap();
             assert_eq!(queries.preparation_builds, 1);
@@ -343,12 +345,20 @@ fn batch_storage_refusal_preserves_the_already_checked_prefix() {
 #[test]
 fn query_preparation_uses_the_source_work_boundary() {
     let fixture = Fixture::new();
-    let config = SolveConfig { backend: Backend::Cpu, grounder: Grounder::Lazy,
-        models: 0, max_source_work: 0, ..Default::default() };
+    let config = SolveConfig {
+        backend: Backend::Cpu,
+        grounder: Grounder::Lazy,
+        models: 0,
+        max_source_work: 0,
+        ..Default::default()
+    };
     let (answers, outcome) = run(&fixture, config);
     assert!(answers.is_empty());
     assert_eq!(outcome.verified_models(), 0);
-    assert_eq!(outcome.interruption(), Some(Interruption::Preparation(Stop::WorkLimit)));
+    assert_eq!(
+        outcome.interruption(),
+        Some(Interruption::Preparation(Stop::WorkLimit))
+    );
     assert_eq!(outcome.completion(), Some(Completion::Interrupted));
     let observation = outcome.query_execution().unwrap();
     assert!(observation.fault.is_none());

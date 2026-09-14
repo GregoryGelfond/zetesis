@@ -56,8 +56,8 @@ pub use zetesis_solve::{
     Grounder, GroundingMeasurement, GroundingTimings, Interruption, LazyBufferUsage,
     LazyExecutionStatistics, LazyTransportReplacements, LazyTransportUsage, MeasurementSpan,
     Optimization, OptimizationStop, Oracle, PhaseTimings, PreparedInput, PreparedProfile,
-    QueryExecutionObservation,
-    SearchState, SemanticOutcome, Session, SessionBuilder, SessionModel, SharedExecutionStatistics,
-    SolveConfig, SolveError, SolveFailure, SolveMeasurements, SolvePhase, SourceBatching, Subject,
-    WorldView, WorldViewError, WorldViewFailure, WorldViewLimits,
+    QueryExecutionObservation, SearchState, SemanticOutcome, Session, SessionBuilder, SessionModel,
+    SharedExecutionStatistics, SolveConfig, SolveError, SolveFailure, SolveMeasurements,
+    SolvePhase, SourceBatching, Subject, WorldView, WorldViewError, WorldViewFailure,
+    WorldViewLimits,
 };

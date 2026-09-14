@@ -168,19 +168,32 @@ struct IndependentCpu {
 }
 
 impl IndependentCpu {
-    fn check(&mut self, program: &Program, seeds: &[SeedSelection], limits: Limits, control: &Control)
-        -> Result<Vec<Result<Option<Model>, Stop>>, SolveError>
-    {
-        let result = self.oracle.check_batch_views(program, seeds.par_iter().map(SeedSelection::view), limits, control);
+    fn check(
+        &mut self,
+        program: &Program,
+        seeds: &[SeedSelection],
+        limits: Limits,
+        control: &Control,
+    ) -> Result<Vec<Result<Option<Model>, Stop>>, SolveError> {
+        let result = self.oracle.check_batch_views(
+            program,
+            seeds.par_iter().map(SeedSelection::view),
+            limits,
+            control,
+        );
         self.observation.capture(self.oracle.query_statistics());
         // A snapshot fault is retained separately and delivered by the session
         // after these already-checked results. No membership is discarded here.
-        Ok(result.map_err(SolveError::Batch)?.into_iter().map(|result| {
-            result.map(|check| match check.into_stable_interpretation() {
-                Ok(accepted) => Some(accepted.into_interpretation()),
-                Err(_) => None,
+        Ok(result
+            .map_err(SolveError::Batch)?
+            .into_iter()
+            .map(|result| {
+                result.map(|check| match check.into_stable_interpretation() {
+                    Ok(accepted) => Some(accepted.into_interpretation()),
+                    Err(_) => None,
+                })
             })
-        }).collect())
+            .collect())
     }
 }
 
@@ -287,7 +300,10 @@ impl Executor {
                     batching: options.source_batching,
                     workers: options.workers,
                 })?;
-                Ok(Self::Cpu(IndependentCpu { oracle, observation: crate::QueryExecutionObservation::default() }))
+                Ok(Self::Cpu(IndependentCpu {
+                    oracle,
+                    observation: crate::QueryExecutionObservation::default(),
+                }))
             }
         }
     }

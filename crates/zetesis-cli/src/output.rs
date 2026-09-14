@@ -789,8 +789,13 @@ fn execution_statistics(
     out.text("}}")
 }
 
-fn query_statistics(out: &mut Buffer, observation: Option<&crate::QueryExecutionObservation>) -> Result<(), RunError> {
-    let Some(observation) = observation else { return out.text("null"); };
+fn query_statistics(
+    out: &mut Buffer,
+    observation: Option<&crate::QueryExecutionObservation>,
+) -> Result<(), RunError> {
+    let Some(observation) = observation else {
+        return out.text("null");
+    };
     out.text("{\"backend\":\"cpu\",\"source_batching\":\"independent\",\"snapshot\":")?;
     if let Some(stats) = observation.statistics {
         out.text("{\"preparation\":")?;
@@ -799,7 +804,9 @@ fn query_statistics(out: &mut Buffer, observation: Option<&crate::QueryExecution
             out.text(&preparation.work.to_string())?;
             out.number_field("retained_bytes", preparation.retained_bytes)?;
             out.text("}")?;
-        } else { out.text("null")?; }
+        } else {
+            out.text("null")?;
+        }
         out.number_field("preparation_builds", stats.preparation_builds)?;
         out.number_field("retained_workspaces", stats.retained_workspaces)?;
         out.number_field("active_workspaces", stats.active_workspaces)?;
@@ -807,10 +814,15 @@ fn query_statistics(out: &mut Buffer, observation: Option<&crate::QueryExecution
         out.number_field("retained_bytes", stats.retained_bytes)?;
         out.number_field("reserved_bytes", stats.reserved_bytes)?;
         out.text("}")?;
-    } else { out.text("null")?; }
+    } else {
+        out.text("null")?;
+    }
     out.text(",\"fault\":")?;
-    if let Some(fault) = &observation.fault { query_fault(out, fault)?; }
-    else { out.text("null")?; }
+    if let Some(fault) = &observation.fault {
+        query_fault(out, fault)?;
+    } else {
+        out.text("null")?;
+    }
     out.text("}")
 }
 
