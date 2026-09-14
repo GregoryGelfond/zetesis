@@ -28,8 +28,8 @@ variable {Column Variable Value Row Result : Type}
 
 /-- The intersection of every argument domain naming one source variable. -/
 def Meet (scope : Column → Variable) (domains : Column → Value → Prop)
-    (variable : Variable) (value : Value) : Prop :=
-  ∀ column, scope column = variable → domains column value
+    (slot : Variable) (value : Value) : Prop :=
+  ∀ column, scope column = slot → domains column value
 
 /-- Complete argument coverage implies membership in each variable's meet.
 
@@ -39,8 +39,8 @@ predicate names or source positions differ. -/
 theorem complete_binding_survives (scope : Column → Variable)
     (domains : Column → Value → Prop) (binding : Variable → Value)
     (covered : ∀ column, domains column (binding (scope column))) :
-    ∀ variable, Meet scope domains variable (binding variable) := by
-  intro variable column same
+    ∀ slot, Meet scope domains slot (binding slot) := by
+  intro slot column same
   simpa only [same] using covered column
 
 /-- Removing rows without complete continuations preserves the exact ordered
