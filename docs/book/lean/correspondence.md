@@ -23,9 +23,9 @@ The formula grounder's consuming phases retain atom/node/root order, origins,
 activated objectives and the original cumulative budget. Discarded support and
 construction indexes have no later semantic consumer. The ID-only atom catalog
 requires lookup soundness, lookup completeness and stable insertion IDs under
-full typed equality, including collisions. The dictionary laws below express
-the lookup contract abstractly; they do not prove hash-table construction or
-fallible Rust allocation.
+full typed equality. The dictionary laws below express the lookup contract
+abstractly; checked typed comparison, AVL ordering and balancing, transactional
+publication and fallible Rust allocation remain executable obligations.
 
 `SourceContributions.chain_unique` identifies the ordered observations of a
 finite chain in shared storage. `chain_preserved` shows that changing other
