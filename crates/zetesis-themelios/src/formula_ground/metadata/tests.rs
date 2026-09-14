@@ -105,31 +105,41 @@ fn duplicate_lookup_obeys_the_work_ceiling() {
 
 #[test]
 fn failed_metadata_records_the_published_atom() {
+    // Sweep the actual small operation's finite work prefix. Interner lookup,
+    // planning and copy admission precede metadata, so a literal one-tick
+    // allowance no longer identifies the metadata failure boundary.
+    let (complete_work, _) = metadata_publication_attempt(None);
+    assert!((0..complete_work).any(|work| metadata_publication_attempt(Some(work)).1));
+}
+
+#[derive(Default)]
+struct MetadataObserver(
+    std::cell::RefCell<Option<(crate::GroundingOutcome, crate::GroundingWork)>>,
+);
+impl crate::GroundingObserver for MetadataObserver {
+    fn enter(&self) {}
+    fn exit(&self) {}
+    fn details_enabled(&self) -> bool {
+        true
+    }
+    fn phase_exit(
+        &self,
+        _phase: crate::GroundingPhase,
+        _location: Option<Location>,
+        outcome: crate::GroundingOutcome,
+        work: crate::GroundingWork,
+    ) {
+        *self.0.borrow_mut() = Some((outcome, work));
+    }
+}
+
+fn metadata_publication_attempt(additional: Option<u64>) -> (u64, bool) {
     use crate::formula_binding::Binding;
     use crate::formula_ground::{Builder, Purpose};
     use crate::grounding_observer::Profile;
-    use crate::{GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork};
-    use std::cell::RefCell;
+    use crate::{GroundingOutcome, GroundingPhase};
 
-    #[derive(Default)]
-    struct Observer(RefCell<Option<(GroundingOutcome, GroundingWork)>>);
-    impl GroundingObserver for Observer {
-        fn enter(&self) {}
-        fn exit(&self) {}
-        fn details_enabled(&self) -> bool {
-            true
-        }
-        fn phase_exit(
-            &self,
-            _phase: GroundingPhase,
-            _location: Option<Location>,
-            outcome: GroundingOutcome,
-            work: GroundingWork,
-        ) {
-            *self.0.borrow_mut() = Some((outcome, work));
-        }
-    }
-    let observer = Observer::default();
+    let observer = MetadataObserver::default();
     let profile = Profile::new(Some(&observer));
     let limits = FormulaLimits::default();
     let mut budget = Budget::new(ExpansionLimits::default(), 0);
@@ -156,29 +166,63 @@ fn failed_metadata_records_the_published_atom() {
             .unwrap();
     }
     let before = builder.metadata.atoms.len();
+    let origins_before = builder.metadata.origins.len();
+    let nodes_before = builder.nodes.len();
     assert_eq!(builder.catalog.len(), before);
+    let relocation = growth(&builder.metadata.atoms) + growth(&builder.metadata.origins);
+    assert!(relocation > 0);
+    let started = builder.counters.work;
     let limited = FormulaLimits {
-        max_work: builder.counters.work + 1,
+        max_work: additional.map_or(limits.max_work, |work| started.checked_add(work).unwrap()),
         ..limits
     };
     builder.limits = &limited;
     let result = profile.phase(GroundingPhase::RuleInstantiation, None, || {
         builder.atom(&pattern("e"), &Binding::default(), location(0, 0))
     });
+    let spent = builder.counters.work - started;
+    if additional.is_none() {
+        result.unwrap();
+        assert_eq!(builder.catalog.len(), before + 1);
+        assert_eq!(builder.metadata.atoms.len(), before + 1);
+        return (spent, false);
+    }
+    // Replays inspect their own actual capacities; a completed shorter path is
+    // not evidence of the required metadata refusal.
+    let Err(error) = result else {
+        return (spent, false);
+    };
     assert!(matches!(
-        result,
-        Err(FormulaFailure::Limit {
+        error,
+        FormulaFailure::Limit {
             resource: FormulaResource::Work,
             ..
-        })
+        }
     ));
+    if builder.catalog.len() == before || builder.metadata.atoms.len() != before {
+        return (spent, false);
+    }
+    assert!(matches!(error, FormulaFailure::Limit {
+        resource: FormulaResource::Work, observed, limit, location: found,
+    } if observed == u128::from(builder.counters.work) + relocation
+        && limit == u128::from(limited.max_work) && found == location(0, 0)));
     let (outcome, work) = observer.0.borrow().unwrap();
     assert_eq!(outcome, GroundingOutcome::Failed);
     assert_eq!(work.atoms_inserted, Some(1));
     assert_eq!(builder.catalog.len(), before + 1);
+    assert_eq!(
+        builder.catalog.get(before),
+        Some(
+            &zetesis_core::Atom::new(zetesis_core::Predicate::new("e", 0).unwrap(), vec![])
+                .unwrap()
+        )
+    );
     assert_eq!(builder.metadata.atoms.len(), before);
+    assert_eq!(builder.metadata.origins.len(), origins_before);
+    assert_eq!(builder.nodes.len(), nodes_before);
     assert!(builder.roots.is_empty());
     assert!(builder.origins.is_empty());
+    (spent, true)
 }
 
 #[test]

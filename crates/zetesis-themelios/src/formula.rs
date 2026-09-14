@@ -170,7 +170,7 @@ pub enum FormulaResource {
     /// Nodes in one transient objective-body formula.
     ObjectiveFormulaNodes,
     /// Named atom/interner capacity, bounded by a finite layout-derived envelope
-    /// from the applicable atom ceiling. Nested payload remains under ScalarBytes.
+    /// from the applicable atom ceiling. Nested payload remains under `ScalarBytes`.
     AtomStorageBytes,
     /// Dense semantic atoms.
     Atoms,
@@ -393,8 +393,9 @@ impl fmt::Display for FormulaFailure {
 impl std::error::Error for FormulaFailure {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::MetadataAllocation { error, .. } => Some(error),
-            Self::AtomAllocation { error, .. } => Some(error),
+            Self::MetadataAllocation { error, .. } | Self::AtomAllocation { error, .. } => {
+                Some(error)
+            }
             Self::SupportRelation { error, .. } => Some(error),
             Self::SupportTable { error, .. } => Some(error),
             Self::Expansion(error) => Some(error),

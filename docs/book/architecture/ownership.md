@@ -44,11 +44,13 @@ payload merely to index it requires a separate justification.
 
 Formula instantiation consumes its source IR and retains only the analysis,
 provenance, activated objectives and emitted builder needed by later phases.
-The final formula atom catalog owns each complete atom once; its lookup table
-stores dense IDs. Full typed equality decides identity even under hash collisions.
-The table is not iterated to emit atoms, so randomized hashing cannot change
-their first-occurrence order. Consuming finalization transfers the atom vector
-and releases the index.
+The formula atom builder owns each complete atom once. Its checked AVL index
+stores dense IDs and links; complete typed comparisons decide identity without
+copying a second set of keys. Insertion fixes first-occurrence order, while
+committing a pending suffix preserves those IDs and transfers its ownership.
+Consuming finalization transfers the completed atom vector into the immutable
+catalog and releases the construction index. These operations consume the
+enclosing work budget; catalog membership alone does not establish truth.
 
 ## Device resource scope
 

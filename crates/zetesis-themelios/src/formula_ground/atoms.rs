@@ -3,7 +3,7 @@
 //! Only vacant entries copy a checked substitution. First insertion fixes each
 //! dense ID; commits move suffix ownership without reordering or copying payload.
 //! AVL comparisons, path planning, reservations and commit work all use the
-//! enclosing formula counter. Nested payload remains under ScalarBytes, while
+//! enclosing formula counter. Nested payload remains under `ScalarBytes`, while
 //! the finite index-capacity envelope is derived from the applicable atom bound.
 
 use themelios_base::span::Location;
