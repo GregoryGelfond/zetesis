@@ -1,6 +1,6 @@
 [package]
 name = "zetesis-themelios"
-version = "0.1.0"
+version.workspace = true
 description = "The checked finite relational source boundary for zetesis."
 edition.workspace = true
 rust-version.workspace = true

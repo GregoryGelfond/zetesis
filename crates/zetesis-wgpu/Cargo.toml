@@ -1,6 +1,6 @@
 [package]
 name = "zetesis-wgpu"
-version = "0.1.0"
+version.workspace = true
 description = "An exact, explicitly static batched reduct oracle on wgpu compute devices."
 edition.workspace = true
 rust-version.workspace = true
