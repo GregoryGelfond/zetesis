@@ -291,7 +291,9 @@ impl GroundingWork {
 
     fn record(&mut self, event: Event) {
         let amount = match event {
-            Event::TablePrepareWork(work) | Event::TableQueryWork(work) | Event::DomainPrepareWork(work) => Some(work),
+            Event::TablePrepareWork(work)
+            | Event::TableQueryWork(work)
+            | Event::DomainPrepareWork(work) => Some(work),
             Event::TableIndexBytes(bytes) => u64::try_from(bytes).ok(),
             Event::SupportPeakBytes(bytes) => u64::try_from(bytes).ok(),
             _ => Some(1),
@@ -361,7 +363,11 @@ impl<'a> Profile<'a> {
         let source_observer = observer;
         let observer = observer.filter(|observer| observer.details_enabled());
         let work = Work(observer.map(|_| Rc::new(RefCell::new(GroundingWork::default()))));
-        Self { observer, source_observer, work }
+        Self {
+            observer,
+            source_observer,
+            work,
+        }
     }
 
     pub(crate) fn domain_analysis(&self, observation: super::DomainObservation<'_, '_>) {

@@ -23,7 +23,9 @@ struct Observation {
 impl GroundingObserver for Observation {
     fn enter(&self) {}
     fn exit(&self) {}
-    fn details_enabled(&self) -> bool { true }
+    fn details_enabled(&self) -> bool {
+        true
+    }
     fn domain_analysis(&self, observation: DomainObservation<'_, '_>) {
         match observation {
             DomainObservation::Disabled => self.disabled.set(true),
@@ -34,22 +36,38 @@ impl GroundingObserver for Observation {
             }
         }
     }
-    fn phase_exit(&self, phase: GroundingPhase, _: Option<Location>, _: GroundingOutcome, work: GroundingWork) {
+    fn phase_exit(
+        &self,
+        phase: GroundingPhase,
+        _: Option<Location>,
+        _: GroundingOutcome,
+        work: GroundingWork,
+    ) {
         self.work.set(self.work.get().checked_sum(work));
         if phase == GroundingPhase::SupportCompletion {
             self.support.set(self.support.get().checked_sum(work));
         }
-        if phase == GroundingPhase::RuleInstantiation { self.rules.borrow_mut().push(work); }
+        if phase == GroundingPhase::RuleInstantiation {
+            self.rules.borrow_mut().push(work);
+        }
     }
 }
 
-fn ground(source: &str, strategy: JoinStrategy, domains: Option<DomainLimits>, observation: &Observation)
-    -> Result<AdmittedFormula, FormulaFailure>
-{
-    prepare_formula(source.to_owned(), AdmissionOptions::default(), ExpansionLimits::default(), FormulaLimits::default())?
-        .with_grounding_options(GroundingOptions { joins: strategy })
-        .with_domain_analysis(domains)
-        .ground_with_observer(Some(observation))
+fn ground(
+    source: &str,
+    strategy: JoinStrategy,
+    domains: Option<DomainLimits>,
+    observation: &Observation,
+) -> Result<AdmittedFormula, FormulaFailure> {
+    prepare_formula(
+        source.to_owned(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )?
+    .with_grounding_options(GroundingOptions { joins: strategy })
+    .with_domain_analysis(domains)
+    .ground_with_observer(Some(observation))
 }
 
 fn equal(left: &AdmittedFormula, right: &AdmittedFormula) {
@@ -57,15 +75,22 @@ fn equal(left: &AdmittedFormula, right: &AdmittedFormula) {
     assert_eq!(left.theory().nodes(), right.theory().nodes());
     assert_eq!(left.theory().roots(), right.theory().roots());
     assert_eq!(left.formula_origins(), right.formula_origins());
-    assert_eq!(left.objectives().templates(), right.objectives().templates());
+    assert_eq!(
+        left.objectives().templates(),
+        right.objectives().templates()
+    );
     assert_eq!(left.objective_origins(), right.objective_origins());
 }
 
 fn selective() -> String {
     let mut source = String::new();
-    for value in 1..=8 { write!(source, "a({value}).b({value}).").unwrap(); }
+    for value in 1..=8 {
+        write!(source, "a({value}).b({value}).").unwrap();
+    }
     for left in 5..=12 {
-        for right in 5..=12 { write!(source, "c({left},{right}).").unwrap(); }
+        for right in 5..=12 {
+            write!(source, "c({left},{right}).").unwrap();
+        }
     }
     source.push_str("r(X,Y):-a(X),b(Y),c(X,Y).");
     source
@@ -80,10 +105,22 @@ fn finite_meets_avoid_real_prefixes_and_probes() {
         let complete = ground(&source, strategy, None, &off).unwrap();
         let narrowed = ground(&source, strategy, Some(DomainLimits::default()), &on).unwrap();
         equal(&complete, &narrowed);
-        let actual: Vec<_> = narrowed.atoms().iter().filter(|atom| atom.predicate().name() == "r")
-            .map(|atom| atom.values().to_vec()).collect();
-        let expected: Vec<_> = (5..=8).flat_map(|left| (5..=8).map(move |right|
-            vec![zetesis_core::Value::Number(left), zetesis_core::Value::Number(right)])).collect();
+        let actual: Vec<_> = narrowed
+            .atoms()
+            .iter()
+            .filter(|atom| atom.predicate().name() == "r")
+            .map(|atom| atom.values().to_vec())
+            .collect();
+        let expected: Vec<_> = (5..=8)
+            .flat_map(|left| {
+                (5..=8).map(move |right| {
+                    vec![
+                        zetesis_core::Value::Number(left),
+                        zetesis_core::Value::Number(right),
+                    ]
+                })
+            })
+            .collect();
         assert_eq!(actual, expected);
         assert!(off.disabled.get());
         assert_eq!(on.status.get(), Some(Status::FixedPoint));
@@ -100,7 +137,9 @@ fn finite_meets_avoid_real_prefixes_and_probes() {
         assert_eq!(after.binding_snapshots, before.binding_snapshots);
         assert!(after.domain_guard_checks.unwrap() > 0);
         assert!(on.work.get().domain_prepare_work.unwrap() > after.domain_prepare_work.unwrap());
-        if strategy == JoinStrategy::Table { assert!(after.table_probes.unwrap() > 0); }
+        if strategy == JoinStrategy::Table {
+            assert!(after.table_probes.unwrap() > 0);
+        }
     }
 }
 
@@ -116,8 +155,16 @@ fn typed_aliases_cycles_and_provenance_survive() {
     ] {
         let off = Observation::default();
         let on = Observation::default();
-        equal(&ground(source, JoinStrategy::Indexed, None, &off).unwrap(),
-            &ground(source, JoinStrategy::Indexed, Some(DomainLimits::default()), &on).unwrap());
+        equal(
+            &ground(source, JoinStrategy::Indexed, None, &off).unwrap(),
+            &ground(
+                source,
+                JoinStrategy::Indexed,
+                Some(DomainLimits::default()),
+                &on,
+            )
+            .unwrap(),
+        );
         assert_eq!(on.status.get(), Some(Status::FixedPoint), "{source}");
         assert_eq!(on.support.get(), off.support.get());
     }
@@ -126,18 +173,37 @@ fn typed_aliases_cycles_and_provenance_survive() {
 #[test]
 fn widened_arguments_and_stopped_analysis_preserve_fallback() {
     let source = selective();
-    let ordinary = ground(&source, JoinStrategy::Indexed, None, &Observation::default()).unwrap();
+    let ordinary = ground(
+        &source,
+        JoinStrategy::Indexed,
+        None,
+        &Observation::default(),
+    )
+    .unwrap();
     for limits in [
-        DomainLimits { max_values_per_argument: 0, ..DomainLimits::default() },
-        DomainLimits { max_work: 7, ..DomainLimits::default() },
+        DomainLimits {
+            max_values_per_argument: 0,
+            ..DomainLimits::default()
+        },
+        DomainLimits {
+            max_work: 7,
+            ..DomainLimits::default()
+        },
     ] {
         let observation = Observation::default();
-        equal(&ordinary, &ground(&source, JoinStrategy::Indexed, Some(limits), &observation).unwrap());
+        equal(
+            &ordinary,
+            &ground(&source, JoinStrategy::Indexed, Some(limits), &observation).unwrap(),
+        );
         if limits.max_work == 7 {
-            assert!(matches!(observation.status.get(), Some(Status::Stopped(stop))
-                if stop.resource == zetesis_domain::Resource::Work && stop.limit == 7 && stop.observed == 8));
+            assert!(
+                matches!(observation.status.get(), Some(Status::Stopped(stop))
+                if stop.resource == zetesis_domain::Resource::Work && stop.limit == 7 && stop.observed == 8)
+            );
             assert!(observation.work.get().domain_prepare_work.unwrap() >= 7);
-        } else { assert_eq!(observation.status.get(), Some(Status::FixedPoint)); }
+        } else {
+            assert_eq!(observation.status.get(), Some(Status::FixedPoint));
+        }
         assert_eq!(observation.work.get().domain_guard_rows, Some(0));
         assert_eq!(observation.work.get().domain_rejected_rows, Some(0));
     }
@@ -154,8 +220,16 @@ fn richer_source_keeps_the_complete_join() {
     ] {
         let off = Observation::default();
         let on = Observation::default();
-        equal(&ground(source, JoinStrategy::Indexed, None, &off).unwrap(),
-            &ground(source, JoinStrategy::Indexed, Some(DomainLimits::default()), &on).unwrap());
+        equal(
+            &ground(source, JoinStrategy::Indexed, None, &off).unwrap(),
+            &ground(
+                source,
+                JoinStrategy::Indexed,
+                Some(DomainLimits::default()),
+                &on,
+            )
+            .unwrap(),
+        );
         assert!(on.declined.get(), "{source}");
         assert_eq!(on.work.get().domain_guard_rows, Some(0));
     }
@@ -165,8 +239,20 @@ fn richer_source_keeps_the_complete_join() {
 fn optional_analysis_never_suppresses_authored_arithmetic() {
     for source in ["d(0).p:-d(X),1=2,1/X=1.", "d(0).p:-d(X),1=2,not q(1/X)."] {
         for options in [None, Some(DomainLimits::default())] {
-            assert!(matches!(ground(source, JoinStrategy::Indexed, options, &Observation::default()),
-                Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. }))), "{source}");
+            assert!(
+                matches!(
+                    ground(
+                        source,
+                        JoinStrategy::Indexed,
+                        options,
+                        &Observation::default()
+                    ),
+                    Err(FormulaFailure::Expansion(
+                        ExpansionFailure::Evaluation { .. }
+                    ))
+                ),
+                "{source}"
+            );
         }
     }
 }

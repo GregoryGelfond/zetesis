@@ -491,7 +491,8 @@ impl<'a, 'source> Join<'a, 'source> {
     ) -> Result<Self, FormulaFailure> {
         if domains.is_some_and(|guards| !guards.belongs_to(rule, support)) {
             return Err(FormulaFailure::SupportRelation {
-                error: zetesis_core::relation::Failure::Owner, location: rule.location,
+                error: zetesis_core::relation::Failure::Owner,
+                location: rule.location,
             });
         }
         let mut join = Self::rule(rule, support, budget)?;

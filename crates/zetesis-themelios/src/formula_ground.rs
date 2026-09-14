@@ -129,7 +129,14 @@ fn instantiate<'a>(
     let support = queries.support();
     let domains = if options.domains.is_some() {
         profile.phase(GroundingPhase::DomainAnalysis, None, || {
-            crate::formula_domains::analyze(&prepared, options.domains, limits, &mut counters, profile, location)
+            crate::formula_domains::analyze(
+                &prepared,
+                options.domains,
+                limits,
+                &mut counters,
+                profile,
+                location,
+            )
         })?
     } else {
         profile.domain_analysis(crate::DomainObservation::Disabled);
@@ -159,8 +166,16 @@ fn instantiate<'a>(
                     return Ok(());
                 }
                 let guards = if let Some(domains) = &domains {
-                    support.domain_guards(rule, domains.for_rule(index, rule)?, limits, builder.budget, &mut builder.counters)?
-                } else { None };
+                    support.domain_guards(
+                        rule,
+                        domains.for_rule(index, rule)?,
+                        limits,
+                        builder.budget,
+                        &mut builder.counters,
+                    )?
+                } else {
+                    None
+                };
                 let mut outer = Join::domain_rule(rule, support, guards.as_ref(), builder.budget)?;
                 while let Some(row) =
                     outer.next_row(limits, builder.budget, &mut builder.counters, rule.location)?

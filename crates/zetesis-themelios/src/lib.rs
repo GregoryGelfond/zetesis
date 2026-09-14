@@ -114,7 +114,9 @@ pub use formula_count_plan::{
 };
 mod grounding_options;
 mod formula_domains;
-pub use grounding_observer::{DomainObservation, GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork};
+pub use grounding_observer::{
+    DomainObservation, GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork,
+};
 pub use grounding_options::{DomainLimits, GroundingOptions, JoinStrategy};
 pub use metadata::{
     AtomSelection, AtomSelectionError, AtomSelectionLimits, LocatedDirective, MetadataError,
