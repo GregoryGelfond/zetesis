@@ -40,6 +40,13 @@ fn catalog_samples_reproduce_the_published_tables() {
 }
 
 #[test]
+fn undeclared_block_labels_refuse_publication() {
+    let mut dataset = HISTORICAL;
+    dataset.labels[0] = "different-acquisition";
+    assert!(data::load(&dataset).is_err());
+}
+
+#[test]
 fn the_default_selection_preserves_the_historical_comparison() {
     for arguments in [
         vec!["release_observations"],

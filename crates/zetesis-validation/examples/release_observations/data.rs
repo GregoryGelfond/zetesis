@@ -144,7 +144,7 @@ pub(super) fn validate(data: &Observations, dataset: &Dataset<'_>) -> Result<()>
     for (index, (block, label)) in data
         .blocks
         .iter()
-        .zip(["prior-1", "current-1", "current-2", "prior-2"])
+        .zip(dataset.labels)
         .enumerate()
     {
         let version = usize::from(index == 1 || index == 2);

@@ -3,6 +3,7 @@
 use super::dataset::Dataset;
 
 pub(super) const ATOM_CATALOG: Dataset<'static> = Dataset {
+    labels: ["prior-1", "current-1", "current-2", "prior-2"],
     sources: [
         "1e5b78ce913ab3aeece6ed496f69ca8176f0644d",
         "ca10a5e7ec84e13fbcc4a23bd0de8b0232c53fe1",

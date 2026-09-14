@@ -4,6 +4,8 @@
 /// These borrows do not admit arbitrary files or launch measurement processes.
 #[derive(Clone, Copy)]
 pub(super) struct Dataset<'a> {
+    /// Actual acquisition labels in the selected prior/current/current/prior order.
+    pub labels: [&'a str; 4],
     pub sources: [&'a str; 2],
     pub binaries: [&'a str; 2],
     pub joins: [Option<&'a str>; 2],
@@ -13,6 +15,7 @@ pub(super) struct Dataset<'a> {
 }
 
 pub(super) const HISTORICAL: Dataset<'static> = Dataset {
+    labels: ["prior-1", "current-1", "current-2", "prior-2"],
     sources: [
         "6bebb980f9c102dbb7f943076d7cde92374841ce",
         "1e5b78ce913ab3aeece6ed496f69ca8176f0644d",
