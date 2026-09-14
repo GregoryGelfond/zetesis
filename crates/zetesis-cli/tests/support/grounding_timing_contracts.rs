@@ -66,21 +66,40 @@ fn attribution_output_preserves_unavailable_values() {
 #[test]
 fn real_domain_work_reaches_the_shared_output_view() {
     use std::fmt::Write as _;
-    use zetesis_themelios::{AdmissionOptions, DomainLimits, ExpansionLimits, FormulaLimits, prepare_formula};
+    use zetesis_themelios::{
+        AdmissionOptions, DomainLimits, ExpansionLimits, FormulaLimits, prepare_formula,
+    };
 
     let mut source = String::new();
-    for value in 1..=4 { write!(source, "a({value}).b({value}).").unwrap(); }
+    for value in 1..=4 {
+        write!(source, "a({value}).b({value}).").unwrap();
+    }
     for left in 3..=6 {
-        for right in 3..=6 { write!(source, "c({left},{right}).").unwrap(); }
+        for right in 3..=6 {
+            write!(source, "c({left},{right}).").unwrap();
+        }
     }
     source.push_str("r(X,Y):-a(X),b(Y),c(X,Y).");
     let measurements = SolveMeasurements::new(true);
     let observer = measurements.grounding_observer().unwrap();
-    let admitted = prepare_formula(source, AdmissionOptions::default(), ExpansionLimits::default(),
-        FormulaLimits::default()).unwrap()
-        .with_domain_analysis(Some(DomainLimits::default()))
-        .ground_with_observer(Some(&observer)).unwrap();
-    assert_eq!(admitted.atoms().iter().filter(|atom| atom.predicate().name() == "r").count(), 4);
+    let admitted = prepare_formula(
+        source,
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap()
+    .with_domain_analysis(Some(DomainLimits::default()))
+    .ground_with_observer(Some(&observer))
+    .unwrap();
+    assert_eq!(
+        admitted
+            .atoms()
+            .iter()
+            .filter(|atom| atom.predicate().name() == "r")
+            .count(),
+        4
+    );
     let timings = measurements.snapshot().unwrap().grounding;
     let analysis = timings.get(GroundingPhase::DomainAnalysis).unwrap();
     assert_eq!(analysis.count(GroundingOutcome::Completed), Some(1));
@@ -95,7 +114,10 @@ fn real_domain_work_reaches_the_shared_output_view() {
     assert!(fields.contains(&("domain_rejected_rows", Some(14))));
     assert!(fields.contains(&("domain_guard_rows", rules.work.domain_guard_rows)));
     assert!(fields.contains(&("domain_guard_checks", rules.work.domain_guard_checks)));
-    assert!(super::work_fields(&analysis.work).contains(&("domain_prepare_work", analysis.work.domain_prepare_work)));
+    assert!(
+        super::work_fields(&analysis.work)
+            .contains(&("domain_prepare_work", analysis.work.domain_prepare_work))
+    );
     // This is the same field view used by output.rs's JSON path. The producer is
     // real library preparation; ordinary command defaults are deliberately off.
     let mut output = Vec::new();

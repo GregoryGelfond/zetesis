@@ -263,7 +263,12 @@ fn unavailable_domain_work_refuses_complete_capture() {
     work.domain_prepare_work = None;
     observer.enter();
     observer.phase_enter(GroundingPhase::DomainAnalysis, None);
-    observer.phase_exit(GroundingPhase::DomainAnalysis, None, GroundingOutcome::Failed, work);
+    observer.phase_exit(
+        GroundingPhase::DomainAnalysis,
+        None,
+        GroundingOutcome::Failed,
+        work,
+    );
     observer.exit();
     let (_, records, refusal) = observer.finish();
     assert_eq!(refusal, Some(CaptureRefusal::WorkUnavailable));

@@ -4,8 +4,8 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 use zetesis_themelios::{
-    BundleAdmissionOptions, BundleLimits, DomainLimits, ExpansionLimits, FormulaLimits, GroundingOptions,
-    JoinStrategy,
+    BundleAdmissionOptions, BundleLimits, DomainLimits, ExpansionLimits, FormulaLimits,
+    GroundingOptions, JoinStrategy,
 };
 
 use super::Error;

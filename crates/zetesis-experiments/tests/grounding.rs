@@ -603,7 +603,7 @@ fn native_limits_are_numeric_json_fields() {
         ("admission", 4),
         ("expansion", 7),
         ("formula", 20),
-        ("search", 4),
+        ("search", 5),
         ("certificate", 4),
         ("capture", 7),
     ] {

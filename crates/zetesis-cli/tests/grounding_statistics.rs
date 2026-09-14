@@ -58,8 +58,16 @@ fn json_attribution_preserves_typed_measurements() {
             );
         }
         assert_eq!(json["work"]["roots"].as_u64(), measurement.work.roots);
-        for name in ["domain_prepare_work", "domain_guard_rows", "domain_guard_checks", "domain_rejected_rows"] {
-            assert_eq!(json["work"][name], 0, "ordinary CLI leaves optional domains disabled");
+        for name in [
+            "domain_prepare_work",
+            "domain_guard_rows",
+            "domain_guard_checks",
+            "domain_rejected_rows",
+        ] {
+            assert_eq!(
+                json["work"][name], 0,
+                "ordinary CLI leaves optional domains disabled"
+            );
         }
         assert_eq!(
             json["work"]["expression_nodes"].as_u64(),
