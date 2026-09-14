@@ -52,7 +52,8 @@ pub enum Phase {
 pub struct SourceWork {
     /// Completed immutable rounds.
     pub rounds: u64,
-    /// Charged source operations, including mask operations.
+    /// Charged source operations, including seed interning, checked identity
+    /// maintenance, canonical row selection, masks and committed-prefix transfer.
     pub source_work: u64,
     /// Offered source instances, not instance/world products.
     pub instances: u64,
@@ -60,11 +61,14 @@ pub struct SourceWork {
     pub chunks: u64,
     /// Distinct demanded catalog identities.
     pub catalog_atoms: usize,
-    /// Mask operations already included in `source_work`.
+    /// Packed selection/membership operations already included in `source_work`.
+    /// Union row selection also probes masks; zero is not implied by that policy.
     pub mask_words: u64,
     /// Empty current-world join prefixes omitted by Worlds.
     pub pruned_prefixes: u64,
-    /// Peak requested membership/frame/index bytes; not RSS.
+    /// Peak retained source-ID capacity plus requested membership/frame bytes.
+    /// Core interner storage and failed temporary ordering are bounded separately
+    /// by source host limits; this subtotal is neither total capacity nor RSS.
     pub peak_mask_bytes: usize,
 }
 

@@ -85,7 +85,14 @@ fn sparse_worlds_omit_cross_world_instances() {
         .unwrap();
     assert!(worlds.instances < union.instances);
     assert!(worlds.pruned_prefixes > 0);
-    assert_eq!(union.mask_words, 0);
+    assert_eq!(union.pruned_prefixes, 0);
+    // Union still selects source rows from packed per-world truth. Its final
+    // canonical ID vector retains all 4×3 unary identities and 3³ possible
+    // triple identities, even though cross-world triples are never derived.
+    let union_identities = 4 * 3 + 3_usize.pow(3);
+    assert_eq!(union.catalog_atoms, union_identities);
+    assert!(union.mask_words > 0);
+    assert!(union.peak_mask_bytes >= union_identities * size_of::<usize>());
     assert!(worlds.peak_mask_bytes > 0);
 }
 
