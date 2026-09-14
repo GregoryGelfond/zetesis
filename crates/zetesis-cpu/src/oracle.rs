@@ -1,4 +1,4 @@
-//! Synchronous lazy source rounds with iterative, backtracking relational joins.
+//! Synchronous scalar delta rounds and complete ordered source traversal.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -13,7 +13,7 @@ mod window;
 mod relations;
 mod prepared;
 pub use prepared::{ClosureWorkspace, PreparationLimits, PreparationStatistics, PreparedQueries};
-use relations::{Catalogs, Relational};
+use relations::{Catalogs, Relational, RowSet};
 pub(crate) mod restrictions;
 pub mod source;
 pub(crate) mod worlds;
@@ -28,7 +28,7 @@ mod work_tests;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Limits {
     /// Maximum charged template, tuple-probe, atom-key argument span, gate/filter,
-    /// and output operations.
+    /// delta-view preparation and output operations.
     /// Lazy joins also charge bound-prefix inspections and ordered comparisons,
     /// including both compared values' referenced payload bytes. Work counts can
     /// change with the execution algorithm; they are not ground-instance counts.
@@ -38,7 +38,7 @@ pub struct Limits {
     /// Maximum distinct derived atoms, including pending round outputs.
     pub max_derived_atoms: usize,
     /// Named capacity per scalar closure: predicate/catalog cells and names,
-    /// tuple/index/column/prepared-order buffers, nested tuple payload, pending
+    /// tuple/index/column/prepared-order and old/new ID buffers, nested tuple payload, pending
     /// tuples and operation scratch/growth overlap. Shared structural buffers
     /// are counted per occurrence. Tree-container allocations (including vacant
     /// slots), allocator metadata and Arc-counter overhead,
@@ -70,14 +70,20 @@ pub struct Statistics {
     /// Charged operations, as described by [`Limits::max_work`].
     pub work: u64,
     /// Subset of work spent constructing, extending and probing retained typed
-    /// catalogs. Source joins and final interpretation assembly are separate.
+    /// catalogs and their old/new ID views. Source joins and final interpretation
+    /// assembly are separate.
     pub catalog_work: u64,
     /// Largest admitted or actually reserved named scalar closure envelope,
     /// under [`Limits::max_closure_bytes`]. Refused unallocated proposals do not
     /// increase this maximum. It excludes final output ownership and is not RSS.
     pub peak_closure_bytes: usize,
-    /// Fully matched enabled/filter-valid bindings visited across all rounds.
+    /// Fully matched enabled/filter-valid bindings visited by the selected round
+    /// schedule. Old bindings are not revisited by later scalar delta rounds.
     pub bindings: u64,
+    /// Source rows offered to the whole-row matcher, including rejected rows.
+    /// Excludes prefix-search comparisons and catalog membership lookups. Each
+    /// probe belongs to an already charged join-loop step, so it is bounded by work.
+    pub tuple_probes: u64,
     /// Distinct atoms in the final least consequence closure.
     pub derived_atoms: usize,
 }
@@ -221,8 +227,11 @@ impl Work<'_> {
 type Relations<'a> = BTreeMap<&'a Predicate, Vec<&'a Atom>>;
 
 /// Compute the exact least positive closure selected by a sparse frozen seed.
-/// Joins read only current derived relations. A no-delta round checks every
-/// template and constraint before the final gate-carrier seed comparison.
+/// Bootstrap checks every template against empty truth, including zero-positive
+/// rules and constraints. Later rounds visit each binding at its first newly
+/// derived source occurrence. Completed earlier scans account for old bindings;
+/// the final no-change round completes source coverage before the full
+/// gate-carrier seed comparison. Shared source traversal has its own full schedule.
 ///
 /// # Errors
 /// Returns [`Stop`] for cancellation, deadlines, budgets, foreign seed identity,
@@ -273,20 +282,19 @@ pub fn check_view(
     prepared.check_with(seed, &mut ClosureWorkspace::default(), &mut work)
 }
 
-// Construction establishes a complete no-delta source scan, not constraint
-// satisfaction or agreement with the seed. Those are separate acceptance facts.
+// Construction establishes complete source coverage through bootstrap and
+// completed round history, not constraint satisfaction or seed agreement.
 struct CompletedClosure {
     atoms: Model,
     constraint_violated: bool,
 }
 
-// The caller has established program/seed identity. Each round reads only the
-// preceding closure and visits every template, including constraints. Positive
-// bodies and the fixed gate seed make derived atoms and constraint violations
-// monotone. A no-delta round therefore establishes leastness and source coverage.
-// Every pending insertion is charged and bounded before publication; a stop
-// cannot construct CompletedClosure. Constraint failure never truncates a scan.
-// Each growing round adds an atom, so the derived-atom ceiling bounds growth.
+// Positive bodies, pure equality filters and frozen gates make old enabled
+// bindings persist. Complete bootstrap plus disjoint first-new scans therefore
+// cover the same inflationary step as full rescanning. Constraints latch only
+// after a complete selected family; they never truncate another occurrence.
+// Every growing round adds an atom and has admitted its pending publication.
+// No resource stop can produce CompletedClosure or publish a reusable frontier.
 #[cfg(test)]
 fn least_closure(
     program: &Program,
@@ -294,82 +302,72 @@ fn least_closure(
     work: &mut Work<'_>,
 ) -> Result<CompletedClosure, Stop> {
     let prepared = PreparedQueries::prepare(program, work)?;
-    prepared.closure_with(seed, &mut ClosureWorkspace::default(), work)
+    prepared.closure_with(seed, &mut ClosureWorkspace::default(), Schedule::Delta, work)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Schedule {
+    Delta,
+    #[cfg(test)]
+    Full,
+}
+
+#[derive(Clone, Copy)]
+enum Selection { All, FirstNew(usize) }
+
+impl Selection {
+    fn rows(self, occurrence: usize) -> RowSet {
+        match self {
+            Self::All => RowSet::Current,
+            Self::FirstNew(pivot) if occurrence < pivot => RowSet::Old,
+            Self::FirstNew(pivot) if occurrence == pivot => RowSet::New,
+            Self::FirstNew(_) => RowSet::Current,
+        }
+    }
+}
+
+struct RoundWorkspace<'a> {
+    buffers: &'a mut prepared::Buffers,
+    dimensions: &'a prepared::Dimensions,
+    overhead: u128,
 }
 
 fn least_closure_with(
     program: &Program,
     seed: SeedView<'_>,
     closure: &mut Catalogs,
-    buffers: &mut prepared::Buffers,
-    dimensions: &prepared::Dimensions,
-    overhead: u128,
+    workspace: RoundWorkspace<'_>,
+    schedule: Schedule,
     work: &mut Work<'_>,
 ) -> Result<CompletedClosure, Stop> {
+    let RoundWorkspace { buffers, dimensions, overhead } = workspace;
     let mut constraint_violated = false;
     loop {
         work.tick()?;
-        closure.prepare(work)?;
-        let mut delta = BTreeSet::new();
-        let mut pending_bytes = 0_u128;
+        let incremental = schedule == Schedule::Delta && work.statistics.rounds != 0;
+        if incremental { closure.prepare_delta(work)?; }
+        else { closure.prepare(work)?; }
         // Bindings borrow this round's immutable catalog extent only. The
         // reference-free cursor/undo buffers survive after these bindings drop.
-        {
+        let consequences = {
             let (mut assignment, bytes) = prepared::assignment(
                 dimensions,
-                closure
-                    .owned_bytes()
-                    .checked_add(overhead)
-                    .ok_or(Stop::StorageLimit)?,
+                closure.owned_bytes().checked_add(overhead).ok_or(Stop::StorageLimit)?,
                 work,
             )?;
             closure.set_overhead(overhead.checked_add(bytes).ok_or(Stop::StorageLimit)?, work)?;
-            for template in program.templates() {
-                work.tick()?;
-                visit_with(
-                    template,
-                    &*closure,
-                    Some(seed),
-                    None,
-                    work,
-                    |assignment, work| {
-                        work.tick()?;
-                        if let Some(head) = template.head() {
-                            work.charge(head.terms().len())?;
-                            let key = head.key(assignment).map_err(|_| Stop::InvalidProgram)?;
-                            if !closure.contains(&key, pending_bytes, work)?
-                                && key.get(&delta).is_none()
-                            {
-                                if closure
-                                    .len()
-                                    .checked_add(delta.len())
-                                    .ok_or(Stop::DerivedAtomLimit)?
-                                    >= work.limits.max_derived_atoms
-                                {
-                                    return Err(Stop::DerivedAtomLimit);
-                                }
-                                let (atom, bytes) = closure.pending(key, pending_bytes, work)?;
-                                delta.insert(atom);
-                                pending_bytes =
-                                    pending_bytes.checked_add(bytes).ok_or(Stop::StorageLimit)?;
-                            }
-                        } else {
-                            constraint_violated = true;
-                        }
-                        Ok(())
-                    },
-                    Frame {
-                        assignment: &mut assignment,
-                        buffers: &mut *buffers,
-                    },
-                )?;
-            }
-        }
+            visit_round(program, seed, closure, incremental,
+                Frame { assignment: &mut assignment, buffers: &mut *buffers, selection: Selection::All },
+                work)?
+        };
+        let RoundConsequences { atoms: delta, bytes: mut pending_bytes, constraint_violated: triggered } = consequences;
+        constraint_violated |= triggered;
         closure.set_overhead(overhead, work)?;
         work.statistics.rounds += 1;
         if delta.is_empty() {
             break;
         }
+        if schedule == Schedule::Delta { closure.advance(work)?; }
         for atom in delta {
             let bytes = relations::atom_bytes(&atom, work)?;
             pending_bytes = pending_bytes
@@ -382,6 +380,67 @@ fn least_closure_with(
         atoms: closure.take_model(work)?,
         constraint_violated,
     })
+}
+
+struct RoundConsequences {
+    atoms: BTreeSet<Atom>,
+    bytes: u128,
+    constraint_violated: bool,
+}
+
+// Complete the disjoint source family before publishing either its history or
+// its consequences. A constraint latch never skips another source occurrence.
+fn visit_round<'source>(
+    program: &Program,
+    seed: SeedView<'_>,
+    closure: &'source Catalogs,
+    incremental: bool,
+    frame: Frame<'_, 'source>,
+    work: &mut Work<'_>,
+) -> Result<RoundConsequences, Stop> {
+    let Frame { assignment, buffers, .. } = frame;
+    let mut result = RoundConsequences {
+        atoms: BTreeSet::new(), bytes: 0, constraint_violated: false,
+    };
+    for template in program.templates() {
+        work.tick()?;
+        let mut emit = |assignment: &[Option<&Value>], work: &mut Work<'_>| -> Result<(), Stop> {
+            work.tick()?;
+            if let Some(head) = template.head() {
+                work.charge(head.terms().len())?;
+                let key = head.key(assignment).map_err(|_| Stop::InvalidProgram)?;
+                if !closure.contains(&key, result.bytes, work)? && key.get(&result.atoms).is_none() {
+                    if closure.len().checked_add(result.atoms.len()).ok_or(Stop::DerivedAtomLimit)?
+                        >= work.limits.max_derived_atoms
+                    { return Err(Stop::DerivedAtomLimit); }
+                    let (atom, bytes) = closure.pending(key, result.bytes, work)?;
+                    result.atoms.insert(atom);
+                    result.bytes = result.bytes.checked_add(bytes).ok_or(Stop::StorageLimit)?;
+                }
+            } else {
+                result.constraint_violated = true;
+            }
+            Ok(())
+        };
+        if incremental {
+            // Repeated predicates retain distinct occurrences. Earlier Old,
+            // this New and later Current rows select the unique first new row.
+            for (pivot, pattern) in template.positive().iter().enumerate() {
+                if closure.has_new(pattern.predicate(), work)? {
+                    visit_with(template, closure, Some(seed), None, work, &mut emit,
+                        Frame { assignment: &mut *assignment, buffers: &mut *buffers,
+                            selection: Selection::FirstNew(pivot) })?;
+                }
+            }
+        } else {
+            // Bootstrap includes every zero-positive head and constraint under
+            // the frozen gates. The test reference repeats this complete scan.
+            visit_with(template, closure, Some(seed), None, work, &mut emit,
+                Frame { assignment: &mut *assignment, buffers: &mut *buffers,
+                    selection: Selection::All })?;
+        }
+    }
+    Ok(result)
 }
 
 // Establish closure ∩ gate_carrier = seed in both directions. Continue charging
@@ -412,6 +471,7 @@ fn gate_agreement(
 struct Frame<'frame, 'source> {
     assignment: &'frame mut [Option<&'source Value>],
     buffers: &'frame mut prepared::Buffers,
+    selection: Selection,
 }
 
 fn visit<'source, E: From<Stop>>(
@@ -434,6 +494,7 @@ fn visit<'source, E: From<Stop>>(
         Frame {
             assignment: &mut assignment,
             buffers: &mut buffers,
+            selection: Selection::All,
         },
     )
 }
@@ -452,6 +513,7 @@ fn visit_with<'source, E: From<Stop>>(
     let Frame {
         assignment,
         buffers,
+        selection,
     } = frame;
     let assignment = &mut assignment[..template.variable_count()];
     work.charge(assignment.len())?;
@@ -494,7 +556,7 @@ fn visit_with<'source, E: From<Stop>>(
             continue;
         }
         let pattern = &template.positive()[depth];
-        let tuples = relations.rows(pattern.predicate());
+        let tuples = relations.selected(pattern.predicate(), selection.rows(depth))?;
         let cursor = &mut cursors[depth];
         if cursor.is_none() {
             *cursor = Some(window::matching_prefix(pattern, tuples, assignment, work)?);
@@ -509,6 +571,9 @@ fn visit_with<'source, E: From<Stop>>(
             continue;
         };
         let atom = tuples.get(index).ok_or(Stop::InvalidProgram)?;
+        // This iteration already charged one join step and offers at most one
+        // row. The cumulative probe count therefore cannot exceed charged work.
+        work.statistics.tuple_probes += 1;
         if bind(pattern, atom, assignment, &mut undo[depth], work)?
             && guards(template, assignment, seed, work)?
             && match membership.as_mut() {

@@ -41,7 +41,8 @@ pub struct PreparationStatistics {
 /// Prepared join dimensions for one exact immutable program instance.
 ///
 /// This owner shares the admitted program and holds no candidate truth. It does
-/// not enumerate a ground carrier or change template, tuple or round order.
+/// not enumerate a ground carrier. Its evaluator uses scalar delta rounds;
+/// within each selected source occurrence tuples keep canonical storage order.
 /// Preparation is linear in templates and positive-pattern occurrences. The
 /// dimensions bound the assignment, cursor and undo buffers actually used by
 /// [`Self::check_view`]. They are not a class certificate or semantic index.
@@ -115,7 +116,9 @@ impl PreparedQueries {
     ///
     /// All candidate truth is empty initially. A completed call transfers atom
     /// payload to its returned `Check`; only empty catalog metadata, predicate
-    /// names and reference-free join buffers remain. Assignment references live
+    /// names and reference-free join/old-new ID capacity remain. Frontiers and
+    /// all logical ID lengths are reset before another candidate is evaluated.
+    /// Assignment references live
     /// within one immutable round. A different program instance retires the old
     /// workspace before reuse. Retained capacity is admitted under the supplied
     /// limits, including when they are tighter than the preceding call.
@@ -150,6 +153,12 @@ impl PreparedQueries {
         workspace: &mut ClosureWorkspace,
         work: &mut Work<'_>,
     ) -> Result<Check, Stop> {
+        self.check_scheduled(seed, workspace, super::Schedule::Delta, work)
+    }
+
+    fn check_scheduled(&self, seed: SeedView<'_>, workspace: &mut ClosureWorkspace,
+        schedule: super::Schedule, work: &mut Work<'_>) -> Result<Check, Stop>
+    {
         if !workspace.clean
             || workspace
                 .program
@@ -160,7 +169,7 @@ impl PreparedQueries {
         }
         workspace.clean = false;
         workspace.program = Some(self.program.clone());
-        let result = self.evaluate(seed, workspace, work);
+        let result = self.evaluate(seed, workspace, schedule, work);
         if result.is_ok() {
             workspace.clean = true;
         } else {
@@ -173,9 +182,10 @@ impl PreparedQueries {
         &self,
         seed: SeedView<'_>,
         workspace: &mut ClosureWorkspace,
+        schedule: super::Schedule,
         work: &mut Work<'_>,
     ) -> Result<Check, Stop> {
-        let completed = self.closure_with(seed, workspace, work)?;
+        let completed = self.closure_with(seed, workspace, schedule, work)?;
         let seed_mismatch =
             !super::gate_agreement(&self.program, seed, completed.atoms.atoms(), work)?;
         work.statistics.derived_atoms = completed.atoms.atoms().len();
@@ -192,6 +202,7 @@ impl PreparedQueries {
         &self,
         seed: SeedView<'_>,
         workspace: &mut ClosureWorkspace,
+        schedule: super::Schedule,
         work: &mut Work<'_>,
     ) -> Result<super::CompletedClosure, Stop> {
         let base = workspace
@@ -216,15 +227,14 @@ impl PreparedQueries {
             &self.program,
             seed,
             &mut workspace.catalogs,
-            &mut workspace.buffers,
-            &self.dimensions,
-            overhead,
+            super::RoundWorkspace { buffers: &mut workspace.buffers, dimensions: &self.dimensions, overhead },
+            schedule,
             work,
         )
     }
 }
 
-/// Reusable empty relation metadata and join cursor capacity.
+/// Reusable empty relation metadata, ordered ID views and join cursor capacity.
 ///
 /// This owner never retains borrowed values or candidate truth after a completed
 /// call. It can be moved between workers. No thread identity, global cache or
@@ -368,3 +378,6 @@ fn reserve<T>(
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod delta_tests;

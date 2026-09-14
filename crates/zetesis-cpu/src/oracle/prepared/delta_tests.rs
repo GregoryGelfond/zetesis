@@ -1,0 +1,245 @@
+//! Delta scheduling preserves complete frozen-reduct results while avoiding rows.
+
+use super::*;
+use crate::oracle::Schedule;
+use zetesis_core::{AdmissionLimits, Atom, AtomPattern, Model, Predicate, Seed, Template, Term, Value};
+
+fn atom(name: &str, values: &[i32]) -> Atom {
+    Atom::new(Predicate::new(name, values.len()).unwrap(),
+        values.iter().copied().map(Value::Number).collect()).unwrap()
+}
+
+fn pattern(name: &str, terms: Vec<Term>) -> AtomPattern {
+    AtomPattern::new(Predicate::new(name, terms.len()).unwrap(), terms).unwrap()
+}
+
+fn fact(name: &str, values: &[i32]) -> Template {
+    Template::new(Some(pattern(name, values.iter().copied().map(Value::Number)
+        .map(Term::Constant).collect())), vec![], vec![], vec![], vec![])
+}
+
+fn rule(head: AtomPattern, positive: Vec<AtomPattern>) -> Template {
+    Template::new(Some(head), positive, vec![], vec![], vec![])
+}
+
+fn path(edges: i32, labels: i32) -> (Program, Model) {
+    let mut templates: Vec<_> = (0..edges).map(|x| fact("edge", &[x, x + 1])).collect();
+    templates.push(fact("reach", &[0]));
+    templates.push(rule(pattern("reach", vec![Term::Variable(1)]), vec![
+        pattern("reach", vec![Term::Variable(0)]),
+        pattern("edge", vec![Term::Variable(0), Term::Variable(1)]),
+    ]));
+    let mut expected: Vec<_> = (0..edges).map(|x| atom("edge", &[x, x + 1])).collect();
+    expected.extend((0..=edges).map(|x| atom("reach", &[x])));
+    if labels > 0 {
+        templates.extend((0..labels).map(|x| fact("label", &[x])));
+        templates.push(rule(pattern("seen", vec![Term::Variable(0)]), vec![
+            pattern("reach", vec![Term::Variable(0)]),
+            pattern("label", vec![Term::Variable(1)]),
+            pattern("label", vec![Term::Variable(2)]),
+        ]));
+        expected.extend((0..labels).map(|x| atom("label", &[x])));
+        expected.extend((0..=edges).map(|x| atom("seen", &[x])));
+    }
+    (Program::new(templates, AdmissionLimits::default()).unwrap(), Model::new(expected))
+}
+
+fn scheduled(prepared: &PreparedQueries, seed: SeedView<'_>, workspace: &mut ClosureWorkspace,
+    schedule: Schedule, limits: Limits, control: &Control) -> Result<Check, Stop>
+{
+    let mut work = Work::source(control, limits.max_work);
+    work.limits = limits;
+    prepared.check_scheduled(seed, workspace, schedule, &mut work)
+}
+
+fn complete(program: &Program, schedule: Schedule) -> Check {
+    let control = Control::default();
+    let prepared = PreparedQueries::new(program, PreparationLimits::default(), &control).unwrap();
+    scheduled(&prepared, Seed::new(program, []).unwrap().view(), &mut ClosureWorkspace::default(),
+        schedule, Limits::default(), &control).unwrap()
+}
+
+fn assert_complete(check: &Check, expected: &Model, rounds: u64) {
+    assert!(check.accepted());
+    assert!(!check.constraint_violated());
+    assert!(!check.seed_mismatch());
+    assert_eq!(check.closure(), expected);
+    let stats = check.statistics();
+    assert_eq!(stats.derived_atoms, expected.atoms().len());
+    assert_eq!(stats.rounds, rounds);
+    assert!(stats.tuple_probes <= stats.work);
+    assert!(stats.catalog_work <= stats.work);
+    assert!(stats.peak_closure_bytes > 0);
+    assert!(stats.peak_closure_bytes <= Limits::default().max_closure_bytes);
+}
+
+#[test]
+fn path_delta_avoids_old_row_probes() {
+    for (edges, rounds, full_bindings, delta_bindings, full_probes) in [
+        (4, 6, 44, 9, 29), (8, 10, 134, 17, 89),
+    ] {
+        let (program, expected) = path(edges, 0);
+        let full = complete(&program, Schedule::Full);
+        let delta = complete(&program, Schedule::Delta);
+        assert_complete(&full, &expected, rounds);
+        assert_complete(&delta, &expected, rounds);
+        assert_eq!(full.statistics().bindings, full_bindings);
+        assert_eq!(delta.statistics().bindings, delta_bindings);
+        assert_eq!(full.statistics().tuple_probes, full_probes);
+        assert_eq!(delta.statistics().tuple_probes, delta_bindings);
+    }
+}
+
+#[test]
+fn repeated_occurrence_fanout_reduces_inclusive_work() {
+    // Positive fanout dimensions preserve the additional seen-consequence round.
+    for (edges, labels, rounds, full_bindings, delta_bindings, full_probes, delta_probes) in [
+        (4, 3, 7, 254, 57, 298, 74), (8, 8, 11, 3695, 601, 4048, 674),
+    ] {
+        let (program, expected) = path(edges, labels);
+        let full = complete(&program, Schedule::Full);
+        let delta = complete(&program, Schedule::Delta);
+        assert_complete(&full, &expected, rounds);
+        assert_complete(&delta, &expected, rounds);
+        assert_eq!(full.statistics().bindings, full_bindings);
+        assert_eq!(delta.statistics().bindings, delta_bindings);
+        assert_eq!(full.statistics().tuple_probes, full_probes);
+        assert_eq!(delta.statistics().tuple_probes, delta_probes);
+        // These are complete candidate receipts: partition initialization,
+        // reads/writes, canonical preparation, pending publication, extraction
+        // and final gate comparison are all inside the charged total.
+        assert!(delta.statistics().work < full.statistics().work,
+            "full {:?}, delta {:?}", full.statistics(), delta.statistics());
+    }
+}
+
+#[test]
+fn moving_rank_and_repeated_predicate_have_one_first_new_binding() {
+    let program = Program::new(vec![
+        fact("p", &[2]), fact("step", &[1]),
+        rule(pattern("p", vec![Term::Variable(0)]), vec![pattern("step", vec![Term::Variable(0)])]),
+        rule(pattern("hit", vec![Term::Variable(0)]), vec![
+            pattern("p", vec![Term::Variable(0)]), pattern("p", vec![Term::Variable(0)]),
+        ]),
+    ], AdmissionLimits::default()).unwrap();
+    let expected = Model::new([atom("p", &[1]), atom("p", &[2]), atom("step", &[1]),
+        atom("hit", &[1]), atom("hit", &[2])]);
+    let full = complete(&program, Schedule::Full);
+    let delta = complete(&program, Schedule::Delta);
+    assert_complete(&full, &expected, 4);
+    assert_complete(&delta, &expected, 4);
+    assert_eq!(full.statistics().bindings, 16);
+    assert_eq!(delta.statistics().bindings, 5);
+    assert!(delta.statistics().tuple_probes < full.statistics().tuple_probes);
+}
+
+#[test]
+fn every_incomplete_delta_prefix_is_retired_before_reuse() {
+    let (path, mut expected) = path(3, 0);
+    let gate = pattern("enabled", vec![]);
+    let mut templates = path.templates().to_vec();
+    let recursive = templates.pop().unwrap();
+    templates.push(Template::new(recursive.head().cloned(), recursive.positive().to_vec(),
+        vec![gate.clone()], vec![], vec![]));
+    templates.push(Template::new(Some(gate.clone()), vec![], vec![gate], vec![], vec![]));
+    let program = Program::new(templates, AdmissionLimits::default()).unwrap();
+    expected = Model::new(expected.atoms().iter().cloned().chain([atom("enabled", &[])]));
+    let control = Control::default();
+    let prepared = PreparedQueries::new(&program, PreparationLimits::default(), &control).unwrap();
+    let seed = Seed::new(&program, [atom("enabled", &[])]).unwrap();
+    let other_seed = Seed::new(&program, []).unwrap();
+    let mut original = ClosureWorkspace::default();
+    let complete = prepared.check_view(seed.view(), &mut original, Limits::default(), &control).unwrap();
+    let reference = scheduled(&prepared, other_seed.view(), &mut ClosureWorkspace::default(),
+        Schedule::Full, Limits::default(), &control).unwrap();
+    for max_work in 0..complete.statistics().work {
+        let mut workspace = ClosureWorkspace::default();
+        let Err(stop) = prepared.check_view(seed.view(), &mut workspace,
+            Limits { max_work, ..Limits::default() }, &control)
+        else { panic!("a strict prefix cannot establish completed source coverage"); };
+        assert_eq!(stop, Stop::WorkLimit);
+        assert_eq!(workspace.retained_bytes().unwrap(), ClosureWorkspace::default().retained_bytes().unwrap());
+        let retry = prepared.check_view(other_seed.view(), &mut workspace, Limits::default(), &control).unwrap();
+        assert_eq!(retry.closure(), reference.closure());
+        assert_eq!(retry.accepted(), reference.accepted());
+        assert_eq!(retry.constraint_violated(), reference.constraint_violated());
+        assert_eq!(retry.seed_mismatch(), reference.seed_mismatch());
+        assert_eq!(complete.closure(), &expected);
+    }
+}
+
+#[test]
+fn complete_delta_work_limit_is_inclusive() {
+    let (program, expected) = path(4, 3);
+    let control = Control::default();
+    let seed = Seed::new(&program, []).unwrap();
+    // One-shot work includes the same source preparation as the actual API.
+    let reference = crate::check(&program, &seed, Limits::default(), &control).unwrap();
+    let exact = crate::check(&program, &seed, Limits {
+        max_work: reference.statistics().work,
+        ..Limits::default()
+    }, &control).unwrap();
+    assert_eq!(exact.closure(), &expected);
+    assert_eq!(exact.statistics(), reference.statistics());
+    let Err(stop) = crate::check(&program, &seed, Limits {
+        max_work: reference.statistics().work - 1, ..Limits::default()
+    }, &control) else { panic!("final completion work is required"); };
+    assert_eq!(stop, Stop::WorkLimit);
+}
+
+#[test]
+fn delta_capacity_admits_the_complete_named_envelope() {
+    let (program, expected) = path(4, 3);
+    let control = Control::default();
+    let seed = Seed::new(&program, []).unwrap();
+    let reference = crate::check(&program, &seed, Limits::default(), &control).unwrap();
+    let exact = crate::check(&program, &seed, Limits {
+        max_closure_bytes: reference.statistics().peak_closure_bytes,
+        ..Limits::default()
+    }, &control).unwrap();
+    assert_eq!(exact.closure(), &expected);
+    assert_eq!(exact.statistics(), reference.statistics());
+    let Err(stop) = crate::check(&program, &seed, Limits {
+        max_closure_bytes: reference.statistics().peak_closure_bytes - 1, ..Limits::default()
+    }, &control) else { panic!("complete view and publication capacity is required"); };
+    assert_eq!(stop, Stop::StorageLimit);
+}
+
+#[test]
+fn bootstrap_gates_and_latched_constraints_preserve_rejection() {
+    let gate = pattern("enabled", vec![]);
+    let program = Program::new(vec![
+        // The ungated fact will disagree with the empty frozen seed. Neither
+        // that mismatch nor the bootstrap constraint can truncate closure.
+        fact("enabled", &[]), fact("a", &[]),
+        Template::new(None, vec![], vec![], vec![], vec![]),
+        Template::new(Some(pattern("gated", vec![])), vec![], vec![gate.clone()], vec![], vec![]),
+        rule(pattern("b", vec![]), vec![pattern("a", vec![])]),
+        rule(pattern("c", vec![]), vec![pattern("b", vec![])]),
+        Template::new(None, vec![pattern("c", vec![])], vec![], vec![], vec![]),
+    ], AdmissionLimits::default()).unwrap();
+    let expected = Model::new([atom("enabled", &[]), atom("a", &[]), atom("b", &[]), atom("c", &[])]);
+    let full = complete(&program, Schedule::Full);
+    let delta = complete(&program, Schedule::Delta);
+    for check in [&full, &delta] {
+        assert_eq!(check.closure(), &expected);
+        assert!(check.constraint_violated());
+        assert!(check.seed_mismatch());
+        assert!(!check.accepted());
+        assert_eq!(check.statistics().rounds, 4);
+    }
+    // The second seed enables the zero-positive rule only at bootstrap. This
+    // preserves its consequence even though it is not revisited in later rounds.
+    let control = Control::default();
+    let prepared = PreparedQueries::new(&program, PreparationLimits::default(), &control).unwrap();
+    let seed = Seed::new(&program, [atom("enabled", &[])]).unwrap();
+    let expected = Model::new(expected.atoms().iter().cloned().chain([atom("gated", &[])]));
+    for schedule in [Schedule::Full, Schedule::Delta] {
+        let check = scheduled(&prepared, seed.view(), &mut ClosureWorkspace::default(), schedule,
+            Limits::default(), &control).unwrap();
+        assert_eq!(check.closure(), &expected);
+        assert!(check.constraint_violated());
+        assert!(!check.seed_mismatch());
+        assert!(!check.accepted());
+    }
+}

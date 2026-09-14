@@ -329,15 +329,44 @@ prepares a complete ordered ID view for each changed extent and reuses that view
 for the round's joins. Preparation traverses O(n) row IDs and accounts its cache
 and traversal capacity. Subsequent indexed row access is constant time and
 borrows the authoritative tuple. A duplicate or refused insertion preserves an
-existing prepared extent; a successful append invalidates it. This changes the
-physical identity representation, not the full-round least-consequence schedule,
-frozen candidate, constraint check or answer-set definition.
+existing prepared extent; a successful append invalidates it.
+
+Scalar closure first visits every template against empty derived truth, including
+facts, zero-positive rules and constraints under the frozen candidate. In each
+later round, a binding is visited at its first source occurrence containing a new
+row: earlier occurrences select Old rows, that occurrence selects New rows, and
+later occurrences select Current rows. These disjoint choices preserve repeated
+predicates and source occurrences. Newness uses stable per-predicate insertion
+IDs, never canonical ranks, which can move when a smaller tuple is appended.
+For mixed extents, one derived ID buffer partitions the canonical rows into
+ordered Old and New slices. It shares the sole tuple payload owner and is cached
+by both old cutoff and current extent. All-old and all-new extents reuse the
+complete ordered view or an empty slice.
+
+A round completes every selected binding and constraint before advancing its
+frontier and publishing pending heads. Frozen gates and pure equality filters
+preserve the eligibility of old positive bindings. Their consequences are
+already present, and earlier constraint triggers remain latched. Together with
+bootstrap and completed earlier scans, the final no-change round establishes
+complete source coverage. The final gate-carrier comparison still checks both
+directions, even for a rejected candidate. Failure returns no partial closure
+and discards dirty workspace history. Public `source::scan` and shared-world
+source traversal retain their complete ordered scans; this scalar schedule does
+not change the answer-set definition or claim device delta execution.
+
+Completed scalar `Statistics::tuple_probes` counts source rows offered to the
+whole-row matcher, including rejected rows. It excludes prefix-search comparisons
+and catalog membership operations. Each probe belongs to a charged join-loop
+step. `work` also includes canonical and delta-view preparation, initialization,
+ID reads and writes, pivot checks, pending publication and final completion.
+Fewer emitted bindings alone do not establish fewer probes or less total work;
+none of these counters establishes an elapsed-time gain.
 
 `zetesis_cpu::PreparedQueries` inspects one exact admitted `Program` once to
 bound the assignment, cursor and undo buffers used by its joins. Its preparation
 work and bytes have independent finite limits and a separate receipt. A
 `ClosureWorkspace` retains the actual empty catalog metadata, predicate owners
-and reference-free cursor/undo buffers between candidates. Assignments borrow
+and reference-free cursor/undo and old/new ID capacities between candidates. Assignments borrow
 only the current immutable round; no candidate truth survives completion.
 `Catalog::take_atoms` transfers the completed atom vector without copying its
 payload and invalidates its old row/equality IDs. The exported result owns its
@@ -352,7 +381,8 @@ closures, constraints and seed checks agree. Retained capacities are admitted
 under each prepared call's current limits, including an empty program. The
 one-shot empty-program path constructs no preparation or workspace and retains
 its vacuous zero-round result. This removes repeated allocation and dimension
-inspection; it does not establish a timing gain or replace full-round closure.
+inspection; it does not establish a timing gain. Both entry points use the
+same scalar delta schedule described above.
 
 `BatchOracle` retains that preparation and a bounded set of workspaces across
 independent batches. Its indexed borrowed seed producer is divided into at most
@@ -380,7 +410,8 @@ receipts describe bounded ownership and reuse, not timing or process RSS.
 
 `zetesis_cpu::Limits::max_closure_bytes` bounds each scalar closure's
 named predicate/catalog cells, atom and value buffers, nested payload, prepared
-order, query-owner/assignment/cursor/undo capacities and pending tuples, including operation scratch and conservative buffer
+order and old/new ID views, query-owner/assignment/cursor/undo capacities and
+pending tuples, including operation scratch and conservative buffer
 growth overlap. Its default is 128 MiB; zero is a zero-byte allowance. Pending
 atoms use fallible buffer reservation, and moving them into catalogs transfers
 their payload charge rather than counting a second payload owner. The reported

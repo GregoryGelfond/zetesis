@@ -173,6 +173,11 @@ packing, output and transport storage within its stated scope.
 Independent scalar closure construction has a per-candidate named-capacity
 allowance, `Limits::max_closure_bytes`. `BatchOracle` retains one preparation
 for its exact `Program` and reuses empty query workspaces across submissions.
+Scalar delta rows are derived ID selections over each predicate's sole tuple
+owner. Their live and spare capacities, headers and conservative replacement
+overlap enter the same per-candidate allowance. Cutoffs, cache keys and logical
+ID lengths are reset before reuse; stable insertion IDs belong to one candidate's
+catalog lifetime and do not become persistent truth across candidates.
 Before executing a batch it admits the shared cache, idle retained workspaces,
 and the allowance for each assigned workspace against its collective limit.
 If `C` is the cache and spare slot capacity, `P` the prepared header already
