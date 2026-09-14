@@ -395,9 +395,10 @@ fn evaluate_world(
 /// No completed checks are returned on any incomplete scan or execution failure.
 /// Atom IDs grow only when seeds or source instances demand them. All seed atoms
 /// participate in the final projection check, even if no rule derives them.
-/// Empty batches perform no source or evaluator work. Catalog trees, symbolic
-/// source-snapshot collection and shared ownership envelopes use infallible
-/// allocations. Explicit vector reservations return typed allocation failures.
+/// Empty batches perform no source or evaluator work. Catalog/index, ordered-ID
+/// and transport vector reservations return typed allocation failures. Borrowed
+/// source-relation grouping, copied Instance payloads and shared ownership
+/// envelopes retain their infallible allocation contracts.
 /// Completed worlds share one final atom catalog and retain their own selected
 /// positions. This is a logical payload bound, not a process-RSS guarantee.
 ///
