@@ -62,6 +62,38 @@ fn cpu_routes_check_every_ordered_seed_occurrence() {
 }
 
 #[test]
+fn samples_expose_only_receipts_of_their_route() {
+    measurement::measure(&configuration(Family::Sparse), |event| {
+        if let Event::Sample(sample) = event {
+            let independent = matches!(sample.route, Route::Scalar | Route::Rayon);
+            assert_eq!(sample.independent.is_some(), independent);
+            assert_eq!(sample.queries.is_some(), sample.route == Route::Rayon);
+            assert_eq!(sample.source.is_some(), !independent);
+            let json = serde_json::to_value(sample).unwrap();
+            assert_eq!(json["independent"].is_null(), !independent);
+            if let Some(statistics) = sample.queries {
+                let preparation = statistics.preparation.unwrap();
+                assert_eq!(json["queries"], serde_json::json!({
+                    "preparation": {
+                        "work": preparation.work,
+                        "retained_bytes": preparation.retained_bytes,
+                    },
+                    "preparation_builds": statistics.preparation_builds,
+                    "retained_workspaces": statistics.retained_workspaces,
+                    "active_workspaces": statistics.active_workspaces,
+                    "reused_workspaces": statistics.reused_workspaces,
+                    "retained_bytes": statistics.retained_bytes,
+                    "reserved_bytes": statistics.reserved_bytes,
+                }));
+            } else {
+                assert!(json["queries"].is_null());
+            }
+        }
+        Ok(())
+    }).unwrap();
+}
+
+#[test]
 fn sparse_worlds_omit_cross_world_instances() {
     let mut samples = Vec::new();
     measurement::measure(&configuration(Family::Sparse), |event| {
@@ -262,6 +294,7 @@ fn command_json_lines_retain_the_complete_configuration() {
         .lines()
         .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
         .collect::<Vec<_>>();
+    assert_eq!(records[0]["schema"], 2);
     assert_eq!(
         records[0]["configuration"]["source_per_batch"]["max_host_bytes"],
         134_217_728

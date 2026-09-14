@@ -45,6 +45,69 @@ fn fixture() -> (fixture::Fixture, Configuration) {
     )
 }
 
+fn varied_checks() -> [Check; 4] {
+    let (fixture, configuration) = fixture();
+    let mut checks = scalar(&fixture, &configuration).unwrap();
+    let dense = zetesis_core::Seed::new(
+        &fixture.program,
+        fixture.seeds.iter().flat_map(|seed| seed.atoms().iter().cloned()),
+    ).unwrap();
+    checks.push(zetesis_cpu::check(
+        &fixture.program, &dense, configuration.cpu_limits, &Control::default(),
+    ).unwrap());
+    // Preserve a second occurrence of the accepted sparse candidate.
+    checks.push(checks[1].clone());
+    assert_eq!(checks.iter().filter(|check| check.accepted()).count(), 2);
+    assert_eq!(checks.iter().map(|check| check.closure().atoms().len()).collect::<Vec<_>>(),
+        [5, 5, 16, 5]);
+    checks.try_into().unwrap()
+}
+
+#[test]
+fn independent_work_sums_completed_occurrences() {
+    let checks = varied_checks();
+    let [first, second, dense, repeated] = checks.each_ref().map(Check::statistics);
+    let total = view::IndependentWork::from_checks(&checks);
+    assert_eq!(total.derived_atoms, 31);
+    assert_eq!(total.work, u128::from(first.work) + u128::from(second.work)
+        + u128::from(dense.work) + u128::from(repeated.work));
+    assert_eq!(total.catalog_work, u128::from(first.catalog_work) + u128::from(second.catalog_work)
+        + u128::from(dense.catalog_work) + u128::from(repeated.catalog_work));
+    assert_eq!(total.rounds, u128::from(first.rounds) + u128::from(second.rounds)
+        + u128::from(dense.rounds) + u128::from(repeated.rounds));
+    assert_eq!(total.bindings, u128::from(first.bindings) + u128::from(second.bindings)
+        + u128::from(dense.bindings) + u128::from(repeated.bindings));
+}
+
+#[test]
+fn independent_peak_is_largest_candidate_envelope() {
+    let checks = varied_checks();
+    let peaks = checks.iter().map(|check| check.statistics().peak_closure_bytes).collect::<Vec<_>>();
+    let total = view::IndependentWork::from_checks(&checks);
+    assert!(peaks.iter().all(|peak| *peak > 0));
+    assert_eq!(total.peak_closure_bytes, *peaks.iter().max().unwrap());
+    assert!(total.peak_closure_bytes < peaks.iter().sum::<usize>());
+}
+
+#[test]
+fn rayon_snapshot_matches_owned_pool() {
+    let (fixture, configuration) = fixture();
+    let expected = scalar(&fixture, &configuration).unwrap();
+    let mut execution = Execution::new(&configuration, configuration.cases[0].worlds,
+        &mut |_| Ok(())).unwrap();
+    for reused in [0, 1] {
+        let measured = execution.check(&configuration, &fixture, &expected, Route::Rayon).unwrap();
+        let actual = execution.pool.query_statistics().unwrap();
+        assert_eq!(measured.queries, Some(actual));
+        assert_eq!(actual.preparation_builds, 1);
+        assert_eq!(actual.active_workspaces, 1);
+        assert_eq!(actual.reused_workspaces, reused);
+        assert!(actual.preparation.is_some());
+        assert!(actual.retained_bytes > 0);
+        assert!(actual.reserved_bytes >= actual.retained_bytes);
+    }
+}
+
 #[test]
 fn reordered_checks_fail_parity() {
     let (fixture, configuration) = fixture();

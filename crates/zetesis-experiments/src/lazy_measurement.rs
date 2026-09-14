@@ -1,8 +1,10 @@
 //! Matched relational programs and frozen candidate batches across CPU and physical GPUs.
 //!
 //! Source scans, complete reduct closure checking and result construction are
-//! inside each sample. Fixture preparation, parity comparisons, pool/device
-//! setup and publication are outside it. This is not outer answer-set search.
+//! inside each sample. Fixture preparation, parity comparisons, receipt
+//! observation, pool/device setup and publication are outside it. This is not
+//! outer answer-set search. JSON-lines schema 2 adds independent check and Rayon
+//! query-cache receipts; shared source and device fields retain their meanings.
 //! Scalar/Rayon limits apply per candidate; round-source limits apply per batch.
 //! All successful routes must return the same complete ordered checks despite
 //! those different schedules. Requested mask payload is not process peak RSS.
@@ -16,7 +18,7 @@ use std::{fmt, io};
 
 pub use config::{Case, Configuration, Family, Options};
 pub use run::measure;
-pub use view::{DeviceWork, Event, Phase, Route, Sample, SourceWork};
+pub use view::{DeviceWork, Event, IndependentWork, Phase, Route, Sample, SourceWork};
 
 /// Failed setup, incomplete checking, disagreement or publication failure.
 /// A consumer may retain the event prefix; no completion event follows failure.
@@ -34,6 +36,9 @@ pub enum Error {
     Cpu(zetesis_cpu::Stop),
     /// Pool construction or bounded submission failed.
     Pool(zetesis_cpu::BatchError),
+    /// The post-timer query-cache snapshot failed. Completed checking alone
+    /// cannot publish a successful sample with a fabricated ownership receipt.
+    QueryObservation(zetesis_cpu::BatchError),
     /// An injected portable round evaluator did not complete.
     Source(zetesis_cpu::lazy::Failure<zetesis_cpu::Stop>),
     /// Physical device setup failed; no CPU fallback occurs.
@@ -57,6 +62,7 @@ impl fmt::Display for Error {
             Self::Seed(error) => error.fmt(formatter),
             Self::Cpu(error) => error.fmt(formatter),
             Self::Pool(error) => error.fmt(formatter),
+            Self::QueryObservation(error) => write!(formatter, "query observation failed: {error}"),
             Self::Source(error) => error.fmt(formatter),
             Self::Device(error) => error.fmt(formatter),
             Self::Gpu(error) => error.fmt(formatter),
@@ -78,7 +84,7 @@ impl std::error::Error for Error {
             Self::Construction(error) => Some(error),
             Self::Seed(error) => Some(error),
             Self::Cpu(error) => Some(error),
-            Self::Pool(error) => Some(error),
+            Self::Pool(error) | Self::QueryObservation(error) => Some(error),
             Self::Source(error) => Some(error),
             Self::Device(error) => Some(error),
             Self::Gpu(error) => Some(error),

@@ -185,6 +185,34 @@ portable routes. Ordered closures and rejection reasons must match even when
 routes charge different work. Source-round execution, transport and returned
 results are timed; setup, reference comparison and rendering are separate.
 
+Lazy JSON-lines schema 2 adds `independent` and `queries` sample fields.
+`independent` sums completed Scalar/Rayon checks' work, catalog work, rounds,
+bindings and derived atoms across every occurrence, including duplicate seeds
+and rejected candidates. Catalog work is already part of work. Its
+`peak_closure_bytes` is the maximum individual named closure envelope; it is
+neither the sum of those envelopes nor a simultaneous batch peak or process RSS.
+Shared routes instead retain their existing `source` receipts; their
+`independent` and `queries` fields are absent (`null` in JSON).
+
+Scalar uses the one-shot check for each candidate, including query preparation
+in that candidate's work. Rayon builds queries for the exact program on the first
+invocation, then reuses immutable dimensions and persistent range workspaces.
+Its candidate work excludes that separate preparation. Only Rayon records
+`queries`, the actual owned pool snapshot: the retained preparation's work and
+bytes, cumulative preparation builds, retained/active/reused workspace counts,
+retained named bytes and the last admitted collective reservation. The latter
+is a configured allowance, not an observed peak. These counts describe owned
+and assigned slots, not active threads or successful checks; do not sum repeated
+snapshots as new preparation work or add overlapping storage subtotals.
+The pool retains its default finite preparation limits and 512 MiB collective
+closure allowance, independently of the configured per-candidate limits.
+
+Receipt aggregation, cache observation, parity comparison and publication occur
+after the sample timer. Preparation and workspace reuse happen within checking;
+the pool itself is created before samples. A failed cache observation produces a
+typed failed route, without a successful sample or completion event. This profile
+does not time receipt observation or establish a benefit from preparation reuse.
+
 These source fixtures are generated and bounded. Measurements include neither
 external parsing nor an ordinary outer candidate search.
 See [lazy API](src/lazy_measurement.rs) and

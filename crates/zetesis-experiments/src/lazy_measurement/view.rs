@@ -4,13 +4,18 @@ use zetesis_wgpu::LazyGpuStatistics;
 
 use super::{Case, Configuration};
 
+mod independent;
+
+pub use independent::IndependentWork;
+
 /// Measured execution strategy; only Metal/Vulkan variants submit physical device work.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Route {
     /// Independent scalar source checking of each occurrence.
     Scalar,
-    /// The same scalar checks scheduled in an owned Rayon pool.
+    /// Independent checks with prepared queries and persistent range workspaces
+    /// in an owned Rayon pool. Preparation has its own work/storage receipt.
     Rayon,
     /// Union source scans with the portable round evaluator.
     PortableUnion,
@@ -204,12 +209,22 @@ pub struct Sample {
     pub position: usize,
     /// Execution strategy actually called.
     pub route: Route,
-    /// Host-monotonic complete checking duration, before parity comparison.
+    /// Host-monotonic complete checking duration. Parity, receipt aggregation,
+    /// cache observation and publication happen after this timer.
     pub elapsed_ns: u128,
     /// Complete checks, including duplicate occurrences.
     pub checked: usize,
     /// Accepted occurrences in that same ordered batch.
     pub accepted: usize,
+    /// Completed Scalar/Rayon check sums and maximum individual closure peak.
+    /// Absent for shared portable/device routes, whose work is in `source`.
+    pub independent: Option<IndependentWork>,
+    /// Actual Rayon pool snapshot after checking. Preparation builds are
+    /// cumulative over this pool's lifetime; active/reused slots describe this
+    /// submission, not successful checks. `reserved_bytes` is an admitted
+    /// allowance, not a measured peak. Absent for every other route.
+    #[serde(serialize_with = "independent::queries")]
+    pub queries: Option<zetesis_cpu::QueryStatistics>,
     /// Round-source progress; absent for independent scalar/Rayon checking.
     pub source: Option<SourceWork>,
     /// Physical work; absent for every CPU route.

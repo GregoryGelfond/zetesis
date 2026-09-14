@@ -43,7 +43,9 @@ pub struct Configuration {
     pub repetitions: NonZeroUsize,
     /// Explicitly owned Rayon pool threads, one through 64.
     pub workers: NonZeroUsize,
-    /// Scalar/Rayon budget per candidate.
+    /// Scalar/Rayon budget per candidate. Scalar includes one-shot query
+    /// preparation here; Rayon uses the pool's separate default preparation
+    /// limits and collective storage admission.
     pub cpu_limits: Limits,
     /// Round-source budget per whole batch; shared by portable and GPU routes.
     pub source_limits: lazy::Limits,

@@ -35,9 +35,13 @@ const VULKAN_ROUTES: [Route; 6] = [
 /// its timer. Each phase starts with the declared route order; iteration i
 /// rotates it left by i. Six GPU repetitions balance all six route positions.
 /// Programs, seeds and reference checks remain live during the samples.
+/// Completed check aggregation and the Rayon cache snapshot are also outside
+/// the timer, before publication. A failed snapshot refuses the sample.
 ///
-/// The pool/device are reused across cases; lazy catalog/source/transport state
-/// is rebuilt per call. This is not a resident-transport experiment. No outer
+/// The pool/device are reused across cases. Rayon prepares queries on the first
+/// call for an exact program and reuses its range workspaces; Scalar uses the
+/// one-shot checking door for every candidate. Shared lazy catalog/source/transport
+/// state is rebuilt per call. This is not a resident-transport experiment. No outer
 /// candidate search, parsing, objectives, peak RSS or kernel timestamps are timed.
 /// Caller-owned binaries/source identity and host-load control remain external.
 ///
@@ -50,8 +54,8 @@ pub fn measure(
     mut observe: impl FnMut(&Event<'_>) -> io::Result<()>,
 ) -> Result<(), Error> {
     configuration.validate()?;
-    observe(&Event::Configuration { schema: 1, configuration,
-        scope: "relational-source-scans-and-complete-reduct-checks; excludes outer search, fixture/setup/parity/publication",
+    observe(&Event::Configuration { schema: 2, configuration,
+        scope: "relational-source-scans-and-complete-reduct-checks; excludes outer search, fixture/setup/parity/receipt-observation/publication",
         peak_rss: "unavailable: source mask payload and transfer bytes are not process RSS",
     }).map_err(Error::Output)?;
     let maximum = configuration
@@ -126,6 +130,8 @@ pub fn measure(
                 elapsed_ns: measured.elapsed_ns,
                 checked: expected.len(),
                 accepted: expected.iter().filter(|check| check.accepted()).count(),
+                independent: measured.independent,
+                queries: measured.queries,
                 source: measured.source,
                 device: measured.device,
             }))
@@ -172,6 +178,8 @@ struct Execution {
 
 struct Measured {
     elapsed_ns: u128,
+    independent: Option<view::IndependentWork>,
+    queries: Option<zetesis_cpu::QueryStatistics>,
     source: Option<view::SourceWork>,
     device: Option<view::DeviceWork>,
 }
@@ -233,20 +241,7 @@ impl Execution {
                         .map_err(Error::Cpu)?
                 };
                 let elapsed_ns = started.elapsed().as_nanos();
-                if expected.len() != checks.len()
-                    || expected.iter().zip(&checks).any(|(left, right)| {
-                        left.closure() != right.closure()
-                            || left.constraint_violated() != right.constraint_violated()
-                            || left.seed_mismatch() != right.seed_mismatch()
-                    })
-                {
-                    return Err(Error::Parity);
-                }
-                Ok(Measured {
-                    elapsed_ns,
-                    source: None,
-                    device: None,
-                })
+                self.observe_independent(&checks, expected, route, elapsed_ns)
             }
             Route::PortableUnion
             | Route::PortableWorlds
@@ -297,11 +292,46 @@ impl Execution {
                 }
                 Ok(Measured {
                     elapsed_ns,
+                    independent: None,
+                    queries: None,
                     source: Some(batch.progress.into()),
                     device: device.map(Into::into),
                 })
             }
         }
+    }
+
+    // The sample timer has stopped. Semantic comparison and receipt observation
+    // must both succeed before this complete check batch becomes a sample.
+    fn observe_independent(
+        &self,
+        checks: &[Check],
+        expected: &[Check],
+        route: Route,
+        elapsed_ns: u128,
+    ) -> Result<Measured, Error> {
+        if expected.len() != checks.len()
+            || expected.iter().zip(checks).any(|(left, right)| {
+                left.closure() != right.closure()
+                    || left.constraint_violated() != right.constraint_violated()
+                    || left.seed_mismatch() != right.seed_mismatch()
+            })
+        {
+            return Err(Error::Parity);
+        }
+        let independent = view::IndependentWork::from_checks(checks);
+        let queries = if route == Route::Rayon {
+            Some(self.pool.query_statistics().map_err(Error::QueryObservation)?)
+        } else {
+            None
+        };
+        Ok(Measured {
+            elapsed_ns,
+            independent: Some(independent),
+            queries,
+            source: None,
+            device: None,
+        })
     }
 }
 
