@@ -40,6 +40,24 @@ pub struct Query<'owner, 'source> {
     work: u128,
 }
 
+/// One complete equality query or typed refusal with its actual work prefix.
+///
+/// No partially resolved equalities escape a refusal. Capacity includes the
+/// borrowed relation and the query's named frame/buffer, not caller scratch,
+/// this by-value receipt wrapper or source payload. These observations neither grant additional budget nor
+/// establish row feasibility or semantic truth.
+pub struct QueryAttempt<'owner, 'source> {
+    /// Complete owner-bound query, or the original typed failure.
+    pub result: Result<Query<'owner, 'source>, Failure>,
+    /// Admitted inspection/comparison work, including a failed attempt's prefix.
+    pub work: u128,
+    /// Highest admitted or actually allocated named capacity in this attempt.
+    /// Zero means initial relation/frame admission failed before a meter existed.
+    /// Refused proposed allocations are excluded; actual allocator slack can
+    /// exceed the byte limit and is retained even when the attempt then fails.
+    pub peak_bytes: usize,
+}
+
 impl<'owner, 'source> Query<'owner, 'source> {
     /// The exact borrowed relation owner.
     #[must_use]
@@ -170,12 +188,49 @@ impl<'source> Relation<'source> {
     /// # Errors
     /// Refuses invalid columns, resource excess and allocation failure. Limits
     /// include the relation and resulting query; other caller frames are external.
+    /// [`Self::query_attempt`] additionally retains accounting on failure.
     pub fn query(
         &self,
         equalities: &[(usize, &Value)],
         limits: Limits,
     ) -> Result<Query<'_, 'source>, Failure> {
-        let mut work = self.work(limits, size_of::<Query<'_, '_>>())?;
+        self.query_attempt(equalities, limits).result
+    }
+
+    /// Resolve equalities with the same implementation as [`Self::query`],
+    /// retaining actual admitted work and named capacity on every outcome.
+    ///
+    /// Use this door when an enclosing operation charges a cumulative budget.
+    /// A failed lookup cannot supply a partially resolved query or refund work.
+    #[must_use]
+    pub fn query_attempt(
+        &self,
+        equalities: &[(usize, &Value)],
+        limits: Limits,
+    ) -> QueryAttempt<'_, 'source> {
+        let mut work = match self.work(limits, size_of::<Query<'_, '_>>()) {
+            Ok(work) => work,
+            Err(error) => {
+                return QueryAttempt {
+                    result: Err(error),
+                    work: 0,
+                    peak_bytes: 0,
+                };
+            }
+        };
+        let result = self.resolve_query(equalities, &mut work);
+        QueryAttempt {
+            result,
+            work: work.used,
+            peak_bytes: work.peak,
+        }
+    }
+
+    fn resolve_query(
+        &self,
+        equalities: &[(usize, &Value)],
+        work: &mut Work,
+    ) -> Result<Query<'_, 'source>, Failure> {
         let mut resolved = work.reserve(equalities.len())?;
         let mut possible = true;
         for &(column, value) in equalities {
@@ -183,7 +238,7 @@ impl<'source> Relation<'source> {
             if column >= self.predicate.arity() {
                 return Err(Failure::Column);
             }
-            if let Some(index) = storage::lookup(&self.layout, &self.source, value, &mut work)? {
+            if let Some(index) = storage::lookup(&self.layout, &self.source, value, work)? {
                 let value_id = index;
                 work.tick(1)?;
                 resolved.push(Equality { column, value_id });

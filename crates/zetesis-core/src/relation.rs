@@ -38,7 +38,7 @@ mod catalog;
 
 pub use catalog::{Catalog, CatalogFailure, ExtractedAtoms, Insertion, Lookup, OrderedRows};
 
-pub use selection::{Equality, Mask, Query, Selection};
+pub use selection::{Equality, Mask, Query, QueryAttempt, Selection};
 
 /// Inclusive construction and operation ceilings.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

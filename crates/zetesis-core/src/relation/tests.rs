@@ -2,6 +2,7 @@ use super::*;
 
 mod masks;
 mod mask_selection;
+mod query_attempt;
 
 fn predicate(arity: usize) -> Predicate {
     Predicate::new("relation", arity).unwrap()

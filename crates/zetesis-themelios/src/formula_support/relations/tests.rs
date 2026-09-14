@@ -401,17 +401,21 @@ fn probe_work_includes_typed_query_resolution() {
             .unwrap(),
         Some([0].as_slice())
     );
-    let below = FormulaLimits {
-        max_work: counters.work - 1,
-        ..exact
-    };
-    assert!(matches!(
-        support.probe(&pattern, &binding, &below, &mut counters_at_entry(), location()),
-        Err(FormulaFailure::Limit {
-            resource: FormulaResource::Work, observed, limit, location: found,
-        }) if observed == u128::from(counters.work)
-            && limit == u128::from(counters.work - 1) && found == location()
-    ));
+    for maximum in initial_work..counters.work {
+        let below = FormulaLimits { max_work: maximum, ..exact };
+        let mut failed = counters_at_entry();
+        assert!(matches!(
+            support.probe(&pattern, &binding, &below, &mut failed, location()),
+            Err(FormulaFailure::Limit {
+                resource: FormulaResource::Work, observed, limit, location: found,
+            }) if observed == u128::from(maximum) + 1
+                && limit == u128::from(maximum) && found == location()
+        ));
+        // The outer term scan and the inner dictionary prefix are both spent,
+        // even though no posting is returned. Mapping must not add the prefix
+        // twice to the refusal's original cumulative amount.
+        assert_eq!(failed.work, maximum);
+    }
 }
 
 #[test]

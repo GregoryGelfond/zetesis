@@ -214,6 +214,16 @@ argument order instead of computing offsets into one host allocation. Device
 preparation copies these columns directly into one checked mapped GPU buffer,
 without a temporary packed host vector.
 
+`Relation::query_attempt` resolves equalities into that same dictionary and
+retains admitted work and named peak capacity on success or failure. No partial
+query escapes a refusal. Eager support probes use the receipt to charge a failed
+lookup prefix to the original cumulative formula budget, while keeping its
+original error and source location. `Relation::query` delegates to this operation
+when a caller needs only its result. Capacity covers the relation and query
+frame/buffer, excluding source payload, caller scratch and the receipt wrapper;
+it is not RSS. An initial admission refusal reports zero admitted work/capacity,
+while actual allocator slack after reservation remains visible even on failure.
+
 `Relation::select` returns ordered positions; `Relation::select_mask` applies
 the same equality predicate directly into packed original-row membership.
 Neither needs to convert through the other's representation. Mask production

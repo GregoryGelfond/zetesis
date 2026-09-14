@@ -195,7 +195,7 @@ fn catalog_failure(
     outer_bytes: usize,
     location: Location,
 ) -> FormulaFailure {
-    let failure = relation_failure(error.error, limits, counters, outer_bytes, location);
+    let failure = relation_failure(error.error, limits, counters.work, outer_bytes, location);
     match counters.charge_work(error.work, limits, location) {
         Ok(()) => failure,
         Err(charge) => charge,
@@ -326,9 +326,11 @@ impl Relations<'_> {
             super::postings::observe(rows, pattern, values, None);
             return Ok(None);
         }
-        let query = rows
+        let base_work = counters.work;
+        let outer = memory.bytes - rows.relation.storage().retained_bytes;
+        let attempt = rows
             .relation
-            .query(
+            .query_attempt(
                 &keys,
                 relation_limits(
                     limits,
@@ -336,17 +338,12 @@ impl Relations<'_> {
                     pattern.predicate(),
                     rows.relation.storage().retained_bytes + memory.remaining()?,
                 ),
-            )
-            .map_err(|error| {
-                relation_failure(
-                    error,
-                    limits,
-                    counters,
-                    memory.bytes - rows.relation.storage().retained_bytes,
-                    location,
-                )
-            })?;
-        counters.charge_work(query.work(), limits, location)?;
+            );
+        counters.charge_work(attempt.work, limits, location)?;
+        counters.record(Event::SupportPeakBytes(outer as u128 + attempt.peak_bytes as u128));
+        let query = attempt.result.map_err(|error| {
+            relation_failure(error, limits, base_work, outer, location)
+        })?;
         memory.add(query.retained_bytes())?;
         let mut selected: Option<&[usize]> = None;
         if query.is_possible() {
@@ -391,7 +388,7 @@ fn failure(error: Failure, location: Location) -> FormulaFailure {
 fn relation_failure(
     error: Failure,
     limits: &FormulaLimits,
-    counters: &Counters,
+    base_work: u64,
     outer_bytes: usize,
     location: Location,
 ) -> FormulaFailure {
@@ -402,7 +399,7 @@ fn relation_failure(
             ..
         } => (
             FormulaResource::Work,
-            u128::from(counters.work),
+            u128::from(base_work),
             observed,
             u128::from(limits.max_work),
         ),
