@@ -277,6 +277,55 @@ producer traversal, and the final evidence traversal and copy. Allocation failur
 and either origin ceiling remain located admission failures, never UNSAT.
 
 
+### Optional final-rule domain guards
+
+Eager formula preparation can request a domain attempt through the library's
+`with_domain_analysis` method. It is default off, independently of `Indexed` or
+`Table`, and changes neither possible-support completion nor the original
+formula/reduct semantics. The source guide provides a
+[checked on/off example](../rust/source.md#optional-domains-during-final-instantiation).
+
+The private applicability check covers the exact normalized whole source and
+its original positive flat rule occurrences. It excludes computed or generated
+terms, negative body literals, structural/local scopes and richer producers;
+a favorable dependency projection cannot qualify. The analyzer borrows that
+same immutable Program until final instantiation ends. Normalized statement
+deduplication does not merge the rule occurrences or their provenance.
+
+Every complete binding must belong to the upper domain of each mandatory
+positive argument. Intersecting those domains for one source variable remains
+necessary, including repeated occurrences. Unknown contributes no restriction.
+A global Unknown/Stopped analysis or an inapplicable program keeps complete
+fallback. These are upper bounds on source bindings, not facts about candidate
+truth or answer-set membership.
+
+The guard builder retains borrowed source symbols for the meets, converts one
+atomic value at a time through the existing compiler, and resolves it through
+the completed support owner's sole equality dictionary. It retains only IDs and
+original rule/row/column ownership. Both join strategies offer their original
+rows to the same guard before binding and deeper probes. An Indexed posting can
+include rows that fail another bound column; Table intersects its equalities
+before offering rows. Thus offered-row and guard-rejection counts need not
+match across strategies, even when complete bindings do.
+
+`DomainBindings.complete_binding_survives` states the necessary-meet law under
+explicit argument coverage. `guarded_continuations_exact` preserves the ordered
+complete result list, allowing a locally matching row with no complete
+continuation to disappear. The [domain-binding guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/domain-bindings.md)
+keeps analyzer soundness, source/IR correspondence, dictionary identity and
+recursive Rust enumeration as separate obligations. The laws are not an
+end-to-end proof of the source grounder or its resource failures. Arithmetic
+validation stays on the existing complete path for the excluded profiles.
+
+Applicability, analysis, bridge and guard work consume the remaining cumulative
+formula budget. Analysis has separate finite logical populations and bounded
+standard allocations, outside the named support/guard byte allowance and
+without a new caller-control API. Rule guards account their named scratch and
+actual capacities alongside live support/table/query owners; failed work and
+observed capacity remain in receipts. Optional analysis may cost more work or
+storage than it saves. Its observations establish activity and completion scope,
+not elapsed-time, memory or scalability improvement.
+
 ### Relation rows and vector operations
 
 A relation row is one complete typed tuple. Formula support's

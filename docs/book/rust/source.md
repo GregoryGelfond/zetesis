@@ -81,6 +81,69 @@ does not launch ordinary Rayon or GPU grounding; later answer-set execution has
 its own policy. See [finite-table selection](finite-tables.md) for the ownership,
 applicability and proof boundaries.
 
+## Optional domains during final instantiation
+
+`PreparedFormula::with_domain_analysis(Some(DomainLimits { .. }))` requests
+necessary argument-domain guards; `None` is the default. Bundle preparation has
+the same method. The ordinary CLI leaves this option off. This is separate from
+choosing `Indexed` or `Table` joins, and adds no language construct or CLI flag.
+
+The consumer checks the exact normalized whole program and its original rule
+occurrences. The initial profile permits ordinary positive flat rules and
+constraints, whole named variables, and atomic numbers, strings, positive
+nullary symbols, infimum and supremum. It excludes arithmetic, generators,
+negative body literals, structured terms, anonymous/local scopes and richer
+heads. `NormalizedProgram` is necessary; a dependency projection never supplies
+narrowing. Inapplicability keeps the existing complete path and does not create
+a new source refusal.
+
+After unchanged possible-support completion, finite argument domains constrain
+each final rule's variable occurrences. Their intersection can reject a row
+that has no complete positive continuation, before copying its new bindings or
+opening deeper probes. The surviving rows keep the existing matcher, original
+positions and source origins. Support-growth, objective and factorized component
+joins retain their existing paths. Global Unknown or Stopped analysis supplies
+no guards. An individually Unknown argument is unrestricted; other finite
+arguments may still contribute restrictions.
+
+This complete example compares admitted atoms, nodes, roots and provenance,
+observes an actual typed `Analysis` and positive guard activity, and checks both
+local widening and a stopped analysis. It materializes theories without solving
+for answer sets or measuring elapsed time.
+
+```rust
+# extern crate themelios_base;
+# extern crate zetesis_domain;
+# extern crate zetesis_themelios;
+{{#include ../examples/domain-grounding.rs:example}}
+```
+
+Run its maintained Cargo control or the example itself from the checkout root:
+
+```sh
+cargo test --locked -p zetesis-themelios --example book-domain-grounding
+cargo run --locked -p zetesis-themelios --example book-domain-grounding
+```
+
+`DomainObservation` also distinguishes Disabled and Inapplicable. An Analyzed
+callback borrows the exact owner's status, context, argument domains and logical
+statistics; retaining a result requires copying the specific owned information
+the caller needs. Detailed work reports include applicability, analysis and guard
+preparation, even on a failed or stopped prefix. A completed analysis-attempt
+phase can have used conservative fallback; it does not imply FixedPoint.
+
+Analyzer `DomainLimits` bound logical populations and inspected source/symbol
+bytes. Actual work, including stopped work, consumes the original cumulative
+formula budget. The analyzer uses bounded standard collections with no
+fallible-allocation or caller-control API; its heap is outside
+`FormulaLimits::max_support_bytes`. The guard/query lease separately accounts
+its named headers, scratch, temporary atomic payload and actual vector capacity
+beside support, table indices and live masks. These contracts give neither a
+hard allocator/RSS limit nor cancellation/deadline polling. Guard preparation
+and membership costs may outweigh avoided probes. See
+[finite-domain ownership and proof boundaries](finite-tables.md#optional-argument-domain-guards)
+for the exact named-capacity scope and preservation premises.
+
 ## Know which program was analyzed
 
 The analysis accessors are part of the prepared solver input's inspection

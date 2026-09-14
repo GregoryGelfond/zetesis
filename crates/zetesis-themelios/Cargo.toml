@@ -30,3 +30,8 @@ workspace = true
 [[example]]
 name = "book-table-grounding"
 path = "../../docs/book/examples/table-grounding.rs"
+
+[[example]]
+name = "book-domain-grounding"
+path = "../../docs/book/examples/domain-grounding.rs"
+test = true

@@ -79,6 +79,7 @@ cargo run --locked -p zetesis-solve --no-default-features --example book-session
 cargo run --locked -p zetesis-solve --no-default-features --example book-source
 cargo run --locked -p zetesis-solve --no-default-features --example book-selection
 cargo run --locked -p zetesis-solve --no-default-features --example book-measurements
+cargo run --locked -p zetesis-themelios --example book-domain-grounding
 ```
 
 On a machine with an accessible physical GPU, run the shared-resource example:
@@ -111,3 +112,11 @@ lake build
 The Lean toolchain is declared by `proofs/lean-toolchain`. Building the book
 does not replace checking the proof package, source/API links, workspace Rust
 gates or the physical execution paths described by a backend claim.
+
+The optional-domain example also has a Cargo test harness. Its control runs the
+same real preparation, typed analysis observation and complete-theory/fallback
+checks as the displayed example, without a solver or timer:
+
+```sh
+cargo test --locked -p zetesis-themelios --example book-domain-grounding
+```
