@@ -7,7 +7,10 @@ use std::sync::{Mutex, TryLockError};
 use rayon::prelude::*;
 use zetesis_core::{GroundProgram, Program, Seed, SeedView};
 
-use crate::{Check, Control, Limits, PreparationLimits, PreparationStatistics, StaticCheck, Stop, check_static_view};
+use crate::{
+    Check, Control, Limits, PreparationLimits, PreparationStatistics, StaticCheck, Stop,
+    check_static_view,
+};
 
 mod prepared;
 
@@ -76,7 +79,10 @@ impl BatchOracle {
     /// Returns Busy or Poisoned when the shared admission owner is unavailable,
     /// or a checked named-storage sum cannot be represented.
     pub fn query_statistics(&self) -> Result<QueryStatistics, BatchError> {
-        self.admission.try_lock().map_err(admission_error)?.statistics()
+        self.admission
+            .try_lock()
+            .map_err(|error| admission_error(&error))?
+            .statistics()
     }
 
     /// Check a bounded slice and return results in input order. Limits apply
@@ -122,14 +128,24 @@ impl BatchOracle {
                 actual: seeds.len(),
             });
         }
-        let mut cache = self.admission.try_lock().map_err(admission_error)?;
+        let mut cache = self
+            .admission
+            .try_lock()
+            .map_err(|error| admission_error(&error))?;
+        cache.begin_submission();
         let length = seeds.len();
         let active = length.min(self.pool.current_num_threads());
         if active == 0 {
             cache.admit(0, limits, self.max_closure_bytes)?;
             return Ok(Vec::new());
         }
-        cache.prepare(program, active, self.preparation_limits, self.max_closure_bytes, control)?;
+        cache.prepare(
+            program,
+            active,
+            self.preparation_limits,
+            self.max_closure_bytes,
+            control,
+        )?;
         cache.admit(active, limits, self.max_closure_bytes)?;
         let execution = cache.execution(length, active, limits, control);
         Ok(self.pool.install(|| seeds.with_producer(execution)))
@@ -244,19 +260,24 @@ impl BatchOracle {
 /// Actual immutable preparation and fixed workspace ownership receipts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct QueryStatistics {
-    /// Most recent completed preparation, absent before any nonempty lazy batch.
+    /// Currently retained completed preparation, absent before preparation or
+    /// after its cache is retired.
     pub preparation: Option<PreparationStatistics>,
     /// Completed preparation builds over this oracle's lifetime.
     pub preparation_builds: u128,
     /// Persistent slots, including idle slots from a previously larger batch.
     pub retained_workspaces: usize,
-    /// Slots assigned to the last admitted nonempty lazy submission.
+    /// Slots assigned by the latest independent submission acquiring admission.
+    /// Zero when empty or refused during preparation/reservation.
     pub active_workspaces: usize,
-    /// Assigned slots retained from an earlier submission.
+    /// Assigned slots retained from an earlier submission. Zero when no slots
+    /// were assigned by the latest independent submission acquiring admission.
     pub reused_workspaces: usize,
     /// Actual named cache envelope, excluding returned results and source payload.
     pub retained_bytes: u128,
-    /// Collective active/idle/preparation envelope admitted most recently.
+    /// Collective active/idle/preparation envelope of the latest independent
+    /// submission acquiring admission. Capacity and busy refusals cannot update
+    /// these receipts because they do not acquire the cache.
     /// This reserves configured capacity; it is not an observed allocation peak.
     /// Zero means no successful reservation or the latest admission was refused.
     pub reserved_bytes: u128,
@@ -321,7 +342,7 @@ impl std::error::Error for BatchError {
     }
 }
 
-fn admission_error<T>(error: TryLockError<T>) -> BatchError {
+fn admission_error<T>(error: &TryLockError<T>) -> BatchError {
     match error {
         TryLockError::WouldBlock => BatchError::Busy,
         TryLockError::Poisoned(_) => BatchError::Poisoned,

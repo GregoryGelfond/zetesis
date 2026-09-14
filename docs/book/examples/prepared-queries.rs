@@ -2,8 +2,8 @@
 
 // ANCHOR: example
 use zetesis_core::{
-    AdmissionLimits, AtomPattern, ConstructionError, Model, Predicate, Program, Seed, Template, Term,
-    Value,
+    AdmissionLimits, AtomPattern, ConstructionError, Model, Predicate, Program, Seed, Template,
+    Term, Value,
 };
 use zetesis_cpu::{ClosureWorkspace, Control, Limits, PreparationLimits, PreparedQueries, check};
 

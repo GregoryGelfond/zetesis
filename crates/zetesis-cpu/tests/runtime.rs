@@ -289,7 +289,7 @@ fn gates_prune_after_their_arguments_are_bound_before_a_cartesian_join() {
 }
 
 #[test]
-fn bounded_rayon_batch_preserves_input_order_and_individual_stops() {
+fn rayon_batches_preserve_candidate_order() {
     let program = program(vec![choice("p")]);
     let seeds: Vec<_> = Candidates::new(&program, CandidateLimits::default(), Control::default())
         .collect::<Result<_, _>>()
@@ -306,20 +306,34 @@ fn bounded_rayon_batch_preserves_input_order_and_individual_stops() {
             .collect::<Vec<_>>(),
         [0, 1]
     );
+}
+
+#[test]
+fn batch_capacity_refuses_before_preparation() {
+    let program = program(vec![choice("p")]);
+    let seeds: Vec<_> = Candidates::new(&program, CandidateLimits::default(), Control::default())
+        .collect::<Result<_, _>>()
+        .expect("two seeds");
+    let workers = NonZeroUsize::new(2).expect("nonzero");
     let too_small =
         BatchOracle::new(workers, NonZeroUsize::new(1).expect("nonzero")).expect("owned pool");
     assert!(matches!(
         too_small.check_batch(&program, &seeds, Limits::default(), &Control::default()),
         Err(BatchError::Capacity { .. })
     ));
+    assert_eq!(too_small.query_statistics().unwrap().preparation_builds, 0);
+}
+
+#[test]
+fn initial_cancellation_refuses_batch_preparation() {
+    let program = program(vec![choice("p")]);
+    let seed = empty_seed(&program);
+    let batch = BatchOracle::new(NonZeroUsize::MIN, NonZeroUsize::MIN).expect("owned pool");
     let control = Control::default();
     control.cancel();
-    let stopped = batch
-        .check_batch(&program, &seeds, Limits::default(), &control)
-        .expect("admitted batch");
-    assert!(
-        stopped
-            .iter()
-            .all(|result| matches!(result, Err(Stop::Cancelled)))
-    );
+    assert!(matches!(
+        batch.check_batch(&program, &[seed], Limits::default(), &control),
+        Err(BatchError::Preparation(Stop::Cancelled))
+    ));
+    assert_eq!(batch.query_statistics().unwrap().preparation_builds, 0);
 }

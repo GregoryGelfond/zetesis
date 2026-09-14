@@ -1,4 +1,4 @@
-//! Owned and shared true sets enter one reduct checker, with unchanged budgets.
+//! Owned and shared true sets enter the same prepared or one-shot reduct checker.
 
 use std::num::NonZeroUsize;
 use std::sync::Arc;
@@ -150,9 +150,12 @@ fn indexed_view_batches_preserve_occurrence_order() {
     let program = program();
     let selections = selections(&program);
     let graph = GroundProgram::compile(&program, StaticLimits::default()).unwrap();
+    // Both doors start with equivalent empty caches. Reusing the same cache for
+    // the second door would compare different allocation and lookup histories.
+    let reference_pool = pool(selections.len());
     let pool = pool(selections.len());
     let owned: Vec<_> = selections.iter().map(SeedSelection::to_seed).collect();
-    let reference = pool
+    let reference = reference_pool
         .check_batch(&program, &owned, Limits::default(), &Control::default())
         .unwrap();
     let actual = pool
