@@ -130,7 +130,7 @@ impl GroundingObserver for SupportObservation {
         work: GroundingWork,
     ) {
         if phase == GroundingPhase::SupportCompletion {
-            self.work.set(Some(work));
+            self.work.set(Some(self.work.get().unwrap_or_default().checked_sum(work)));
             self.outcome.set(Some(outcome));
         }
     }
