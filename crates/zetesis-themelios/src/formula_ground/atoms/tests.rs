@@ -1,32 +1,20 @@
-//! Atom identity, first-occurrence order and reservation failures.
+//! Shared atom identity, first-occurrence order and located refusal contracts.
 
 #[path = "count_capture.rs"]
 mod count_capture;
 
 use std::collections::BTreeMap;
 use std::error::Error;
-use std::hash::{BuildHasher, BuildHasherDefault, Hasher};
 
 use proptest::prelude::*;
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Location, Span};
+use zetesis_core::atom_interner::Limits;
 use zetesis_core::{Atom, AtomPattern, Predicate, Sign, Term, Value, ValueLimits, ValueNode};
 
-use super::{Catalog, Entry};
-use crate::{AtomAllocation, FormulaFailure};
-
-#[derive(Default)]
-struct ConstantHash;
-
-impl Hasher for ConstantHash {
-    fn finish(&self) -> u64 {
-        0
-    }
-
-    fn write(&mut self, _bytes: &[u8]) {}
-}
-
-type CollidingCatalog = Catalog<BuildHasherDefault<ConstantHash>>;
+use super::Catalog;
+use crate::formula_support::Counters;
+use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 
 fn atom(name: &str, sign: Sign, values: Vec<Value>) -> Atom {
     Atom::new(
@@ -35,25 +23,76 @@ fn atom(name: &str, sign: Sign, values: Vec<Value>) -> Atom {
     )
     .unwrap()
 }
-
 fn number(value: i32) -> Atom {
     atom("p", Sign::Positive, vec![Value::Number(value)])
 }
+fn location() -> Location {
+    Location {
+        source: SourceId::new(7),
+        span: Span::empty(ByteOffset::new(3)),
+    }
+}
+fn bound() -> (FormulaResource, usize) {
+    (FormulaResource::Atoms, 1024)
+}
 
-fn intern<S: BuildHasher>(catalog: &mut Catalog<S>, atom: &Atom) -> usize {
+fn intern(catalog: &mut Catalog, atom: &Atom) -> usize {
     let pattern = AtomPattern::new(
         atom.predicate().clone(),
         atom.values().iter().cloned().map(Term::Constant).collect(),
     )
     .unwrap();
-    match catalog.entry(pattern.key(&[] as &[Value]).unwrap()) {
-        Entry::Occupied(id) => id,
-        Entry::Vacant(entry) => entry.insert().unwrap(),
-    }
+    let mut counters = Counters::default();
+    let limits = FormulaLimits::default();
+    catalog
+        .entry(
+            pattern.key(&[] as &[Value]).unwrap(),
+            bound(),
+            &mut counters,
+            &limits,
+            location(),
+        )
+        .unwrap()
+        .insert_with(Limits::for_atoms(bound().1), || {
+            counters.work(&limits, location())
+        })
+        .map_err(|error| super::failure(error, bound(), location()))
+        .unwrap()
+}
+fn find(catalog: &mut Catalog, atom: &Atom) -> Option<usize> {
+    catalog
+        .find(
+            atom,
+            bound(),
+            &mut Counters::default(),
+            &FormulaLimits::default(),
+            location(),
+        )
+        .unwrap()
+}
+fn commit(catalog: &mut Catalog) {
+    catalog
+        .commit(
+            bound(),
+            &mut Counters::default(),
+            &FormulaLimits::default(),
+            location(),
+        )
+        .unwrap();
+}
+fn finish(catalog: Catalog) -> Vec<Atom> {
+    catalog
+        .into_atoms(
+            bound(),
+            &mut Counters::default(),
+            &FormulaLimits::default(),
+            location(),
+        )
+        .unwrap()
 }
 
 #[test]
-fn hash_collisions_preserve_complete_atom_identity() {
+fn shared_index_preserves_complete_atom_identity() {
     let tuple = Value::from_nodes(
         vec![ValueNode::Tuple { arity: 1 }, ValueNode::Number(1)],
         ValueLimits::default(),
@@ -68,129 +107,101 @@ fn hash_collisions_preserve_complete_atom_identity() {
         atom("p", Sign::Positive, vec![]),
         atom("p", Sign::Positive, vec![tuple]),
     ];
-    let mut catalog = CollidingCatalog::default();
+    let mut catalog = Catalog::default();
     for (id, atom) in atoms.iter().enumerate() {
         assert_eq!(intern(&mut catalog, atom), id);
     }
     for (id, atom) in atoms.iter().enumerate() {
-        assert_eq!(catalog.find(atom), Some(id));
-        // Verify the forced-collision route actually stored every identity
-        // under the constant hash, rather than silently using another hasher.
-        assert_eq!(catalog.index.find(0, |&stored| stored == id), Some(&id));
+        assert_eq!(find(&mut catalog, atom), Some(id));
     }
-    assert_eq!(catalog.find(&number(2)), None);
-    assert_eq!(catalog.into_atoms(), atoms);
+    assert_eq!(find(&mut catalog, &number(2)), None);
+    assert_eq!(finish(catalog), atoms);
 }
 
 #[test]
-fn duplicate_atoms_reuse_the_first_id() {
-    let mut catalog = CollidingCatalog::default();
-    assert_eq!(intern(&mut catalog, &number(2)), 0);
-    assert_eq!(intern(&mut catalog, &number(1)), 1);
-    let pattern = AtomPattern::new(number(2).predicate().clone(), vec![Term::Variable(0)]).unwrap();
-    assert!(matches!(
-        catalog.entry(pattern.key(&[Value::Number(2)][..]).unwrap()),
-        Entry::Occupied(0)
-    ));
-    assert_eq!(catalog.into_atoms(), [number(2), number(1)]);
-}
-
-#[test]
-fn table_growth_preserves_first_occurrence_order() {
+fn growth_preserves_first_occurrence_order() {
     let atoms: Vec<_> = (0..257).rev().map(number).collect();
-    let mut catalog = Catalog::<std::collections::hash_map::RandomState>::default();
+    let mut catalog = Catalog::default();
     for (id, atom) in atoms.iter().enumerate() {
         assert_eq!(intern(&mut catalog, atom), id);
+        if id % 31 == 0 {
+            commit(&mut catalog);
+        }
     }
     for (id, atom) in atoms.iter().enumerate().rev() {
-        assert_eq!(catalog.find(atom), Some(id));
+        assert_eq!(find(&mut catalog, atom), Some(id));
     }
-    assert_eq!(catalog.into_atoms(), atoms);
+    assert_eq!(finish(catalog), atoms);
 }
 
 #[test]
-fn refused_reservation_preserves_existing_membership() {
-    let mut catalog = CollidingCatalog::default();
-    assert_eq!(intern(&mut catalog, &number(4)), 0);
-    assert!(matches!(
-        catalog.reserve(usize::MAX),
-        Err(AtomAllocation::Atoms(_))
-    ));
-    assert_eq!(catalog.find(&number(4)), Some(0));
-    assert_eq!(catalog.find(&number(5)), None);
+fn exhausted_lookup_retains_its_source_cause() {
+    let mut catalog = Catalog::default();
+    intern(&mut catalog, &number(4));
+    let limits = FormulaLimits {
+        max_work: 0,
+        ..FormulaLimits::default()
+    };
+    let mut counters = Counters::default();
+    let result = catalog.find(&number(5), bound(), &mut counters, &limits, location());
+    assert!(matches!(result, Err(FormulaFailure::Limit {
+        resource: FormulaResource::Work, observed: 1, limit: 0, location: actual,
+    }) if actual == location()));
+    assert_eq!(counters.work, 0);
+    assert_eq!(catalog.len(), 1);
+    assert_eq!(find(&mut catalog, &number(4)), Some(0));
+    assert_eq!(find(&mut catalog, &number(5)), None);
     assert_eq!(intern(&mut catalog, &number(5)), 1);
-    assert_eq!(catalog.into_atoms(), [number(4), number(5)]);
-}
-
-fn located(error: AtomAllocation) -> FormulaFailure {
-    FormulaFailure::AtomAllocation {
-        error,
-        location: Location {
-            source: SourceId::new(7),
-            span: Span::empty(ByteOffset::new(3)),
-        },
-    }
+    assert_eq!(finish(catalog), [number(4), number(5)]);
 }
 
 #[test]
-fn atom_allocation_preserves_the_reservation_error() {
+fn allocation_diagnostics_retain_the_original_error() {
     let error = Vec::<Atom>::new().try_reserve(usize::MAX).unwrap_err();
-    let failure = located(AtomAllocation::Atoms(error));
+    let failure = FormulaFailure::AtomAllocation {
+        error,
+        location: location(),
+    };
     assert!(failure.to_string().starts_with("formula atom storage:"));
     assert!(
         failure
-            .source()
-            .unwrap()
             .source()
             .unwrap()
             .is::<std::collections::TryReserveError>()
     );
     let diagnostics = failure.diagnostics();
     assert_eq!(diagnostics.len(), 1);
-    assert_eq!(diagnostics[0].primary().location.source, SourceId::new(7));
-    assert_eq!(
-        diagnostics[0].primary().location.span,
-        Span::empty(ByteOffset::new(3))
-    );
+    assert_eq!(diagnostics[0].primary().location, location());
 }
 
 #[test]
-fn index_allocation_preserves_the_reservation_error() {
-    let error = hashbrown::HashTable::<usize>::new()
-        .try_reserve(usize::MAX, |_| 0)
-        .unwrap_err();
-    let failure = located(AtomAllocation::Index(error));
-    assert!(failure.to_string().starts_with("formula atom index:"));
-    assert!(
-        failure
-            .source()
-            .unwrap()
-            .source()
-            .unwrap()
-            .is::<hashbrown::TryReserveError>()
+fn named_storage_refusal_preserves_exact_requested_bytes() {
+    let failure = super::failure(
+        zetesis_core::atom_interner::Failure::Bytes {
+            required: 101,
+            limit: 100,
+        },
+        bound(),
+        location(),
     );
-    assert_eq!(
-        failure.diagnostics()[0].primary().location.source,
-        SourceId::new(7)
-    );
+    assert!(matches!(failure, FormulaFailure::Limit {
+        resource: FormulaResource::AtomStorageBytes, observed: 101, limit: 100, location: actual,
+    } if actual == location()));
 }
 
 proptest! {
     #[test]
-    fn collision_lookup_agrees_with_typed_equality(values in prop::collection::vec(-32_i32..32, 0..256)) {
-        let mut catalog = CollidingCatalog::default();
+    fn indexed_lookup_agrees_with_typed_equality(values in prop::collection::vec(-32_i32..32, 0..256)) {
+        let mut catalog = Catalog::default();
         let mut reference = BTreeMap::new();
         let mut ordered = Vec::new();
         for value in values {
             let atom = number(value);
             let next = reference.len();
-            let id = *reference.entry(atom.clone()).or_insert_with(|| {
-                ordered.push(atom.clone());
-                next
-            });
+            let id = *reference.entry(atom.clone()).or_insert_with(|| { ordered.push(atom.clone()); next });
             prop_assert_eq!(intern(&mut catalog, &atom), id);
-            prop_assert_eq!(catalog.find(&atom), Some(id));
+            prop_assert_eq!(find(&mut catalog, &atom), Some(id));
         }
-        prop_assert_eq!(catalog.into_atoms(), ordered);
+        prop_assert_eq!(finish(catalog), ordered);
     }
 }

@@ -11,7 +11,7 @@ use zetesis_ferraris::{
     Limits, Node, Theory, append_aggregate, models,
 };
 
-use super::{Catalog, atom, intern};
+use super::{Catalog, atom, commit, find, finish, intern};
 use crate::CountPlanLimits;
 use crate::formula_count_plan::{Bounds, Collector, Input, Outcome, Request};
 
@@ -98,6 +98,7 @@ impl Fixture {
         let mut bounds = Bounds::new(members.len());
         bounds.guard(comparison, bound);
         let origin = location(&self.source, statement);
+        commit(&mut self.atoms);
         self.collector.capture_group(
             Input {
                 body: 1,
@@ -164,9 +165,9 @@ fn captured_members_keep_their_meaning_after_catalog_growth() {
         .map(|name| atom(name, Sign::Positive, vec![]))
         .into();
     for (id, atom) in expected.iter().enumerate() {
-        assert_eq!(fixture.atoms.find(atom), Some(id));
+        assert_eq!(find(&mut fixture.atoms, atom), Some(id));
     }
-    let atoms = fixture.atoms.into_atoms();
+    let atoms = finish(fixture.atoms);
     assert_eq!(atoms, expected);
     let theory = Theory::new(
         atoms.len(),

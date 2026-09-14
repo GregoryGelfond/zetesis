@@ -567,3 +567,25 @@ are requested logical payload, excluding allocator overhead and temporary cursor
 storage; they are not process RSS. These observations measure eager formula
 selectivity, not elapsed time or GPU/lazy performance. Production libraries and
 CLI builds contain neither this instrument nor an additional option.
+
+
+## Formula atom ownership
+
+Emitted formula atoms use the shared core appendable interner. The AVL index
+retains only dense positions and metadata; one payload sequence fixes each
+first-occurrence identity. A committed prefix supplies exact contiguous count
+capture, and finalization transfers the sequence into the existing immutable
+`AtomCatalog`. Possible positive support remains a separate population; catalog
+presence never establishes truth, source coverage or answer-set membership.
+
+Lookup, copied scalar descriptors/text, index construction and commit operations
+now consume the cumulative formula work ceiling. Exact work cutoffs can therefore
+change. `Limits::for_atoms` derives a finite index-capacity envelope from the
+applicable atom ceiling; `FormulaResource::AtomStorageBytes` reports that named
+storage refusal. Nested payload remains under the existing scalar-byte budget;
+neither budget is a process RSS ceiling.
+
+This pre-1.0 source API change removes the old `AtomAllocation` enum and its
+hash-table-specific error variant. `FormulaFailure::AtomAllocation` now retains
+the original `std::collections::TryReserveError` directly, with the source
+location. Configured limits and exhausted work remain distinct typed refusals.

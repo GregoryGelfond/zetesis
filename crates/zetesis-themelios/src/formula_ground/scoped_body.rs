@@ -46,12 +46,20 @@ pub(super) fn validate_with_purpose(
     let mut builder = Builder::empty(context.limits, context.budget, counters, purpose, None);
     let result = (|| {
         builder.initialize(context.location)?;
-        builder.body(literals, binding, context.location, support)
+        let root = builder.body(literals, binding, context.location, support)?;
+        builder.commit_atoms(context.location)?;
+        Ok::<_, FormulaFailure>(root)
     })();
+    let atom_bound = builder.atom_bound();
     *context.counters = builder.counters;
     let root = result?;
     Ok(ValidatedBody {
-        atoms: builder.catalog.into_atoms(),
+        atoms: builder.catalog.into_atoms(
+            atom_bound,
+            context.counters,
+            context.limits,
+            context.location,
+        )?,
         nodes: builder.nodes,
         root,
     })

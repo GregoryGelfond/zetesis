@@ -133,15 +133,34 @@ scratch reduces overlap between phases; it does not establish a lower earlier
 construction peak or process RSS. The [ownership chapter](ownership.md) relates
 these lifetimes to prepared views and execution state.
 
-The final formula catalog owns one atom sequence and indexes it with dense IDs.
-Lookup uses full typed atom equality; hashes alone never establish identity.
-Insertion order fixes the IDs, and the table is never iterated to emit the final
-sequence. Lookup has expected constant table work plus hashing and equality;
-collisions can require a full scan of the catalog. The
-[catalog](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/atoms.rs)
-reserves sequence and index capacity before publishing a new ID. Failed
-reservations return a located `FormulaFailure::AtomAllocation`. Conservative
-cumulative scalar-byte charges remain separate from actual live index capacity.
+The final formula catalog uses the shared core
+[`AtomInterner`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/atom_interner.rs).
+It owns each atom once and indexes stable insertion positions with an AVL tree.
+Lookup performs logarithmically many checked node probes and full typed
+comparisons; compared descriptors and text prefixes are additional charged work.
+Insertion plans links and rotations in reusable scratch, admits capacity and
+publication work, then publishes the new identity. It neither hashes complete
+payloads nor shifts a sorted index. Canonical traversal is separate from the
+dense insertion order.
+
+A committed prefix supplies the count-plan collector's exact dense atom slice.
+The first commit transfers the pending vector; later commits move only pending
+atoms after borrowed views end. Finalization transfers that sequence into the
+existing immutable `AtomCatalog`. Possible support and emitted atoms retain
+distinct populations, and commitment establishes no truth.
+
+The located source
+[adapter](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/atoms.rs)
+charges lookup, copying, index construction and commit against cumulative formula
+work; exact refusal cutoffs can change with these operations. `Limits::for_atoms`
+derives a finite conservative named-capacity envelope from the applicable atom
+ceiling and actual layouts, including index/scratch and buffer-growth overlap.
+A refusal preserves existing IDs, although capacity already acquired can remain.
+`FormulaResource::AtomStorageBytes` reports that capacity ceiling; allocation
+failure retains the original `TryReserveError` directly in
+`FormulaFailure::AtomAllocation`. Nested payload remains under the separate
+scalar-byte budget. Neither named capacity nor cumulative scalar bytes measure
+process RSS.
 
 An atom in a **possible support relation** is a witness available to source
 enumeration. It is not thereby true in a candidate, and an aggregate's proposed

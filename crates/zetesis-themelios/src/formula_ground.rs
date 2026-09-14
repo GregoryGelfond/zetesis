@@ -70,7 +70,7 @@ pub(crate) fn ground(
         roots,
         origins,
         count_plan,
-    } = builder.finish(&profile)?;
+    } = builder.finish(&profile, location)?;
     let theory = profile.phase(GroundingPhase::TheoryValidation, None, || {
         Theory::new(atoms.len(), nodes, roots, limits.theory)
             .map_err(|error| FormulaFailure::Theory { error, location })
@@ -298,15 +298,28 @@ impl Builder<'_> {
     /// Complete the semantic additions before discarding construction indexes.
     /// Moving the emitted vectors preserves IDs, root order and source origins;
     /// cumulative budgets are never released with the discarded scratch.
-    fn finish(mut self, profile: &Profile<'_>) -> Result<Emission, FormulaFailure> {
+    fn finish(
+        mut self,
+        profile: &Profile<'_>,
+        location: Location,
+    ) -> Result<Emission, FormulaFailure> {
         use crate::GroundingPhase;
 
-        profile.phase(GroundingPhase::Coherence, None, || self.coherence())?;
+        profile.phase(GroundingPhase::Coherence, None, || {
+            self.commit_atoms(location)?;
+            self.coherence()
+        })?;
         profile.phase(GroundingPhase::SupportGuards, None, || {
             self.support_guards()
         })?;
+        let atom_bound = self.atom_bound();
         Ok(Emission {
-            atoms: self.catalog.into_atoms(),
+            atoms: self.catalog.into_atoms(
+                atom_bound,
+                &mut self.counters,
+                self.limits,
+                location,
+            )?,
             nodes: self.nodes,
             roots: self.roots,
             origins: self.origins,
@@ -318,7 +331,7 @@ impl Builder<'_> {
     // coexist. Reuse its IDs; coherence must create neither atoms nor support.
     fn coherence(&mut self) -> Result<(), FormulaFailure> {
         for index in 0..self.catalog.len() {
-            let atom = &self.catalog.atoms()[index];
+            let atom = self.catalog.get(index).expect("emitted atom position");
             if atom.predicate().sign() != zetesis_core::Sign::Negative {
                 continue;
             }
@@ -334,7 +347,14 @@ impl Builder<'_> {
             )
             .expect("opposite atom keeps the same arity");
             self.work(location)?;
-            if let Some(other) = self.catalog.find(&opposite) {
+            let atom_bound = self.atom_bound();
+            if let Some(other) = self.catalog.find(
+                &opposite,
+                atom_bound,
+                &mut self.counters,
+                self.limits,
+                location,
+            )? {
                 let positive = self.node(Node::Atom(other), location)?;
                 let negative = self.node(Node::Atom(index), location)?;
                 let both = self.and(positive, negative, location)?;
@@ -349,6 +369,12 @@ impl Builder<'_> {
             }
         }
         Ok(())
+    }
+
+    pub(super) fn commit_atoms(&mut self, location: Location) -> Result<(), FormulaFailure> {
+        let bound = self.atom_bound();
+        self.catalog
+            .commit(bound, &mut self.counters, self.limits, location)
     }
 
     pub(super) fn work(&mut self, location: Location) -> Result<(), FormulaFailure> {
@@ -473,24 +499,30 @@ impl Builder<'_> {
         self.counters.record(Event::AtomLookup);
         let required = self.catalog.len() as u128 + 1;
         let (atom_resource, atom_limit) = self.atom_bound();
-        let index = match self.catalog.entry(key) {
-            atoms::Entry::Occupied(index) => index,
-            atoms::Entry::Vacant(entry) => {
-                ceiling(atom_resource, required, atom_limit as u128, location)?;
-                if matches!(self.purpose, Purpose::Theory) {
-                    self.budget
-                        .charge(ExpansionResource::Origins, 1, location)?;
-                }
-                let index = entry
-                    .insert()
-                    .map_err(|error| FormulaFailure::AtomAllocation { error, location })?;
-                self.counters.record(Event::AtomInserted);
-                if matches!(self.purpose, Purpose::Theory) {
-                    self.metadata
-                        .atom(location, &mut self.counters, self.limits)?;
-                }
-                index
+        let atom_bound = (atom_resource, atom_limit);
+        let entry =
+            self.catalog
+                .entry(key, atom_bound, &mut self.counters, self.limits, location)?;
+        let index = if let Some(index) = entry.position() {
+            index
+        } else {
+            ceiling(atom_resource, required, atom_limit as u128, location)?;
+            if matches!(self.purpose, Purpose::Theory) {
+                self.budget
+                    .charge(ExpansionResource::Origins, 1, location)?;
             }
+            let index = entry
+                .insert_with(
+                    zetesis_core::atom_interner::Limits::for_atoms(atom_limit),
+                    || self.counters.work(self.limits, location),
+                )
+                .map_err(|error| atoms::failure(error, atom_bound, location))?;
+            self.counters.record(Event::AtomInserted);
+            if matches!(self.purpose, Purpose::Theory) {
+                self.metadata
+                    .atom(location, &mut self.counters, self.limits)?;
+            }
+            index
         };
         self.node(Node::Atom(index), location)
     }
@@ -818,6 +850,12 @@ impl Builder<'_> {
             let violated = self.and(body, outside, rule.location)?;
             let constraint = self.node(Node::Implies(violated, FALSUM), rule.location)?;
             self.root(constraint, rule)?;
+            if self.count_plan.is_some()
+                && retained.as_ref().is_some_and(|(_, keys)| keys.is_some())
+                && count_bounds.is_some()
+            {
+                self.commit_atoms(rule.location)?;
+            }
             if let (Some(collector), Some((eligible, Some(keys))), Some(bounds)) =
                 (&mut self.count_plan, retained, count_bounds)
             {

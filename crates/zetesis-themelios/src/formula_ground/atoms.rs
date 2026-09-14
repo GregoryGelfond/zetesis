@@ -1,101 +1,124 @@
-//! One owned formula-atom sequence with a lookup table containing only IDs.
+//! Located source admission over the shared authoritative atom interner.
 //!
-//! Full typed equality decides identity even when every hash collides. The table
-//! is never enumerated to emit atoms: first insertion fixes each dense ID, and
-//! consuming the catalog transfers that sequence without cloning its contents.
-//! Lookup borrows a checked substitution; only a vacant entry materializes an
-//! atom after reservations. Repeated occurrences copy no typed payload.
-//! Lookup is expected constant table work plus atom hashing/equality; a collision
-//! chain can inspect every atom. Growth can rehash existing atoms. Randomized
-//! hashing changes neither IDs nor emission order.
-//!
-//! Atom count bounds the index population. Vector/table reservations are fallible
-//! before membership changes. Table buckets are additional authored index storage;
-//! the caller's conservative scalar-byte allowance is not total live memory.
+//! Only vacant entries copy a checked substitution. First insertion fixes each
+//! dense ID; commits move suffix ownership without reordering or copying payload.
+//! AVL comparisons, path planning, reservations and commit work all use the
+//! enclosing formula counter. Nested payload remains under ScalarBytes, while
+//! the finite index-capacity envelope is derived from the applicable atom bound.
 
-use std::collections::hash_map::RandomState;
-use std::hash::BuildHasher;
-
-use hashbrown::HashTable;
+use themelios_base::span::Location;
+use zetesis_core::atom_interner::{AtomEntry, AtomInterner, Failure, Limits};
 use zetesis_core::{Atom, AtomKey};
 
-use crate::AtomAllocation;
+use crate::formula_support::Counters;
+use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 
 #[derive(Default)]
-pub(super) struct Catalog<S = RandomState> {
-    atoms: Vec<Atom>,
-    index: HashTable<usize>,
-    hasher: S,
-}
+pub(super) struct Catalog(AtomInterner);
 
-pub(super) enum Entry<'a, 'key, S> {
-    Occupied(usize),
-    Vacant(Vacant<'a, 'key, S>),
-}
-
-pub(super) struct Vacant<'a, 'key, S> {
-    catalog: &'a mut Catalog<S>,
-    key: AtomKey<'key>,
-    hash: u64,
-}
-
-impl<S: BuildHasher> Catalog<S> {
+impl Catalog {
     pub(super) fn len(&self) -> usize {
-        self.atoms.len()
+        self.0.len()
+    }
+    pub(super) fn get(&self, id: usize) -> Option<&Atom> {
+        self.0.get(id)
     }
 
+    /// Callers commit before exposing a complete contiguous capture population.
     pub(super) fn atoms(&self) -> &[Atom] {
-        &self.atoms
+        let committed = self.0.committed();
+        assert_eq!(committed.len(), self.len(), "complete atom capture prefix");
+        committed.as_slice()
     }
 
-    pub(super) fn find(&self, atom: &Atom) -> Option<usize> {
-        self.index
-            .find(self.hasher.hash_one(atom), |&id| self.atoms[id] == *atom)
-            .copied()
+    pub(super) fn entry<'owner, 'key>(
+        &'owner mut self,
+        key: AtomKey<'key>,
+        bound: (FormulaResource, usize),
+        counters: &mut Counters,
+        limits: &FormulaLimits,
+        location: Location,
+    ) -> Result<AtomEntry<'owner, 'key>, FormulaFailure> {
+        self.0
+            .entry_key_with(key, Limits::for_atoms(bound.1), || {
+                counters.work(limits, location)
+            })
+            .map_err(|error| failure(error, bound, location))
     }
 
-    pub(super) fn entry<'key>(&mut self, key: AtomKey<'key>) -> Entry<'_, 'key, S> {
-        let hash = self.hasher.hash_one(key);
-        match self
-            .index
-            .find(hash, |&id| key.compare(&self.atoms[id]).is_eq())
-        {
-            Some(&id) => Entry::Occupied(id),
-            None => Entry::Vacant(Vacant {
-                catalog: self,
-                key,
-                hash,
-            }),
-        }
+    pub(super) fn find(
+        &mut self,
+        atom: &Atom,
+        bound: (FormulaResource, usize),
+        counters: &mut Counters,
+        limits: &FormulaLimits,
+        location: Location,
+    ) -> Result<Option<usize>, FormulaFailure> {
+        self.0
+            .entry_atom_with(atom, Limits::for_atoms(bound.1), || {
+                counters.work(limits, location)
+            })
+            .map(|entry| entry.position())
+            .map_err(|error| failure(error, bound, location))
     }
 
-    fn reserve(&mut self, additional: usize) -> Result<(), AtomAllocation> {
-        self.atoms
-            .try_reserve(additional)
-            .map_err(AtomAllocation::Atoms)?;
-        self.index
-            .try_reserve(additional, |&id| self.hasher.hash_one(&self.atoms[id]))
-            .map_err(AtomAllocation::Index)
+    pub(super) fn commit(
+        &mut self,
+        bound: (FormulaResource, usize),
+        counters: &mut Counters,
+        limits: &FormulaLimits,
+        location: Location,
+    ) -> Result<(), FormulaFailure> {
+        self.0
+            .commit_with(Limits::for_atoms(bound.1), || {
+                counters.work(limits, location)
+            })
+            .map_err(|error| failure(error, bound, location))
     }
 
-    pub(super) fn into_atoms(self) -> Vec<Atom> {
-        self.atoms
+    pub(super) fn into_atoms(
+        self,
+        bound: (FormulaResource, usize),
+        counters: &mut Counters,
+        limits: &FormulaLimits,
+        location: Location,
+    ) -> Result<Vec<Atom>, FormulaFailure> {
+        self.0
+            .into_atoms_with(Limits::for_atoms(bound.1), || {
+                counters.work(limits, location)
+            })
+            .map_err(|error| failure(error, bound, location))
     }
 }
 
-impl<S: BuildHasher> Vacant<'_, '_, S> {
-    /// Publish the new ID only after both reservations and updates complete.
-    /// A refused reservation may retain capacity, but changes no atom membership.
-    pub(super) fn insert(self) -> Result<usize, AtomAllocation> {
-        self.catalog.reserve(1)?;
-        let id = self.catalog.atoms.len();
-        self.catalog.atoms.push(self.key.to_atom());
-        self.catalog
-            .index
-            .insert_unique(self.hash, id, |&existing| {
-                self.catalog.hasher.hash_one(&self.catalog.atoms[existing])
-            });
-        Ok(id)
+pub(super) fn failure(
+    error: Failure<FormulaFailure>,
+    bound: (FormulaResource, usize),
+    location: Location,
+) -> FormulaFailure {
+    match error {
+        Failure::Stopped(error) => error,
+        Failure::Allocation(error) => FormulaFailure::AtomAllocation { error, location },
+        Failure::Atoms { required, limit } => FormulaFailure::Limit {
+            resource: bound.0,
+            observed: required as u128,
+            limit: limit as u128,
+            location,
+        },
+        Failure::Bytes { required, limit } => FormulaFailure::Limit {
+            resource: FormulaResource::AtomStorageBytes,
+            observed: required,
+            limit,
+            location,
+        },
+        // Interner Overflow denotes a next element count beyond usize: byte
+        // envelopes themselves are computed in u128 from admitted capacities.
+        Failure::Overflow => FormulaFailure::Limit {
+            resource: bound.0,
+            observed: usize::MAX as u128 + 1,
+            limit: bound.1 as u128,
+            location,
+        },
     }
 }
 
