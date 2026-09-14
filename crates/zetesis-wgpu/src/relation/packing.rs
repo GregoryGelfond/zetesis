@@ -152,6 +152,7 @@ impl Plan {
                 .checked_add(address(query.equalities().len())?)
                 .ok_or_else(|| capacity("relation equality count exceeds u32"))
         })?;
+        crate::runtime::positive_timeout(limits.timeout)?;
         let query_bytes = u64::from(cells(count, 4)?.max(4)) * 4;
         let equality_bytes = u64::from(cells(equalities, 2)?.max(2)) * 4;
         let stride = words

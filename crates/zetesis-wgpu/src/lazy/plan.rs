@@ -181,6 +181,12 @@ impl Plan {
             rules.map_err(|_| capacity())?,
             candidates.map_err(|_| capacity())?,
         ];
+        snapshot_shape(
+            chunk.words(),
+            chunk.worlds(),
+            chunk.snapshots().len(),
+            chunk.seeds().len(),
+        )?;
         // Source records address this catalog with u32 indices, even though its
         // count is not needed in the device uniform.
         u32::try_from(chunk.catalog_atoms()).map_err(|_| capacity())?;
@@ -223,9 +229,7 @@ impl Plan {
         {
             return Err(capacity());
         }
-        if limits.timeout.is_zero() {
-            return Err(capacity());
-        }
+        crate::runtime::positive_timeout(limits.timeout)?;
         let uploaded_bytes = sizes[..4]
             .iter()
             .try_fold(UNIFORM_BYTES, |sum, size| sum.checked_add(*size))
@@ -286,3 +290,26 @@ impl Plan {
         Ok(decoded)
     }
 }
+
+// The CPU owns Chunk construction, but the backend independently checks every
+// row read by its world×word indexing before allocating transport. A matching
+// byte ceiling alone cannot establish either immutable input's shape.
+fn snapshot_shape(
+    words: usize,
+    worlds: usize,
+    snapshots: usize,
+    seeds: usize,
+) -> Result<(), GpuError> {
+    let expected = words.checked_mul(worlds);
+    if expected != Some(snapshots) || expected != Some(seeds) {
+        return Err(GpuError::new(
+            GpuErrorKind::Capacity,
+            "lazy snapshots and seeds must each contain worlds times words entries",
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "../../tests/lazy/shapes.rs"]
+mod shape_tests;

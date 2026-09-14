@@ -263,6 +263,7 @@ impl Plan {
         epoch: u32,
     ) -> Result<Self, GpuError> {
         let count = address(worlds)?;
+        crate::runtime::positive_timeout(limits.timeout)?;
         if worlds > limits.max_candidates || count > device.max_compute_workgroups_per_dimension {
             return Err(capacity("tight batch exceeds candidate/dispatch ceiling"));
         }

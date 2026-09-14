@@ -132,6 +132,7 @@ pub struct AggregateGpuLimits {
     pub max_device_work: u64,
     /// Submission/readback wait with shared control polling. This does not bound
     /// initialization, allocation, compilation or error-scope drainage.
+    /// Must be positive for a nonempty batch; empty batches perform no wait.
     pub timeout: Duration,
 }
 impl Default for AggregateGpuLimits {

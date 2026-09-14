@@ -153,3 +153,46 @@ fn complete_retention_requests_no_buffers() {
     .complete(|_| panic!("retained handle was lost"));
     assert_eq!(*events.borrow(), [Event::GroupDropped]);
 }
+
+#[test]
+fn input_replacement_preserves_each_binding_position() {
+    for mask in 0..16 {
+        let original = Buffers {
+            uniform: 10,
+            inputs: [20, 21, 22, 23],
+            output: 30,
+            readback: 40,
+        };
+        let pending = original.retain(Retention {
+            uniform: true,
+            inputs: std::array::from_fn(|index| mask & (1 << index) != 0),
+            result: true,
+        });
+        let mut requested = Vec::new();
+        let complete = pending.complete(|slot| {
+            let Slot::Input(index) = slot else {
+                panic!("only input bindings were released");
+            };
+            requested.push(index);
+            100 + index
+        });
+        for (index, value) in complete.inputs.into_iter().enumerate() {
+            let expected = if mask & (1 << index) == 0 {
+                100 + index
+            } else {
+                20 + index
+            };
+            assert_eq!(value, expected);
+        }
+        assert_eq!(
+            requested,
+            (0..4)
+                .filter(|index| mask & (1 << index) == 0)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            (complete.uniform, complete.output, complete.readback),
+            (10, 30, 40)
+        );
+    }
+}

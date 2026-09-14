@@ -175,6 +175,19 @@ pub(crate) fn submit(
     queue.submit([encoder.finish()])
 }
 
+/// Admit a dispatch's wait policy before any device allocation or submission.
+/// Empty operations that submit no work do not need a wait allowance.
+pub(crate) fn positive_timeout(timeout: Duration) -> Result<(), GpuError> {
+    if timeout.is_zero() {
+        Err(GpuError::new(
+            GpuErrorKind::Capacity,
+            "the GPU wait timeout must be positive",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 // Poll control between bounded waits. Keep settled effects distinct from the
 // caller outcome: cancellation is never converted to success for reuse. Resident
 // buffer handles may remain owned until explicit release or owner destruction.

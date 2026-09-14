@@ -240,6 +240,10 @@ fn qualify_refusals(backend: physical::Backend) {
     let work = prepared.activity().completed_work;
     for limits in [
         RelationGpuLimits {
+            timeout: std::time::Duration::ZERO,
+            ..RelationGpuLimits::default()
+        },
+        RelationGpuLimits {
             max_queries: 0,
             ..RelationGpuLimits::default()
         },
@@ -252,10 +256,12 @@ fn qualify_refusals(backend: physical::Backend) {
             ..RelationGpuLimits::default()
         },
     ] {
+        let error = prepared
+            .filter(&queries, limits, &Control::default())
+            .err()
+            .unwrap();
         assert!(
-            prepared
-                .filter(&queries, limits, &Control::default())
-                .is_err()
+            matches!(error, RelationGpuError::Gpu(ref error) if error.kind() == zetesis_wgpu::GpuErrorKind::Capacity)
         );
         assert_eq!(prepared.activity(), RelationGpuActivity::default());
         assert!(prepared.last_stats().is_none());
@@ -263,7 +269,14 @@ fn qualify_refusals(backend: physical::Backend) {
     let cancelled = Control::default();
     cancelled.cancel();
     assert!(matches!(
-        prepared.filter(&queries, RelationGpuLimits::default(), &cancelled),
+        prepared.filter(
+            &queries,
+            RelationGpuLimits {
+                timeout: std::time::Duration::ZERO,
+                ..RelationGpuLimits::default()
+            },
+            &cancelled,
+        ),
         Err(RelationGpuError::Stopped(Stop::Cancelled))
     ));
     let exact = RelationGpuLimits {

@@ -43,6 +43,7 @@ pub struct FormulaLimits {
     pub max_work_per_candidate: u32,
     /// Maximum host wait for submitted work; not GPU preemption or a deadline
     /// for device initialization, compilation, allocation or error-scope drains.
+    /// Must be positive for a nonempty batch; empty batches perform no wait.
     pub timeout: Duration,
 }
 impl Default for FormulaLimits {

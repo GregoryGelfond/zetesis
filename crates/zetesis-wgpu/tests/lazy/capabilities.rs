@@ -2,6 +2,29 @@
 
 use crate::GpuErrorKind;
 
+#[test]
+fn lazy_receipts_follow_uniform_storage_completion() {
+    let module = naga::front::wgsl::parse_str(super::SHADER).unwrap();
+    let body = &module.entry_points[0].function.body;
+    let rule_loop = body
+        .iter()
+        .position(|statement| matches!(statement, naga::Statement::Loop { .. }))
+        .unwrap();
+    let barrier = body
+        .iter()
+        .position(|statement| {
+            matches!(statement, naga::Statement::ControlBarrier(flags) if flags.contains(naga::Barrier::STORAGE))
+        })
+        .unwrap();
+    let receipt = body
+        .iter()
+        .position(|statement| matches!(statement, naga::Statement::If { .. }))
+        .unwrap();
+    // The only top-level conditional writes the world/epoch receipt. Moving it
+    // before the rule loop, or removing the unconditional barrier, must fail.
+    assert!(rule_loop < barrier && barrier < receipt);
+}
+
 fn exact() -> wgpu::Limits {
     wgpu::Limits {
         max_compute_invocations_per_workgroup: 64,

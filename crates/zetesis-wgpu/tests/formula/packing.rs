@@ -33,6 +33,34 @@ fn device() -> wgpu::Limits {
 fn plan(graph: &Graph, limits: FormulaLimits, fresh: bool) -> Plan {
     Plan::new(graph, 2, limits, &device(), fresh, 7).unwrap()
 }
+
+#[test]
+fn formula_dispatch_requires_a_positive_wait() {
+    let graph = graph(&theory(), &device()).unwrap();
+    for fresh in [false, true] {
+        for (timeout, admitted) in [
+            (std::time::Duration::ZERO, false),
+            (std::time::Duration::from_nanos(1), true),
+        ] {
+            let result = Plan::new(
+                &graph,
+                2,
+                FormulaLimits {
+                    timeout,
+                    ..FormulaLimits::default()
+                },
+                &device(),
+                fresh,
+                1,
+            );
+            assert_eq!(result.is_ok(), admitted);
+            if let Err(error) = result {
+                assert_eq!(error.kind(), GpuErrorKind::Capacity);
+            }
+        }
+    }
+}
+
 #[test]
 fn packed_nodes_preserve_topology_shared_atom_ids_and_original_operators() {
     let prepared = prepared(&theory(), &device()).unwrap();

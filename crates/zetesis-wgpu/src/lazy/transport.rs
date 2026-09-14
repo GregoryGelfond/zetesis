@@ -34,12 +34,16 @@ enum Slot {
 
 impl<T> Buffers<T> {
     fn retain(self, retention: Retention) -> Buffers<Option<T>> {
-        let mut indices = 0..4;
+        let [offsets, records, snapshots, seeds] = self.inputs;
         Buffers {
             uniform: retention.uniform.then_some(self.uniform),
-            inputs: self.inputs.map(|buffer| {
-                retention.inputs[indices.next().expect("four input positions")].then_some(buffer)
-            }),
+            inputs: [
+                (offsets, retention.inputs[0]),
+                (records, retention.inputs[1]),
+                (snapshots, retention.inputs[2]),
+                (seeds, retention.inputs[3]),
+            ]
+            .map(|(buffer, retain)| retain.then_some(buffer)),
             output: retention.result.then_some(self.output),
             readback: retention.result.then_some(self.readback),
         }
@@ -57,13 +61,11 @@ impl<T> Buffers<Option<T>> {
     }
 
     fn complete(self, mut allocate: impl FnMut(Slot) -> T) -> Buffers<T> {
-        let mut indices = 0..4;
+        let [offsets, records, snapshots, seeds] = self.inputs;
         Buffers {
             uniform: self.uniform.unwrap_or_else(|| allocate(Slot::Uniform)),
-            inputs: self.inputs.map(|buffer| {
-                let index = indices.next().expect("four input positions");
-                buffer.unwrap_or_else(|| allocate(Slot::Input(index)))
-            }),
+            inputs: [(offsets, 0), (records, 1), (snapshots, 2), (seeds, 3)]
+                .map(|(buffer, index)| buffer.unwrap_or_else(|| allocate(Slot::Input(index)))),
             output: self.output.unwrap_or_else(|| allocate(Slot::Output)),
             readback: self.readback.unwrap_or_else(|| allocate(Slot::Readback)),
         }

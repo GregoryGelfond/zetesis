@@ -22,10 +22,6 @@ fn frozen(world: u32, atom: u32) -> bool {
 fn consequence(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lane: u32) {
     let world = group.x;
     let result = world * (dimensions.words + 3u);
-    if lane == 0u {
-        atomicStore(&output[result + dimensions.words + 1u], world);
-        atomicStore(&output[result + dimensions.words + 2u], dimensions.epoch);
-    }
     for (var rule = lane; rule < dimensions.rules; rule += 64u) {
         let offset = offsets[rule];
         let head = records[offset];
@@ -55,5 +51,12 @@ fn consequence(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocatio
                 }
             }
         }
+    }
+    // Every lane finishes its immutable-round rule partition before the world
+    // identity is published. Queue completion and host validation remain needed.
+    storageBarrier();
+    if lane == 0u {
+        atomicStore(&output[result + dimensions.words + 1u], world);
+        atomicStore(&output[result + dimensions.words + 2u], dimensions.epoch);
     }
 }

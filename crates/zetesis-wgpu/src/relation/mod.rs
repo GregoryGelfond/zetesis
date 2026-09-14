@@ -39,6 +39,7 @@ pub struct RelationGpuLimits {
     pub max_work: u64,
     /// Bounded wait for submitted work; control is polled between short waits.
     /// Device creation, shader compilation and driver allocations are outside it.
+    /// Must be positive when rows and queries are nonempty; empty calls do not wait.
     pub timeout: Duration,
 }
 

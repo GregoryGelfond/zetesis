@@ -59,7 +59,10 @@ fn controlled_calls(backend: GpuBackendPreference) {
                 .check_batch_with_control(
                     &ground,
                     if empty { &[] } else { &seeds },
-                    GpuLimits::default(),
+                    GpuLimits {
+                        timeout: std::time::Duration::ZERO,
+                        ..GpuLimits::default()
+                    },
                     &control,
                 )
                 .unwrap_err();
@@ -67,7 +70,10 @@ fn controlled_calls(backend: GpuBackendPreference) {
                 .propagate_batch_with_control(
                     &theory,
                     if empty { &[] } else { &candidates },
-                    FormulaLimits::default(),
+                    FormulaLimits {
+                        timeout: std::time::Duration::ZERO,
+                        ..FormulaLimits::default()
+                    },
                     &control,
                 )
                 .unwrap_err();

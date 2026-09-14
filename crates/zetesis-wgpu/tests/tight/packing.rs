@@ -43,6 +43,33 @@ fn plan(graph: &Graph, count: usize, fresh: bool) -> Plan {
     .unwrap()
 }
 
+#[test]
+fn tight_dispatch_requires_a_positive_wait() {
+    let graph = graph();
+    for fresh in [false, true] {
+        for (timeout, admitted) in [
+            (std::time::Duration::ZERO, false),
+            (std::time::Duration::from_nanos(1), true),
+        ] {
+            let result = Plan::new(
+                &graph,
+                2,
+                TightGpuLimits {
+                    timeout,
+                    ..TightGpuLimits::default()
+                },
+                &wgpu::Limits::default(),
+                fresh,
+                1,
+            );
+            assert_eq!(result.is_ok(), admitted);
+            if let Err(error) = result {
+                assert_eq!(error.kind(), GpuErrorKind::Capacity);
+            }
+        }
+    }
+}
+
 // The wire-decoder tests below use candidates containing this fixture's entire
 // carrier; dedicated controls supply absent bits and malformed seed shapes.
 fn decode_present(

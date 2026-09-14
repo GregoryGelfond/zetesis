@@ -139,12 +139,7 @@ impl BatchPlan {
                 "candidate count exceeds the device's dispatch dimension",
             ));
         }
-        if budget.timeout.is_zero() {
-            return Err(GpuError::new(
-                GpuErrorKind::Capacity,
-                "the GPU wait timeout must be positive",
-            ));
-        }
+        crate::runtime::positive_timeout(budget.timeout)?;
         let word_count = graph.word_count;
         let seed_words = multiply("seed array", word_count, worlds)?.max(1);
         let result_words = multiply(

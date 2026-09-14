@@ -101,6 +101,18 @@ Their 16-byte uniform contains only word count, rule count, world count and
 epoch; the source catalog's address range is checked on the host. Every returned
 world record must match the plan's epoch and ordinal. Retained buffers do not
 retain an earlier chunk's output or reset the oracle's submission sequence.
+The backend independently requires both snapshot and seed slices to contain
+exactly `worlds * words` entries. Every lane finishes its rule partition before
+a uniform storage barrier allows the world/epoch receipt to be written. The
+receipt still requires successful queue completion and complete host validation;
+it is not a certificate against an arbitrary faulty driver.
+
+Every primitive requires a positive wait timeout before dispatch. A zero timeout
+is a Capacity refusal before transport allocation or submission, preserving
+healthy residency. Existing empty operations perform no wait and keep their
+control/health checks; relation preparation uploads columns without dispatch and
+does not consume a wait allowance. Control and device-health precedence are
+unchanged. This policy does not turn a positive timeout into hard preemption.
 
 Within one lazy batch, retained seed buffers need another upload only when their
 layout or buffer changes. Snapshot buffers also need a write when the immutable

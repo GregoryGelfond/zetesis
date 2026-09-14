@@ -454,6 +454,10 @@ fn qualify_support_refusals_preserve_reusable_residency(
     let bytes = oracle.last_batch_stats().unwrap().accounted_bytes;
     for limits in [
         TightGpuLimits {
+            timeout: std::time::Duration::ZERO,
+            ..Default::default()
+        },
+        TightGpuLimits {
             max_batch_bytes: bytes - 1,
             ..Default::default()
         },
@@ -479,7 +483,15 @@ fn qualify_support_refusals_preserve_reusable_residency(
     cancelled.cancel();
     assert_eq!(
         oracle
-            .check_batch(&certificate, &input, TightGpuLimits::default(), &cancelled)
+            .check_batch(
+                &certificate,
+                &input,
+                TightGpuLimits {
+                    timeout: std::time::Duration::ZERO,
+                    ..TightGpuLimits::default()
+                },
+                &cancelled,
+            )
             .unwrap_err(),
         TightGpuError::Stopped(Stop::Cancelled)
     );

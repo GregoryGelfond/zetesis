@@ -45,6 +45,7 @@ pub struct TightGpuLimits {
     /// Bounded submission wait, with control polling at most 50 ms apart while
     /// waiting. Not GPU preemption or a bound on device creation, allocation,
     /// shader compilation or error-scope drainage.
+    /// Must be positive for a nonempty batch; empty batches perform no wait.
     pub timeout: Duration,
 }
 

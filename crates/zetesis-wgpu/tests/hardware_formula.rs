@@ -388,6 +388,7 @@ fn qualify_resources(backend: physical::Backend, projection: GateProjection) {
         .unwrap();
     assert_eq!(full[1].verdict(), FormulaVerdict::NoProperSubset);
     let hot = *oracle.last_batch_stats().unwrap();
+    assert_zero_wait_preserves_residency(&mut oracle, &graph, &inputs, &full);
     for (bytes, succeeds) in [
         (hot.accounted_bytes - 1, false),
         (hot.accounted_bytes, true),
@@ -444,6 +445,7 @@ fn qualify_resources(backend: physical::Backend, projection: GateProjection) {
                 FormulaLimits {
                     max_work_per_candidate: 0,
                     max_batch_bytes: 0,
+                    timeout: std::time::Duration::ZERO,
                     ..FormulaLimits::default()
                 }
             )
@@ -452,6 +454,33 @@ fn qualify_resources(backend: physical::Backend, projection: GateProjection) {
     );
     assert!(oracle.last_batch_stats().is_none());
     assert_clears_residency(&mut oracle, &graph, &inputs);
+}
+
+fn assert_zero_wait_preserves_residency(
+    oracle: &mut GpuFormulaOracle,
+    graph: &Theory,
+    inputs: &[Interpretation],
+    expected: &[zetesis_wgpu::FormulaCheck],
+) {
+    let zero_wait = FormulaLimits {
+        timeout: std::time::Duration::ZERO,
+        ..FormulaLimits::default()
+    };
+    assert_eq!(
+        oracle
+            .propagate_batch(graph, inputs, zero_wait)
+            .unwrap_err()
+            .kind(),
+        GpuErrorKind::Capacity
+    );
+    assert!(oracle.last_batch_stats().is_none());
+    assert!(oracle.last_submission_candidates().is_none());
+    let reused = oracle
+        .propagate_batch(graph, inputs, FormulaLimits::default())
+        .unwrap();
+    assert_eq!(reused.as_slice(), expected);
+    let stats = oracle.last_batch_stats().unwrap();
+    assert!(!stats.theory_uploaded && !stats.transport_allocated);
 }
 
 fn assert_clears_residency(

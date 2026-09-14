@@ -81,10 +81,10 @@ impl Plan {
             || accounted > limits.max_batch_bytes
             || host_work > limits.max_host_work
             || total_work > limits.max_device_work
-            || limits.timeout.is_zero()
         {
             return Err(capacity("aggregate batch resource ceiling exceeded"));
         }
+        crate::runtime::positive_timeout(limits.timeout)?;
         for size in [
             bytes(numeric.tuples.len())?,
             bytes(numeric.guards.len())?,

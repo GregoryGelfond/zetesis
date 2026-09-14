@@ -3,6 +3,34 @@ use zetesis_core::{Atom, Predicate, Value};
 
 mod allocations;
 
+#[test]
+fn relation_dispatch_requires_a_positive_wait() {
+    for rows in [0, 1] {
+        let (predicate, atoms) = source(rows);
+        let relation = Relation::from_atoms(&predicate, &atoms, relation::Limits::default()).unwrap();
+        let queries = [relation.query(&[], relation::Limits::default()).unwrap()];
+        for count in [0, 1] {
+            for timeout in [Duration::ZERO, Duration::from_nanos(1)] {
+                let result = packing::Plan::new(
+                    &relation,
+                    &queries[..count],
+                    RelationGpuLimits {
+                        timeout,
+                        ..RelationGpuLimits::default()
+                    },
+                    &wgpu::Limits::default(),
+                    1,
+                );
+                let dispatches = rows != 0 && count != 0;
+                assert_eq!(result.is_ok(), !dispatches || !timeout.is_zero());
+                if let Err(error) = result {
+                    assert_eq!(error.kind(), GpuErrorKind::Capacity);
+                }
+            }
+        }
+    }
+}
+
 fn source(rows: usize) -> (Predicate, Vec<Atom>) {
     let predicate = Predicate::new("row", 1).unwrap();
     let atoms = (0..rows)
