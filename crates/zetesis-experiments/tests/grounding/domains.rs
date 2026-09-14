@@ -43,7 +43,10 @@ fn domains_preserve_the_qualified_subject() {
         let qualified = after.qualification.as_ref().unwrap();
         assert!(qualified.exhausted);
         // Every source fact and exactly r(5..8,5..8) belong to the one least model.
-        assert_eq!(qualified.interpretations, [(0_usize..96).collect::<Vec<_>>()]);
+        assert_eq!(
+            qualified.interpretations,
+            [(0_usize..96).collect::<Vec<_>>()]
+        );
         let actual: Vec<_> = after
             .atoms
             .iter()
@@ -124,7 +127,10 @@ fn stopped_domain_analysis_retains_complete_fallback() {
     let report = profile(source("domain-prefixes.lp"), config).unwrap();
     assert!(report.complete, "{:?}", report.failure);
     let qualified = report.qualification.as_ref().unwrap();
-    assert_eq!(qualified.interpretations, [(0_usize..96).collect::<Vec<_>>()]);
+    assert_eq!(
+        qualified.interpretations,
+        [(0_usize..96).collect::<Vec<_>>()]
+    );
     for sample in &report.samples {
         assert_eq!(sample.subject_equal, Some(true));
         let models = sample.models.as_ref().unwrap();
