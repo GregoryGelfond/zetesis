@@ -1,7 +1,7 @@
 //! Finite DAG refinement of `Feedback.Witness` and `Feedback.Allow`.
 //!
 //! This compiler is experiment-local. Its input J need not be a countermodel:
-//! the preservation law holds for any J. Only Store::learn accepts production
+//! the preservation law holds for any J. Only `Store::learn` accepts production
 //! witnesses, through the opaque checked-subject record.
 
 use std::mem::size_of;
@@ -22,7 +22,11 @@ impl Guard {
         self.witness.iter().fold(0, |bits, atom| bits | (1 << atom))
     }
     pub(super) fn owner(&self, source: &Theory) -> Result<(), Error> {
-        if self.source.same_instance(source) { Ok(()) } else { Err(Error::Owner) }
+        if self.source.same_instance(source) {
+            Ok(())
+        } else {
+            Err(Error::Owner)
+        }
     }
     pub(super) fn allows(
         &self,
@@ -35,8 +39,8 @@ impl Guard {
         }
         // Dense atom meanings are those of the retained original owner. A
         // same-sized foreign theory is insufficient to authorize this rebind.
-        let rebound = Interpretation::new(&self.restriction, candidate.atoms())
-            .map_err(Error::Admission)?;
+        let rebound =
+            Interpretation::new(&self.restriction, candidate.atoms()).map_err(Error::Admission)?;
         zetesis_ferraris::models(
             &self.restriction,
             &rebound,
@@ -98,7 +102,10 @@ impl<'a> Budget<'a> {
 
     fn capacity(&mut self, build: usize) -> Result<(), Error> {
         self.peak_build_bytes = self.peak_build_bytes.max(build);
-        let live = self.retained_bytes.checked_add(build).ok_or(Error::Overflow)?;
+        let live = self
+            .retained_bytes
+            .checked_add(build)
+            .ok_or(Error::Overflow)?;
         self.peak_live_bytes = self.peak_live_bytes.max(live);
         if build > self.limits.max_build_bytes {
             return Err(Error::Limit(Resource::BuildBytes));
@@ -114,8 +121,13 @@ impl<'a> Budget<'a> {
         let requested = count.checked_mul(size_of::<T>()).ok_or(Error::Overflow)?;
         self.capacity(live.checked_add(requested).ok_or(Error::Overflow)?)?;
         let mut values = Vec::new();
-        values.try_reserve_exact(count).map_err(|_| Error::Allocation)?;
-        let actual = values.capacity().checked_mul(size_of::<T>()).ok_or(Error::Overflow)?;
+        values
+            .try_reserve_exact(count)
+            .map_err(|_| Error::Allocation)?;
+        let actual = values
+            .capacity()
+            .checked_mul(size_of::<T>())
+            .ok_or(Error::Overflow)?;
         *live = live.checked_add(actual).ok_or(Error::Overflow)?;
         self.capacity(*live)?;
         Ok(values)
@@ -233,10 +245,19 @@ pub(super) fn compile(
         source.atom_count(),
         builder.nodes,
         roots,
-        AdmissionLimits { max_atoms: 6, max_nodes, max_roots: 1 },
+        AdmissionLimits {
+            max_atoms: 6,
+            max_nodes,
+            max_roots: 1,
+        },
     )
     .map_err(Error::Admission)?;
-    Ok(Guard { source: source.clone(), restriction, witness: selected, bytes: retained })
+    Ok(Guard {
+        source: source.clone(),
+        restriction,
+        witness: selected,
+        bytes: retained,
+    })
 }
 
 pub(super) struct Store {
@@ -244,8 +265,14 @@ pub(super) struct Store {
 }
 impl Store {
     pub(super) fn storage(&self) -> (usize, usize) {
-        (self.guards.iter().map(|guard| guard.restriction.nodes().len()).sum(),
-         self.guards.capacity() * size_of::<Guard>() + self.guards.iter().map(|guard| guard.bytes).sum::<usize>())
+        (
+            self.guards
+                .iter()
+                .map(|guard| guard.restriction.nodes().len())
+                .sum(),
+            self.guards.capacity() * size_of::<Guard>()
+                + self.guards.iter().map(|guard| guard.bytes).sum::<usize>(),
+        )
     }
     pub(super) fn new(budget: &mut Budget<'_>) -> Result<Self, Error> {
         let mut live = 0;

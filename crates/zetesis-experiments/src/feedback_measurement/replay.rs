@@ -1,7 +1,10 @@
+use super::{
+    Configuration, Error, Progress, StageTimes, fixtures,
+    guard::{Budget, Store},
+};
 use std::time::Instant;
 use zetesis_cpu::Control;
 use zetesis_ferraris::Theory;
-use super::{Configuration, Error, Progress, StageTimes, fixtures, guard::{Budget, Store}};
 
 pub(super) fn fixed(
     source: &Theory,
@@ -13,7 +16,15 @@ pub(super) fn fixed(
 ) -> Result<Store, Error> {
     let started = Instant::now();
     let mut budget = Budget::new(configuration.construction, control);
-    let outcome = fixed_inner(source, feedback, configuration, control, progress, elapsed, &mut budget);
+    let outcome = fixed_inner(
+        source,
+        feedback,
+        configuration,
+        control,
+        progress,
+        elapsed,
+        &mut budget,
+    );
     progress.construction.work = budget.work;
     progress.construction.nodes = budget.retained_nodes;
     progress.construction.retained_bytes = budget.retained_bytes;
@@ -35,7 +46,11 @@ fn fixed_inner(
     progress.stable = super::reserve(64)?;
     progress.witnesses = super::reserve(8)?;
     control.poll().map_err(Error::Control)?;
-    let mut store = if feedback { Store::new(budget)? } else { Store { guards: Vec::new() } };
+    let mut store = if feedback {
+        Store::new(budget)?
+    } else {
+        Store { guards: Vec::new() }
+    };
     for bits in 0..1 << source.atom_count() {
         control.poll().map_err(Error::Control)?;
         let candidate = fixtures::interpretation(source, bits)?;
@@ -123,7 +138,9 @@ fn search_inner(
         progress.pre_acquired_guards = store.guards.len();
         (progress.pre_acquired_nodes, progress.pre_acquired_bytes) = store.storage();
         progress.witnesses = super::reserve(8)?;
-        progress.witnesses.extend(store.guards.iter().map(super::guard::Guard::witness_bits));
+        progress
+            .witnesses
+            .extend(store.guards.iter().map(super::guard::Guard::witness_bits));
     }
     let clock = Instant::now();
     let result = zetesis_sat::StableModels::new(source, configuration.native(), control.clone());
@@ -145,13 +162,17 @@ fn enumerate(
         let clock = Instant::now();
         let next = search.next();
         elapsed.membership_ns += clock.elapsed().as_nanos();
-        let Some(next) = next else { break; };
+        let Some(next) = next else {
+            break;
+        };
         let stable = next.map_err(Error::Native)?;
         if progress.stable.len() == 64 {
             return Err(Error::Invariant);
         }
         progress.stable.push(fixtures::bits(&stable));
-        if progress.stable.len() == 1 && let Some(store) = guards {
+        if progress.stable.len() == 1
+            && let Some(store) = guards
+        {
             for guard in &store.guards {
                 // The source handle, not only its atom count, authorizes the
                 // public restriction's dense-ID interpretation.

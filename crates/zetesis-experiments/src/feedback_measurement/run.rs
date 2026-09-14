@@ -1,8 +1,12 @@
+use super::{
+    Case, Configuration, ConstructionLimits, Error, Event, Progress, Route, Sample, StageTimes,
+    fixtures,
+    guard::{self, Budget},
+    replay,
+};
 use std::io;
 use zetesis_cpu::Control;
 use zetesis_ferraris::Theory;
-use super::{Case, Configuration, ConstructionLimits, Error, Event, Progress, Route, Sample,
-    StageTimes, fixtures, guard::{self, Budget}, replay};
 
 /// Run complete refinement checks and the finite whole-owner observations.
 ///
@@ -27,32 +31,75 @@ pub fn measure_with_control(
     mut observe: impl FnMut(&Event<'_>) -> io::Result<()>,
 ) -> Result<(), Error> {
     configuration.validate()?;
-    observe(&Event::Start { schema: 1, configuration, native_limits: configuration.native().into(),
+    observe(&Event::Start {
+        schema: 1,
+        configuration,
+        native_limits: configuration.native().into(),
         qualification_construction: ConstructionLimits::default(),
-        reference_subsets: super::reference_limits(configuration.max_reference_work).max_subsets })
-        .map_err(Error::Output)?;
+        reference_subsets: super::reference_limits(configuration.max_reference_work).max_subsets,
+    })
+    .map_err(Error::Output)?;
     let mut samples = 0;
     for case in Case::ALL {
         control.poll().map_err(Error::Control)?;
         let source = case.theory()?;
         let (expected, pairs) = qualify(&source, configuration.max_reference_work, control)?;
-        observe(&Event::Qualified { case, atoms: source.atom_count(), nodes: source.nodes(),
-            roots: source.roots(), stable: &expected, pairs }).map_err(Error::Output)?;
-        for (phase, repetitions) in [("qualification", 1), ("warmup", configuration.warmups),
-            ("timed", configuration.repetitions)] {
+        observe(&Event::Qualified {
+            case,
+            atoms: source.atom_count(),
+            nodes: source.nodes(),
+            roots: source.roots(),
+            stable: &expected,
+            pairs,
+        })
+        .map_err(Error::Output)?;
+        for (phase, repetitions) in [
+            ("qualification", 1),
+            ("warmup", configuration.warmups),
+            ("timed", configuration.repetitions),
+        ] {
             for repetition in 0..repetitions {
                 let mut guards = None;
-                for route in [Route::Direct, Route::Feedback, Route::Search, Route::Restricted] {
-                    let mut sample = Sample { case, route, phase, repetition,
-                        progress: Progress::default(), elapsed: StageTimes::default() };
+                for route in [
+                    Route::Direct,
+                    Route::Feedback,
+                    Route::Search,
+                    Route::Restricted,
+                ] {
+                    let mut sample = Sample {
+                        case,
+                        route,
+                        phase,
+                        repetition,
+                        progress: Progress::default(),
+                        elapsed: StageTimes::default(),
+                    };
                     let result = match route {
-                        Route::Direct | Route::Feedback => replay::fixed(&source,
-                            route == Route::Feedback, *configuration, control,
-                            &mut sample.progress, &mut sample.elapsed)
-                            .map(|store| { if route == Route::Feedback { guards = Some(store); } }),
-                        Route::Search | Route::Restricted => replay::search(&source,
-                            if route == Route::Restricted { guards.as_ref() } else { None },
-                            *configuration, control, &mut sample.progress, &mut sample.elapsed),
+                        Route::Direct | Route::Feedback => replay::fixed(
+                            &source,
+                            route == Route::Feedback,
+                            *configuration,
+                            control,
+                            &mut sample.progress,
+                            &mut sample.elapsed,
+                        )
+                        .map(|store| {
+                            if route == Route::Feedback {
+                                guards = Some(store);
+                            }
+                        }),
+                        Route::Search | Route::Restricted => replay::search(
+                            &source,
+                            if route == Route::Restricted {
+                                guards.as_ref()
+                            } else {
+                                None
+                            },
+                            *configuration,
+                            control,
+                            &mut sample.progress,
+                            &mut sample.elapsed,
+                        ),
                     };
                     // Both complete-family comparison and publication occur
                     // after the measured route. The output preserves delivery order.
@@ -74,9 +121,15 @@ fn report_failure(
     sample: &Sample,
     original: Error,
 ) -> Error {
-    match observe(&Event::Failed { sample, error: &original }) {
+    match observe(&Event::Failed {
+        sample,
+        error: &original,
+    }) {
         Ok(()) => original,
-        Err(output) => Error::FailureOutput { original: Box::new(original), output },
+        Err(output) => Error::FailureOutput {
+            original: Box::new(original),
+            output,
+        },
     }
 }
 
@@ -86,7 +139,8 @@ pub(super) fn family(progress: &Progress, expected: &[u64]) -> Result<(), Error>
     }
     let mut seen = 0_u64;
     for &candidate in &progress.stable {
-        let Some(bit) = 1_u64.checked_shl(u32::try_from(candidate).map_err(|_| Error::Parity)?) else {
+        let Some(bit) = 1_u64.checked_shl(u32::try_from(candidate).map_err(|_| Error::Parity)?)
+        else {
             return Err(Error::Parity);
         };
         if seen & bit != 0 || !expected.contains(&candidate) {
@@ -97,7 +151,11 @@ pub(super) fn family(progress: &Progress, expected: &[u64]) -> Result<(), Error>
     Ok(())
 }
 
-pub(super) fn qualify(source: &Theory, max_work: u64, control: &Control) -> Result<(Vec<u64>, u64), Error> {
+pub(super) fn qualify(
+    source: &Theory,
+    max_work: u64,
+    control: &Control,
+) -> Result<(Vec<u64>, u64), Error> {
     fixtures::shape(source)?;
     let mut expected = super::reserve(64)?;
     let limit = 1_u64 << source.atom_count();
@@ -105,7 +163,9 @@ pub(super) fn qualify(source: &Theory, max_work: u64, control: &Control) -> Resu
     for bits in 0..limit {
         let candidate = fixtures::interpretation(source, bits)?;
         if zetesis_ferraris::check(source, &candidate, reference, control)
-            .map_err(Error::Control)?.accepted() {
+            .map_err(Error::Control)?
+            .accepted()
+        {
             expected.push(bits);
         }
     }
@@ -119,8 +179,9 @@ pub(super) fn qualify(source: &Theory, max_work: u64, control: &Control) -> Resu
         for candidate_bits in 0..limit {
             let candidate = fixtures::interpretation(source, candidate_bits)?;
             let proper = witness_bits != candidate_bits && witness_bits & !candidate_bits == 0;
-            let models = zetesis_ferraris::models_reduct(source, &candidate, &witness, reference, control)
-                .map_err(Error::Control)?;
+            let models =
+                zetesis_ferraris::models_reduct(source, &candidate, &witness, reference, control)
+                    .map_err(Error::Control)?;
             let allows = guard.allows(&candidate, max_work, control)?;
             if allows == (proper && models) || (!allows && expected.contains(&candidate_bits)) {
                 return Err(Error::Parity);

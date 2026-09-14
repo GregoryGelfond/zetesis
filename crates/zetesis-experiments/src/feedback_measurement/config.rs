@@ -1,6 +1,6 @@
+use super::Error;
 use clap::Args;
 use serde::Serialize;
-use super::Error;
 
 /// Named guard-construction ceilings, all independent of native SAT budgets.
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -22,8 +22,14 @@ pub struct ConstructionLimits {
 }
 impl Default for ConstructionLimits {
     fn default() -> Self {
-        Self { max_nodes: 256, max_total_nodes: 2048, max_guards: 8,
-            max_build_bytes: 64 * 1024, max_retained_bytes: 256 * 1024, max_work: 1_000_000 }
+        Self {
+            max_nodes: 256,
+            max_total_nodes: 2048,
+            max_guards: 8,
+            max_build_bytes: 64 * 1024,
+            max_retained_bytes: 256 * 1024,
+            max_work: 1_000_000,
+        }
     }
 }
 
@@ -47,29 +53,51 @@ pub struct Configuration {
 }
 impl Default for Configuration {
     fn default() -> Self {
-        Self { warmups: 1, repetitions: 3, construction: ConstructionLimits::default(),
-            max_native_work: 1_000_000, max_reference_work: 1_000_000 }
+        Self {
+            warmups: 1,
+            repetitions: 3,
+            construction: ConstructionLimits::default(),
+            max_native_work: 1_000_000,
+            max_reference_work: 1_000_000,
+        }
     }
 }
 impl Configuration {
     pub(super) fn validate(self) -> Result<(), Error> {
         let limits = self.construction;
-        if self.warmups > 2 || self.repetitions > 12 || limits.max_guards > 8
-            || limits.max_nodes > 256 || limits.max_total_nodes > 2048
-            || limits.max_build_bytes > 64 * 1024 || limits.max_retained_bytes > 256 * 1024
-            || limits.max_work > 1_000_000 || self.max_native_work > 1_000_000
-            || self.max_reference_work > 1_000_000 {
-            return Err(Error::Configuration("requested limits exceed the fixed finite study"));
+        if self.warmups > 2
+            || self.repetitions > 12
+            || limits.max_guards > 8
+            || limits.max_nodes > 256
+            || limits.max_total_nodes > 2048
+            || limits.max_build_bytes > 64 * 1024
+            || limits.max_retained_bytes > 256 * 1024
+            || limits.max_work > 1_000_000
+            || self.max_native_work > 1_000_000
+            || self.max_reference_work > 1_000_000
+        {
+            return Err(Error::Configuration(
+                "requested limits exceed the fixed finite study",
+            ));
         }
         Ok(())
     }
     pub(super) fn native(self) -> zetesis_sat::Limits {
         zetesis_sat::Limits {
-            admission: zetesis_sat::AdmissionLimits { max_variables: 4096, max_clauses: 16_384,
-                max_literals: 65_536 },
-            projections: zetesis_sat::ProjectionLimits { max_entries: 64, max_nodes: 512,
-                max_bytes: 64 * 1024 },
-            search: zetesis_sat::SearchLimits { max_work: self.max_native_work, max_decisions: 100_000 },
+            admission: zetesis_sat::AdmissionLimits {
+                max_variables: 4096,
+                max_clauses: 16_384,
+                max_literals: 65_536,
+            },
+            projections: zetesis_sat::ProjectionLimits {
+                max_entries: 64,
+                max_nodes: 512,
+                max_bytes: 64 * 1024,
+            },
+            search: zetesis_sat::SearchLimits {
+                max_work: self.max_native_work,
+                max_decisions: 100_000,
+            },
             max_candidates: 64,
             max_verification_work: self.max_native_work,
         }

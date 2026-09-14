@@ -251,6 +251,18 @@ establish a hard allocator or RSS cap, including on a refused allocation. Reused
 capacity can increase retained space or change work counts; neither this law nor
 semantic equivalence proves a speedup.
 
+Independent scalar rounds use the same occurrence partition over stable catalog
+insertion IDs. `DeltaRounds.coverage_of_first_delta` requires a correspondence
+between those IDs and complete body bindings. `delta_step_exact` then preserves
+the complete inflationary step when old consequences are already present;
+`latched_constraints_exact` additionally requires exact prior constraint history.
+Bootstrap handles zero-positive rules and constraints. These premises explain
+why the final no-change round can combine its selected scans with completed
+history instead of revisiting every old binding. They do not certify the Rust
+matcher, cache boundaries, failure cleanup or shared-world/device schedules.
+The [delta-round guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/delta-rounds.md)
+connects each premise to its concrete owner and publication boundary.
+
 Eager support joins partition new tuple combinations by their first new source
 occurrence. `DeltaJoins.partition_complete` proves coverage and
 `partition_disjoint` proves uniqueness. Source occurrence identity survives

@@ -74,7 +74,7 @@ bindings and tuple probes. A tuple probe is a row offered to whole-row matching,
 including a rejected row; prefix comparisons and catalog lookup are separate.
 Total work also includes preparation, so fewer probes alone do not establish a
 cheaper operation. The maximum named per-candidate closure envelope is distinct
-from the Rayon's pool reservation and process RSS. The pool reports its shared
+from the Rayon pool's reservation and process RSS. The pool reports its shared
 preparation separately; repeated snapshots are not new preparation events.
 
 JSON-lines schema 3 adds the tuple-probe observation. A missing field in an older

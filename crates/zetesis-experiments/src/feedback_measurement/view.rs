@@ -1,6 +1,6 @@
+use super::{Case, Configuration, ConstructionLimits, Error};
 use serde::{Serialize, Serializer, ser::SerializeSeq};
 use zetesis_ferraris::Node;
-use super::{Case, Configuration, ConstructionLimits, Error};
 
 /// Distinct measured algorithms; guarded SAT uses witnesses acquired beforehand.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -75,10 +75,16 @@ pub struct Native {
 }
 impl From<zetesis_sat::Statistics> for Native {
     fn from(value: zetesis_sat::Statistics) -> Self {
-        Self { work: value.search.work, candidate_queries: value.candidate_queries,
-            candidates: value.candidates, countermodel_queries: value.countermodel_queries,
-            countermodels: value.countermodels, restrictions: value.candidate_restrictions,
-            projection_entries: value.projections.entries, projection_peak_bytes: value.projections.peak_bytes }
+        Self {
+            work: value.search.work,
+            candidate_queries: value.candidate_queries,
+            candidates: value.candidates,
+            countermodel_queries: value.countermodel_queries,
+            countermodels: value.countermodels,
+            restrictions: value.candidate_restrictions,
+            projection_entries: value.projections.entries,
+            projection_peak_bytes: value.projections.peak_bytes,
+        }
     }
 }
 
@@ -172,11 +178,18 @@ pub struct NativeLimits {
 }
 impl From<zetesis_sat::Limits> for NativeLimits {
     fn from(value: zetesis_sat::Limits) -> Self {
-        Self { variables: value.admission.max_variables, clauses: value.admission.max_clauses,
-            literals: value.admission.max_literals, projection_entries: value.projections.max_entries,
-            projection_nodes: value.projections.max_nodes, projection_bytes: value.projections.max_bytes,
-            work: value.search.max_work, decisions: value.search.max_decisions,
-            candidates: value.max_candidates, verification_work: value.max_verification_work }
+        Self {
+            variables: value.admission.max_variables,
+            clauses: value.admission.max_clauses,
+            literals: value.admission.max_literals,
+            projection_entries: value.projections.max_entries,
+            projection_nodes: value.projections.max_nodes,
+            projection_bytes: value.projections.max_bytes,
+            work: value.search.max_work,
+            decisions: value.search.max_decisions,
+            candidates: value.max_candidates,
+            verification_work: value.max_verification_work,
+        }
     }
 }
 
@@ -205,7 +218,7 @@ pub enum Event<'a> {
         /// Complete original universe.
         atoms: usize,
         /// Topological source nodes as [kind,left,right], kinds atom/false/and/or/implies.
-        #[serde(serialize_with = "nodes")]
+        #[serde(serialize_with = "self::nodes")]
         nodes: &'a [Node],
         /// Original asserted roots, preserving duplicates.
         roots: &'a [usize],
@@ -221,7 +234,7 @@ pub enum Event<'a> {
         /// Incomplete current route, retaining its exact completed prefix.
         sample: &'a Sample,
         /// Human-readable rendering of the original error.
-        #[serde(serialize_with = "error")]
+        #[serde(serialize_with = "self::error")]
         error: &'a Error,
     },
     /// All qualification and requested route observations completed.

@@ -32,7 +32,7 @@ The maintained full index is
 | Does borrowed atom lookup denote the materialized tuple? | `AtomKeys.membership_identity` | Successful substitution preserves the predicate and argument order |
 | Can atoms share contribution storage without changing their observations? | `SourceContributions.chain_preserved`, `record_other` | Unchanged entries along a finite chain; distinct atom identities in the append log |
 | Can impossible gate regions be skipped? | `GateRestrictions.answer_set_avoids`, `suffix_region_rejected` | Constraint premises witnessed by unconditional facts and the supplied carrier |
-| Must an ordinary disjunctive answer set have head support? | `DisjunctiveSupport.answer_set_supported` | Complete ordinary producer grammar; unchanged original theory |
+| Must an answer-set atom have an applicable producer? | `DisjunctiveSupport.answer_set_supported`, `answer_set_supported_with_choices` | Complete ordinary/atomic-choice producer coverage; ordinary sole-head or enabled choice support; unchanged original theory |
 | When may candidate domains be narrowed? | `DomainContraction.compatible_contraction` | Unchanged theory, fixed assignment interpretation and activation, recognized constraints and a sound filter |
 | When does completed source support cover an answer set? | `SourceSupport.stable_inside_closed`, `completed_activity_covers` | Completed producer closure and an explicit original-model/reduct projection premise; no termination or realizability conclusion |
 | Which possible-head producer establishes the projection premise? | `NormalSupport.projection_compatible`, `projection_compatible_of_coverage` | Mathematical normalized rules, or a producer covering their proposals; concrete source instantiation remains unproved |

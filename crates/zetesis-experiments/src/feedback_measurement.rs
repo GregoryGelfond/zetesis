@@ -15,10 +15,10 @@ mod view;
 #[cfg(test)]
 mod tests;
 
-use std::{fmt, io};
 pub use config::{Configuration, ConstructionLimits, Options};
 pub use fixtures::Case;
 pub use run::{measure, measure_with_control};
+use std::{fmt, io};
 pub use view::{Construction, Event, Native, NativeLimits, Progress, Route, Sample, StageTimes};
 
 /// Independent experimental construction refusal dimension.
@@ -83,13 +83,17 @@ impl fmt::Display for Error {
             Self::Allocation => f.write_str("feedback experiment allocation failed"),
             Self::Overflow => f.write_str("feedback experiment capacity overflow"),
             Self::Owner => f.write_str("feedback subject belongs to a different theory"),
-            Self::Witness => f.write_str("feedback learning requires a checked native countermodel"),
+            Self::Witness => {
+                f.write_str("feedback learning requires a checked native countermodel")
+            }
             Self::Admission(error) => error.fmt(f),
             Self::Native(error) => error.fmt(f),
             Self::Parity => f.write_str("feedback restriction or complete family disagrees"),
             Self::Invariant => f.write_str("feedback experiment invariant violated"),
             Self::Output(error) => error.fmt(f),
-            Self::FailureOutput { original, output } => write!(f, "{original}; failure publication: {output}"),
+            Self::FailureOutput { original, output } => {
+                write!(f, "{original}; failure publication: {output}")
+            }
         }
     }
 }
@@ -108,11 +112,16 @@ impl std::error::Error for Error {
 
 fn reserve<T>(count: usize) -> Result<Vec<T>, Error> {
     let mut values = Vec::new();
-    values.try_reserve_exact(count).map_err(|_| Error::Allocation)?;
+    values
+        .try_reserve_exact(count)
+        .map_err(|_| Error::Allocation)?;
     Ok(values)
 }
 fn reference_limits(max_work: u64) -> zetesis_ferraris::Limits {
-    zetesis_ferraris::Limits { max_work, max_subsets: 64 }
+    zetesis_ferraris::Limits {
+        max_work,
+        max_subsets: 64,
+    }
 }
 
 /// Run the fixed study and serialize its synchronous event view as JSON lines.

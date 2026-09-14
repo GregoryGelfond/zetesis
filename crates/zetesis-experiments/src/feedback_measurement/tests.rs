@@ -3,8 +3,11 @@ use zetesis_cpu::{Control, Stop};
 use zetesis_sat::{Check, CheckedInterpretation};
 
 fn checked(source: &zetesis_ferraris::Theory, bits: u64) -> CheckedInterpretation {
-    zetesis_sat::check_interpretation(fixtures::interpretation(source, bits).unwrap(),
-        Configuration::default().native(), &Control::default())
+    zetesis_sat::check_interpretation(
+        fixtures::interpretation(source, bits).unwrap(),
+        Configuration::default().native(),
+        &Control::default(),
+    )
 }
 
 #[test]
@@ -30,8 +33,11 @@ fn conditional_guard_preserves_a_stable_choice_extension() {
     let mut budget = guard::Budget::new(ConstructionLimits::default(), &control);
     let guard = guard::compile(&source, &witness, &mut budget).unwrap();
     let candidate = fixtures::interpretation(&source, 5).unwrap();
-    assert!(zetesis_ferraris::check(&source, &candidate, reference_limits(1_000_000), &control)
-        .unwrap().accepted());
+    assert!(
+        zetesis_ferraris::check(&source, &candidate, reference_limits(1_000_000), &control)
+            .unwrap()
+            .accepted()
+    );
     assert!(guard.allows(&candidate, 1_000_000, &control).unwrap());
 }
 
@@ -44,7 +50,11 @@ fn checked_countermodel_excludes_its_actual_subject() {
     let mut budget = guard::Budget::new(ConstructionLimits::default(), &control);
     let mut store = guard::Store::new(&mut budget).unwrap();
     assert!(store.learn(&checked, &mut budget).unwrap());
-    assert!(!store.guards[0].allows(checked.candidate(), 1_000_000, &control).unwrap());
+    assert!(
+        !store.guards[0]
+            .allows(checked.candidate(), 1_000_000, &control)
+            .unwrap()
+    );
 }
 
 #[test]
@@ -55,7 +65,10 @@ fn learning_requires_a_native_countermodel() {
     assert!(matches!(checked.verdict(), Check::Stable));
     let mut budget = guard::Budget::new(ConstructionLimits::default(), &control);
     let mut store = guard::Store::new(&mut budget).unwrap();
-    assert!(matches!(store.learn(&checked, &mut budget), Err(Error::Witness)));
+    assert!(matches!(
+        store.learn(&checked, &mut budget),
+        Err(Error::Witness)
+    ));
     assert!(store.guards.is_empty());
 }
 
@@ -69,7 +82,10 @@ fn equal_foreign_theory_cannot_rebind_a_guard() {
     let witness = fixtures::interpretation(&source, 1).unwrap();
     let guard = guard::compile(&source, &witness, &mut budget).unwrap();
     let foreign = fixtures::interpretation(&other, 3).unwrap();
-    assert!(matches!(guard.allows(&foreign, 1_000_000, &control), Err(Error::Owner)));
+    assert!(matches!(
+        guard.allows(&foreign, 1_000_000, &control),
+        Err(Error::Owner)
+    ));
 }
 
 #[test]
@@ -79,7 +95,10 @@ fn compilation_rejects_a_foreign_witness() {
     let witness = fixtures::interpretation(&other, 0).unwrap();
     let control = Control::default();
     let mut budget = guard::Budget::new(ConstructionLimits::default(), &control);
-    assert!(matches!(guard::compile(&source, &witness, &mut budget), Err(Error::Owner)));
+    assert!(matches!(
+        guard::compile(&source, &witness, &mut budget),
+        Err(Error::Owner)
+    ));
     assert_eq!(budget.work, 0);
 }
 
@@ -113,17 +132,33 @@ fn every_construction_work_refusal_keeps_the_store_empty() {
     store.learn(&checked, &mut full).unwrap();
     let complete = full.work;
     for maximum in setup..complete {
-        let limits = ConstructionLimits { max_work: maximum, ..ConstructionLimits::default() };
+        let limits = ConstructionLimits {
+            max_work: maximum,
+            ..ConstructionLimits::default()
+        };
         let mut budget = guard::Budget::new(limits, &control);
         let mut refused = guard::Store::new(&mut budget).unwrap();
-        assert!(matches!(refused.learn(&checked, &mut budget), Err(Error::Limit(Resource::Work))));
+        assert!(matches!(
+            refused.learn(&checked, &mut budget),
+            Err(Error::Limit(Resource::Work))
+        ));
         assert!(refused.guards.is_empty());
         assert_eq!(budget.retained_nodes, 0);
         assert_eq!(budget.work, maximum);
     }
-    let mut budget = guard::Budget::new(ConstructionLimits { max_work: complete,
-        ..ConstructionLimits::default() }, &control);
-    assert!(guard::Store::new(&mut budget).unwrap().learn(&checked, &mut budget).unwrap());
+    let mut budget = guard::Budget::new(
+        ConstructionLimits {
+            max_work: complete,
+            ..ConstructionLimits::default()
+        },
+        &control,
+    );
+    assert!(
+        guard::Store::new(&mut budget)
+            .unwrap()
+            .learn(&checked, &mut budget)
+            .unwrap()
+    );
 }
 
 #[test]
@@ -136,16 +171,34 @@ fn every_node_refusal_publishes_no_guard() {
     store.learn(&checked, &mut budget).unwrap();
     let complete = store.guards[0].restriction.nodes().len();
     for max_nodes in 0..complete {
-        let mut budget = guard::Budget::new(ConstructionLimits { max_nodes,
-            ..ConstructionLimits::default() }, &control);
+        let mut budget = guard::Budget::new(
+            ConstructionLimits {
+                max_nodes,
+                ..ConstructionLimits::default()
+            },
+            &control,
+        );
         let mut store = guard::Store::new(&mut budget).unwrap();
-        assert!(matches!(store.learn(&checked, &mut budget), Err(Error::Limit(Resource::Nodes))));
+        assert!(matches!(
+            store.learn(&checked, &mut budget),
+            Err(Error::Limit(Resource::Nodes))
+        ));
         assert!(store.guards.is_empty());
         assert_eq!(budget.retained_nodes, 0);
     }
-    let mut budget = guard::Budget::new(ConstructionLimits { max_nodes: complete,
-        ..ConstructionLimits::default() }, &control);
-    assert!(guard::Store::new(&mut budget).unwrap().learn(&checked, &mut budget).unwrap());
+    let mut budget = guard::Budget::new(
+        ConstructionLimits {
+            max_nodes: complete,
+            ..ConstructionLimits::default()
+        },
+        &control,
+    );
+    assert!(
+        guard::Store::new(&mut budget)
+            .unwrap()
+            .learn(&checked, &mut budget)
+            .unwrap()
+    );
 }
 
 #[test]
@@ -159,11 +212,18 @@ fn failed_learning_preserves_the_previous_guard() {
     let bytes = budget.retained_bytes;
     let nodes = budget.retained_nodes;
     budget.limits.max_work = budget.work;
-    assert!(matches!(store.learn(&first, &mut budget), Err(Error::Limit(Resource::Work))));
+    assert!(matches!(
+        store.learn(&first, &mut budget),
+        Err(Error::Limit(Resource::Work))
+    ));
     assert_eq!(store.guards.len(), 1);
     assert_eq!(budget.retained_bytes, bytes);
     assert_eq!(budget.retained_nodes, nodes);
-    assert!(!store.guards[0].allows(first.candidate(), 1_000_000, &control).unwrap());
+    assert!(
+        !store.guards[0]
+            .allows(first.candidate(), 1_000_000, &control)
+            .unwrap()
+    );
 }
 
 #[test]
@@ -174,7 +234,10 @@ fn cancelled_learning_preserves_the_original_stop() {
     let mut budget = guard::Budget::new(ConstructionLimits::default(), &control);
     let mut store = guard::Store::new(&mut budget).unwrap();
     control.cancel();
-    assert!(matches!(store.learn(&checked, &mut budget), Err(Error::Control(Stop::Cancelled))));
+    assert!(matches!(
+        store.learn(&checked, &mut budget),
+        Err(Error::Control(Stop::Cancelled))
+    ));
     assert!(store.guards.is_empty());
 }
 
@@ -184,7 +247,15 @@ fn feedback_saves_calls_without_skipping_candidates() {
     let control = Control::default();
     let mut progress = Progress::default();
     let mut elapsed = StageTimes::default();
-    replay::fixed(&source, true, Configuration::default(), &control, &mut progress, &mut elapsed).unwrap();
+    replay::fixed(
+        &source,
+        true,
+        Configuration::default(),
+        &control,
+        &mut progress,
+        &mut elapsed,
+    )
+    .unwrap();
     assert!(progress.exhausted);
     assert_eq!(progress.stable, [0]);
     assert_eq!(progress.candidates_completed, 64);
@@ -198,11 +269,22 @@ fn feedback_saves_calls_without_skipping_candidates() {
 #[test]
 fn refused_learning_retains_completed_membership() {
     let source = Case::Loops.theory().unwrap();
-    let configuration = Configuration { construction: ConstructionLimits { max_guards: 0,
-        ..ConstructionLimits::default() }, ..Configuration::default() };
+    let configuration = Configuration {
+        construction: ConstructionLimits {
+            max_guards: 0,
+            ..ConstructionLimits::default()
+        },
+        ..Configuration::default()
+    };
     let mut progress = Progress::default();
-    let result = replay::fixed(&source, true, configuration, &Control::default(),
-        &mut progress, &mut StageTimes::default());
+    let result = replay::fixed(
+        &source,
+        true,
+        configuration,
+        &Control::default(),
+        &mut progress,
+        &mut StageTimes::default(),
+    );
     assert!(matches!(result, Err(Error::Limit(Resource::Guards))));
     assert_eq!(progress.candidates_completed, 2);
     assert_eq!(progress.membership_completed, 2);
@@ -218,12 +300,26 @@ fn actual_restart_preserves_already_delivered_models() {
     let control = Control::default();
     let config = Configuration::default();
     let mut fixed = Progress::default();
-    let store = replay::fixed(&source, true, config, &control, &mut fixed,
-        &mut StageTimes::default()).unwrap();
+    let store = replay::fixed(
+        &source,
+        true,
+        config,
+        &control,
+        &mut fixed,
+        &mut StageTimes::default(),
+    )
+    .unwrap();
     assert!(!store.guards.is_empty());
     let mut search = Progress::default();
-    replay::search(&source, Some(&store), config, &control, &mut search,
-        &mut StageTimes::default()).unwrap();
+    replay::search(
+        &source,
+        Some(&store),
+        config,
+        &control,
+        &mut search,
+        &mut StageTimes::default(),
+    )
+    .unwrap();
     run::family(&search, &fixed.stable).unwrap();
     assert_eq!(search.restarts, store.guards.len() as u64);
     assert_eq!(search.installation_attempts, search.restarts);
@@ -233,17 +329,25 @@ fn actual_restart_preserves_already_delivered_models() {
 
 #[test]
 fn all_routes_preserve_the_complete_reference_families() {
-    let configuration = Configuration { warmups: 0, repetitions: 0, ..Configuration::default() };
+    let configuration = Configuration {
+        warmups: 0,
+        repetitions: 0,
+        ..Configuration::default()
+    };
     let mut samples = Vec::new();
     let mut complete = false;
     measure(&configuration, |event| {
         match event {
             Event::Sample(sample) => samples.push((*sample).clone()),
-            Event::Complete { samples } => { assert_eq!(*samples, 32); complete = true; },
-            _ => {},
+            Event::Complete { samples } => {
+                assert_eq!(*samples, 32);
+                complete = true;
+            }
+            _ => {}
         }
         Ok(())
-    }).unwrap();
+    })
+    .unwrap();
     assert!(complete);
     assert_eq!(samples.len(), 32);
     for sample in samples {
@@ -259,15 +363,27 @@ fn empty_guard_has_a_five_node_fifteen_step_boundary() {
     let control = Control::default();
     // Four reservations; falsum, verum, proper, excluded, implication;
     // then five node and one root admission visits. No universe/map/root fold.
-    let limits = ConstructionLimits { max_nodes: 5, max_work: 15,
-        ..ConstructionLimits::default() };
+    let limits = ConstructionLimits {
+        max_nodes: 5,
+        max_work: 15,
+        ..ConstructionLimits::default()
+    };
     let mut budget = guard::Budget::new(limits, &control);
     let guard = guard::compile(&source, &witness, &mut budget).unwrap();
     assert_eq!(budget.work, 15);
     assert_eq!(guard.restriction.nodes().len(), 5);
     assert!(guard.allows(&witness, 1_000_000, &control).unwrap());
-    let mut budget = guard::Budget::new(ConstructionLimits { max_work: 14, ..limits }, &control);
-    assert!(matches!(guard::compile(&source, &witness, &mut budget), Err(Error::Limit(Resource::Work))));
+    let mut budget = guard::Budget::new(
+        ConstructionLimits {
+            max_work: 14,
+            ..limits
+        },
+        &control,
+    );
+    assert!(matches!(
+        guard::compile(&source, &witness, &mut budget),
+        Err(Error::Limit(Resource::Work))
+    ));
 }
 
 #[test]
@@ -284,7 +400,9 @@ fn guard_bytes_are_admitted_before_publication() {
             Resource::LiveBytes => budget.limits.max_retained_bytes = retained,
             _ => unreachable!(),
         }
-        assert!(matches!(store.learn(&checked, &mut budget), Err(Error::Limit(found)) if found == resource));
+        assert!(
+            matches!(store.learn(&checked, &mut budget), Err(Error::Limit(found)) if found == resource)
+        );
         assert!(store.guards.is_empty());
         assert_eq!(budget.retained_bytes, retained);
         assert_eq!(budget.retained_nodes, 0);
@@ -293,9 +411,15 @@ fn guard_bytes_are_admitted_before_publication() {
 
 #[test]
 fn failed_event_preserves_the_original_writer_cause_pair() {
-    let configuration = Configuration { warmups: 0, repetitions: 0,
-        construction: ConstructionLimits { max_work: 0, ..ConstructionLimits::default() },
-        ..Configuration::default() };
+    let configuration = Configuration {
+        warmups: 0,
+        repetitions: 0,
+        construction: ConstructionLimits {
+            max_work: 0,
+            ..ConstructionLimits::default()
+        },
+        ..Configuration::default()
+    };
     let mut samples = 0;
     let mut complete = false;
     let result = measure(&configuration, |event| {
@@ -307,7 +431,7 @@ fn failed_event_preserves_the_original_writer_cause_pair() {
                 return Err(std::io::Error::other("failed-record sink"));
             }
             Event::Complete { .. } => complete = true,
-            _ => {},
+            _ => {}
         }
         Ok(())
     });
@@ -327,11 +451,19 @@ fn retained_node_refusal_publishes_no_guard() {
     let source = Case::Loops.theory().unwrap();
     let checked = checked(&source, 1);
     let control = Control::default();
-    let mut budget = guard::Budget::new(ConstructionLimits { max_total_nodes: 0,
-        ..ConstructionLimits::default() }, &control);
+    let mut budget = guard::Budget::new(
+        ConstructionLimits {
+            max_total_nodes: 0,
+            ..ConstructionLimits::default()
+        },
+        &control,
+    );
     let mut store = guard::Store::new(&mut budget).unwrap();
     let retained = budget.retained_bytes;
-    assert!(matches!(store.learn(&checked, &mut budget), Err(Error::Limit(Resource::TotalNodes))));
+    assert!(matches!(
+        store.learn(&checked, &mut budget),
+        Err(Error::Limit(Resource::TotalNodes))
+    ));
     assert!(store.guards.is_empty());
     assert_eq!(budget.retained_bytes, retained);
     assert_eq!(budget.retained_nodes, 0);
@@ -342,20 +474,39 @@ fn refused_installation_retains_the_first_answer() {
     let source = Case::Mixed.theory().unwrap();
     let control = Control::default();
     let configuration = Configuration::default();
-    let store = replay::fixed(&source, true, configuration, &control,
-        &mut Progress::default(), &mut StageTimes::default()).unwrap();
+    let store = replay::fixed(
+        &source,
+        true,
+        configuration,
+        &control,
+        &mut Progress::default(),
+        &mut StageTimes::default(),
+    )
+    .unwrap();
     assert!(!store.guards.is_empty());
-    let mut reference = zetesis_sat::StableModels::new(&source, configuration.native(), control.clone()).unwrap();
+    let mut reference =
+        zetesis_sat::StableModels::new(&source, configuration.native(), control.clone()).unwrap();
     let first = fixtures::bits(&reference.next().unwrap().unwrap());
     // An actually observed native work boundary, not a guessed timeout or quota.
     // The identical setup and first next call fit; the first extra restriction
     // operation cannot be admitted. This is not a timing assertion.
-    let configuration = Configuration { max_native_work: reference.statistics().search.work,
-        ..configuration };
+    let configuration = Configuration {
+        max_native_work: reference.statistics().search.work,
+        ..configuration
+    };
     let mut progress = Progress::default();
-    let result = replay::search(&source, Some(&store), configuration, &control,
-        &mut progress, &mut StageTimes::default());
-    assert!(matches!(result, Err(Error::Native(zetesis_sat::Incomplete::WorkLimit))));
+    let result = replay::search(
+        &source,
+        Some(&store),
+        configuration,
+        &control,
+        &mut progress,
+        &mut StageTimes::default(),
+    );
+    assert!(matches!(
+        result,
+        Err(Error::Native(zetesis_sat::Incomplete::WorkLimit))
+    ));
     assert_eq!(progress.stable, [first]);
     assert_eq!(progress.installation_attempts, 1);
     assert_eq!(progress.restarts, 0);
