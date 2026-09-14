@@ -29,29 +29,46 @@ struct Observation {
 impl GroundingObserver for Observation {
     fn enter(&self) {}
     fn exit(&self) {}
-    fn details_enabled(&self) -> bool { true }
+    fn details_enabled(&self) -> bool {
+        true
+    }
 
     fn domain_analysis(&self, observation: DomainObservation<'_, '_>) {
         if let DomainObservation::Analyzed(analysis) = observation {
             // Inspect the actual borrowed result during the synchronous callback.
             // Retain only the owned status and information this example needs.
             self.status.set(Some(analysis.status()));
-            self.unknown_argument.set(analysis.arguments().any(|(_, _, argument)| {
-                matches!(argument.domain(), Domain::Unknown)
-            }));
+            self.unknown_argument.set(
+                analysis
+                    .arguments()
+                    .any(|(_, _, argument)| matches!(argument.domain(), Domain::Unknown)),
+            );
         }
     }
 
-    fn phase_exit(&self, _: GroundingPhase, _: Option<Location>, _: GroundingOutcome, work: GroundingWork) {
+    fn phase_exit(
+        &self,
+        _: GroundingPhase,
+        _: Option<Location>,
+        _: GroundingOutcome,
+        work: GroundingWork,
+    ) {
         self.work.set(self.work.get().checked_sum(work));
     }
 }
 
-fn ground(domains: Option<DomainLimits>, observer: &Observation) -> Result<AdmittedFormula, FormulaFailure> {
-    prepare_formula(SOURCE.to_owned(), AdmissionOptions::default(), ExpansionLimits::default(),
-        FormulaLimits::default())?
-        .with_domain_analysis(domains) // None is the default; Indexed joins stay unchanged.
-        .ground_with_observer(Some(observer))
+fn ground(
+    domains: Option<DomainLimits>,
+    observer: &Observation,
+) -> Result<AdmittedFormula, FormulaFailure> {
+    prepare_formula(
+        SOURCE.to_owned(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )?
+    .with_domain_analysis(domains) // None is the default; Indexed joins stay unchanged.
+    .ground_with_observer(Some(observer))
 }
 
 fn same_theory(left: &AdmittedFormula, right: &AdmittedFormula) {
@@ -69,7 +86,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     same_theory(&ordinary, &narrowed);
     assert_eq!(on.status.get(), Some(Status::FixedPoint));
     assert!(!on.unknown_argument.get());
-    assert_eq!(narrowed.atoms().iter().filter(|atom| atom.predicate().name() == "r").count(), 4);
+    assert_eq!(
+        narrowed
+            .atoms()
+            .iter()
+            .filter(|atom| atom.predicate().name() == "r")
+            .count(),
+        4
+    );
     let work = on.work.get();
     assert!(work.domain_prepare_work.is_some_and(|count| count > 0));
     assert!(work.domain_guard_checks.is_some_and(|count| count > 0));
@@ -79,8 +103,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert!(work.join_probes.unwrap() < off.work.get().join_probes.unwrap());
 
     for limits in [
-        DomainLimits { max_values_per_argument: 0, ..DomainLimits::default() },
-        DomainLimits { max_work: 7, ..DomainLimits::default() },
+        DomainLimits {
+            max_values_per_argument: 0,
+            ..DomainLimits::default()
+        },
+        DomainLimits {
+            max_work: 7,
+            ..DomainLimits::default()
+        },
     ] {
         let fallback = Observation::default();
         same_theory(&ordinary, &ground(Some(limits), &fallback)?);
