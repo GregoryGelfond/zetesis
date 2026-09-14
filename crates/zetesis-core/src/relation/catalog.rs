@@ -27,11 +27,13 @@ use super::{
 /// layout and operation scratch. The supplied atoms' nested payload allocations
 /// remain the source admission caller's responsibility, as for borrowed views.
 /// They are reported conservatively as referenced payload, not unique RSS.
-/// Membership uses the same checked typed identity comparisons as `AtomInterner`.
+/// Membership uses the same checked typed identity comparisons as
+/// [`AtomInterner`](crate::atom_interner::AtomInterner).
 /// Row and dictionary AVL indexes contain only IDs and links. Row membership
 /// visits O(log n) nodes; dictionary membership visits O(log d), with typed
-/// descriptor/text-prefix comparison work additional. Inserting a tuple with a
-/// newly distinct values keeps O(a log d) tentative node patches; checked overlay scans can
+/// descriptor/text-prefix comparison work additional. Inserting a tuple with
+/// `a` newly distinct values keeps O(a log d) tentative node patches; checked
+/// overlay scans can
 /// cost O(a² log² d) metadata work. No historical sorted ID sequence is shifted.
 /// Ordered access requires an explicitly prepared view, reusable until append.
 /// Column/vector growth and ordered preparation have separate admitted costs.

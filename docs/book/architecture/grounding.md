@@ -301,7 +301,7 @@ IDs and links; typed comparisons inspect their actual descriptor/text prefixes.
 An insertion plans the new tuple's dictionary leaves in a bounded metadata
 overlay, then publishes row, equality and column changes after all fallible
 checks. No historical sorted row or dictionary sequence is shifted. If a tuple
-introduces a new values into a dictionary of size d, tentative patches occupy
+introduces `a` new values into a dictionary of size `d`, tentative patches occupy
 O(a log d) cells; the checked overlay lookups can use O(a² log² d) metadata work.
 Typed comparisons, node inspection, append copies and posting construction
 consume the grounding work budget. Snapshot construction visits predicates
@@ -323,8 +323,9 @@ growth overlap. Its default is 128 MiB; zero is a zero-byte allowance. Pending
 atoms use fallible buffer reservation, and moving them into catalogs transfers
 their payload charge rather than counting a second payload owner. The reported
 `peak_closure_bytes` is a maximum for this named envelope. Shared structural
-buffers are conservatively counted per occurrence. BTree node overhead,
-allocator metadata, Arc counters, template binding/cursor frames and final Model
+buffers are conservatively counted per occurrence. Tree-container allocations
+(including vacant slots), allocator metadata, Arc counters, template binding/cursor
+frames and final Model
 retention are excluded. This is a composable closure allowance, not total RSS;
 collective worker admission and result retention have separate owners.
 `FormulaLimits::max_support_bytes` bounds the catalog's atom-vector cells,

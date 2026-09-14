@@ -38,7 +38,8 @@ pub struct Limits {
     /// Named capacity per scalar closure: predicate/catalog cells and names,
     /// tuple/index/column/prepared-order buffers, nested tuple payload, pending
     /// tuples and operation scratch/growth overlap. Shared structural buffers
-    /// are counted per occurrence. BTree node/allocator/Arc-counter overhead,
+    /// are counted per occurrence. Tree-container allocations (including vacant
+    /// slots), allocator metadata and Arc-counter overhead,
     /// template binding/cursor frames and final Model retention are excluded.
     /// This is an independent finite allowance, not a process RSS ceiling.
     pub max_closure_bytes: usize,
