@@ -108,18 +108,41 @@ fn reused_comparisons_keep_the_work_ceiling_inclusive() {
             },
         )
     };
+    // This test locates an inclusive work boundary, not a fixed cost target.
+    // Start from an actually admitted endpoint under the public finite policy;
+    // checked lookup operations may change the amount of work this source needs.
+    let mut upper = FormulaLimits::default().max_work;
+    let complete = admitted(upper).expect("finite comparison fixture is admitted");
+    let expected = source_records::Records::from([(
+        ["d(1)", "d(2)", "d(3)", "p(1,3)", "p(3,1)"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+        None,
+    )]);
+    assert_eq!(source_records::exhaustive(&complete), expected);
+    let has_enough_work = |maximum| match admitted(maximum) {
+        Ok(_) => true,
+        Err(FormulaFailure::Limit {
+            resource: FormulaResource::Work,
+            limit,
+            observed,
+            ..
+        }) if limit == u128::from(maximum) && observed > limit => false,
+        Err(error) => panic!("expected only a work refusal at {maximum}: {error:?}"),
+    };
     let mut lower = 0;
-    let mut upper = 1_024;
-    assert!(admitted(upper).is_ok());
     while lower + 1 < upper {
         let middle = lower + (upper - lower) / 2;
-        if admitted(middle).is_ok() {
+        if has_enough_work(middle) {
             upper = middle;
         } else {
             lower = middle;
         }
     }
-    assert!(admitted(upper).is_ok());
+    assert_eq!(upper, lower + 1);
+    let exact = admitted(upper).expect("the exact work ceiling is inclusive");
+    assert_eq!(source_records::exhaustive(&exact), expected);
     for maximum in [0, lower] {
         assert!(matches!(
             admitted(maximum),
