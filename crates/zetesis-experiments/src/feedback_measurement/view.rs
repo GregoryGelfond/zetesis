@@ -217,7 +217,7 @@ pub enum Event<'a> {
         case: Case,
         /// Complete original universe.
         atoms: usize,
-        /// Topological source nodes as [kind,left,right], kinds atom/false/and/or/implies.
+        /// Topological source nodes as `[kind, left, right]`, kinds atom/false/and/or/implies.
         #[serde(serialize_with = "self::nodes")]
         nodes: &'a [Node],
         /// Original asserted roots, preserving duplicates.
