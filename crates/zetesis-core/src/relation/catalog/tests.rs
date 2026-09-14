@@ -428,6 +428,7 @@ fn duplicate_insert_preserves_prepared_order() {
             .inserted
     );
     assert_eq!(catalog.ordered().unwrap().get(0), Some(&atom(2, 9)));
+    assert_eq!(catalog.ordered().unwrap().row_id(0), Some(0));
     assert_eq!(
         catalog
             .prepare_ordered(Limits {
@@ -503,6 +504,7 @@ fn refused_rotation_preserves_the_published_extent() {
             .expect("refusal preserves prior preparation");
         assert_eq!(rows.len(), 1);
         assert_eq!(rows.get(0), Some(&original[0]));
+        assert_eq!(rows.row_id(0), Some(0));
         assert_eq!(
             catalog
                 .lookup(&rotating_tuple(), Limits::default())
@@ -650,4 +652,54 @@ fn refused_extraction_preserves_the_prepared_extent() {
             .atoms,
         [atom(9, 3)]
     );
+}
+
+
+#[test]
+fn ordered_ids_preserve_rows_when_ranks_move() {
+    let mut catalog = owner();
+    assert_eq!(catalog.ordered().unwrap().row_id(0), None);
+    for (id, value) in [9, 2, 5].into_iter().enumerate() {
+        assert_eq!(catalog.insert(atom(value, 0), Limits::default()).unwrap().row, id);
+    }
+    catalog.prepare_ordered(Limits::default()).unwrap();
+    let before = catalog.ordered().unwrap();
+    assert_eq!((0..before.len()).map(|rank| before.row_id(rank).unwrap()).collect::<Vec<_>>(), [1, 2, 0]);
+    assert_eq!(catalog.insert(atom(0, 0), Limits::default()).unwrap().row, 3);
+    catalog.prepare_ordered(Limits::default()).unwrap();
+    let rows = catalog.ordered().unwrap();
+    for (rank, (id, value)) in [(3, 0), (1, 2), (2, 5), (0, 9)].into_iter().enumerate() {
+        assert_eq!(rows.row_id(rank), Some(id));
+        assert_eq!(rows.get(rank), Some(&atom(value, 0)));
+        assert!(std::ptr::eq(rows.get(rank).unwrap(), &catalog.atoms()[id]));
+    }
+    assert_eq!(rows.row_id(rows.len()), None);
+    assert_eq!(rows.row_id(usize::MAX), None);
+}
+
+#[test]
+fn ordered_ids_preserve_complete_typed_identity() {
+    let nested = Value::from_nodes(vec![ValueNode::Function {
+        name: "f".into(), arity: 1, sign: Sign::Negative,
+    }, ValueNode::Number(1)], ValueLimits::default()).unwrap();
+    for sign in [Sign::Positive, Sign::Negative] {
+        let predicate = Predicate::with_sign("typed", 1, sign).unwrap();
+        let mut catalog = Catalog::new(predicate.clone(), Limits::default()).unwrap();
+        let values = [Value::String("1".into()), Value::Number(1), nested.clone(),
+            Value::Symbol("1".into()), Value::Infimum, Value::Supremum];
+        for value in &values {
+            catalog.insert(Atom::new(predicate.clone(), vec![value.clone()]).unwrap(), Limits::default()).unwrap();
+        }
+        catalog.prepare_ordered(Limits::default()).unwrap();
+        let rows = catalog.ordered().unwrap();
+        // Literal storage order: extrema, integer, string, symbol, constructor.
+        // It is independent of printed spelling and differs from ASP term order.
+        for (rank, id) in [4, 1, 0, 3, 2, 5].into_iter().enumerate() {
+            assert_eq!(rows.row_id(rank), Some(id));
+            let atom = rows.get(rank).unwrap();
+            assert_eq!(atom.predicate(), &predicate);
+            assert_eq!(atom.values(), &[values[id].clone()]);
+            assert!(std::ptr::eq(atom, &catalog.atoms()[id]));
+        }
+    }
 }

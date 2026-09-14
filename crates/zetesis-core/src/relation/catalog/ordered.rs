@@ -30,13 +30,21 @@ impl<'a> OrderedRows<'a> {
         self.catalog.ordered.is_empty()
     }
 
+    /// Stable catalog-local insertion row ID at an ordered position.
+    ///
+    /// This is one bounds-checked index read, with no lookup, allocation or
+    /// payload comparison. A row ID belongs only to this catalog: append
+    /// preserves it, while extraction invalidates it. Ordered positions can
+    /// move after append. Out-of-range positions return `None`.
+    #[must_use]
+    pub fn row_id(self, position: usize) -> Option<usize> {
+        self.catalog.ordered.get(position).copied()
+    }
+
     /// Borrow one authoritative atom by ordered position. Constant time.
     #[must_use]
     pub fn get(self, position: usize) -> Option<&'a Atom> {
-        self.catalog
-            .ordered
-            .get(position)
-            .and_then(|&row| self.catalog.atoms.get(row))
+        self.row_id(position).and_then(|row| self.catalog.atoms.get(row))
     }
 
     /// Current owner capacity and work of the preparation or reuse operation.
