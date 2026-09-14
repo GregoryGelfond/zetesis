@@ -62,6 +62,26 @@ source work occurs during membership, so it cannot also be claimed as a disjoint
 grounding stage. Host intervals around GPU calls include preparation, transfers,
 submission, waiting and readback; they are not shader timings.
 
+## Compare independent reduct checks
+
+The [`lazy_measurement` library](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-experiments/src/lazy_measurement.rs)
+compares the same ordered candidate occurrences across scalar, Rayon and shared
+CPU/device schedules. It checks complete closures and rejection reasons after
+each timed call. This measures membership checking, not outer candidate search.
+
+Independent scalar/Rayon samples sum actual completed checks' work, rounds,
+bindings and tuple probes. A tuple probe is a row offered to whole-row matching,
+including a rejected row; prefix comparisons and catalog lookup are separate.
+Total work also includes preparation, so fewer probes alone do not establish a
+cheaper operation. The maximum named per-candidate closure envelope is distinct
+from the Rayon's pool reservation and process RSS. The pool reports its shared
+preparation separately; repeated snapshots are not new preparation events.
+
+JSON-lines schema 3 adds the tuple-probe observation. A missing field in an older
+report means unavailable, not zero. Shared routes retain their own source/device
+receipts. The [measurement contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-experiments/README.md)
+specifies setup, reuse, timing and failed-report boundaries.
+
 ## Thread and failure contracts
 
 The measurement owner is `Send + Sync`. Short internal locks protect fixed-size

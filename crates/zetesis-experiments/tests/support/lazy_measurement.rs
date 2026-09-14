@@ -112,6 +112,18 @@ fn independent_work_sums_completed_occurrences() {
             + u128::from(dense.bindings)
             + u128::from(repeated.bindings)
     );
+    assert!(
+        checks
+            .iter()
+            .all(|check| check.statistics().tuple_probes > 0)
+    );
+    assert_eq!(
+        total.tuple_probes,
+        u128::from(first.tuple_probes)
+            + u128::from(second.tuple_probes)
+            + u128::from(dense.tuple_probes)
+            + u128::from(repeated.tuple_probes)
+    );
 }
 
 #[test]

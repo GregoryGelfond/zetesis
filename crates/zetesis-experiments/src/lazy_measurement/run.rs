@@ -54,7 +54,7 @@ pub fn measure(
     mut observe: impl FnMut(&Event<'_>) -> io::Result<()>,
 ) -> Result<(), Error> {
     configuration.validate()?;
-    observe(&Event::Configuration { schema: 2, configuration,
+    observe(&Event::Configuration { schema: 3, configuration,
         scope: "relational-source-scans-and-complete-reduct-checks; excludes outer search, fixture/setup/parity/receipt-observation/publication",
         peak_rss: "unavailable: source mask payload and transfer bytes are not process RSS",
     }).map_err(Error::Output)?;

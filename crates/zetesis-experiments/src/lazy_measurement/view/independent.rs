@@ -22,6 +22,9 @@ pub struct IndependentWork {
     pub rounds: u128,
     /// Sum of fully matched enabled/filter-valid bindings across all rounds.
     pub bindings: u128,
+    /// Sum of source rows offered to whole-row matching, including rejected rows.
+    /// Excludes prefix comparisons and catalog lookups; already included in work.
+    pub tuple_probes: u128,
     /// Sum of final closure atom counts, preserving occurrence multiplicity.
     pub derived_atoms: u128,
     /// Maximum individual named closure envelope. Excludes returned models and
@@ -39,6 +42,7 @@ impl IndependentWork {
             total.catalog_work += u128::from(statistics.catalog_work);
             total.rounds += u128::from(statistics.rounds);
             total.bindings += u128::from(statistics.bindings);
+            total.tuple_probes += u128::from(statistics.tuple_probes);
             total.derived_atoms += statistics.derived_atoms as u128;
             total.peak_closure_bytes = total.peak_closure_bytes.max(statistics.peak_closure_bytes);
             total

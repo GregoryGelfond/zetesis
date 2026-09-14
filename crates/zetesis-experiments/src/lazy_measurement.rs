@@ -3,8 +3,10 @@
 //! Source scans, complete reduct closure checking and result construction are
 //! inside each sample. Fixture preparation, parity comparisons, receipt
 //! observation, pool/device setup and publication are outside it. This is not
-//! outer answer-set search. JSON-lines schema 2 adds independent check and Rayon
-//! query-cache receipts; shared source and device fields retain their meanings.
+//! outer answer-set search. JSON-lines schema 3 includes independent tuple-probe
+//! counts alongside schema 2's independent check and Rayon query-cache receipts.
+//! Shared source and device fields retain their meanings. Missing fields in
+//! earlier schemas are unavailable observations, not zero work.
 //! Scalar/Rayon limits apply per candidate; round-source limits apply per batch.
 //! All successful routes must return the same complete ordered checks despite
 //! those different schedules. Requested mask payload is not process peak RSS.

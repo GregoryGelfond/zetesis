@@ -185,13 +185,17 @@ portable routes. Ordered closures and rejection reasons must match even when
 routes charge different work. Source-round execution, transport and returned
 results are timed; setup, reference comparison and rendering are separate.
 
-Lazy JSON-lines schema 2 adds `independent` and `queries` sample fields.
+Lazy JSON-lines schema 3 includes `independent` and `queries` sample fields,
+with `tuple_probes` added to the independent work observations. Earlier schemas
+without that field supply no observation; its absence must not be read as zero.
 The synchronous event borrows its sample and failure receipts; a library
 consumer retaining samples explicitly clones each `Sample`. JSON shape is unchanged
 by that borrowing boundary.
 `independent` sums completed Scalar/Rayon checks' work, catalog work, rounds,
-bindings and derived atoms across every occurrence, including duplicate seeds
-and rejected candidates. Catalog work is already part of work. Its
+bindings, tuple probes and derived atoms across every occurrence, including
+duplicate seeds and rejected candidates. Tuple probes count rows offered to the
+whole-row matcher, including rejected rows; they exclude prefix comparisons and
+catalog lookups. Both catalog work and tuple probes are already part of work. Its
 `peak_closure_bytes` is the maximum individual named closure envelope; it is
 neither the sum of those envelopes nor a simultaneous batch peak or process RSS.
 Shared routes instead retain their existing `source` receipts; their

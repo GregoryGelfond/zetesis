@@ -71,6 +71,12 @@ fn samples_expose_only_receipts_of_their_route() {
             assert_eq!(sample.source.is_some(), !independent);
             let json = serde_json::to_value(sample).unwrap();
             assert_eq!(json["independent"].is_null(), !independent);
+            if let Some(work) = sample.independent {
+                assert_eq!(
+                    json["independent"]["tuple_probes"],
+                    serde_json::to_value(work.tuple_probes).unwrap()
+                );
+            }
             if let Some(statistics) = sample.queries {
                 let preparation = statistics.preparation.unwrap();
                 assert_eq!(
@@ -298,7 +304,7 @@ fn command_json_lines_retain_the_complete_configuration() {
         .lines()
         .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
         .collect::<Vec<_>>();
-    assert_eq!(records[0]["schema"], 2);
+    assert_eq!(records[0]["schema"], 3);
     assert_eq!(
         records[0]["configuration"]["source_per_batch"]["max_host_bytes"],
         134_217_728
