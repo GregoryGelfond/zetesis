@@ -2,14 +2,18 @@
 
 use std::mem::size_of;
 
-use crate::{Atom, AtomKey, Predicate, Value, identity, ordered_index::{self, Directions, Index, Link, Node, Step}};
+use crate::{
+    Atom, AtomKey, Predicate, Value, identity,
+    ordered_index::{self, Directions, Index, Link, Node, Step},
+};
 
 mod plan;
 mod ordered;
 pub use ordered::OrderedRows;
 
 use super::{
-    Cell, DictionaryIndex, Failure, Layout, LayoutOwner, Limits, Relation, Resource, Source, Storage, Work, ceiling,
+    Cell, DictionaryIndex, Failure, Layout, LayoutOwner, Limits, Relation, Resource, Source,
+    Storage, Work, ceiling,
 };
 
 /// One signed predicate's unique typed atoms and appendable equality layout.
@@ -23,7 +27,7 @@ use super::{
 /// layout and operation scratch. The supplied atoms' nested payload allocations
 /// remain the source admission caller's responsibility, as for borrowed views.
 /// They are reported conservatively as referenced payload, not unique RSS.
-/// Membership uses the same checked typed identity comparisons as AtomInterner.
+/// Membership uses the same checked typed identity comparisons as `AtomInterner`.
 /// Row and dictionary AVL indexes contain only IDs and links. Row membership
 /// visits O(log n) nodes; dictionary membership visits O(log d), with typed
 /// descriptor/text-prefix comparison work additional. Inserting a tuple with a
@@ -194,9 +198,17 @@ impl Catalog {
     /// nested typed-value payload costs and do not rely on equality IDs alone.
     pub fn lookup(&self, atom: &Atom, limits: Limits) -> Result<Lookup, CatalogFailure> {
         let mut work = self.work(limits)?;
-        self.locate(atom.predicate(), |column| &atom.values()[column], &mut work, |_| {})
-            .map(|row| Lookup { row, storage: self.receipt(&work) })
-            .map_err(|error| self.failed(error, &work))
+        self.locate(
+            atom.predicate(),
+            |column| &atom.values()[column],
+            &mut work,
+            |_| {},
+        )
+        .map(|row| Lookup {
+            row,
+            storage: self.receipt(&work),
+        })
+        .map_err(|error| self.failed(error, &work))
     }
 
     /// Look up a borrowed substitution with the same comparison and accounting
@@ -207,9 +219,17 @@ impl Catalog {
     /// comparison work in the failure receipt.
     pub fn lookup_key(&self, key: &AtomKey<'_>, limits: Limits) -> Result<Lookup, CatalogFailure> {
         let mut work = self.work(limits)?;
-        self.locate(key.predicate(), |column| key.argument(column), &mut work, |_| {})
-            .map(|row| Lookup { row, storage: self.receipt(&work) })
-            .map_err(|error| self.failed(error, &work))
+        self.locate(
+            key.predicate(),
+            |column| key.argument(column),
+            &mut work,
+            |_| {},
+        )
+        .map(|row| Lookup {
+            row,
+            storage: self.receipt(&work),
+        })
+        .map_err(|error| self.failed(error, &work))
     }
 
     /// Insert an atom only after every required reservation and check succeeds.
@@ -227,12 +247,24 @@ impl Catalog {
 
     fn insert_inner(&mut self, atom: Atom, work: &mut Work) -> Result<Insertion, Failure> {
         let mut route = Directions::default();
-        if let Some(row) = self.locate(atom.predicate(), |column| &atom.values()[column], work,
-            |right| route.push(right).expect("AVL height fits two words"))? {
-            return Ok(Insertion { row, inserted: false, storage: self.receipt(work) });
+        if let Some(row) = self.locate(
+            atom.predicate(),
+            |column| &atom.values()[column],
+            work,
+            |right| route.push(right).expect("AVL height fits two words"),
+        )? {
+            return Ok(Insertion {
+                row,
+                inserted: false,
+                storage: self.receipt(work),
+            });
         }
         let row = self.atoms.len();
-        ceiling(Resource::Rows, row as u128 + 1, work.limits.max_rows as u128)?;
+        ceiling(
+            Resource::Rows,
+            row as u128 + 1,
+            work.limits.max_rows as u128,
+        )?;
         let row_root = plan::row(&mut self.rows, row, &route, work)?;
         let plan = plan::values(&mut self.layout, &self.atoms, &atom, self.payload, work)?;
         self.reserve(&plan, work)?;
@@ -252,17 +284,30 @@ impl Catalog {
         }
         // Publication has no callbacks, allocations, comparisons or failure.
         // Include the branch inspection of each row-path step and every patch.
-        work.tick(self.rows.path.len() as u128 + plan.ids.len() as u128
-            + plan.added.len() as u128 * 2 + plan.patches.len() as u128 + 3)?;
+        work.tick(
+            self.rows.path.len() as u128
+                + plan.ids.len() as u128
+                + plan.added.len() as u128 * 2
+                + plan.patches.len() as u128
+                + 3,
+        )?;
         Ok(())
     }
 
-    fn publish(&mut self, atom: Atom, row_root: Link, plan: plan::Plan, work: &mut Work) -> Insertion {
+    fn publish(
+        &mut self,
+        atom: Atom,
+        row_root: Link,
+        plan: plan::Plan,
+        work: &mut Work,
+    ) -> Insertion {
         let row = self.atoms.len();
         let DictionaryIndex::Append(index) = &mut self.layout.index else {
             unreachable!("catalog owns an append index");
         };
-        index.nodes.resize(index.nodes.len() + plan.added.len(), Node::default());
+        index
+            .nodes
+            .resize(index.nodes.len() + plan.added.len(), Node::default());
         for patch in &plan.patches {
             index.nodes[patch.id] = patch.node;
         }
@@ -276,7 +321,11 @@ impl Catalog {
         self.payload = plan.payload;
         self.ordered_valid = false;
         plan.release(work);
-        Insertion { row, inserted: true, storage: self.receipt(work) }
+        Insertion {
+            row,
+            inserted: true,
+            storage: self.receipt(work),
+        }
     }
 
     fn locate<'value>(
@@ -289,27 +338,48 @@ impl Catalog {
         if !identity::predicate(predicate, &self.predicate, &mut || work.tick(1))?.is_eq() {
             return Err(Failure::Predicate);
         }
-        ordered_index::search(&self.rows.nodes, self.rows.root, |row| {
-            work.tick(1)?;
-            for (column, right) in self.atoms[row].values().iter().enumerate() {
-                let order = work.compare(value(column), right)?;
-                if !order.is_eq() {
-                    return Ok(order);
+        ordered_index::search(
+            &self.rows.nodes,
+            self.rows.root,
+            |row| {
+                work.tick(1)?;
+                for (column, right) in self.atoms[row].values().iter().enumerate() {
+                    let order = work.compare(value(column), right)?;
+                    if !order.is_eq() {
+                        return Ok(order);
+                    }
                 }
-            }
-            Ok(std::cmp::Ordering::Equal)
-        }, descend)
+                Ok(std::cmp::Ordering::Equal)
+            },
+            descend,
+        )
     }
 
     fn work(&self, limits: Limits) -> Result<Work, CatalogFailure> {
         let build = (|| {
-            ceiling(Resource::Rows, self.atoms.len() as u128, limits.max_rows as u128)?;
-            ceiling(Resource::Columns, self.predicate.arity() as u128, limits.max_columns as u128)?;
-            ceiling(Resource::Values, self.layout.dictionary.len() as u128, limits.max_values as u128)?;
+            ceiling(
+                Resource::Rows,
+                self.atoms.len() as u128,
+                limits.max_rows as u128,
+            )?;
+            ceiling(
+                Resource::Columns,
+                self.predicate.arity() as u128,
+                limits.max_columns as u128,
+            )?;
+            ceiling(
+                Resource::Values,
+                self.layout.dictionary.len() as u128,
+                limits.max_values as u128,
+            )?;
             Work::new(limits, self.retained_bytes() as u128)
         })();
-        build.map_err(|error| CatalogFailure { error, work: 0,
-            retained_bytes: self.retained_bytes(), peak_construction_bytes: self.retained_bytes() })
+        build.map_err(|error| CatalogFailure {
+            error,
+            work: 0,
+            retained_bytes: self.retained_bytes(),
+            peak_construction_bytes: self.retained_bytes(),
+        })
     }
 
     fn failed(&self, error: Failure, work: &Work) -> CatalogFailure {

@@ -33,7 +33,10 @@ impl<'a> OrderedRows<'a> {
     /// Borrow one authoritative atom by ordered position. Constant time.
     #[must_use]
     pub fn get(self, position: usize) -> Option<&'a Atom> {
-        self.catalog.ordered.get(position).and_then(|&row| self.catalog.atoms.get(row))
+        self.catalog
+            .ordered
+            .get(position)
+            .and_then(|&row| self.catalog.atoms.get(row))
     }
 
     /// Current owner capacity and work of the preparation or reuse operation.
@@ -73,7 +76,9 @@ impl Catalog {
                         path.push(id);
                         cursor = self.rows.nodes[id].children[0];
                     }
-                    let Some(id) = path.pop() else { break; };
+                    let Some(id) = path.pop() else {
+                        break;
+                    };
                     work.tick(1)?;
                     self.ordered.push(id);
                     cursor = self.rows.nodes[id].children[1];
@@ -85,7 +90,10 @@ impl Catalog {
             })();
             prepare.map_err(|error| self.failed(error, &work))?;
         }
-        Ok(OrderedRows { catalog: self, storage: self.receipt(&work) })
+        Ok(OrderedRows {
+            catalog: self,
+            storage: self.receipt(&work),
+        })
     }
 
     /// Borrow an already prepared extent without allocating or traversing rows.

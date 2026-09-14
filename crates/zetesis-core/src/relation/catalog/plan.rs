@@ -8,7 +8,10 @@
 
 use std::{cmp::Ordering, mem::size_of};
 
-use crate::{Atom, Value, ordered_index::{Directions, Index, Link, Node, Step, position}};
+use crate::{
+    Atom, Value,
+    ordered_index::{Directions, Index, Link, Node, Step, position},
+};
 
 use super::super::{Cell, DictionaryIndex, Failure, Layout, Resource, Work, ceiling};
 
@@ -40,11 +43,14 @@ impl Plan {
         id: usize,
     ) -> Result<&'a Value, Failure> {
         let cell = if let Some(cell) = dictionary.get(id) {
-            return atoms.get(cell.row)
+            return atoms
+                .get(cell.row)
                 .and_then(|atom| atom.values().get(cell.column))
                 .ok_or(Failure::Dictionary);
         } else {
-            self.added.get(id - dictionary.len()).ok_or(Failure::Dictionary)?
+            self.added
+                .get(id - dictionary.len())
+                .ok_or(Failure::Dictionary)?
         };
         atom.values().get(cell.column).ok_or(Failure::Dictionary)
     }
@@ -88,13 +94,31 @@ impl Plan {
             let right = route.get(offset).ok_or(Failure::Dictionary)?;
             let previous = position(cursor.ok_or(Failure::Dictionary)?);
             let node = self.node(&index.nodes, previous, work)?;
-            push(index, Step { id: previous, node, right, changed: false }, work)?;
+            push(
+                index,
+                Step {
+                    id: previous,
+                    node,
+                    right,
+                    changed: false,
+                },
+                work,
+            )?;
             cursor = node.children[usize::from(right)];
         }
         if cursor.is_some() {
             return Err(Failure::Dictionary);
         }
-        push(index, Step { id, node: Node::default(), right: false, changed: true }, work)?;
+        push(
+            index,
+            Step {
+                id,
+                node: Node::default(),
+                right: false,
+                changed: true,
+            },
+            work,
+        )?;
         let root = index.plan_from(self.root, id, &mut || work.tick(1))?;
         work.tick(index.path.len() as u128)?;
         let changed = index.path.iter().filter(|step| step.changed).count();
@@ -124,7 +148,9 @@ pub(super) fn values(
     payload: u128,
     work: &mut Work,
 ) -> Result<Plan, Failure> {
-    let Layout { dictionary, index, .. } = layout;
+    let Layout {
+        dictionary, index, ..
+    } = layout;
     let DictionaryIndex::Append(index) = index else {
         return Err(Failure::Dictionary);
     };
@@ -138,22 +164,34 @@ pub(super) fn values(
     };
     for (column, value) in atom.values().iter().enumerate() {
         work.tick(1)?;
-        plan.payload = plan.payload.checked_add(value.payload_bytes() as u128)
+        plan.payload = plan
+            .payload
+            .checked_add(value.payload_bytes() as u128)
             .ok_or(Failure::Overflow)?;
         let (found, route) = plan.locate(index, dictionary, atoms, atom, value, work)?;
         let id = if let Some(id) = found {
             id
         } else {
-            let id = dictionary.len().checked_add(plan.added.len()).ok_or(Failure::Overflow)?;
-            ceiling(Resource::Values, id as u128 + 1,
-                (work.limits.max_values as u128).min(u128::from(u32::MAX) + 1))?;
+            let id = dictionary
+                .len()
+                .checked_add(plan.added.len())
+                .ok_or(Failure::Overflow)?;
+            ceiling(
+                Resource::Values,
+                id as u128 + 1,
+                (work.limits.max_values as u128).min(u128::from(u32::MAX) + 1),
+            )?;
             plan.extend(index, id, &route, work)?;
             work.tick(1)?;
-            plan.added.push(Cell { row: atoms.len(), column });
+            plan.added.push(Cell {
+                row: atoms.len(),
+                column,
+            });
             id
         };
         work.tick(1)?;
-        plan.ids.push(u32::try_from(id).map_err(|_| Failure::Overflow)?);
+        plan.ids
+            .push(u32::try_from(id).map_err(|_| Failure::Overflow)?);
     }
     Ok(plan)
 }
@@ -171,13 +209,31 @@ pub(super) fn row(
         let right = route.get(offset).ok_or(Failure::Dictionary)?;
         let previous = position(cursor.ok_or(Failure::Dictionary)?);
         let node = index.nodes[previous];
-        push(index, Step { id: previous, node, right, changed: false }, work)?;
+        push(
+            index,
+            Step {
+                id: previous,
+                node,
+                right,
+                changed: false,
+            },
+            work,
+        )?;
         cursor = node.children[usize::from(right)];
     }
     if cursor.is_some() {
         return Err(Failure::Dictionary);
     }
-    push(index, Step { id, node: Node::default(), right: false, changed: true }, work)?;
+    push(
+        index,
+        Step {
+            id,
+            node: Node::default(),
+            right: false,
+            changed: true,
+        },
+        work,
+    )?;
     index.plan(id, &mut || work.tick(1))
 }
 

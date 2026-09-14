@@ -61,7 +61,11 @@ impl Relational for Catalogs {
         self.relations
             .get(predicate)
             .map_or(Rows::Borrowed(&[]), |catalog| {
-                Rows::Catalog(catalog.ordered().expect("round prepared its published extent"))
+                Rows::Catalog(
+                    catalog
+                        .ordered()
+                        .expect("round prepared its published extent"),
+                )
             })
     }
 }

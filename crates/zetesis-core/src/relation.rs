@@ -503,10 +503,12 @@ impl Work {
         // Reservation may transiently retain both old and replacement buffers.
         // Record actual slack even when that post-allocation envelope is refused.
         let overlap = self.live as u128 + values.capacity() as u128 * size_of::<T>() as u128;
-        let actual = self.live as u128
-            + (values.capacity() - previous) as u128 * size_of::<T>() as u128;
+        let actual =
+            self.live as u128 + (values.capacity() - previous) as u128 * size_of::<T>() as u128;
         self.live = usize::try_from(actual).map_err(|_| Failure::Overflow)?;
-        self.peak = self.peak.max(usize::try_from(overlap).map_err(|_| Failure::Overflow)?);
+        self.peak = self
+            .peak
+            .max(usize::try_from(overlap).map_err(|_| Failure::Overflow)?);
         ceiling(Resource::Bytes, overlap, self.limits.max_bytes as u128)?;
         Ok(())
     }

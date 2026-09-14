@@ -5,7 +5,8 @@ use std::{cmp::Ordering, mem::size_of};
 use crate::{Predicate, Value};
 
 use super::{
-    Cell, DictionaryIndex, Failure, Layout, LayoutOwner, Limits, Relation, Resource, Source, Storage, Work, ceiling,
+    Cell, DictionaryIndex, Failure, Layout, LayoutOwner, Limits, Relation, Resource, Source,
+    Storage, Work, ceiling,
 };
 
 pub(super) fn build<'source>(
@@ -67,8 +68,7 @@ pub(super) fn build<'source>(
     for row in 0..source.len() {
         let atom = source.atom(row).ok_or(Failure::CatalogIndex)?;
         for (column, value) in atom.values().iter().enumerate() {
-            let id =
-                lookup(&layout, &source, value, &mut work)?.ok_or(Failure::Dictionary)?;
+            let id = lookup(&layout, &source, value, &mut work)?.ok_or(Failure::Dictionary)?;
             work.tick(1)?;
             layout.columns[column][row] = id;
         }
