@@ -222,6 +222,29 @@ before changing its counter. Rust word bounds and the placement of control
 checks remain concrete implementation obligations; the law does not promise
 observation of asynchronous cancellation between bookkeeping units.
 
+[`PreparedQueries`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/oracle/prepared.rs)
+shares one exact program and records the join dimensions it inspected. Reusing
+that owner does not reuse a reduct or an interpretation. Each candidate starts
+with empty relations; assignments borrow only its current immutable round.
+`Catalog::take_atoms` transfers completed atoms into the result and resets the
+remaining identity metadata. Unlike append, this operation invalidates prior
+row and equality IDs. The next candidate cannot inherit those IDs or their truth.
+The required refinement is equality with a fresh full-round closure, including
+constraints and frozen-seed agreement. The scalar and batch reuse controls
+compare those results, retained buffer addresses and failure recovery. They do
+not constitute a Lean proof of the Rust implementation.
+
+The batch oracle partitions ordered candidate occurrences into disjoint ranges,
+each with an exclusive workspace. Its coverage obligation is that splitting
+preserves every occurrence once and ordered concatenation restores the input
+sequence. Its storage obligation includes shared preparation, idle capacities
+and active reservations without counting shared headers twice.
+[`StorageOwners.sum_within_reservations`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StorageOwners.lean)
+supplies the abstract sum law once those component bounds hold. Actual Rust
+capacity measurement, cache retirement, checked arithmetic and range scheduling
+remain implementation obligations. Reused capacity can increase retained space
+or change work counts; neither this law nor semantic equivalence proves a speedup.
+
 Eager support joins partition new tuple combinations by their first new source
 occurrence. `DeltaJoins.partition_complete` proves coverage and
 `partition_disjoint` proves uniqueness. Source occurrence identity survives
