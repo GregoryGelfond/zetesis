@@ -153,3 +153,21 @@ fn preparation_refuses_its_own_byte_boundary() {
         max_bytes: prepared.statistics().retained_bytes - 1, ..PreparationLimits::default()
     }, &control), Err(Stop::StorageLimit)));
 }
+
+#[test]
+fn prepared_empty_checks_admit_their_retained_owners() {
+    let program = Program::new(vec![], AdmissionLimits::default()).unwrap();
+    let control = Control::default();
+    let prepared = PreparedQueries::new(&program, PreparationLimits::default(), &control).unwrap();
+    let seed = Seed::new(&program, []).unwrap();
+    let mut workspace = ClosureWorkspace::default();
+    let named = usize::try_from(workspace.retained_bytes().unwrap()).unwrap() + prepared.statistics().retained_bytes;
+    assert!(matches!(prepared.check_view(seed.view(), &mut workspace,
+        Limits { max_closure_bytes: 0, ..Limits::default() }, &control), Err(Stop::StorageLimit)));
+    let exact = prepared.check_view(seed.view(), &mut workspace,
+        Limits { max_closure_bytes: named, ..Limits::default() }, &control).unwrap();
+    assert_eq!(exact.closure(), &Model::default());
+    assert!(exact.accepted());
+    assert_eq!(exact.statistics().rounds, 0);
+    assert_eq!(exact.statistics().peak_closure_bytes, named);
+}

@@ -295,8 +295,7 @@ fn least_closure(
     work: &mut Work<'_>,
 ) -> Result<CompletedClosure, Stop> {
     let prepared = PreparedQueries::prepare(program, work)?;
-    let check = prepared.check_with(seed, &mut ClosureWorkspace::default(), work)?;
-    Ok(CompletedClosure { atoms: check.closure, constraint_violated: check.constraint_violated })
+    prepared.closure_with(seed, &mut ClosureWorkspace::default(), work)
 }
 
 fn least_closure_with(

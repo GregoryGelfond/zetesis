@@ -332,7 +332,9 @@ The one-shot `check_view` uses the same evaluator and charges preparation plus
 candidate work to its existing cumulative work limit. Reused preparation has a
 separate work receipt, so exact resource cutoffs can differ while completed
 closures, constraints and seed checks agree. Retained capacities are admitted
-under each call's current limits. This removes repeated allocation and dimension
+under each prepared call's current limits, including an empty program. The
+one-shot empty-program path constructs no preparation or workspace and retains
+its vacuous zero-round result. This removes repeated allocation and dimension
 inspection; it does not establish a timing gain or replace full-round closure.
 
 `zetesis_cpu::Limits::max_closure_bytes` bounds each scalar closure's

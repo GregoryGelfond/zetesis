@@ -140,18 +140,7 @@ impl PreparedQueries {
     fn evaluate(&self, seed: SeedView<'_>, workspace: &mut ClosureWorkspace,
         work: &mut Work<'_>) -> Result<Check, Stop>
     {
-        if self.program.templates().is_empty() {
-            return Ok(Check { program: self.program.clone(), closure: zetesis_core::Model::default(),
-                constraint_violated: false, seed_mismatch: false, statistics: work.statistics });
-        }
-        let base = workspace.catalogs.owned_bytes().checked_add(ClosureWorkspace::headers())
-            .and_then(|bytes| bytes.checked_add(size_of::<Self>() as u128)).ok_or(Stop::StorageLimit)?;
-        workspace.buffers.prepare(&self.dimensions, base, work)?;
-        let overhead = ClosureWorkspace::headers().checked_add(workspace.buffers.bytes()?)
-            .and_then(|bytes| bytes.checked_add(size_of::<Self>() as u128)).ok_or(Stop::StorageLimit)?;
-        workspace.catalogs.set_overhead(overhead, work)?;
-        let completed = super::least_closure_with(&self.program, seed, &mut workspace.catalogs,
-            &mut workspace.buffers, &self.dimensions, overhead, work)?;
+        let completed = self.closure_with(seed, workspace, work)?;
         let seed_mismatch = !super::gate_agreement(&self.program, seed, completed.atoms.atoms(), work)?;
         work.statistics.derived_atoms = completed.atoms.atoms().len();
         work.control.poll()?;
@@ -159,6 +148,22 @@ impl PreparedQueries {
             constraint_violated: completed.constraint_violated, seed_mismatch,
             statistics: work.statistics })
     }
+    pub(super) fn closure_with(&self, seed: SeedView<'_>, workspace: &mut ClosureWorkspace,
+        work: &mut Work<'_>) -> Result<super::CompletedClosure, Stop>
+    {
+        let base = workspace.catalogs.owned_bytes().checked_add(ClosureWorkspace::headers())
+            .and_then(|bytes| bytes.checked_add(size_of::<Self>() as u128)).ok_or(Stop::StorageLimit)?;
+        workspace.buffers.prepare(&self.dimensions, base, work)?;
+        let overhead = ClosureWorkspace::headers().checked_add(workspace.buffers.bytes()?)
+            .and_then(|bytes| bytes.checked_add(size_of::<Self>() as u128)).ok_or(Stop::StorageLimit)?;
+        workspace.catalogs.set_overhead(overhead, work)?;
+        if self.program.templates().is_empty() {
+            return Ok(super::CompletedClosure { atoms: zetesis_core::Model::default(), constraint_violated: false });
+        }
+        super::least_closure_with(&self.program, seed, &mut workspace.catalogs,
+            &mut workspace.buffers, &self.dimensions, overhead, work)
+    }
+
 }
 
 /// Reusable empty relation metadata and join cursor capacity.
