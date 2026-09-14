@@ -59,7 +59,10 @@ impl Serialize for QueryView<'_> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let statistics = self.0;
         let mut view = serializer.serialize_struct("QueryStatistics", 7)?;
-        view.serialize_field("preparation", &statistics.preparation.as_ref().map(PreparationView))?;
+        view.serialize_field(
+            "preparation",
+            &statistics.preparation.as_ref().map(PreparationView),
+        )?;
         view.serialize_field("preparation_builds", &statistics.preparation_builds)?;
         view.serialize_field("retained_workspaces", &statistics.retained_workspaces)?;
         view.serialize_field("active_workspaces", &statistics.active_workspaces)?;

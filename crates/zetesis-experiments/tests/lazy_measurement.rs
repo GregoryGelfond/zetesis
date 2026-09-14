@@ -73,24 +73,28 @@ fn samples_expose_only_receipts_of_their_route() {
             assert_eq!(json["independent"].is_null(), !independent);
             if let Some(statistics) = sample.queries {
                 let preparation = statistics.preparation.unwrap();
-                assert_eq!(json["queries"], serde_json::json!({
-                    "preparation": {
-                        "work": preparation.work,
-                        "retained_bytes": preparation.retained_bytes,
-                    },
-                    "preparation_builds": statistics.preparation_builds,
-                    "retained_workspaces": statistics.retained_workspaces,
-                    "active_workspaces": statistics.active_workspaces,
-                    "reused_workspaces": statistics.reused_workspaces,
-                    "retained_bytes": statistics.retained_bytes,
-                    "reserved_bytes": statistics.reserved_bytes,
-                }));
+                assert_eq!(
+                    json["queries"],
+                    serde_json::json!({
+                        "preparation": {
+                            "work": preparation.work,
+                            "retained_bytes": preparation.retained_bytes,
+                        },
+                        "preparation_builds": statistics.preparation_builds,
+                        "retained_workspaces": statistics.retained_workspaces,
+                        "active_workspaces": statistics.active_workspaces,
+                        "reused_workspaces": statistics.reused_workspaces,
+                        "retained_bytes": statistics.retained_bytes,
+                        "reserved_bytes": statistics.reserved_bytes,
+                    })
+                );
             } else {
                 assert!(json["queries"].is_null());
             }
         }
         Ok(())
-    }).unwrap();
+    })
+    .unwrap();
 }
 
 #[test]

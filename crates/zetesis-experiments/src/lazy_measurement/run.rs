@@ -321,7 +321,11 @@ impl Execution {
         }
         let independent = view::IndependentWork::from_checks(checks);
         let queries = if route == Route::Rayon {
-            Some(self.pool.query_statistics().map_err(Error::QueryObservation)?)
+            Some(
+                self.pool
+                    .query_statistics()
+                    .map_err(Error::QueryObservation)?,
+            )
         } else {
             None
         };
