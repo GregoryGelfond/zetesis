@@ -184,6 +184,13 @@ model lookups use the existing selected positions. Preparation and query work
 remain charged. The [library map](docs/book/rust/libraries.md) describes these
 ownership and failure contracts.
 
+Formula construction and lazy source rounds use the same appendable atom
+interner. One owner stores each typed atom; its checked index stores positions.
+Lazy snapshots borrow a committed prefix while new identities accumulate in a
+separate suffix. Committing that suffix preserves IDs and candidate truth.
+The [model manual](docs/book/rust/models.md) describes the ownership, work and
+storage contracts, with a bounded runnable interning example.
+
 The [Lean library](proofs/README.md) develops satisfaction, reducts, minimality,
 normal least closure and their preservation laws. Its normalized-rule translation
 is proved equivalent to Ferraris answer-set semantics. For normalized normal
