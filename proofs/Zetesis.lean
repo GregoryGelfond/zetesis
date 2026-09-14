@@ -118,3 +118,4 @@ import Zetesis.FiniteTables
 import Zetesis.TableBindings
 import Zetesis.ModelSelections
 import Zetesis.AtomCatalogs
+import Zetesis.StorageOwners

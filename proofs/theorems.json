@@ -4765,6 +4765,16 @@
     "line": 122
   },
   {
+    "name": "Zetesis.StorageOwners.sum_within_reservations",
+    "file": "Zetesis/StorageOwners.lean",
+    "line": 20
+  },
+  {
+    "name": "Zetesis.StorageOwners.active_storage_within_limit",
+    "file": "Zetesis/StorageOwners.lean",
+    "line": 36
+  },
+  {
     "name": "Zetesis.StrongNegation.satisfies_rename",
     "file": "Zetesis/StrongNegation.lean",
     "line": 44

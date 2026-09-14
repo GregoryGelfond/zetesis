@@ -308,7 +308,9 @@ fn sparse_first_candidate_precedes_carrier_expansion() {
         &program,
         &first,
         Limits {
-            max_work: 100,
+            // Include catalog construction while staying far below the 2^32
+            // symbolic carrier. This is a sparse-work guard, not an exact receipt.
+            max_work: 1_024,
             max_derived_atoms: 2,
             ..Limits::default()
         },

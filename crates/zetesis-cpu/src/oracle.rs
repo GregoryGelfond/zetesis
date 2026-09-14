@@ -41,8 +41,8 @@ pub struct Limits {
     /// are counted per occurrence. Tree-container allocations (including vacant
     /// slots), allocator metadata and Arc-counter overhead,
     /// template binding/cursor frames and final `Model` retention are excluded.
-    /// Actual allocator slack can exceed the proposed reservation before refusal;
-    /// the reported peak retains that attempted capacity.
+    /// Actual allocator slack can exceed the proposed reservation before refusal.
+    /// A stopped scalar check returns no completed statistics.
     /// This is an independent finite allowance, not a process RSS ceiling.
     pub max_closure_bytes: usize,
 }

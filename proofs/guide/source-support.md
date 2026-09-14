@@ -81,7 +81,7 @@ dependency projection's class verdict cannot certify omitted source semantics.
 The Rust [support builder](../../crates/zetesis-themelios/src/formula_support.rs)
 creates `CompletedCatalog` only after an entire support round adds no atom.
 Its `CompletedSupport` view borrows the authoritative catalog; intermediate
-snapshots have only the `Support` type. Objective preparation and final formula
+snapshots have only the `Relations` type. Objective preparation and final formula
 grounding use the same completed relation view. A work, round, value or storage
 failure returns an error before an incomplete objective program can be supplied.
 Recursive value generation may continue indefinitely unless stopped by a limit.

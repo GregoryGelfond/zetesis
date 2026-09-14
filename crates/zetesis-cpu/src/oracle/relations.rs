@@ -102,7 +102,7 @@ impl Catalogs {
             let other = self.bytes.checked_sub(old).ok_or(Stop::InvalidProgram)?;
             let result = catalog
                 .prepare_ordered(limits(work, other)?)
-                .map(|rows| rows.storage());
+                .map(OrderedRows::storage);
             self.bytes = other
                 .checked_add(catalog.retained_bytes() as u128)
                 .ok_or(Stop::StorageLimit)?;
@@ -181,13 +181,13 @@ impl Catalogs {
             .checked_sub(old)
             .and_then(|bytes| bytes.checked_add(catalog.retained_bytes() as u128))
             .ok_or(Stop::StorageLimit)?;
-        if let Ok(insertion) = &result {
-            if insertion.inserted {
-                self.bytes = self
-                    .bytes
-                    .checked_add(input - size_of::<Atom>() as u128)
-                    .ok_or(Stop::StorageLimit)?;
-            }
+        if let Ok(insertion) = &result
+            && insertion.inserted
+        {
+            self.bytes = self
+                .bytes
+                .checked_add(input - size_of::<Atom>() as u128)
+                .ok_or(Stop::StorageLimit)?;
         }
         let insertion = completed(result, other, work)?;
         storage::record(

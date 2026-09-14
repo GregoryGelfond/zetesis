@@ -221,14 +221,14 @@ fn a_large_symbolic_carrier_does_not_delay_the_first_check() {
         .expect("no carrier needed");
     assert_eq!(candidates.discovered_atoms(), 0);
     // Two source rounds inspect this gate and the two unary fact heads.
-    // Key argument scans are charged separately from the existing work budget;
-    // none of the exponential symbolic carrier is enumerated.
+    // The fixed allowance includes checked catalog construction. Argument scans
+    // remain linear; none of the exponential symbolic carrier is enumerated.
     let key_scan_work = 2 * u64::try_from(gate_arity + 2).unwrap();
     let result = check(
         &program,
         &seed,
         Limits {
-            max_work: 100 + key_scan_work,
+            max_work: 1_024 + key_scan_work,
             max_derived_atoms: 2,
             ..Limits::default()
         },

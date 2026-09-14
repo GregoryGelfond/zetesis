@@ -183,10 +183,11 @@ submits no candidate and releases the pool's admission slot.
 [`StorageOwners`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StorageOwners.lean)
 proves the natural-number bound obtained by summing independently bounded
 owners. Its premise is admitted capacity: allocator slack can exceed a proposed
-reservation before the actual-capacity check refuses it. The recorded failed
-peak can therefore exceed the allowance. This is not a hard bound on transient
-allocator or process memory. Concrete capacity measurement, worker scheduling
-and checked arithmetic remain implementation obligations.
+reservation before the actual-capacity check refuses it. A scalar stop returns
+no completed statistics; a core catalog failure separately carries its capacity
+receipt. This is not a hard bound on transient allocator or process memory.
+Concrete capacity measurement, worker scheduling and checked arithmetic remain
+implementation obligations.
 
 The lazy coordinator's `max_host_bytes` is a mixed, explicitly scoped envelope.
 It includes actual committed/pending catalog, AVL/path and ordered-ID capacities,

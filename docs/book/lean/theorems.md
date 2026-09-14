@@ -23,6 +23,7 @@ The maintained full index is
 | When does table projection preserve complete rows? | `FiniteTables.narrowing_preserves_rows` | Original coherent row occurrences and complete domains; no ASP source-completeness claim |
 | Can table preselection preserve positive binding families? | `TableBindings.indexed_matches_preserved`, `join_family_preserved` | Exact row bits, successful flat-match domain necessity and the same finite join schedule; ordered source/row witnesses and bindings are retained |
 | Can relation storage grow without changing old queries? | `RelationExtension.acceptance_preserved` | Existing rows and dictionary meanings survive extension |
+| When does a worker reservation bound active owner storage? | `StorageOwners.active_storage_within_limit` | Each owner's capacity and the active-owner count respect their declared bounds; concrete allocation and scheduling remain separate premises |
 | Do incremental positive joins cover every new combination once? | `DeltaJoins.partition_complete`, `partition_disjoint` | Source occurrence identities and old prefixes of the current row domains |
 | May a scope omit unrelated binding slots? | `BindingScopes.readAll_restrict` | Every requested slot belongs to the retained scope; absence is explicit |
 | Does borrowed atom lookup denote the materialized tuple? | `AtomKeys.membership_identity` | Successful substitution preserves the predicate and argument order |

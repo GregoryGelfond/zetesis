@@ -3,10 +3,9 @@
 use clap::{CommandFactory, FromArgMatches, Parser, error::ErrorKind};
 use zetesis_cli::{Backend, Grounder, Options, Oracle, SolveConfig, SourceBatching};
 
-#[test]
-fn nondefault_options_preserve_each_solver_field() {
+fn nondefault_options() -> Options {
     // Distinct values detect crossed fields whose defaults happen to coincide.
-    let options = Options::try_parse_from([
+    Options::try_parse_from([
         "zetesis",
         "--backend",
         "cpu",
@@ -76,8 +75,12 @@ fn nondefault_options_preserve_each_solver_field() {
         "--max-closure-batch-bytes",
         "39",
     ])
-    .unwrap();
-    let config = SolveConfig::from(&options);
+    .unwrap()
+}
+
+#[test]
+fn nondefault_options_preserve_each_solver_field() {
+    let config = SolveConfig::from(&nondefault_options());
     assert_eq!(config.backend, Backend::Cpu);
     assert_eq!(config.grounder, Grounder::Lazy);
     assert_eq!(config.source_batching, SourceBatching::Worlds);

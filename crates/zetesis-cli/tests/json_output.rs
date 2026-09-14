@@ -657,6 +657,19 @@ fn stage_views_preserve_the_typed_partition() {
 fn resource_stops_encode_partial_coverage() {
     let cases: &[(&str, &[&str], &str, &str)] = &[
         (
+            "a.",
+            &[
+                "--oracle",
+                "closure",
+                "--grounder",
+                "lazy",
+                "--max-closure-bytes",
+                "0",
+            ],
+            "oracle",
+            "storage_limit",
+        ),
+        (
             "{a}.",
             &["--oracle", "closure", "--max-work", "0"],
             "oracle",

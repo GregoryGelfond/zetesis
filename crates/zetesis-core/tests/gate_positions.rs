@@ -3,8 +3,8 @@
 use std::sync::Arc;
 use zetesis_core::{
     AdmissionLimits, Atom, AtomPattern, GateAtom, GroundProgram, Predicate, Program, SeedError,
-    SeedSelection, SeedSelectionError, Sign, StaticLimits, StructuralValue, Template, Term, Value,
-    ValueLimits, ValueNode,
+    SeedSelection, SeedSelectionError, Sign, StaticLimits, Template, Term, Value, ValueLimits,
+    ValueNode,
 };
 
 fn program() -> Program {
@@ -41,13 +41,11 @@ fn program() -> Program {
         Value::Infimum,
         Value::Supremum,
         Value::Number(-1),
-        Value::Structured(
-            StructuralValue::from_nodes(
-                vec![ValueNode::Tuple { arity: 1 }, ValueNode::Number(1)],
-                ValueLimits::default(),
-            )
-            .unwrap(),
-        ),
+        Value::from_nodes(
+            vec![ValueNode::Tuple { arity: 1 }, ValueNode::Number(1)],
+            ValueLimits::default(),
+        )
+        .unwrap(),
     ] {
         let p = AtomPattern::new(
             Predicate::new("value", 1).unwrap(),
@@ -97,7 +95,10 @@ fn full_carrier_matches_independent_atom_storage_order() {
     expected.extend_from_within(..);
     expected.sort();
     expected.dedup();
-    let actual = program.carrier_atoms().collect::<Result<Vec<_>, _>>().unwrap();
+    let actual = program
+        .carrier_atoms()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
     assert_eq!(actual, expected);
 }
 

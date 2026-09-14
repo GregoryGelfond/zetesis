@@ -295,12 +295,12 @@ impl Plan {
 // row read by its world×word indexing before allocating transport. A matching
 // byte ceiling alone cannot establish either immutable input's shape.
 fn snapshot_shape(
-    words: usize,
+    packed_words: usize,
     worlds: usize,
     snapshots: usize,
     seeds: usize,
 ) -> Result<(), GpuError> {
-    let expected = words.checked_mul(worlds);
+    let expected = packed_words.checked_mul(worlds);
     if expected != Some(snapshots) || expected != Some(seeds) {
         return Err(GpuError::new(
             GpuErrorKind::Capacity,
