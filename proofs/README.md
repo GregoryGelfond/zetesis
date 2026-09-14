@@ -42,7 +42,7 @@ conceptual overview.
 | Where does negation apply to an anonymous consequent? | [ProjectedConditionals](Zetesis/ProjectedConditionals.lean) separates complete anonymous witness projections, signed source alternatives and universal condition rows. |
 | How does a consumer apply the normal/Ferraris bridge? | [The checked choices example](Zetesis/Examples/Choices.lean) proves that `{a}` is an answer set of the guided tour's two-rule program through its least reduct closure. |
 | Does discovering an atom make it true? | [AtomCatalogs](Zetesis/AtomCatalogs.lean) preserves local identities and selected interpretations when pending atoms are appended; discovery alone adds no truth. |
-| When does a collective reservation cover active closures? | [StorageOwners](Zetesis/StorageOwners.lean) sums independently bounded owners under an explicit active-worker bound. The actual Rust capacities, allocation failures and worker lifetimes remain implementation obligations. |
+| When does a collective reservation cover active closures? | [StorageOwners](Zetesis/StorageOwners.lean) sums pointwise owner bounds, including one shared component, idle retained sizes and active maxima; it also retains the uniform worker-allowance laws. Actual Rust capacity measurements, disjoint ownership, allocation failures and worker lifetimes remain implementation obligations. |
 | Which implementation correspondences remain open? | The manual's [proof boundary](../docs/book/lean/correspondence.md) separates mathematical laws from executable refinement. |
 
 For example, `NormalFerraris.answer_set_iff` relates the two independently defined

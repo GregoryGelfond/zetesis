@@ -239,11 +239,17 @@ each with an exclusive workspace. Its coverage obligation is that splitting
 preserves every occurrence once and ordered concatenation restores the input
 sequence. Its storage obligation includes shared preparation, idle capacities
 and active reservations without counting shared headers twice.
-[`StorageOwners.sum_within_reservations`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StorageOwners.lean)
-supplies the abstract sum law once those component bounds hold. Actual Rust
-capacity measurement, cache retirement, checked arithmetic and range scheduling
-remain implementation obligations. Reused capacity can increase retained space
-or change work counts; neither this law nor semantic equivalence proves a speedup.
+[`StorageOwners.shared_idle_active_within_limit`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StorageOwners.lean)
+sums explicit shared and idle bounds with an active bound of
+`max(retained, allowance)` per owner. The batch maps `allowance` to the scalar
+limit minus the shared preparation header, after checked subtraction; an empty
+batch reserves only retained storage. The consumer must account for every named
+region with disjoint owner entries and count the shared component once. The
+pointwise capacity bounds, Rust measurement, cache retirement, checked arithmetic
+and range scheduling remain implementation obligations. The theorem does not
+establish a hard allocator or RSS cap, including on a refused allocation. Reused
+capacity can increase retained space or change work counts; neither this law nor
+semantic equivalence proves a speedup.
 
 Eager support joins partition new tuple combinations by their first new source
 occurrence. `DeltaJoins.partition_complete` proves coverage and

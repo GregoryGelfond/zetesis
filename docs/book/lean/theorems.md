@@ -24,6 +24,7 @@ The maintained full index is
 | Can table preselection preserve positive binding families? | `TableBindings.indexed_matches_preserved`, `join_family_preserved` | Exact row bits, successful flat-match domain necessity and the same finite join schedule; ordered source/row witnesses and bindings are retained |
 | Can relation storage grow without changing old queries? | `RelationExtension.acceptance_preserved` | Existing rows and dictionary meanings survive extension |
 | When does a worker reservation bound active owner storage? | `StorageOwners.active_storage_within_limit` | Each owner's capacity and the active-owner count respect their declared bounds; concrete allocation and scheduling remain separate premises |
+| How does retained cache storage compose with active allowances? | `StorageOwners.sum_within_component_bounds`, `shared_idle_active_within_limit` | Pointwise shared/idle bounds and active maxima fit the admitted sum; complete disjoint owner accounting and concrete capacity bounds remain consumer obligations |
 | Do incremental positive joins cover every new combination once? | `DeltaJoins.partition_complete`, `partition_disjoint` | Source occurrence identities and old prefixes of the current row domains |
 | May a scope omit unrelated binding slots? | `BindingScopes.readAll_restrict` | Every requested slot belongs to the retained scope; absence is explicit |
 | Does borrowed atom lookup denote the materialized tuple? | `AtomKeys.membership_identity` | Successful substitution preserves the predicate and argument order |
