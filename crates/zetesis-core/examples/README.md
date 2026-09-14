@@ -54,3 +54,77 @@ these columns is peak RSS or a process memory limit.
 Retain source, compiler, executable, command, exit and host identities alongside
 any measured CSV. Ordinary objective solving requires its own matched full-model
 and cost comparison, including setup, search, output and completion.
+
+# Appendable atom interning probe
+
+`atom_interning.rs` exercises the public `AtomInterner` independently of the
+immutable lookup probe above. It constructs each catalog in four equal append
+rounds, checks repeated membership through both owned-atom and borrowed-key
+doors, obtains canonical committed snapshots and commits each pending suffix.
+The fixed final populations are 128, 1,024 and 4,096 distinct atoms. No source
+parser, grounder, solver, device or parallel worker participates.
+
+Run the same semantic and accounting controls without timings:
+
+```sh
+cargo run --locked -p zetesis-core --example atom_interning -- --check
+```
+
+For a separately scheduled release measurement:
+
+```sh
+cargo run --locked --release -p zetesis-core --example atom_interning
+```
+
+The descending fixture includes paired positive/negative predicates, numbers,
+numeric strings and negative structured functions containing a tuple. Dense IDs
+must equal first-insertion positions. A separate reference sorts original IDs
+with derived typed `Atom::Ord`; both snapshots must return that exact order and
+payload identity. During append, the retained committed view must stay unchanged
+while the appender can find new pending atoms. Before commit the ordered snapshot
+excludes those atoms; afterward it includes them. Neither membership nor
+commitment establishes logical truth.
+
+Each round queries every admitted atom four times through each lookup door and
+checks its original ID, including both committed and pending atoms. Occupied
+insertion must return that ID without copy/write work. Sixteen signed, absent
+symbol keys are each queried four times without insertion. The first commit must
+take one work unit and preserve named capacity; the final vector transfer must
+preserve all original rows with no pending commit work.
+
+All interner operations use `Limits::for_atoms` for the stated final population.
+Its finite byte envelope derives from actual layouts and includes conservative
+buffer overlap; allocator slack is still checked and may refuse. Each phase has
+a fresh 100-million-unit work ceiling. Value construction uses `ValueLimits`.
+Every library, work-limit and output error terminates the probe; there is no
+retry or fallback. A partial CSV is evidence of a prefix, not a completed case.
+The fixed loop counts and assertions are identical in both modes. Actual vector
+capacities can vary with the allocator even in `--check` mode.
+
+The CSV has seven phase rows per round: append, owned and borrowed duplicate
+lookup, borrowed misses, pending snapshot, commit and committed snapshot. `items`
+counts atoms/queries, or returned IDs for snapshots. `interner_calls` counts
+entry plus insertion calls for append/duplicates, entry calls for misses, and
+one call for each snapshot or commit. Accessors, `split` and `AtomPattern::key`
+construction are excluded from that call count. `work` counts actual callback
+admissions,
+including comparison descriptors/text, index operations, conservative relocation
+and publication work; it is not an instruction count or a count of cloned bytes.
+
+Each interval includes its loop, borrowed-key construction where used, and the
+checks within that phase. Fixture construction, reference sorting, receipt
+capacity checks, CSV publication and final vector transfer are outside those
+intervals. Cases and phases run once in a fixed order, so the output does not establish statistically
+replicated latency or a comparison with an earlier representation.
+
+`interner_retained_bytes` reports the current owner header and vector capacities;
+`interner_peak_bytes` is the cumulative greatest live or actual conservative
+reservation-overlap envelope for that case, including temporary ordered IDs.
+`ordered_ids_bytes` reports the returned vector header plus its actual capacity,
+and is zero outside snapshot rows. That vector is dropped before the next
+operation. Peak receipts are repeated observations, not additive phase costs.
+These measures exclude nested Atom/Value payloads, allocator bookkeeping, the
+fixture/reference owners and other process state. They are neither RSS nor a
+total memory ceiling. Preserve source, compiler, executable, command, exit and
+host identities with measured output; ordinary grounding and solving still need
+their own complete-result and resource comparisons.
