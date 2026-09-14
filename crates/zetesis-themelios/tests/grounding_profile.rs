@@ -410,6 +410,7 @@ fn phase_labels_form_a_unique_complete_catalog() {
         labels,
         [
             "support_completion",
+            "domain_analysis",
             "objective_activation",
             "formula_initialization",
             "rule_instantiation",
