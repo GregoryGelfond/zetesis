@@ -324,6 +324,9 @@
 'Zetesis.DeltaJoins.first_true' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.DeltaJoins.partition_complete' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.DeltaJoins.partition_disjoint' depends on axioms: [propext, Quot.sound]
+'Zetesis.DeltaRounds.coverage_of_first_delta' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.DeltaRounds.delta_step_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.DeltaRounds.latched_constraints_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.DependencySchedule.ready_evaluation' does not depend on any axioms
 'Zetesis.DependencySchedule.assignment_preserves_agreement' depends on axioms: [propext]
 'Zetesis.DependencySchedule.execution_preserves_agreement' depends on axioms: [propext]
@@ -333,6 +336,12 @@
 'Zetesis.DisjunctiveSupport.other_head' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.DisjunctiveSupport.producer_removal' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.DisjunctiveSupport.answer_set_supported' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.DisjunctiveSupport.choice_satisfied' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.DisjunctiveSupport.choice_reduct_of_heads' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.DisjunctiveSupport.choice_removal' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.DisjunctiveSupport.answer_set_supported_with_choices' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
 'Zetesis.DomainContraction.singleton_filter_preserves' depends on axioms: [propext, Quot.sound]
 'Zetesis.DomainContraction.remainder_lower_bound' depends on axioms: [propext, Quot.sound]
 'Zetesis.DomainContraction.affine_filter_preserves' depends on axioms: [propext, Quot.sound]
@@ -645,6 +654,7 @@
 'Zetesis.NormalFerraris.applicable_answer_set_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.NormalFerraris.applicable_frozen_subset_model_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.NormalFerraris.ferraris_answer_set_iff_closure' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.NormalSupport.propose_gate_independent' depends on axioms: [propext, Quot.sound]
 'Zetesis.NormalSupport.propose_monotone' does not depend on any axioms
 'Zetesis.NormalSupport.restricted_reduct_model' does not depend on any axioms
 'Zetesis.NormalSupport.projection_compatible' depends on axioms: [propext, Classical.choice, Quot.sound]

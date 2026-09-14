@@ -3,7 +3,7 @@
 use clap::Parser;
 use zetesis_experiments::{
     CommandOptions, Experiment,
-    feedback_measurement::{self, Event},
+    feedback_measurement::{self, Configuration, Event},
 };
 
 #[test]
@@ -50,7 +50,7 @@ fn supplied_cancellation_never_publishes_completion() {
     control.cancel();
     let mut completed = false;
     let result =
-        feedback_measurement::measure_with_control(&Default::default(), &control, |event| {
+        feedback_measurement::measure_with_control(&Configuration::default(), &control, |event| {
             completed |= matches!(event, Event::Complete { .. });
             Ok(())
         });

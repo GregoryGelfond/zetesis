@@ -101,7 +101,10 @@ impl<'a> Budget<'a> {
     }
 
     fn admit_capacity(&self, build: usize) -> Result<(), Error> {
-        let live = self.retained_bytes.checked_add(build).ok_or(Error::Overflow)?;
+        let live = self
+            .retained_bytes
+            .checked_add(build)
+            .ok_or(Error::Overflow)?;
         if build > self.limits.max_build_bytes {
             return Err(Error::Limit(Resource::BuildBytes));
         }
@@ -116,7 +119,10 @@ impl<'a> Budget<'a> {
         // Actual allocator capacity is evidence even when its readback exceeds
         // the admitted request and the operation must now refuse publication.
         self.peak_build_bytes = self.peak_build_bytes.max(build);
-        let live = self.retained_bytes.checked_add(build).ok_or(Error::Overflow)?;
+        let live = self
+            .retained_bytes
+            .checked_add(build)
+            .ok_or(Error::Overflow)?;
         self.peak_live_bytes = self.peak_live_bytes.max(live);
         self.admit_capacity(build)
     }

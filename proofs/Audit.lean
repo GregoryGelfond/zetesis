@@ -314,6 +314,9 @@ import Zetesis
 #print axioms Zetesis.DeltaJoins.first_true
 #print axioms Zetesis.DeltaJoins.partition_complete
 #print axioms Zetesis.DeltaJoins.partition_disjoint
+#print axioms Zetesis.DeltaRounds.coverage_of_first_delta
+#print axioms Zetesis.DeltaRounds.delta_step_exact
+#print axioms Zetesis.DeltaRounds.latched_constraints_exact
 #print axioms Zetesis.DependencySchedule.ready_evaluation
 #print axioms Zetesis.DependencySchedule.assignment_preserves_agreement
 #print axioms Zetesis.DependencySchedule.execution_preserves_agreement
@@ -323,6 +326,10 @@ import Zetesis
 #print axioms Zetesis.DisjunctiveSupport.other_head
 #print axioms Zetesis.DisjunctiveSupport.producer_removal
 #print axioms Zetesis.DisjunctiveSupport.answer_set_supported
+#print axioms Zetesis.DisjunctiveSupport.choice_satisfied
+#print axioms Zetesis.DisjunctiveSupport.choice_reduct_of_heads
+#print axioms Zetesis.DisjunctiveSupport.choice_removal
+#print axioms Zetesis.DisjunctiveSupport.answer_set_supported_with_choices
 #print axioms Zetesis.DomainContraction.singleton_filter_preserves
 #print axioms Zetesis.DomainContraction.remainder_lower_bound
 #print axioms Zetesis.DomainContraction.affine_filter_preserves
@@ -625,6 +632,7 @@ import Zetesis
 #print axioms Zetesis.NormalFerraris.applicable_answer_set_iff
 #print axioms Zetesis.NormalFerraris.applicable_frozen_subset_model_iff
 #print axioms Zetesis.NormalFerraris.ferraris_answer_set_iff_closure
+#print axioms Zetesis.NormalSupport.propose_gate_independent
 #print axioms Zetesis.NormalSupport.propose_monotone
 #print axioms Zetesis.NormalSupport.restricted_reduct_model
 #print axioms Zetesis.NormalSupport.projection_compatible

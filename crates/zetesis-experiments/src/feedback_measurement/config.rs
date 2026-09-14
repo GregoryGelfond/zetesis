@@ -11,7 +11,8 @@ pub struct ConstructionLimits {
     pub max_total_nodes: usize,
     /// Distinct retained guards, at most eight.
     pub max_guards: usize,
-    /// One build's node/root/map/witness vector capacity, at most 64 KiB.
+    /// One reservation sequence: entry initialization or a guard's
+    /// node/root/map/witness vectors, at most 64 KiB.
     pub max_build_bytes: usize,
     /// Guard-entry capacity plus retained and building vectors, at most 256 KiB.
     /// Excludes original sources, native SAT/Interpretation/evaluation storage,
