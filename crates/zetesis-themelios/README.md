@@ -572,8 +572,8 @@ CLI builds contain neither this instrument nor an additional option.
 ## Formula atom ownership
 
 Emitted formula atoms use the shared core appendable interner. The AVL index
-retains only dense positions and metadata; one payload sequence fixes each
-first-occurrence identity. A committed prefix supplies exact contiguous count
+retains only dense positions and metadata; one payload sequence assigns each
+distinct atom its first-insertion position. A committed prefix supplies exact contiguous count
 capture, and finalization transfers the sequence into the existing immutable
 `AtomCatalog`. Possible positive support remains a separate population; catalog
 presence never establishes truth, source coverage or answer-set membership.

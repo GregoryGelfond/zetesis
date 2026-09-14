@@ -45,8 +45,9 @@ a caller building a theory need not parse source, and a caller preparing a
 program need not search it.
 
 `Model::lookup` borrows the model's existing canonical selection without
-allocation. For an arbitrary immutable atom catalog, `AtomIndex::new_with`
-prepares exact-key and predicate orders while preserving original row IDs.
+allocation. For an immutable catalog of distinct atoms in arbitrary original
+order, `AtomIndex::new_with` prepares exact-key and predicate orders while
+preserving original row IDs.
 Preparation reserves two integer indices and one temporary merge buffer, each
 with the admitted catalog's row count; atoms are borrowed, not copied. Every
 comparison and index write passes through the caller's fallible work callback.

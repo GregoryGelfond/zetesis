@@ -23,7 +23,9 @@ original source catalog
 
 The arrows describe dependencies, not independent copies of every intermediate
 object. Source identities and parsed origins remain available after preparation.
-The source and formula work counters continue across preparation and grounding.
+The source-expansion budget continues across preparation and grounding. Formula
+work starts at materialization and remains cumulative across its grounding
+phases; preparation retains its configured ceiling.
 An analysis projection records its own basis; its classifications do not prove
 properties of source constructs that the projection erased.
 

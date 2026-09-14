@@ -46,7 +46,7 @@ Formula instantiation consumes its source IR and retains only the analysis,
 provenance, activated objectives and emitted builder needed by later phases.
 The formula atom builder owns each complete atom once. Its checked AVL index
 stores dense IDs and links; complete typed comparisons decide identity without
-copying a second set of keys. Insertion fixes first-occurrence order, while
+copying a second set of keys. Insertion fixes first-insertion order, while
 committing a pending suffix preserves those IDs and transfers its ownership.
 Consuming finalization transfers the completed atom vector into the immutable
 catalog and releases the construction index. These operations consume the
