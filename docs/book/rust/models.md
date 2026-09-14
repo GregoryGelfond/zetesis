@@ -66,6 +66,9 @@ belong to their owner and must not be compared across unrelated catalogs as
 semantic identities. The
 [`implementation`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/atom_interner.rs)
 documents the entry, borrowing, allocation and final-transfer contracts.
+The bounded
+[`atom_interning` example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/examples/README.md#appendable-atom-interning-probe)
+checks typed identities and append rounds, and reports work and storage separately.
 
 ## Borrowing and explicit copies
 
