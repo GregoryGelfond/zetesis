@@ -130,8 +130,8 @@ impl AtomInterner {
         )
     }
 
-    /// Greatest admitted or actually allocated conservative storage envelope.
-    /// A refused proposal alone does not increase this value. Allocator slack
+    /// Greatest admitted live capacity or actual reservation-overlap envelope.
+    /// A preflighted proposal stopped before allocation does not increase it. Allocator slack
     /// acquired before a later refusal remains reflected here and in capacity.
     #[must_use]
     pub fn storage_peak_bytes(&self) -> u128 {
@@ -263,7 +263,8 @@ impl AtomInterner {
     /// Move the pending suffix into the committed vector, preserving every local
     /// position. Borrowing prevents this while a scan or appender is retained.
     /// Each constant-size Atom move is pre-admitted before the indivisible move;
-    /// nested allocations are transferred, never cloned.
+    /// nested allocations are transferred, never cloned. An empty committed prefix
+    /// takes the pending vector in one admitted owner swap without allocation.
     ///
     /// # Errors
     /// On refusal no membership or prefix changes. A successful capacity growth
@@ -279,6 +280,11 @@ impl AtomInterner {
         population(self.len(), limits)?;
         let additional = self.pending.len();
         if additional == 0 {
+            return Ok(());
+        }
+        if self.committed.is_empty() {
+            checked()?;
+            std::mem::swap(&mut self.committed, &mut self.pending);
             return Ok(());
         }
         reserve(

@@ -354,3 +354,98 @@ fn occupied_entry_rechecks_a_changed_population_limit() {
     assert_eq!(owner.get(1), Some(&atom(2)));
     validate(&owner);
 }
+
+fn staged() -> AtomInterner {
+    let mut owner = owner(&[5, 1, 9]);
+    owner.commit_with(limits(), checked).unwrap();
+    for value in [7, 3, 11, 0] {
+        insert(&mut owner, &atom(value));
+    }
+    owner
+}
+
+#[test]
+fn refused_commit_keeps_the_original_prefix() {
+    let mut complete = staged();
+    let mut operations = 0;
+    complete
+        .commit_with(limits(), || {
+            operations += 1;
+            checked()
+        })
+        .unwrap();
+    for limit in 0..operations {
+        let mut owner = staged();
+        let mut spent = 0;
+        let result = owner.commit_with(limits(), || {
+            if spent == limit {
+                Err(limit)
+            } else {
+                spent += 1;
+                Ok(())
+            }
+        });
+        assert!(matches!(result, Err(Failure::Stopped(actual)) if actual == limit));
+        assert_eq!(spent, limit);
+        assert_eq!(owner.committed, [atom(5), atom(1), atom(9)]);
+        assert_eq!(owner.pending, [atom(7), atom(3), atom(11), atom(0)]);
+        validate(&owner);
+        owner.commit_with(limits(), checked).unwrap();
+        assert_eq!(owner.committed, [5, 1, 9, 7, 3, 11, 0].map(atom));
+        assert!(owner.pending.is_empty());
+    }
+}
+
+#[test]
+fn refused_order_exposes_no_partial_selection() {
+    let mut complete = staged();
+    let mut operations = 0;
+    assert_eq!(
+        complete
+            .ordered_ids_with(limits(), || {
+                operations += 1;
+                checked()
+            })
+            .unwrap(),
+        [1, 0, 2]
+    );
+    for limit in 0..operations {
+        let mut owner = staged();
+        let mut spent = 0;
+        let result = owner.ordered_ids_with(limits(), || {
+            if spent == limit {
+                Err(limit)
+            } else {
+                spent += 1;
+                Ok(())
+            }
+        });
+        assert!(matches!(result, Err(Failure::Stopped(actual)) if actual == limit));
+        assert_eq!(spent, limit);
+        validate(&owner);
+        assert_eq!(
+            owner.ordered_ids_with(limits(), checked).unwrap(),
+            [1, 0, 2]
+        );
+        assert_eq!(owner.committed, [atom(5), atom(1), atom(9)]);
+        assert_eq!(owner.pending, [atom(7), atom(3), atom(11), atom(0)]);
+    }
+}
+
+#[test]
+fn first_commit_transfers_the_pending_buffer() {
+    let mut owner = owner(&[5, 1, 9]);
+    let pointer = owner.pending.as_ptr();
+    let capacity = owner.pending.capacity();
+    let live = owner.storage_bytes();
+    let bounds = Limits {
+        max_bytes: live,
+        ..limits()
+    };
+    owner.commit_with(bounds, checked).unwrap();
+    assert_eq!(owner.committed.as_ptr(), pointer);
+    assert_eq!(owner.committed.capacity(), capacity);
+    assert_eq!(owner.committed, [atom(5), atom(1), atom(9)]);
+    assert!(owner.pending.is_empty());
+    assert_eq!(owner.storage_bytes(), live);
+}
