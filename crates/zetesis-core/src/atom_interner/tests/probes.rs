@@ -205,7 +205,7 @@ fn query_work_limits_are_inclusive() {
             let result = owner.find_key_with(key, limits(), &mut before);
             if limit < 10 {
                 assert!(
-                    matches!(result, Err(Failure::Stopped(actual)) if std::ptr::eq(actual, &cause))
+                    matches!(result, Err(Failure::Stopped(actual)) if std::ptr::eq(actual, &raw const cause))
                 );
                 assert_eq!(spent, limit);
             } else {

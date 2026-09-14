@@ -165,7 +165,7 @@ fn captured_members_keep_their_meaning_after_catalog_growth() {
         .map(|name| atom(name, Sign::Positive, vec![]))
         .into();
     for (id, atom) in expected.iter().enumerate() {
-        assert_eq!(find(&mut fixture.atoms, atom), Some(id));
+        assert_eq!(find(&fixture.atoms, atom), Some(id));
     }
     let atoms = finish(fixture.atoms);
     assert_eq!(atoms, expected);
