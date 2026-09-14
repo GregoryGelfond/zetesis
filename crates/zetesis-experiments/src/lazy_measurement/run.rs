@@ -135,8 +135,7 @@ pub fn measure(
                 source: measured.source,
                 device: measured.device,
             };
-            observe(&Event::Sample(&sample))
-            .map_err(Error::Output)?;
+            observe(&Event::Sample(&sample)).map_err(Error::Output)?;
             emitted += 1;
         }
     }

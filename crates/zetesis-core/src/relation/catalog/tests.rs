@@ -622,12 +622,11 @@ fn refused_extraction_preserves_the_prepared_extent() {
     catalog.insert(atom(9, 3), Limits::default()).unwrap();
     catalog.prepare_ordered(Limits::default()).unwrap();
     let required = 13;
-    let failure = match catalog.take_atoms(Limits {
+    let Err(failure) = catalog.take_atoms(Limits {
         max_work: required - 1,
         ..Limits::default()
-    }) {
-        Err(failure) => failure,
-        Ok(_) => panic!("reset must be admitted before moving atoms"),
+    }) else {
+        panic!("reset must be admitted before moving atoms");
     };
     assert_eq!(
         failure.error,
