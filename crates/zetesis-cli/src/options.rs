@@ -100,8 +100,10 @@ pub struct Options {
     pub max_search_decisions: u64,
     /// Maximum source-expansion and eager formula-grounding work.
     ///
-    /// Formula grounding includes typed column construction and lookup.
-    #[arg(long, default_value_t = 1_048_576, hide_short_help = true)]
+    /// Each counter uses this ceiling independently. The default matches the
+    /// formula library's finite work policy. Formula grounding includes checked
+    /// typed lookup, index construction, copying and commit work.
+    #[arg(long, default_value_t = usize::try_from(zetesis_themelios::FormulaLimits::default().max_work).expect("default formula work fits supported address widths"), hide_short_help = true)]
     pub max_expansion_work: usize,
     /// Maximum authored bytes for eager formula support views, indexes and queries.
     ///
