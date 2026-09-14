@@ -1,4 +1,4 @@
-//! One checked typed search for immutable membership and vacant-path recording.
+//! One checked typed search and a bounded local record of its descent directions.
 
 use std::cmp::Ordering;
 
@@ -15,19 +15,72 @@ pub(super) enum Query<'a> {
     Key(AtomKey<'a>),
 }
 
+/// Fixed traversal state, never another index or an atom owner.
+///
+/// Let `N(h)` be the minimum node count of an AVL of height h, with empty height
+/// zero. Its recurrence gives `N(h) >= 2*N(h-2)+1` and hence
+/// `N(h) >= 2^ceil(h/2)-1`. For a nonempty tree with n nodes and bit width b,
+/// `n < 2^b` implies `h <= 2*b`. Since `b <= usize::BITS`, two target-sized words
+/// hold every descent. The planned insertion leaf is not a descent bit.
+/// The empty tree records no directions. This argument uses mathematical `n+1`;
+/// no potentially overflowing machine addition is needed to compute the bound.
+///
+/// Checked packing protects the representation independently of that AVL
+/// invariant. A failed push from an actual search means the internal AVL height
+/// invariant was broken, not a user resource refusal or missing atom.
+/// This local stack record lives only during entry lookup/path preparation;
+/// its two words and checked length are excluded from named vector capacities.
+#[derive(Default)]
+pub(super) struct Directions {
+    words: [usize; 2],
+    length: usize,
+}
+
+impl Directions {
+    pub(super) fn push(&mut self, right: bool) -> Option<()> {
+        let next = self.length.checked_add(1)?;
+        let (word, mask) = Self::position(self.length)?;
+        let slot = self.words.get_mut(word)?;
+        if right {
+            *slot |= mask;
+        }
+        self.length = next;
+        Some(())
+    }
+
+    pub(super) fn len(&self) -> usize {
+        self.length
+    }
+
+    pub(super) fn get(&self, position: usize) -> Option<bool> {
+        if position >= self.length {
+            return None;
+        }
+        let (word, mask) = Self::position(position)?;
+        Some(*self.words.get(word)? & mask != 0)
+    }
+
+    fn position(position: usize) -> Option<(usize, usize)> {
+        let width = usize::BITS as usize;
+        let offset = u32::try_from(position % width).ok()?;
+        Some((position / width, 1_usize.checked_shl(offset)?))
+    }
+}
+
 impl Query<'_> {
-    /// The optional descent observer records no payload and cannot change the
-    /// borrowed nodes. Both passes therefore use the same typed search. A pure
-    /// probe supplies a no-op observer; only a confirmed vacant entry records
-    /// tentative mutation metadata during its second pass.
-    pub(super) fn search<E, F: FnMut() -> Result<(), E>>(
+    /// One node-work unit admits its probe, child selection and optional
+    /// constant-size local direction recording. Typed descriptor/text work is
+    /// separately charged. These units describe operations, not instructions.
+    /// The observer cannot mutate the borrowed nodes. Pure find uses no recorder;
+    /// entry retains directions without copying nodes or growing path scratch.
+    pub(super) fn search<E>(
         self,
         committed: &[Atom],
         pending: &[Atom],
         nodes: &[Node],
         mut cursor: Link,
-        before: &mut F,
-        mut descend: impl FnMut(usize, &Node, bool, &mut F) -> Result<(), E>,
+        before: &mut impl FnMut() -> Result<(), E>,
+        mut descend: impl FnMut(bool),
     ) -> Result<Option<usize>, E> {
         while let Some(next) = cursor {
             before()?;
@@ -42,7 +95,7 @@ impl Query<'_> {
             }
             let right = order == Ordering::Greater;
             let node = &nodes[id];
-            descend(id, node, right, before)?;
+            descend(right);
             cursor = node.children[usize::from(right)];
         }
         Ok(None)

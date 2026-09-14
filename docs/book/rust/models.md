@@ -53,15 +53,21 @@ Committing an atom does not select it as true in any candidate interpretation.
 The builder uses an iterative AVL index. `find_atom_with` and `find_key_with`
 borrow the owner immutably, allocate nothing, and return a local position or
 absence after a checked search of committed and pending identities. Occupied
-entries use that same probe without changing mutation scratch. A vacant entry
-performs a second checked search to prepare its insertion path: repeated queries
-avoid unused path work, while misses pay for both searches. Each search visits a
-logarithmic path, charging the actual predicate and value prefixes compared.
+entries use that same probe without changing retained mutation scratch. Entry
+records each descent in two target-sized words and a checked length, local to
+lookup and path preparation. The AVL height bound makes this record sufficient
+for every representable node population. A vacant entry replays those directions
+through the exclusively borrowed tree to prepare its insertion path, without
+repeating typed comparisons. Each search visits a logarithmic path, charging the
+actual predicate and value prefixes compared. The node-work unit includes child
+selection and fixed local direction recording; replay admits each node visit and
+path-step write separately. These are operation units, not machine instructions.
 Canonical traversal visits the index once. Fallible reservations and work checks
 precede publication, so a stopped insertion changes neither membership nor old
 links. Already acquired capacity can remain after failure. The builder's byte
 measure covers its documented vector/index/scratch capacities and conservative
-growth overlap; nested atom payload and process RSS are separate measures.
+growth overlap. The bounded local direction record and borrowed-view stack
+headers are excluded; nested atom payload and process RSS are separate measures.
 
 This unique-builder contract is deliberately narrower than `AtomCatalog::new`.
 The public immutable constructor can retain duplicate dense slots in arbitrary

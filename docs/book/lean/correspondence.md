@@ -24,8 +24,11 @@ activated objectives and the original cumulative budget. Discarded support and
 construction indexes have no later semantic consumer. The ID-only atom catalog
 requires lookup soundness, lookup completeness and stable insertion IDs under
 full typed equality. The dictionary laws below express the lookup contract
-abstractly; checked typed comparison, AVL ordering and balancing, transactional
-publication and fallible Rust allocation remain executable obligations.
+abstractly; checked typed comparison, AVL ordering and balancing, the bounded
+direction record and its exclusive-tree replay, transactional publication and
+fallible Rust allocation remain executable obligations. The Rust lookup module
+states the height bound and replay argument; the abstract dictionary laws do not
+prove that concrete AVL representation.
 
 `SourceContributions.chain_unique` identifies the ordered observations of a
 finite chain in shared storage. `chain_preserved` shows that changing other

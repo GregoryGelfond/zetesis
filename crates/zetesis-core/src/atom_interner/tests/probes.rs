@@ -276,7 +276,7 @@ fn empty_queries_perform_no_operations() {
 }
 
 #[test]
-fn vacant_entries_charge_both_searches() {
+fn vacant_entries_charge_link_replay() {
     let mut owner = owner(&[2, 1, 3]);
     assert!(owner.index.path.capacity() >= 2);
     let mut spent = 0;
@@ -288,9 +288,10 @@ fn vacant_entries_charge_both_searches() {
         })
         .unwrap();
     assert_eq!(entry.position(), None);
-    // Each search visits two five-operation nodes; only the second search
-    // writes the two path steps. Existing capacity needs no growth allowance.
-    assert_eq!(spent, 2 * 10 + 2);
+    // Two five-operation typed probes include the local direction recording.
+    // Replay costs one node/decode and one Step write per visited node, without
+    // repeating typed comparisons. Existing capacity needs no growth allowance.
+    assert_eq!(spent, 10 + 2 * 2);
     assert_eq!(
         entry
             .insert_with(limits(), || Ok::<(), Infallible>(()))
@@ -298,4 +299,75 @@ fn vacant_entries_charge_both_searches() {
         3
     );
     validate(&owner);
+}
+
+#[test]
+fn direction_record_preserves_word_boundaries() {
+    let mut directions = Directions::default();
+    let capacity = 2 * usize::BITS as usize;
+    // Repeat runs of both directions across the word boundary and final bit.
+    // Read every recorded prefix so an offset error cannot hide in a full word.
+    for position in 0..capacity {
+        directions.push(position % 3 == 0).unwrap();
+        assert_eq!(directions.len(), position + 1);
+        for previous in 0..=position {
+            assert_eq!(directions.get(previous), Some(previous % 3 == 0));
+        }
+        assert_eq!(directions.get(position + 1), None);
+    }
+}
+
+#[test]
+fn full_direction_record_refuses_without_change() {
+    let mut directions = Directions::default();
+    let capacity = 2 * usize::BITS as usize;
+    for position in 0..capacity {
+        directions.push(position % 2 == 0).unwrap();
+    }
+    assert_eq!(directions.push(true), None);
+    assert_eq!(directions.push(false), None);
+    assert_eq!(directions.len(), capacity);
+    for position in 0..capacity {
+        assert_eq!(directions.get(position), Some(position % 2 == 0));
+    }
+    assert_eq!(directions.get(capacity), None);
+    assert_eq!(directions.get(usize::MAX), None);
+}
+
+#[test]
+fn replay_refusal_preserves_published_membership() {
+    // p(4) takes two typed probes (ten operations), followed by two replay
+    // node/Step pairs. Stop separately before each replay operation.
+    for limit in 10..14 {
+        let mut owner = owner(&[2, 1, 3]);
+        assert!(owner.index.path.capacity() >= 2);
+        owner
+            .commit_with(limits(), || Ok::<(), Infallible>(()))
+            .unwrap();
+        let original = owner.committed.as_ptr();
+        let cause = ("replay stopped", limit);
+        let mut spent = 0;
+        let added = atom(4);
+        let result = owner.entry_atom_with(&added, limits(), || {
+            if spent == limit {
+                Err(&cause)
+            } else {
+                spent += 1;
+                Ok(())
+            }
+        });
+        assert!(
+            matches!(result, Err(Failure::Stopped(actual)) if std::ptr::eq(actual, &raw const cause))
+        );
+        assert_eq!(spent, limit);
+        assert_eq!(owner.len(), 3);
+        assert_eq!(owner.committed.as_ptr(), original);
+        for (id, value) in [2, 1, 3].into_iter().enumerate() {
+            assert_eq!(owner.get(id), Some(&atom(value)));
+        }
+        validate(&owner);
+        assert_eq!(insert(&mut owner, &added), 3);
+        assert_eq!(owner.get(3), Some(&added));
+        validate(&owner);
+    }
 }

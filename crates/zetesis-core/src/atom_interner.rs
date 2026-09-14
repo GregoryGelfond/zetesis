@@ -14,7 +14,7 @@ use std::{collections::TryReserveError, fmt};
 
 use crate::{Atom, AtomKey};
 use index::{Index, Node, Step, position};
-use query::Query;
+use query::{Directions, Query};
 
 /// Bounds on this interner's population and named storage, independent of truth.
 #[derive(Clone, Copy, Debug)]
@@ -23,7 +23,8 @@ pub struct Limits {
     pub max_atoms: usize,
     /// Owner header, atom-vector capacities, AVL nodes and reusable path capacity,
     /// including conservative old/new buffer overlap and temporary ordered IDs.
-    /// Nested Atom/Value payload, temporary borrowed-view stack headers,
+    /// Nested Atom/Value payload, temporary borrowed-view stack headers and the
+    /// fixed entry direction record (two usize words plus a checked length),
     /// allocator bookkeeping, caller storage and RSS
     /// are excluded and must be admitted separately by the enclosing owner.
     pub max_bytes: u128,
@@ -108,9 +109,10 @@ impl<E: std::error::Error + 'static> std::error::Error for Failure<E> {
 /// Authoritative unique atoms in first-insertion order, plus an ID-only AVL index.
 ///
 /// Searches use O(log n) node probes and checked typed comparisons without
-/// allocating or changing scratch. A vacant entry repeats that search to prepare
-/// its mutation path; insertion uses O(log n) path operations and at most two
-/// rotations. Vector growth is
+/// allocating or changing retained scratch. Entry records the initial search's
+/// directions in fixed local stack state. Only a vacant entry replays child
+/// links to prepare its mutation path, without repeating typed comparisons.
+/// Insertion uses O(log n) path operations and at most two rotations. Vector growth is
 /// geometric (work admission includes possible relocation of live cells even
 /// for in-place allocator growth); commit moves only the pending suffix. Canonical order comes from
 /// the tree, without sorting historical atoms or shifting a sorted index.
@@ -195,7 +197,7 @@ impl AtomInterner {
             &self.index.nodes,
             self.index.root,
             &mut || before().map_err(Failure::Stopped),
-            |_, _, _, _| Ok(()),
+            |_| {},
         )
     }
 
@@ -252,8 +254,11 @@ impl AtomInterner {
     }
 
     /// Find or prepare an entry from an already owned atom, without copying it.
-    /// Occupied entries use the immutable probe without changing scratch. A
-    /// vacant entry repeats the checked search to prepare its insertion path.
+    /// Entry records each descent in fixed local stack state without changing
+    /// retained scratch. The charged node operation includes that constant-size
+    /// recording; typed comparison work is separate. Only a vacant entry replays
+    /// the recorded child links to prepare its insertion path. The two target-
+    /// sized words and checked length live only through this call.
     ///
     /// # Errors
     /// Returns the first work, storage or reservation refusal. Vacant-path
@@ -486,7 +491,8 @@ impl AtomAppender<'_> {
     }
 
     /// Search without copying an owned atom; prepare a path only when vacant.
-    /// Occupied lookup changes no scratch. A miss repeats the checked search.
+    /// Node work includes fixed local direction recording. Occupied lookup
+    /// changes no retained scratch; a miss replays links without comparing keys.
     ///
     /// # Errors
     /// Refusal changes no membership. Vacant-path preparation may retain
@@ -522,16 +528,17 @@ impl<'a> AtomAppender<'a> {
         let mut checked = || before().map_err(Failure::Stopped);
         population(self.len(), limits)?;
         admit(self.storage_bytes(), limits)?;
+        let mut directions = Directions::default();
         let found = query.search(
             self.committed,
             self.pending,
             &self.index.nodes,
             self.index.root,
             &mut checked,
-            |_, _, _, _| Ok(()),
+            |right| directions.push(right).expect("AVL height fits two words"),
         )?;
         if found.is_none() {
-            self.prepare_path(query, limits, &mut checked)?;
+            self.prepare_path(&directions, limits, &mut checked)?;
         }
         Ok(AtomEntry {
             appender: self,
@@ -542,7 +549,7 @@ impl<'a> AtomAppender<'a> {
 
     fn prepare_path<E>(
         &mut self,
-        query: Query<'_>,
+        directions: &Directions,
         limits: Limits,
         before: &mut impl FnMut() -> Result<(), Failure<E>>,
     ) -> Result<(), Failure<E>> {
@@ -560,26 +567,29 @@ impl<'a> AtomAppender<'a> {
             peak,
         } = &mut *self.index;
         path.clear();
-        let found = query.search(
-            self.committed,
-            self.pending,
-            nodes,
-            *root,
-            before,
-            |id, node, right, before| {
-                let live = fixed + cells::<Step>(path.capacity());
-                reserve(path, 1, bound, live, peak, limits, before)?;
-                before()?;
-                path.push(Step {
-                    id,
-                    node: *node,
-                    right,
-                    changed: false,
-                });
-                Ok(())
-            },
-        )?;
-        debug_assert!(found.is_none(), "exclusive vacant entry");
+        // The exclusive entry borrow has prevented any node/link change since
+        // this route reached absence. Inductively, replay starts at the same
+        // root and each recorded direction reaches the same next node. Thus it
+        // ends at that absent child; no second typed comparison is required.
+        // Refusal changes only disposable path scratch, never published links.
+        let mut cursor = *root;
+        for offset in 0..directions.len() {
+            before()?; // Replayed node and its constant-size direction decode.
+            let right = directions.get(offset).expect("recorded direction");
+            let id = position(cursor.expect("vacant route retains its nodes"));
+            let node = nodes[id];
+            let live = fixed + cells::<Step>(path.capacity());
+            reserve(path, 1, bound, live, peak, limits, before)?;
+            before()?;
+            path.push(Step {
+                id,
+                node,
+                right,
+                changed: false,
+            });
+            cursor = node.children[usize::from(right)];
+        }
+        assert!(cursor.is_none(), "exclusive vacant route reaches absence");
         Ok(())
     }
 }
