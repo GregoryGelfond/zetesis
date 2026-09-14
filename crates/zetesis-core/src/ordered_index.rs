@@ -3,26 +3,26 @@
 //! height minus left height. Inserting one leaf causes at most one rotation;
 //! only that search path and its parent link change. No payload is stored here.
 
-use std::num::NonZeroUsize;
+use std::{cmp::Ordering, num::NonZeroUsize};
 
-pub(super) type Link = Option<NonZeroUsize>;
+pub(crate) type Link = Option<NonZeroUsize>;
 
-pub(super) fn encoded(position: usize) -> NonZeroUsize {
+pub(crate) fn encoded(position: usize) -> NonZeroUsize {
     NonZeroUsize::new(position.checked_add(1).expect("admitted position")).expect("positive ID")
 }
 
-pub(super) fn position(value: NonZeroUsize) -> usize {
+pub(crate) fn position(value: NonZeroUsize) -> usize {
     value.get() - 1
 }
 
 #[derive(Clone, Copy, Default)]
-pub(super) struct Node {
+pub(crate) struct Node {
     pub children: [Link; 2],
     pub balance: i8,
 }
 
 #[derive(Clone, Copy)]
-pub(super) struct Step {
+pub(crate) struct Step {
     pub id: usize,
     pub node: Node,
     pub right: bool,
@@ -30,7 +30,7 @@ pub(super) struct Step {
 }
 
 #[derive(Default)]
-pub(super) struct Index {
+pub(crate) struct Index {
     pub nodes: Vec<Node>,
     pub root: Link,
     pub path: Vec<Step>,
@@ -123,5 +123,85 @@ impl Index {
             }
         }
         self.root = root;
+    }
+}
+
+/// Search the owner's ordered identities without owning or copying any payload.
+/// `compare` admits one node visit before comparing the query with the ID's
+/// authoritative value. The callback's ordering must be the tree's ordering.
+/// `descend` records only successful comparisons; an error publishes no result
+/// and changes no node. A miss visits at most the AVL height in nodes.
+pub(crate) fn search<E>(
+    nodes: &[Node],
+    mut cursor: Link,
+    mut compare: impl FnMut(usize) -> Result<Ordering, E>,
+    mut descend: impl FnMut(bool),
+) -> Result<Option<usize>, E> {
+    while let Some(next) = cursor {
+        let id = position(next);
+        let order = compare(id)?;
+        if order.is_eq() {
+            return Ok(Some(id));
+        }
+        let right = order == Ordering::Greater;
+        descend(right);
+        cursor = nodes[id].children[usize::from(right)];
+    }
+    Ok(None)
+}
+
+/// Fixed traversal state, never another index or an atom owner.
+///
+/// Let `N(h)` be the minimum node count of an AVL of height h, with empty height
+/// zero. Its recurrence gives `N(h) >= 2*N(h-2)+1` and hence
+/// `N(h) >= 2^ceil(h/2)-1`. For a nonempty tree with n nodes and bit width b,
+/// `n < 2^b` implies `h <= 2*b`. Since `b <= usize::BITS`, two target-sized words
+/// hold every descent. The planned insertion leaf is not a descent bit.
+/// The empty tree records no directions. This argument uses mathematical `n+1`;
+/// no potentially overflowing machine addition is needed to compute the bound.
+///
+/// Checked packing protects the representation independently of that AVL
+/// invariant. A failed push from an actual search means the internal AVL height
+/// invariant was broken, not a user resource refusal or missing atom.
+/// This local stack record lives only during entry lookup/path preparation;
+/// its two words and checked length are excluded from named vector capacities.
+#[derive(Default)]
+pub(crate) struct Directions {
+    words: [usize; 2],
+    length: usize,
+}
+
+impl Directions {
+    pub(crate) fn push(&mut self, right: bool) -> Option<()> {
+        let next = self.length.checked_add(1)?;
+        if next > self.words.len() * usize::BITS as usize {
+            return None;
+        }
+        // The newest direction occupies bit zero. Transfer the low word's
+        // oldest bit before shifting; the admitted length ensures that no
+        // recorded bit can leave the high word. Decode positions only on replay.
+        let carry = self.words[0] >> (usize::BITS - 1);
+        self.words[0] = (self.words[0] << 1) | usize::from(right);
+        self.words[1] = (self.words[1] << 1) | carry;
+        self.length = next;
+        Some(())
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.length
+    }
+
+    pub(crate) fn get(&self, position: usize) -> Option<bool> {
+        if position >= self.length {
+            return None;
+        }
+        let (word, mask) = Self::position(self.length - 1 - position)?;
+        Some(*self.words.get(word)? & mask != 0)
+    }
+
+    fn position(position: usize) -> Option<(usize, usize)> {
+        let width = usize::BITS as usize;
+        let offset = u32::try_from(position % width).ok()?;
+        Some((position / width, 1_usize.checked_shl(offset)?))
     }
 }

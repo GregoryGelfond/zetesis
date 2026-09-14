@@ -31,6 +31,7 @@ mod program;
 mod candidate;
 mod model;
 mod identity;
+mod ordered_index;
 mod atom_lookup;
 pub mod atom_interner;
 mod carrier;

@@ -7,14 +7,13 @@
 //! This unique-builder contract does not alter [`crate::AtomCatalog::new`], which
 //! preserves arbitrary original order, duplicate positions and input addresses.
 
-mod index;
 mod query;
 
 use std::{collections::TryReserveError, fmt};
 
-use crate::{Atom, AtomKey};
-use index::{Index, Node, Step, position};
-use query::{Directions, Query};
+use crate::{Atom, AtomKey, ordered_index as index};
+use index::{Directions, Index, Node, Step, position};
+use query::Query;
 
 /// Bounds on this interner's population and named storage, independent of truth.
 #[derive(Clone, Copy, Debug)]
