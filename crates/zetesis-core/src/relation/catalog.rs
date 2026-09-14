@@ -218,7 +218,10 @@ impl Catalog {
         self.ordered.clear();
         self.ordered_valid = true;
         self.payload = 0;
-        Ok(ExtractedAtoms { atoms, storage: self.receipt(&work) })
+        Ok(ExtractedAtoms {
+            atoms,
+            storage: self.receipt(&work),
+        })
     }
 
     /// Borrow the current layout without rebuilding its dictionary or columns.
