@@ -49,13 +49,14 @@ theorem propose_gate_independent (P : Semantics.Program A)
   apply atoms_ext
   intro atom
   constructor
-  · intro ⟨mapped, member, head, valid, body⟩
-    obtain ⟨original, member, rfl⟩ := List.mem_map.mp member
-    exact ⟨original, member, head, valid, body⟩
-  · intro ⟨original, member, head, valid, body⟩
-    exact ⟨{ original with gateTrue := trueGates original,
-      gateFalse := falseGates original },
-      List.mem_map.mpr ⟨original, member, rfl⟩, head, valid, body⟩
+  · intro ⟨mapped, inMapped, head, valid, body⟩
+    obtain ⟨original, inProgram, mappedEq⟩ := List.mem_map.mp inMapped
+    subst mapped
+    exact ⟨original, inProgram, head, valid, body⟩
+  · intro ⟨original, inProgram, head, valid, body⟩
+    let mapped : Semantics.Rule A :=
+      { original with gateTrue := trueGates original, gateFalse := falseGates original }
+    exact ⟨mapped, List.mem_map.mpr ⟨original, inProgram, rfl⟩, head, valid, body⟩
 
 /-- Adding possible body atoms cannot remove a proposed head. The same rule
 witness remains applicable by positive-body monotonicity. -/

@@ -1,17 +1,18 @@
 import Zetesis.TightPlans
 
 /-!
-# Necessary support for ordinary disjunctive heads
+# Necessary support for disjunctive and atomic-choice producers
 
-An answer set cannot contain an atom without an applicable producer for which
-that atom is the only true distinct head. Otherwise deleting that atom leaves a
+An answer-set atom needs ordinary sole-head support or enabled atomic-choice
+support. Otherwise deleting that atom leaves a
 proper-subset model of the frozen reduct. This is a necessary candidate
 restriction, not a sufficient membership test or a shift of the original theory.
 
-Bodies may be arbitrary formulas. Asserted heads are positive disjunctions;
-asserted default negations are frozen constraints. Repeated head occurrences do
-not denote different atoms. The laws do not establish Rust DAG extraction,
-Boolean encoding, allocation or resource accounting.
+Bodies may be arbitrary formulas. Asserted heads are positive disjunctions or
+atomic choices; asserted default negations are frozen constraints. An enabled
+choice supplies a support witness for its chosen atom. Repeated ordinary head
+occurrences do not denote different atoms. The laws do not establish Rust DAG
+extraction, Boolean encoding, allocation or resource accounting.
 -/
 namespace Zetesis.DisjunctiveSupport
 
@@ -162,6 +163,119 @@ theorem answer_set_supported (M : Atoms α) (T : Theory α)
     rcases covered F asserted with ⟨r, inRules, rfl⟩ | ⟨G, rfl⟩ | rfl
     · apply producer_removal M r a (answer.1 r.formula (original r inRules))
       exact fun support => unsupported ⟨r, inRules, support⟩
+    · apply (TightPlans.negation_frozen M (remove M a) G).mpr
+      exact answer.1 (Ferraris.Neg G) asserted
+    · exact False.elim (answer.1 .bot asserted)
+  have proper : ProperSub (remove M a) M := by
+    refine ⟨fun _ member => member.1, ?_⟩
+    intro reverse
+    exact (reverse a present).2 rfl
+  exact answer.2 ⟨remove M a, proper, reductModel⟩
+
+/-- Atomic choices retain their original body and the order of their two
+branches. Unlike ranked producers, their bodies may be arbitrary formulas. -/
+inductive ChoiceProducer (α : Type u) where
+  | fact : α → ChoiceProducer α
+  | rule : Formula α → α → ChoiceProducer α
+  | reversedFact : α → ChoiceProducer α
+  | reversedRule : Formula α → α → ChoiceProducer α
+
+def ChoiceProducer.head : ChoiceProducer α → α
+  | .fact a | .rule _ a | .reversedFact a | .reversedRule _ a => a
+
+def ChoiceProducer.Enabled (M : Atoms α) : ChoiceProducer α → Prop
+  | .fact _ | .reversedFact _ => True
+  | .rule B _ | .reversedRule B _ => Satisfies M B
+
+def ChoiceProducer.formula : ChoiceProducer α → Formula α
+  | .fact a => .disj (.atom a) (Ferraris.Neg (.atom a))
+  | .rule B a => .imp B (.disj (.atom a) (Ferraris.Neg (.atom a)))
+  | .reversedFact a => .disj (Ferraris.Neg (.atom a)) (.atom a)
+  | .reversedRule B a => .imp B (.disj (Ferraris.Neg (.atom a)) (.atom a))
+
+/-- The original body permits this single atom. No dependency rank is required. -/
+def ChoiceProducer.Supports (M : Atoms α) (r : ChoiceProducer α) (a : α) : Prop :=
+  r.Enabled M ∧ r.head = a
+
+/-- An atomic-choice root is classically true, with or without a body.
+Its frozen reduct can still require the chosen atom. -/
+theorem choice_satisfied (M : Atoms α) (r : ChoiceProducer α) :
+    Satisfies M r.formula := by
+  cases r with
+  | fact a => exact Classical.em (M a)
+  | rule _ a => exact fun _ => Classical.em (M a)
+  | reversedFact a => exact Or.symm (Classical.em (M a))
+  | reversedRule _ a => exact fun _ => Or.symm (Classical.em (M a))
+
+/-- Preserving each enabled, chosen head satisfies the choice's frozen reduct.
+An inactive original body cannot become true in its reduct. Otherwise the
+atomic-choice guard requires only the original chosen head. -/
+theorem choice_reduct_of_heads (M J : Atoms α) (r : ChoiceProducer α)
+    (heads : r.Enabled M → M r.head → J r.head) :
+    Satisfies J (Reduct M r.formula) := by
+  cases r with
+  | fact a => exact (choice_reduct_guard M J a).mpr (heads trivial)
+  | reversedFact a =>
+    exact (TightPlans.reversed_choice_reduct_guard M J a).mpr (heads trivial)
+  | rule B a =>
+    apply (RuleFactorization.reduct_imp M J B
+      (.disj (.atom a) (Ferraris.Neg (.atom a)))).mpr
+    refine ⟨choice_satisfied M (.rule B a), ?_⟩
+    intro body
+    exact (choice_reduct_guard M J a).mpr
+      (heads (TightPlans.original_of_reduct M J B body))
+  | reversedRule B a =>
+    apply (RuleFactorization.reduct_imp M J B
+      (.disj (Ferraris.Neg (.atom a)) (.atom a))).mpr
+    refine ⟨choice_satisfied M (.reversedRule B a), ?_⟩
+    intro body
+    exact (TightPlans.reversed_choice_reduct_guard M J a).mpr
+      (heads (TightPlans.original_of_reduct M J B body))
+
+/-- Deleting an atom unsupported by a choice preserves that choice's reduct.
+An enabled chosen head must be a different atom and therefore survives deletion. -/
+theorem choice_removal (M : Atoms α) (r : ChoiceProducer α) (a : α)
+    (unsupported : ¬ r.Supports M a) :
+    Satisfies (remove M a) (Reduct M r.formula) := by
+  apply choice_reduct_of_heads M (remove M a) r
+  intro enabled present
+  refine ⟨present, ?_⟩
+  intro same
+  exact unsupported ⟨enabled, same⟩
+
+/-- Both producer families and frozen constraints cover every original root.
+No unrecognized asserted formula may be omitted from this premise. -/
+def CoveredWithChoices (T : Theory α) (rules : List (Producer α))
+    (choices : List (ChoiceProducer α)) : Prop :=
+  ∀ F ∈ T, (∃ r ∈ rules, r.formula = F) ∨
+    (∃ c ∈ choices, c.formula = F) ∨ (∃ G, F = Ferraris.Neg G) ∨ F = .bot
+
+/-- Every answer-set atom has ordinary sole-head support or enabled choice support.
+
+If neither support exists, deleting the atom preserves every ordinary producer
+and every choice reduct by the two removal laws. Frozen constraints survive as
+before. Complete root coverage then contradicts reduct minimality. This is only
+a necessary restriction: unranked support does not establish membership.
+-/
+theorem answer_set_supported_with_choices (M : Atoms α) (T : Theory α)
+    (rules : List (Producer α)) (choices : List (ChoiceProducer α))
+    (covered : CoveredWithChoices T rules choices)
+    (answer : Stable M T) :
+    ∀ a, M a → (∃ r ∈ rules, r.Supports M a) ∨
+      (∃ c ∈ choices, c.Supports M a) := by
+  classical
+  intro a present
+  apply Classical.byContradiction
+  intro unsupported
+  have reductModel : Models (remove M a) (ReductTheory M T) := by
+    intro reduced member
+    obtain ⟨F, asserted, rfl⟩ := List.mem_map.mp member
+    rcases covered F asserted with
+      ⟨r, inRules, rfl⟩ | ⟨c, inChoices, rfl⟩ | ⟨G, rfl⟩ | rfl
+    · apply producer_removal M r a (answer.1 r.formula asserted)
+      exact fun support => unsupported (Or.inl ⟨r, inRules, support⟩)
+    · apply choice_removal M c a
+      exact fun support => unsupported (Or.inr ⟨c, inChoices, support⟩)
     · apply (TightPlans.negation_frozen M (remove M a) G).mpr
       exact answer.1 (Ferraris.Neg G) asserted
     · exact False.elim (answer.1 .bot asserted)
