@@ -139,7 +139,7 @@ pub(crate) struct Work<'a> {
 }
 
 impl Work<'_> {
-    fn tick(&mut self) -> Result<(), Stop> {
+    pub(crate) fn tick(&mut self) -> Result<(), Stop> {
         self.charge(1)
     }
 

@@ -74,7 +74,8 @@ impl Instance {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ScanStatistics {
     /// Charged template, tuple, filter and instance-copy work, including any
-    /// private world-membership construction and intersection charges.
+    /// private world-membership construction/intersections and the lazy batch's
+    /// checked identity preparation and callback interning charges.
     pub work: u64,
     /// Fully matched bindings offered to the consumer, including its failure.
     pub bindings: u64,
@@ -83,8 +84,9 @@ pub struct ScanStatistics {
     /// Matched positive prefixes with no possible current world.
     /// Their unvisited extensions are not counted as offered instances.
     pub pruned_prefixes: u64,
-    /// Peak requested owned membership/frame/index payload in this round.
-    /// This excludes symbolic atoms, allocator rounding and process RSS.
+    /// Peak retained ordered-ID capacity plus requested membership/frame payload
+    /// reached by round preparation. Interner storage is bounded separately;
+    /// symbolic atoms and other allocator overhead are excluded. This is not RSS.
     pub mask_bytes: usize,
 }
 
@@ -163,13 +165,31 @@ pub fn scan<E>(
     mut consume: impl FnMut(Instance) -> Result<(), E>,
 ) -> Result<ScanStatistics, ScanFailure<E>> {
     let mut work = Work::source(control, limits.max_work);
+    scan_rows(
+        program,
+        snapshot.atoms().iter(),
+        limits,
+        &mut work,
+        |instance, _| consume(instance),
+    )
+}
+
+/// Visit a canonical borrowed row selection. The batch's interner and source
+/// visitor share one work owner; callback charges are retained on every exit.
+pub(crate) fn scan_rows<'a, E>(
+    program: &Program,
+    atoms: impl Iterator<Item = &'a Atom>,
+    limits: ScanLimits,
+    work: &mut Work<'_>,
+    mut consume: impl FnMut(Instance, &mut Work<'_>) -> Result<(), E>,
+) -> Result<ScanStatistics, ScanFailure<E>> {
     let mut offered = 0;
     let result = scan_inner(
         program,
-        snapshot.atoms().iter(),
+        atoms,
         None,
         limits,
-        &mut work,
+        work,
         &mut offered,
         &mut consume,
     );
@@ -181,16 +201,16 @@ pub fn scan<E>(
 
 pub(crate) fn scan_worlds<E>(
     program: &Program,
-    snapshot: &mut worlds::Snapshot,
+    snapshot: &mut worlds::Snapshot<'_>,
     limits: ScanLimits,
     work: &mut Work<'_>,
-    mut consume: impl FnMut(Instance) -> Result<(), E>,
+    mut consume: impl FnMut(Instance, &mut Work<'_>) -> Result<(), E>,
 ) -> Result<ScanStatistics, ScanFailure<E>> {
     let mut offered = 0;
     let (atoms, mut membership) = snapshot.parts();
     let result = scan_inner(
         program,
-        atoms.iter(),
+        atoms,
         Some(&mut membership),
         limits,
         work,
@@ -210,7 +230,7 @@ fn scan_inner<'a, E>(
     limits: ScanLimits,
     work: &mut Work<'_>,
     offered: &mut u64,
-    consume: &mut impl FnMut(Instance) -> Result<(), E>,
+    consume: &mut impl FnMut(Instance, &mut Work<'_>) -> Result<(), E>,
 ) -> Result<(), ScanCause<E>> {
     work.control.poll()?;
     let mut relations = Relations::new();
@@ -255,12 +275,15 @@ fn scan_inner<'a, E>(
                     .map(&mut copy)
                     .collect::<Result<_, Stop>>()?;
                 *offered += 1;
-                consume(Instance {
-                    head,
-                    positive,
-                    gate_true,
-                    gate_false,
-                })
+                consume(
+                    Instance {
+                        head,
+                        positive,
+                        gate_true,
+                        gate_false,
+                    },
+                    work,
+                )
                 .map_err(ScanCause::Consumer)
             },
         )?;

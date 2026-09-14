@@ -4,8 +4,6 @@
 //! packed stride. A join frame intersects only complete round-snapshot truth.
 //! Frozen seeds and pending consequences never enter this representation.
 
-use std::collections::BTreeMap;
-
 use zetesis_core::{Atom, Predicate, Program, Template};
 
 use super::Work;
@@ -15,8 +13,76 @@ use crate::Stop;
 #[path = "../../tests/support/world_membership.rs"]
 mod tests;
 
-pub(crate) struct Snapshot {
-    atoms: Vec<Atom>,
+/// Canonical local IDs select round truth while borrowing the committed owner.
+/// The ID vector owns no Atom and can outlive mutation of an independent append
+/// tail or packed transport. Its retained capacity remains live during callbacks.
+pub(crate) struct Rows<'a> {
+    atoms: &'a [Atom],
+    positions: Vec<usize>,
+    bytes: usize,
+}
+
+impl<'a> Rows<'a> {
+    pub(crate) fn select(
+        atoms: &'a [Atom],
+        mut positions: Vec<usize>,
+        snapshots: &[u32],
+        stride: usize,
+        worlds: usize,
+        available: usize,
+        work: &mut Work<'_>,
+    ) -> Result<Self, Stop> {
+        let bytes = positions
+            .capacity()
+            .checked_mul(size_of::<usize>())
+            .ok_or(Stop::Allocation)?;
+        work.mask_bytes = work.mask_bytes.checked_add(bytes).ok_or(Stop::Allocation)?;
+        if bytes > available {
+            return Err(Stop::Allocation);
+        }
+        if worlds == 0 || stride == 0 || stride.checked_mul(worlds) != Some(snapshots.len()) {
+            return Err(Stop::InvalidProgram);
+        }
+        let mut selected = 0;
+        for cursor in 0..positions.len() {
+            work.tick()?;
+            let id = positions[cursor];
+            if id >= atoms.len() || id / 32 >= stride {
+                return Err(Stop::InvalidProgram);
+            }
+            let mut included = false;
+            for world in 0..worlds {
+                work.mask_word()?;
+                if present(snapshots, stride, world, id) {
+                    included = true;
+                    break;
+                }
+            }
+            if included {
+                work.tick()?;
+                positions[selected] = id;
+                selected += 1;
+            }
+        }
+        positions.truncate(selected);
+        Ok(Self {
+            atoms,
+            positions,
+            bytes,
+        })
+    }
+
+    pub(crate) const fn bytes(&self) -> usize {
+        self.bytes
+    }
+
+    pub(crate) fn iter(&self) -> impl ExactSizeIterator<Item = &Atom> + Clone {
+        self.positions.iter().map(|&id| &self.atoms[id])
+    }
+}
+
+pub(crate) struct Snapshot<'a> {
+    rows: Rows<'a>,
     membership: Vec<u32>,
     workspace: Workspace,
     bytes: usize,
@@ -90,70 +156,54 @@ impl Workspace {
         self.bytes
     }
 
-    /// Rebuild membership from complete current snapshots, including existing
-    /// atom identities that have gained worlds. The one symbolic union copy is
-    /// reserved independently. `available` includes this workspace's live bytes.
-    pub(crate) fn snapshot(
+    /// A reused owner is live before any fallible round preparation starts.
+    pub(crate) fn record_retained(&self, work: &mut Work<'_>) {
+        work.mask_bytes = self.bytes;
+    }
+
+    /// Rebuild membership over selected committed rows, including existing atom
+    /// identities that have gained worlds. `available` includes the input ID
+    /// vector and this workspace's live bytes. No symbolic atom is copied.
+    pub(crate) fn snapshot<'a>(
         self,
-        catalog: &BTreeMap<Atom, u32>,
+        rows: Rows<'a>,
         snapshots: &[u32],
         stride: usize,
         available: usize,
         work: &mut Work<'_>,
-    ) -> Result<Snapshot, Stop> {
-        work.mask_bytes = self.bytes;
+    ) -> Result<Snapshot<'a>, Stop> {
+        work.mask_bytes = rows.bytes.checked_add(self.bytes).ok_or(Stop::Allocation)?;
         if stride == 0 || stride.checked_mul(self.worlds) != Some(snapshots.len()) {
             return Err(Stop::InvalidProgram);
         }
-        let mut rows = 0usize;
-        for id in catalog.values() {
-            if *id as usize / 32 >= stride {
-                return Err(Stop::InvalidProgram);
-            }
-            for world in 0..self.worlds {
-                work.mask_word()?;
-                if present(snapshots, stride, world, *id) {
-                    rows = rows.checked_add(1).ok_or(Stop::Allocation)?;
-                    break;
-                }
-            }
-        }
-        let matrix = rows.checked_mul(self.words).ok_or(Stop::Allocation)?;
+        let matrix = rows
+            .positions
+            .len()
+            .checked_mul(self.words)
+            .ok_or(Stop::Allocation)?;
         let bytes = matrix
             .checked_mul(size_of::<u32>())
             .and_then(|bytes| bytes.checked_add(self.bytes))
+            .and_then(|bytes| bytes.checked_add(rows.bytes))
             .ok_or(Stop::Allocation)?;
         if bytes > available {
             return Err(Stop::Allocation);
         }
-        let mut atoms = Vec::new();
-        atoms
-            .try_reserve_exact(rows)
-            .map_err(|_| Stop::Allocation)?;
         let mut membership = zeros(matrix, work)?;
-        for (atom, id) in catalog {
-            let row = atoms.len();
-            let mut included = false;
+        for (row, &id) in rows.positions.iter().enumerate() {
             for world in 0..self.worlds {
                 work.mask_word()?;
-                if present(snapshots, stride, world, *id) {
+                if present(snapshots, stride, world, id) {
                     work.mask_word()?;
                     let entry = membership
                         .get_mut(row * self.words + world / 32)
                         .ok_or(Stop::InvalidProgram)?;
                     *entry |= 1 << (world % 32);
-                    included = true;
                 }
             }
-            if included {
-                atoms.push(atom.clone());
-            }
-        }
-        if atoms.len() != rows {
-            return Err(Stop::InvalidProgram);
         }
         Ok(Snapshot {
-            atoms,
+            rows,
             membership,
             workspace: self,
             bytes,
@@ -161,21 +211,22 @@ impl Workspace {
     }
 }
 
-impl Snapshot {
+impl Snapshot<'_> {
     pub(crate) const fn bytes(&self) -> usize {
         self.bytes
     }
 
-    /// Drop this round's atoms and membership before retaining only join storage.
+    /// Drop this round's selected IDs and membership, retaining only join storage.
     pub(crate) fn into_workspace(self) -> Workspace {
         self.workspace
     }
 
-    pub(crate) fn parts(&mut self) -> (&[Atom], Join<'_>) {
+    pub(crate) fn parts(&mut self) -> (impl ExactSizeIterator<Item = &Atom> + Clone, Join<'_>) {
         (
-            &self.atoms,
+            self.rows.iter(),
             Join {
-                atoms: &self.atoms,
+                atoms: self.rows.atoms,
+                positions: &self.rows.positions,
                 membership: &self.membership,
                 frames: &mut self.workspace.frames,
                 starts: &mut self.workspace.starts,
@@ -199,8 +250,8 @@ fn zeros(count: usize, work: &mut Work<'_>) -> Result<Vec<u32>, Stop> {
     Ok(values)
 }
 
-fn present(snapshots: &[u32], stride: usize, world: usize, atom: u32) -> bool {
-    snapshots[world * stride + atom as usize / 32] & (1 << (atom % 32)) != 0
+fn present(snapshots: &[u32], stride: usize, world: usize, atom: usize) -> bool {
+    snapshots[world * stride + atom / 32] & (1 << (atom % 32)) != 0
 }
 
 /// Frame d describes the conjunction of the first d chosen positive rows.
@@ -208,6 +259,7 @@ fn present(snapshots: &[u32], stride: usize, world: usize, atom: u32) -> bool {
 /// their necessary world-membership condition and never establishes gate truth.
 pub(crate) struct Join<'a> {
     atoms: &'a [Atom],
+    positions: &'a [usize],
     membership: &'a [u32],
     frames: &'a mut [u32],
     starts: &'a mut [Option<usize>],
@@ -234,11 +286,11 @@ impl Join<'_> {
 
     fn row_start(&self, predicate: &Predicate, work: &mut Work<'_>) -> Result<Option<usize>, Stop> {
         let mut start = 0;
-        let mut end = self.atoms.len();
+        let mut end = self.positions.len();
         while start < end {
             work.tick()?;
             let middle = start + (end - start) / 2;
-            let actual = self.atoms[middle].predicate();
+            let actual = self.atoms[self.positions[middle]].predicate();
             for name in [actual.name(), predicate.name()] {
                 work.charge(name.len())?;
             }
@@ -250,9 +302,9 @@ impl Join<'_> {
         }
         work.tick()?;
         Ok(self
-            .atoms
+            .positions
             .get(start)
-            .is_some_and(|atom| atom.predicate() == predicate)
+            .is_some_and(|&id| self.atoms[id].predicate() == predicate)
             .then_some(start))
     }
 

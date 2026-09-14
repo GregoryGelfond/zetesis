@@ -1,21 +1,59 @@
 //! Independent finite interpretations for private membership preparation.
 
-use zetesis_core::{AdmissionLimits, AtomPattern, Sign};
+use zetesis_core::{AdmissionLimits, AtomPattern, Sign, Value};
 
 use super::*;
 use crate::Control;
 
-fn snapshot(
+struct Catalog {
+    atoms: Vec<Atom>,
+    positions: Vec<usize>,
+}
+
+impl Catalog {
+    fn new(atoms: Vec<Atom>) -> Self {
+        let mut positions: Vec<_> = (0..atoms.len()).collect();
+        positions.sort_by_key(|&id| &atoms[id]);
+        Self { atoms, positions }
+    }
+
+    fn id(&self, atom: &Atom) -> usize {
+        self.atoms.iter().position(|actual| actual == atom).unwrap()
+    }
+
+    fn snapshot<'a>(
+        &'a self,
+        workspace: Workspace,
+        input: &[u32],
+        stride: usize,
+        available: usize,
+        work: &mut Work<'_>,
+    ) -> Result<Snapshot<'a>, Stop> {
+        workspace.record_retained(work);
+        let rows = Rows::select(
+            &self.atoms,
+            self.positions.clone(),
+            input,
+            stride,
+            workspace.worlds,
+            available,
+            work,
+        )?;
+        workspace.snapshot(rows, input, stride, available, work)
+    }
+}
+
+fn snapshot<'a>(
     program: &Program,
-    catalog: &BTreeMap<Atom, u32>,
+    catalog: &'a Catalog,
     snapshots: &[u32],
     stride: usize,
     worlds: usize,
     available: usize,
     work: &mut Work<'_>,
-) -> Result<Snapshot, Stop> {
-    Workspace::new(program, worlds, available, work)?
-        .snapshot(catalog, snapshots, stride, available, work)
+) -> Result<Snapshot<'a>, Stop> {
+    let workspace = Workspace::new(program, worlds, available, work)?;
+    catalog.snapshot(workspace, snapshots, stride, available, work)
 }
 
 fn predicate(name: &str) -> Predicate {
@@ -43,28 +81,26 @@ fn program() -> Program {
     Program::new(vec![template(&["a", "b", "c"])], AdmissionLimits::default()).unwrap()
 }
 
-fn catalog() -> BTreeMap<Atom, u32> {
+fn catalog() -> Catalog {
     // Canonical source order differs deliberately from demanded ID order.
-    [(atom("a"), 2), (atom("b"), 0), (atom("c"), 1)]
-        .into_iter()
-        .collect()
+    Catalog::new(vec![atom("b"), atom("c"), atom("a")])
 }
 
 fn assert_conjunctions(
     program: &Program,
-    catalog: &BTreeMap<Atom, u32>,
+    catalog: &Catalog,
     input: &[u32],
-    snapshot: &mut Snapshot,
+    snapshot: &mut Snapshot<'_>,
     work: &mut Work<'_>,
 ) {
     let (atoms, mut join) = snapshot.parts();
     join.reset(&program.templates()[0], work).unwrap();
     let mut selected = Vec::new();
     for (depth, name) in ["a", "b", "c"].into_iter().enumerate() {
-        if !atoms.iter().any(|atom| atom.predicate().name() == name) {
+        if !atoms.clone().any(|atom| atom.predicate().name() == name) {
             break;
         }
-        selected.push(catalog[&atom(name)]);
+        selected.push(catalog.id(&atom(name)));
         let expected = input
             .iter()
             .any(|world| selected.iter().all(|id| world & (1 << id) != 0));
@@ -106,8 +142,8 @@ fn reused_join_storage_ignores_previous_truth() {
             .frames
             .fill(if assignment % 2 == 0 { 0 } else { u32::MAX });
         workspace.starts.fill(Some(usize::MAX));
-        let mut snapshot = workspace
-            .snapshot(&catalog, &input, 1, usize::MAX, &mut work)
+        let mut snapshot = catalog
+            .snapshot(workspace, &input, 1, usize::MAX, &mut work)
             .unwrap();
         assert_conjunctions(&program, &catalog, &input, &mut snapshot, &mut work);
         workspace = snapshot.into_workspace();
@@ -124,8 +160,8 @@ fn successive_snapshots_retain_join_allocations() {
     let frames = (workspace.frames.as_ptr(), workspace.frames.capacity());
     let starts = (workspace.starts.as_ptr(), workspace.starts.capacity());
     for truth in [0, 7, 1, 0, 6, 7] {
-        let snapshot = workspace
-            .snapshot(&catalog, &[truth; 65], 1, usize::MAX, &mut work)
+        let snapshot = catalog
+            .snapshot(workspace, &[truth; 65], 1, usize::MAX, &mut work)
             .unwrap();
         workspace = snapshot.into_workspace();
         assert_eq!(
@@ -147,9 +183,14 @@ fn reused_join_storage_skips_initialization_work() {
     let mut first = Work::source(&control, u64::MAX);
     let original = snapshot(&program, &catalog, &[7; 33], 1, 33, usize::MAX, &mut first).unwrap();
     let mut repeated = Work::source(&control, u64::MAX);
-    original
-        .into_workspace()
-        .snapshot(&catalog, &[7; 33], 1, usize::MAX, &mut repeated)
+    catalog
+        .snapshot(
+            original.into_workspace(),
+            &[7; 33],
+            1,
+            usize::MAX,
+            &mut repeated,
+        )
         .unwrap();
     // Three positive rows require four two-word frames, three indices and one
     // template-shape visit. Membership is freshly rebuilt in both invocations.
@@ -166,35 +207,27 @@ fn reused_join_storage_remains_in_the_live_budget() {
     let mut work = Work::source(&control, u64::MAX);
     let workspace = Workspace::new(&program, 3, usize::MAX, &mut work).unwrap();
     let retained = workspace.bytes();
-    let exact = retained + 3 * size_of::<u32>();
-    let snapshot = workspace
-        .snapshot(&catalog, &[7; 3], 1, exact, &mut work)
+    let indices = 3 * size_of::<usize>();
+    let exact = retained + indices + 3 * size_of::<u32>();
+    let snapshot = catalog
+        .snapshot(workspace, &[7; 3], 1, exact, &mut work)
         .unwrap();
     assert_eq!(snapshot.bytes(), exact);
     let mut next = Work::source(&control, u64::MAX);
-    let refused = snapshot
-        .into_workspace()
-        .snapshot(&catalog, &[7; 3], 1, exact - 1, &mut next);
+    let refused = catalog.snapshot(snapshot.into_workspace(), &[7; 3], 1, exact - 1, &mut next);
     assert!(matches!(refused, Err(Stop::Allocation)));
-    assert_eq!(next.mask_bytes, retained);
+    assert_eq!(next.mask_bytes, retained + indices);
 }
 
 #[test]
 fn pairwise_overlap_does_not_establish_a_common_world() {
     let program = program();
+    let catalog = catalog();
     let control = Control::default();
     let mut work = Work::source(&control, u64::MAX);
     // a={0,2}, b={1,2}, c={0,1}: each pair intersects, but all three do not.
-    let mut snapshot = snapshot(
-        &program,
-        &catalog(),
-        &[6, 3, 5],
-        1,
-        3,
-        usize::MAX,
-        &mut work,
-    )
-    .unwrap();
+    let mut snapshot =
+        snapshot(&program, &catalog, &[6, 3, 5], 1, 3, usize::MAX, &mut work).unwrap();
     let (_, mut join) = snapshot.parts();
     join.reset(&program.templates()[0], &mut work).unwrap();
     assert!(join.extend(0, 0, &mut work).unwrap());
@@ -212,7 +245,7 @@ fn catalog_identity_does_not_make_an_old_mask_fresh() {
     let old = snapshot(&program, &catalog, &[4, 1], 1, 2, usize::MAX, &mut old_work).unwrap();
     let mut new_work = Work::source(&control, u64::MAX);
     let fresh = snapshot(&program, &catalog, &[4, 5], 1, 2, usize::MAX, &mut new_work).unwrap();
-    assert_eq!(old.atoms, fresh.atoms);
+    assert!(old.rows.iter().eq(fresh.rows.iter()));
     assert_eq!(old.membership, [1, 2]);
     assert_eq!(fresh.membership, [3, 2]);
     // Negative control: reusing the old matrix would erase world 1's new a.
@@ -226,12 +259,10 @@ fn catalog_identity_does_not_make_an_old_mask_fresh() {
 fn predicate_signs_have_distinct_membership_rows() {
     let positive = predicate("p");
     let negative = Predicate::with_sign("p", 0, Sign::Negative).unwrap();
-    let catalog = [
-        (Atom::new(positive.clone(), vec![]).unwrap(), 1),
-        (Atom::new(negative.clone(), vec![]).unwrap(), 0),
-    ]
-    .into_iter()
-    .collect();
+    let catalog = Catalog::new(vec![
+        Atom::new(negative.clone(), vec![]).unwrap(),
+        Atom::new(positive.clone(), vec![]).unwrap(),
+    ]);
     let rule = Template::new(
         None,
         vec![
@@ -255,12 +286,13 @@ fn predicate_signs_have_distinct_membership_rows() {
 #[test]
 fn unused_world_tail_bits_are_never_members() {
     let program = program();
+    let catalog = catalog();
     let control = Control::default();
     for count in [31usize, 32, 33, 63, 64, 65] {
         let mut work = Work::source(&control, u64::MAX);
         let mut snapshot = snapshot(
             &program,
-            &catalog(),
+            &catalog,
             &vec![7; count],
             1,
             count,
@@ -305,7 +337,10 @@ fn malformed_snapshot_dimensions_are_refused() {
 #[test]
 fn catalog_ids_must_fit_the_snapshot_stride() {
     let program = program();
-    let catalog = [(atom("a"), 32)].into_iter().collect();
+    let catalog = Catalog {
+        atoms: (0..33).map(|id| atom(&format!("a{id}"))).collect(),
+        positions: vec![32],
+    };
     let control = Control::default();
     let mut work = Work::source(&control, u64::MAX);
     assert!(matches!(
@@ -337,4 +372,37 @@ fn membership_preparation_observes_cancellation() {
         Err(Stop::Cancelled)
     ));
     assert_eq!(work.mask_bytes, 0);
+}
+
+#[test]
+fn selected_rows_borrow_the_authoritative_typed_payload() {
+    let predicate = Predicate::new("p", 1).unwrap();
+    let catalog = Catalog::new(vec![
+        Atom::new(predicate.clone(), vec![Value::String("payload".repeat(32))]).unwrap(),
+        Atom::new(predicate.clone(), vec![Value::Number(1)]).unwrap(),
+        Atom::new(predicate, vec![Value::Symbol("payload".repeat(32))]).unwrap(),
+    ]);
+    let program = program();
+    let control = Control::default();
+    let mut work = Work::source(&control, u64::MAX);
+    let selected = snapshot(&program, &catalog, &[5], 1, 1, usize::MAX, &mut work).unwrap();
+    let expected: Vec<_> = catalog
+        .positions
+        .iter()
+        .copied()
+        .filter(|id| *id != 1)
+        .collect();
+    assert_eq!(selected.rows.positions, expected);
+    for actual in selected.rows.iter() {
+        let original = &catalog.atoms[catalog.id(actual)];
+        assert!(std::ptr::eq(actual, original));
+        assert_eq!(actual.values().as_ptr(), original.values().as_ptr());
+        match (&actual.values()[0], &original.values()[0]) {
+            (Value::String(left), Value::String(right))
+            | (Value::Symbol(left), Value::Symbol(right)) => {
+                assert_eq!(left.as_ptr(), right.as_ptr());
+            }
+            other => panic!("unexpected selected values: {other:?}"),
+        }
+    }
 }

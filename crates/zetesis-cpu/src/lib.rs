@@ -2,6 +2,9 @@
 //! generation, an explicit dense static oracle, and a bounded owned Rayon pool.
 //! The lazy oracle joins only derived tuples. The static oracle accepts an
 //! already compiled graph; neither oracle silently performs static compilation.
+//! Batched lazy rounds retain one appendable atom catalog and borrow canonical
+//! committed rows while extending a disjoint identity tail. Catalog membership,
+//! frozen seed membership and derived truth remain separate authorities.
 #![forbid(unsafe_code)]
 
 mod control;

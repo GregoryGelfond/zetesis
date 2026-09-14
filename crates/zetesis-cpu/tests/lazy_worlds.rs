@@ -324,17 +324,22 @@ fn mask_preparation_can_stop_without_offering_instances() {
 }
 
 #[test]
-fn root_membership_storage_has_an_inclusive_host_cap() {
+fn empty_catalog_preparation_has_an_inclusive_host_cap() {
     let program = program(vec![]);
     let seeds = vec![Seed::new(&program, []).unwrap(); 33];
     let fixed = (5 * 33 + 2 * 33 + 4 + 1) * size_of::<u32>() + 33 * size_of::<lazy::Check>();
     let masks = 2 * size_of::<u32>();
+    let catalog =
+        usize::try_from(zetesis_core::atom_interner::AtomInterner::new().storage_bytes()).unwrap();
+    // The empty order-vector envelope is the larger of the two disjoint
+    // preparation stages; the later two-word root membership also fits.
+    let source = size_of::<Vec<usize>>().max(masks);
     let limits = lazy::Limits {
         max_atoms: 1,
         max_chunk_rules: 1,
         max_chunk_words: 4,
         max_instance_bytes: 0,
-        max_host_bytes: fixed + masks,
+        max_host_bytes: fixed + catalog + source,
         ..Default::default()
     };
     let complete = lazy::check_with_source(
@@ -448,9 +453,10 @@ fn default_selection_matches_explicit_union() {
     .unwrap();
     let union = run(&program, &seeds, lazy::SourceSelection::Union);
     assert_eq!(old.progress, union.progress);
-    assert_eq!(old.progress.mask_words, 0);
+    // Both policies select derived union rows from the same packed snapshots.
+    assert!(old.progress.mask_words > 0);
     assert_eq!(old.progress.pruned_prefixes, 0);
-    assert_eq!(old.progress.peak_mask_bytes, 0);
+    assert!(old.progress.peak_mask_bytes > 0);
 }
 
 #[test]
@@ -524,7 +530,7 @@ fn bound_prefix_windows_select_the_correct_row_masks() {
 }
 
 #[test]
-fn catalog_growth_keeps_live_mask_storage_reserved() {
+fn catalog_refusal_retains_live_mask_progress() {
     let rules = (0..33)
         .map(|n| {
             let head = pattern(&format!("a{n:02}"), vec![]);
@@ -533,19 +539,14 @@ fn catalog_growth_keeps_live_mask_storage_reserved() {
         .collect();
     let program = program(rules);
     let seeds = [Seed::new(&program, []).unwrap()];
-    let atom_bytes = size_of::<Atom>() + 3;
-    let base = (2 + 4 + 1) * size_of::<u32>() + size_of::<lazy::Check>() + atom_bytes;
     let root_mask = size_of::<u32>();
-    let growth_peak = base + 6 * 2 * size_of::<u32>() + 33 * 4 * atom_bytes + root_mask;
     let limits = lazy::Limits {
         max_rounds: 1,
         max_chunk_rules: 1,
         max_chunk_words: 4,
-        max_instance_bytes: atom_bytes,
-        max_host_bytes: growth_peak,
         ..Default::default()
     };
-    // Only the first round is permitted. At its inclusive growth budget it
+    // Only the first round is permitted. With all 33 identities admitted it
     // completes; the separate round ceiling then prevents a final closure.
     let exact = lazy::check_with_source(
         &program,
@@ -562,7 +563,7 @@ fn catalog_growth_keeps_live_mask_storage_reserved() {
         &program,
         &seeds,
         lazy::Limits {
-            max_host_bytes: growth_peak - 1,
+            max_atoms: 32,
             ..limits
         },
         lazy::SourceSelection::Worlds,
@@ -570,7 +571,10 @@ fn catalog_growth_keeps_live_mask_storage_reserved() {
         lazy::evaluate,
     )
     .unwrap_err();
-    assert!(matches!(below.cause, lazy::Cause::Source(Stop::Allocation)));
+    assert!(matches!(
+        below.cause,
+        lazy::Cause::Source(Stop::CarrierLimit)
+    ));
     assert_eq!(below.progress.rounds, 0);
     assert_eq!(below.progress.catalog_atoms, 32);
     assert!(below.progress.chunks > 0);

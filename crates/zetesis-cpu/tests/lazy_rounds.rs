@@ -371,7 +371,6 @@ fn instance_scratch_is_reserved_before_catalog_growth() {
         max_chunk_rules: 2,
         max_chunk_words: 11,
         max_instance_bytes: 2 * atom_bytes,
-        max_host_bytes: fixed_bytes + 6 * atom_bytes,
         ..Default::default()
     };
     let completed = lazy::check_with(
@@ -385,7 +384,13 @@ fn instance_scratch_is_reserved_before_catalog_growth() {
     assert_eq!(completed.progress.instances, 2);
     assert_eq!(completed.progress.catalog_atoms, 1);
     let below = lazy::Limits {
-        max_host_bytes: limits.max_host_bytes - 1,
+        // Retain one full source-instance reservation plus the empty interner
+        // and order-vector envelopes. There is no remaining Atom payload slot.
+        max_host_bytes: fixed_bytes
+            + limits.max_instance_bytes
+            + usize::try_from(zetesis_core::atom_interner::AtomInterner::new().storage_bytes())
+                .unwrap()
+            + size_of::<Vec<usize>>(),
         ..limits
     };
     let failure = lazy::check_with(&program, &seeds, below, &Control::default(), |_| {
@@ -567,23 +572,16 @@ fn demanded_ids_preserve_closure_across_word_boundaries() {
 }
 
 #[test]
-fn failed_growth_discards_already_evaluated_deltas() {
+fn catalog_refusal_discards_already_evaluated_deltas() {
     let program = program(
         (0..33)
             .map(|n| rule(Some(nullary(&format!("a{n:02}"))), vec![], vec![], vec![]))
             .collect(),
     );
     let seeds = [Seed::new(&program, []).unwrap()];
-    let atom_bytes = size_of::<Atom>() + 3;
-    // At the first 32-to-64-bit growth, three old and three new vectors
-    // coexist. The conservative six-new-vector preflight is an explicit cap.
-    let base = (2 + 4 + 1) * size_of::<u32>() + size_of::<lazy::Check>() + atom_bytes;
-    let peak = base + 6 * 2 * size_of::<u32>() + 33 * 4 * atom_bytes;
     let limits = lazy::Limits {
         max_chunk_rules: 1,
         max_chunk_words: 4,
-        max_instance_bytes: atom_bytes,
-        max_host_bytes: peak,
         ..Default::default()
     };
     let completed = lazy::check_with(
@@ -599,7 +597,7 @@ fn failed_growth_discards_already_evaluated_deltas() {
         &program,
         &seeds,
         lazy::Limits {
-            max_host_bytes: peak - 1,
+            max_atoms: 32,
             ..limits
         },
         &Control::default(),
@@ -608,9 +606,64 @@ fn failed_growth_discards_already_evaluated_deltas() {
     .unwrap_err();
     assert!(matches!(
         failure.cause,
-        lazy::Cause::Source(Stop::Allocation)
+        lazy::Cause::Source(Stop::CarrierLimit)
     ));
     assert_eq!(failure.progress.rounds, 0);
     assert_eq!(failure.progress.catalog_atoms, 32);
     assert!(failure.progress.chunks > 0);
+}
+
+#[test]
+fn final_zero_delta_round_keeps_underived_identity_across_word_growth() {
+    let program = program(
+        (0..33)
+            .map(|n| {
+                rule(
+                    Some(nullary(&format!("head{n:02}"))),
+                    vec![],
+                    vec![],
+                    vec![nullary("gate")],
+                )
+            })
+            .collect(),
+    );
+    let seeds = [Seed::new(&program, [atom("gate")]).unwrap()];
+    for selection in [lazy::SourceSelection::Union, lazy::SourceSelection::Worlds] {
+        let mut widths = Vec::new();
+        let result = lazy::check_with_source(
+            &program,
+            &seeds,
+            lazy::Limits {
+                max_chunk_rules: 7,
+                ..Default::default()
+            },
+            selection,
+            &Control::default(),
+            |chunk| {
+                widths.push(chunk.words());
+                assert!(chunk.snapshots().iter().all(|word| *word == 0));
+                lazy::evaluate(chunk)
+            },
+        )
+        .unwrap();
+        assert_eq!(result.progress.rounds, 1);
+        assert_eq!(result.progress.catalog_atoms, 34);
+        assert!(widths.contains(&1));
+        assert!(widths.contains(&2));
+        let check = &result.checks[0];
+        assert_eq!(check.closure().catalog().atoms().len(), 34);
+        assert_eq!(check.closure().catalog().atoms()[0], atom("gate"));
+        for id in 0..33 {
+            assert_eq!(
+                check.closure().catalog().atoms()[id + 1],
+                atom(&format!("head{id:02}"))
+            );
+        }
+        assert!(check.closure().atoms().is_empty());
+        assert!(check.seed_mismatch());
+        let scalar =
+            zetesis_cpu::check(&program, &seeds[0], Limits::default(), &Control::default())
+                .unwrap();
+        assert_eq!(check.closure(), scalar.closure());
+    }
 }
