@@ -1226,6 +1226,36 @@
       "name": "Zetesis.ConsequentAlternatives.alternative_collection_keeps_stability"
     },
     {
+      "file": "Zetesis/ConstrainedPositive.lean",
+      "line": 26,
+      "name": "Zetesis.ConstrainedPositive.reduct_of_false"
+    },
+    {
+      "file": "Zetesis/ConstrainedPositive.lean",
+      "line": 41,
+      "name": "Zetesis.ConstrainedPositive.constraint_frozen"
+    },
+    {
+      "file": "Zetesis/ConstrainedPositive.lean",
+      "line": 52,
+      "name": "Zetesis.ConstrainedPositive.constraints_frozen"
+    },
+    {
+      "file": "Zetesis/ConstrainedPositive.lean",
+      "line": 65,
+      "name": "Zetesis.ConstrainedPositive.stable_append_constraints"
+    },
+    {
+      "file": "Zetesis/ConstrainedPositive.lean",
+      "line": 96,
+      "name": "Zetesis.ConstrainedPositive.positive_stable_iff"
+    },
+    {
+      "file": "Zetesis/ConstrainedPositive.lean",
+      "line": 114,
+      "name": "Zetesis.ConstrainedPositive.failed_constraints_no_stable"
+    },
+    {
       "file": "Zetesis/ConstructorPatterns.lean",
       "line": 73,
       "name": "Zetesis.ConstructorPatterns.function_shape_exact"
@@ -3801,6 +3831,21 @@
       "name": "Zetesis.PackedQueryLiterals.packed_truth"
     },
     {
+      "file": "Zetesis/ParametricReduct.lean",
+      "line": 41,
+      "name": "Zetesis.ParametricReduct.satisfies_original"
+    },
+    {
+      "file": "Zetesis/ParametricReduct.lean",
+      "line": 69,
+      "name": "Zetesis.ParametricReduct.satisfies_reduct"
+    },
+    {
+      "file": "Zetesis/ParametricReduct.lean",
+      "line": 122,
+      "name": "Zetesis.ParametricReduct.countermodel_iff"
+    },
+    {
       "file": "Zetesis/PartitionCapacities.lean",
       "line": 35,
       "name": "Zetesis.PartitionCapacities.count_append"
@@ -3924,6 +3969,71 @@
       "file": "Zetesis/PositiveArguments.lean",
       "line": 101,
       "name": "Zetesis.PositiveArguments.frozen_atom_preserved"
+    },
+    {
+      "file": "Zetesis/PositiveTheory.lean",
+      "line": 45,
+      "name": "Zetesis.PositiveTheory.positive_monotone"
+    },
+    {
+      "file": "Zetesis/PositiveTheory.lean",
+      "line": 62,
+      "name": "Zetesis.PositiveTheory.positive_reduct_exact"
+    },
+    {
+      "file": "Zetesis/PositiveTheory.lean",
+      "line": 112,
+      "name": "Zetesis.PositiveTheory.least_sub_closed"
+    },
+    {
+      "file": "Zetesis/PositiveTheory.lean",
+      "line": 119,
+      "name": "Zetesis.PositiveTheory.models_iff_closed_constraints"
+    },
+    {
+      "file": "Zetesis/PositiveTheory.lean",
+      "line": 136,
+      "name": "Zetesis.PositiveTheory.least_closed"
+    },
+    {
+      "file": "Zetesis/PositiveTheory.lean",
+      "line": 152,
+      "name": "Zetesis.PositiveTheory.constraints_downward"
+    },
+    {
+      "file": "Zetesis/PositiveTheory.lean",
+      "line": 167,
+      "name": "Zetesis.PositiveTheory.root_reduct_exact"
+    },
+    {
+      "file": "Zetesis/PositiveTheory.lean",
+      "line": 188,
+      "name": "Zetesis.PositiveTheory.models_reduct_exact"
+    },
+    {
+      "file": "Zetesis/PositiveTheory.lean",
+      "line": 204,
+      "name": "Zetesis.PositiveTheory.stable_iff_least_constraints"
+    },
+    {
+      "file": "Zetesis/PositiveTheory.lean",
+      "line": 240,
+      "name": "Zetesis.PositiveTheory.failed_constraint_no_model"
+    },
+    {
+      "file": "Zetesis/ProducerScheduling.lean",
+      "line": 41,
+      "name": "Zetesis.ProducerScheduling.unaffected_body_old"
+    },
+    {
+      "file": "Zetesis/ProducerScheduling.lean",
+      "line": 65,
+      "name": "Zetesis.ProducerScheduling.selective_step_exact"
+    },
+    {
+      "file": "Zetesis/ProducerScheduling.lean",
+      "line": 104,
+      "name": "Zetesis.ProducerScheduling.empty_selection_closed"
     },
     {
       "file": "Zetesis/ProjectedConditionals.lean",
@@ -5825,6 +5935,7 @@
     "Zetesis/ColumnRelations.lean",
     "Zetesis/ConditionalConsumers.lean",
     "Zetesis/ConsequentAlternatives.lean",
+    "Zetesis/ConstrainedPositive.lean",
     "Zetesis/ConstructorPatterns.lean",
     "Zetesis/Core.lean",
     "Zetesis/CountEligibility.lean",
@@ -5889,9 +6000,12 @@
     "Zetesis/OuterNegativeConsumers.lean",
     "Zetesis/OuterRanges.lean",
     "Zetesis/PackedQueryLiterals.lean",
+    "Zetesis/ParametricReduct.lean",
     "Zetesis/PartitionCapacities.lean",
     "Zetesis/PartitionedScan.lean",
     "Zetesis/PositiveArguments.lean",
+    "Zetesis/PositiveTheory.lean",
+    "Zetesis/ProducerScheduling.lean",
     "Zetesis/ProjectedConditionals.lean",
     "Zetesis/Propagation.lean",
     "Zetesis/QueryCompaction.lean",
@@ -5927,8 +6041,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "53e4721bd1fe3ef837a7c7c3f4f7e5fad93ca2376a5f3bc048f4b26a2dfe2f51",
-    "Zetesis.lean": "4c8d149b585edccf811996d4f1f1034811d8649d188ce63892992f9246aacb2a",
+    "Audit.lean": "52deb9cad4d45b072bdbab210e5142e561b5330265c2ae26991421a0db34fdd5",
+    "Zetesis.lean": "bfdab7379697a86c7b94c86f4bc2facd9556ce7f9fd62415c0506c2bfa803310",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
     "Zetesis/AggregateConsumers.lean": "41aded89dbfaa79833ed3b336030ef4b08afa5be8e7029060416c2f8de59ef97",
@@ -5952,6 +6066,7 @@
     "Zetesis/ColumnRelations.lean": "d4af6d98f76e143bdef15095a0f2db9afeeed56cbb85585cf097e2767a6ee6c6",
     "Zetesis/ConditionalConsumers.lean": "448c154cb481418551f21c0516fa74e63ccfe16d32e00ff1109d7d68874c5bca",
     "Zetesis/ConsequentAlternatives.lean": "f056a33623c406de8644d47c55912ac300f855a9d9ff0afef23bdbfaff2cc306",
+    "Zetesis/ConstrainedPositive.lean": "20bd842967dd6267ed299db27c14b2152482c1c730c697ddc3ae9a5b8613de90",
     "Zetesis/ConstructorPatterns.lean": "9760a578639689c713f59d3fc8492e8c5aca2cdfb0c31598eca318e38bbfeeb2",
     "Zetesis/Core.lean": "36b7f46d189f9ffd3c05c93c45f736ddb2025cf8467f756747d35504bf946f54",
     "Zetesis/CountEligibility.lean": "d9457fe5dd6ec6a259e8bbe990aa1ae6de25c99ccf9727a5df575c02df83785b",
@@ -6016,9 +6131,12 @@
     "Zetesis/OuterNegativeConsumers.lean": "66d81c52e252a7ada9b30079df8106d535b486d5656051c0fcddc3a7d5b6cf17",
     "Zetesis/OuterRanges.lean": "0534f1216fbdfa31fb82b0c0b18885b70aadd64e575b68c75a5e0276b95434a2",
     "Zetesis/PackedQueryLiterals.lean": "4700438efc4c0e35d1601acb2ada298d51b335287de0469cefca110600c3f853",
+    "Zetesis/ParametricReduct.lean": "83253fefcab7208464a498fac0fb8e2e50503f06a0a5099baa4499a0e94fd59f",
     "Zetesis/PartitionCapacities.lean": "9affe7200203f4b5e4ada5eaf950be5598b5c1c6588600df68200c1364f471a8",
     "Zetesis/PartitionedScan.lean": "513fd9e0b5d9fad9eb89911aab621f11ba9a604ecc416c16d7f4c1e76ee3748e",
     "Zetesis/PositiveArguments.lean": "71e99535d01f24ecf2bc447153cbd48006231bab85babead9f982638e9735bd2",
+    "Zetesis/PositiveTheory.lean": "f0168dab6f0bba3a7df30abe4130871d99fff83d1aa0b2c9879530422f0d8a7a",
+    "Zetesis/ProducerScheduling.lean": "2ebb6a591a9d6d22a5b43227e61c6a78c9bd2d7fc50b75c718fe1ce4ef1a6adb",
     "Zetesis/ProjectedConditionals.lean": "a420d26c76215b77f75cf33831dce80055a5d6cdb448db53f83c8951bf06dc4b",
     "Zetesis/Propagation.lean": "f6b516c7a9f15e58f78342b47f96990a0a9e5a18a5df962ed8367e47fdad3368",
     "Zetesis/QueryCompaction.lean": "47e08ca3b250dd8c0099635a836a7a3953cfb55863da57ac00324fa010b56c53",

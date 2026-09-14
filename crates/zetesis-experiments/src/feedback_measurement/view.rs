@@ -161,6 +161,14 @@ pub struct NativeLimits {
     pub clauses: usize,
     /// CNF literal occurrences.
     pub literals: usize,
+    /// Independent reduct CNF variable ceiling.
+    pub reduct_variables: usize,
+    /// Independent reduct CNF clause ceiling.
+    pub reduct_clauses: usize,
+    /// Independent reduct CNF literal ceiling.
+    pub reduct_literals: usize,
+    /// Named bytes for reduct preparation or one query workspace.
+    pub reduct_bytes: u64,
     /// Distinct projection-history entries.
     pub projection_entries: u64,
     /// Logical projection-history nodes.
@@ -182,6 +190,10 @@ impl From<zetesis_sat::Limits> for NativeLimits {
             variables: value.admission.max_variables,
             clauses: value.admission.max_clauses,
             literals: value.admission.max_literals,
+            reduct_variables: value.reduct_admission.max_variables,
+            reduct_clauses: value.reduct_admission.max_clauses,
+            reduct_literals: value.reduct_admission.max_literals,
+            reduct_bytes: value.max_reduct_bytes,
             projection_entries: value.projections.max_entries,
             projection_nodes: value.projections.max_nodes,
             projection_bytes: value.projections.max_bytes,

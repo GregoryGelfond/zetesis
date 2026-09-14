@@ -28,9 +28,23 @@ pub(crate) struct SupportCatalog {
     atoms: usize,
     entries: usize,
     index_bytes: usize,
+    prepared_bytes: usize,
 }
 
 impl SupportCatalog {
+    /// Borrowed producer metadata coexists with every growing snapshot. It is
+    /// released before this catalog becomes the completed support owner.
+    pub(super) fn with_prepared_bytes(prepared_bytes: usize) -> Self {
+        Self {
+            prepared_bytes,
+            ..Self::default()
+        }
+    }
+
+    pub(super) fn release_preparation(&mut self) {
+        self.prepared_bytes = 0;
+    }
+
     /// Publish the complete owner only after both tuple and posting extension.
     /// A failed operation consumes its in-progress owner, so a partial index can
     /// never be reused by another support round.
@@ -41,7 +55,12 @@ impl SupportCatalog {
         counters: &mut Counters,
         location: Location,
     ) -> Result<Self, FormulaFailure> {
-        let mut memory = Memory::new(self.index_bytes, limits, counters, location);
+        let mut memory = Memory::new(
+            self.index_bytes + self.prepared_bytes,
+            limits,
+            counters,
+            location,
+        );
         let source = match self.rows.entry(atom.predicate().clone()) {
             Entry::Occupied(entry) => entry.into_mut(),
             Entry::Vacant(entry) => {
@@ -102,7 +121,7 @@ impl SupportCatalog {
             self.atoms += 1;
             counters.record(Event::SupportAtom);
         }
-        self.index_bytes = memory.bytes;
+        self.index_bytes = memory.bytes - self.prepared_bytes;
         Ok(self)
     }
 
@@ -128,7 +147,12 @@ impl SupportCatalog {
         counters: &mut Counters,
         location: Location,
     ) -> Result<Relations<'_>, FormulaFailure> {
-        let mut memory = Memory::new(self.index_bytes, limits, counters, location);
+        let mut memory = Memory::new(
+            self.index_bytes + self.prepared_bytes,
+            limits,
+            counters,
+            location,
+        );
         memory.add(size_of::<Relations<'_>>())?;
         let mut rows = BTreeMap::new();
         for (predicate, source) in &self.rows {
@@ -428,15 +452,15 @@ pub(super) fn relation_failure(
 
 /// Authored catalog/snapshot/index capacity. Nested atom payloads and
 /// allocator/tree overhead retain separate bounds; this is not total RSS.
-struct Memory<'limits> {
-    bytes: usize,
+pub(super) struct Memory<'limits> {
+    pub(super) bytes: usize,
     limits: &'limits FormulaLimits,
     location: Location,
     observed: crate::grounding_observer::Work,
 }
 
 impl<'limits> Memory<'limits> {
-    fn new(
+    pub(super) fn new(
         bytes: usize,
         limits: &'limits FormulaLimits,
         counters: &Counters,
@@ -450,7 +474,7 @@ impl<'limits> Memory<'limits> {
         }
     }
 
-    fn add(&mut self, amount: usize) -> Result<(), FormulaFailure> {
+    pub(super) fn add(&mut self, amount: usize) -> Result<(), FormulaFailure> {
         let next = self.bytes as u128 + amount as u128;
         ceiling(
             FormulaResource::SupportBytes,
@@ -475,11 +499,15 @@ impl<'limits> Memory<'limits> {
         Ok(self.limits.max_support_bytes - self.bytes)
     }
 
-    fn release(&mut self, amount: usize) {
+    pub(super) fn release(&mut self, amount: usize) {
         self.bytes = self.bytes.checked_sub(amount).expect("charged allocation");
     }
 
-    fn reserve<T>(&mut self, values: &mut Vec<T>, additional: usize) -> Result<(), FormulaFailure> {
+    pub(super) fn reserve<T>(
+        &mut self,
+        values: &mut Vec<T>,
+        additional: usize,
+    ) -> Result<(), FormulaFailure> {
         let needed = values
             .len()
             .checked_add(additional)

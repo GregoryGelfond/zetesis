@@ -157,6 +157,12 @@ reduct queries exactly on CPU. Outer candidate search and objective scoring also
 remain on the host. This route is hybrid, and explicit lazy formula execution is
 unsupported.
 
+With `--oracle auto` on CPU, complete-theory checks can select ranked support or
+positive least consequences. The latter includes positive recursion and checks
+all original constraints after closure. Source analysis chooses attempt order;
+it never replaces complete ground-theory validation. `--oracle countermodel`
+retains the general reduct comparison route explicitly.
+
 `--gpu-formula-work` and `--gpu-formula-rounds` independently bound device
 propagation per formula candidate. Their defaults are 100,000,000 charged work
 units and 64 sweeps, matching the device library. `--max-work` bounds CPU
@@ -179,10 +185,16 @@ submission does not establish how much shader work completed.
 independent exact formula checks, with a scalar CPU default of one.
 `--batch-size`, `--max-batch-bytes` and
 `--max-completion-scratch-bytes` bound batches and concurrent query storage.
-The scratch limit includes logical reserved query/result slots, not allocator,
-thread, shared-theory or GPU overhead; it is not RSS. A budget that cannot admit
+General checking retains one candidate-parametric reduct encoding. The scratch
+limit counts that shared owner once plus reserved query/result slots, excluding
+allocator, thread, shared-theory and GPU overhead; it is not RSS.
+`--max-reduct-bytes` independently bounds cold encoding preparation and each
+complete query workspace. Preparation consumes cumulative search work once;
+query work remains charged after reuse. A budget that cannot admit
 one required query yields incomplete coverage. The direct CPU scalar cursor
-does not consume the completion-batch allowance.
+does not consume the completion-batch allowance, but does use the reduct byte
+limit. Optional class preparation and checking separately use the completion
+scratch ceiling; the two uses do not establish a combined process-memory bound.
 
 Advanced `--source-batching independent|union|worlds` selects relational source
 sharing. Union/Worlds require lazy or automatic grounding with CPU/automatic

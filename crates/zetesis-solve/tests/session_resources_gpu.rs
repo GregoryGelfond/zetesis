@@ -168,6 +168,7 @@ struct Routes {
     cpu_closure: usize,
     cpu_formula: usize,
     observed_backend: Option<AdapterBackend>,
+    observed_projection: Option<GateProjection>,
 }
 
 impl ExecutionObserver for Routes {
@@ -179,8 +180,13 @@ impl ExecutionObserver for Routes {
                 self.device_closure += 1;
                 Some(adapter)
             }
-            ExecutionObservation::DeviceFormula { adapter, .. } => {
+            ExecutionObservation::DeviceFormula {
+                adapter,
+                projection,
+                ..
+            } => {
                 self.device_formula += 1;
+                self.observed_projection = Some(projection);
                 Some(adapter)
             }
             ExecutionObservation::CpuClosure { .. } => {
@@ -452,6 +458,9 @@ fn independent_profile_sessions(device: Device) {
         assert!(!stopped.outcome.unsatisfiable());
         assert!(stopped.outcome.incumbent().is_none());
         assert_eq!(stopped.outcome.formula_execution().unwrap().gpu_batches, 0);
+        // Setup observations identify the actual compiled evaluator even when
+        // a candidate limit prevents the first dispatch.
+        assert_eq!(stopped.routes.observed_projection, Some(projection));
         independent_formulas(&retained, device);
     }
 }

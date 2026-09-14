@@ -55,6 +55,10 @@ pub(super) fn input(owner: &AdmittedFormula) -> super::Input<'_> {
         atoms: owner.atom_catalog(),
         gate_atoms: 0,
         objectives: owner.objectives(),
+        certificate_order: crate::countermodel::certificate_order(
+            owner.source_analysis(),
+            owner.analysis_basis(),
+        ),
     }
 }
 

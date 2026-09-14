@@ -56,8 +56,13 @@ fn outcome_label<S: serde::Serializer>(value: &GroundingOutcome, s: S) -> Result
 
 fn serialize_work<S: serde::Serializer>(work: &GroundingWork, s: S) -> Result<S::Ok, S::Error> {
     use serde::ser::SerializeStruct;
-    let mut fields = s.serialize_struct("GroundingWork", 28)?;
+    let mut fields = s.serialize_struct("GroundingWork", 30)?;
     fields.serialize_field("support_rounds", &work.support_rounds)?;
+    fields.serialize_field("support_producer_visits", &work.support_producer_visits)?;
+    fields.serialize_field(
+        "support_snapshot_preparations",
+        &work.support_snapshot_preparations,
+    )?;
     fields.serialize_field("support_atoms", &work.support_atoms)?;
     fields.serialize_field("support_index_entries", &work.support_index_entries)?;
     fields.serialize_field("join_probes", &work.join_probes)?;
@@ -203,6 +208,8 @@ impl GroundingObserver for Observer {
         let elapsed_ns = self.duration(start);
         if [
             work.support_rounds,
+            work.support_producer_visits,
+            work.support_snapshot_preparations,
             work.support_atoms,
             work.support_index_entries,
             work.join_probes,

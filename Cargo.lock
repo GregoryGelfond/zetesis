@@ -1996,6 +1996,7 @@ dependencies = [
  "zetesis-ferraris",
  "zetesis-objective",
  "zetesis-sat",
+ "zetesis-solve",
  "zetesis-themelios",
  "zetesis-validation",
  "zetesis-wgpu",

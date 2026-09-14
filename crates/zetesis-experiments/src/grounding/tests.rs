@@ -15,9 +15,11 @@ fn source(name: &str) -> PathBuf {
 }
 
 #[test]
-fn failed_admission_retains_phase_work() {
+fn failed_initialization_retains_support_work() {
     let mut config = Configuration::default();
-    config.formula.max_work = 1;
+    // Complete support work before refusing the first formula node. A tiny
+    // work limit can stop in an operation outside the selected event counters.
+    config.formula.theory.max_nodes = 0;
     let bundle = SourceBundle::load(source("arithmetic.lp"), config.bundle).unwrap();
     let (sample, admitted, _) = measure(bundle, &config, 0, Mode::Detailed).unwrap();
     assert!(matches!(admitted, Err(Error::Admission(_))));
@@ -28,13 +30,16 @@ fn failed_admission_retains_phase_work() {
         sample.phases.last().unwrap().outcome,
         GroundingOutcome::Failed
     );
+    assert_eq!(
+        sample.phases.last().unwrap().phase,
+        GroundingPhase::FormulaInitialization
+    );
     assert!(
         sample
             .phases
             .iter()
-            .any(|phase| phase.work.expression_nodes != Some(0)
-                || phase.work.join_probes != Some(0)
-                || phase.work.support_rounds != Some(0))
+            .any(|phase| phase.phase == GroundingPhase::SupportCompletion
+                && phase.work.support_rounds.is_some_and(|work| work > 0))
     );
 }
 

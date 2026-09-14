@@ -90,6 +90,13 @@ fn countermodel_stops_have_distinct_machine_codes() {
         (Incomplete::CandidateLimit, "candidate_limit"),
         (Incomplete::PendingBytes, "pending_bytes"),
         (Incomplete::CompletionScratch, "completion_scratch"),
+        (
+            Incomplete::ReductStorage {
+                required: 65,
+                limit: 64,
+            },
+            "reduct_storage",
+        ),
         (Incomplete::BatchCandidateLimit, "batch_candidate_limit"),
         (Incomplete::PendingBatch, "pending_batch"),
         (Incomplete::Allocation, "allocation"),

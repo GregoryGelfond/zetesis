@@ -31,6 +31,24 @@ interpretations, including nested implication and non-Horn reducts. Boundary
 tests cover finite identities, packed words, empty theories, exact limits,
 cancellation, and deadlines.
 
+## Reusing original satisfaction work
+
+`EvaluationWorkspace::evaluate(&candidate, limits, control)` computes every
+original node's truth, then checks asserted roots through the first failure.
+Its `FormulaEvaluation` borrows the exact candidate and the workspace. Consumers
+can inspect `node_truth`, `failed_root` and `is_model`; they cannot construct this
+view from unverified bits or retain it while overwriting the workspace. A
+successful evaluation can report a nonmodel. It does not establish an answer set.
+
+The workspace retains capacity across candidates and independently admitted
+theories, recomputing all values on every call. Work counts node and root visits;
+bytes include its header and actual Boolean-vector capacity. A lowered byte
+ceiling includes capacity retained by earlier calls. Cancellation, deadlines,
+allocation and resource failures expose no truth view and retain their consumed
+work and storage receipt. Borrowed inputs and allocator bookkeeping are excluded.
+The `models` convenience operation uses this evaluator with a fresh workspace;
+its theory-identity check and original work-limit behavior are preserved.
+
 ## Reusing a candidate's reduct
 
 `FrozenReduct::new(&candidate, limits, control)` freezes the candidate's own
@@ -136,6 +154,43 @@ Run them from the repository root and retain the output with the source revision
 cargo test --locked -p zetesis-themelios --test tight_plans original_corpus_eligibility -- --ignored --exact --nocapture --test-threads=1
 cargo test --locked -p zetesis-themelios --test tight_completion unchanged_corpus_complete_batch_experiment -- --ignored --exact --nocapture --test-threads=1
 ```
+
+## Positive producers and original constraints
+
+`PositivePlan::compile_accounted` checks every original asserted root and
+computes its least consequences once. Roots may be atomic facts, a positive body
+implying one atom, an arbitrary body implying falsum, or falsum. Producer bodies contain
+atoms, falsum, And, Or and exactly the truth constant `False -> False`. Positive
+cycles are allowed. Choices, default negation and other implications in producer
+bodies, and disjunctive asserted heads decline this specialization; a source-analysis label
+or dependency projection cannot replace complete original-root validation.
+
+The constructor builds forward incidence for atom and formula vertices. A true
+atom signals its occurrences; Or needs one true child and And needs both child
+occurrences, including aliases. Each vertex enters the queue once and each
+outgoing incidence is visited once. No body is expanded into disjunctive normal
+form. The graph is released before exact original evaluation checks roots on the
+least interpretation through its first failure. A false producer is an invariant
+refusal. The plan retains only its
+exact-owner `Interpretation`, first failed original constraint and observations.
+
+`least_consequences()` satisfies the producers. If `failed_constraint()` is
+`None`, this interpretation is the unique answer set of the admitted original
+theory. Otherwise it is not a model of the full theory, and no answer set exists;
+larger classical models may still exist with nonmonotone constraints. The value
+is not a solve `AnswerSet` and does not prove source completeness. The
+[semantic laws and correspondence obligations](../../proofs/guide/constrained-positive.md)
+separate this characterization from Rust queue/index/ownership correctness.
+
+`PositivePlanLimits` independently bounds incidences, named bytes and cumulative
+construction, propagation and original-evaluation work. Named bytes count the final header throughout
+construction, temporary vector headers and observed capacities; they exclude
+shared theory storage, allocator metadata and other stack temporaries. Actual
+allocation slack is checked after reservation, so this is not a hard allocator
+or RSS cap. A failed attempt preserves admitted work and observed peak capacity
+but returns no partial plan. Cancellation, deadline, allocation and limit
+failures remain refusals. `compile` delegates to the same implementation while
+omitting the failure receipt. No timing gain follows solely from this API.
 
 ## Finite scalar aggregates
 

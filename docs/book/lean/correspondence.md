@@ -178,9 +178,17 @@ and a renumbering preserves meaning when the selected atoms agree. Rust
 Static and formula answers share their program catalogs; completed batched lazy
 closures share a catalog frozen after the final complete round. Checked positions,
 logical comparison, ownership and allocation remain executable obligations.
-The retained-byte limit conservatively charges the entire catalog for each
-retained answer, including unselected atoms; it is neither unique allocation
-accounting nor process memory.
+The common `ModelRetention` ledger charges each distinct catalog allocation once,
+including unselected atoms, then selected-position records per entry and the
+consumer's score records. `StorageOwners.sum_within_component_bounds` supplies
+the finite-sum bound when those canonical components are completely covered
+once. It does not establish the ledger's allocation-identity/hash invariant,
+checked arithmetic or transactional publication. Rust keeps a live catalog
+handle for every private identity key and commits only after both owner-index
+and consumer-slot reservations. Abandoned or refused admissions preserve the
+prior retained family; replacement admits the complete new family before
+dropping the old one. The measure excludes capacity/allocator overhead and
+transient old/new overlap, so it is not an allocated-byte or process-memory bound.
 
 [`AtomCatalogs`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AtomCatalogs.lean)
 describes a catalog split into a committed prefix and a pending suffix.
@@ -389,6 +397,54 @@ DAG construction. Likewise, `FrozenReduct` is a Rust representation of a fixed
 candidate's reduct; its existence does not close the Rust-to-Lean mask
 correspondence.
 
+`EvaluationWorkspace` computes original node truth before exposing a borrowed
+`FormulaEvaluation`. Rust's ownership boundary ties that view to the exact
+interpretation and prevents reuse of its backing workspace while the view lives.
+The denotational satisfaction relation supplies the mathematical specification;
+the topological evaluation loop, node-index admission, complete-root decision
+and charged failure prefixes remain Rust refinement obligations. Independent
+syntax-tree controls check satisfaction and all asserted-root truth across the
+finite test family. These tests do not establish a general implementation proof.
+
+[`ParametricReduct`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ParametricReduct.lean)
+proves that a fixed connective network agrees with frozen-reduct truth below a
+candidate when its original-truth parameters are accurate. Atoms read the tested
+subset; implication retains its original candidate-truth guard. The countermodel
+law covers every asserted root and a proper subset, while original candidate
+satisfaction remains separate. Rust `PreparedReduct` binds one immutable theory
+and takes parameters from its authenticated `FormulaEvaluation`. Its CNF
+encoding, subset/properness clauses, replaced assumptions, search reset,
+independent witness check and shared/worker storage accounting remain concrete
+obligations. Neither retained capacity nor reuse authenticates stale parameters.
+
+[`PositiveTheory`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/PositiveTheory.lean)
+characterizes complete atomic-head theories with monotone bodies, including
+positive cycles and exactly the truth constructor `False → False`. The least
+producer-closed interpretation is the sole possible answer set; it is an answer
+set exactly when all positive constraints hold there. Under this strict grammar,
+a failed constraint rules out every classical model. Rust `PositivePlan` uses
+that positive producer argument and the arbitrary-constraint extension below.
+Its CSR correspondence must establish sound
+activation, complete child incidences including aliases, finite queue exhaustion
+and complete constraint checking against the same owner. The law does not prove
+Rust indexing, allocation or work admission, nor source completeness or ordinary
+candidate enumeration. A dependency projection or class hint cannot replace
+the original-root certificate. See the [reading guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/positive-theory.md).
+
+[`ConstrainedPositive`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ConstrainedPositive.lean)
+proves that any original constraint `F → False` satisfied by a candidate has a
+reduct true in every interpretation. It needs no subset or positive-body
+premise. Adding arbitrary constraints therefore filters existing answer sets
+without supplying support. For positive producers, the least consequences are
+the unique answer set exactly when the original constraints hold there. Failure
+rules out answer sets, but need not rule out larger classical models. Rust must
+classify every original root, compute closure only from positive producers,
+then evaluate the same original theory through `EvaluationWorkspace`. A false
+producer is an invariant refusal, not a constraint verdict. Exact evaluation
+consumes remaining work and counts its actual capacity beside the retained least
+interpretation after CSR release. The append/partition law does not prove those
+Rust ownership, work, first-error or source-completeness obligations.
+
 The head-element laws assume a correctly identified activity family. Explicit
 aggregate elements use complete tuple keys; ordinary Boolean choices use original
 source occurrences, with local witnesses coalesced within an occurrence. Ordinary
@@ -510,8 +566,22 @@ the positive bindings, checked scalar operations, source occurrence IDs and
 old-head publication history; the emitted original formulas retain the gates.
 The law does not equate answer sets of programs with different gates.
 
+[`ProducerScheduling`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ProducerScheduling.lean)
+retains original producer identities beside their ground rules. Complete
+positive-input registration ensures every newly enabled body wakes its producer.
+If every old head proposal is already published, selected proposals plus the
+current carrier equal the full inflationary step; an empty selected set then
+establishes possible-head closure. Zero-input producers require complete
+bootstrap. The Rust positive-flat source plan preserves original IR slots,
+uses signed-predicate reverse postings and a packed wake set, and retains the
+existing first-new binding partitions. Complete source instantiation, exact
+postings, checked work/storage and all-success round publication are executable
+correspondences. Final constraints and answer-set membership remain separate.
+
 The Rust [support builder](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support.rs)
-creates `CompletedCatalog` only after a full round adds no atom. Its immutable
+creates `CompletedCatalog` only after an admitted round establishes no new atom.
+For selective traversal, completed old-head history and complete wake coverage
+justify that conclusion even when no producer needs another snapshot. Its immutable
 `CompletedSupport` view supplies the same typed rows to objective eligibility
 and final grounding. Intermediate snapshots and resource-stopped rounds cannot
 supply this capability. The types enforce the completion handoff; they do not

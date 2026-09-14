@@ -16,7 +16,7 @@ use zetesis_cli::{
 };
 use zetesis_core::{Model, StaticError};
 use zetesis_cpu::Control;
-use zetesis_ferraris::{TightError, TightResource};
+use zetesis_ferraris::{PositiveError, PositiveResource};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionLimits,
     FormulaLimits, SourceBundle, admit_bundle_extended, admit_bundle_formula, admit_extended,
@@ -210,8 +210,15 @@ fn certificate_setup_exhaustion_is_incomplete() {
     let certificate = statistics.certified.unwrap();
     assert_eq!(
         certificate.refusal,
-        Some(TightError::Limit(TightResource::Work))
+        Some(zetesis_sat::CertificateError::Positive(
+            PositiveError::Limit {
+                resource: PositiveResource::Work,
+                observed: 1,
+                limit: 0,
+            }
+        ))
     );
+    assert!(certificate.tight_refusal.is_none());
     assert!(certificate.plan.is_none());
     assert_eq!(certificate.construction_work, 0);
     assert_eq!(certificate.checks, 0);

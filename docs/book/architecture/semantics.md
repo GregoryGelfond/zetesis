@@ -7,16 +7,50 @@ answer-set semantics adds a minimality requirement on the reduct.
 
 ## Begin with positive programs
 
-For a positive normal program, each headed rule has one atom in its head and a
-conjunction of positive atoms in its body. Its immediate-consequence operator
+For a basic positive normal program, each headed rule has one atom in its head
+and a conjunction of positive atoms in its body. An empty body is a fact;
+a headless rule is a constraint. Its immediate-consequence operator
 derives every head whose body already holds. Iteration from the empty set, adding
 these consequences, reaches the least closed interpretation when the finite
 iteration completes. Positive constraints must also hold. If this least closure
-violates a positive constraint, every larger closed interpretation violates it.
+violates a positive constraint, every larger closed interpretation violates it,
+so there is no model. Otherwise the least closure is the unique answer set.
+Positive cycles do not invalidate this argument: `a :- b. b :- a.` has the
+empty least closure, while adding the fact `a.` derives both atoms.
+
+The same reasoning applies to atomic-head formula rules with monotone bodies.
+The admitted producer body grammar is atoms, falsum, conjunction, disjunction
+and exactly the truth constant `False → False`. Every producer root must be an
+atomic fact or such a body implying one atom. For
+example, `(a ∨ b) → c` requires `c` whenever either body alternative holds.
+Choice heads, default negation and other implications in producer bodies are
+outside this class;
+classical truth alone does not admit a different formula as its truth constant.
+
+These producers can coexist with arbitrary original constraints `F → False`,
+including falsum as an unconditional constraint. A constraint satisfied by a
+candidate has a reduct true in every interpretation, so it can filter answer
+sets but supplies no support. Compute the producers' least consequences, then
+evaluate the original constraints there: if all hold, that is the unique answer
+set; otherwise there is no answer set. Unlike positive constraints, arbitrary
+constraints can still permit larger classical models. For `:- not a.` with no
+producer for `a`, `{a}` is a classical model but neither interpretation is stable.
+
+The library primitive `PositivePlan` checks this complete grammar against its
+immutable original `Theory`, computes the least consequences, and then checks
+all original constraints. Its result distinguishes least producer closure from
+a model of the full theory. The
+[constrained-positive argument](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/constrained-positive.md)
+proves this formula-level characterization. The primitive's CSR propagation,
+resource admission and connection to ordinary candidate enumeration require
+their own implementation correspondence; an analysis label cannot substitute
+for its complete-root check.
 
 A positive disjunctive program has a different shape. `a | b.` has two minimal
 models, `{a}` and `{b}`, and no least model: their intersection fails the rule.
-Its answer sets are its subset-minimal models. “Compute the positive answer
+Its answer sets are its subset-minimal models. An atomic-head least-consequence
+specialization must decline this theory and retain the general reduct check.
+“Compute the positive answer
 sets” therefore does not mean “compute a least closure” for every language.
 
 ## Freeze the candidate, then check its reduct

@@ -45,6 +45,8 @@ pub enum Procedure {
     Countermodel,
     /// Certified tight-program support checking.
     TightSupport,
+    /// Certified positive consequences followed by original constraint validation.
+    PositiveConsequences,
 }
 /// Actual reported device activity; unavailable is never replaced by zero.
 #[derive(Debug, Serialize)]
@@ -103,6 +105,28 @@ pub struct Observation {
     pub timing: Diagnostics,
     /// Actual execution metadata and measured device counters.
     pub execution: Execution,
+}
+impl Observation {
+    /// Reconcile already-parsed native statistics with their captured text view.
+    ///
+    /// This pure decoder accepts only the supported finite phase/stage schemas
+    /// and reconciles the actual route with the explicit request. It does not
+    /// establish process completion, answer-family parity or semantic correctness.
+    /// The caller bounds and parses `document` and bounds `stderr` before calling.
+    /// The decoder scans the text linearly and reads a fixed set of JSON fields.
+    /// Temporary line storage is linear in the supplied text; retained storage
+    /// contains the finite measurements and reported adapter name.
+    ///
+    /// # Errors
+    /// Refuses malformed, incomplete, unsupported or contradictory telemetry,
+    /// including a route that differs from an explicit requested procedure.
+    pub fn from_statistics(
+        document: &serde_json::Value,
+        stderr: &[u8],
+        request: crate::selected::NativeExecution,
+    ) -> Result<Self, String> {
+        super::telemetry::observe(document, stderr, request)
+    }
 }
 /// A schedule position with its raw capture when launched.
 #[derive(Debug, Serialize)]

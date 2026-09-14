@@ -47,9 +47,11 @@ pub struct SolveConfig {
     pub max_optimal_models: usize,
     /// Maximum atoms across retained incumbents.
     pub max_optimal_atoms: usize,
-    /// Maximum canonical incumbent payload bytes. Each model counts its entire
-    /// referenced atom catalog plus selected positions; shared catalogs are
-    /// conservatively recounted. Spare capacity and allocator/Arc overhead are excluded.
+    /// Maximum canonical incumbent payload bytes: each distinct catalog owner
+    /// once, selected positions per retained model, and one shared best-score
+    /// record. Equal-content separate catalogs count separately. Excludes spare
+    /// vector/hash capacity, owner-index entries, allocator/Arc overhead, subjects,
+    /// execution state and transient old/new replacement overlap; this is not RSS.
     pub max_optimal_bytes: usize,
     /// Maximum candidates per owned batch.
     pub batch_size: NonZeroUsize,
@@ -57,8 +59,15 @@ pub struct SolveConfig {
     pub workers: NonZeroUsize,
     /// Formula exact-completion worker count.
     pub completion_workers: NonZeroUsize,
-    /// Retained query capacities and transient/result scratch bytes, excluding
+    /// Named cold reduct preparation and each query's retained capacity.
+    /// The immutable reduct is prepared once per original theory. Parallel
+    /// completion also admits its shared owner against the collective ceiling.
+    /// Shared theory payload and allocator metadata are excluded.
+    pub max_reduct_bytes: u64,
+    /// Shared prepared reduct, worker query capacities and transient/result bytes, excluding
     /// thread stacks, allocator/table overhead, scalar cursor and GPU storage.
+    /// Optional class preparation/checking uses this ceiling independently;
+    /// it is not a combined cap on class storage plus completion storage.
     pub max_completion_scratch_bytes: u64,
     /// Maximum candidate seeds or formula candidates.
     pub max_candidates: u64,
@@ -133,6 +142,7 @@ impl SolveConfig {
         batch_size: NonZeroUsize::new(64).unwrap(),
         workers: NonZeroUsize::new(4).unwrap(),
         completion_workers: NonZeroUsize::new(1).unwrap(),
+        max_reduct_bytes: zetesis_sat::ReductPreparationLimits::DEFAULT_BYTES,
         max_completion_scratch_bytes: 268_435_456,
         max_candidates: 10_000_000,
         max_carrier_atoms: 4_096,

@@ -5,9 +5,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use super::super::{Capture, Error, Fault, Phase, capture};
-use super::{
-    Decision, Plan, Producer, Report, Request, Sample, Slot, Suite, Workload, outcome, telemetry,
-};
+use super::{Decision, Plan, Producer, Report, Request, Sample, Slot, Suite, Workload, outcome};
 use crate::selected::{identity, publication};
 use crate::{answers, examples, process};
 use serde_json::Value;
@@ -468,8 +466,12 @@ fn qualify(
                 .reported_displays(request.max_spelling_bytes)
                 .map_err(|error| invalid(&error))?;
             sample.observation = Some(
-                telemetry::observe(&document, capture.stderr(), request.plan.profiles[profile])
-                    .map_err(|e| (Decision::InvalidTelemetry, e))?,
+                super::Observation::from_statistics(
+                    &document,
+                    capture.stderr(),
+                    request.plan.profiles[profile],
+                )
+                .map_err(|e| (Decision::InvalidTelemetry, e))?,
             );
             display
         }

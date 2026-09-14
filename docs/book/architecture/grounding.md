@@ -185,6 +185,40 @@ and collects new positive head atoms. Aggregate and conditional truth remains in
 the emitted formulas; it does not prune possible producers. A proposed aggregate
 assignment value retains its original equality.
 
+For a whole normalized positive-flat program, a private
+[producer plan](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/producers.rs)
+checks every original IR occurrence against the same source applicability used
+by optional domain guards. It checks signed predicate names and arities,
+positive dependency edges and the existing themelios SCC order. Canonical source
+rules may coalesce duplicates; plan slots still refer to the original IR rule
+array and preserve its provenance. The plan borrows that preparation and caches
+positive body occurrence IDs. Reverse signed-predicate postings mark original
+producer IDs in a packed active set. Bootstrap visits zero-input producers;
+later rounds visit only producers affected by the previous round's newly
+published predicates. Selected producers retain their original order and the
+same first-new binding partitions. All selected scans finish before new atoms
+are published. An empty active set still admits the final support round but
+needs no new catalog/query snapshot.
+
+Plan construction and traversal consume the cumulative formula work allowance.
+Its header, occurrence arrays, borrowed predicate postings, packed active set
+and temporary construction arrays count
+against `max_support_bytes` beside the live catalog and query views. Preparation
+uses checked signature searches and a conservative finite comparison allowance
+for the upstream graph's opaque tree lookup; this is not an exact count of that
+lookup's comparisons. Wake lookup, posting visits and packed-set reads/writes
+are also charged. Temporary graph metadata is released after preparation, and
+the plan is released before completed support is returned. These
+checks qualify support scheduling, not satisfiability, unique-answer claims or
+source-to-Rust semantic refinement. Richer programs keep the existing schedule.
+`GroundingWork.support_producer_visits` counts charged entries into actual rule
+variant traversal; `support_snapshot_preparations` counts charged growing
+snapshot attempts, including attempts that subsequently fail. These optional
+fields do not retroactively turn missing historical observations into zeros.
+The [producer scheduling laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/producer-scheduling.md)
+state complete input registration and published old-head history as explicit
+premises. Fewer visits do not by themselves establish a timing improvement.
+
 Ordinary positive atom heads with positive flat witnesses and pure scalar checks
 or generators use [delta joins](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/delta.rs).
 Flat ordinary `not` and `not not` atoms may occur between these inputs. They

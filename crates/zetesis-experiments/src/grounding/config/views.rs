@@ -169,6 +169,8 @@ struct Observation {
 pub(super) struct Search {
     #[serde(with = "Cnf")]
     admission: zetesis_sat::AdmissionLimits,
+    #[serde(with = "Cnf")]
+    reduct_admission: zetesis_sat::AdmissionLimits,
     #[serde(with = "Projection")]
     projections: zetesis_sat::ProjectionLimits,
     #[serde(with = "SearchWork")]
@@ -179,6 +181,7 @@ pub(super) struct Search {
     search: zetesis_sat::SearchLimits,
     max_candidates: u64,
     max_verification_work: u64,
+    max_reduct_bytes: u64,
 }
 
 #[derive(Serialize)]

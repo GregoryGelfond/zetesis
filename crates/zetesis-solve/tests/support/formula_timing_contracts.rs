@@ -11,10 +11,11 @@ use zetesis_cpu::Control;
 use zetesis_sat::{PhaseMeasurement, SearchPhaseTimings};
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
-fn phases(timing: SearchPhaseTimings) -> [(SolvePhase, PhaseMeasurement); 4] {
+fn phases(timing: SearchPhaseTimings) -> [(SolvePhase, PhaseMeasurement); 5] {
     [
         (SolvePhase::CandidateGeneration, timing.candidates),
         (SolvePhase::OriginalValidation, timing.original_validation),
+        (SolvePhase::ReductPreparation, timing.reduct_preparation),
         (SolvePhase::ExactReductMembership, timing.reduct),
         (SolvePhase::CertifiedMembership, timing.certified),
     ]
@@ -47,6 +48,7 @@ fn interleaved_sessions_preserve_all_phase_attempts() {
         atoms: admitted.atom_catalog(),
         objectives: admitted.objectives(),
         gate_atoms: 0,
+        certificate_order: zetesis_sat::CertificateOrder::TightFirst,
     };
     let mut sessions = [(), ()].map(|()| {
         FormulaSession::with_selection(

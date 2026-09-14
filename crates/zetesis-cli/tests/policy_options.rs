@@ -74,6 +74,8 @@ fn nondefault_options() -> Options {
         "38",
         "--max-closure-batch-bytes",
         "39",
+        "--max-reduct-bytes",
+        "40",
     ])
     .unwrap()
 }
@@ -115,6 +117,7 @@ fn nondefault_options_preserve_each_solver_field() {
     assert_eq!(config.max_projection_bytes, 37);
     assert_eq!(config.max_closure_bytes, 38);
     assert_eq!(config.max_closure_batch_bytes, 39);
+    assert_eq!(config.max_reduct_bytes, 40);
 }
 
 #[test]

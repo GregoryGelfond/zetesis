@@ -1225,6 +1225,36 @@
     "line": 117
   },
   {
+    "name": "Zetesis.ConstrainedPositive.reduct_of_false",
+    "file": "Zetesis/ConstrainedPositive.lean",
+    "line": 26
+  },
+  {
+    "name": "Zetesis.ConstrainedPositive.constraint_frozen",
+    "file": "Zetesis/ConstrainedPositive.lean",
+    "line": 41
+  },
+  {
+    "name": "Zetesis.ConstrainedPositive.constraints_frozen",
+    "file": "Zetesis/ConstrainedPositive.lean",
+    "line": 52
+  },
+  {
+    "name": "Zetesis.ConstrainedPositive.stable_append_constraints",
+    "file": "Zetesis/ConstrainedPositive.lean",
+    "line": 65
+  },
+  {
+    "name": "Zetesis.ConstrainedPositive.positive_stable_iff",
+    "file": "Zetesis/ConstrainedPositive.lean",
+    "line": 96
+  },
+  {
+    "name": "Zetesis.ConstrainedPositive.failed_constraints_no_stable",
+    "file": "Zetesis/ConstrainedPositive.lean",
+    "line": 114
+  },
+  {
     "name": "Zetesis.ConstructorPatterns.function_shape_exact",
     "file": "Zetesis/ConstructorPatterns.lean",
     "line": 73
@@ -3800,6 +3830,21 @@
     "line": 52
   },
   {
+    "name": "Zetesis.ParametricReduct.satisfies_original",
+    "file": "Zetesis/ParametricReduct.lean",
+    "line": 41
+  },
+  {
+    "name": "Zetesis.ParametricReduct.satisfies_reduct",
+    "file": "Zetesis/ParametricReduct.lean",
+    "line": 69
+  },
+  {
+    "name": "Zetesis.ParametricReduct.countermodel_iff",
+    "file": "Zetesis/ParametricReduct.lean",
+    "line": 122
+  },
+  {
     "name": "Zetesis.PartitionCapacities.count_append",
     "file": "Zetesis/PartitionCapacities.lean",
     "line": 35
@@ -3923,6 +3968,71 @@
     "name": "Zetesis.PositiveArguments.frozen_atom_preserved",
     "file": "Zetesis/PositiveArguments.lean",
     "line": 101
+  },
+  {
+    "name": "Zetesis.PositiveTheory.positive_monotone",
+    "file": "Zetesis/PositiveTheory.lean",
+    "line": 45
+  },
+  {
+    "name": "Zetesis.PositiveTheory.positive_reduct_exact",
+    "file": "Zetesis/PositiveTheory.lean",
+    "line": 62
+  },
+  {
+    "name": "Zetesis.PositiveTheory.least_sub_closed",
+    "file": "Zetesis/PositiveTheory.lean",
+    "line": 112
+  },
+  {
+    "name": "Zetesis.PositiveTheory.models_iff_closed_constraints",
+    "file": "Zetesis/PositiveTheory.lean",
+    "line": 119
+  },
+  {
+    "name": "Zetesis.PositiveTheory.least_closed",
+    "file": "Zetesis/PositiveTheory.lean",
+    "line": 136
+  },
+  {
+    "name": "Zetesis.PositiveTheory.constraints_downward",
+    "file": "Zetesis/PositiveTheory.lean",
+    "line": 152
+  },
+  {
+    "name": "Zetesis.PositiveTheory.root_reduct_exact",
+    "file": "Zetesis/PositiveTheory.lean",
+    "line": 167
+  },
+  {
+    "name": "Zetesis.PositiveTheory.models_reduct_exact",
+    "file": "Zetesis/PositiveTheory.lean",
+    "line": 188
+  },
+  {
+    "name": "Zetesis.PositiveTheory.stable_iff_least_constraints",
+    "file": "Zetesis/PositiveTheory.lean",
+    "line": 204
+  },
+  {
+    "name": "Zetesis.PositiveTheory.failed_constraint_no_model",
+    "file": "Zetesis/PositiveTheory.lean",
+    "line": 240
+  },
+  {
+    "name": "Zetesis.ProducerScheduling.unaffected_body_old",
+    "file": "Zetesis/ProducerScheduling.lean",
+    "line": 41
+  },
+  {
+    "name": "Zetesis.ProducerScheduling.selective_step_exact",
+    "file": "Zetesis/ProducerScheduling.lean",
+    "line": 65
+  },
+  {
+    "name": "Zetesis.ProducerScheduling.empty_selection_closed",
+    "file": "Zetesis/ProducerScheduling.lean",
+    "line": 104
   },
   {
     "name": "Zetesis.ProjectedConditionals.complete_projection",

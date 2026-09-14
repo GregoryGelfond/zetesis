@@ -73,8 +73,18 @@ Certified positive producers use disjoint joins containing newly derived rows;
 other producers retain complete round traversal. Final formula emission still
 validates every authored body instance.
 
+Whole normalized positive-flat programs prepare a borrowed occurrence plan
+using the existing signed dependency graph and SCC order. The plan preserves
+every original IR occurrence and caches its positive inputs. Bootstrap handles
+zero-input producers; subsequent rounds select affected producers through signed
+reverse postings and a packed active set, retaining their original order.
+Completed publication precedes every new round. Optional domain guards share the
+same source applicability check. This is support preparation, not an answer-set
+membership or unique-model certificate; richer source retains its existing
+traversal and final authored-error validation.
+
 `FormulaLimits::max_support_bytes` bounds retained catalog, Atom vector cells,
-postings, snapshot and query capacity, including construction scratch. Nested
+postings, producer-plan and wake-set, snapshot and query capacity, including construction scratch. Nested
 atom/value payloads, allocator/tree overhead and unrelated grounding state have
 separate bounds. Construction and lookup consume grounding work; this ceiling
 is not a process-memory measurement.

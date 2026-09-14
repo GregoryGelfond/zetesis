@@ -120,6 +120,11 @@ workloads do not establish a GPU crossover that justifies an automatic switch.
 Explicit eager grounding remains available on either backend.
 General formulas use eager source grounding, with host candidate search,
 optional GPU propagation and exact CPU completion of unresolved reduct queries.
+For admitted positive atomic-head formulas, automatic CPU planning can compute
+least consequences once, including recursive cycles, then check every original
+constraint. Other formulas retain their applicable class or general reduct
+check. Source analysis guides planning; each class plan validates the original
+ground theory independently.
 Use `--backend metal` to request Metal explicitly. Adapter discovery and
 initialization happen during the solve, including on the first run after
 installation. `zetesis devices` is an optional inventory; no qualification step
@@ -138,7 +143,9 @@ both have physical Metal checks. Atomic remains its default. These are reusable
 membership primitives, and ordinary solving does not automatically select them.
 Eager formula grounding retains typed predicate catalogs and lookup postings
 across support rounds. Eligible positive producers join combinations containing
-new tuples; complete authored-body validation remains separate. The same
+new tuples. Where complete positive-source analysis permits it, new predicate
+tuples wake only their dependent producers; recursive saturation still completes.
+Complete authored-body validation remains separate. The same
 relation library supplies CPU/Rayon/GPU equality-selection
 primitives with checked row reconstruction. It preserves logical values and row
 identity. The eager support consumer currently runs on the host; GPU equality
@@ -165,6 +172,8 @@ independently of terminal rendering. The CLI consumes its public session API.
 A reusable
 `zetesis_ferraris::FrozenReduct` binds a reduct to the interpretation that defines
 it. Independent satisfaction queries can share that immutable reduct.
+Ordinary general checking also retains one `PreparedReduct` across candidates,
+with authenticated candidate parameters and disjoint scalar/Rayon query state.
 See the [working Rust examples](docs/book/rust/libraries.md).
 
 The session API returns checked `AnswerSet` values. `Session::enumerate` streams
@@ -172,6 +181,9 @@ the original answer family, including nonoptimal answers with their scores.
 Optional bounded `WorldView` collection requires complete enumeration; a stopped
 prefix and a selected optimum remain distinct results. The
 [session manual](docs/book/rust/sessions.md) explains ownership and completion.
+Retention accounts for each shared catalog once, each selected interpretation
+separately, and objective score payload according to its owner. These canonical
+byte limits are distinct from process memory.
 `Session::builder` composes answer selection, typed observations, measurements
 and reusable `ExecutionResources`. Its `collect` operation requires the complete
 original answer family. Sessions supplied the same context share the device;

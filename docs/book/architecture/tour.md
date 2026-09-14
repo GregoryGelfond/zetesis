@@ -167,6 +167,16 @@ be one least model. zetesis instead asks whether a proper subset of the
 candidate satisfies its frozen reduct. The [next chapter](semantics.md) makes
 that distinction precise.
 
+An original theory with positive atomic-head producers is a separate useful
+case. Their least consequences can be computed once, allowing positive cycles
+and And/Or bodies, then tested against arbitrary original constraints. The
+`PositivePlan` library primitive validates that complete formula shape; it is
+not inferred from a dependency projection. A failed constraint leaves least
+consequences but no answer set; larger classical models may exist. The
+[constrained-positive guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/constrained-positive.md)
+states the exact grammar and reduct argument. This primitive does not itself
+enumerate or publish the ordinary session's `AnswerSet` values.
+
 To follow the actual entry points, see the
 [writer-free session example](../rust/sessions.md),
 [`zetesis_themelios::admit`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/lib.rs),

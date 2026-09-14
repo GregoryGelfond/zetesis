@@ -117,15 +117,35 @@ selects its resulting catalog. It remains an infallible allocation door.
 error without a partial model. Arc envelope allocations remain infallible.
 Neither constructor implicitly grounds or solves a program.
 
-`max_optimal_bytes` and `WorldViewLimits::max_bytes` count canonical retained
-payload, including every referenced catalog atom and the selected-position
-record. They conservatively count a shared catalog once per retained model.
-Sparse models can consequently reach these limits earlier than a selected-only
-payload measure would suggest. The catalog records its checked size once;
-subsequent retention checks use that summary. Overflow remains a refusal.
+`max_optimal_bytes` and `WorldViewLimits::max_bytes` use the common
+[`ModelRetention`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/retention.rs)
+ledger. It counts each distinct catalog allocation once, including every
+unselected atom, then adds a selected-position record per retained model entry.
+Cloned selections still count per entry. Equal-content catalogs from separate
+allocations remain separate owners; logical equality never establishes sharing.
+World-view collection adds one optional score record per answer. Optimal-tie
+retention adds its one best-score record once for the entire tied family. A score
+record has a one-byte option tag; a present score adds a u64 length and one
+i32/i64 pair per priority. Even an empty selected interpretation has a length
+record and retains its catalog.
 
-This byte measure excludes spare vector capacity, Arc and allocator overhead,
-shared subject data and execution state. It is not RSS. `AtomCatalog::capacity`
+Catalog construction records its checked canonical size once. Retention reads
+that summary and uses a private hash index with expected amortized constant-time
+owner lookup (linear worst case). The index retains the actual catalog handles,
+preventing allocation-address reuse while an identity is registered; it copies
+no atom payload. `admit` and `replace` return exclusive pending admissions. A
+consumer reserves its own entry slot before committing the ledger and publishing
+the entry. Failure or abandonment preserves the previous charge and owner set.
+A better incumbent replaces the old family only after its complete new payload
+is admitted. Scoring work and verified/scored counts are not undone by a storage
+refusal. The standalone `Model::retained_payload_bytes` still describes one model
+in isolation; summing it does not account for sharing.
+
+This byte measure excludes spare vector/hash capacity, owner-index entries,
+Arc and allocator overhead, shared subject data and execution state. Replacement
+admits the new retained family, not transient overlap with the still-live old
+family. Successful reservations can leave capacity after an abandoned admission.
+It is not RSS. `AtomCatalog::capacity`
 and `Model::selection_capacity` expose retained vector capacities separately.
 No universal memory or solve-time improvement follows from sharing alone.
 

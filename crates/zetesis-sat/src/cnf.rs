@@ -275,6 +275,10 @@ impl Cnf {
         Ok(())
     }
 
+    pub(crate) const fn submitted_counts(&self) -> (usize, usize) {
+        (self.submitted_clauses, self.submitted_literals)
+    }
+
     pub(crate) fn retained_bytes(&self) -> u128 {
         (self.literals.capacity() as u128 + self.ends.capacity() as u128)
             * std::mem::size_of::<usize>() as u128

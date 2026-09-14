@@ -20,9 +20,9 @@ impl Workspace {
         reserve(&mut self.buffer, count)
     }
 
-    pub(crate) fn retained_bytes(&self) -> u128 {
-        self.scores.capacity() as u128 * std::mem::size_of::<u64>() as u128
-            + self.buffer.capacity() as u128 * std::mem::size_of::<usize>() as u128
+    pub(crate) fn required_bytes(&self, variables: usize) -> u128 {
+        self.scores.capacity().max(variables) as u128 * std::mem::size_of::<u64>() as u128
+            + self.buffer.capacity().max(variables) as u128 * std::mem::size_of::<usize>() as u128
     }
 
     pub(crate) fn variables<'a>(

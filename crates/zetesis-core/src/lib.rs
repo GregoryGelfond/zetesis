@@ -30,6 +30,7 @@ mod atom_key;
 mod program;
 mod candidate;
 mod model;
+pub mod retention;
 mod identity;
 mod ordered_index;
 mod atom_lookup;

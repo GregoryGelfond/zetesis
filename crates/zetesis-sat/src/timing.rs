@@ -27,7 +27,7 @@ impl PhaseMeasurement {
     }
 }
 
-/// Opt-in native search wall intervals. The four phases do not nest.
+/// Opt-in native search wall intervals. The five phases do not nest.
 /// Initial CNF construction and candidate restriction application are excluded;
 /// their caller can measure these operations independently. Driver setup,
 /// callback/device execution, publication and timer overhead are not included.
@@ -37,9 +37,11 @@ pub struct SearchPhaseTimings {
     pub candidates: PhaseMeasurement,
     /// Independent original-model checks, including repeated residual prechecks.
     pub original_validation: PhaseMeasurement,
-    /// Frozen-reduct encoding, exact search and returned-countermodel validation.
+    /// Cold immutable reduct construction, including failed preparation.
+    pub reduct_preparation: PhaseMeasurement,
+    /// Parameter installation, exact search and returned-countermodel validation.
     pub reduct: PhaseMeasurement,
-    /// Ranked-support membership checking, including failed attempts.
+    /// Selected class membership checking, including failed attempts.
     pub certified: PhaseMeasurement,
 }
 
@@ -48,6 +50,7 @@ pub(crate) enum Phase {
     Candidates,
     OriginalValidation,
     Reduct,
+    ReductPreparation,
     Certified,
 }
 
@@ -65,6 +68,7 @@ pub(crate) fn finish(
             Phase::Candidates => &mut timing.candidates,
             Phase::OriginalValidation => &mut timing.original_validation,
             Phase::Reduct => &mut timing.reduct,
+            Phase::ReductPreparation => &mut timing.reduct_preparation,
             Phase::Certified => &mut timing.certified,
         };
         measurement.record(started.elapsed());

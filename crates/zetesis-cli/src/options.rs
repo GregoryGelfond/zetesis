@@ -180,7 +180,7 @@ pub struct Options {
     /// Maximum atoms across retained incumbent models, before display selection.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_optimal_atoms, hide_short_help = true)]
     pub max_optimal_atoms: usize,
-    /// Maximum retained canonical bytes, counting the whole atom catalog per model.
+    /// Maximum canonical incumbent bytes: distinct catalogs, selections and one score.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_optimal_bytes, hide_short_help = true)]
     pub max_optimal_bytes: usize,
     /// Maximum batched formula candidates; closure batches follow its first seed.
@@ -192,8 +192,13 @@ pub struct Options {
     /// Exact formula completion workers; one retains the scalar CPU cursor.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.completion_workers, hide_short_help = true)]
     pub completion_workers: NonZeroUsize,
-    /// Maximum query and transient/result scratch bytes, excluding the
+    /// Maximum named cold reduct preparation and each query's retained bytes.
+    /// Shared theory payload and allocator metadata are excluded.
+    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_reduct_bytes, hide_short_help = true)]
+    pub max_reduct_bytes: u64,
+    /// Maximum shared prepared reduct, worker query and transient/result bytes, excluding the
     /// scalar cursor, allocator/table overhead, thread stacks and GPU storage.
+    /// Optional class preparation/checking uses the same ceiling independently.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_completion_scratch_bytes, hide_short_help = true)]
     pub max_completion_scratch_bytes: u64,
     /// Maximum candidate seeds; reaching a limit leaves search incomplete.
@@ -291,6 +296,7 @@ impl From<&Options> for crate::SolveConfig {
             batch_size: options.batch_size,
             workers: options.workers,
             completion_workers: options.completion_workers,
+            max_reduct_bytes: options.max_reduct_bytes,
             max_completion_scratch_bytes: options.max_completion_scratch_bytes,
             max_candidates: options.max_candidates,
             max_candidate_bytes: options.max_candidate_bytes,

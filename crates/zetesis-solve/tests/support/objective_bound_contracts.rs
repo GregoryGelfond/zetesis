@@ -31,6 +31,7 @@ fn input(admitted: &AdmittedFormula) -> Input<'_> {
         atoms: admitted.atom_catalog(),
         gate_atoms: 0,
         objectives: admitted.objectives(),
+        certificate_order: zetesis_sat::CertificateOrder::TightFirst,
     }
 }
 
@@ -140,8 +141,9 @@ fn bound_capacity_failure_restores_exact_search_and_disables_only_pruning() {
     )
     .unwrap();
     assert!(bounds.plan.is_some());
-    // The original independent choices and their reducts need no auxiliary
-    // variables. The nontrivial cost guard does; refusing it must roll back.
+    // The original independent choices need no auxiliary candidate variables.
+    // The cost guard does; refusing it must roll back that candidate owner.
+    // Exact reduct checking has a separate admission allowance.
     let limits = Limits {
         admission: zetesis_sat::AdmissionLimits {
             max_variables: admitted.atoms().len(),

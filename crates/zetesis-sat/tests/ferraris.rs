@@ -256,10 +256,15 @@ fn exact_candidate_ceiling_allows_final_unsat_query_and_failure_is_fused() {
 
 #[test]
 fn empty_theory_exhausts_with_one_cnf_clause() {
-    // Empty theory uses no original clauses; its reduct needs one empty clause.
+    // Empty theory uses no original clauses; the independently admitted reduct
+    // needs exactly one empty clause to exclude a nonexistent proper subset.
     let input = theory(0, vec![], vec![]);
     let limits = Limits {
         admission: zetesis_sat::AdmissionLimits {
+            max_clauses: 1,
+            ..Default::default()
+        },
+        reduct_admission: zetesis_sat::AdmissionLimits {
             max_clauses: 1,
             ..Default::default()
         },
@@ -275,8 +280,8 @@ fn empty_theory_exhausts_with_one_cnf_clause() {
 
 #[test]
 fn verified_models_precede_the_history_limit_stop() {
-    // Two independent choices compact to no outer clauses. Three clauses
-    // admit every reduct query. A separate history limit admits three keys.
+    // Two independent choices compact to no outer clauses. Reduct construction
+    // has its own admission; the history limit independently admits three keys.
     let choice = theory(
         2,
         vec![

@@ -110,7 +110,9 @@ fn optimum_bytes_include_unselected_catalog_payload() {
             .iter()
             .any(|atom| atom.predicate().name() == "hidden")
     );
-    let required = model.retained_payload_bytes().unwrap();
+    // One best score, held beside the shared model catalog: option tag1,
+    // priority-count8, then one i32/i64 priority/cost pair12.
+    let required = model.retained_payload_bytes().unwrap() + 21;
     assert!(required > hidden.len());
     assert!(required > Model::new([a.clone()]).retained_payload_bytes().unwrap());
 

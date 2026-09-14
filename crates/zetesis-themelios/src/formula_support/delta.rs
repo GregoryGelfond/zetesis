@@ -27,6 +27,7 @@ pub(super) struct Variants<'a, 'source> {
     full: bool,
     certified: bool,
     next: usize,
+    prepared: Option<&'a [usize]>,
 }
 
 pub(super) fn variants<'a, 'source>(
@@ -64,7 +65,26 @@ pub(super) fn variants<'a, 'source>(
         full: !certified || (inputs == 0 && first),
         certified,
         next: 0,
+        prepared: None,
     })
+}
+
+/// The producer plan has already checked the complete positive-flat rule and
+/// preserves these original body occurrences. No per-round classification scan.
+pub(super) fn prepared_variants<'a, 'source>(
+    rule: &'a RuleIr,
+    support: &'a Support<'source>,
+    inputs: &'a [usize],
+    first: bool,
+) -> Variants<'a, 'source> {
+    Variants {
+        rule,
+        support,
+        full: inputs.is_empty() && first,
+        certified: true,
+        next: 0,
+        prepared: Some(inputs),
+    }
 }
 
 pub(super) enum Variant {
@@ -82,9 +102,14 @@ impl Variants<'_, '_> {
             return Ok(Some(Variant::Full));
         }
         if self.certified {
-            while let Some(literal) = self.rule.body.get(self.next) {
+            loop {
+                let occurrence = match self.prepared {
+                    Some(inputs) => inputs.get(self.next).copied(),
+                    None => (self.next < self.rule.body.len()).then_some(self.next),
+                };
+                let Some(occurrence) = occurrence else { break };
                 counters.work(limits, self.rule.location)?;
-                let occurrence = self.next;
+                let literal = &self.rule.body[occurrence];
                 self.next += 1;
                 if let LiteralIr::Atom(DefaultNegation::None, atom) = literal
                     && self.support.old_rows(atom.predicate())

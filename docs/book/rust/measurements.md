@@ -62,6 +62,21 @@ source work occurs during membership, so it cannot also be claimed as a disjoint
 grounding stage. Host intervals around GPU calls include preparation, transfers,
 submission, waiting and readback; they are not shader timings.
 
+Formula timing distinguishes `ReductPreparation`, the first attempt to compile
+an immutable parametric query, from `ExactReductMembership`, the per-candidate
+parameterization, subset search and returned-witness checks. Both remain within
+the cumulative search allowance. Original satisfaction has its own interval;
+successful preparation is not counted again when later batches reuse its owner.
+The `reduct` statistics retain construction work and named capacity, original
+evaluation work, parameter work and the largest observed worker workspace.
+The collective completion receipt counts the shared prepared owner once.
+
+The grounding profile also exposes `support_producer_visits` and
+`support_snapshot_preparations`. These count entered operations, including those
+followed by failure. They distinguish affected-producer scheduling from a full
+round scan without asserting a timing benefit. Fields missing from older
+reports remain unavailable.
+
 ## Compare independent reduct checks
 
 The [`lazy_measurement` library](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-experiments/src/lazy_measurement.rs)

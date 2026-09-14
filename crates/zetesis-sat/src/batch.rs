@@ -244,9 +244,9 @@ impl StableModels {
                     &mut self.statistics,
                     &mut search,
                 )? {
-                    zetesis_ferraris::TightVerdict::Stable => BatchVerdict::NoProperSubset,
-                    zetesis_ferraris::TightVerdict::NotModel { .. } => BatchVerdict::NotModel,
-                    zetesis_ferraris::TightVerdict::Residual { .. } => BatchVerdict::Residual,
+                    super::certified::Verdict::Stable => BatchVerdict::NoProperSubset,
+                    super::certified::Verdict::NotModel => BatchVerdict::NotModel,
+                    super::certified::Verdict::Residual => BatchVerdict::Residual,
                 };
             }
             Ok(())
@@ -329,7 +329,7 @@ impl StableModels {
         // Completion owns every resident query workspace in this attempt.
         // Scalar scratch carries no semantic state and must not remain as an
         // additional unaccounted workspace when switching execution modes.
-        self.reduct_workspace = super::reduct_query::Workspace::default();
+        self.reduct.workspace = crate::ReductWorkspace::default();
         let mut accepted = Vec::new();
         let mut budget = Budget {
             quota: crate::search::LocalQuota,
@@ -344,10 +344,12 @@ impl StableModels {
                 candidates: &self.batch.pending,
                 verdicts,
                 limits: self.limits,
+                prepared: None,
             },
             &mut budget,
             &mut self.statistics,
             &mut accepted,
+            &mut self.reduct,
         );
         self.statistics.search = budget.statistics;
         result?;

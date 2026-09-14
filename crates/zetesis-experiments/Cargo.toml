@@ -25,6 +25,7 @@ sha2 = "0.10"
 [dev-dependencies]
 criterion = { version = "0.7", default-features = false, features = ["cargo_bench_support"] }
 zetesis-validation = { path = "../zetesis-validation" }
+zetesis-solve = { workspace = true, features = ["gpu"] }
 
 [lints]
 workspace = true
@@ -36,3 +37,7 @@ path = "src/main.rs"
 [[bench]]
 name = "oracles"
 harness = false
+
+[[example]]
+name = "session-projection"
+test = true

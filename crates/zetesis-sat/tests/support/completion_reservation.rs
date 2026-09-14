@@ -1,7 +1,7 @@
 //! Failed workspace reservation must retain its measured prefix and first cause.
 
 use super::*;
-use crate::{AdmissionLimits, SearchStatistics};
+use crate::{Literal, PreparedReduct, ReductPreparationLimits, SearchStatistics};
 use zetesis_ferraris::Node;
 
 #[test]
@@ -33,21 +33,17 @@ fn partial_reservation_records_capacity_and_preserves_allocation_failure() {
     let candidates = vec![Interpretation::new(&original, [0]).unwrap(); 3];
     let verdicts = vec![BatchVerdict::Residual; 3];
     let limits = Limits::default();
-    let required = CompletionExecutor::scratch_requirements(&original, limits, 3).unwrap();
-    // Each reservation first allocates finite clause/mask/node vectors. The
-    // final non-ZST strict-subset vector necessarily exceeds isize::MAX bytes.
-    let failing = Theory::new(
-        usize::MAX / 2,
-        vec![Node::False; 256],
-        vec![],
-        zetesis_ferraris::AdmissionLimits {
-            max_atoms: usize::MAX,
-            ..Default::default()
-        },
+    let prepared = PreparedReduct::prepare(
+        &original,
+        ReductPreparationLimits::default(),
+        &Control::default(),
     )
+    .result
     .unwrap();
+    let required = prepared.scratch_requirements(3).unwrap();
+    let larger = larger_query();
     for failure_at in 0..3 {
-        let ceiling = required.result_bytes + 3 * required.query_bytes;
+        let ceiling = required.shared_bytes + required.result_bytes + 3 * required.query_bytes;
         let mut executor =
             CompletionExecutor::with_scratch_limit(NonZeroUsize::new(3).unwrap(), ceiling).unwrap();
         let control = Control::default();
@@ -59,6 +55,12 @@ fn partial_reservation_records_capacity_and_preserves_allocation_failure() {
         };
         let mut statistics = Statistics::default();
         let mut accepted = Vec::new();
+        let mut state = crate::prepared_reduct::State::default();
+        state
+            .ensure(&original, limits, &mut budget, &mut statistics)
+            .unwrap();
+        let before_budget = budget.statistics;
+        let before_statistics = statistics;
         let mut calls = 0_usize;
         let mut dynamic_bytes = 0;
         let result = executor.complete_with(
@@ -67,22 +69,21 @@ fn partial_reservation_records_capacity_and_preserves_allocation_failure() {
                 candidates: &candidates,
                 verdicts: &verdicts,
                 limits,
+                prepared: None,
             },
             &mut budget,
             &mut statistics,
             &mut accepted,
-            |workspace, theory, admission| {
+            &mut state,
+            |workspace, owner, limit, control| {
                 let result = if calls == failure_at {
-                    workspace.reserve(
-                        &failing,
-                        AdmissionLimits {
-                            max_variables: usize::MAX,
-                            max_clauses: 4,
-                            max_literals: 8,
-                        },
-                    )
+                    workspace.reserve(&larger, limit, control).unwrap();
+                    let mut refused = Vec::<Literal>::new();
+                    refused
+                        .try_reserve_exact(usize::MAX)
+                        .map_err(|_| Incomplete::Allocation)
                 } else {
-                    workspace.reserve(theory, admission)
+                    workspace.reserve(owner, limit, control)
                 };
                 calls += 1;
                 let bytes = workspace.retained_bytes() - std::mem::size_of_val(workspace) as u128;
@@ -94,10 +95,11 @@ fn partial_reservation_records_capacity_and_preserves_allocation_failure() {
         assert_eq!(result, Err(Incomplete::Allocation));
         assert_eq!(calls, failure_at + 1);
         let progress = executor.last_statistics().unwrap();
-        let minimum_peak = u128::from(required.result_bytes)
-            + 3 * std::mem::size_of::<reduct_query::Workspace>() as u128
+        let minimum_peak = u128::from(required.shared_bytes)
+            + u128::from(required.result_bytes)
+            + 3 * std::mem::size_of::<ReductWorkspace>() as u128
             + dynamic_bytes
-            + calls as u128 * scratch::transient(&original, limits).unwrap();
+            + calls as u128 * scratch::transient(&prepared);
         assert!(u128::from(progress.peak_scratch_bytes) >= minimum_peak);
         // This must preserve Allocation even when the observed prefix is above
         // the ceiling; no CompletionScratch error may replace the first cause.
@@ -107,8 +109,28 @@ fn partial_reservation_records_capacity_and_preserves_allocation_failure() {
             (progress.candidates, progress.completed, progress.failed),
             (0, 0, 0)
         );
-        assert_eq!(budget.statistics, SearchStatistics::default());
-        assert_eq!(statistics, Statistics::default());
+        assert_eq!(budget.statistics, before_budget);
+        assert_eq!(statistics, before_statistics);
         assert!(accepted.is_empty());
     }
+}
+
+/// A real finite query whose retained worker arrays exceed the one-atom fixture.
+/// The reservation callback grows to this shape before its deterministic Vec
+/// capacity-overflow request, separating an actual allocated prefix from refusal.
+fn larger_query() -> PreparedReduct {
+    let theory = Theory::new(
+        8,
+        vec![Node::False; 256],
+        vec![],
+        zetesis_ferraris::AdmissionLimits::default(),
+    )
+    .unwrap();
+    PreparedReduct::prepare(
+        &theory,
+        ReductPreparationLimits::default(),
+        &Control::default(),
+    )
+    .result
+    .unwrap()
 }

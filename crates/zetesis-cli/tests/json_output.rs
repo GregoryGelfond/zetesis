@@ -364,7 +364,7 @@ fn search_statistics_count_stable_models() {
 fn formula_phases_exclude_closure_measurements() {
     let (report, value) = formula_statistics();
     assert!(report.phase_timings.is_some());
-    assert_eq!(value["statistics"]["phase_timings"]["schema"], 2);
+    assert_eq!(value["statistics"]["phase_timings"]["schema"], 3);
     assert!(value["statistics"]["phase_timings"]["measurements"]["closure_membership"].is_null());
 }
 

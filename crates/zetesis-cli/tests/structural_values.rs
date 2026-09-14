@@ -67,7 +67,9 @@ fn retained_structural_payload_is_admitted_before_publication() {
     // + number5. Selection storage adds its length8 and one original index8.
     const CATALOG_BYTES: usize = 8 + 17 + 1 + 18 + 1 + 5;
     const SELECTION_BYTES: usize = 8 + 8;
-    const RETAINED: usize = CATALOG_BYTES + SELECTION_BYTES;
+    // One shared optional score: present tag, length, i32 priority and i64 cost.
+    const SCORE_BYTES: usize = 1 + 8 + 4 + 8;
+    const RETAINED: usize = CATALOG_BYTES + SELECTION_BYTES + SCORE_BYTES;
     for ceiling in [RETAINED - 1, RETAINED] {
         let (report, output) = solve(
             "p(f(1)).#minimize{0:p(f(1))}.",

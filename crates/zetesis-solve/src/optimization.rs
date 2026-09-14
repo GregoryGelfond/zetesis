@@ -4,6 +4,7 @@ use std::cmp::Ordering;
 use std::fmt;
 
 use zetesis_core::Model;
+use zetesis_core::retention::{ModelRetention, RetentionError};
 use zetesis_cpu::Control;
 use zetesis_objective::{ObjectiveProgram, Score};
 
@@ -30,11 +31,11 @@ pub enum OptimizationStop {
     Models,
     /// Retained full-model atoms would exceed the configured ceiling.
     Atoms,
-    /// Retained full-model payload bytes would exceed the configured ceiling.
+    /// Retained catalog, selection and best-score payload would exceed the ceiling.
     Bytes,
     /// Count or size arithmetic overflowed.
     Overflow,
-    /// Fallible reservation of a retained model slot failed.
+    /// Fallible reservation of a retained model slot or catalog-index entry failed.
     Allocation,
 }
 impl fmt::Display for OptimizationStop {
@@ -44,12 +45,22 @@ impl fmt::Display for OptimizationStop {
 }
 impl std::error::Error for OptimizationStop {}
 
+impl From<RetentionError> for OptimizationStop {
+    fn from(error: RetentionError) -> Self {
+        match error {
+            RetentionError::Bytes { .. } => Self::Bytes,
+            RetentionError::Overflow => Self::Overflow,
+            RetentionError::Allocation => Self::Allocation,
+        }
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct Incumbents {
     best: Option<Optimization>,
     models: Vec<Model>,
     atoms: usize,
-    bytes: usize,
+    retention: ModelRetention,
     work: u64,
     scored: u64,
 }
@@ -113,20 +124,22 @@ impl Incumbents {
             .as_ref()
             .map_or(Ordering::Less, |best| score.compare_costs(&best.score));
         if order == Ordering::Less {
-            // Admission of the replacement precedes dropping any previous incumbent.
-            self.admit(&model, options, true)
+            // The score is retained once for this entire tied family. Admission
+            // of its full replacement precedes dropping any previous incumbent.
+            let score_bytes = score_payload_bytes(Some(&score))
+                .map_err(OptimizationStop::from)
                 .map_err(Interruption::Incumbent)?;
-            self.models.clear();
-            self.atoms = 0;
-            self.bytes = 0;
+            self.retain(model, score_bytes, options, true)
+                .map_err(Interruption::Incumbent)?;
             self.best = Some(Optimization {
                 score,
-                tied_models: 0,
+                tied_models: 1,
                 scored_models: self.scored,
                 work: self.work,
             });
+            return Ok(true);
         }
-        if order != Ordering::Greater {
+        if order == Ordering::Equal {
             let best = self
                 .best
                 .as_mut()
@@ -136,51 +149,59 @@ impl Incumbents {
                 .checked_add(1)
                 .ok_or(Interruption::Incumbent(OptimizationStop::Overflow))?;
             if options.models == 0 || self.models.len() < options.models {
-                self.admit(&model, options, false)
+                self.retain(model, 0, options, false)
                     .map_err(Interruption::Incumbent)?;
-                self.atoms += model.atoms().len();
-                self.bytes += payload_bytes(&model).map_err(Interruption::Incumbent)?;
-                self.models.push(model);
             }
         }
-        Ok(order == Ordering::Less)
+        Ok(false)
     }
 
     pub(crate) fn score(&self) -> Option<&Score> {
         self.best.as_ref().map(|best| &best.score)
     }
 
-    fn admit(
+    fn retain(
         &mut self,
-        model: &Model,
+        model: Model,
+        associated_bytes: usize,
         options: &SolveConfig,
         replacement: bool,
     ) -> Result<(), OptimizationStop> {
-        let (models, atoms, bytes) = if replacement {
-            (0, 0, 0)
+        let (models, atoms) = if replacement {
+            (0, 0)
         } else {
-            (self.models.len(), self.atoms, self.bytes)
+            (self.models.len(), self.atoms)
         };
         if models >= options.max_optimal_models {
             return Err(OptimizationStop::Models);
         }
-        if atoms
+        let atoms = atoms
             .checked_add(model.atoms().len())
-            .ok_or(OptimizationStop::Overflow)?
-            > options.max_optimal_atoms
-        {
+            .ok_or(OptimizationStop::Overflow)?;
+        if atoms > options.max_optimal_atoms {
             return Err(OptimizationStop::Atoms);
         }
-        if bytes
-            .checked_add(payload_bytes(model)?)
-            .ok_or(OptimizationStop::Overflow)?
-            > options.max_optimal_bytes
-        {
-            return Err(OptimizationStop::Bytes);
+        let admission = if replacement {
+            self.retention
+                .replace(&model, associated_bytes, options.max_optimal_bytes)?
+        } else {
+            self.retention
+                .admit(&model, associated_bytes, options.max_optimal_bytes)?
+        };
+        if !replacement || self.models.capacity() == 0 {
+            self.models
+                .try_reserve(1)
+                .map_err(|_| OptimizationStop::Allocation)?;
         }
-        self.models
-            .try_reserve(1)
-            .map_err(|_| OptimizationStop::Allocation)
+        // No fallible step follows either publication. Replacement needs one
+        // available slot, not additional capacity beside every previous tie.
+        admission.commit();
+        if replacement {
+            self.models.clear();
+        }
+        self.models.push(model);
+        self.atoms = atoms;
+        Ok(())
     }
 
     pub(crate) fn metadata(&self) -> Option<&Optimization> {
@@ -196,15 +217,29 @@ impl Incumbents {
     }
 
     pub(crate) fn take_models(&mut self) -> std::vec::IntoIter<Model> {
+        // Final outcome metadata is captured before this transfer. The consumer
+        // owns the yielded queue thereafter; no new retention is attempted.
+        self.retention.clear();
+        self.atoms = 0;
         std::mem::take(&mut self.models).into_iter()
     }
 }
 
-pub(crate) fn payload_bytes(model: &Model) -> Result<usize, OptimizationStop> {
-    // Count the entire retained catalog, including false atoms, for every
-    // retained model. Shared catalogs are conservatively recounted. The checked
-    // catalog summary is computed once; this admission is constant time.
-    model
-        .retained_payload_bytes()
-        .ok_or(OptimizationStop::Overflow)
+pub(crate) fn score_payload_bytes(score: Option<&Score>) -> Result<usize, RetentionError> {
+    // One option tag; a present score adds u64 length and i32/i64 pairs.
+    // Incumbents stores this once; WorldView stores one record per answer.
+    const SCORE_LEVEL_BYTES: usize = size_of::<i32>() + size_of::<i64>();
+    const SCORE_HEADER_BYTES: usize = 1 + size_of::<u64>();
+    match score {
+        None => Ok(1),
+        Some(score) => score
+            .costs()
+            .len()
+            .checked_mul(SCORE_LEVEL_BYTES)
+            .and_then(|bytes| bytes.checked_add(SCORE_HEADER_BYTES))
+            .ok_or(RetentionError::Overflow),
+    }
 }
+
+#[cfg(test)]
+mod tests;

@@ -155,6 +155,11 @@ fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
     )?;
     writeln!(
         sink,
+        "  prepared reduct limits: cold preparation/each query bytes={}; collective owner/worker/result bytes={}; theory and allocator metadata excluded",
+        o.max_reduct_bytes, o.max_completion_scratch_bytes
+    )?;
+    writeln!(
+        sink,
         "  independent CPU closure limits: named bytes/owner={}; preparation/cache/collective reservation bytes={}; query preparation work={}; returned models and allocator overhead excluded",
         o.max_closure_bytes, o.max_closure_batch_bytes, o.max_source_work
     )?;
@@ -543,40 +548,106 @@ fn countermodel(
         stats.projections.peak_bytes,
         stats.projections.work,
     )?;
-    if let Some(certified) = stats.certified {
+    if let Some(preparation) = stats.reduct.preparation {
         writeln!(
             sink,
-            "  tight certificate: eligible={}; refusal={:?}; storage limit={}; construction work={}; checks={}; stable decisions before commit={}; residuals={}; failed={}; checking work={}",
-            certified.plan.is_some(),
-            certified.refusal,
-            options.max_completion_scratch_bytes,
-            certified.construction_work,
-            certified.checks,
-            certified.stable,
-            certified.residuals,
-            certified.failed,
-            certified.checking_work
+            "  prepared reduct: work={}; variables={}; clauses={}; literals={}; retained bytes={}; construction peak bytes={}; work included in search; capacities exclude allocator overhead",
+            preparation.work,
+            preparation.variables,
+            preparation.clauses,
+            preparation.literals,
+            preparation.retained_bytes,
+            preparation.peak_bytes,
         )?;
-        if let Some(plan) = certified.plan {
-            writeln!(
+        writeln!(
+            sink,
+            "  prepared reduct queries: original evaluation work={}; parameter work={} (included in search); peak worker workspace bytes={}",
+            stats.reduct.original_work,
+            stats.reduct.parameter_work,
+            stats.reduct.peak_workspace_bytes,
+        )?;
+    }
+    if let Some(certified) = stats.certified {
+        certificate(sink, &certified, options.max_completion_scratch_bytes)?;
+    }
+    Ok(())
+}
+
+fn certificate(
+    sink: &mut impl Write,
+    certified: &zetesis_sat::CertifiedStatistics,
+    max_bytes: u64,
+) -> io::Result<()> {
+    writeln!(
+        sink,
+        "  class certificate: eligible={}; refusal={:?}; storage limit={}; construction work={}; checks={}; stable decisions before commit={}; residuals={}; failed={}; checking work={}",
+        certified.plan.is_some(),
+        certified.refusal,
+        max_bytes,
+        certified.construction_work,
+        certified.checks,
+        certified.stable,
+        certified.residuals,
+        certified.failed,
+        certified.checking_work
+    )?;
+    if let Some(plan) = certified.plan {
+        match plan {
+            zetesis_sat::CertificatePlanStatistics::Tight(plan) => writeln!(
                 sink,
                 "  tight certificate storage: construction logical bytes={}; resident logical bytes={}; dependencies={}",
                 plan.construction_bytes, plan.resident_bytes, plan.dependencies
-            )?;
+            )?,
+            zetesis_sat::CertificatePlanStatistics::Positive(plan) => writeln!(
+                sink,
+                "  positive certificate: derived atoms={}; activated formula nodes={}; dependencies={}; propagated dependencies={}; construction peak bytes={}; retained bytes={}",
+                plan.derived_atoms,
+                plan.activated_nodes,
+                plan.dependencies,
+                plan.propagated_dependencies,
+                plan.peak_bytes,
+                plan.retained_bytes
+            )?,
         }
+    }
+    writeln!(
+        sink,
+        "  class attempts: tight refusal={:?}; positive refusal={:?}; restriction refusal={:?}; restriction work={}; committed restriction clauses={}",
+        certified.tight_refusal,
+        certified.positive_refusal,
+        certified.restriction_refusal,
+        certified.restriction_work,
+        certified.restriction_clauses
+    )?;
+    if let Some(peak) = certified.positive_check_peak_bytes {
+        writeln!(
+            sink,
+            "  positive checking: peak plan and evaluation bytes={peak}"
+        )?;
+    }
+    if !matches!(
+        certified.plan,
+        Some(zetesis_sat::CertificatePlanStatistics::Positive(_))
+    ) && let Some(attempt) = certified.positive_attempt
+    {
+        writeln!(
+            sink,
+            "  positive preparation attempt: work={}; observed peak bytes={}; primitive retained bytes={}; positive plan not selected",
+            attempt.work, attempt.peak_bytes, attempt.retained_bytes
+        )?;
     }
     Ok(())
 }
 
 fn formula(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io::Result<()> {
-    let oracle = if report
+    let oracle = match report
         .countermodel_statistics
         .and_then(|s| s.certified)
-        .is_some_and(|s| s.plan.is_some())
+        .and_then(|s| s.plan)
     {
-        "tight-support"
-    } else {
-        "countermodel"
+        Some(zetesis_sat::CertificatePlanStatistics::Tight(_)) => "tight-support",
+        Some(zetesis_sat::CertificatePlanStatistics::Positive(_)) => "positive-consequences",
+        None => "countermodel",
     };
     if let Some(execution) = report.formula_execution {
         let backend = if execution.adapter.is_empty() {
@@ -591,7 +662,7 @@ fn formula(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
         )?;
         writeln!(
             sink,
-            "  formula completion: entered={}; residuals entered={}; completed before commit={}; failed={}; peak requested scratch bytes={}; peak query and transient/result scratch bytes={}; scratch limit={}; counters overflowed={}",
+            "  formula completion: entered={}; residuals entered={}; completed before commit={}; failed={}; peak requested scratch bytes={}; peak shared owner, query and transient/result scratch bytes={}; scratch limit={}; counters overflowed={}",
             execution.completion.entered,
             execution.completion.residuals,
             execution.completion.completed,

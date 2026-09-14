@@ -201,6 +201,78 @@ two separately created devices select the same physical adapter.
 See [formula measurement](src/formula_measurement.rs) and
 [projection tests](tests/formula_projection.rs).
 
+### Ordinary session projection comparison
+
+The maintained [session-projection example](examples/session-projection.rs) compares
+complete ordinary formula sessions on one admitted source. It runs scalar CPU and
+Rayon exact completion; `--backend metal` or `--backend vulkan` also runs enumerated
+and bitwise gate profiles compiled on the **same device context**. Supplied profile
+ownership fixes the context and pipeline, and the execution observer checks the
+actual projection, reported adapter and requested batch/completion settings. CPU
+is the example's default; existing benchmark profile defaults are unchanged.
+
+```sh
+cargo build --locked --release -p zetesis-experiments --example session-projection
+./target/release/examples/session-projection program.lp --backend cpu \
+  --workers 4 --batch-size 32 --warmups 1 --repetitions 3 \
+  > session-cpu.jsonl 2> session-cpu.stderr
+./target/release/examples/session-projection program.lp --backend metal \
+  --workers 4 --batch-size 32 --warmups 1 --repetitions 3 \
+  > session-metal.jsonl 2> session-metal.stderr
+```
+
+Run each command separately and retain its exit status before proceeding. The
+source must be self-contained, at most 1 MiB, and admitted by the library's finite
+formula defaults; the example does not load includes or supply constant overrides.
+`--workers` must be at least two for the Rayon baseline. Sessions explicitly use
+`Oracle::Countermodel`, eager formulas and unrestricted complete-family collection.
+Automatic positive/tight membership specialization is outside this comparison.
+
+An untimed scalar session establishes the reference full family. Each warmup and
+measured session must exhaust original candidate coverage and preserve every
+full model and objective cost, including hidden atoms and nonoptimal answers.
+Comparison uses dense IDs only after checking the exact shared typed atom catalog
+owner. The report records this maintained in-process comparison, not raw full
+families for independent reconstruction. Physical sessions additionally require
+positive decoded device work and complete submitted/decoded/committed accounting;
+an input with no device candidates is refused as a physical timing sample.
+
+Each round runs scalar, Rayon, then enumerated/bitwise/bitwise/enumerated when a
+device is selected. Warmups use that same schedule but emit no sample records.
+The default therefore emits six CPU-only or eighteen device-comparison samples.
+A final `complete` record and a successful process exit are both required; earlier
+sample lines from an interrupted run do not establish a completed schedule. Errors
+propagate immediately, including collection failures with their original checked
+prefix. An I/O failure can occur after some lines were written.
+
+Source admission, context creation and both pipeline compilations are outside
+`session_ns`. Each timed session constructs fresh ordinary search state, CPU
+completion pool where applicable, theory/device transport, exact residual queries,
+scoring and bounded answer retention. It includes observer work. Comparison,
+hashing and JSON output are outside sample clocks; both compiled GPU profiles and the
+reference comparison family remain resident during every baseline. The CPU order
+is fixed and GPU positions are only locally balanced, so order and thermal effects
+remain possible. There is no end-to-end grounding, process-cold startup or RSS
+measurement and no whole-session wall deadline. Dispatch waits retain the device
+API's finite timeout; setup and compilation are outside that timeout.
+
+Records bind the actual input bytes and executable with SHA-256, package version,
+requested API, full reported adapter metadata, and effective formula/search,
+projection, objective, reduct, batch and collection limits. In particular,
+`max_reduct_bytes` is independent of `max_completion_scratch_bytes`. Retain the
+exact repository revision, lockfile, toolchain/build recipe and executable
+before/after seals beside reports: a package version or content hash alone does
+not attest a source build. Source admission uses the defaults of that recorded
+executable; it is not timed or included in session work.
+
+Device observations are `null` for CPU runs. Scalar sessions have no batch
+completion receipt; Rayon sessions have real completion observations even when
+all device fields are absent. Reduct preparation is absent until a residual needs
+it. Counters cover each fresh session; completion counts accumulate its entered
+batches, while capacity peaks are maxima. Reported work is logical work, and
+named capacity peaks retain their API exclusions; neither is elapsed time or process RSS. These are measurements of the
+specified ordinary session routes, not evidence of a general CPU/GPU speedup.
+
 ### Native aggregate reductions
 
 The aggregate profile acquires original/frozen eligibility over complete tuple

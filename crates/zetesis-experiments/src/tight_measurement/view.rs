@@ -393,10 +393,13 @@ struct ReferenceLimits {
 struct ResidualLimits {
     #[serde(with = "AdmissionLimits")]
     admission: zetesis_sat::AdmissionLimits,
+    #[serde(with = "AdmissionLimits")]
+    reduct_admission: zetesis_sat::AdmissionLimits,
     #[serde(with = "SearchLimits")]
     search: zetesis_sat::SearchLimits,
     max_candidates: u64,
     max_verification_work: u64,
+    max_reduct_bytes: u64,
 }
 #[derive(Serialize)]
 #[serde(remote = "zetesis_sat::AdmissionLimits")]

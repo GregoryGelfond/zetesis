@@ -60,8 +60,8 @@ impl TightPlan {
                 + self.theory.atom_count() as u128,
             limits.max_bytes,
         )?;
-        // Byte cells, rather than implementation-dependent packed Vec<bool>,
-        // give this primitive and future candidate tiles a clear payload bound.
+        // Explicit byte cells give candidate tiles a fixed payload bound.
+        // Rust's Vec<bool> also stores byte-sized elements; it is not bit-packed.
         let mut values = reserve::<u8>(self.theory.nodes().len())?;
         for node in self.theory.nodes() {
             work.tick()?;

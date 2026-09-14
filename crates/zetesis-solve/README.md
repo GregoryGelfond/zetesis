@@ -40,6 +40,18 @@ of a proper-subset model of the frozen reduct. CPU, Rayon and wgpu execution
 preserve this contract. Class certificates justify specializations only under
 their checked premises.
 
+Automatic CPU formula execution checks those premises against the complete ground
+theory. Positive atomic-head programs use least consequences and original
+constraint satisfaction; tight programs can use supportedness. Full normalized
+source analysis guides the order of these checks. It does not certify a ground
+theory by itself. Explicit countermodel checking retains the general reduct path.
+
+General formula execution prepares one candidate-parametric reduct encoding per
+search owner and reuses it across residual queries. Rayon workers share the
+immutable encoding and retain separate query state. Preparation, original
+satisfaction and query work remain explicitly bounded and accounted; reuse does
+not carry candidate truth into another check.
+
 With GPU support, `ExecutionResources::with_gpu` shares a selected context and
 `with_formula_profile` additionally shares one exact compiled formula primitive.
 Each session retains its own program preparation, residency, candidate stream,
@@ -60,6 +72,11 @@ candidate truth nor a performance guarantee.
 of consumer output. `Session::progress` snapshots current evidence without
 stopping search. `SolveFailure` retains the cause, subject, available semantics
 and optional timings; it contains no publication state.
+
+Retained-answer limits count each actual shared atom-catalog owner once, each
+answer's selection separately, and retained objective scores. Equal catalogs
+with distinct owners remain distinct charges. These canonical payload limits
+bound represented data, not allocator overhead or process memory.
 
 `ExecutionObserver` receives typed synchronous execution facts. An observer
 failure terminates its operation and preserves existing evidence; it cannot

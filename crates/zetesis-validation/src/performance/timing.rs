@@ -24,6 +24,8 @@ pub struct Diagnostics {
     pub unattributed_elapsed_ns: u64,
     /// Additional coarse phases, distinct from the exclusive stage partition.
     pub phases: BTreeMap<String, Option<Measurement>>,
+    /// Recognized phase schema; older records omit phases introduced later.
+    pub phase_schema: u8,
 }
 fn measurements(
     values: BTreeMap<&str, Option<phase::Measurement>>,
@@ -65,5 +67,6 @@ pub(super) fn parse_any(bytes: &[u8]) -> Result<Diagnostics, String> {
             .unattributed_elapsed_ns
             .ok_or("missing stage remainder")?,
         phases: measurements(phases.phases),
+        phase_schema: phases.schema_version,
     })
 }

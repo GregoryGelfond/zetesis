@@ -255,6 +255,12 @@
 'Zetesis.ConsequentAlternatives.alternative_collection_keeps_stability' depends on axioms: [propext,
  Classical.choice,
  Quot.sound]
+'Zetesis.ConstrainedPositive.reduct_of_false' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ConstrainedPositive.constraint_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ConstrainedPositive.constraints_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ConstrainedPositive.stable_append_constraints' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ConstrainedPositive.positive_stable_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ConstrainedPositive.failed_constraints_no_stable' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ConstructorPatterns.function_shape_exact' depends on axioms: [propext]
 'Zetesis.ConstructorPatterns.tuple_refuses_function' does not depend on any axioms
 'Zetesis.ConstructorPatterns.root_capture' depends on axioms: [propext]
@@ -794,6 +800,9 @@
 'Zetesis.PackedQueryLiterals.encode_injective' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PackedQueryLiterals.encode_lt' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PackedQueryLiterals.packed_truth' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ParametricReduct.satisfies_original' does not depend on any axioms
+'Zetesis.ParametricReduct.satisfies_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ParametricReduct.countermodel_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PartitionCapacities.count_append' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PartitionCapacities.count_members' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PartitionCapacities.capacity_bounds' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -819,6 +828,19 @@
 'Zetesis.PositiveArguments.repeated_selection' depends on axioms: [propext, Quot.sound]
 'Zetesis.PositiveArguments.original_atom_preserved' depends on axioms: [propext]
 'Zetesis.PositiveArguments.frozen_atom_preserved' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.PositiveTheory.positive_monotone' does not depend on any axioms
+'Zetesis.PositiveTheory.positive_reduct_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.PositiveTheory.least_sub_closed' depends on axioms: [propext]
+'Zetesis.PositiveTheory.models_iff_closed_constraints' depends on axioms: [propext]
+'Zetesis.PositiveTheory.least_closed' depends on axioms: [propext]
+'Zetesis.PositiveTheory.constraints_downward' depends on axioms: [propext]
+'Zetesis.PositiveTheory.root_reduct_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.PositiveTheory.models_reduct_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.PositiveTheory.stable_iff_least_constraints' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.PositiveTheory.failed_constraint_no_model' depends on axioms: [propext]
+'Zetesis.ProducerScheduling.unaffected_body_old' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ProducerScheduling.selective_step_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ProducerScheduling.empty_selection_closed' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ProjectedConditionals.complete_projection' depends on axioms: [propext, Quot.sound]
 'Zetesis.ProjectedConditionals.original_semantics' depends on axioms: [propext, Quot.sound]
 'Zetesis.ProjectedConditionals.frozen_semantics' depends on axioms: [propext, Classical.choice, Quot.sound]

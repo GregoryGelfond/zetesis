@@ -18,15 +18,17 @@ pub enum SolvePhase {
     CandidateSetup,
     /// Complete original-theory certificate construction, including refusals.
     CertificateSetup,
-    /// Ranked-support membership checking, including interrupted attempts.
+    /// Applicable class membership checking, including interrupted attempts.
     CertifiedMembership,
     /// Candidate generation/projection and exact semantic blocking.
     CandidateGeneration,
     /// Independent original-formula validation, including residual prechecks.
     OriginalValidation,
+    /// One immutable parametric reduct construction, including a failed attempt.
+    ReductPreparation,
     /// GPU host oracle call, including packing, waits, readback and failed calls.
     GpuHostOracle,
-    /// Exact frozen-reduct encoding/search and countermodel validation on CPU.
+    /// Frozen-reduct parameterization/search and countermodel validation on CPU.
     ExactReductMembership,
     /// CPU closure batch execution, including worker scheduling and collection.
     ClosureMembership,
@@ -39,7 +41,7 @@ pub enum SolvePhase {
 }
 impl SolvePhase {
     /// Finite phase catalog in report order.
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::AdmissionMaterialization,
         Self::ExecutionSetup,
         Self::CandidateSetup,
@@ -47,6 +49,7 @@ impl SolvePhase {
         Self::CertifiedMembership,
         Self::CandidateGeneration,
         Self::OriginalValidation,
+        Self::ReductPreparation,
         Self::GpuHostOracle,
         Self::ExactReductMembership,
         Self::ClosureMembership,
@@ -66,6 +69,7 @@ impl SolvePhase {
             Self::CertifiedMembership => "certified_membership",
             Self::CandidateGeneration => "candidate_generation",
             Self::OriginalValidation => "original_validation",
+            Self::ReductPreparation => "reduct_preparation",
             Self::GpuHostOracle => "gpu_host_oracle",
             Self::ExactReductMembership => "exact_reduct_membership",
             Self::ClosureMembership => "closure_membership",
@@ -90,7 +94,7 @@ pub struct PhaseTimings {
     pub stages: StageTimings,
     /// Optional attribution within eager formula grounding. Other grounders remain unmeasured here.
     pub grounding: crate::GroundingTimings,
-    measurements: [Option<PhaseMeasurement>; 13],
+    measurements: [Option<PhaseMeasurement>; SolvePhase::ALL.len()],
 }
 impl PhaseTimings {
     /// An entered phase's attempted time; `None` means unentered or inapplicable.
@@ -103,14 +107,14 @@ impl PhaseTimings {
 pub(crate) struct Recorder {
     stages: StageRecorder,
     grounding: crate::grounding_timing::Recorder,
-    measurements: Mutex<[Option<PhaseMeasurement>; 13]>,
+    measurements: Mutex<[Option<PhaseMeasurement>; SolvePhase::ALL.len()]>,
 }
 impl Recorder {
     pub(crate) fn new(enabled: bool) -> Self {
         Self {
             stages: StageRecorder::new(enabled),
             grounding: crate::grounding_timing::Recorder::default(),
-            measurements: Mutex::new([None; 13]),
+            measurements: Mutex::new([None; SolvePhase::ALL.len()]),
         }
     }
 
@@ -153,6 +157,11 @@ impl Recorder {
                     current.original_validation,
                 ),
                 (
+                    SolvePhase::ReductPreparation,
+                    previous.reduct_preparation,
+                    current.reduct_preparation,
+                ),
+                (
                     SolvePhase::ExactReductMembership,
                     previous.reduct,
                     current.reduct,
@@ -188,7 +197,9 @@ impl Recorder {
 
     // No caller code runs under this lock. A poisoned accumulator retains its
     // known prefix as incomplete; it cannot turn instrumentation into a solve fault.
-    fn lock_measurements(&self) -> MutexGuard<'_, [Option<PhaseMeasurement>; 13]> {
+    fn lock_measurements(
+        &self,
+    ) -> MutexGuard<'_, [Option<PhaseMeasurement>; SolvePhase::ALL.len()]> {
         self.measurements.lock().unwrap_or_else(|poisoned| {
             let mut values = poisoned.into_inner();
             for measurement in values.iter_mut().flatten() {

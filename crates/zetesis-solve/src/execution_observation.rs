@@ -77,6 +77,9 @@ pub enum ExecutionObservation<'a> {
     DeviceFormula {
         /// Observed adapter, borrowed from this executor.
         adapter: zetesis_wgpu::AdapterMetadata<'a>,
+        /// Exact gate evaluator compiled into this executor. This records the
+        /// selected implementation, not a device submission or completed check.
+        projection: zetesis_wgpu::GateProjection,
         /// Requested materialization policy.
         grounder: Grounder,
         /// Candidate batch ceiling.
@@ -95,8 +98,11 @@ pub enum ExecutionObservation<'a> {
     },
     /// A checked tight certificate enables specialized membership checking.
     TightMembership,
+    /// Complete positive atomic-head classification and least consequences enable
+    /// the unique-answer restriction; original constraints remain authoritative.
+    PositiveMembership,
     /// General reduct checking remains after an optional certificate refusal.
-    GeneralMembership(zetesis_ferraris::TightError),
+    GeneralMembership(zetesis_sat::CertificateError),
     /// Optional objective-plan preparation was refused; exact search remains.
     ObjectiveUnavailable(ObjectiveBoundError),
     /// Optional objective-bound construction was refused; exact search remains.

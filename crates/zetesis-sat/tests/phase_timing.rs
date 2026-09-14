@@ -180,7 +180,7 @@ fn measurement_overflow_preserves_an_explicit_incomplete_prefix() {
 }
 
 #[test]
-fn failed_reduct_encoding_is_a_timed_attempt_even_before_a_query_is_counted() {
+fn failed_cold_preparation_is_recorded_before_worker_entry() {
     let theory = choice();
     let mut probe = StableModels::new(&theory, Limits::default(), Control::default()).unwrap();
     assert!(matches!(
@@ -209,9 +209,21 @@ fn failed_reduct_encoding_is_a_timed_attempt_even_before_a_query_is_counted() {
     let stats = search.statistics();
     assert_eq!(
         stats.countermodel_queries, 0,
-        "encoding failed before query entry"
+        "cold preparation failed before query entry"
     );
-    assert_eq!(stats.phase_timings.unwrap().reduct.calls, 1);
+    let timing = stats.phase_timings.unwrap();
+    assert_eq!(timing.reduct_preparation.calls, 1);
+    assert_eq!(timing.reduct.calls, 0);
+    assert_eq!(
+        timing.original_validation.calls, 2,
+        "only proposals were validated"
+    );
+    let preparation = stats.reduct.preparation.unwrap();
+    assert_eq!(
+        preparation.work, 0,
+        "the proposal exhausted the work allowance"
+    );
+    assert_eq!(preparation.retained_bytes, 0);
     assert_eq!(stats.stable_models, 0);
     assert_eq!(search.batch_statistics().pending, 2);
     assert!(!search.exhausted());

@@ -1,4 +1,7 @@
-use crate::{FrozenReduct, Interpretation, Node, Theory};
+use crate::{
+    EvaluationError, EvaluationLimits, EvaluationWorkspace, FrozenReduct, Interpretation, Node,
+    Theory,
+};
 use zetesis_cpu::{Control, Stop};
 
 /// Per-call bounds for exact finite checking. Exceeding a bound is incomplete,
@@ -152,15 +155,23 @@ pub fn models(
     control: &Control,
 ) -> Result<bool, Stop> {
     identities(theory, interpretation)?;
-    control.poll()?;
-    let mut work = Work {
-        limits,
-        control,
-        statistics: Statistics::default(),
-    };
-    let mut values = reserve(theory.nodes().len())?;
-    evaluate(theory, interpretation, None, &mut values, &mut work)?;
-    Ok(failed_root(theory, &values, &mut work)?.is_none())
+    EvaluationWorkspace::default()
+        .evaluate(
+            interpretation,
+            EvaluationLimits {
+                max_work: limits.max_work,
+                max_bytes: usize::MAX,
+            },
+            control,
+        )
+        .result
+        .map(|evaluation| evaluation.is_model())
+        .map_err(|error| match error {
+            EvaluationError::Stopped(stop) => stop,
+            // The convenience operation imposes no finite byte ceiling. A
+            // charge beyond usize is an unrepresentable allocation request.
+            EvaluationError::Storage { .. } => Stop::Allocation,
+        })
 }
 
 /// Satisfaction in `tested` of the formula reduct frozen in `candidate`.

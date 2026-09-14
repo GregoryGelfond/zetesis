@@ -51,7 +51,9 @@ different types of value.
 | Determine the normal reduct | Evaluate positive/negative gates against one immutable seed | [`check_static`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/static_oracle.rs) |
 | Derive positive consequences | Test enabled bodies, union their heads, repeat until closed | [`check_static`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/static_oracle.rs); [lazy batches](../rust/parallel.md) |
 | Test formula satisfaction | Evaluate an acyclic Boolean graph; require every asserted root | [`models`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/oracle.rs) |
+| Compute least consequences of positive atomic-head formulas | Propagate newly true atom/body vertices through sparse incidences; check original constraints on the completed interpretation | [`PositivePlan`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/positive.rs) |
 | Construct and reuse a formula reduct | Freeze candidate truth at every graph node; mask candidate-false nodes during later queries | [`FrozenReduct`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/reduct.rs) |
+| Reuse reduct structure across candidates | Compile one parameterized graph; refresh authenticated candidate truth and membership inputs | [`PreparedReduct`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/prepared_reduct.rs) |
 | Establish subset minimality | Search for a proper-subset reduct model; propagate Boolean domains and exactly complete unresolved queries | [`zetesis-sat`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/README.md); [`GpuFormulaOracle`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md) |
 | Evaluate an aggregate | Coalesce complete tuple identities, combine eligibility, then reduce count/sum/extrema and compare the bound | [Source formula lowering](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground.rs); [native aggregate operations](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md#native-numeric-aggregates) |
 | Score an answer | Resolve correlated objective fields, retain model-relative eligibility, coalesce complete contribution keys, then sum by priority | [Objective specialization](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/objectives.rs); [cost evaluation](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-objective/src/evaluate.rs) |
@@ -203,6 +205,39 @@ propagation fixed point may leave choices unresolved, so it returns residual
 work for exact host completion. A class certificate can justify a cheaper exact
 membership test when its premises hold.
 
+The ordinary host checker can compile the reduct's structure once. Under
+`J subset M`, an atom's reduct value is simply `Member(J, a)`; conjunction and
+disjunction combine their reduct children. Only implication needs its original
+truth parameter as an additional guard:
+
+```text
+ParametricNode(J, Atom(a),             R) = Member(J, a)
+ParametricNode(J, Falsum,              R) = false
+ParametricNode(J, And(left,right),     R) = R[left] AND R[right]
+ParametricNode(J, Or(left,right),      R) = R[left] OR R[right]
+ParametricNode(J, Implies(left,right), R) = frozen[node]
+                                          AND (NOT R[left] OR R[right])
+```
+
+This is another realization of the same reduct relation, with the subset
+premise made explicit. `PreparedReduct` encodes it with candidate membership
+parameters and a strict-subset condition. Each query receives original truth
+through a subject-bound `FormulaEvaluation`, resets its search state, and
+independently validates any returned countermodel. The
+[parametric correspondence](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/parametric-reduct.md) explains
+why the missing explicit And/Or masks are valid under the stated premise.
+
+For positive atomic-head producers, `PositivePlan` instead computes least
+consequences before proposing an answer. Its forward incidence graph connects
+atoms to their body occurrences and completed bodies to head atoms. An And
+vertex waits for both child occurrences, an Or vertex for one. Facts and truth
+constants seed propagation. Each vertex becomes true at most once; each outgoing
+incidence is visited at most once. Positive cycles need a supporting seed and do not
+force repeated scans of the whole graph. Original constraints are checked on
+the completed least interpretation; they do not become producers. This is a
+specialized implementation justified by reduct minimality, not a different
+answer-set definition.
+
 The opportunities for parallelism have different dependencies: candidates and
 frozen-subset queries are independent, while nodes depend on their children and
 closure rounds depend on earlier consequences. Parallel evaluation must respect
@@ -277,11 +312,11 @@ cannot share truth by accident. A rejected proposal, a pending query and a commi
 different states. General subset blocking is not licensed merely by finding an
 answer: for example, `{a}.` admits both the empty answer and `{a}`.
 
-The bounded [`feedback` experiment](../../../crates/zetesis-experiments/README.md#conditional-countermodel-feedback)
+The bounded [`feedback` experiment](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-experiments/README.md#conditional-countermodel-feedback)
 constructs conditional restrictions from actual checked reduct countermodels.
 Its guard tests both proper inclusion and satisfaction of that particular frozen
 reduct witness. Complete tiny families check the compiler against the
-[`Feedback` laws](../../../proofs/Zetesis/Feedback.lean); the laws do not establish
+[`Feedback` laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Feedback.lean); the laws do not establish
 Rust compilation or restart correctness. Fixed-candidate replay measures avoided
 membership calls, while a separate pre-acquired-guard replay counts actual native
 restriction restarts. Neither changes the ordinary search protocol.

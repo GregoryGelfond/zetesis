@@ -8,6 +8,8 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 
 const HEADER: &str =
+    "Phase timings: clock=host-monotonic; scope=driver; failed_attempts=included; schema=3";
+const CERTIFICATE_HEADER: &str =
     "Phase timings: clock=host-monotonic; scope=driver; failed_attempts=included; schema=2";
 const LEGACY_HEADER: &str =
     "Phase timings: clock=host-monotonic; scope=driver; failed_attempts=included";
@@ -26,7 +28,7 @@ const LEGACY_LABELS: [&str; 11] = [
     "observation_output",
 ];
 
-const LABELS: [&str; 13] = [
+const CERTIFICATE_LABELS: [&str; 13] = [
     "admission_materialization",
     "execution_setup",
     "candidate_setup",
@@ -42,9 +44,26 @@ const LABELS: [&str; 13] = [
     "observation_output",
 ];
 
+const LABELS: [&str; 14] = [
+    "admission_materialization",
+    "execution_setup",
+    "candidate_setup",
+    "certificate_setup",
+    "certified_membership",
+    "candidate_generation",
+    "original_validation",
+    "reduct_preparation",
+    "gpu_host_oracle",
+    "exact_reduct_membership",
+    "closure_membership",
+    "objective_scoring_retention",
+    "objective_feedback",
+    "observation_output",
+];
+
 #[derive(Debug, Serialize)]
 pub(crate) struct PhaseTimings {
-    /// Exact recognized timing schema; legacy records have no certificate phases.
+    /// Exact recognized schema: 1 omits certificates; 2 omits reduct preparation.
     pub(crate) schema_version: u8,
     /// Driver host interval; source loading and statistics output are excluded.
     pub(crate) driver_elapsed_ns: u64,
@@ -74,7 +93,8 @@ pub(crate) fn parse(stderr: &str) -> Result<Option<PhaseTimings>, String> {
         return Ok(None);
     }
     let (schema_version, labels): (u8, &[&'static str]) = match lines[0] {
-        HEADER => (2, &LABELS),
+        HEADER => (3, &LABELS),
+        CERTIFICATE_HEADER => (2, &CERTIFICATE_LABELS),
         LEGACY_HEADER => (1, &LEGACY_LABELS),
         _ => return Err("unsupported phase timing schema".into()),
     };

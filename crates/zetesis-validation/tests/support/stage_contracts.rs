@@ -6,7 +6,7 @@ const SECTION: &str = include_str!("stage_statistics.txt");
 const GROUNDING: &str = "grounding: calls=1; elapsed_ns=200; complete=true";
 
 #[test]
-fn stage_absence_preserves_both_phase_schemas_and_diagnostics() {
+fn stage_absence_preserves_supported_phase_schemas() {
     let legacy = include_str!("phase_statistics.txt");
     assert!(parse(legacy).unwrap().is_none());
     let current = legacy
@@ -15,7 +15,11 @@ fn stage_absence_preserves_both_phase_schemas_and_diagnostics() {
             "  phase candidate_generation:",
             "  phase certificate_setup: unmeasured\n  phase certified_membership: unmeasured\n  phase candidate_generation:",
         );
-    for phase in [legacy, current.as_str()] {
+    let prepared = current.replace("schema=2", "schema=3").replace(
+        "  phase gpu_host_oracle:",
+        "  phase reduct_preparation: unmeasured\n  phase gpu_host_oracle:",
+    );
+    for phase in [legacy, current.as_str(), prepared.as_str()] {
         let combined = format!("Timing summary: 0.001 ms\n{SECTION}{phase}\nother diagnostic\n");
         let stages = parse(&combined).unwrap().unwrap();
         assert!(stages.complete);

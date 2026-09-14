@@ -43,6 +43,25 @@ index range until admission; packing introduces no additional admitted bound.
 `check(&Theory, &Interpretation, Limits, &Control)` returns
 `Check::Stable`, `Check::NotModel`, `Check::NonMinimal(witness)` or
 `Check::Inconclusive(reason)`. `Check::accepted()` is true only for `Stable`.
+This standalone call explicitly constructs a fresh candidate-simplified reduct,
+retaining a differential control for the persistent path.
+
+`PreparedReduct::prepare(&Theory, ReductPreparationLimits, &Control)` returns
+`ReductPreparationAttempt { result, statistics }`. The result contains the
+immutable proper-subset query or its original typed refusal; the receipt retains
+actual work and capacity on either outcome. Clones share the completed owner.
+This replaces the provisional `new`/combined failure-receipt API: inspect
+`attempt.result` for the unchanged typed cause and `attempt.statistics` for its
+actual prefix. Failed preparation does not allocate an error wrapper.
+`prepared.check(&candidate, &mut ReductWorkspace, Limits, &Control)`
+reuses worker allocation capacity and returns the verdict with actual statistics.
+Original truth is authenticated by `EvaluationWorkspace`; callers cannot supply
+arbitrary truth bits. The prepared owner checks exact theory identity. Each
+concurrent query needs its own workspace. Preparation reports separate work,
+submitted dimensions, retained capacity and observed construction peak, including
+failure prefixes. The fixed CNF can be larger or search more slowly than a fresh
+candidate-simplified encoding; reuse does not promise a speedup.
+
 
 `StableModels::new(&Theory, Limits, Control)` builds the candidate CNF and
 returns an iterator of `Result<Interpretation, Incomplete>`. Interpretations
@@ -65,6 +84,50 @@ The initial optional [necessary support filter](docs/candidate-pruning.md#initia
 recognizes complete mixed ordinary-disjunctive and exact atomic-choice producers.
 Its status and setup work are recorded separately; original reduct checking
 remains authoritative even when necessary support removes proposals.
+
+`enable_certified_checking(TightPlanLimits)` retains the tight-only library door.
+`enable_class_checking(CertificateLimits, CertificateOrder)` tries ranked support
+and positive least consequences in the requested order. Each plan checks the
+complete original theory; a source class hint can choose order but cannot bypass
+applicability. Positive producers allow cycles and monotone conjunction/disjunction
+bodies. The primitive evaluates every original constraint on the completed least
+interpretation; a failed constraint excludes answer sets, without claiming that
+there are no classical models. Choices and unsupported producer bodies decline
+this specialization.
+
+A successful positive plan adds one unit for every original semantic atom, or
+one empty candidate clause when the least interpretation violates a constraint.
+The units preserve all answer sets and avoid an exponential walk through other
+classical models. They use the existing CNF arena and admission, introduce no
+auxiliary atom or copied restriction DAG, and roll back together on failure.
+The immutable original theory remains the subject. Each emitted candidate must
+match the exact owner and least interpretation and independently satisfy that
+original theory. Complete positive execution therefore needs no reduct query;
+ranked support may still leave residual candidates for exact completion.
+The [constrained-positive laws](../../proofs/guide/constrained-positive.md)
+separate positive producer closure from arbitrary original constraint filtering;
+their premises do not establish the Rust CNF or resource refinement.
+
+The certificate statistics API now names the selected algorithm explicitly.
+Consumers of the former tight-only `plan`, `refusal` and
+`Incomplete::Certificate` payloads match `CertificatePlanStatistics` and
+`CertificateError`; the tight-only enabling method retains its original policy.
+
+`CertifiedStatistics::plan` distinguishes `Tight` and `Positive`. Actual refused
+attempts remain visible even when a later plan succeeds. Construction, exact-unit
+restriction and candidate-check work are disjoint subsets of cumulative SAT work;
+none receives a fresh run budget. Optional construction or unit-dimension
+refusal leaves fallback available. Control, allocation and cumulative work failures
+preserve the original stop and cannot establish exhaustion. A partially appended
+unit restriction is never installed. Repeated configuration retains its first
+attempt, and configuration after candidate generation is refused.
+
+The positive construction receipt reports named retained and peak capacity,
+including failed preparation. `positive_check_peak_bytes` separately reports the
+actual retained plan plus local evaluation capacity; it is absent when that route
+was not entered. Neither number is RSS. Source/refinement and physical execution
+remain separate from the semantic least-model preservation argument. No elapsed
+performance improvement follows from these route and full-family controls.
 
 `StableModels::next_batch(BatchLimits, checker)` separates complete original-model
 proposals from membership checking. The checker receives the immutable original
@@ -108,7 +171,7 @@ records consumed permits and returns unused ones on completion or failure.
 Waiting workers cannot declare exhaustion while a grant can still return work.
 Decisions retain individual atomic reservations. No worker gets a fresh full-run
 quota. A private statically selected quota policy keeps scalar
-queries free of shared-pointer checks while reusing the same encoding and search
+queries free of shared-pointer checks while reusing the same parameter and search
 operations for parallel completion. Every job joins before counters are merged and before
 any result is committed. Failure retains the entire pending batch, even if
 other workers already proved some members stable. For complete matching runs within configured limits, model order and
@@ -121,27 +184,40 @@ including completed-but-uncommitted slots and failures. When timing is enabled,
 coordinator elapsed time and summed worker intervals are separate. Parallel
 worker intervals are not added to the scalar `SearchPhaseTimings` recorder.
 `CompletionExecutor::with_scratch_limit(workers, bytes)` sets a cumulative live
-completion-scratch ceiling; `new` and `default` use 256 MiB. Before any
-completion-owned result/query allocation, `scratch_requirements` computes a
-conservative envelope from original atom/node/root counts and CNF limits.
-It includes all ordered outcome slots, accepted flags, output interpretation
-slots, CNF clause/literal capacity, frozen/node buffers, reserved alias-map
-entries, search state and ordering arrays, assignments and independent witness
-validation. Unused reserved slots remain charged. Each worker reuses its reserved
-encoding and search vectors within a joined batch. Every query recomputes the
-candidate's frozen truth values, reduct equations and strict-subset condition,
-then resets search state. Only allocation capacity survives between queries.
-The executor releases these workspaces after the batch. The scalar enumerator
-retains one workspace until its owner is dropped or batched completion begins;
-logical exhaustion alone does not release its allocations. The caller owns
-returned model storage after a successful batch.
+completion-scratch ceiling; `new` and `default` use 256 MiB. The enumeration
+lazily builds one `PreparedReduct` at the first actual residual, using cumulative
+SAT work, its `Limits::reduct_admission` dimensions and independent
+`Limits::max_reduct_bytes` ceiling (64 MiB by default). `Limits::admission`
+bounds the original candidate CNF and submitted restrictions; it does not
+bound the distinct reduct owner. The explicit fresh `check` uses
+`reduct_admission` too. All-certified execution does not construct it. Scalar checks and joined
+residual workers borrow the same immutable owner across candidates, batches and
+candidate-only restrictions. Shared original theory remains unchanged.
+
+Completion first admits result-only storage, then prepares if required.
+`prepared.scratch_requirements(candidates)` uses actual compiled CNF dimensions
+and retained owner capacity. Its `shared_bytes` is charged once; `query_bytes`
+contains one worker's truth, parameter, search and witness-transient slots;
+`result_bytes` covers the whole ordered batch. The source-only
+`CompletionExecutor::scratch_requirements` instead estimates the parametric
+worst-case shape, treating every node as a possible implication; it constructs
+nothing and does not predict allocator slack. Actual worker capacities are
+checked after reservation and before candidate work. A scratch refusal may
+retain the newly prepared owner and cold-work receipt for a later retry.
+
+Worker scratch is released between batches. The scalar enumerator retains one
+workspace until it is dropped or switches to batched completion; that switch
+releases scalar scratch while preserving preparation. Every query recomputes
+original truth once, replaces candidate/truth parameters, and resets assignments,
+watches and decision state. The CNF, its gate structure and proper-subset
+constraints are not rebuilt. The caller owns returned models after publication.
 
 All result slots plus at most the requested number of query envelopes are
 admitted together. The scratch ceiling may reduce query concurrency to one.
 If results plus one required query cannot fit, `BatchError::Limits` carries
 `Incomplete::CompletionScratch`; the original proposals remain retryable using
 an executor with a sufficient allowance. Certificate-only batches need result
-storage but no query workspace. Work/decision or semantic failures still follow
+storage and any already retained shared owner, but no query workspace. Work/decision or semantic failures still follow
 the existing terminal-search contract. `last_statistics` distinguishes requested
 workers, preflight concurrency, requested minimum bytes, observed capacity plus
 transient bytes, and residuals entered, completed locally or failed. Reserved
@@ -149,8 +225,8 @@ capacity can exceed the minimum request. Its ceiling is checked before candidate
 work begins; a refusal can therefore report a peak above the limit with zero
 entered candidates. Local success is not batch publication.
 
-The accounting uses retained query-vector capacities and reported map entry capacity,
-plus a conservative allowance for transient and result storage. Hash-table
+The accounting uses the shared prepared owner and retained worker-vector
+capacities, plus a conservative allowance for transient and result storage. Hash-table
 bucket/control overhead, allocator metadata, Rayon scheduling storage, thread
 stacks, immutable original theory and the separate proposal/candidate cursor are
 excluded. It does not bound RSS or GPU memory. `max_pending_bytes` retains its
@@ -161,7 +237,9 @@ established by these portable completion tests.
 in `statistics().phase_timings`. Enabling is idempotent and starts after initial
 candidate CNF construction. Separate measurements cover candidate queries,
 projection and exact blocking; independent original-model validation; and frozen
-reduct encoding, exact search and witness validation. Candidate restrictions are
+cold reduct preparation; parameter installation, exact search and witness
+validation. Cold preparation has its own interval and is not added to worker
+intervals. Candidate restrictions are
 excluded for the caller to measure alongside objective feedback. Callback/device
 execution is also excluded. The CLI enables this only for `--stats`.
 
@@ -184,27 +262,34 @@ gate receives a fresh auxiliary with full equivalence (three clauses), giving ev
 interpretation exactly one auxiliary extension. Only semantic atoms participate
 in interpretations, subset tests and model blocking.
 
-Compaction is local to a classical query. It never rewrites the stored Ferraris
-theory before reduct formation: the original candidate truth mask is fixed first.
+Compaction is local to a query expression. It never rewrites the stored Ferraris
+theory: the fresh encoder fixes original truth before composing reduct children,
+and the persistent network retains explicit original-truth guards as parameters.
 For example, `a or not a` can be constant true in the outer query but must reduce
 to `a` in the reduct of `{a}`. Classically equivalent source formulas cannot in
-general be substituted before this masking step.
+general be substituted before establishing their reduct meanings.
 
-For a candidate `M`, the independent `zetesis-ferraris::models` evaluator first
-checks the original theory. The encoder evaluates every original node once in
-`M`. Every `M`-false node becomes falsum; every other node keeps its connective
-over the reduct values of its children. This is the same all-node masking
-interpretation used by the reference kernel. The frozen mask never changes
-while searching an inner interpretation `J`.
+For a candidate M, `EvaluationWorkspace` evaluates every original DAG node and
+checks original satisfaction, producing a borrow tied to that exact interpretation
+and theory. One persistent network reads prospective subset N from the original
+atom slots. And/Or compose child reduct values; implication reads
+`original_truth_M(implication) AND (NOT reduct(left) OR reduct(right))`.
+Under N subset M, a false-in-M atom cannot be in N, and false And/Or nodes
+collapse through their child reducts. Thus only implication nodes need explicit
+original-truth parameters. Classical equivalences of the original false nodes
+are never reused as reduct equivalences.
 
-The inner CNF asserts the frozen reduct, makes every original atom outside `M`
-false, and asserts that at least one original member of `M` is false. Thus its
-semantic models are exactly the proper subsets satisfying the reduct. For an
-empty candidate the last condition is an empty clause, correctly ruling out a
-proper subset. An inner SAT result is checked independently for strict subset
-membership and by `zetesis-ferraris::models_reduct`. Only a completed inner
-UNSAT query establishes stability. No least-model assumption or recursive
-stability query for `J` is used.
+The CNF asserts every reduct root, N subset M, and at least one M atom absent
+from N. With no atoms, strictness is an empty clause. Each query supplies M and
+implication truth as level-zero assumptions. Backtracking cannot retract them;
+a successful assignment is checked against both clauses and assumptions.
+A returned witness is still independently checked for properness and by
+`zetesis-ferraris::models_reduct`. Only completed UNSAT establishes stability.
+No least-model assumption or recursive stability query for N is used.
+The [parametric reduct laws](../../proofs/Zetesis/ParametricReduct.lean) prove the
+formula-level equivalence under subset and authentic-truth premises; the
+[guide](../../proofs/guide/parametric-reduct.md) separates that argument from
+Rust DAG/CNF, owner, search and resource obligations.
 
 After checking a candidate, enumeration adds the clause that disagrees with
 that candidate on at least one original atom. It excludes exactly `M` and does
@@ -246,8 +331,8 @@ Exhaustion means the original finite traversal has no unvisited base-CNF model
 whose semantic projection remains unblocked. Both accepted and rejected
 candidates receive the same exact block after their reduct check completes.
 An incomplete check terminates the iterator with incomplete coverage. Each inner
-reduct query still receives fresh search state; its frozen mask and independent
-countermodel validation are unchanged.
+reduct query still receives fresh search state and authenticated original-truth
+parameters; independent countermodel validation remains unchanged.
 
 `AdmissionLimits` bounds variables, submitted clauses and submitted literal
 occurrences, including duplicates and tautologies before canonicalization.
@@ -256,6 +341,28 @@ instead use `Limits::projections`, independently of each candidate/reduct CNF.
 Arithmetic and watch-index representability are checked. Storage reservations
 are fallible. These are shape bounds, not a claim that a configured count is a
 particular number of bytes or that allocator bookkeeping is measured as work.
+
+The persistent fixed encoding has its own actual submitted CNF population under
+`Limits::reduct_admission`, independent of `Limits::admission` for the candidate
+CNF. The explicit fresh check also uses `reduct_admission`; a limit fitted to one
+simplified reduct need not admit every parameterized query. `Limits::max_reduct_bytes` separately bounds
+named construction storage and a retained query worker, each independently.
+Query bytes include actual vector capacity, including capacity from earlier calls;
+construction also names gate-map entry capacity. Lowering a query ceiling below
+retained capacity refuses before new work. Refused proposals do not count as
+allocated peaks. Reservation overlap, Arc/allocator/hash-control metadata,
+shared original theory and bounded local variables are excluded. Independent
+witness/output transients keep their shape bounds and are additionally included
+in aggregate completion's transient allowance. These names are not process RSS.
+
+`Statistics::reduct` retains the cold preparation attempt, actual original
+node/root work of prepared queries, parameter work (a subset of SAT work), and
+maximum single-worker retained capacity observed on return. Original evaluation
+and returned-witness verification have independent per-call verification ceilings;
+proposal validation is a separate operation. The preparation work is also a
+subset of SAT work. Parallel aggregation sums actual query work and takes the
+maximum single-worker capacity, while completion reports aggregate live storage.
+
 
 `ProjectionLimits` independently bounds distinct complete keys, logical trie
 nodes and named history capacity. Defaults are 1,000,000 entries, 12,582,913 nodes

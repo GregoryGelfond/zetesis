@@ -379,7 +379,9 @@ fn both_signs_have_the_same_retained_tag_size() {
     // selection length (8) and its original catalog index (8).
     const CATALOG_BYTES: usize = 8 + 16 + 1 + 1;
     const SELECTION_BYTES: usize = 8 + 8;
-    const PAYLOAD: usize = CATALOG_BYTES + SELECTION_BYTES;
+    // One shared optional score: present tag, length, i32 priority and i64 cost.
+    const SCORE_BYTES: usize = 1 + 8 + 4 + 8;
+    const PAYLOAD: usize = CATALOG_BYTES + SELECTION_BYTES + SCORE_BYTES;
     for atom in ["p", "-p"] {
         for hidden in [false, true] {
             let source = format!(

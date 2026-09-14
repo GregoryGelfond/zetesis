@@ -82,6 +82,47 @@ completion result. The ordinary CLI's `--stats`, JSON `query_execution` object
 and failure reports view this same receipt. These named capacity observations
 are not process RSS or evidence of a speedup.
 
+## Formula membership plans
+
+An ordinary CPU formula session with `Oracle::Auto` attempts an applicable class
+plan before general reduct checking. Full normalized source analysis can prefer
+positive consequence checking; a dependency projection supplies no such class
+certificate. Attempt order is only a hint: each plan validates the complete
+original ground theory itself.
+
+`PositivePlan` admits positive atomic-head producers, including recursive ones,
+and arbitrary constraints. It computes their least consequences once, then
+checks original roots through the first failure. If all hold, the plan restricts
+candidate generation to that exact interpretation; a violated constraint empties
+the candidate region. A failed constraint leaves no answer
+set; it does not necessarily rule out larger classical models. `TightPlan`
+instead establishes its own acyclicity and supportedness conditions. Neither
+plan changes the definition of membership. The
+[semantic argument](../architecture/semantics.md) explains their relation to the
+frozen reduct.
+
+Class-shape or optional-capacity refusals retain general checking. Cancellation,
+exhausted shared work and allocation failure remain explicit interruptions.
+`ExecutionObservation::PositiveMembership` and `TightMembership` report the
+selected plan; the search statistics retain attempted construction, restrictions
+and checking work. Use `Oracle::Countermodel` to select the general comparison
+path explicitly. Explicit device execution currently retains that general path.
+
+General completion lazily constructs one `PreparedReduct` for the exact original
+theory. Subsequent candidates supply membership and authenticated original-truth
+parameters, rather than rebuilding the encoding. Scalar checking reuses one
+workspace; Rayon workers borrow the shared encoding with disjoint query state.
+Returned countermodels still undergo independent frozen-reduct validation.
+Candidate restrictions do not replace this original owner.
+
+`SolveConfig::max_reduct_bytes` bounds cold preparation and each query's named
+storage separately. `max_completion_scratch_bytes` bounds the shared prepared
+owner plus simultaneous completion workspaces and results. That setting also
+supplies a separate allowance for optional class preparation and checking; it is
+not a combined process-memory ceiling. Preparation work is charged once to the
+session search budget and reported in `SolvePhase::ReductPreparation`.
+Reuse preserves consumed work and pending-candidate accounting after a refusal.
+
 ## Collecting the original world view
 
 `WorldView::collect(input, config, limits, control)` owns a fresh unrestricted
@@ -99,10 +140,11 @@ inconsistency, while an empty vector collected from a stopped stream does not.
 An arbitrary vector and a detached outcome cannot construct a `WorldView`.
 
 `WorldViewLimits` independently bounds retained answers, summed full atoms and
-canonical payload bytes, including each answer's entire referenced atom catalog,
-selected positions and score priorities. Shared catalogs are conservatively
-counted once per retained answer. The byte bound excludes
-shared subjects, spare capacity, allocator/Arc overhead, engine state and the one answer being
+canonical payload bytes: each distinct catalog allocation once, selected
+positions per answer, and one optional score record per answer. A sparse answer
+retains all unselected catalog atoms; equal-content separately allocated catalogs
+are charged separately. The byte bound excludes
+shared subjects, spare vector/hash capacity, owner-index entries, allocator/Arc overhead, engine state and the one answer being
 considered for collection. It is not a process-memory limit. Members are moved
 into the collection without a repeated membership check or full-model clone;
 retained space can still be exponential in program size.

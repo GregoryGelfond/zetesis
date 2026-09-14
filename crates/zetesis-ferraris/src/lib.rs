@@ -11,6 +11,7 @@
 
 mod theory;
 mod oracle;
+mod evaluation;
 mod reduct;
 mod normal;
 mod aggregate;
@@ -18,6 +19,7 @@ mod tight;
 mod checked;
 mod support;
 mod atomic_choice;
+mod positive;
 pub mod partition;
 
 pub use checked::{CheckedInterpretation, StableInterpretation, check_interpretation};
@@ -30,6 +32,9 @@ pub use aggregate::{
     append_aggregate, append_aggregate_family, append_extremum, append_value_extremum,
 };
 
+pub use evaluation::{
+    EvaluationAttempt, EvaluationError, EvaluationLimits, EvaluationWorkspace, FormulaEvaluation,
+};
 pub use normal::{from_ground_program, from_ground_program_supported};
 pub use oracle::{Check, Limits, Statistics, Verdict, check, models, models_reduct};
 pub use reduct::FrozenReduct;
@@ -41,3 +46,8 @@ pub use tight::{
 };
 
 pub use support::{SupportAttempt, SupportError, SupportLimits, support_restriction};
+
+pub use positive::{
+    PositiveAttempt, PositiveError, PositivePlan, PositivePlanLimits, PositivePlanStatistics,
+    PositiveResource,
+};

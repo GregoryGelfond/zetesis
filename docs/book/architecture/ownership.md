@@ -21,7 +21,9 @@ caller reuse that owner without parsing or admitting it again.
 a complete ground graph, typed relation columns, an indexed formula graph or a
 certified support plan. It may retain a shared subject handle and derived
 storage. Reusing it requires the same subject, compatible capabilities and a
-valid physical owner. It does not establish that any candidate is an answer set.
+valid physical owner. Sharing that storage alone does not establish that a
+candidate is an answer set; a semantic certificate has its own applicability
+and membership contract.
 
 **Search and invocation state** belongs to a particular computation. Candidates,
 frozen truth, positive snapshots, pending deltas, work budgets and incumbents
@@ -33,6 +35,8 @@ allocation must not reuse a previous search's truth, coverage or budget.
 | Original program or theory | Exact immutable subject identity | After its readers and checked results release it |
 | Construction indexes and support | The construction phase's atom and formula domains | After the final consumer has produced the retained representation |
 | Relation columns and postings | Exact source, tuple dictionary and row domain | After the last query against that snapshot |
+| Prepared reduct encoding | Exact immutable original theory | After its enumeration and borrowed queries release it |
+| Original truth and query parameters | One candidate in that theory | Before another candidate uses the workspace |
 | Compiled device primitive | Device capabilities and pipeline contract | After all prepared users and invocations release it |
 | Frozen candidate and positive snapshot | Candidate, world, round and catalog identity | After all required evaluations of that round complete |
 | Pending result and readback | Exact invocation and submitted occurrence order | After checked completion or failure cleanup |
@@ -51,6 +55,38 @@ committing a pending suffix preserves those IDs and transfers its ownership.
 Consuming finalization transfers the completed atom vector into the immutable
 catalog and releases the construction index. These operations consume the
 enclosing work budget; catalog membership alone does not establish truth.
+
+## Prepared formula queries
+
+An ordinary formula enumeration constructs its `PreparedReduct` lazily, when a
+candidate first needs exact subset checking. One immutable encoding represents
+the original theory's reduct for every candidate. The encoding separates the
+prospective subset's atom values from the candidate's membership and original
+implication truth. A successful `EvaluationWorkspace` operation authenticates
+that truth against the exact candidate and theory; an arbitrary external truth
+mask cannot parameterize the query.
+
+The coordinator owns this prepared encoding across batches and candidate
+restrictions. A scalar check reuses its `ReductWorkspace`; concurrent completion
+workers borrow the same encoding and own disjoint evaluation, parameter and
+search storage. Every query resets logical state, and every returned subset is
+independently checked against the original frozen reduct. Candidate restrictions
+do not change the theory whose answer sets are being sought.
+
+The original candidate encoding and the reduct encoding have independent
+dimension limits. Their work shares the enumeration's cumulative search budget.
+Cold preparation and each query's retained capacity also have an explicit byte
+ceiling. Parallel completion charges the shared prepared owner once, then adds
+the disjoint worker and result allowances. Allocation overhead and process RSS
+remain outside these named-storage accounts. Failed preparation publishes no
+owner; a later completion-capacity refusal can retain a successfully prepared
+owner for retry without discarding its charged work.
+
+This architecture avoids rebuilding the reduct's structure for each candidate.
+The fixed encoding can be larger than a separately simplified reduct, so reuse
+alone establishes neither a time nor a memory improvement. The
+[parametric reduct law](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/parametric-reduct.md) states the
+semantic preservation argument and its remaining implementation obligations.
 
 ## Device resource scope
 

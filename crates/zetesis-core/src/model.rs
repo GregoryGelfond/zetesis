@@ -56,6 +56,21 @@ impl AtomCatalog {
     pub fn same_owner(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.0, &other.0)
     }
+
+    /// Canonical payload of the entire catalog, including unselected atoms.
+    /// Recorded by the constructor; returns `None` on arithmetic overflow.
+    /// This portable measure excludes spare capacity, Arc and allocator overhead.
+    #[must_use]
+    pub fn retained_payload_bytes(&self) -> Option<usize> {
+        self.0.canonical_bytes
+    }
+
+    // Only a live retained handle makes this address an allocation identity.
+    // The retention index stores that handle beside the key; it never exposes
+    // addresses as logical identity or keeps a key after releasing its owner.
+    pub(crate) fn owner_key(&self) -> usize {
+        Arc::as_ptr(&self.0).addr()
+    }
 }
 
 impl Default for AtomCatalog {
@@ -215,16 +230,23 @@ impl Model {
     /// the catalog's initial traversal. Returns `None` on size overflow.
     ///
     /// Counting this per retained model conservatively recounts shared catalogs.
+    /// [`crate::retention::ModelRetention`] accounts shared catalogs once instead.
     /// This is a portable admission measure, not allocated bytes or RSS: spare
     /// vector capacity, Arc envelopes and allocator bookkeeping are excluded.
     #[must_use]
     pub fn retained_payload_bytes(&self) -> Option<usize> {
-        self.0
-            .catalog
-            .0
-            .canonical_bytes?
-            .checked_add(LENGTH_BYTES)?
-            .checked_add(self.0.positions.len().checked_mul(LENGTH_BYTES)?)
+        self.catalog()
+            .retained_payload_bytes()?
+            .checked_add(self.selection_payload_bytes()?)
+    }
+
+    /// Canonical selected-position record: a u64 length and u64 per position.
+    /// Constant time; excludes the catalog, spare capacity and Arc overhead.
+    /// Returns `None` on arithmetic overflow. Retention accounts this per model
+    /// entry, even when a cloned model physically shares its selection vector.
+    #[must_use]
+    pub fn selection_payload_bytes(&self) -> Option<usize> {
+        LENGTH_BYTES.checked_add(self.0.positions.len().checked_mul(LENGTH_BYTES)?)
     }
 }
 

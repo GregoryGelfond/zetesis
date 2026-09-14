@@ -26,7 +26,10 @@ construction and standalone analysis APIs belong to its own manual.
 | Normal reduct membership | `zetesis_cpu::{check, check_static, BatchOracle}` |
 | Reuse scalar closure preparation across frozen seeds | `zetesis_cpu::{PreparedQueries, PreparationLimits, PreparationStatistics, ClosureWorkspace}` |
 | Finite formula construction and reference membership | `zetesis_ferraris::{Theory, Node, Interpretation, check}` |
+| Reusable original satisfaction with subject-bound node truth | `zetesis_ferraris::{EvaluationWorkspace, FormulaEvaluation}` |
+| Least consequences for an exact positive atomic-head formula theory | `zetesis_ferraris::{PositivePlan, PositivePlanLimits}` |
 | Repeated queries against one candidate's reduct | `zetesis_ferraris::FrozenReduct` |
+| Reuse one reduct encoding across different candidates | `zetesis_sat::{PreparedReduct, ReductWorkspace}` |
 | Native formula candidate/countermodel search | `zetesis_sat` |
 | Bounded device execution | `zetesis_wgpu` |
 | Several device primitives on one selected device | `GpuContext` and each primitive's `from_context` constructor |

@@ -91,6 +91,10 @@ impl<'a> PreparedInput<'a> {
                 atoms: owner.atom_catalog(),
                 objectives: owner.objectives(),
                 gate_atoms: 0,
+                certificate_order: crate::countermodel::certificate_order(
+                    owner.source_analysis(),
+                    owner.analysis_basis(),
+                ),
             }),
             metadata: Some(owner.metadata()),
         }
@@ -104,6 +108,10 @@ impl<'a> PreparedInput<'a> {
                 atoms: owner.atom_catalog(),
                 objectives: owner.objectives(),
                 gate_atoms: 0,
+                certificate_order: crate::countermodel::certificate_order(
+                    owner.source_analysis(),
+                    owner.analysis_basis(),
+                ),
             }),
             metadata: Some(owner.metadata()),
         }

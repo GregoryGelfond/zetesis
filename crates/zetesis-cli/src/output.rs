@@ -225,7 +225,7 @@ fn phases(out: &mut Buffer, timings: Option<&PhaseTimings>) -> Result<(), RunErr
         return out.text("null");
     };
     out.text(&format!(
-        "{{\"schema\":2,\"clock\":\"host_monotonic\",\"driver_elapsed_ns\":{},\"measurements\":{{",
+        "{{\"schema\":3,\"clock\":\"host_monotonic\",\"driver_elapsed_ns\":{},\"measurements\":{{",
         timings.driver_elapsed.as_nanos()
     ))?;
     for (index, phase) in SolvePhase::ALL.into_iter().enumerate() {
@@ -348,6 +348,7 @@ fn reason_code(reason: Interruption) -> &'static str {
                 },
                 Incomplete::PendingBytes => "pending_bytes",
                 Incomplete::CompletionScratch => "completion_scratch",
+                Incomplete::ReductStorage { .. } => "reduct_storage",
                 Incomplete::BatchCandidateLimit => "batch_candidate_limit",
                 Incomplete::PendingBatch => "pending_batch",
                 Incomplete::Allocation => "allocation",

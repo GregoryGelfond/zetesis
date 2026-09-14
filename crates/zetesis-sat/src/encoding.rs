@@ -3,7 +3,7 @@ use zetesis_ferraris::{Interpretation, Node, Theory};
 use crate::search::{Budget, Quota, storage};
 use crate::{AdmissionLimits, Assignment, Cnf, Incomplete, Literal};
 
-fn clause<const N: usize>(
+pub(crate) fn clause<const N: usize>(
     cnf: &mut Cnf,
     mut literals: [Literal; N],
     budget: &mut Budget<'_, impl Quota>,
@@ -73,7 +73,7 @@ impl Workspace {
             .cnf
             .get_or_insert(Cnf::empty(theory.atom_count(), limits)?);
         cnf.reset(theory.atom_count(), limits)?;
-        let dimensions = Dimensions::new(theory, limits)?;
+        let dimensions = ClauseReservation::new(theory, limits)?;
         cnf.reserve(dimensions.clauses, dimensions.literals)?;
         reserve(&mut self.mask, theory.nodes().len())?;
         reserve(&mut self.nodes, theory.nodes().len())?;
@@ -84,6 +84,7 @@ impl Workspace {
         Ok(())
     }
 
+    #[cfg(test)]
     pub(crate) fn retained_bytes(&self) -> u128 {
         use std::mem::size_of;
         size_of::<Self>() as u128
@@ -142,13 +143,12 @@ impl Workspace {
     }
 }
 
-pub(crate) struct Dimensions {
-    pub(crate) variables: usize,
+pub(crate) struct ClauseReservation {
     pub(crate) clauses: usize,
     pub(crate) literals: usize,
 }
 
-impl Dimensions {
+impl ClauseReservation {
     pub(crate) fn new(theory: &Theory, limits: AdmissionLimits) -> Result<Self, Incomplete> {
         let atoms = theory.atom_count() as u128;
         let nodes = theory.nodes().len() as u128;
@@ -157,7 +157,6 @@ impl Dimensions {
             usize::try_from(count.min(limit as u128)).map_err(|_| Incomplete::CounterOverflow)
         };
         Ok(Self {
-            variables: narrow(atoms + nodes, limits.max_variables)?,
             clauses: narrow(3 * nodes + roots + atoms + 1, limits.max_clauses)?,
             literals: narrow(7 * nodes + roots + 2 * atoms, limits.max_literals)?,
         })
@@ -234,12 +233,12 @@ fn append_nodes<Q: Quota>(
 }
 
 #[derive(Clone, Copy, Debug)]
-enum Encoded {
+pub(crate) enum Encoded {
     Constant(bool),
     Literal(Literal),
 }
 impl Encoded {
-    const fn negated(self) -> Self {
+    pub(crate) const fn negated(self) -> Self {
         match self {
             Self::Constant(value) => Self::Constant(!value),
             Self::Literal(literal) => Self::Literal(literal.negated()),
@@ -247,7 +246,7 @@ impl Encoded {
     }
 }
 
-fn gate(
+pub(crate) fn gate(
     cnf: &mut Cnf,
     gates: &mut HashMap<(usize, usize), Literal>,
     disjunction: bool,
@@ -274,8 +273,8 @@ fn gate(
         (Encoded::Literal(a), Encoded::Literal(b)) => (a, b),
     };
     // Classical aliases can make distinct original DAG nodes identical in this
-    // query. Reuse a complete equivalence only after computing the frozen mask.
-    // Commutative keys never change the original formula or its reduct mask.
+    // query. Only already-composed child expressions may share equivalences.
+    // Commutative keys never replace original truth or reduct guards.
     let (left, right) = if disjunction {
         (left.negated(), right.negated())
     } else {
@@ -331,16 +330,3 @@ use std::collections::HashMap;
 #[cfg(test)]
 #[path = "../tests/support/encoding_workspace.rs"]
 mod workspace_tests;
-
-pub(crate) fn scratch_bytes(atoms: u128, nodes: u128, roots: u128, clauses: u128) -> u128 {
-    use std::mem::size_of;
-    // Frozen values, node aliases, explicitly reserved alias-map entries,
-    // retained clause capacities and the largest in-flight submitted clause.
-    size_of::<Workspace>() as u128
-        + nodes
-            * (size_of::<bool>() + size_of::<Encoded>() + size_of::<((usize, usize), Literal)>())
-                as u128
-        + clauses * size_of::<usize>() as u128
-        + (7 * nodes + roots + 2 * atoms) * size_of::<usize>() as u128
-        + (atoms + 3) * size_of::<Literal>() as u128
-}

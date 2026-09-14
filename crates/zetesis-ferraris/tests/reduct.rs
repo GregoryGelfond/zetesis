@@ -3,8 +3,8 @@
 use std::time::Instant;
 use zetesis_cpu::{Control, Stop};
 use zetesis_ferraris::{
-    AdmissionError, AdmissionLimits, FrozenReduct, Interpretation, Limits, Node, Theory, Verdict,
-    check, models, models_reduct,
+    AdmissionError, AdmissionLimits, EvaluationLimits, EvaluationWorkspace, FrozenReduct,
+    Interpretation, Limits, Node, Theory, Verdict, check, models, models_reduct,
 };
 
 #[derive(Clone, Debug)]
@@ -59,6 +59,7 @@ fn interpretation(theory: &Theory, world: u8) -> Interpretation {
 fn compare(formulas: &[Expr]) {
     let program = theory(formulas);
     let control = Control::default();
+    let mut workspace = EvaluationWorkspace::default();
     for candidate in 0..4 {
         let model = interpretation(&program, candidate);
         let classical = formulas.iter().all(|expr| expr.eval(candidate));
@@ -66,6 +67,14 @@ fn compare(formulas: &[Expr]) {
             models(&program, &model, Limits::default(), &control).unwrap(),
             classical
         );
+        let truth = workspace
+            .evaluate(&model, EvaluationLimits::default(), &control)
+            .result
+            .unwrap();
+        for (root, formula) in program.roots().iter().zip(formulas) {
+            assert_eq!(truth.node_truth(*root), Some(formula.eval(candidate)));
+        }
+        assert_eq!(truth.is_model(), classical);
         let reduct: Vec<_> = formulas.iter().map(|expr| expr.reduct(candidate)).collect();
         let frozen = FrozenReduct::new(&model, Limits::default(), &control).unwrap();
         for tested in 0..4 {

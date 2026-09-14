@@ -485,7 +485,36 @@ fn search_initialized(
     cnf: &Cnf,
     budget: &mut Budget<'_, impl Quota>,
 ) -> Result<Option<Assignment>, Incomplete> {
-    if !state.initialize(cnf, budget)? || !state.propagate(cnf, budget)? {
+    search_assuming(state, cnf, &[], budget)
+}
+
+fn search_assuming(
+    state: &mut State,
+    cnf: &Cnf,
+    assumptions: &[Literal],
+    budget: &mut Budget<'_, impl Quota>,
+) -> Result<Option<Assignment>, Incomplete> {
+    if !state.initialize(cnf, budget)? {
+        increment(&mut budget.statistics.conflicts)?;
+        return Ok(None);
+    }
+    // Parameters are level-zero assignments: every decision starts after them
+    // on the trail, so chronological backtracking never retracts a parameter.
+    for &literal in assumptions {
+        budget.tick()?;
+        if literal.variable() >= cnf.variables() {
+            return Err(crate::AdmissionError::Variable {
+                variable: literal.variable(),
+                variables: cnf.variables(),
+            }
+            .into());
+        }
+        if !state.assign(literal) {
+            increment(&mut budget.statistics.conflicts)?;
+            return Ok(None);
+        }
+    }
+    if !state.propagate(cnf, budget)? {
         increment(&mut budget.statistics.conflicts)?;
         return Ok(None);
     }
@@ -498,7 +527,15 @@ fn search_initialized(
                 return Ok(None);
             }
         } else if !state.branch(budget)? {
-            return state.finish(cnf, budget).map(Some);
+            let assignment = state.finish(cnf, budget)?;
+            // Clause validation alone cannot authenticate the parameter input.
+            for &literal in assumptions {
+                budget.tick()?;
+                if assignment.value(literal.variable()) != Some(literal.positive()) {
+                    return Err(Incomplete::InvalidWitness);
+                }
+            }
+            return Ok(Some(assignment));
         }
     }
 }
@@ -513,25 +550,43 @@ impl Workspace {
     }
 
     pub(crate) fn retained_bytes(&self) -> u128 {
+        self.required_bytes(0, 0)
+    }
+
+    /// Current retained capacity or the requested final slots for this shape,
+    /// whichever is larger for each vector. Reservation overlap is excluded.
+    pub(crate) fn required_bytes(&self, variables: usize, clauses: usize) -> u128 {
         use std::mem::size_of;
         let state = &self.0;
         size_of::<Self>() as u128
-            + state.values.capacity() as u128 * size_of::<Option<bool>>() as u128
-            + state.trail.capacity() as u128 * size_of::<Literal>() as u128
-            + state.decisions.capacity() as u128 * size_of::<Decision>() as u128
-            + (state.order.capacity() as u128 + state.ranks.capacity() as u128)
+            + state.values.capacity().max(variables) as u128 * size_of::<Option<bool>>() as u128
+            + state.trail.capacity().max(variables) as u128 * size_of::<Literal>() as u128
+            + state.decisions.capacity().max(variables) as u128 * size_of::<Decision>() as u128
+            + (state.order.capacity().max(variables) as u128
+                + state.ranks.capacity().max(variables) as u128)
                 * size_of::<usize>() as u128
-            + state.positions.capacity() as u128 * size_of::<[usize; 2]>() as u128
-            + (state.heads.capacity() as u128 + state.next.capacity() as u128)
+            + state.positions.capacity().max(clauses) as u128 * size_of::<[usize; 2]>() as u128
+            + (state.heads.capacity() as u128).max(2 * variables as u128)
                 * size_of::<Option<WatchNode>>() as u128
-            + state.ordering.retained_bytes()
+            + (state.next.capacity() as u128).max(2 * clauses as u128)
+                * size_of::<Option<WatchNode>>() as u128
+            + state.ordering.required_bytes(variables)
     }
 
     pub(crate) fn query(&mut self, cnf: &Cnf, budget: &mut Budget<'_, impl Quota>) -> Solve {
+        self.query_assuming(cnf, &[], budget)
+    }
+
+    pub(crate) fn query_assuming(
+        &mut self,
+        cnf: &Cnf,
+        assumptions: &[Literal],
+        budget: &mut Budget<'_, impl Quota>,
+    ) -> Solve {
         match self
             .0
             .reset(cnf, budget)
-            .and_then(|()| search_initialized(&mut self.0, cnf, budget))
+            .and_then(|()| search_assuming(&mut self.0, cnf, assumptions, budget))
         {
             Ok(Some(assignment)) => Solve::Sat(assignment),
             Ok(None) => Solve::Unsat,

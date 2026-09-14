@@ -101,9 +101,13 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         // operation, so its attempted work remains available on failure.
         self.models = Some(models);
         let models = self.models.as_mut().expect("candidate stream installed");
-        if let Some(error) =
-            crate::countermodel::prepare_certificate(models, config, observations, phases)?
-        {
+        if let Some(error) = crate::countermodel::prepare_certificate(
+            models,
+            self.input.certificate_order,
+            config,
+            observations,
+            phases,
+        )? {
             self.complete(
                 SearchState::Interrupted(Interruption::Countermodel(error)),
                 phases,

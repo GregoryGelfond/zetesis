@@ -13,12 +13,31 @@ pub(crate) struct Input<'a> {
     pub(crate) atoms: &'a AtomCatalog,
     pub(crate) gate_atoms: usize,
     pub(crate) objectives: &'a zetesis_objective::ObjectiveProgram,
+    /// Source analysis chooses attempt order; each plan checks the whole theory.
+    pub(crate) certificate_order: zetesis_sat::CertificateOrder,
+}
+
+pub(crate) fn certificate_order(
+    analysis: &zetesis_themelios::analysis::Analysis,
+    basis: zetesis_themelios::AnalysisBasis,
+) -> zetesis_sat::CertificateOrder {
+    if basis == zetesis_themelios::AnalysisBasis::NormalizedProgram
+        && matches!(
+            analysis.classes().horn(),
+            zetesis_themelios::analysis::classify::HornKind::Horn
+        )
+    {
+        zetesis_sat::CertificateOrder::PositiveFirst
+    } else {
+        zetesis_sat::CertificateOrder::TightFirst
+    }
 }
 
 /// An optional setup interruption is retained by the same search report. A
 /// diagnostic failure propagates separately and never erases the owned stream.
 pub(crate) fn prepare_certificate(
     models: &mut zetesis_sat::StableModels,
+    order: zetesis_sat::CertificateOrder,
     options: &SolveConfig,
     diagnostics: &mut impl ExecutionSink,
     phases: &Recorder,
@@ -29,13 +48,31 @@ pub(crate) fn prepare_certificate(
         return Ok(None);
     }
     let eligibility = phases.measure(SolvePhase::CertificateSetup, || {
-        models.enable_certified_checking(zetesis_ferraris::TightPlanLimits {
-            max_bytes: options.max_completion_scratch_bytes,
-            ..Default::default()
-        })
+        models.enable_class_checking(
+            zetesis_sat::CertificateLimits {
+                tight: zetesis_ferraris::TightPlanLimits {
+                    max_bytes: options.max_completion_scratch_bytes,
+                    ..Default::default()
+                },
+                positive: zetesis_ferraris::PositivePlanLimits {
+                    max_bytes: usize::try_from(options.max_completion_scratch_bytes)
+                        .unwrap_or(usize::MAX),
+                    ..Default::default()
+                },
+            },
+            order,
+        )
     });
     match eligibility {
-        Ok(true) => diagnostics.record(Event::TightMembership)?,
+        Ok(true) => match models.statistics().certified.and_then(|stats| stats.plan) {
+            Some(zetesis_sat::CertificatePlanStatistics::Tight(_)) => {
+                diagnostics.record(Event::TightMembership)?;
+            }
+            Some(zetesis_sat::CertificatePlanStatistics::Positive(_)) => {
+                diagnostics.record(Event::PositiveMembership)?;
+            }
+            None => return Ok(Some(zetesis_sat::Incomplete::InvalidWitness)),
+        },
         Ok(false) => diagnostics.record(Event::GeneralMembership(
             models
                 .statistics()
@@ -60,6 +97,7 @@ pub(crate) fn search_limits(options: &SolveConfig) -> zetesis_sat::Limits {
             max_bytes: options.max_projection_bytes,
         },
         max_candidates: options.max_candidates,
+        max_reduct_bytes: options.max_reduct_bytes,
         max_verification_work: options.max_work,
         ..Default::default()
     }
@@ -68,6 +106,10 @@ pub(crate) fn search_limits(options: &SolveConfig) -> zetesis_sat::Limits {
 #[cfg(test)]
 #[path = "../tests/support/formula_harness.rs"]
 mod test_harness;
+
+#[cfg(test)]
+#[path = "../tests/support/certificate_order.rs"]
+mod certificate_order_tests;
 
 #[cfg(test)]
 #[path = "../tests/support/batch_orchestration.rs"]

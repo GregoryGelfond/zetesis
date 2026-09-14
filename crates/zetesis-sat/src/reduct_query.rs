@@ -12,19 +12,20 @@ pub(super) struct Workspace {
 }
 
 impl Workspace {
+    #[cfg(test)]
     pub(super) fn reserve(
         &mut self,
         theory: &Theory,
         limits: AdmissionLimits,
     ) -> Result<(), Incomplete> {
-        let dimensions = encoding::Dimensions::new(theory, limits)?;
+        let dimensions = encoding::ClauseReservation::new(theory, limits)?;
         self.encoding.reserve(theory, limits)?;
-        self.search
-            .reserve(dimensions.variables, dimensions.clauses)
-    }
-
-    pub(super) fn retained_bytes(&self) -> u128 {
-        self.encoding.retained_bytes() + self.search.retained_bytes()
+        let variables = usize::try_from(
+            (theory.atom_count() as u128 + theory.nodes().len() as u128)
+                .min(limits.max_variables as u128),
+        )
+        .map_err(|_| Incomplete::CounterOverflow)?;
+        self.search.reserve(variables, dimensions.clauses)
     }
 
     pub(super) fn encode(
@@ -82,7 +83,7 @@ mod tests {
                 control: &control,
                 statistics: SearchStatistics::default(),
             };
-            let result = super::super::membership(
+            let result = super::super::fresh_membership(
                 original,
                 &candidate,
                 Limits::default(),
@@ -167,8 +168,10 @@ mod tests {
         let mut models =
             crate::StableModels::new(&choice, Limits::default(), Control::default()).unwrap();
         let first = models.next().unwrap().unwrap();
-        let empty = Workspace::default().retained_bytes();
-        assert!(models.reduct_workspace.retained_bytes() > empty);
+        let empty = crate::ReductWorkspace::default().retained_bytes();
+        assert!(models.reduct.workspace.retained_bytes() > empty);
+        let owner = models.reduct.prepared().unwrap().clone();
+        let preparation = models.statistics().reduct.preparation;
         let next = models
             .next_batch(
                 crate::BatchLimits {
@@ -183,7 +186,9 @@ mod tests {
                 },
             )
             .unwrap();
-        assert_eq!(models.reduct_workspace.retained_bytes(), empty);
+        assert_eq!(models.reduct.workspace.retained_bytes(), empty);
+        assert!(models.reduct.prepared().unwrap().same_owner(&owner));
+        assert_eq!(models.statistics().reduct.preparation, preparation);
         assert_eq!(next.len(), 1);
         assert_ne!(
             first.atoms().collect::<Vec<_>>(),

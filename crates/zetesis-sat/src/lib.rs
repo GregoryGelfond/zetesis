@@ -17,6 +17,11 @@ mod encoding;
 mod ferraris;
 mod timing;
 mod checked;
+mod prepared_reduct;
+pub use prepared_reduct::{
+    PreparedReduct, ReductPreparationAttempt, ReductPreparationLimits, ReductPreparationStatistics,
+    ReductQueryStatistics, ReductStatistics, ReductWorkspace,
+};
 pub use zetesis_ferraris::partition;
 
 pub use checked::{CheckedInterpretation, StableInterpretation, check_interpretation};
@@ -25,9 +30,10 @@ pub use clauses::{Clause, Clauses};
 pub use cnf::{AdmissionError, AdmissionLimits, Assignment, Cnf, Literal, Resource};
 pub use error::Incomplete;
 pub use ferraris::{
-    BatchError, BatchLimits, BatchStatistics, BatchVerdict, CertifiedStatistics, Check,
-    CompletionExecutor, CompletionScratch, CompletionStatistics, Limits, StableModels, Statistics,
-    SupportStatistics, SupportStatus, check,
+    BatchError, BatchLimits, BatchStatistics, BatchVerdict, CertificateError, CertificateLimits,
+    CertificateOrder, CertificatePlanStatistics, CertifiedStatistics, Check, CompletionExecutor,
+    CompletionScratch, CompletionStatistics, Limits, StableModels, Statistics, SupportStatistics,
+    SupportStatus, check,
 };
 pub use projection::{ProjectionLimits, ProjectionResource, ProjectionStatistics};
 pub use search::{SearchLimits, SearchStatistics, Solve, solve, solve_with_statistics};

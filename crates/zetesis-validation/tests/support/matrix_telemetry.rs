@@ -375,3 +375,168 @@ fn cpu_batch_residuals_require_completion_attempts() {
     document["statistics"]["execution"]["completion"] = json!({"complete":true,"entered":0,"completed":0,"failed":0,"residuals":0,"residual_completed":0,"residual_failed":0});
     assert!(observe(&document, text.as_bytes(), NativeExecution::default()).is_err());
 }
+
+fn prepared_fixture() -> (Value, String) {
+    let (mut document, text) = fixture();
+    let text = text
+        .replace("failed_attempts=included", "failed_attempts=included; schema=3")
+        .replace(
+            "  phase candidate_generation:",
+            "  phase certificate_setup: unmeasured\n  phase certified_membership: unmeasured\n  phase candidate_generation:",
+        )
+        .replace(
+            "  phase gpu_host_oracle:",
+            "  phase reduct_preparation: unmeasured\n  phase gpu_host_oracle:",
+        );
+    let phases = &mut document["statistics"]["phase_timings"];
+    phases["schema"] = json!(3);
+    for name in [
+        "certificate_setup",
+        "certified_membership",
+        "reduct_preparation",
+    ] {
+        phases["measurements"][name] = Value::Null;
+    }
+    (document, text)
+}
+
+#[test]
+fn supported_phase_versions_keep_their_exact_population() {
+    let (document, text) = fixture();
+    let old = observe(&document, text.as_bytes(), NativeExecution::default()).unwrap();
+    assert_eq!((old.timing.phase_schema, old.timing.phases.len()), (1, 11));
+    let (mut document, text) = prepared_fixture();
+    let current = observe(&document, text.as_bytes(), NativeExecution::default()).unwrap();
+    assert_eq!(
+        (current.timing.phase_schema, current.timing.phases.len()),
+        (3, 14)
+    );
+    document["statistics"]["phase_timings"]["schema"] = json!(2);
+    document["statistics"]["phase_timings"]["measurements"]
+        .as_object_mut()
+        .unwrap()
+        .remove("reduct_preparation");
+    let certificate = text
+        .replace("schema=3", "schema=2")
+        .replace("  phase reduct_preparation: unmeasured\n", "");
+    let middle = observe(
+        &document,
+        certificate.as_bytes(),
+        NativeExecution::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        (middle.timing.phase_schema, middle.timing.phases.len()),
+        (2, 13)
+    );
+}
+
+#[test]
+fn typed_phase_versions_must_match_the_text_profile() {
+    let (document, text) = prepared_fixture();
+    for schema in [Value::Null, json!(1), json!(2), json!(4)] {
+        let mut changed = document.clone();
+        changed["statistics"]["phase_timings"]["schema"] = schema;
+        assert!(observe(&changed, text.as_bytes(), NativeExecution::default()).is_err());
+    }
+    let mut missing = document;
+    missing["statistics"]["phase_timings"]
+        .as_object_mut()
+        .unwrap()
+        .remove("schema");
+    assert!(observe(&missing, text.as_bytes(), NativeExecution::default()).is_err());
+}
+
+#[test]
+fn unknown_typed_phases_are_not_silently_discarded() {
+    let (mut document, text) = prepared_fixture();
+    document["statistics"]["phase_timings"]["measurements"]["future_preparation"] = Value::Null;
+    assert!(observe(&document, text.as_bytes(), NativeExecution::default()).is_err());
+}
+
+#[test]
+fn positive_consequences_remains_a_distinct_procedure() {
+    let (document, text) = prepared_fixture();
+    let text = text.replace("oracle=closure", "oracle=positive-consequences");
+    let observed = observe(&document, text.as_bytes(), NativeExecution::default()).unwrap();
+    assert_eq!(
+        observed.execution.procedure,
+        Procedure::PositiveConsequences
+    );
+    assert!(matches!(observed.execution.device, DeviceWork::Cpu));
+    assert_eq!(
+        serde_json::to_value(observed.execution.procedure).unwrap(),
+        "positive_consequences"
+    );
+}
+
+#[test]
+fn positive_consequences_cannot_satisfy_an_explicit_oracle_request() {
+    let (document, text) = prepared_fixture();
+    let text = text.replace("oracle=closure", "oracle=positive-consequences");
+    for oracle in [Oracle::Closure, Oracle::Countermodel] {
+        let request = NativeExecution {
+            oracle,
+            ..Default::default()
+        };
+        assert_eq!(
+            observe(&document, text.as_bytes(), request).unwrap_err(),
+            "actual oracle differs from explicit requested procedure"
+        );
+    }
+}
+
+#[test]
+fn unknown_procedures_are_not_automatic_specializations() {
+    let (document, text) = prepared_fixture();
+    let text = text.replace("oracle=closure", "oracle=future-certificate");
+    assert_eq!(
+        observe(&document, text.as_bytes(), NativeExecution::default()).unwrap_err(),
+        "unsupported actual oracle metadata"
+    );
+}
+
+#[test]
+fn positive_consequences_cannot_describe_a_metal_route() {
+    let (document, text) = formula_fixture();
+    let text = text.replace("oracle=countermodel", "oracle=positive-consequences");
+    let request = NativeExecution {
+        backend: Backend::Metal,
+        ..Default::default()
+    };
+    assert_eq!(
+        observe(&document, text.as_bytes(), request).unwrap_err(),
+        "positive consequences require the eager CPU formula route"
+    );
+}
+
+#[test]
+fn positive_consequences_cannot_describe_lazy_grounding() {
+    let (mut document, text) = prepared_fixture();
+    let text = text
+        .replace(
+            "oracle=closure; grounder=eager",
+            "oracle=positive-consequences; grounder=lazy",
+        )
+        .replace("grounding_mode: eager", "grounding_mode: lazy_interleaved")
+        .replace(
+            "stage grounding: calls=1; elapsed_ns=200; complete=true",
+            "stage grounding: unavailable=interleaved",
+        )
+        .replace(
+            "stage solving: calls=3; elapsed_ns=500; complete=true",
+            "stage solving: calls=3; elapsed_ns=700; complete=true",
+        );
+    let stages = &mut document["statistics"]["stage_timings"];
+    stages["grounding_mode"] = json!("lazy_interleaved");
+    stages["measurements"]["grounding"] = Value::Null;
+    stages["measurements"]["solving"]["elapsed_ns"] = json!(700);
+    let request = NativeExecution {
+        grounder: Grounder::Lazy,
+        ..Default::default()
+    };
+    assert_eq!(
+        observe(&document, text.as_bytes(), request).unwrap_err(),
+        "positive consequences require the eager CPU formula route"
+    );
+}

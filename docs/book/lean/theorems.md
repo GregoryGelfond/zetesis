@@ -42,6 +42,9 @@ The maintained full index is
 | Can empty world masks prune joins? | `WorldMasks.masked_scan_covers_world` | Membership belongs to the current immutable snapshots; no future-carrier conclusion |
 | Is reused join storage semantically harmless? | `JoinFrames.retained_frames_irrelevant` | Root reset and child overwrites follow the defined schedule |
 | Can a class certificate replace a subset query? | `TightPlans.ranked_support_stable` | Complete original producers, rank, original-model truth and support |
+| When does positive recursion need only least consequences? | `PositiveTheory.stable_iff_least_constraints` | Positive atomic-head producers and positive constraints; no acyclicity premise |
+| Can arbitrary constraints supply additional support? | `ConstrainedPositive.positive_stable_iff` | Positive producer theory, complete original constraint list and exact satisfaction at least consequences |
+| Can many candidates reuse one reduct representation? | `ParametricReduct.satisfies_reduct` | Authenticated candidate truth, subset membership and exact parametric formula construction |
 | Can certificates and residual checks compose? | `CertifiedExecution.completed_membership_exact` | Sound verdict, exact residual answer and completed result |
 | Does packed query storage preserve literal truth? | `PackedQueryLiterals.packed_truth` | Defined encode/decode operations; machine bounds remain separate |
 | Can payload work be charged as one amount? | `WorkCharge.repeated_eq_charge` | Unchanged control during the compared bookkeeping operations |

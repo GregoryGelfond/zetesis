@@ -92,3 +92,47 @@ fn search_keeps_reserved_arrays_across_smaller_queries() {
         );
     }
 }
+
+#[test]
+fn changing_level_zero_parameters_matches_explicit_unit_queries() {
+    let control = Control::default();
+    let mut workspace = Workspace::default();
+    let p = |variable| Literal::new(variable, true);
+    let base = vec![
+        vec![p(0), p(1)],
+        vec![p(1).negated(), p(2)],
+        vec![p(0).negated(), p(2).negated()],
+    ];
+    let cnf = Cnf::new(3, base.clone(), AdmissionLimits::default()).unwrap();
+    for assumptions in [
+        vec![p(2)],
+        vec![p(2).negated()],
+        vec![p(0), p(0).negated()],
+        vec![p(0).negated()],
+        vec![],
+    ] {
+        let mut clauses = base.clone();
+        clauses.extend(assumptions.iter().map(|&literal| vec![literal]));
+        let reference = Cnf::new(3, clauses, AdmissionLimits::default()).unwrap();
+        let expected = solve(&reference, SearchLimits::default(), &control);
+        let mut budget = Budget {
+            quota: LocalQuota,
+            limits: SearchLimits::default(),
+            control: &control,
+            statistics: SearchStatistics::default(),
+        };
+        let actual = workspace.query_assuming(&cnf, &assumptions, &mut budget);
+        match (actual, expected) {
+            (Solve::Sat(assignment), Solve::Sat(_)) => {
+                assert!(assumptions.iter().all(
+                    |literal| assignment.value(literal.variable()) == Some(literal.positive())
+                ));
+                assert!(base.iter().all(|clause| clause.iter().any(|literal| {
+                    assignment.value(literal.variable()) == Some(literal.positive())
+                })));
+            }
+            (Solve::Unsat, Solve::Unsat) => (),
+            mismatch => panic!("parameter/unit mismatch: {mismatch:?}"),
+        }
+    }
+}

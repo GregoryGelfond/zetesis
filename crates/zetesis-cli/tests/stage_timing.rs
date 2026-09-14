@@ -93,7 +93,7 @@ fn eager_lazy_formula_certified_and_parallel_routes_preserve_results() {
                 assert!(
                     text.find("Stage timings:").unwrap() < text.find("Phase timings:").unwrap()
                 );
-                assert!(text.contains("failed_attempts=included; schema=2"));
+                assert!(text.contains("failed_attempts=included; schema=3"));
                 if source == "1{p;q}1." {
                     // One parse, one closure admission and one formula admission.
                     // Retrying the grammar reuses the original parsed owner.

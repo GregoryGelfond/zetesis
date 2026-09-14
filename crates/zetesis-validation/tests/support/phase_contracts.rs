@@ -1,13 +1,21 @@
 //! Timing evidence is optional and never substitutes for answer-set qualification.
 
-use super::{FOOTER, HEADER, LABELS, parse};
+use super::{CERTIFICATE_HEADER, CERTIFICATE_LABELS, FOOTER, HEADER, LABELS, parse};
 
 fn section() -> String {
+    section_for(HEADER, &LABELS)
+}
+
+fn section_for(header: &str, labels: &[&str]) -> String {
     let mut lines = vec![
-        HEADER.to_owned(),
+        header.to_owned(),
         "  phase driver: elapsed_ns=1000".to_owned(),
     ];
-    lines.extend(LABELS.map(|label| format!("  phase {label}: unmeasured")));
+    lines.extend(
+        labels
+            .iter()
+            .map(|label| format!("  phase {label}: unmeasured")),
+    );
     lines.push(FOOTER.to_owned());
     lines.join("\n")
 }
@@ -81,7 +89,7 @@ fn certificate_schema_is_distinct_and_legacy_evidence_remains_readable() {
     let old = parse(legacy).unwrap().unwrap();
     assert_eq!(old.schema_version, 1);
     assert!(!old.phases.contains_key("certificate_setup"));
-    let current = section().replace(
+    let current = section_for(CERTIFICATE_HEADER, &CERTIFICATE_LABELS).replace(
         "phase certified_membership: unmeasured",
         "phase certified_membership: calls=4; elapsed_ns=12; complete=true",
     );
@@ -102,6 +110,31 @@ fn certificate_schema_is_distinct_and_legacy_evidence_remains_readable() {
             })
             .collect::<Vec<_>>()
             .join("\n"),
+    ] {
+        assert!(parse(&malformed).is_err());
+    }
+}
+
+#[test]
+fn reduct_preparation_requires_its_own_phase_schema() {
+    let current = section().replace(
+        "phase reduct_preparation: unmeasured",
+        "phase reduct_preparation: calls=1; elapsed_ns=12; complete=true",
+    );
+    let parsed = parse(&current).unwrap().unwrap();
+    assert_eq!(parsed.schema_version, 3);
+    assert_eq!(parsed.phases.len(), 14);
+    let preparation = parsed.phases["reduct_preparation"].as_ref().unwrap();
+    assert_eq!((preparation.calls, preparation.elapsed_ns), (1, 12));
+    for malformed in [
+        current.replace("; schema=3", ""),
+        current.replace("; schema=3", "; schema=2"),
+        current.replace("; schema=3", "; schema=4"),
+        current.replace(
+            "  phase reduct_preparation: calls=1; elapsed_ns=12; complete=true\n",
+            "",
+        ),
+        current.replace("phase reduct_preparation:", "phase future_preparation:"),
     ] {
         assert!(parse(&malformed).is_err());
     }

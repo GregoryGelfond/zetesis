@@ -2,6 +2,7 @@
 
 use std::fmt;
 
+use zetesis_core::retention::{ModelRetention, RetentionError};
 use zetesis_cpu::Control;
 
 use crate::execution_observation::ExecutionSink;
@@ -19,11 +20,12 @@ pub struct WorldViewLimits {
     pub max_answer_sets: usize,
     /// Maximum summed atom counts across retained full answer sets.
     pub max_atoms: usize,
-    /// Maximum canonical answer payload bytes: each answer's entire referenced
-    /// atom catalog, selected positions and optional score priorities. Shared
-    /// catalogs are conservatively recounted. Excludes shared subjects, spare
-    /// vector capacity, allocator/Arc overhead, execution state and the one
-    /// yielded answer being considered for admission.
+    /// Maximum canonical answer payload bytes: each distinct catalog allocation
+    /// once, plus selected positions and optional score priorities per answer.
+    /// Equal-content separately allocated catalogs count separately. Excludes
+    /// shared subjects, spare vector/hash capacity, owner-index entries,
+    /// allocator/Arc overhead, execution state and the one yielded answer being
+    /// considered for admission. This is not an allocated-memory or RSS limit.
     pub max_bytes: usize,
 }
 
@@ -54,7 +56,7 @@ pub enum WorldViewError {
     Bytes,
     /// Collection payload arithmetic exceeded the machine's integer range.
     Overflow,
-    /// The collection could not reserve another answer slot.
+    /// The collection could not reserve an answer slot or catalog-index entry.
     Allocation,
 }
 
@@ -77,6 +79,16 @@ impl std::error::Error for WorldViewError {
         match self {
             Self::Solve(error) => Some(error.as_ref()),
             _ => None,
+        }
+    }
+}
+
+impl From<RetentionError> for WorldViewError {
+    fn from(error: RetentionError) -> Self {
+        match error {
+            RetentionError::Bytes { .. } => Self::Bytes,
+            RetentionError::Overflow => Self::Overflow,
+            RetentionError::Allocation => Self::Allocation,
         }
     }
 }
@@ -171,8 +183,9 @@ impl WorldView {
     /// use [`SessionBuilder::collect`] or [`SessionBuilder::collect_observed`].
     /// This convenience operation uses that same request and collection loop.
     ///
-    /// Work is the ordinary search and scoring plus constant-time payload
-    /// admission per returned answer using its catalog's checked size summary.
+    /// Work is the ordinary search and scoring plus expected amortized constant
+    /// payload admission per answer using checked catalog sizes. Owner lookup
+    /// and index growth can take linear work in the retained catalog count.
     /// Retained space is the full family within `limits`, in addition to the
     /// session's independent budgets. The family can be exponentially large.
     /// Collection-vector reservation is fallible; the model's shared ownership
@@ -288,7 +301,7 @@ impl WorldView {
 struct Collection {
     answer_sets: Vec<AnswerSet>,
     atoms: usize,
-    bytes: usize,
+    retention: ModelRetention,
 }
 
 impl Collection {
@@ -303,37 +316,18 @@ impl Collection {
         if atoms > limits.max_atoms {
             return Err(WorldViewError::Atoms);
         }
-        let bytes = self
-            .bytes
-            .checked_add(payload_bytes(&answer)?)
-            .ok_or(WorldViewError::Overflow)?;
-        if bytes > limits.max_bytes {
-            return Err(WorldViewError::Bytes);
-        }
+        let admission = self.retention.admit(
+            answer.interpretation(),
+            crate::optimization::score_payload_bytes(answer.score())?,
+            limits.max_bytes,
+        )?;
         self.answer_sets
             .try_reserve(1)
             .map_err(|_| WorldViewError::Allocation)?;
+        // All arithmetic and both reservations precede owner/answer publication.
+        admission.commit();
         self.answer_sets.push(answer);
         self.atoms = atoms;
-        self.bytes = bytes;
         Ok(())
     }
-}
-
-fn payload_bytes(answer: &AnswerSet) -> Result<usize, WorldViewError> {
-    // One optional-score tag; a present score adds u64 length and i32/i64 pairs.
-    const SCORE_LEVEL_BYTES: usize = 4 + 8;
-    const SCORE_HEADER_BYTES: usize = 1 + 8;
-    let model = crate::optimization::payload_bytes(answer.interpretation())
-        .map_err(|_| WorldViewError::Overflow)?;
-    let score = match answer.score() {
-        None => 1,
-        Some(score) => score
-            .costs()
-            .len()
-            .checked_mul(SCORE_LEVEL_BYTES)
-            .and_then(|bytes| bytes.checked_add(SCORE_HEADER_BYTES))
-            .ok_or(WorldViewError::Overflow)?,
-    };
-    model.checked_add(score).ok_or(WorldViewError::Overflow)
 }

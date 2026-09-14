@@ -47,7 +47,8 @@ pub struct Configuration {
     pub construction: ConstructionLimits,
     /// Native per-call or whole iterator search and verification work, at most 1M.
     /// Candidate64/decision100k, CNF4096/16384/65536 and projection64/512/64KiB
-    /// ceilings remain fixed, and are serialized with each start record.
+    /// ceilings remain fixed. Reduct shape has the same independent CNF ceilings
+    /// and a 1 MiB named-storage bound. All appear in each start record.
     pub max_native_work: u64,
     /// Per-call exhaustive reference or guard evaluation work, at most 1M.
     pub max_reference_work: u64,
@@ -84,12 +85,14 @@ impl Configuration {
         Ok(())
     }
     pub(super) fn native(self) -> zetesis_sat::Limits {
+        let admission = zetesis_sat::AdmissionLimits {
+            max_variables: 4096,
+            max_clauses: 16_384,
+            max_literals: 65_536,
+        };
         zetesis_sat::Limits {
-            admission: zetesis_sat::AdmissionLimits {
-                max_variables: 4096,
-                max_clauses: 16_384,
-                max_literals: 65_536,
-            },
+            admission,
+            reduct_admission: admission,
             projections: zetesis_sat::ProjectionLimits {
                 max_entries: 64,
                 max_nodes: 512,
@@ -101,6 +104,7 @@ impl Configuration {
             },
             max_candidates: 64,
             max_verification_work: self.max_native_work,
+            max_reduct_bytes: 1024 * 1024,
         }
     }
 }

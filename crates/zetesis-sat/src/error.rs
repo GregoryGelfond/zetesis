@@ -20,6 +20,13 @@ pub enum Incomplete {
     PendingBytes,
     /// Concurrent completion workspaces and ordered results exceed logical scratch.
     CompletionScratch,
+    /// Named prepared-reduct or query storage exceeds its explicit byte ceiling.
+    ReductStorage {
+        /// Required named vector/map capacity, excluding shared source payload.
+        required: u128,
+        /// Inclusive ceiling for this preparation or query owner.
+        limit: u128,
+    },
     /// A retained batch exceeds the current call's candidate ceiling.
     BatchCandidateLimit,
     /// Scalar iteration cannot discard an outstanding candidate batch.
@@ -51,7 +58,7 @@ pub enum Incomplete {
     /// A certificate cannot be configured after candidate generation has begun.
     LateCertificate,
     /// Optional candidate certification stopped without establishing membership.
-    Certificate(zetesis_ferraris::TightError),
+    Certificate(crate::CertificateError),
     /// Independent formula evaluation stopped without validating a witness.
     Verification(Stop),
     /// An internal SAT witness failed independent semantic validation.
@@ -84,6 +91,10 @@ impl fmt::Display for Incomplete {
             Self::DecisionLimit => f.write_str("SAT decision limit reached"),
             Self::CandidateLimit => f.write_str("stable candidate limit reached"),
             Self::CompletionScratch => f.write_str("completion logical scratch byte limit reached"),
+            Self::ReductStorage { required, limit } => write!(
+                f,
+                "prepared reduct storage requires {required} bytes; limit is {limit}"
+            ),
             Self::PendingBytes => f.write_str("pending candidate byte limit reached"),
             Self::BatchCandidateLimit => f.write_str("pending batch candidate limit reached"),
             Self::PendingBatch => f.write_str("an unresolved candidate batch remains"),

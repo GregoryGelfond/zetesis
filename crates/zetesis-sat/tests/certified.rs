@@ -8,8 +8,8 @@ use zetesis_ferraris::{
     AdmissionLimits, Interpretation, Node, Theory, TightError, TightPlanLimits, TightResource,
 };
 use zetesis_sat::{
-    BatchError, BatchLimits, BatchVerdict, CompletionExecutor, Control, Incomplete, Limits,
-    StableModels,
+    BatchError, BatchLimits, BatchVerdict, CertificateError, CompletionExecutor, Control,
+    Incomplete, Limits, StableModels,
 };
 
 fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
@@ -172,7 +172,9 @@ fn failed_construction_is_charged_and_cannot_restart_or_reset_search_limits() {
     assert_eq!(baseline.statistics().search.work, before + 3);
     assert_eq!(
         baseline.statistics().certified.unwrap().refusal,
-        Some(TightError::Limit(TightResource::Work))
+        Some(CertificateError::Tight(TightError::Limit(
+            TightResource::Work
+        )))
     );
     assert!(
         !baseline
@@ -256,7 +258,7 @@ fn certificate_failure_retains_pending_candidates_without_reentering_completion(
     assert!(matches!(
         result,
         Err(BatchError::Search(Incomplete::Certificate(
-            TightError::Limit(TightResource::Work)
+            CertificateError::Tight(TightError::Limit(TightResource::Work))
         )))
     ));
     assert_eq!(stream.batch_statistics().completion_calls, 0);

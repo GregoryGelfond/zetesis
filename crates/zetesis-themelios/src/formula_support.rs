@@ -2,6 +2,7 @@
 
 mod evaluation;
 mod delta;
+mod producers;
 mod relations;
 mod queries;
 #[cfg(test)]
@@ -177,7 +178,21 @@ pub(crate) fn build(
     counters: &mut Counters,
     fallback: Location,
 ) -> Result<CompletedCatalog, FormulaFailure> {
-    let mut catalog = SupportCatalog::default();
+    let plan = producers::ProducerPlan::prepare(prepared, limits, counters, fallback)?;
+    complete(prepared, plan, limits, budget, counters, fallback)
+}
+
+fn complete(
+    prepared: &Prepared,
+    mut plan: Option<producers::ProducerPlan<'_>>,
+    limits: &FormulaLimits,
+    budget: &mut Budget,
+    counters: &mut Counters,
+    fallback: Location,
+) -> Result<CompletedCatalog, FormulaFailure> {
+    let mut catalog = SupportCatalog::with_prepared_bytes(
+        plan.as_ref().map_or(0, producers::ProducerPlan::bytes),
+    );
     #[cfg(test)]
     postings::begin_support();
     let mut rounds = 0_u64;
@@ -190,29 +205,57 @@ pub(crate) fn build(
         )?;
         rounds += 1;
         counters.record(Event::SupportRound);
-        let relations = catalog.snapshot(limits, counters, fallback)?;
-        let support = Support::indexed(&relations, limits, counters, fallback)?;
-        let mut delta = BTreeSet::new();
-        for rule in &prepared.rules {
-            if matches!(rule.head, HeadIr::Normal(None)) {
-                continue;
+        let delta = {
+            let mut schedule = plan.as_ref().map_or_else(
+                || producers::Schedule::all(&prepared.rules),
+                producers::ProducerPlan::schedule,
+            );
+            let mut selected = schedule.next(limits, counters, fallback)?;
+            if selected.is_none() && plan.is_some() {
+                // Every zero-input producer ran at bootstrap. Every subsequent
+                // new positive binding needs a changed predicate, whose complete
+                // posting would have selected its original producer. Thus this
+                // admitted round is unchanged without a new relation snapshot.
+                drop(plan);
+                catalog.release_preparation();
+                return Ok(CompletedCatalog { catalog });
             }
-            let mut variants = delta::variants(rule, &support, rounds == 1, limits, counters)?;
-            while let Some(variant) = variants.next(limits, counters)? {
-                let mut outer = Join::rule(rule, &support, budget)?;
-                outer.delta = match variant {
-                    delta::Variant::Full => None,
-                    delta::Variant::Delta(pivot) => Some(pivot),
+            counters.work(limits, fallback)?;
+            counters.record(Event::SupportSnapshotPreparation);
+            let relations = catalog.snapshot(limits, counters, fallback)?;
+            let support = Support::indexed(&relations, limits, counters, fallback)?;
+            let mut delta = BTreeSet::new();
+            while let Some(index) = selected {
+                let rule = &prepared.rules[index];
+                counters.work(limits, rule.location)?;
+                counters.record(Event::SupportProducerVisit);
+                let mut variants = match &plan {
+                    Some(plan) => {
+                        plan.variants(index, rule, &support, rounds == 1, limits, counters)?
+                    }
+                    None => delta::variants(rule, &support, rounds == 1, limits, counters)?,
                 };
-                derive_rule(
-                    rule, &mut outer, &support, &mut delta, limits, budget, counters,
-                )?;
+                while let Some(variant) = variants.next(limits, counters)? {
+                    let mut outer = Join::rule(rule, &support, budget)?;
+                    outer.delta = match variant {
+                        delta::Variant::Full => None,
+                        delta::Variant::Delta(pivot) => Some(pivot),
+                    };
+                    derive_rule(
+                        rule, &mut outer, &support, &mut delta, limits, budget, counters,
+                    )?;
+                }
+                selected = schedule.next(limits, counters, fallback)?;
             }
-        }
-        drop(support);
-        drop(relations);
+            delta
+        };
         if delta.is_empty() {
+            drop(plan);
+            catalog.release_preparation();
             return Ok(CompletedCatalog { catalog });
+        }
+        if let Some(plan) = &mut plan {
+            plan.advance(&delta, limits, counters, fallback)?;
         }
         catalog.advance(limits, counters, fallback)?;
         for atom in delta {

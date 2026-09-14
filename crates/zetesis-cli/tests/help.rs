@@ -65,6 +65,7 @@ fn full_help_exposes_the_resource_contracts() {
         "--max-observation-bytes",
         "--max-objective-work",
         "--max-completion-scratch-bytes",
+        "--max-reduct-bytes",
         "--max-substitutions",
         "--max-ground-rules",
         "--max-batch-bytes",

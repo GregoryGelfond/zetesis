@@ -174,6 +174,19 @@ positions; samples are not silently replaced. `accounted` means every position
 has a disposition, whereas `passed` requires all requested observations to pass.
 Check both semantic qualification and sample scope before comparing timings.
 
+The matrix accepts the actual closure, countermodel, tight-support and positive-
+consequences procedures. Certified positive consequences require eager CPU
+formula execution and remain distinct from an explicitly requested closure or
+countermodel procedure. Phase schema 3 adds cold `reduct_preparation`; exact
+schema-1 and schema-2 records remain readable with their original phase sets.
+Unknown versions or phase/procedure names and contradictory typed/text views are
+refused. A missing phase is not retroactively supplied to an older observation.
+
+`matrix::Observation::from_statistics` exposes the same decoder used by the
+matrix runner for separately retained, caller-bounded JSON and stderr. It checks
+telemetry consistency only; callers still establish process completion and full
+answer-family qualification. It performs no solving or process invocation.
+
 Host phase timings and process wall time are separate. Lazy grounding is
 interleaved with solving; a missing duration stays unavailable. Logical payload,
 transfer and authored allocation counts are not RSS. Neither successful parity

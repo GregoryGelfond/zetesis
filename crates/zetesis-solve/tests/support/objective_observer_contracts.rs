@@ -59,6 +59,7 @@ fn attempt(
             atoms: planned.atom_catalog(),
             gate_atoms: 0,
             objectives: planned.objectives(),
+            certificate_order: zetesis_sat::CertificateOrder::TightFirst,
         },
         &options,
         &mut crate::execution_observation::Ignore,

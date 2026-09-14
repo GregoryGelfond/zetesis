@@ -1,4 +1,4 @@
-use zetesis_ferraris::{Interpretation, Theory, TightVerdict, models, models_reduct};
+use zetesis_ferraris::{Interpretation, Theory, models, models_reduct};
 
 use crate::encoding;
 use crate::search::{Budget, Cursor, Quota, increment};
@@ -18,7 +18,10 @@ pub use completion::{CompletionExecutor, CompletionScratch, CompletionStatistics
 
 #[path = "certified.rs"]
 mod certified;
-pub use certified::CertifiedStatistics;
+pub use certified::{
+    CertificateError, CertificateLimits, CertificateOrder, CertificatePlanStatistics,
+    CertifiedStatistics,
+};
 
 #[path = "candidate_support.rs"]
 mod candidate_support;
@@ -30,9 +33,12 @@ mod reduct_query;
 /// Whole-operation ceilings for a membership check or stable-model enumeration.
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {
-    /// Each candidate/reduct CNF, including submitted candidate restrictions.
+    /// Original candidate CNF, including submitted candidate restrictions.
     /// Exact candidate exclusions have their own `projections` population.
     pub admission: AdmissionLimits,
+    /// Immutable prepared reduct CNF, or the explicit fresh-check reduct CNF.
+    /// These dimensions are independent of candidate/restriction admission.
+    pub reduct_admission: AdmissionLimits,
     /// Distinct exclusion keys, logical trie nodes and named retained capacity.
     pub projections: ProjectionLimits,
     /// Cumulative encoding, certificate and search work/decisions across a run.
@@ -41,15 +47,21 @@ pub struct Limits {
     pub max_candidates: u64,
     /// Per-call work ceiling for independent original/reduct formula evaluation.
     pub max_verification_work: u64,
+    /// Named immutable reduct preparation and retained per-query capacity,
+    /// each bounded independently. Aggregate completion also admits the shared
+    /// prepared owner once alongside all worker/transient/result storage.
+    pub max_reduct_bytes: u64,
 }
 impl Default for Limits {
     fn default() -> Self {
         Self {
             admission: AdmissionLimits::default(),
+            reduct_admission: AdmissionLimits::default(),
             projections: ProjectionLimits::default(),
             search: SearchLimits::default(),
             max_candidates: 1_000_000,
             max_verification_work: 100_000_000,
+            max_reduct_bytes: crate::ReductPreparationLimits::DEFAULT_BYTES,
         }
     }
 }
@@ -108,6 +120,8 @@ pub struct Statistics {
     /// Initial necessary disjunctive support restriction on outer candidates.
     /// Standalone membership checks do not construct this optional restriction.
     pub support: Option<SupportStatistics>,
+    /// Actual persistent-reduct construction and query work, including failures.
+    pub reduct: crate::ReductStatistics,
 }
 
 fn verification(limits: Limits) -> zetesis_ferraris::Limits {
@@ -134,7 +148,7 @@ pub fn check(
         statistics: SearchStatistics::default(),
     };
     let mut statistics = Statistics::default();
-    match membership(
+    match fresh_membership(
         theory,
         candidate,
         limits,
@@ -147,7 +161,7 @@ pub fn check(
     }
 }
 
-fn membership(
+fn fresh_membership(
     theory: &Theory,
     candidate: &Interpretation,
     limits: Limits,
@@ -155,6 +169,23 @@ fn membership(
     statistics: &mut Statistics,
     workspace: &mut reduct_query::Workspace,
 ) -> Result<Check, Incomplete> {
+    let original = original_model(theory, candidate, limits, budget, statistics);
+    if !original? {
+        return Ok(Check::NotModel);
+    }
+    let started = timing::start(statistics.phase_timings.as_ref());
+    let result = reduct_membership(theory, candidate, limits, budget, statistics, workspace);
+    timing::finish(&mut statistics.phase_timings, Phase::Reduct, started);
+    result
+}
+
+pub(crate) fn original_model(
+    theory: &Theory,
+    candidate: &Interpretation,
+    limits: Limits,
+    budget: &Budget<'_, impl Quota>,
+    statistics: &mut Statistics,
+) -> Result<bool, Incomplete> {
     let started = timing::start(statistics.phase_timings.as_ref());
     let original = (|| {
         budget.control.poll()?;
@@ -168,13 +199,7 @@ fn membership(
         Phase::OriginalValidation,
         started,
     );
-    if !original? {
-        return Ok(Check::NotModel);
-    }
-    let started = timing::start(statistics.phase_timings.as_ref());
-    let result = reduct_membership(theory, candidate, limits, budget, statistics, workspace);
-    timing::finish(&mut statistics.phase_timings, Phase::Reduct, started);
-    result
+    original
 }
 
 fn reduct_membership(
@@ -185,9 +210,21 @@ fn reduct_membership(
     statistics: &mut Statistics,
     workspace: &mut reduct_query::Workspace,
 ) -> Result<Check, Incomplete> {
-    let (reduct, search) = workspace.encode(theory, candidate, limits.admission, budget)?;
+    let (reduct, search) = workspace.encode(theory, candidate, limits.reduct_admission, budget)?;
     increment(&mut statistics.countermodel_queries)?;
-    match search.query(reduct, budget) {
+    let result = search.query(reduct, budget);
+    checked_reduct_result(theory, candidate, limits, budget, statistics, result)
+}
+
+pub(crate) fn checked_reduct_result(
+    theory: &Theory,
+    candidate: &Interpretation,
+    limits: Limits,
+    budget: &mut Budget<'_, impl Quota>,
+    statistics: &mut Statistics,
+    result: Solve,
+) -> Result<Check, Incomplete> {
+    match result {
         Solve::Unsat => Ok(Check::Stable),
         Solve::Inconclusive(error) => Err(error),
         Solve::Sat(assignment) => {
@@ -238,7 +275,7 @@ pub struct StableModels {
     pending_error: Option<Incomplete>,
     batch: batch::State,
     certification: Option<certified::Certification>,
-    reduct_workspace: reduct_query::Workspace,
+    reduct: crate::prepared_reduct::State,
 }
 impl StableModels {
     /// Encode the original theory once, retaining its immutable instance identity.
@@ -277,7 +314,7 @@ impl StableModels {
             pending_error: None,
             batch: batch::State::default(),
             certification: None,
-            reduct_workspace: reduct_query::Workspace::default(),
+            reduct: crate::prepared_reduct::State::default(),
         })
     }
     /// Enable coarse host timing from this point onward. Repeated calls retain
@@ -369,7 +406,7 @@ impl StableModels {
                 theory: &self.theory,
                 limits: self.limits,
                 certificate: self.certification.as_ref(),
-                workspace: &mut self.reduct_workspace,
+                reduct: &mut self.reduct,
             },
             &self.candidate_cnf,
             &mut self.candidate_cursor,
@@ -416,7 +453,7 @@ struct Membership<'a> {
     theory: &'a Theory,
     limits: Limits,
     certificate: Option<&'a certified::Certification>,
-    workspace: &'a mut reduct_query::Workspace,
+    reduct: &'a mut crate::prepared_reduct::State,
 }
 
 fn advance(
@@ -431,7 +468,7 @@ fn advance(
         theory,
         limits,
         certificate,
-        workspace,
+        reduct,
     } = membership_input;
     loop {
         let started = timing::start(statistics.phase_timings.as_ref());
@@ -461,14 +498,14 @@ fn advance(
                 statistics,
                 &mut budget.statistics,
             )? {
-                TightVerdict::Stable => Check::Stable,
-                TightVerdict::NotModel { .. } => Check::NotModel,
-                TightVerdict::Residual { .. } => {
-                    membership(theory, &candidate, limits, budget, statistics, workspace)?
+                certified::Verdict::Stable => Check::Stable,
+                certified::Verdict::NotModel => Check::NotModel,
+                certified::Verdict::Residual => {
+                    reduct.check(theory, &candidate, limits, budget, statistics)?
                 }
             }
         } else {
-            membership(theory, &candidate, limits, budget, statistics, workspace)?
+            reduct.check(theory, &candidate, limits, budget, statistics)?
         };
         if matches!(result, Check::NotModel | Check::Inconclusive(_)) {
             return Err(Incomplete::InvalidWitness);
@@ -484,3 +521,7 @@ fn advance(
         blocking?;
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/support/prepared_owner.rs"]
+mod prepared_owner_tests;

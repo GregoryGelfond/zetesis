@@ -596,20 +596,31 @@ fn support_byte_limit_is_serialized() {
 
 #[test]
 fn native_limits_are_numeric_json_fields() {
-    let config = Configuration::default();
+    let mut config = Configuration::default();
+    config.search.reduct_admission = zetesis_sat::AdmissionLimits {
+        max_variables: 17,
+        max_clauses: 19,
+        max_literals: 23,
+    };
+    config.search.max_reduct_bytes = 29;
     let encoded = serde_json::to_value(config).unwrap();
     for (field, count) in [
         ("bundle", 5),
         ("admission", 4),
         ("expansion", 7),
         ("formula", 20),
-        ("search", 5),
+        ("search", 7),
         ("certificate", 4),
         ("capture", 7),
     ] {
         assert_eq!(encoded[field].as_object().unwrap().len(), count, "{field}");
     }
     assert_eq!(encoded["formula"]["max_work"], config.formula.max_work);
+    assert_eq!(
+        encoded["search"]["reduct_admission"],
+        serde_json::json!({"max_variables": 17, "max_clauses": 19, "max_literals": 23})
+    );
+    assert_eq!(encoded["search"]["max_reduct_bytes"], 29);
     assert_eq!(
         encoded["capture"]["max_subject_bytes"],
         config.capture.max_subject_bytes

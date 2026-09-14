@@ -202,18 +202,33 @@ fn optional_formula_limit_preserves_the_original_query() {
     let input = disjunctions(1);
     let mut limits = Limits::default();
     // Eight occurrences admit the original a-or-b encoding. They do not admit
-    // the separately bounded support formula. Full two-atom reduct encoding
-    // still needs ten literal occurrences; exclusion history is independent.
+    // the separately bounded support formula. Reduct-query admission and
+    // exclusion history are independent of this original candidate limit.
     limits.admission.max_literals = 8;
     let mut models = StableModels::new(&input, limits, Control::default()).unwrap();
     let support = models.statistics().support.unwrap();
     assert_eq!(support.status, SupportStatus::FormulaLimit);
     assert!(support.construction_work > 0);
     assert_eq!(support.encoding_work, 0);
-    let family: BTreeSet<Vec<_>> = (0..2)
-        .map(|_| models.next().unwrap().unwrap().atoms().collect())
-        .collect();
-    assert_eq!(family, BTreeSet::from([vec![0], vec![1]]));
+    assert_eq!(collect(&mut models), BTreeSet::from([vec![0], vec![1]]));
+    assert_eq!(models.statistics().candidates, 3);
+    assert_eq!(models.statistics().countermodels, 1);
+}
+
+#[test]
+fn cold_reduct_admission_refusal_cannot_publish_an_answer() {
+    let input = disjunctions(1);
+    let mut limits = Limits::default();
+    // The same eight-literal candidate owner completes its original encoding,
+    // with optional support declined. The separately requested immutable reduct
+    // cannot admit its next ten-literal prefix and never enters native search.
+    limits.admission.max_literals = 8;
+    limits.reduct_admission.max_literals = 8;
+    let mut models = StableModels::new(&input, limits, Control::default()).unwrap();
+    assert_eq!(
+        models.statistics().support.unwrap().status,
+        SupportStatus::FormulaLimit
+    );
     assert!(matches!(
         models.next().unwrap(),
         Err(Incomplete::Admission(zetesis_sat::AdmissionError::Limit {
@@ -222,6 +237,15 @@ fn optional_formula_limit_preserves_the_original_query() {
             limit: 8,
         }))
     ));
+    let statistics = models.statistics();
+    assert_eq!(statistics.candidates, 1);
+    assert_eq!(statistics.countermodel_queries, 0);
+    assert_eq!(statistics.stable_models, 0);
+    let preparation = statistics.reduct.preparation.unwrap();
+    assert_eq!(preparation.retained_bytes, 0);
+    assert!(preparation.work > 0);
+    assert!(preparation.work <= statistics.search.work);
+    assert!(models.next().is_none());
     assert!(!models.exhausted());
 }
 

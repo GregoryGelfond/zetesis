@@ -67,7 +67,7 @@ fn ordinary_certified_models_optimum_ties_and_hidden_displays_match_explicit_red
             assert_eq!(s.countermodel_queries, 0);
             assert_eq!(c.failed, 0);
             assert!(diag.contains("Membership: checked tight support certificate"));
-            assert!(diag.contains("tight certificate: eligible=true"));
+            assert!(diag.contains("class certificate: eligible=true"));
             assert!(diag.contains("storage limit=268435456"));
             let timing = r.phase_timings.unwrap();
             assert_eq!(timing.get(SolvePhase::CertificateSetup).unwrap().calls, 1);
@@ -103,13 +103,13 @@ fn unsupported_class_falls_back_and_explicit_general_oracle_keeps_comparison_pat
             .countermodel_queries
     );
     assert!(s.certified.unwrap().refusal.is_some());
-    assert!(diag.contains("tight certificate refused"));
+    assert!(diag.contains("optional class certificate refused"));
     let mut limited = options(Oracle::Auto, 1);
     limited.max_completion_scratch_bytes = 0;
     let (r, _, diag) = solve("1{a;b}1.", &limited);
     assert_eq!(r.completion, Completion::Exhausted);
     assert!(r.countermodel_statistics.unwrap().countermodel_queries > 0);
-    assert!(diag.contains("tight certificate refused"));
+    assert!(diag.contains("optional class certificate refused"));
     assert!(diag.contains("storage limit=0"));
 }
 struct Broken;

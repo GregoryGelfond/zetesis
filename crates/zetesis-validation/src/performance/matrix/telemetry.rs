@@ -61,19 +61,21 @@ pub(super) fn observe(
         "closure" => Procedure::Closure,
         "countermodel" => Procedure::Countermodel,
         "tight-support" => Procedure::TightSupport,
+        "positive-consequences" => Procedure::PositiveConsequences,
         _ => return Err("unsupported actual oracle metadata".into()),
     };
-    if matches!(
-        (request.oracle, procedure),
-        (
-            Oracle::Closure,
-            Procedure::Countermodel | Procedure::TightSupport
-        ) | (
-            Oracle::Countermodel,
-            Procedure::Closure | Procedure::TightSupport
-        )
-    ) {
+    let matches_request = match request.oracle {
+        Oracle::Auto => true,
+        Oracle::Closure => procedure == Procedure::Closure,
+        Oracle::Countermodel => procedure == Procedure::Countermodel,
+    };
+    if !matches_request {
         return Err("actual oracle differs from explicit requested procedure".into());
+    }
+    if procedure == Procedure::PositiveConsequences
+        && (backend != Backend::Cpu || request.grounder != Grounder::Eager)
+    {
+        return Err("positive consequences require the eager CPU formula route".into());
     }
     let device = device(
         statistics,
@@ -257,6 +259,18 @@ fn consistent_timings(
     statistics: &Value,
     timing: &super::super::Diagnostics,
 ) -> Result<(), String> {
+    let phases = &statistics["phase_timings"];
+    // The original unversioned text profile also admitted typed records without
+    // a schema field. Newer profiles require their exact explicit version.
+    let schema_matches = match phases.get("schema") {
+        None => timing.phase_schema == 1,
+        Some(schema) => schema.as_u64() == Some(u64::from(timing.phase_schema)),
+    };
+    if !schema_matches
+        || phases["measurements"].as_object().map(serde_json::Map::len) != Some(timing.phases.len())
+    {
+        return Err("typed and text phase schemas disagree".into());
+    }
     for (section, measurements) in [
         ("stage_timings", &timing.stages),
         ("phase_timings", &timing.phases),

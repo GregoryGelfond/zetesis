@@ -107,6 +107,12 @@ impl GroundingOutcome {
 pub struct GroundingWork {
     /// Support rounds admitted by the existing round ceiling.
     pub support_rounds: Option<u64>,
+    /// Original producer occurrences entered for variant traversal, after an
+    /// admitted work tick. A later failure retains the entered occurrence.
+    pub support_producer_visits: Option<u64>,
+    /// Growing support/query snapshot attempts entered after an admitted work
+    /// tick. Counts attempts, including a later allocation or query refusal.
+    pub support_snapshot_preparations: Option<u64>,
     /// New support atoms inserted while publishing a support round.
     pub support_atoms: Option<u64>,
     /// Column/row associations inserted into support indices, including rebuilds.
@@ -176,6 +182,8 @@ impl Default for GroundingWork {
     fn default() -> Self {
         Self {
             support_rounds: Some(0),
+            support_producer_visits: Some(0),
+            support_snapshot_preparations: Some(0),
             support_atoms: Some(0),
             support_index_entries: Some(0),
             join_probes: Some(0),
@@ -210,6 +218,8 @@ impl Default for GroundingWork {
 #[derive(Clone, Copy)]
 pub(crate) enum Event {
     SupportRound,
+    SupportProducerVisit,
+    SupportSnapshotPreparation,
     SupportAtom,
     SupportIndexEntry,
     JoinProbe,
@@ -253,6 +263,14 @@ impl GroundingWork {
         };
         Self {
             support_rounds: sum(self.support_rounds, other.support_rounds),
+            support_producer_visits: sum(
+                self.support_producer_visits,
+                other.support_producer_visits,
+            ),
+            support_snapshot_preparations: sum(
+                self.support_snapshot_preparations,
+                other.support_snapshot_preparations,
+            ),
             support_atoms: sum(self.support_atoms, other.support_atoms),
             support_index_entries: sum(self.support_index_entries, other.support_index_entries),
             join_probes: sum(self.join_probes, other.join_probes),
@@ -304,6 +322,8 @@ impl GroundingWork {
         }
         let field = match event {
             Event::SupportRound => &mut self.support_rounds,
+            Event::SupportProducerVisit => &mut self.support_producer_visits,
+            Event::SupportSnapshotPreparation => &mut self.support_snapshot_preparations,
             Event::SupportAtom => &mut self.support_atoms,
             Event::SupportIndexEntry => &mut self.support_index_entries,
             Event::JoinProbe => &mut self.join_probes,

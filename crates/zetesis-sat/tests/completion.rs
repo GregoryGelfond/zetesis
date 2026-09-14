@@ -6,8 +6,8 @@ use std::num::NonZeroUsize;
 
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
 use zetesis_sat::{
-    BatchError, BatchLimits, BatchVerdict, CompletionExecutor, Control, Incomplete, Limits,
-    SearchLimits, StableModels,
+    BatchError, BatchLimits, BatchVerdict, CompletionExecutor, CompletionScratch, Control,
+    Incomplete, Limits, PreparedReduct, ReductPreparationLimits, SearchLimits, StableModels,
 };
 
 fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
@@ -37,9 +37,20 @@ fn executor(workers: usize) -> CompletionExecutor {
     CompletionExecutor::new(NonZeroUsize::new(workers).unwrap()).unwrap()
 }
 
+fn prepared_requirements(theory: &Theory, candidates: usize) -> CompletionScratch {
+    PreparedReduct::prepare(
+        theory,
+        ReductPreparationLimits::default(),
+        &Control::default(),
+    )
+    .result
+    .unwrap()
+    .scratch_requirements(candidates)
+    .unwrap()
+}
+
 fn retained_query_bytes(theory: &Theory, candidates: usize) -> u64 {
-    let required =
-        CompletionExecutor::scratch_requirements(theory, Limits::default(), candidates).unwrap();
+    let required = prepared_requirements(theory, candidates);
     let mut search = StableModels::new(theory, Limits::default(), Control::default()).unwrap();
     let mut executor = executor(1);
     search
@@ -48,10 +59,10 @@ fn retained_query_bytes(theory: &Theory, candidates: usize) -> u64 {
     let actual = executor.last_statistics().unwrap();
     assert_eq!(
         actual.requested_scratch_bytes,
-        required.result_bytes + required.query_bytes
+        required.shared_bytes + required.result_bytes + required.query_bytes
     );
     assert!(actual.peak_scratch_bytes >= actual.requested_scratch_bytes);
-    actual.peak_scratch_bytes - required.result_bytes
+    actual.peak_scratch_bytes - required.result_bytes - required.shared_bytes
 }
 
 fn batch(count: usize) -> BatchLimits {
@@ -176,7 +187,7 @@ fn partial(limits: Limits, executor: &mut CompletionExecutor) -> StableModels {
 }
 
 #[test]
-fn shared_work_and_decision_ceilings_include_proposals_and_all_failed_workers() {
+fn shared_work_ceiling_counts_preparation_before_residual_workers() {
     let mut scalar = executor(1);
     let mut complete = partial(Limits::default(), &mut scalar);
     let proposed = complete.statistics().search;
@@ -188,12 +199,16 @@ fn shared_work_and_decision_ceilings_include_proposals_and_all_failed_workers() 
         3
     );
     let finished = complete.statistics().search;
+    let cold = complete.statistics().reduct.preparation.unwrap();
+    assert!(cold.work > 0);
     assert!(finished.work > proposed.work);
     let mut parallel = executor(4);
     for repeat in 0..8 {
         for extra in [
             0,
             1,
+            cold.work - 1,
+            cold.work,
             (finished.work - proposed.work) / 2,
             finished.work - proposed.work - 1,
             finished.work - proposed.work,
@@ -227,12 +242,34 @@ fn shared_work_and_decision_ceilings_include_proposals_and_all_failed_workers() 
                 assert_eq!(search.statistics().stable_models, 0);
                 assert!(!search.exhausted());
                 let progress = parallel.last_statistics().unwrap();
-                assert_eq!(progress.candidates, 3);
-                assert_eq!(progress.completed + progress.failed, 3);
-                assert!(progress.failed > 0);
+                let preparation = search.statistics().reduct.preparation.unwrap();
+                if extra < cold.work {
+                    assert_eq!(preparation.work, extra);
+                    assert_eq!(preparation.retained_bytes, 0);
+                    assert_eq!(
+                        (
+                            progress.effective_workers,
+                            progress.candidates,
+                            progress.completed,
+                            progress.failed
+                        ),
+                        (0, 0, 0, 0)
+                    );
+                } else {
+                    assert_eq!(preparation, cold);
+                    assert_eq!(progress.candidates, 3);
+                    assert_eq!(progress.completed + progress.failed, 3);
+                    assert!(progress.failed > 0);
+                }
             }
         }
     }
+}
+
+#[test]
+fn shared_decision_ceiling_includes_proposals_and_residuals() {
+    let mut scalar = executor(1);
+    let mut parallel = executor(4);
     // Independent unconstrained atoms require proper-subset branching. Find a
     // measured batch with reduct decisions before testing its shared decision cap.
     let t = theory(5, vec![], vec![]);
@@ -401,7 +438,7 @@ fn scratch_admission_precedes_results_and_is_retryable_without_new_proposals() {
         assert_eq!(refused.last_statistics().unwrap().candidates, 0);
         assert_eq!(refused.last_statistics().unwrap().peak_scratch_bytes, 0);
         let before = search.statistics();
-        let required = CompletionExecutor::scratch_requirements(&t, Limits::default(), 3).unwrap();
+        let required = prepared_requirements(&t, 3);
         let mut results_only = CompletionExecutor::with_scratch_limit(
             NonZeroUsize::new(workers).unwrap(),
             required.result_bytes,
@@ -411,10 +448,14 @@ fn scratch_admission_precedes_results_and_is_retryable_without_new_proposals() {
             search.next_batch_with_completion(batch(3), &mut results_only, residual),
             Err(BatchError::Limits(Incomplete::CompletionScratch))
         ));
-        assert_eq!(search.statistics(), before);
+        let prepared = search.statistics();
+        let cold = prepared.reduct.preparation.unwrap();
+        assert_eq!(prepared.search.work, before.search.work + cold.work);
+        assert_eq!(prepared.countermodel_queries, before.countermodel_queries);
+        assert_eq!(prepared.candidate_queries, before.candidate_queries);
         let mut admitted = CompletionExecutor::with_scratch_limit(
             NonZeroUsize::new(workers).unwrap(),
-            required.result_bytes + retained_query_bytes(&t, 3),
+            required.shared_bytes + required.result_bytes + retained_query_bytes(&t, 3),
         )
         .unwrap();
         let found = search
@@ -429,7 +470,7 @@ fn scratch_admission_precedes_results_and_is_retryable_without_new_proposals() {
         assert_eq!((progress.workers, progress.effective_workers), (workers, 1));
         assert_eq!(
             progress.peak_scratch_bytes,
-            required.result_bytes + retained_query_bytes(&t, 3)
+            required.shared_bytes + required.result_bytes + retained_query_bytes(&t, 3)
         );
         assert_eq!(
             (progress.residual_completed, progress.residual_failed),
@@ -440,14 +481,10 @@ fn scratch_admission_precedes_results_and_is_retryable_without_new_proposals() {
 }
 
 #[test]
-fn retained_capacity_is_admitted_before_candidate_work() {
+fn prepared_owner_survives_capacity_refusal_and_retry() {
     let theory = choices();
-    let requested =
-        CompletionExecutor::scratch_requirements(&theory, Limits::default(), 3).unwrap();
-    let actual = requested.result_bytes + retained_query_bytes(&theory, 3);
-    // Ten alias entries require a larger reported HashMap capacity on the
-    // pinned implementation. This exercises real retained capacity, not ZSTs.
-    assert!(actual > requested.result_bytes + requested.query_bytes);
+    let requested = prepared_requirements(&theory, 3);
+    let actual = requested.shared_bytes + requested.result_bytes + retained_query_bytes(&theory, 3);
     let mut search = StableModels::new(&theory, Limits::default(), Control::default()).unwrap();
     let _ = search.next_batch(batch(3), |_, _| {
         Err::<Vec<BatchVerdict>, _>("retain proposals")
@@ -461,15 +498,13 @@ fn retained_capacity_is_admitted_before_candidate_work() {
     ));
     let progress = refused.last_statistics().unwrap();
     assert_eq!(
-        progress.requested_scratch_bytes,
-        requested.result_bytes + requested.query_bytes
-    );
-    assert_eq!(progress.peak_scratch_bytes, actual);
-    assert_eq!(
         (progress.candidates, progress.completed, progress.failed),
         (0, 0, 0)
     );
-    assert_eq!(search.statistics(), before);
+    let prepared = search.statistics();
+    let cold = prepared.reduct.preparation.unwrap();
+    assert_eq!(prepared.search.work, before.search.work + cold.work);
+    assert_eq!(prepared.countermodel_queries, 0);
     assert_eq!(search.batch_statistics().pending, 3);
     let mut exact =
         CompletionExecutor::with_scratch_limit(NonZeroUsize::new(1).unwrap(), actual).unwrap();
@@ -482,6 +517,11 @@ fn retained_capacity_is_admitted_before_candidate_work() {
     );
     assert_eq!(exact.last_statistics().unwrap().peak_scratch_bytes, actual);
     assert_eq!(
+        search.statistics().reduct.preparation,
+        Some(cold),
+        "retry must not reconstruct the owner or reset cold work"
+    );
+    assert_eq!(
         search.statistics().candidate_queries,
         before.candidate_queries
     );
@@ -493,9 +533,10 @@ fn fixed_scratch_envelopes_cap_concurrency_and_release_between_irregular_calls()
     let t = choices();
     for workers in [1, 2, 4] {
         for admitted in [1, 2, 4] {
-            let requirements =
-                CompletionExecutor::scratch_requirements(&t, Limits::default(), 3).unwrap();
-            let ceiling = requirements.result_bytes + retained_query_bytes(&t, 3) * admitted;
+            let requirements = prepared_requirements(&t, 3);
+            let ceiling = requirements.shared_bytes
+                + requirements.result_bytes
+                + retained_query_bytes(&t, 3) * admitted;
             let mut pool = CompletionExecutor::with_scratch_limit(
                 NonZeroUsize::new(workers).unwrap(),
                 ceiling,
@@ -517,7 +558,7 @@ fn fixed_scratch_envelopes_cap_concurrency_and_release_between_irregular_calls()
 #[test]
 fn certificate_only_completion_needs_result_storage_but_no_query_workspace() {
     let t = choices();
-    let requirements = CompletionExecutor::scratch_requirements(&t, Limits::default(), 3).unwrap();
+    let requirements = prepared_requirements(&t, 3);
     for workers in [1, 2, 4] {
         let mut search = StableModels::new(&t, Limits::default(), Control::default()).unwrap();
         let mut pool = CompletionExecutor::with_scratch_limit(
@@ -542,17 +583,22 @@ fn certificate_only_completion_needs_result_storage_but_no_query_workspace() {
 #[test]
 fn one_workspace_parallel_failure_joins_all_residual_slots_and_accounts_each() {
     let t = choices();
-    let required = CompletionExecutor::scratch_requirements(&t, Limits::default(), 3).unwrap();
+    let required = prepared_requirements(&t, 3);
     let mut probe = StableModels::new(&t, Limits::default(), Control::default()).unwrap();
     let _ = probe.next_batch(batch(3), |_, _| {
         Err::<Vec<BatchVerdict>, _>("retain proposals")
     });
     let mut limits = Limits::default();
-    limits.search.max_work = probe.statistics().search.work;
+    limits.search.max_work = probe.statistics().search.work
+        + PreparedReduct::prepare(&t, ReductPreparationLimits::default(), &Control::default())
+            .result
+            .unwrap()
+            .statistics()
+            .work;
     let mut search = StableModels::new(&t, limits, Control::default()).unwrap();
     let mut pool = CompletionExecutor::with_scratch_limit(
         NonZeroUsize::new(4).unwrap(),
-        required.result_bytes + retained_query_bytes(&t, 3),
+        required.shared_bytes + required.result_bytes + retained_query_bytes(&t, 3),
     )
     .unwrap();
     let result = search.next_batch_with_completion(batch(3), &mut pool, residual);
@@ -581,4 +627,42 @@ fn one_workspace_parallel_failure_joins_all_residual_slots_and_accounts_each() {
         (3, 0)
     );
     assert_eq!(collect(&t, 3, &mut pool), collect(&t, 3, &mut executor(1)));
+}
+
+#[test]
+fn independent_query_capacity_is_admitted_before_worker_entry() {
+    // Many independent atom slots make the worker arrays larger than cold
+    // compilation. Derive the actual cold ceiling from the real builder.
+    let input = theory(64, vec![], vec![]);
+    let prepared = PreparedReduct::prepare(
+        &input,
+        ReductPreparationLimits::default(),
+        &Control::default(),
+    )
+    .result
+    .unwrap();
+    let limit = u64::try_from(prepared.statistics().peak_bytes).unwrap();
+    let limits = Limits {
+        max_reduct_bytes: limit,
+        ..Limits::default()
+    };
+    let mut search = StableModels::new(&input, limits, Control::default()).unwrap();
+    let mut pool = executor(3);
+    let result = search.next_batch_with_completion(batch(1), &mut pool, residual);
+    assert!(
+        matches!(result, Err(BatchError::Search(Incomplete::ReductStorage { required, limit: actual })) if required > actual && actual == u128::from(limit))
+    );
+    assert_eq!(
+        search.statistics().reduct.preparation,
+        Some(prepared.statistics())
+    );
+    let progress = pool.last_statistics().unwrap();
+    assert_eq!(
+        (progress.candidates, progress.completed, progress.failed),
+        (0, 0, 0)
+    );
+    assert_eq!(search.statistics().countermodel_queries, 0);
+    assert_eq!(search.batch_statistics().pending, 1);
+    assert_eq!(search.batch_statistics().committed, 0);
+    assert!(!search.exhausted());
 }
