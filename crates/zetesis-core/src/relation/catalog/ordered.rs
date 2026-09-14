@@ -44,7 +44,8 @@ impl<'a> OrderedRows<'a> {
     /// Borrow one authoritative atom by ordered position. Constant time.
     #[must_use]
     pub fn get(self, position: usize) -> Option<&'a Atom> {
-        self.row_id(position).and_then(|row| self.catalog.atoms.get(row))
+        self.row_id(position)
+            .and_then(|row| self.catalog.atoms.get(row))
     }
 
     /// Current owner capacity and work of the preparation or reuse operation.
