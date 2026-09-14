@@ -478,6 +478,14 @@ gates. The normal/Ferraris bridge then supplies the same frozen-reduct verdict.
 This advances the mathematical producer argument without certifying Rust's
 source bindings, rich heads or aggregate assignment machinery.
 
+`NormalSupport.propose_gate_independent` states that changing only normalized
+candidate gates leaves possible heads unchanged at every carrier. The eager
+support scheduler admits flat ordinary negative and double-negative non-inputs
+under its existing first-new-positive-occurrence partition. Rust must preserve
+the positive bindings, checked scalar operations, source occurrence IDs and
+old-head publication history; the emitted original formulas retain the gates.
+The law does not equate answer sets of programs with different gates.
+
 The Rust [support builder](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support.rs)
 creates `CompletedCatalog` only after a full round adds no atom. Its immutable
 `CompletedSupport` view supplies the same typed rows to objective eligibility

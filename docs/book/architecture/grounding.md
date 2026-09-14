@@ -187,6 +187,10 @@ assignment value retains its original equality.
 
 Ordinary positive atom heads with positive flat witnesses and pure scalar checks
 or generators use [delta joins](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/delta.rs).
+Flat ordinary `not` and `not not` atoms may occur between these inputs. They
+provide no bindings and do not test truth during possible-support discovery;
+their arguments use the existing admitted bindings and scalar evaluation.
+Their truth remains in the original emitted formula and its frozen reduct.
 Each new tuple combination has one first source occurrence that selects a newly
 appended row. Earlier occurrences select old rows; later occurrences select all
 current rows. This partitions the combinations even when one predicate occurs
@@ -201,13 +205,26 @@ for pivot in PositiveSourceOccurrences(rule):
     proposals = Union(proposals, JoinAndEvaluate(rule, inputs))
 ```
 
-An ordinary producer without positive inputs runs once. Aggregate, conditional,
-negative, structural and nonnormal producers retain full-round traversal. Every
+An ordinary producer without positive inputs runs once, even if it has negative
+non-input atoms. Changing such atoms' possible presence cannot enable another
+head proposal, because support generation ignores their truth. Aggregate,
+conditional, projected, structural and nonnormal producers retain full-round traversal. Every
 selected input still passes the same typed tuple matcher and scalar evaluator.
 An empty proposal set establishes completion only after every required variant
 and conservative producer has finished. Final formula emission visits all
 complete authored-body bindings, including those with false scalar filters;
 support membership cannot conceal a required arithmetic error.
+
+The preservation argument concerns possible heads, not answer-set truth.
+Removing these flat negative non-inputs leaves the positive occurrence order,
+binding generation, scalar validity and head projection unchanged. Old
+combinations have already proposed their heads; each new combination belongs to
+one delta partition. `NormalSupport.propose_gate_independent` states the
+corresponding gate-invariance law for mathematical normalized rules. Connecting
+the compiler's typed instances and checked expressions to that law remains a
+representation obligation. Scheduling fewer old combinations can change the
+charged work and the first bounded refusal; it does not change the cumulative
+generated-value population or turn a failed attempt into completed support.
 
 The [support builder](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support.rs)
 returns `CompletedCatalog` only after an entire round adds no atom. Its

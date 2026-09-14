@@ -34,6 +34,29 @@ def propose (P : Semantics.Program A) (carrier : Atoms A) : Atoms A :=
   fun atom => ∃ rule ∈ P,
     rule.head = some atom ∧ rule.filter ∧ Semantics.Body rule carrier
 
+/-- Changing only a normalized rule's candidate gates preserves its possible
+heads at every carrier. The positive inputs, ground filter and head are fixed.
+
+Each mapped rule has exactly the original head/filter/body witness, in both
+directions. This is producer invariance, not equivalence of the gated programs:
+their reducts and answer sets can differ. Source bindings, argument evaluation
+and the concrete distinction between inputs and non-inputs remain obligations. -/
+theorem propose_gate_independent (P : Semantics.Program A)
+    (trueGates falseGates : Semantics.Rule A → List A) (carrier : Atoms A) :
+    propose (P.map (fun rule =>
+      { rule with gateTrue := trueGates rule, gateFalse := falseGates rule })) carrier =
+      propose P carrier := by
+  apply atoms_ext
+  intro atom
+  constructor
+  · intro ⟨mapped, member, head, valid, body⟩
+    obtain ⟨original, member, rfl⟩ := List.mem_map.mp member
+    exact ⟨original, member, head, valid, body⟩
+  · intro ⟨original, member, head, valid, body⟩
+    exact ⟨{ original with gateTrue := trueGates original,
+      gateFalse := falseGates original },
+      List.mem_map.mpr ⟨original, member, rfl⟩, head, valid, body⟩
+
 /-- Adding possible body atoms cannot remove a proposed head. The same rule
 witness remains applicable by positive-body monotonicity. -/
 theorem propose_monotone (P : Semantics.Program A) :

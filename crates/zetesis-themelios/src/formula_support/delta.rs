@@ -1,11 +1,16 @@
-//! Disjoint first-new-occurrence joins for certified positive producers.
+//! Disjoint first-new-occurrence joins for certified possible-head producers.
 //!
 //! Every new positive tuple combination has a unique first occurrence whose
 //! row was appended in the previous round. Earlier occurrences use old rows,
 //! that occurrence uses new rows, and later occurrences use all current rows.
 //! Scalar checks and generators remain with the complete existing matcher.
+//! Ordinary negative atoms are non-inputs: their truth remains in the emitted
+//! formula, while their already-bound arguments supply no support restriction.
 //! Rich producers retain full-round traversal. This scheduling certificate is
 //! not a certificate of authored-body validation during final formula emission.
+
+#[cfg(test)]
+mod tests;
 
 use std::ops::Range;
 
@@ -37,14 +42,17 @@ pub(super) fn variants<'a, 'source>(
         counters.work(limits, rule.location)?;
         match literal {
             LiteralIr::Atom(DefaultNegation::None, _) => inputs += 1,
-            LiteralIr::Compare(..)
+            // Join::new collects only positive inputs. Flat negative atoms
+            // neither generate bindings nor filter possible heads; any argument
+            // evaluation is a separate, retained scalar operation in the IR.
+            LiteralIr::Atom(DefaultNegation::Not | DefaultNegation::NotNot, _)
+            | LiteralIr::Compare(..)
             | LiteralIr::ArgumentCheck { .. }
             | LiteralIr::TupleCompare(..)
             | LiteralIr::Guard(_)
             | LiteralIr::Bind { .. }
             | LiteralIr::Range { .. } => {}
-            LiteralIr::Atom(..)
-            | LiteralIr::PatternAtom(_)
+            LiteralIr::PatternAtom(_)
             | LiteralIr::ProjectedAtom(..)
             | LiteralIr::Conditional(_)
             | LiteralIr::Aggregate(_) => certified = false,

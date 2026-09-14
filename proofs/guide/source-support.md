@@ -46,6 +46,17 @@ the existing mathematical normalized rules. A rule proposes its atomic head
 when its ground filter holds and its positive body belongs to the carrier.
 It ignores candidate gates. A constraint proposes no head.
 
+`propose_gate_independent` makes the non-input boundary explicit: replacing a
+rule's positive/negative candidate gates while preserving its positive inputs,
+ground filter and head leaves every possible-head proposal unchanged. Its proof
+reuses the same rule witness through the mapped program in both directions.
+This does not preserve the programs' answer sets. The eager Rust delta scheduler
+uses this distinction for ordinary flat `not` and `not not` body atoms: they do
+not generate bindings or restrict possible support. Argument evaluation and all
+authored formulas remain intact; richer source producers still use full rounds.
+The rule-instance/compiler and delta-history correspondences are separate
+obligations, including source occurrence identity and failed-prefix behavior.
+
 `projection_compatible` proves the required property:
 
 1. Suppose `M` models the program and `C` is closed under possible heads.
