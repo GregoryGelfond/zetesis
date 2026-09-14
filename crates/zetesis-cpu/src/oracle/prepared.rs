@@ -156,9 +156,13 @@ impl PreparedQueries {
         self.check_scheduled(seed, workspace, super::Schedule::Delta, work)
     }
 
-    fn check_scheduled(&self, seed: SeedView<'_>, workspace: &mut ClosureWorkspace,
-        schedule: super::Schedule, work: &mut Work<'_>) -> Result<Check, Stop>
-    {
+    fn check_scheduled(
+        &self,
+        seed: SeedView<'_>,
+        workspace: &mut ClosureWorkspace,
+        schedule: super::Schedule,
+        work: &mut Work<'_>,
+    ) -> Result<Check, Stop> {
         if !workspace.clean
             || workspace
                 .program
@@ -227,7 +231,11 @@ impl PreparedQueries {
             &self.program,
             seed,
             &mut workspace.catalogs,
-            super::RoundWorkspace { buffers: &mut workspace.buffers, dimensions: &self.dimensions, overhead },
+            super::RoundWorkspace {
+                buffers: &mut workspace.buffers,
+                dimensions: &self.dimensions,
+                overhead,
+            },
             schedule,
             work,
         )

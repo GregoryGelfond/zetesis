@@ -307,23 +307,40 @@ fn refused_capacity_does_not_report_a_completed_closure() {
     assert_eq!(bounded.statistics.derived_atoms, 0);
 }
 
-
 #[test]
 fn tuple_probes_include_whole_row_rejections() {
     let predicate = Predicate::new("pair", 2).unwrap();
-    let rows = [[1, 2], [2, 2]].map(|values| Atom::new(predicate.clone(),
-        values.map(Value::Number).to_vec()).unwrap());
-    let template = Template::new(None, vec![AtomPattern::new(predicate.clone(),
-        vec![Term::Variable(0), Term::Variable(0)]).unwrap()], vec![], vec![], vec![]);
+    let rows = [[1, 2], [2, 2]]
+        .map(|values| Atom::new(predicate.clone(), values.map(Value::Number).to_vec()).unwrap());
+    let template = Template::new(
+        None,
+        vec![
+            AtomPattern::new(
+                predicate.clone(),
+                vec![Term::Variable(0), Term::Variable(0)],
+            )
+            .unwrap(),
+        ],
+        vec![],
+        vec![],
+        vec![],
+    );
     let relations = super::Relations::from([(&predicate, rows.iter().collect())]);
     let control = Control::default();
     let mut work = work(&control, Limits::default().max_work);
     let mut bound = Vec::new();
-    super::visit(&template, &relations, None, None, &mut work,
+    super::visit(
+        &template,
+        &relations,
+        None,
+        None,
+        &mut work,
         |assignment, _| -> Result<(), Stop> {
             bound.push(assignment[0].unwrap().clone());
             Ok(())
-        }).unwrap();
+        },
+    )
+    .unwrap();
     assert_eq!(bound, [Value::Number(2)]);
     assert_eq!(work.statistics.tuple_probes, 2);
     assert_eq!(work.statistics.bindings, 1);

@@ -328,22 +328,22 @@ impl Relations<'_> {
         }
         let base_work = counters.work;
         let outer = memory.bytes - rows.relation.storage().retained_bytes;
-        let attempt = rows
-            .relation
-            .query_attempt(
-                &keys,
-                relation_limits(
-                    limits,
-                    counters,
-                    pattern.predicate(),
-                    rows.relation.storage().retained_bytes + memory.remaining()?,
-                ),
-            );
+        let attempt = rows.relation.query_attempt(
+            &keys,
+            relation_limits(
+                limits,
+                counters,
+                pattern.predicate(),
+                rows.relation.storage().retained_bytes + memory.remaining()?,
+            ),
+        );
         counters.charge_work(attempt.work, limits, location)?;
-        counters.record(Event::SupportPeakBytes(outer as u128 + attempt.peak_bytes as u128));
-        let query = attempt.result.map_err(|error| {
-            relation_failure(error, limits, base_work, outer, location)
-        })?;
+        counters.record(Event::SupportPeakBytes(
+            outer as u128 + attempt.peak_bytes as u128,
+        ));
+        let query = attempt
+            .result
+            .map_err(|error| relation_failure(error, limits, base_work, outer, location))?;
         memory.add(query.retained_bytes())?;
         let mut selected: Option<&[usize]> = None;
         if query.is_possible() {

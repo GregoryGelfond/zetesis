@@ -402,7 +402,10 @@ fn probe_work_includes_typed_query_resolution() {
         Some([0].as_slice())
     );
     for maximum in initial_work..counters.work {
-        let below = FormulaLimits { max_work: maximum, ..exact };
+        let below = FormulaLimits {
+            max_work: maximum,
+            ..exact
+        };
         let mut failed = counters_at_entry();
         assert!(matches!(
             support.probe(&pattern, &binding, &below, &mut failed, location()),

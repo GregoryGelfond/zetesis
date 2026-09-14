@@ -53,14 +53,21 @@ impl<'a> Rows<'a> {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum RowSet { Current, Old, New }
+pub(super) enum RowSet {
+    Current,
+    Old,
+    New,
+}
 
 pub(super) trait Relational {
     fn rows(&self, predicate: &Predicate) -> Rows<'_>;
 
     fn selected(&self, predicate: &Predicate, set: RowSet) -> Result<Rows<'_>, Stop> {
-        if set == RowSet::Current { Ok(self.rows(predicate)) }
-        else { Err(Stop::InvalidProgram) }
+        if set == RowSet::Current {
+            Ok(self.rows(predicate))
+        } else {
+            Err(Stop::InvalidProgram)
+        }
     }
 }
 
@@ -101,7 +108,8 @@ impl Relational for Catalogs {
             .get(predicate)
             .map_or(Rows::Borrowed(&[]), |relation| {
                 Rows::Catalog(
-                    relation.catalog
+                    relation
+                        .catalog
                         .ordered()
                         .expect("round prepared its published extent"),
                 )
@@ -109,9 +117,11 @@ impl Relational for Catalogs {
     }
 
     fn selected(&self, predicate: &Predicate, set: RowSet) -> Result<Rows<'_>, Stop> {
-        self.relations.get(predicate).map_or(Ok(Rows::Borrowed(&[])), |relation| {
-            relation.partition.rows(&relation.catalog, set)
-        })
+        self.relations
+            .get(predicate)
+            .map_or(Ok(Rows::Borrowed(&[])), |relation| {
+                relation.partition.rows(&relation.catalog, set)
+            })
     }
 }
 
@@ -143,7 +153,9 @@ impl Catalogs {
     pub(super) fn prepare_delta(&mut self, work: &mut Work<'_>) -> Result<(), Stop> {
         self.prepare(work)?;
         for relation in self.relations.values_mut() {
-            relation.partition.prepare(&relation.catalog, &mut self.bytes, work)?;
+            relation
+                .partition
+                .prepare(&relation.catalog, &mut self.bytes, work)?;
         }
         Ok(())
     }
@@ -152,16 +164,19 @@ impl Catalogs {
     /// before appending the new heads. No borrowed round view is still live.
     pub(super) fn advance(&mut self, work: &mut Work<'_>) -> Result<(), Stop> {
         for relation in self.relations.values_mut() {
-            relation.partition.advance(relation.catalog.atoms().len(), work)?;
+            relation
+                .partition
+                .advance(relation.catalog.atoms().len(), work)?;
         }
         Ok(())
     }
 
     pub(super) fn has_new(&self, predicate: &Predicate, work: &mut Work<'_>) -> Result<bool, Stop> {
         work.tick()?;
-        Ok(self.relations.get(predicate).is_some_and(|relation| {
-            relation.partition.has_new(relation.catalog.atoms().len())
-        }))
+        Ok(self
+            .relations
+            .get(predicate)
+            .is_some_and(|relation| relation.partition.has_new(relation.catalog.atoms().len())))
     }
 
     pub(super) fn contains(
@@ -221,7 +236,8 @@ impl Catalogs {
         let catalog = &mut self
             .relations
             .get_mut(atom.predicate())
-            .ok_or(Stop::InvalidProgram)?.catalog;
+            .ok_or(Stop::InvalidProgram)?
+            .catalog;
         let old = catalog.retained_bytes() as u128;
         let other = self
             .bytes
@@ -262,7 +278,9 @@ impl Catalogs {
             .bytes
             .checked_add(held)
             .and_then(|bytes| bytes.checked_add(size_of::<Predicate>() as u128))
-            .and_then(|bytes| bytes.checked_add((size_of::<Relation>() - size_of::<Catalog>()) as u128))
+            .and_then(|bytes| {
+                bytes.checked_add((size_of::<Relation>() - size_of::<Catalog>()) as u128)
+            })
             .ok_or(Stop::StorageLimit)?;
         let headers = base
             .checked_add(size_of::<Catalog>() as u128)
@@ -283,13 +301,18 @@ impl Catalogs {
         self.bytes = self
             .bytes
             .checked_add(size_of::<Predicate>() as u128)
-            .and_then(|bytes| bytes.checked_add((size_of::<Relation>() - size_of::<Catalog>()) as u128))
+            .and_then(|bytes| {
+                bytes.checked_add((size_of::<Relation>() - size_of::<Catalog>()) as u128)
+            })
             .and_then(|bytes| bytes.checked_add(names))
             .and_then(|bytes| bytes.checked_add(catalog.retained_bytes() as u128))
             .ok_or(Stop::StorageLimit)?;
         match self.relations.entry(key) {
             Entry::Vacant(entry) => {
-                entry.insert(Relation { catalog, partition: Partition::default() });
+                entry.insert(Relation {
+                    catalog,
+                    partition: Partition::default(),
+                });
             }
             Entry::Occupied(_) => unreachable!("exclusive absent predicate remains absent"),
         }
@@ -494,7 +517,13 @@ mod tests {
         let predicate = tuple.predicate().clone();
         let mut catalog = Catalog::new(predicate.clone(), limits(&work, 0).unwrap()).unwrap();
         let receipt = catalog.insert(tuple, limits(&work, 0).unwrap()).unwrap();
-        catalogs.relations.insert(predicate, Relation { catalog, partition: Partition::default() });
+        catalogs.relations.insert(
+            predicate,
+            Relation {
+                catalog,
+                partition: Partition::default(),
+            },
+        );
         control.cancel();
         assert_eq!(catalogs.publish(receipt, &mut work), Err(Stop::Cancelled));
         assert_eq!(

@@ -1,8 +1,11 @@
 //! Stable insertion IDs partition canonical rows without another tuple owner.
 
 use super::*;
-use crate::{Control, oracle::{Limits, Statistics}};
 use crate::oracle::relations::{Catalogs, Relational};
+use crate::{
+    Control,
+    oracle::{Limits, Statistics},
+};
 use zetesis_core::{Atom, Model, Predicate, Value};
 
 fn atom(value: i32) -> Atom {
@@ -17,10 +20,14 @@ fn work(control: &Control) -> Work<'_> {
 
 fn mixed(work: &mut Work<'_>) -> Catalogs {
     let mut catalogs = Catalogs::default();
-    for value in [4, 2] { catalogs.insert(atom(value), 0, work).unwrap(); }
+    for value in [4, 2] {
+        catalogs.insert(atom(value), 0, work).unwrap();
+    }
     catalogs.prepare_delta(work).unwrap();
     catalogs.advance(work).unwrap();
-    for value in [3, 1] { catalogs.insert(atom(value), 0, work).unwrap(); }
+    for value in [3, 1] {
+        catalogs.insert(atom(value), 0, work).unwrap();
+    }
     // The partition control starts with a real published, canonically ordered
     // extent. It measures only the additional derived old/new ID preparation.
     catalogs.prepare(work).unwrap();
@@ -34,7 +41,10 @@ fn assert_rows(catalogs: &Catalogs, set: RowSet, ids: &[usize], values: &[i32]) 
     assert_eq!(rows.len(), values.len());
     for (position, (&id, &value)) in ids.iter().zip(values).enumerate() {
         assert_eq!(rows.get(position), Some(&atom(value)));
-        assert!(std::ptr::eq(rows.get(position).unwrap(), &source[id]));
+        assert!(std::ptr::eq(
+            rows.get(position).unwrap(),
+            &raw const source[id]
+        ));
     }
     assert!(rows.get(values.len()).is_none());
 }
@@ -52,14 +62,19 @@ fn age_tracks_insertion_identity_when_canonical_ranks_move() {
     let predicate = Predicate::new("p", 1).unwrap();
     let partition = &catalogs.relations[&predicate].partition;
     assert_eq!(partition.ids, [1, 0, 3, 2]);
-    assert_eq!(catalogs.owned_bytes() - before,
-        (partition.ids.capacity() * size_of::<usize>()) as u128);
+    assert_eq!(
+        catalogs.owned_bytes() - before,
+        (partition.ids.capacity() * size_of::<usize>()) as u128
+    );
     let address = partition.ids.as_ptr();
     let retained = catalogs.owned_bytes();
     let before = work.statistics.catalog_work;
     catalogs.prepare_delta(&mut work).unwrap();
     assert_eq!(work.statistics.catalog_work - before, 1); // Exact extent/cutoff cache check.
-    assert_eq!(catalogs.relations[&predicate].partition.ids.as_ptr(), address);
+    assert_eq!(
+        catalogs.relations[&predicate].partition.ids.as_ptr(),
+        address
+    );
     assert_eq!(catalogs.owned_bytes(), retained);
     catalogs.advance(&mut work).unwrap();
     catalogs.prepare_delta(&mut work).unwrap();
@@ -77,8 +92,10 @@ fn partition_capacity_is_admitted_before_preparation() {
     assert_eq!(catalogs.prepare_delta(&mut work), Err(Stop::StorageLimit));
     assert_eq!(catalogs.owned_bytes(), retained);
     assert_rows(&catalogs, RowSet::Current, &[3, 1, 2, 0], &[1, 2, 3, 4]);
-    assert!(matches!(catalogs.selected(&Predicate::new("p", 1).unwrap(), RowSet::New),
-        Err(Stop::InvalidProgram)));
+    assert!(matches!(
+        catalogs.selected(&Predicate::new("p", 1).unwrap(), RowSet::New),
+        Err(Stop::InvalidProgram)
+    ));
     work.limits = Limits::default();
     catalogs.prepare_delta(&mut work).unwrap();
     assert_rows(&catalogs, RowSet::Old, &[1, 0], &[2, 4]);
@@ -103,8 +120,10 @@ fn interrupted_partition_never_publishes_partial_rows() {
         assert_eq!(limited.statistics.work, max_work);
         assert_eq!(limited.statistics.catalog_work, max_work);
         assert_rows(&catalogs, RowSet::Current, &[3, 1, 2, 0], &[1, 2, 3, 4]);
-        assert!(matches!(catalogs.selected(&Predicate::new("p", 1).unwrap(), RowSet::New),
-            Err(Stop::InvalidProgram)));
+        assert!(matches!(
+            catalogs.selected(&Predicate::new("p", 1).unwrap(), RowSet::New),
+            Err(Stop::InvalidProgram)
+        ));
         limited.limits = Limits::default();
         catalogs.prepare_delta(&mut limited).unwrap();
         assert_rows(&catalogs, RowSet::Old, &[1, 0], &[2, 4]);
@@ -139,26 +158,51 @@ fn extraction_retires_delta_identity_but_retains_empty_capacity() {
 #[test]
 fn signed_typed_rows_keep_their_own_partition() {
     use zetesis_core::{Sign, ValueLimits, ValueNode};
-    let structured = Value::from_nodes(vec![ValueNode::Function {
-        name: "f".into(), arity: 1, sign: Sign::Negative,
-    }, ValueNode::Number(1)], ValueLimits::default()).unwrap();
-    let values = [Value::String("1".into()), structured,
-        Value::Number(1), Value::Symbol("1".into())];
+    let structured = Value::from_nodes(
+        vec![
+            ValueNode::Function {
+                name: "f".into(),
+                arity: 1,
+                sign: Sign::Negative,
+            },
+            ValueNode::Number(1),
+        ],
+        ValueLimits::default(),
+    )
+    .unwrap();
+    let values = [
+        Value::String("1".into()),
+        structured,
+        Value::Number(1),
+        Value::Symbol("1".into()),
+    ];
     let control = Control::default();
     let mut work = work(&control);
     let mut catalogs = Catalogs::default();
-    let predicates = [Sign::Positive, Sign::Negative].map(|sign|
-        Predicate::with_sign("typed", 1, sign).unwrap());
+    let predicates = [Sign::Positive, Sign::Negative]
+        .map(|sign| Predicate::with_sign("typed", 1, sign).unwrap());
     for predicate in &predicates {
         for value in &values[..2] {
-            catalogs.insert(Atom::new(predicate.clone(), vec![value.clone()]).unwrap(), 0, &mut work).unwrap();
+            catalogs
+                .insert(
+                    Atom::new(predicate.clone(), vec![value.clone()]).unwrap(),
+                    0,
+                    &mut work,
+                )
+                .unwrap();
         }
     }
     catalogs.prepare_delta(&mut work).unwrap();
     catalogs.advance(&mut work).unwrap();
     for predicate in &predicates {
         for value in &values[2..] {
-            catalogs.insert(Atom::new(predicate.clone(), vec![value.clone()]).unwrap(), 0, &mut work).unwrap();
+            catalogs
+                .insert(
+                    Atom::new(predicate.clone(), vec![value.clone()]).unwrap(),
+                    0,
+                    &mut work,
+                )
+                .unwrap();
         }
     }
     catalogs.prepare_delta(&mut work).unwrap();
@@ -170,7 +214,10 @@ fn signed_typed_rows_keep_their_own_partition() {
                 let actual = rows.get(position).unwrap();
                 assert_eq!(actual.predicate(), predicate);
                 assert_eq!(actual.values(), &[values[id].clone()]);
-                assert!(std::ptr::eq(actual, &catalogs.relations[predicate].catalog.atoms()[id]));
+                assert!(std::ptr::eq(
+                    actual,
+                    &raw const catalogs.relations[predicate].catalog.atoms()[id]
+                ));
             }
         }
     }

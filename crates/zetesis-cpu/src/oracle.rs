@@ -302,7 +302,12 @@ fn least_closure(
     work: &mut Work<'_>,
 ) -> Result<CompletedClosure, Stop> {
     let prepared = PreparedQueries::prepare(program, work)?;
-    prepared.closure_with(seed, &mut ClosureWorkspace::default(), Schedule::Delta, work)
+    prepared.closure_with(
+        seed,
+        &mut ClosureWorkspace::default(),
+        Schedule::Delta,
+        work,
+    )
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -313,15 +318,17 @@ enum Schedule {
 }
 
 #[derive(Clone, Copy)]
-enum Selection { All, FirstNew(usize) }
+enum Selection {
+    All,
+    FirstNew(usize),
+}
 
 impl Selection {
     fn rows(self, occurrence: usize) -> RowSet {
         match self {
-            Self::All => RowSet::Current,
             Self::FirstNew(pivot) if occurrence < pivot => RowSet::Old,
             Self::FirstNew(pivot) if occurrence == pivot => RowSet::New,
-            Self::FirstNew(_) => RowSet::Current,
+            Self::All | Self::FirstNew(_) => RowSet::Current,
         }
     }
 }
@@ -340,34 +347,59 @@ fn least_closure_with(
     schedule: Schedule,
     work: &mut Work<'_>,
 ) -> Result<CompletedClosure, Stop> {
-    let RoundWorkspace { buffers, dimensions, overhead } = workspace;
+    let RoundWorkspace {
+        buffers,
+        dimensions,
+        overhead,
+    } = workspace;
     let mut constraint_violated = false;
     loop {
         work.tick()?;
         let incremental = schedule == Schedule::Delta && work.statistics.rounds != 0;
-        if incremental { closure.prepare_delta(work)?; }
-        else { closure.prepare(work)?; }
+        if incremental {
+            closure.prepare_delta(work)?;
+        } else {
+            closure.prepare(work)?;
+        }
         // Bindings borrow this round's immutable catalog extent only. The
         // reference-free cursor/undo buffers survive after these bindings drop.
         let consequences = {
             let (mut assignment, bytes) = prepared::assignment(
                 dimensions,
-                closure.owned_bytes().checked_add(overhead).ok_or(Stop::StorageLimit)?,
+                closure
+                    .owned_bytes()
+                    .checked_add(overhead)
+                    .ok_or(Stop::StorageLimit)?,
                 work,
             )?;
             closure.set_overhead(overhead.checked_add(bytes).ok_or(Stop::StorageLimit)?, work)?;
-            visit_round(program, seed, closure, incremental,
-                Frame { assignment: &mut assignment, buffers: &mut *buffers, selection: Selection::All },
-                work)?
+            visit_round(
+                program,
+                seed,
+                closure,
+                incremental,
+                Frame {
+                    assignment: &mut assignment,
+                    buffers: &mut *buffers,
+                    selection: Selection::All,
+                },
+                work,
+            )?
         };
-        let RoundConsequences { atoms: delta, bytes: mut pending_bytes, constraint_violated: triggered } = consequences;
+        let RoundConsequences {
+            atoms: delta,
+            bytes: mut pending_bytes,
+            constraint_violated: triggered,
+        } = consequences;
         constraint_violated |= triggered;
         closure.set_overhead(overhead, work)?;
         work.statistics.rounds += 1;
         if delta.is_empty() {
             break;
         }
-        if schedule == Schedule::Delta { closure.advance(work)?; }
+        if schedule == Schedule::Delta {
+            closure.advance(work)?;
+        }
         for atom in delta {
             let bytes = relations::atom_bytes(&atom, work)?;
             pending_bytes = pending_bytes
@@ -398,9 +430,15 @@ fn visit_round<'source>(
     frame: Frame<'_, 'source>,
     work: &mut Work<'_>,
 ) -> Result<RoundConsequences, Stop> {
-    let Frame { assignment, buffers, .. } = frame;
+    let Frame {
+        assignment,
+        buffers,
+        ..
+    } = frame;
     let mut result = RoundConsequences {
-        atoms: BTreeSet::new(), bytes: 0, constraint_violated: false,
+        atoms: BTreeSet::new(),
+        bytes: 0,
+        constraint_violated: false,
     };
     for template in program.templates() {
         work.tick()?;
@@ -409,10 +447,16 @@ fn visit_round<'source>(
             if let Some(head) = template.head() {
                 work.charge(head.terms().len())?;
                 let key = head.key(assignment).map_err(|_| Stop::InvalidProgram)?;
-                if !closure.contains(&key, result.bytes, work)? && key.get(&result.atoms).is_none() {
-                    if closure.len().checked_add(result.atoms.len()).ok_or(Stop::DerivedAtomLimit)?
+                if !closure.contains(&key, result.bytes, work)? && key.get(&result.atoms).is_none()
+                {
+                    if closure
+                        .len()
+                        .checked_add(result.atoms.len())
+                        .ok_or(Stop::DerivedAtomLimit)?
                         >= work.limits.max_derived_atoms
-                    { return Err(Stop::DerivedAtomLimit); }
+                    {
+                        return Err(Stop::DerivedAtomLimit);
+                    }
                     let (atom, bytes) = closure.pending(key, result.bytes, work)?;
                     result.atoms.insert(atom);
                     result.bytes = result.bytes.checked_add(bytes).ok_or(Stop::StorageLimit)?;
@@ -427,17 +471,37 @@ fn visit_round<'source>(
             // this New and later Current rows select the unique first new row.
             for (pivot, pattern) in template.positive().iter().enumerate() {
                 if closure.has_new(pattern.predicate(), work)? {
-                    visit_with(template, closure, Some(seed), None, work, &mut emit,
-                        Frame { assignment: &mut *assignment, buffers: &mut *buffers,
-                            selection: Selection::FirstNew(pivot) })?;
+                    visit_with(
+                        template,
+                        closure,
+                        Some(seed),
+                        None,
+                        work,
+                        &mut emit,
+                        Frame {
+                            assignment: &mut *assignment,
+                            buffers: &mut *buffers,
+                            selection: Selection::FirstNew(pivot),
+                        },
+                    )?;
                 }
             }
         } else {
             // Bootstrap includes every zero-positive head and constraint under
             // the frozen gates. The test reference repeats this complete scan.
-            visit_with(template, closure, Some(seed), None, work, &mut emit,
-                Frame { assignment: &mut *assignment, buffers: &mut *buffers,
-                    selection: Selection::All })?;
+            visit_with(
+                template,
+                closure,
+                Some(seed),
+                None,
+                work,
+                &mut emit,
+                Frame {
+                    assignment: &mut *assignment,
+                    buffers: &mut *buffers,
+                    selection: Selection::All,
+                },
+            )?;
         }
     }
     Ok(result)

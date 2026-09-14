@@ -30,18 +30,27 @@ impl Partition {
         Ok(())
     }
 
-    pub(super) fn has_new(&self, length: usize) -> bool { self.old_end < length }
+    pub(super) fn has_new(&self, length: usize) -> bool {
+        self.old_end < length
+    }
 
-    pub(super) fn prepare(&mut self, catalog: &Catalog, live: &mut u128,
-        work: &mut Work<'_>) -> Result<(), Stop>
-    {
+    pub(super) fn prepare(
+        &mut self,
+        catalog: &Catalog,
+        live: &mut u128,
+        work: &mut Work<'_>,
+    ) -> Result<(), Stop> {
         storage::admit(work, *live)?;
         storage::record(work, *live)?;
         charge(work, 1)?;
         let length = catalog.atoms().len();
-        if self.old_end > length { return Err(Stop::InvalidProgram); }
+        if self.old_end > length {
+            return Err(Stop::InvalidProgram);
+        }
         let key = (self.old_end, length);
-        if self.prepared == Some(key) { return Ok(()); }
+        if self.prepared == Some(key) {
+            return Ok(());
+        }
         charge(work, 1)?;
         self.prepared = None;
         if self.old_end == 0 || self.old_end == length {
@@ -63,45 +72,66 @@ impl Partition {
             charge(work, 1)?;
             let id = rows.row_id(rank).ok_or(Stop::InvalidProgram)?;
             charge(work, 1)?;
-            let position = if id < self.old_end { &mut old } else { &mut new };
+            let position = if id < self.old_end {
+                &mut old
+            } else {
+                &mut new
+            };
             *self.ids.get_mut(*position).ok_or(Stop::InvalidProgram)? = id;
             *position += 1;
         }
         charge(work, 1)?;
-        if old != self.old_end || new != length { return Err(Stop::InvalidProgram); }
+        if old != self.old_end || new != length {
+            return Err(Stop::InvalidProgram);
+        }
         self.prepared = Some(key);
         Ok(())
     }
 
     fn reserve(&mut self, length: usize, live: &mut u128, work: &mut Work<'_>) -> Result<(), Stop> {
-        if self.ids.capacity() >= length { return Ok(()); }
+        if self.ids.capacity() >= length {
+            return Ok(());
+        }
         let planned = length as u128 * size_of::<usize>() as u128;
         storage::admit(work, live.checked_add(planned).ok_or(Stop::StorageLimit)?)?;
         charge(work, self.ids.len())?;
         let old = self.ids.capacity() as u128 * size_of::<usize>() as u128;
-        self.ids.try_reserve_exact(length - self.ids.len()).map_err(|_| Stop::Allocation)?;
+        self.ids
+            .try_reserve_exact(length - self.ids.len())
+            .map_err(|_| Stop::Allocation)?;
         let actual = self.ids.capacity() as u128 * size_of::<usize>() as u128;
         let overlap = live.checked_add(actual).ok_or(Stop::StorageLimit);
         // Retained capacity changes even when allocator slack refuses the
         // operation. Update its owner before returning any such failure.
-        *live = live.checked_sub(old).and_then(|bytes| bytes.checked_add(actual))
+        *live = live
+            .checked_sub(old)
+            .and_then(|bytes| bytes.checked_add(actual))
             .ok_or(Stop::StorageLimit)?;
         storage::after_reservation(work, overlap?)
     }
 
     pub(super) fn rows<'a>(&'a self, catalog: &'a Catalog, set: RowSet) -> Result<Rows<'a>, Stop> {
         let rows = catalog.ordered().ok_or(Stop::InvalidProgram)?;
-        if set == RowSet::Current { return Ok(Rows::Catalog(rows)); }
+        if set == RowSet::Current {
+            return Ok(Rows::Catalog(rows));
+        }
         let length = rows.len();
-        if self.prepared != Some((self.old_end, length)) { return Err(Stop::InvalidProgram); }
+        if self.prepared != Some((self.old_end, length)) {
+            return Err(Stop::InvalidProgram);
+        }
         match (set, self.old_end) {
             (RowSet::Old, 0) => Ok(Rows::Borrowed(&[])),
             (RowSet::New, end) if end == length => Ok(Rows::Borrowed(&[])),
             (RowSet::Old, end) if end == length => Ok(Rows::Catalog(rows)),
-            (RowSet::New, 0) => Ok(Rows::Catalog(rows)),
-            (RowSet::Old, end) => Ok(Rows::Selected { atoms: catalog.atoms(), ids: &self.ids[..end] }),
-            (RowSet::New, end) => Ok(Rows::Selected { atoms: catalog.atoms(), ids: &self.ids[end..] }),
-            (RowSet::Current, _) => Ok(Rows::Catalog(rows)),
+            (RowSet::New, 0) | (RowSet::Current, _) => Ok(Rows::Catalog(rows)),
+            (RowSet::Old, end) => Ok(Rows::Selected {
+                atoms: catalog.atoms(),
+                ids: &self.ids[..end],
+            }),
+            (RowSet::New, end) => Ok(Rows::Selected {
+                atoms: catalog.atoms(),
+                ids: &self.ids[end..],
+            }),
         }
     }
 }
@@ -110,7 +140,10 @@ fn charge(work: &mut Work<'_>, amount: usize) -> Result<(), Stop> {
     let before = work.statistics.work;
     let result = work.charge(amount);
     let charged = work.statistics.work - before;
-    work.statistics.catalog_work = work.statistics.catalog_work.checked_add(charged)
+    work.statistics.catalog_work = work
+        .statistics
+        .catalog_work
+        .checked_add(charged)
         .ok_or(Stop::InvalidProgram)?;
     result
 }
