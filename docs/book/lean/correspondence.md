@@ -357,6 +357,18 @@ atoms in the emitted formulas. The [binding guide](https://github.com/GregoryGel
 separates these obligations from the independent support-coverage and reduct
 arguments.
 
+[`DomainBindings`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DomainBindings.lean)
+addresses a different filtering boundary: a local match may have no complete
+continuation. Conservative argument coverage makes the intersection for each
+source variable necessary. Selecting every row that can finish then preserves
+the exact ordered completion list, including multiplicity. The optional eager
+consumer applies these guards to the exact normalized positive program, after
+support completion. Unknown, stopped and inapplicable analysis supply no
+narrowing. Concrete analyzer soundness, source/IR correspondence, dictionary
+identity and recursive matching remain unproved implementation bridges. The
+[domain-binding guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/domain-bindings.md)
+also states the separate work, storage and authored-error obligations.
+
 [`DomainContraction`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DomainContraction.lean)
 proves concrete singleton-distinctness and affine filters preserve compatible
 assignments under fixed constraints. Finite compositions preserve that family;

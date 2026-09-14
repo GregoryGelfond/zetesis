@@ -342,6 +342,8 @@
 'Zetesis.DisjunctiveSupport.answer_set_supported_with_choices' depends on axioms: [propext,
  Classical.choice,
  Quot.sound]
+'Zetesis.DomainBindings.complete_binding_survives' does not depend on any axioms
+'Zetesis.DomainBindings.guarded_continuations_exact' depends on axioms: [propext]
 'Zetesis.DomainContraction.singleton_filter_preserves' depends on axioms: [propext, Quot.sound]
 'Zetesis.DomainContraction.remainder_lower_bound' depends on axioms: [propext, Quot.sound]
 'Zetesis.DomainContraction.affine_filter_preserves' depends on axioms: [propext, Quot.sound]

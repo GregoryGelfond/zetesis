@@ -1651,6 +1651,16 @@
       "name": "Zetesis.DisjunctiveSupport.answer_set_supported_with_choices"
     },
     {
+      "file": "Zetesis/DomainBindings.lean",
+      "line": 39,
+      "name": "Zetesis.DomainBindings.complete_binding_survives"
+    },
+    {
+      "file": "Zetesis/DomainBindings.lean",
+      "line": 54,
+      "name": "Zetesis.DomainBindings.guarded_continuations_exact"
+    },
+    {
       "file": "Zetesis/DomainContraction.lean",
       "line": 97,
       "name": "Zetesis.DomainContraction.singleton_filter_preserves"
@@ -5825,6 +5835,7 @@
     "Zetesis/DeltaRounds.lean",
     "Zetesis/DependencySchedule.lean",
     "Zetesis/DisjunctiveSupport.lean",
+    "Zetesis/DomainBindings.lean",
     "Zetesis/DomainContraction.lean",
     "Zetesis/EvaluatedWitnesses.lean",
     "Zetesis/EvaluationPrefix.lean",
@@ -5916,8 +5927,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "45a682c90429fa9195d5d8f0d727a3a5952f2269d4e342bc4b0981f44ced6be4",
-    "Zetesis.lean": "e79fdd3cbe2833556691cf2072af2a7096e99be5853f34a4413b45c3d9173419",
+    "Audit.lean": "53e4721bd1fe3ef837a7c7c3f4f7e5fad93ca2376a5f3bc048f4b26a2dfe2f51",
+    "Zetesis.lean": "4c8d149b585edccf811996d4f1f1034811d8649d188ce63892992f9246aacb2a",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
     "Zetesis/AggregateConsumers.lean": "41aded89dbfaa79833ed3b336030ef4b08afa5be8e7029060416c2f8de59ef97",
@@ -5951,6 +5962,7 @@
     "Zetesis/DeltaRounds.lean": "55c43f1f5c546648dff7e0c073fd6097edc38af37f8319e3bfb423f12e8e86c5",
     "Zetesis/DependencySchedule.lean": "c60bd62d45d5e0af661b0b850c92c0e4495346a8a153587cd22509cd53279c46",
     "Zetesis/DisjunctiveSupport.lean": "06cc6a63275e095939b95bb581a53ec4a481100e2d885733343d6e5cd6c6518e",
+    "Zetesis/DomainBindings.lean": "e6a8b5235159a471d07be8af36ea8be5c4f7ca4694a4af83968731f6b2522172",
     "Zetesis/DomainContraction.lean": "e51c8d3ed236612599e390189e399b1a11df210a26f4bdef943da6a1306a4750",
     "Zetesis/EvaluatedWitnesses.lean": "4bde5b8cec56a3229d091a3010bfead386bdcb310beb061aa1bceaa9db78125b",
     "Zetesis/EvaluationPrefix.lean": "f82517010fed810cc995747c02275d66be4c8b464301bf8a9e8e5de9fcdadbba",

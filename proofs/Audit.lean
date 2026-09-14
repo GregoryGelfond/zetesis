@@ -330,6 +330,8 @@ import Zetesis
 #print axioms Zetesis.DisjunctiveSupport.choice_reduct_of_heads
 #print axioms Zetesis.DisjunctiveSupport.choice_removal
 #print axioms Zetesis.DisjunctiveSupport.answer_set_supported_with_choices
+#print axioms Zetesis.DomainBindings.complete_binding_survives
+#print axioms Zetesis.DomainBindings.guarded_continuations_exact
 #print axioms Zetesis.DomainContraction.singleton_filter_preserves
 #print axioms Zetesis.DomainContraction.remainder_lower_bound
 #print axioms Zetesis.DomainContraction.affine_filter_preserves
