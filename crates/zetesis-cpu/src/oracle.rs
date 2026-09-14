@@ -271,7 +271,6 @@ pub fn check_view(
     };
     let prepared = PreparedQueries::prepare(program, &mut work)?;
     prepared.check_with(seed, &mut ClosureWorkspace::default(), &mut work)
-
 }
 
 // Construction establishes a complete no-delta source scan, not constraint
@@ -316,46 +315,55 @@ fn least_closure_with(
         // Bindings borrow this round's immutable catalog extent only. The
         // reference-free cursor/undo buffers survive after these bindings drop.
         {
-        let (mut assignment, bytes) = prepared::assignment(dimensions,
-            closure.owned_bytes().checked_add(overhead).ok_or(Stop::StorageLimit)?, work)?;
-        closure.set_overhead(overhead.checked_add(bytes).ok_or(Stop::StorageLimit)?, work)?;
-        for template in program.templates() {
-            work.tick()?;
-            visit_with(
-                template,
-                &*closure,
-                Some(seed),
-                None,
+            let (mut assignment, bytes) = prepared::assignment(
+                dimensions,
+                closure
+                    .owned_bytes()
+                    .checked_add(overhead)
+                    .ok_or(Stop::StorageLimit)?,
                 work,
-                |assignment, work| {
-                    work.tick()?;
-                    if let Some(head) = template.head() {
-                        work.charge(head.terms().len())?;
-                        let key = head.key(assignment).map_err(|_| Stop::InvalidProgram)?;
-                        if !closure.contains(&key, pending_bytes, work)?
-                            && key.get(&delta).is_none()
-                        {
-                            if closure
-                                .len()
-                                .checked_add(delta.len())
-                                .ok_or(Stop::DerivedAtomLimit)?
-                                >= work.limits.max_derived_atoms
-                            {
-                                return Err(Stop::DerivedAtomLimit);
-                            }
-                            let (atom, bytes) = closure.pending(key, pending_bytes, work)?;
-                            delta.insert(atom);
-                            pending_bytes =
-                                pending_bytes.checked_add(bytes).ok_or(Stop::StorageLimit)?;
-                        }
-                    } else {
-                        constraint_violated = true;
-                    }
-                    Ok(())
-                },
-                Frame { assignment: &mut assignment, buffers: &mut *buffers },
             )?;
-        }
+            closure.set_overhead(overhead.checked_add(bytes).ok_or(Stop::StorageLimit)?, work)?;
+            for template in program.templates() {
+                work.tick()?;
+                visit_with(
+                    template,
+                    &*closure,
+                    Some(seed),
+                    None,
+                    work,
+                    |assignment, work| {
+                        work.tick()?;
+                        if let Some(head) = template.head() {
+                            work.charge(head.terms().len())?;
+                            let key = head.key(assignment).map_err(|_| Stop::InvalidProgram)?;
+                            if !closure.contains(&key, pending_bytes, work)?
+                                && key.get(&delta).is_none()
+                            {
+                                if closure
+                                    .len()
+                                    .checked_add(delta.len())
+                                    .ok_or(Stop::DerivedAtomLimit)?
+                                    >= work.limits.max_derived_atoms
+                                {
+                                    return Err(Stop::DerivedAtomLimit);
+                                }
+                                let (atom, bytes) = closure.pending(key, pending_bytes, work)?;
+                                delta.insert(atom);
+                                pending_bytes =
+                                    pending_bytes.checked_add(bytes).ok_or(Stop::StorageLimit)?;
+                            }
+                        } else {
+                            constraint_violated = true;
+                        }
+                        Ok(())
+                    },
+                    Frame {
+                        assignment: &mut assignment,
+                        buffers: &mut *buffers,
+                    },
+                )?;
+            }
         }
         closure.set_overhead(overhead, work)?;
         work.statistics.rounds += 1;
@@ -416,8 +424,18 @@ fn visit<'source, E: From<Stop>>(
 ) -> Result<(), E> {
     let mut assignment = vec![None; template.variable_count()];
     let mut buffers = prepared::Buffers::local(template.positive().len());
-    visit_with(template, relations, seed, membership, work, emit,
-        Frame { assignment: &mut assignment, buffers: &mut buffers })
+    visit_with(
+        template,
+        relations,
+        seed,
+        membership,
+        work,
+        emit,
+        Frame {
+            assignment: &mut assignment,
+            buffers: &mut buffers,
+        },
+    )
 }
 
 fn visit_with<'source, E: From<Stop>>(
@@ -431,7 +449,11 @@ fn visit_with<'source, E: From<Stop>>(
 ) -> Result<(), E> {
     // Reset all query state before this source occurrence. No binding survives
     // template reuse; positive matching still returns original borrowed values.
-    let assignment = &mut frame.assignment[..template.variable_count()];
+    let Frame {
+        assignment,
+        buffers,
+    } = frame;
+    let assignment = &mut assignment[..template.variable_count()];
     work.charge(assignment.len())?;
     assignment.fill(None);
     if !guards(template, assignment, seed, work)? {
@@ -450,11 +472,14 @@ fn visit_with<'source, E: From<Stop>>(
     }
     // None means this depth has not yet been opened for the current parent
     // assignment. A retained range advances in the original relation order.
-    let cursors = &mut frame.buffers.cursors[..count];
-    let undo = &mut frame.buffers.undo[..count];
+    let cursors = &mut buffers.cursors[..count];
+    let undo = &mut buffers.undo[..count];
     work.charge(count)?;
     cursors.fill(None);
-    for row in undo.iter_mut() { work.tick()?; row.clear(); }
+    for row in undo.iter_mut() {
+        work.tick()?;
+        row.clear();
+    }
     let mut depth = 0;
     loop {
         work.tick()?;

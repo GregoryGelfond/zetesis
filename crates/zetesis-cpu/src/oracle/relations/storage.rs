@@ -12,7 +12,7 @@ use zetesis_core::{Atom, AtomKey, Predicate, Value};
 use super::super::Work;
 use crate::Stop;
 
-pub(super) fn admit(work: &mut Work<'_>, bytes: u128) -> Result<(), Stop> {
+pub(in crate::oracle) fn admit(work: &mut Work<'_>, bytes: u128) -> Result<(), Stop> {
     work.control.poll()?;
     if bytes > work.limits.max_closure_bytes as u128 {
         return Err(Stop::StorageLimit);
@@ -22,13 +22,13 @@ pub(super) fn admit(work: &mut Work<'_>, bytes: u128) -> Result<(), Stop> {
 
 /// Record capacity already admitted or acquired, including allocator slack on a
 /// failed operation. This does not turn a refusal into successful admission.
-pub(super) fn record(work: &mut Work<'_>, bytes: u128) -> Result<(), Stop> {
+pub(in crate::oracle) fn record(work: &mut Work<'_>, bytes: u128) -> Result<(), Stop> {
     let bytes = usize::try_from(bytes).map_err(|_| Stop::StorageLimit)?;
     work.statistics.peak_closure_bytes = work.statistics.peak_closure_bytes.max(bytes);
     Ok(())
 }
 
-pub(super) fn after_reservation(work: &mut Work<'_>, bytes: u128) -> Result<(), Stop> {
+pub(in crate::oracle) fn after_reservation(work: &mut Work<'_>, bytes: u128) -> Result<(), Stop> {
     record(work, bytes)?;
     if bytes > work.limits.max_closure_bytes as u128 {
         Err(Stop::StorageLimit)

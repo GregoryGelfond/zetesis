@@ -199,10 +199,10 @@ impl Catalog {
     /// Current shape/capacity and reset work must satisfy `limits`. On refusal,
     /// atoms, IDs, indexes and the previous prepared view remain unchanged.
     pub fn take_atoms(&mut self, limits: Limits) -> Result<ExtractedAtoms, CatalogFailure> {
-        let mut work = self.work(limits)?;
         // Atom-vector transfer; three row-index resets; three dictionary-index
         // resets; dictionary, ordered rows, prepared flag and payload counter.
         const RESET_BOOKKEEPING: u128 = 11;
+        let mut work = self.work(limits)?;
         work.tick(self.layout.columns.len() as u128 + RESET_BOOKKEEPING)
             .map_err(|error| self.failed(error, &work))?;
         let DictionaryIndex::Append(index) = &mut self.layout.index else {

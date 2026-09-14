@@ -257,7 +257,10 @@ impl Catalogs {
     }
 
     pub(super) fn set_overhead(&mut self, bytes: u128, work: &mut Work<'_>) -> Result<(), Stop> {
-        let total = self.owned_bytes().checked_add(bytes).ok_or(Stop::StorageLimit)?;
+        let total = self
+            .owned_bytes()
+            .checked_add(bytes)
+            .ok_or(Stop::StorageLimit)?;
         storage::admit(work, total)?;
         storage::record(work, total)?;
         self.bytes = total;
@@ -270,28 +273,34 @@ impl Catalogs {
         // canonicalization remain separate from the closure capacity allowance.
         // Each payload is moved once. Empty indexes and predicate owners remain.
         let mut atoms = Vec::new();
-        atoms.try_reserve_exact(self.atoms).map_err(|_| Stop::Allocation)?;
+        atoms
+            .try_reserve_exact(self.atoms)
+            .map_err(|_| Stop::Allocation)?;
         for catalog in self.relations.values_mut() {
             work.tick()?;
             let mut payload = 0_u128;
             for atom in catalog.atoms() {
-                payload = payload.checked_add(atom_bytes(atom, work)? - size_of::<Atom>() as u128)
+                payload = payload
+                    .checked_add(atom_bytes(atom, work)? - size_of::<Atom>() as u128)
                     .ok_or(Stop::StorageLimit)?;
             }
             let old = catalog.retained_bytes() as u128;
             let other = self.bytes.checked_sub(old).ok_or(Stop::InvalidProgram)?;
             let result = catalog.take_atoms(limits(work, other)?);
-            self.bytes = other.checked_add(catalog.retained_bytes() as u128)
+            self.bytes = other
+                .checked_add(catalog.retained_bytes() as u128)
                 .ok_or(Stop::StorageLimit)?;
             let extracted = completed(result, other, work)?;
-            self.bytes = self.bytes.checked_sub(payload).ok_or(Stop::InvalidProgram)?;
+            self.bytes = self
+                .bytes
+                .checked_sub(payload)
+                .ok_or(Stop::InvalidProgram)?;
             account_storage(work, other, extracted.storage)?;
             atoms.extend(extracted.atoms);
         }
         self.atoms = 0;
         Ok(Model::new(atoms))
     }
-
 }
 
 fn limits(work: &Work<'_>, other: u128) -> Result<Limits, Stop> {
