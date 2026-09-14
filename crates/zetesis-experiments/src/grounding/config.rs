@@ -72,8 +72,9 @@ pub struct Configuration {
     #[serde(with = "views::Grounding")]
     pub grounding: GroundingOptions,
     /// Optional domain analysis in measured admissions, disabled by default.
-    /// The independent reference always disables it. Inapplicable, widened or
-    /// stopped analysis retains the frontend's complete-join fallback contract.
+    /// The independent reference always disables it. Inapplicable or stopped
+    /// analysis keeps complete joins. A widened argument contributes no restriction;
+    /// other finite arguments may still guard their corresponding rows.
     /// These logical analysis limits are not allocated-byte or deadline bounds.
     #[serde(serialize_with = "views::domain_request")]
     pub domain_analysis: Option<DomainLimits>,

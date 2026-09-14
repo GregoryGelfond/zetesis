@@ -364,8 +364,9 @@ Indexed joins, independently of the measured request. The report serializes all
 requested domain limits and the reference policy, as well as the independent
 SAT projection-history limits. A domain request does not expand source admission.
 Only the frontend's checked normalized positive profile may narrow final-rule
-join prefixes; inapplicable, widened or logically stopped analysis keeps the
-complete-join fallback. Enclosing formula work or storage refusal still fails
+join prefixes; inapplicable or logically stopped analysis keeps the complete-join
+fallback. An individually widened argument contributes no restriction; other
+finite arguments may still guard rows. Enclosing formula work or storage refusal still fails
 the measured admission and preserves its report prefix.
 
 Detailed observations retain the optional `domain_analysis` phase and the actual
