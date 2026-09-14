@@ -287,6 +287,7 @@ fn least_closure(
     let mut constraint_violated = false;
     loop {
         work.tick()?;
+        closure.prepare(work)?;
         let mut delta = BTreeSet::new();
         for template in program.templates() {
             work.tick()?;

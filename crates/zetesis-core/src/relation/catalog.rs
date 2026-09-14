@@ -2,11 +2,14 @@
 
 use std::mem::size_of;
 
-use crate::{Atom, AtomKey, Predicate, Value};
+use crate::{Atom, AtomKey, Predicate, Value, identity, ordered_index::{self, Directions, Index, Link, Node, Step}};
+
+mod plan;
+mod ordered;
+pub use ordered::OrderedRows;
 
 use super::{
-    Cell, Failure, Layout, LayoutOwner, Limits, Relation, Resource, Source, Storage, Work, ceiling,
-    storage,
+    Cell, DictionaryIndex, Failure, Layout, LayoutOwner, Limits, Relation, Resource, Source, Storage, Work, ceiling,
 };
 
 /// One signed predicate's unique typed atoms and appendable equality layout.
@@ -20,14 +23,20 @@ use super::{
 /// layout and operation scratch. The supplied atoms' nested payload allocations
 /// remain the source admission caller's responsibility, as for borrowed views.
 /// They are reported conservatively as referenced payload, not unique RSS.
-/// Membership uses full signed predicate and typed tuple equality. Sorted row
-/// and dictionary indexes move IDs only; their worst-case insertion work is
-/// linear in existing rows/values. Column append has amortized linear total
-/// copying across a growth sequence, separate from those sorted index shifts.
+/// Membership uses the same checked typed identity comparisons as AtomInterner.
+/// Row and dictionary AVL indexes contain only IDs and links. Row membership
+/// visits O(log n) nodes; dictionary membership visits O(log d), with typed
+/// descriptor/text-prefix comparison work additional. Inserting a tuple with a
+/// newly distinct values keeps O(a log d) tentative node patches; checked overlay scans can
+/// cost O(a² log² d) metadata work. No historical sorted ID sequence is shifted.
+/// Ordered access requires an explicitly prepared view, reusable until append.
+/// Column/vector growth and ordered preparation have separate admitted costs.
 pub struct Catalog {
     predicate: Predicate,
     atoms: Vec<Atom>,
-    rows: Vec<usize>,
+    rows: Index,
+    ordered: Vec<usize>,
+    ordered_valid: bool,
     layout: Layout,
     payload: u128,
     construction: Storage,
@@ -64,6 +73,9 @@ pub struct CatalogFailure {
     pub work: u128,
     /// Current retained owner capacity; zero when construction returns no owner.
     pub retained_bytes: usize,
+    /// Recorded operation envelope, including scratch and growth overlap.
+    /// A refused proposal that never allocates does not increase this receipt.
+    pub peak_construction_bytes: usize,
 }
 
 impl std::fmt::Display for CatalogFailure {
@@ -77,19 +89,6 @@ impl std::error::Error for CatalogFailure {
     }
 }
 
-struct NewValue {
-    id: u32,
-    column: usize,
-    position: usize,
-}
-
-struct Plan {
-    ids: Vec<u32>,
-    added: Vec<NewValue>,
-    ordered: Vec<usize>,
-    payload: u128,
-}
-
 impl Catalog {
     /// Create an empty signed relation owner, including nullary relations.
     ///
@@ -101,6 +100,7 @@ impl Catalog {
                 error,
                 work: 0,
                 retained_bytes: 0,
+                peak_construction_bytes: 0,
             })?;
         let build = (|| {
             ceiling(
@@ -116,10 +116,12 @@ impl Catalog {
             Ok(Self {
                 predicate,
                 atoms: Vec::new(),
-                rows: Vec::new(),
+                rows: Index::default(),
+                ordered: Vec::new(),
+                ordered_valid: true,
                 layout: Layout {
                     dictionary: Vec::new(),
-                    ordered: Vec::new(),
+                    index: DictionaryIndex::Append(Index::default()),
                     columns,
                 },
                 payload: 0,
@@ -136,6 +138,7 @@ impl Catalog {
             error,
             work: work.used,
             retained_bytes: 0,
+            peak_construction_bytes: work.peak,
         })
     }
 
@@ -155,15 +158,6 @@ impl Catalog {
     #[must_use]
     pub fn atoms(&self) -> &[Atom] {
         &self.atoms
-    }
-
-    /// Borrow a tuple by ascending typed storage order in constant time.
-    /// This sorted position differs from the stable insertion row ID and may
-    /// change on append. Ordering is [`Value`](crate::Value)'s [`Ord`], not
-    /// ASP term order.
-    #[must_use]
-    pub fn ordered_row(&self, position: usize) -> Option<&Atom> {
-        self.rows.get(position).and_then(|&row| self.atoms.get(row))
     }
 
     /// Consume the owner without copying atoms or their nested payloads.
@@ -199,13 +193,10 @@ impl Catalog {
     /// Refuses foreign predicates or work/byte ceilings. Comparisons include
     /// nested typed-value payload costs and do not rely on equality IDs alone.
     pub fn lookup(&self, atom: &Atom, limits: Limits) -> Result<Lookup, CatalogFailure> {
-        let mut work = self.work(limits).map_err(|error| self.failed(error, 0))?;
-        self.position(atom, &mut work)
-            .map(|position| Lookup {
-                row: position.ok(),
-                storage: self.receipt(&work),
-            })
-            .map_err(|error| self.failed(error, work.used))
+        let mut work = self.work(limits)?;
+        self.locate(atom.predicate(), |column| &atom.values()[column], &mut work, |_| {})
+            .map(|row| Lookup { row, storage: self.receipt(&work) })
+            .map_err(|error| self.failed(error, &work))
     }
 
     /// Look up a borrowed substitution with the same comparison and accounting
@@ -215,13 +206,10 @@ impl Catalog {
     /// Refuses foreign predicates or work/byte ceilings, preserving completed
     /// comparison work in the failure receipt.
     pub fn lookup_key(&self, key: &AtomKey<'_>, limits: Limits) -> Result<Lookup, CatalogFailure> {
-        let mut work = self.work(limits).map_err(|error| self.failed(error, 0))?;
-        self.position_values(key.predicate(), |column| key.argument(column), &mut work)
-            .map(|position| Lookup {
-                row: position.ok(),
-                storage: self.receipt(&work),
-            })
-            .map_err(|error| self.failed(error, work.used))
+        let mut work = self.work(limits)?;
+        self.locate(key.predicate(), |column| key.argument(column), &mut work, |_| {})
+            .map(|row| Lookup { row, storage: self.receipt(&work) })
+            .map_err(|error| self.failed(error, &work))
     }
 
     /// Insert an atom only after every required reservation and check succeeds.
@@ -232,221 +220,104 @@ impl Catalog {
     /// unchanged on failure; successful reservations may retain spare capacity.
     /// Subsequent views and admissions include that actual retained capacity.
     pub fn insert(&mut self, atom: Atom, limits: Limits) -> Result<Insertion, CatalogFailure> {
-        let mut work = self.work(limits).map_err(|error| self.failed(error, 0))?;
+        let mut work = self.work(limits)?;
         self.insert_inner(atom, &mut work)
-            .map_err(|error| self.failed(error, work.used))
+            .map_err(|error| self.failed(error, &work))
     }
 
     fn insert_inner(&mut self, atom: Atom, work: &mut Work) -> Result<Insertion, Failure> {
-        let position = match self.position(&atom, work)? {
-            Ok(row) => {
-                return Ok(Insertion {
-                    row,
-                    inserted: false,
-                    storage: self.receipt(work),
-                });
-            }
-            Err(position) => position,
-        };
-        ceiling(
-            Resource::Rows,
-            self.atoms.len() as u128 + 1,
-            work.limits.max_rows as u128,
-        )?;
-        let plan = self.plan(&atom, work)?;
-        self.reserve(&plan, position, work)?;
-        Ok(self.publish(atom, position, plan, work))
-    }
-
-    fn plan(&self, atom: &Atom, work: &mut Work) -> Result<Plan, Failure> {
-        let mut ids = work.reserve(self.predicate.arity())?;
-        let mut added: Vec<NewValue> = work.reserve(self.predicate.arity())?;
-        let mut ordered: Vec<usize> = work.reserve(self.predicate.arity())?;
-        let source = Source::Atoms(&self.atoms);
-        let mut payload = self.payload;
-        for (column, value) in atom.values().iter().enumerate() {
-            work.tick(1 + value.payload_bytes() as u128)?;
-            payload = payload
-                .checked_add(value.payload_bytes() as u128)
-                .ok_or(Failure::Overflow)?;
-            let id = match storage::lookup(&self.layout, &source, value, work)? {
-                Ok(id) => id,
-                Err(insertion) => {
-                    let mut previous = None;
-                    for (index, entry) in added.iter().enumerate() {
-                        if work.compare(&atom.values()[entry.column], value)?.is_eq() {
-                            previous = Some(index);
-                            break;
-                        }
-                    }
-                    let index = if let Some(index) = previous {
-                        index
-                    } else {
-                        let index = added.len();
-                        let mut rank = ordered.len();
-                        for (rank_index, &other) in ordered.iter().enumerate() {
-                            if work
-                                .compare(value, &atom.values()[added[other].column])?
-                                .is_lt()
-                            {
-                                rank = rank_index;
-                                break;
-                            }
-                        }
-                        work.tick((ordered.len() - rank + 1) as u128)?;
-                        ordered.insert(rank, index);
-                        added.push(NewValue {
-                            id: u32::try_from(
-                                self.layout
-                                    .dictionary
-                                    .len()
-                                    .checked_add(index)
-                                    .ok_or(Failure::Overflow)?,
-                            )
-                            .map_err(|_| Failure::Overflow)?,
-                            column,
-                            position: insertion,
-                        });
-                        index
-                    };
-                    added[index].id
-                }
-            };
-            work.tick(1)?;
-            ids.push(id);
+        let mut route = Directions::default();
+        if let Some(row) = self.locate(atom.predicate(), |column| &atom.values()[column], work,
+            |right| route.push(right).expect("AVL height fits two words"))? {
+            return Ok(Insertion { row, inserted: false, storage: self.receipt(work) });
         }
-        Ok(Plan {
-            ids,
-            added,
-            ordered,
-            payload,
-        })
+        let row = self.atoms.len();
+        ceiling(Resource::Rows, row as u128 + 1, work.limits.max_rows as u128)?;
+        let row_root = plan::row(&mut self.rows, row, &route, work)?;
+        let plan = plan::values(&mut self.layout, &self.atoms, &atom, self.payload, work)?;
+        self.reserve(&plan, work)?;
+        Ok(self.publish(atom, row_root, plan, work))
     }
 
-    fn reserve(&mut self, plan: &Plan, position: usize, work: &mut Work) -> Result<(), Failure> {
-        let Plan {
-            ids,
-            added,
-            ordered,
-            ..
-        } = plan;
-        ceiling(
-            Resource::Values,
-            self.layout.dictionary.len() as u128 + added.len() as u128,
-            (work.limits.max_values as u128).min(u128::from(u32::MAX) + 1),
-        )?;
+    fn reserve(&mut self, plan: &plan::Plan, work: &mut Work) -> Result<(), Failure> {
         work.grow(&mut self.atoms, 1)?;
-        work.grow(&mut self.rows, 1)?;
-        work.grow(&mut self.layout.dictionary, added.len())?;
-        work.grow(&mut self.layout.ordered, added.len())?;
+        work.grow(&mut self.rows.nodes, 1)?;
+        work.grow(&mut self.layout.dictionary, plan.added.len())?;
+        let DictionaryIndex::Append(index) = &mut self.layout.index else {
+            return Err(Failure::Dictionary);
+        };
+        work.grow(&mut index.nodes, plan.added.len())?;
         for column in &mut self.layout.columns {
             work.grow(column, 1)?;
         }
-        // Charge every impending mutation before publishing any logical state.
-        let mut writes =
-            (self.rows.len() - position + 1) as u128 + ids.len() as u128 + added.len() as u128 + 1;
-        for (offset, &index) in ordered.iter().enumerate() {
-            let insertion = added[index].position + offset;
-            writes += (self.layout.ordered.len() + offset - insertion + 1) as u128;
-        }
-        work.tick(writes)?;
+        // Publication has no callbacks, allocations, comparisons or failure.
+        // Include the branch inspection of each row-path step and every patch.
+        work.tick(self.rows.path.len() as u128 + plan.ids.len() as u128
+            + plan.added.len() as u128 * 2 + plan.patches.len() as u128 + 3)?;
         Ok(())
     }
 
-    fn publish(&mut self, atom: Atom, position: usize, plan: Plan, work: &mut Work) -> Insertion {
-        let Plan {
-            ids,
-            added,
-            ordered,
-            payload,
-        } = plan;
+    fn publish(&mut self, atom: Atom, row_root: Link, plan: plan::Plan, work: &mut Work) -> Insertion {
         let row = self.atoms.len();
-        for value in &added {
-            self.layout.dictionary.push(Cell {
-                row,
-                column: value.column,
-            });
+        let DictionaryIndex::Append(index) = &mut self.layout.index else {
+            unreachable!("catalog owns an append index");
+        };
+        index.nodes.resize(index.nodes.len() + plan.added.len(), Node::default());
+        for patch in &plan.patches {
+            index.nodes[patch.id] = patch.node;
         }
-        for (offset, &index) in ordered.iter().enumerate() {
-            self.layout
-                .ordered
-                .insert(added[index].position + offset, added[index].id);
-        }
-        for (column, id) in self.layout.columns.iter_mut().zip(ids.iter().copied()) {
+        index.root = plan.root;
+        self.layout.dictionary.extend_from_slice(&plan.added);
+        for (column, id) in self.layout.columns.iter_mut().zip(plan.ids.iter().copied()) {
             column.push(id);
         }
-        self.rows.insert(position, row);
+        self.rows.publish(row_root);
         self.atoms.push(atom);
-        self.payload = payload;
-        work.release(ids);
-        work.release(added);
-        work.release(ordered);
-        Insertion {
-            row,
-            inserted: true,
-            storage: self.receipt(work),
-        }
+        self.payload = plan.payload;
+        self.ordered_valid = false;
+        plan.release(work);
+        Insertion { row, inserted: true, storage: self.receipt(work) }
     }
 
-    fn position(&self, atom: &Atom, work: &mut Work) -> Result<Result<usize, usize>, Failure> {
-        self.position_values(atom.predicate(), |column| &atom.values()[column], work)
-    }
-
-    fn position_values<'value>(
+    fn locate<'value>(
         &self,
         predicate: &Predicate,
         value: impl Fn(usize) -> &'value Value,
         work: &mut Work,
-    ) -> Result<Result<usize, usize>, Failure> {
-        work.tick(1 + self.predicate.name().len() as u128 + predicate.name().len() as u128)?;
-        if predicate != &self.predicate {
+        descend: impl FnMut(bool),
+    ) -> Result<Option<usize>, Failure> {
+        if !identity::predicate(predicate, &self.predicate, &mut || work.tick(1))?.is_eq() {
             return Err(Failure::Predicate);
         }
-        let mut start = 0;
-        let mut end = self.rows.len();
-        while start < end {
-            let middle = start + (end - start) / 2;
-            let row = self.rows[middle];
-            let mut order = std::cmp::Ordering::Equal;
-            for (column, left) in self.atoms[row].values().iter().enumerate() {
-                order = work.compare(left, value(column))?;
+        ordered_index::search(&self.rows.nodes, self.rows.root, |row| {
+            work.tick(1)?;
+            for (column, right) in self.atoms[row].values().iter().enumerate() {
+                let order = work.compare(value(column), right)?;
                 if !order.is_eq() {
-                    break;
+                    return Ok(order);
                 }
             }
-            match order {
-                std::cmp::Ordering::Less => start = middle + 1,
-                std::cmp::Ordering::Equal => return Ok(Ok(row)),
-                std::cmp::Ordering::Greater => end = middle,
-            }
-        }
-        Ok(Err(start))
+            Ok(std::cmp::Ordering::Equal)
+        }, descend)
     }
 
-    fn work(&self, limits: Limits) -> Result<Work, Failure> {
-        ceiling(
-            Resource::Rows,
-            self.atoms.len() as u128,
-            limits.max_rows as u128,
-        )?;
-        ceiling(
-            Resource::Columns,
-            self.predicate.arity() as u128,
-            limits.max_columns as u128,
-        )?;
-        ceiling(
-            Resource::Values,
-            self.layout.dictionary.len() as u128,
-            limits.max_values as u128,
-        )?;
-        Work::new(limits, self.retained_bytes() as u128)
+    fn work(&self, limits: Limits) -> Result<Work, CatalogFailure> {
+        let build = (|| {
+            ceiling(Resource::Rows, self.atoms.len() as u128, limits.max_rows as u128)?;
+            ceiling(Resource::Columns, self.predicate.arity() as u128, limits.max_columns as u128)?;
+            ceiling(Resource::Values, self.layout.dictionary.len() as u128, limits.max_values as u128)?;
+            Work::new(limits, self.retained_bytes() as u128)
+        })();
+        build.map_err(|error| CatalogFailure { error, work: 0,
+            retained_bytes: self.retained_bytes(), peak_construction_bytes: self.retained_bytes() })
     }
 
-    fn failed(&self, error: Failure, work: u128) -> CatalogFailure {
+    fn failed(&self, error: Failure, work: &Work) -> CatalogFailure {
         CatalogFailure {
             error,
-            work,
+            work: work.used,
             retained_bytes: self.retained_bytes(),
+            peak_construction_bytes: work.peak,
         }
     }
 
@@ -456,9 +327,13 @@ impl Catalog {
     pub fn retained_bytes(&self) -> usize {
         size_of::<Self>()
             + self.atoms.capacity() * size_of::<Atom>()
-            + self.rows.capacity() * size_of::<usize>()
+            + index_bytes(&self.rows)
+            + self.ordered.capacity() * size_of::<usize>()
             + self.layout.dictionary.capacity() * size_of::<Cell>()
-            + self.layout.ordered.capacity() * size_of::<u32>()
+            + match &self.layout.index {
+                DictionaryIndex::Sorted(ids) => ids.capacity() * size_of::<u32>(),
+                DictionaryIndex::Append(index) => index_bytes(index),
+            }
             + self.layout.columns.capacity() * size_of::<Vec<u32>>()
             + self
                 .layout
@@ -477,6 +352,10 @@ impl Catalog {
             construction_work: work.used,
         }
     }
+}
+
+fn index_bytes(index: &Index) -> usize {
+    index.nodes.capacity() * size_of::<Node>() + index.path.capacity() * size_of::<Step>()
 }
 
 #[cfg(test)]

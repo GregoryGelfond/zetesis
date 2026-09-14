@@ -234,13 +234,15 @@ fn sorted_positions_borrow_the_original_atoms() {
     for value in [9, 2, 5] {
         catalog.insert(atom(value, 0), Limits::default()).unwrap();
     }
+    catalog.prepare_ordered(Limits::default()).unwrap();
+    let rows = catalog.ordered().unwrap();
     for (position, original) in [1, 2, 0].into_iter().enumerate() {
         assert!(std::ptr::eq(
-            catalog.ordered_row(position).unwrap(),
+            rows.get(position).unwrap(),
             &raw const catalog.atoms()[original]
         ));
     }
-    assert!(catalog.ordered_row(3).is_none());
+    assert!(rows.get(3).is_none());
 }
 
 #[test]
@@ -385,6 +387,108 @@ proptest! {
             let rows=relation.all(Limits::default()).unwrap();
             let selected = relation.select(&query,&rows,Limits::default()).unwrap();
             prop_assert_eq!(selected.positions(),expected.as_slice());
+        }
+    }
+}
+
+#[test]
+fn prepared_order_reuses_the_published_extent() {
+    let mut catalog = owner();
+    for value in [9, 2, 5] {
+        catalog.insert(atom(value, 0), Limits::default()).unwrap();
+    }
+    assert!(catalog.ordered().is_none());
+    let preparation = catalog.prepare_ordered(Limits::default()).unwrap().storage();
+    assert!(preparation.construction_work > 0);
+    let reused = catalog.prepare_ordered(Limits { max_work: 0, ..Limits::default() }).unwrap();
+    assert_eq!(reused.storage().construction_work, 0);
+    assert_eq!(reused.storage().retained_bytes, preparation.retained_bytes);
+    for (position, value) in [2, 5, 9].into_iter().enumerate() {
+        assert_eq!(reused.get(position), Some(&atom(value, 0)));
+    }
+}
+
+#[test]
+fn duplicate_insert_preserves_prepared_order() {
+    let mut catalog = owner();
+    catalog.insert(atom(2, 9), Limits::default()).unwrap();
+    catalog.prepare_ordered(Limits::default()).unwrap();
+    assert!(!catalog.insert(atom(2, 9), Limits::default()).unwrap().inserted);
+    assert_eq!(catalog.ordered().unwrap().get(0), Some(&atom(2, 9)));
+    assert_eq!(catalog.prepare_ordered(Limits { max_work: 0, ..Limits::default() })
+        .unwrap().storage().construction_work, 0);
+}
+
+fn rotation_owner() -> Catalog {
+    let predicate = Predicate::new("quad", 4).unwrap();
+    let mut catalog = Catalog::new(predicate.clone(), Limits::default()).unwrap();
+    catalog.insert(Atom::new(predicate, vec![Value::Number(40); 4]).unwrap(),
+        Limits::default()).unwrap();
+    catalog.prepare_ordered(Limits::default()).unwrap();
+    catalog
+}
+
+fn rotating_tuple() -> Atom {
+    Atom::new(Predicate::new("quad", 4).unwrap(),
+        [30, 20, 10, 50].map(Value::Number).to_vec()).unwrap()
+}
+
+#[test]
+fn refused_rotation_preserves_the_published_extent() {
+    let mut reference = rotation_owner();
+    let required = reference.insert(rotating_tuple(), Limits::default()).unwrap()
+        .storage.construction_work;
+    assert_eq!(reference.layout.dictionary.len(), 5);
+    for limit in 0..required {
+        let mut catalog = rotation_owner();
+        let original = catalog.atoms().to_vec();
+        let original_ids: Vec<Vec<u32>> = catalog.view().columns().map(<[u32]>::to_vec).collect();
+        let failure = catalog.insert(rotating_tuple(), Limits {
+            max_work: u64::try_from(limit).unwrap(), ..Limits::default()
+        }).unwrap_err();
+        assert!(matches!(failure.error, Failure::Limit {
+            resource: Resource::Work, observed, limit: bound
+        } if bound == limit && observed > bound));
+        assert!(failure.work <= limit);
+        assert_eq!(catalog.atoms(), original);
+        assert_eq!(catalog.layout.dictionary.len(), 1);
+        assert_eq!(catalog.view().columns().map(<[u32]>::to_vec).collect::<Vec<_>>(), original_ids);
+        let rows = catalog.ordered().expect("refusal preserves prior preparation");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows.get(0), Some(&original[0]));
+        assert_eq!(catalog.lookup(&rotating_tuple(), Limits::default()).unwrap().row, None);
+        assert_eq!(failure.retained_bytes, catalog.retained_bytes());
+    }
+    let mut exact = rotation_owner();
+    let insertion = exact.insert(rotating_tuple(), Limits {
+        max_work: u64::try_from(required).unwrap(), ..Limits::default()
+    }).unwrap();
+    assert_eq!(insertion.row, 1);
+    assert!(exact.ordered().is_none());
+    assert_eq!(exact.lookup(&rotating_tuple(), Limits::default()).unwrap().row, Some(1));
+}
+
+#[test]
+fn refused_preparation_publishes_no_partial_order() {
+    let mut reference = owner();
+    for value in [9, 2, 5] {
+        reference.insert(atom(value, 0), Limits::default()).unwrap();
+    }
+    let required = reference.prepare_ordered(Limits::default()).unwrap().storage().construction_work;
+    for limit in 0..required {
+        let mut catalog = owner();
+        for value in [9, 2, 5] {
+            catalog.insert(atom(value, 0), Limits::default()).unwrap();
+        }
+        let Err(failure) = catalog.prepare_ordered(Limits {
+            max_work: u64::try_from(limit).unwrap(), ..Limits::default()
+        }) else { panic!("every shorter prefix must refuse preparation"); };
+        assert!(matches!(failure.error, Failure::Limit { resource: Resource::Work, .. }));
+        assert!(catalog.ordered().is_none());
+        assert_eq!(catalog.atoms(), [atom(9, 0), atom(2, 0), atom(5, 0)]);
+        let complete = catalog.prepare_ordered(Limits::default()).unwrap();
+        for (position, value) in [2, 5, 9].into_iter().enumerate() {
+            assert_eq!(complete.get(position), Some(&atom(value, 0)));
         }
     }
 }

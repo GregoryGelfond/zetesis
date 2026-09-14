@@ -265,8 +265,8 @@ and either origin ceiling remain located admission failures, never UNSAT.
 A relation row is one complete typed tuple. Formula support's
 [`SupportCatalog`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/relations.rs)
 owns each possible atom once, with append-only, predicate-local row identities.
-A sorted index of those identities supports membership checks without another
-atom collection. The core relation owner retains its typed equality dictionary
+A checked AVL index of those identities supports membership checks without
+another atom collection. The core relation owner retains its typed equality dictionary
 and argument columns across growth rounds. Each column has a
 `BTreeMap<u32, Vec<usize>>` from dictionary IDs to original row positions;
 insertion extends only the new row's postings. An immutable snapshot borrows
@@ -295,10 +295,26 @@ selectivity; integer comparisons and complete tuple probes have different costs.
 The catalog cannot grow while its snapshot is borrowed. Once a round finishes,
 the snapshot drops before new atoms are appended. A failed tuple or posting
 extension returns no usable support owner. The completed final snapshot supplies
-formula emission and objective eligibility. Membership insertion shifts sorted
-row IDs, not atoms. Typed comparisons, ID shifts, append copies and posting
-construction consume the grounding work budget. Snapshot construction visits
-predicates without revisiting their rows.
+formula emission and objective eligibility. The core catalog uses the shared
+checked AVL implementation for row and dictionary identity. Nodes contain only
+IDs and links; typed comparisons inspect their actual descriptor/text prefixes.
+An insertion plans the new tuple's dictionary leaves in a bounded metadata
+overlay, then publishes row, equality and column changes after all fallible
+checks. No historical sorted row or dictionary sequence is shifted. If a tuple
+introduces a new values into a dictionary of size d, tentative patches occupy
+O(a log d) cells; the checked overlay lookups can use O(a² log² d) metadata work.
+Typed comparisons, node inspection, append copies and posting construction
+consume the grounding work budget. Snapshot construction visits predicates
+without revisiting their rows.
+
+Scalar reduct closure uses the same per-predicate catalog. Before each round it
+prepares a complete ordered ID view for each changed extent and reuses that view
+for the round's joins. Preparation traverses O(n) row IDs and accounts its cache
+and traversal capacity. Subsequent indexed row access is constant time and
+borrows the authoritative tuple. A duplicate or refused insertion preserves an
+existing prepared extent; a successful append invalidates it. This changes the
+physical identity representation, not the full-round least-consequence schedule,
+frozen candidate, constraint check or answer-set definition.
 `FormulaLimits::max_support_bytes` bounds the catalog's atom-vector cells,
 equality layout, postings, borrowed snapshot objects and query capacity,
 including construction scratch. Nested atom payloads, allocator/tree overhead

@@ -18,6 +18,12 @@
 //! row access; device consumers use the same representation for equality masks.
 //! Structured-value clones already share their payload through `Arc`.
 //!
+//! The pre-1.0 `Catalog::ordered_row` operation is replaced by explicit
+//! [`Catalog::prepare_ordered`] and [`Catalog::ordered`] views. A missing prepared
+//! view denotes required preparation, never an empty relation. Relation and
+//! catalog work now charge actual typed descriptor/text-prefix comparisons;
+//! previous numerical work ceilings are not equivalent units.
+//!
 //! Limits cover one operation's relation, supplied query/selection and newly
 //! allocated buffers. Other live caller frames and borrowed source allocations
 //! remain the caller's responsibility. Reported capacity is not process RSS.
@@ -30,7 +36,7 @@ mod storage;
 mod selection;
 mod catalog;
 
-pub use catalog::{Catalog, CatalogFailure, Insertion, Lookup};
+pub use catalog::{Catalog, CatalogFailure, Insertion, Lookup, OrderedRows};
 
 pub use selection::{Equality, Mask, Query, Selection};
 
@@ -43,7 +49,8 @@ pub struct Limits {
     pub max_columns: usize,
     /// Maximum distinct typed dictionary values.
     pub max_values: usize,
-    /// Maximum operation-scoped live owned capacity, including its input views.
+    /// Maximum operation-scoped named capacity, including input views and the
+    /// conservative old/replacement-buffer overlap of a growing owner.
     pub max_bytes: usize,
     /// Maximum charged inspections, comparisons, copied reference/ID cells and payload bytes.
     pub max_work: u64,
@@ -141,7 +148,8 @@ pub struct Storage {
     /// Operation owner's object and retained vector capacities. A borrowed
     /// catalog view excludes the catalog's separately reported owner capacity.
     pub retained_bytes: usize,
-    /// Largest operation-scoped live capacity, including temporary sort buffers.
+    /// Largest operation-scoped capacity envelope, including temporary buffers
+    /// and old/replacement capacity overlap when a reservation occurs.
     pub peak_construction_bytes: usize,
     /// Sum of referenced source-value payload per occurrence, not unique memory.
     ///
@@ -172,8 +180,13 @@ pub struct Relation<'source> {
 /// Dictionary representatives are source positions, never duplicated values.
 struct Layout {
     dictionary: Vec<Cell>,
-    ordered: Vec<u32>,
+    index: DictionaryIndex,
     columns: Vec<Vec<u32>>,
+}
+
+enum DictionaryIndex {
+    Sorted(Vec<u32>),
+    Append(crate::ordered_index::Index),
 }
 
 #[derive(Clone, Copy)]
@@ -443,8 +456,15 @@ impl Work {
     }
 
     fn compare(&mut self, left: &Value, right: &Value) -> Result<std::cmp::Ordering, Failure> {
-        self.tick(1 + left.payload_bytes() as u128 + right.payload_bytes() as u128)?;
-        Ok(left.cmp(right))
+        left.compare_identity_with(right, || self.tick(1))
+    }
+
+    fn include(&mut self, bytes: usize) -> Result<(), Failure> {
+        let next = self.live.checked_add(bytes).ok_or(Failure::Overflow)?;
+        ceiling(Resource::Bytes, next as u128, self.limits.max_bytes as u128)?;
+        self.live = next;
+        self.peak = self.peak.max(next);
+        Ok(())
     }
 
     fn reserve<T>(&mut self, count: usize) -> Result<Vec<T>, Failure> {
@@ -455,9 +475,9 @@ impl Work {
             .try_reserve_exact(count)
             .map_err(|_| Failure::Allocation)?;
         let actual = self.live as u128 + values.capacity() as u128 * size_of::<T>() as u128;
-        ceiling(Resource::Bytes, actual, self.limits.max_bytes as u128)?;
         self.live = usize::try_from(actual).map_err(|_| Failure::Overflow)?;
         self.peak = self.peak.max(self.live);
+        ceiling(Resource::Bytes, actual, self.limits.max_bytes as u128)?;
         Ok(values)
     }
 
@@ -473,18 +493,21 @@ impl Work {
         let proposed = needed.max(previous.saturating_mul(2));
         ceiling(
             Resource::Bytes,
-            self.live as u128 + (proposed - previous) as u128 * size_of::<T>() as u128,
+            self.live as u128 + proposed as u128 * size_of::<T>() as u128,
             self.limits.max_bytes as u128,
         )?;
         self.tick(values.len() as u128)?;
         values
             .try_reserve_exact(proposed - values.len())
             .map_err(|_| Failure::Allocation)?;
-        let actual =
-            self.live as u128 + (values.capacity() - previous) as u128 * size_of::<T>() as u128;
-        ceiling(Resource::Bytes, actual, self.limits.max_bytes as u128)?;
+        // Reservation may transiently retain both old and replacement buffers.
+        // Record actual slack even when that post-allocation envelope is refused.
+        let overlap = self.live as u128 + values.capacity() as u128 * size_of::<T>() as u128;
+        let actual = self.live as u128
+            + (values.capacity() - previous) as u128 * size_of::<T>() as u128;
         self.live = usize::try_from(actual).map_err(|_| Failure::Overflow)?;
-        self.peak = self.peak.max(self.live);
+        self.peak = self.peak.max(usize::try_from(overlap).map_err(|_| Failure::Overflow)?);
+        ceiling(Resource::Bytes, overlap, self.limits.max_bytes as u128)?;
         Ok(())
     }
 

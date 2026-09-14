@@ -46,6 +46,17 @@ impl Index {
         id: usize,
         before: &mut impl FnMut() -> Result<(), E>,
     ) -> Result<Link, E> {
+        self.plan_from(self.root, id, before)
+    }
+
+    /// Plan against an unpublished root whose nodes were supplied in `path`.
+    /// This supports several leaves in one bounded metadata transaction.
+    pub fn plan_from<E>(
+        &mut self,
+        root: Link,
+        id: usize,
+        before: &mut impl FnMut() -> Result<(), E>,
+    ) -> Result<Link, E> {
         let mut child = Some(encoded(id));
         for level in (0..self.path.len() - 1).rev() {
             before()?;
@@ -56,7 +67,7 @@ impl Index {
             step.changed = true;
             child = Some(encoded(step.id));
             if step.node.balance == 0 {
-                return Ok(self.root);
+                return Ok(root);
             }
             if step.node.balance.abs() == 2 {
                 child = self.rotate(level, before)?;
@@ -67,7 +78,7 @@ impl Index {
                 let parent = &mut self.path[level - 1];
                 parent.node.children[usize::from(parent.right)] = child;
                 parent.changed = true;
-                return Ok(self.root);
+                return Ok(root);
             }
         }
         Ok(child)

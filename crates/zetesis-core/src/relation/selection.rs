@@ -183,7 +183,7 @@ impl<'source> Relation<'source> {
             if column >= self.predicate.arity() {
                 return Err(Failure::Column);
             }
-            if let Ok(index) = storage::lookup(&self.layout, &self.source, value, &mut work)? {
+            if let Some(index) = storage::lookup(&self.layout, &self.source, value, &mut work)? {
                 let value_id = index;
                 work.tick(1)?;
                 resolved.push(Equality { column, value_id });

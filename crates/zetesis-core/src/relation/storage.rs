@@ -5,7 +5,7 @@ use std::{cmp::Ordering, mem::size_of};
 use crate::{Predicate, Value};
 
 use super::{
-    Cell, Failure, Layout, LayoutOwner, Limits, Relation, Resource, Source, Storage, Work, ceiling,
+    Cell, DictionaryIndex, Failure, Layout, LayoutOwner, Limits, Relation, Resource, Source, Storage, Work, ceiling,
 };
 
 pub(super) fn build<'source>(
@@ -61,14 +61,14 @@ pub(super) fn build<'source>(
     }
     let mut layout = Layout {
         dictionary,
-        ordered,
+        index: DictionaryIndex::Sorted(ordered),
         columns,
     };
     for row in 0..source.len() {
         let atom = source.atom(row).ok_or(Failure::CatalogIndex)?;
         for (column, value) in atom.values().iter().enumerate() {
             let id =
-                lookup(&layout, &source, value, &mut work)?.map_err(|_| Failure::Dictionary)?;
+                lookup(&layout, &source, value, &mut work)?.ok_or(Failure::Dictionary)?;
             work.tick(1)?;
             layout.columns[column][row] = id;
         }
@@ -202,23 +202,39 @@ fn differs(
     }
 }
 
-/// Found equality ID, or the insertion position in the ordered-ID vector.
+/// Resolve a typed value through the layout's actual ID index.
 pub(super) fn lookup(
     layout: &Layout,
     source: &Source<'_>,
     value: &Value,
     work: &mut Work,
-) -> Result<Result<u32, usize>, Failure> {
-    let mut start = 0;
-    let mut end = layout.ordered.len();
-    while start < end {
-        let middle = start + (end - start) / 2;
-        let id = layout.ordered[middle];
-        match work.compare(layout.dictionary[id as usize].value(source)?, value)? {
-            Ordering::Less => start = middle + 1,
-            Ordering::Equal => return Ok(Ok(id)),
-            Ordering::Greater => end = middle,
+) -> Result<Option<u32>, Failure> {
+    match &layout.index {
+        DictionaryIndex::Sorted(ordered) => {
+            let mut start = 0;
+            let mut end = ordered.len();
+            while start < end {
+                work.tick(1)?;
+                let middle = start + (end - start) / 2;
+                let id = ordered[middle];
+                match work.compare(layout.dictionary[id as usize].value(source)?, value)? {
+                    Ordering::Less => start = middle + 1,
+                    Ordering::Equal => return Ok(Some(id)),
+                    Ordering::Greater => end = middle,
+                }
+            }
+            Ok(None)
         }
+        DictionaryIndex::Append(index) => crate::ordered_index::search(
+            &index.nodes,
+            index.root,
+            |id| {
+                work.tick(1)?;
+                work.compare(value, layout.dictionary[id].value(source)?)
+            },
+            |_| {},
+        )?
+        .map(|id| u32::try_from(id).map_err(|_| Failure::Overflow))
+        .transpose(),
     }
-    Ok(Err(start))
 }

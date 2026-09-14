@@ -2,13 +2,13 @@
 //!
 //! Catalog calls receive the remaining work quota. Control is observed before
 //! and after each whole catalog operation, rather than within its comparisons,
-//! reservations and ID shifts. A stopped operation never returns a closure.
+//! reservations and index planning. A stopped operation never returns a closure.
 
 use std::collections::{BTreeMap, btree_map::Entry};
 
 use zetesis_core::{
     Atom, AtomKey, Model, Predicate,
-    relation::{Catalog, CatalogFailure, Failure, Insertion, Limits, Resource},
+    relation::{Catalog, CatalogFailure, Failure, Insertion, Limits, OrderedRows, Resource},
 };
 
 use super::{Relations, Work};
@@ -19,21 +19,21 @@ use crate::Stop;
 #[derive(Clone, Copy)]
 pub(super) enum Rows<'a> {
     Borrowed(&'a [&'a Atom]),
-    Catalog(&'a Catalog),
+    Catalog(OrderedRows<'a>),
 }
 
 impl<'a> Rows<'a> {
     pub(super) fn len(self) -> usize {
         match self {
             Self::Borrowed(rows) => rows.len(),
-            Self::Catalog(catalog) => catalog.atoms().len(),
+            Self::Catalog(rows) => rows.len(),
         }
     }
 
     pub(super) fn get(self, position: usize) -> Option<&'a Atom> {
         match self {
             Self::Borrowed(rows) => rows.get(position).copied(),
-            Self::Catalog(catalog) => catalog.ordered_row(position),
+            Self::Catalog(rows) => rows.get(position),
         }
     }
 }
@@ -60,13 +60,24 @@ impl Relational for Catalogs {
     fn rows(&self, predicate: &Predicate) -> Rows<'_> {
         self.relations
             .get(predicate)
-            .map_or(Rows::Borrowed(&[]), Rows::Catalog)
+            .map_or(Rows::Borrowed(&[]), |catalog| {
+                Rows::Catalog(catalog.ordered().expect("round prepared its published extent"))
+            })
     }
 }
 
 impl Catalogs {
     pub(super) const fn len(&self) -> usize {
         self.atoms
+    }
+
+    pub(super) fn prepare(&mut self, work: &mut Work<'_>) -> Result<(), Stop> {
+        for catalog in self.relations.values_mut() {
+            work.control.poll()?;
+            let rows = completed(catalog.prepare_ordered(limits(work)), work)?;
+            account(work, rows.storage().construction_work)?;
+        }
+        Ok(())
     }
 
     pub(super) fn contains(&self, key: &AtomKey<'_>, work: &mut Work<'_>) -> Result<bool, Stop> {
@@ -185,6 +196,7 @@ mod tests {
         for atom in &expected {
             catalogs.insert(atom.clone(), &mut work).unwrap();
         }
+        catalogs.prepare(&mut work).unwrap();
         expected.sort();
         let rows = catalogs.rows(&predicate);
         for (index, expected) in expected.iter().enumerate() {
@@ -203,6 +215,7 @@ mod tests {
         catalogs
             .insert(atom(Value::String("payload".into())), &mut work)
             .unwrap();
+        catalogs.prepare(&mut work).unwrap();
         let original = &catalogs.relations[&predicate].atoms()[0];
         let row = catalogs.rows(&predicate).get(0).unwrap();
         assert!(std::ptr::eq(original, row));
