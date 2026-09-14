@@ -314,9 +314,14 @@ struct ConfigurationView<'a> {
 
 #[derive(Serialize)]
 #[serde(remote = "zetesis_cpu::Limits")]
+#[expect(
+    clippy::struct_field_names,
+    reason = "Serde remote fields must match the native resource limits; max_ denotes a ceiling."
+)]
 struct CandidateLimits {
     max_work: u64,
     max_derived_atoms: usize,
+    max_closure_bytes: usize,
 }
 
 #[derive(Serialize)]

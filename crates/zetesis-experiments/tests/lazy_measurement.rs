@@ -312,6 +312,14 @@ fn command_json_lines_retain_the_complete_configuration() {
 }
 
 #[test]
+fn configuration_preserves_candidate_storage_limit() {
+    let mut configuration = configuration(Family::Sparse);
+    configuration.cpu_limits.max_closure_bytes = 1_234_567;
+    let view = serde_json::to_value(&configuration).unwrap();
+    assert_eq!(view["cpu_per_candidate"]["max_closure_bytes"], 1_234_567);
+}
+
+#[test]
 fn oversized_duration_serialization_does_not_panic() {
     let mut configuration = configuration(Family::Sparse);
     configuration.gpu_limits.timeout = Duration::MAX;
