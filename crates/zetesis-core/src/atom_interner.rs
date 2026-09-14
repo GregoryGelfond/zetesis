@@ -507,6 +507,7 @@ impl AtomEntry<'_, '_> {
         mut before: impl FnMut() -> Result<(), E>,
     ) -> Result<usize, Failure<E>> {
         let mut checked = || before().map_err(Failure::Stopped);
+        population(self.appender.len(), limits)?;
         admit(self.storage_bytes(), limits)?;
         if let Some(id) = self.found {
             return Ok(id);

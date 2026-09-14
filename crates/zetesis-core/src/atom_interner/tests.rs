@@ -326,3 +326,31 @@ fn borrowed_keys_preserve_structural_signed_identity() {
     assert_eq!(actual, expected);
     validate(&owner);
 }
+
+#[test]
+fn occupied_entry_rechecks_a_changed_population_limit() {
+    let mut owner = owner(&[1, 2]);
+    let duplicate = atom(1);
+    let entry = owner
+        .entry_atom_with(&duplicate, limits(), checked)
+        .unwrap();
+    assert_eq!(entry.position(), Some(0));
+    let result = entry.insert_with(
+        Limits {
+            max_atoms: 1,
+            ..limits()
+        },
+        || Err("no operation admitted"),
+    );
+    assert!(matches!(
+        result,
+        Err(Failure::Atoms {
+            required: 2,
+            limit: 1
+        })
+    ));
+    assert_eq!(owner.len(), 2);
+    assert_eq!(owner.get(0), Some(&atom(1)));
+    assert_eq!(owner.get(1), Some(&atom(2)));
+    validate(&owner);
+}
