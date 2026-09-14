@@ -154,9 +154,12 @@ the positive reachability joins have no matching rows. A seed selecting
 `start(1)` enables those consequences over successive rounds.
 
 The check begins with an empty derived interpretation, not with all seed atoms
-asserted as facts. A completed no-growth round establishes closure; constraints
-and agreement with the seed still have to hold. This example explains a work
-schedule. It does not, by itself, establish a speedup or a memory reduction.
+asserted as facts. The independent scalar evaluator combines complete bootstrap
+with later first-new row selections and completed consequence/constraint history.
+Its final no-growth round establishes closure through that history. Shared-world
+source traversal above retains complete round scans. In either schedule,
+constraints and agreement with the seed still have to hold. This example
+explains a work schedule. It does not, by itself, establish a speedup or a memory reduction.
 
 From the repository root, compare the complete answer families directly:
 

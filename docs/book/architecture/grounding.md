@@ -354,6 +354,17 @@ and discards dirty workspace history. Public `source::scan` and shared-world
 source traversal retain their complete ordered scans; this scalar schedule does
 not change the answer-set definition or claim device delta execution.
 
+[`DeltaRounds`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DeltaRounds.lean)
+separates three mathematical obligations: first-new partitions cover each new
+binding, old enabled heads are already in current truth, and the retained
+constraint latch equals the old family's triggers. The
+[reading guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/delta-rounds.md)
+maps those premises to scalar catalog cutoffs, complete bootstrap and round
+publication. These laws preserve a consequence step and constraint verdict;
+they do not prove Rust row decoding, interruption handling, a termination bound
+or answer-set membership. Those require their own representation and completed
+execution arguments.
+
 Completed scalar `Statistics::tuple_probes` counts source rows offered to the
 whole-row matcher, including rejected rows. It excludes prefix-search comparisons
 and catalog membership operations. Each probe belongs to a charged join-loop

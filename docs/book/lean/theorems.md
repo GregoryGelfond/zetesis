@@ -26,6 +26,8 @@ The maintained full index is
 | When does a worker reservation bound active owner storage? | `StorageOwners.active_storage_within_limit` | Each owner's capacity and the active-owner count respect their declared bounds; concrete allocation and scheduling remain separate premises |
 | How does retained cache storage compose with active allowances? | `StorageOwners.sum_within_component_bounds`, `shared_idle_active_within_limit` | Pointwise shared/idle bounds and active maxima fit the admitted sum; complete disjoint owner accounting and concrete capacity bounds remain consumer obligations |
 | Do incremental positive joins cover every new combination once? | `DeltaJoins.partition_complete`, `partition_disjoint` | Source occurrence identities and old prefixes of the current row domains |
+| When can a scalar round omit old positive bindings? | `DeltaRounds.coverage_of_first_delta`, `delta_step_exact` | Current/old row correspondence, complete first-new selections and old enabled consequences already in current truth; bootstrap is separate |
+| Can an old constraint latch replace rescanning its old bindings? | `DeltaRounds.latched_constraints_exact` | Exact whole-family old-trigger history, growing positive truth, fixed gates and new-binding coverage |
 | May a scope omit unrelated binding slots? | `BindingScopes.readAll_restrict` | Every requested slot belongs to the retained scope; absence is explicit |
 | Does borrowed atom lookup denote the materialized tuple? | `AtomKeys.membership_identity` | Successful substitution preserves the predicate and argument order |
 | Can atoms share contribution storage without changing their observations? | `SourceContributions.chain_preserved`, `record_other` | Unchanged entries along a finite chain; distinct atom identities in the append log |
@@ -52,6 +54,8 @@ Each module is available under
 [`proofs/Zetesis`](https://github.com/GregoryGelfond/zetesis/tree/main/proofs/Zetesis).
 Read `Core` before `Transformers`; read `Ferraris` before `FerrarisMask` and
 `TightPlans`; read `Lifted` before `LiftedBridge`, `LazyRounds` and `WorldMasks`.
+Read the [delta-round argument](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/delta-rounds.md)
+for the distinction between a disjoint join partition and complete closure history.
 The [worked proof](reading.md) follows the certificate/completion path.
 The [normal-rule bridge](normal-rules.md) follows model preservation into
 minimality and least closure.

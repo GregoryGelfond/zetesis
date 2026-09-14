@@ -18,10 +18,10 @@ structured values retain their distinct identities.
 
 Admitted formula owners and eager `GroundProgram` values expose both their
 original `atoms()` slice and shared `atom_catalog()`. Formula answers and decoded
-static words select those catalogs without cloning atoms. A batched lazy closure
-freezes its catalog after the complete no-delta round, then all completed worlds
-select that same owner. Source carriers can grow before that publication point.
-Scalar closure transfers its owned consequences into the same model representation.
+static words select those catalogs without cloning atoms. Shared lazy rounds
+freeze one catalog after their complete no-delta scan; all completed worlds
+then select that same owner. Source carriers can grow before that publication
+point. Scalar closure transfers its owned consequences into the same model representation.
 
 Cloning a model shares both the catalog and selected-position vector. A retained
 model remains valid after its source, graph or session is dropped. It keeps the

@@ -99,7 +99,7 @@ normal-rule/Ferraris bridge to the corresponding mathematical program.
 ## A finite closure algorithm
 
 For a fixed seed, the normal positive reduct has a least consequence set. This
-bounded schedule computes it:
+bounded full-scan reference states the computation:
 
 ```text
 derived := empty
@@ -119,8 +119,8 @@ must enumerate every matching finite substitution. Each round reads one frozen
 snapshot; pending consequences become visible only at commit. Constraints are
 checked against the completed no-growth snapshot before acceptance.
 
-The invariant is that every derived atom follows from the same fixed reduct;
-derivation grows monotonically and never starts with guessed atoms. If there are
+The reference invariant is that every derived atom follows from the same fixed
+reduct; derivation grows monotonically and never starts with guessed atoms. If there are
 `A` possible consequence atoms, every growing round adds at least one, so at most
 `A` growing rounds precede a final no-growth scan. That complete final scan makes
 the derived set closed; sound derivation and leastness then identify it with the
@@ -136,8 +136,19 @@ bound excludes parsing, candidate generation and output. Covering `G` independen
 `2^G` candidate seeds even if one check is cheap. Indexes change actual join work;
 these bounds establish neither a speedup nor a process-memory bound.
 
+The independent scalar evaluator preserves this reference through a delta
+schedule. It first completes bootstrap, including facts and zero-positive
+constraints. Later rounds select a binding by its first new positive row;
+previously published heads and retained constraint triggers account for old
+bindings. The final no-change round and this completed history together establish
+closure. It need not revisit every old binding. Canonical and delta-view
+preparation also consume work, so the reference scan estimate above is not a
+measured scalar work count. Shared-world source traversal retains complete
+round scans. The [delta-round laws](../lean/theorems.md) and
+[grounding contracts](grounding.md) make these distinct schedules explicit.
+
 The concrete contracts are
-[`check` and `least_closure`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/oracle.rs)
+[`check` and its scalar round evaluator](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/oracle.rs)
 and the [source-coverage laws](../lean/theorems.md). The
 [reachability example](grounding-comparison.md#follow-a-candidate-dependent-join)
 shows why candidate-dependent joins can perform different work for different

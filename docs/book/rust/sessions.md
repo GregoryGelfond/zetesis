@@ -57,8 +57,12 @@ An independent relational CPU session retains one `PreparedQueries` owner for it
 program and a bounded set of empty `ClosureWorkspace` capacities. Each submitted
 batch assigns disjoint candidate ranges to those workspaces. Candidate truth is
 reset between checks; returned models own their atoms independently of later
-workspace reuse. Preparation and retained capacity reuse do not change the
-original full-round closure or answer membership.
+workspace reuse. The scalar evaluator uses disjoint delta bindings after a
+complete initial scan. Completed earlier rounds account for old consequences
+and constraint triggers; the final no-change round completes source coverage.
+Preparation and retained capacity reuse preserve the exact least reduct closure
+and answer membership. Shared-world execution retains its separate full source
+schedule.
 
 `SolveConfig::max_source_work` bounds immutable query preparation, separately
 from each candidate's `max_work`. `max_closure_batch_bytes` supplies the shared
