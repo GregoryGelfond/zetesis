@@ -270,6 +270,36 @@ impl Value {
         }
     }
 
+    /// Named nested buffer capacity, excluding this inline value.
+    ///
+    /// Includes actual string/node-vector/spelling capacities and the structural
+    /// vector/string owner headers. Shared buffers are counted per occurrence;
+    /// Arc counters and allocator metadata are excluded. Visits structural node
+    /// descriptors without comparing or copying their text. Returns `None` if
+    /// the wide accounting sum cannot be represented.
+    #[must_use]
+    pub fn checked_payload_capacity_bytes(&self) -> Option<u128> {
+        match self {
+            Self::String(text) | Self::Symbol(text) => Some(text.capacity() as u128),
+            Self::Structured(value) => {
+                let fixed = (value.nodes.capacity() as u128)
+                    .checked_mul(std::mem::size_of::<ValueNode>() as u128)?
+                    .checked_add(value.rendered.capacity() as u128)?
+                    .checked_add(std::mem::size_of::<Vec<ValueNode>>() as u128)?
+                    .checked_add(std::mem::size_of::<String>() as u128)?;
+                value.nodes.iter().try_fold(fixed, |bytes, node| {
+                    let capacity = match node {
+                        ValueNode::String(text) | ValueNode::Symbol(text)
+                        | ValueNode::Function { name: text, .. } => text.capacity() as u128,
+                        _ => 0,
+                    };
+                    bytes.checked_add(capacity)
+                })
+            }
+            _ => Some(0),
+        }
+    }
+
     /// Logical identity encoding bytes: tags, lengths, numbers and text.
     #[must_use]
     pub fn canonical_bytes(&self) -> usize {

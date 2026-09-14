@@ -215,3 +215,60 @@ fn growing_closure_stops_before_exceeding_atom_limit() {
     ));
     assert_eq!(work.statistics.rounds, 1);
 }
+
+fn capacity_program() -> (Program, Model) {
+    let p = Predicate::new("p", 1).unwrap();
+    let q = Predicate::new("q", 1).unwrap();
+    let values = [Value::String("payload".into()), Value::Symbol("payload".into())];
+    let mut templates = values.iter().map(|value| Template::new(
+        Some(AtomPattern::new(p.clone(), vec![Term::Constant(value.clone())]).unwrap()),
+        vec![], vec![], vec![], vec![],
+    )).collect::<Vec<_>>();
+    templates.push(Template::new(
+        Some(AtomPattern::new(q.clone(), vec![Term::Variable(0)]).unwrap()),
+        vec![AtomPattern::new(p.clone(), vec![Term::Variable(0)]).unwrap()],
+        vec![], vec![], vec![],
+    ));
+    let expected = Model::new([p, q].into_iter().flat_map(|predicate| {
+        values.clone().into_iter().map(move |value| Atom::new(predicate.clone(), vec![value]).unwrap())
+    }));
+    (Program::new(templates, AdmissionLimits::default()).unwrap(), expected)
+}
+
+#[test]
+fn closure_capacity_admits_the_complete_boundary() {
+    let (program, expected) = capacity_program();
+    let seed = Seed::new(&program, []).unwrap();
+    let control = Control::default();
+    let reference = super::check(&program, &seed, Limits::default(), &control).unwrap();
+    assert_eq!(reference.closure(), &expected);
+    assert!(reference.accepted());
+    assert!(reference.statistics().catalog_work > 0);
+    let peak = reference.statistics().peak_closure_bytes;
+    assert!(peak > 0);
+    let exact = super::check(&program, &seed, Limits {
+        max_closure_bytes: peak, ..Limits::default()
+    }, &control).unwrap();
+    assert_eq!(exact.closure(), &expected);
+    assert!(exact.accepted());
+    assert_eq!(exact.statistics(), reference.statistics());
+    let Err(stop) = super::check(&program, &seed, Limits {
+        max_closure_bytes: peak - 1, ..Limits::default()
+    }, &control) else { panic!("the complete capacity envelope must be admitted"); };
+    assert_eq!(stop, Stop::StorageLimit);
+}
+
+#[test]
+fn refused_capacity_does_not_report_a_completed_closure() {
+    let (program, _) = capacity_program();
+    let seed = Seed::new(&program, []).unwrap();
+    let control = Control::default();
+    let mut bounded = work(&control, Limits::default().max_work);
+    bounded.limits.max_closure_bytes = 0;
+    let Err(stop) = least_closure(&program, seed.view(), &mut bounded) else {
+        panic!("zero capacity cannot admit the named closure owner");
+    };
+    assert_eq!(stop, Stop::StorageLimit);
+    assert_eq!(bounded.statistics.peak_closure_bytes, 0);
+    assert_eq!(bounded.statistics.derived_atoms, 0);
+}

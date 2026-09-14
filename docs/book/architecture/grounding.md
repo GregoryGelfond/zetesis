@@ -315,6 +315,18 @@ borrows the authoritative tuple. A duplicate or refused insertion preserves an
 existing prepared extent; a successful append invalidates it. This changes the
 physical identity representation, not the full-round least-consequence schedule,
 frozen candidate, constraint check or answer-set definition.
+
+`zetesis_cpu::oracle::Limits::max_closure_bytes` bounds each scalar closure's
+named predicate/catalog cells, atom and value buffers, nested payload, prepared
+order and pending tuples, including operation scratch and conservative buffer
+growth overlap. Its default is 128 MiB; zero is a zero-byte allowance. Pending
+atoms use fallible buffer reservation, and moving them into catalogs transfers
+their payload charge rather than counting a second payload owner. The reported
+`peak_closure_bytes` is a maximum for this named envelope. Shared structural
+buffers are conservatively counted per occurrence. BTree node overhead,
+allocator metadata, Arc counters, template binding/cursor frames and final Model
+retention are excluded. This is a composable closure allowance, not total RSS;
+collective worker admission and result retention have separate owners.
 `FormulaLimits::max_support_bytes` bounds the catalog's atom-vector cells,
 equality layout, postings, borrowed snapshot objects and query capacity,
 including construction scratch. Nested atom payloads, allocator/tree overhead

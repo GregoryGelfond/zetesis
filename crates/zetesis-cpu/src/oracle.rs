@@ -35,6 +35,13 @@ pub struct Limits {
     pub max_work: u64,
     /// Maximum distinct derived atoms, including pending round outputs.
     pub max_derived_atoms: usize,
+    /// Named capacity per scalar closure: predicate/catalog cells and names,
+    /// tuple/index/column/prepared-order buffers, nested tuple payload, pending
+    /// tuples and operation scratch/growth overlap. Shared structural buffers
+    /// are counted per occurrence. BTree node/allocator/Arc-counter overhead,
+    /// template binding/cursor frames and final Model retention are excluded.
+    /// This is an independent finite allowance, not a process RSS ceiling.
+    pub max_closure_bytes: usize,
 }
 
 impl Default for Limits {
@@ -42,11 +49,12 @@ impl Default for Limits {
         Self {
             max_work: 10_000_000,
             max_derived_atoms: 1_000_000,
+            max_closure_bytes: 134_217_728,
         }
     }
 }
 
-/// Counters for a completed oracle invocation; these are semantic work counts,
+/// Counters for a completed oracle invocation; these are execution work counts,
 /// not a device performance estimate or a count of conceptual ground instances.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Statistics {
@@ -58,6 +66,10 @@ pub struct Statistics {
     /// Subset of work spent constructing, extending and probing retained typed
     /// catalogs. Source joins and final interpretation assembly are separate.
     pub catalog_work: u64,
+    /// Largest admitted or actually reserved named scalar closure envelope,
+    /// under [`Limits::max_closure_bytes`]. Refused unallocated proposals do not
+    /// increase this maximum. It excludes final output ownership and is not RSS.
+    pub peak_closure_bytes: usize,
     /// Fully matched enabled/filter-valid bindings visited across all rounds.
     pub bindings: u64,
     /// Distinct atoms in the final least consequence closure.
@@ -171,6 +183,7 @@ impl Work<'_> {
             limits: Limits {
                 max_work,
                 max_derived_atoms: 0,
+                max_closure_bytes: Limits::default().max_closure_bytes,
             },
             statistics: Statistics::default(),
             mask_words: 0,
@@ -289,6 +302,7 @@ fn least_closure(
         work.tick()?;
         closure.prepare(work)?;
         let mut delta = BTreeSet::new();
+        let mut pending_bytes = 0_u128;
         for template in program.templates() {
             work.tick()?;
             visit(
@@ -302,7 +316,7 @@ fn least_closure(
                     if let Some(head) = template.head() {
                         work.charge(head.terms().len())?;
                         let key = head.key(assignment).map_err(|_| Stop::InvalidProgram)?;
-                        if !closure.contains(&key, work)? && key.get(&delta).is_none() {
+                        if !closure.contains(&key, pending_bytes, work)? && key.get(&delta).is_none() {
                             if closure
                                 .len()
                                 .checked_add(delta.len())
@@ -311,7 +325,9 @@ fn least_closure(
                             {
                                 return Err(Stop::DerivedAtomLimit);
                             }
-                            delta.insert(key.to_atom());
+                            let (atom, bytes) = closure.pending(key, pending_bytes, work)?;
+                            delta.insert(atom);
+                            pending_bytes = pending_bytes.checked_add(bytes).ok_or(Stop::StorageLimit)?;
                         }
                     } else {
                         constraint_violated = true;
@@ -325,7 +341,9 @@ fn least_closure(
             break;
         }
         for atom in delta {
-            closure.insert(atom, work)?;
+            let bytes = relations::atom_bytes(&atom, work)?;
+            pending_bytes = pending_bytes.checked_sub(bytes).ok_or(Stop::InvalidProgram)?;
+            closure.insert(atom, pending_bytes, work)?;
         }
     }
     Ok(CompletedClosure {

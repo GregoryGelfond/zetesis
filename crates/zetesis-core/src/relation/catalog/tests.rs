@@ -570,3 +570,19 @@ fn refused_preparation_publishes_no_partial_order() {
         }
     }
 }
+
+#[test]
+fn nested_capacity_includes_owned_spare_storage() {
+    let mut name = String::with_capacity(64);
+    name.push('p');
+    let mut text = String::with_capacity(128);
+    text.push('x');
+    let mut values = Vec::with_capacity(8);
+    let expected = name.capacity() as u128
+        + values.capacity() as u128 * std::mem::size_of::<Value>() as u128
+        + text.capacity() as u128;
+    values.push(Value::String(text));
+    let atom = Atom::new(Predicate::new(name, 1).unwrap(), values).unwrap();
+    assert_eq!(atom.checked_payload_capacity_bytes(), Some(expected));
+    assert!(atom.checked_payload_capacity_bytes().unwrap() > atom.values()[0].payload_bytes() as u128);
+}

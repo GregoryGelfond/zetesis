@@ -111,6 +111,13 @@ impl Predicate {
     pub fn name(&self) -> &str {
         &self.name
     }
+    /// Owned name-buffer capacity, excluding this inline signature. Constant time.
+    /// Allocator bookkeeping is outside this named capacity.
+    #[must_use]
+    pub fn payload_capacity_bytes(&self) -> usize {
+        self.name.capacity()
+    }
+
     /// The number of arguments.
     #[must_use]
     pub fn arity(&self) -> usize {
@@ -163,6 +170,21 @@ impl Atom {
     pub fn values(&self) -> &[Value] {
         &self.values
     }
+    /// Named nested capacity, excluding this inline atom and allocator metadata.
+    /// Counts the predicate name, actual argument-vector capacity and each
+    /// value's payload capacity. Shared structural buffers are conservatively
+    /// counted per occurrence. Visits arguments and structural node descriptors.
+    /// Returns `None` if the wide accounting sum cannot be represented.
+    #[must_use]
+    pub fn checked_payload_capacity_bytes(&self) -> Option<u128> {
+        let fixed = (self.values.capacity() as u128)
+            .checked_mul(std::mem::size_of::<Value>() as u128)?
+            .checked_add(self.predicate.payload_capacity_bytes() as u128)?;
+        self.values.iter().try_fold(fixed, |bytes, value| {
+            bytes.checked_add(value.checked_payload_capacity_bytes()?)
+        })
+    }
+
     pub(crate) fn from_valid_parts(predicate: Predicate, values: Vec<Value>) -> Self {
         Self { predicate, values }
     }
