@@ -117,10 +117,19 @@ candidate-local truth and outcomes. An owned Rayon pool can execute those checks
 concurrently and return them in input order. Repeated equal candidates are still
 separate submitted occurrences.
 
-Within lazy grounding, source work may be shared across worlds. The union of
-their positive snapshots supplies possible bindings; each world's own snapshot
-and frozen seed determine whether an offered instance contributes to that world.
-This is the distinction between sharing work and sharing truth.
+Within lazy grounding, source work may be shared across worlds. One batch-owned
+atom catalog retains each demanded identity. Its committed prefix is immutable
+during a source scan; callbacks append to a disjoint pending tail. Canonically
+ordered local IDs select source rows by borrowing that prefix, so the Union and
+Worlds policies do not construct separate owned atom snapshots. IDs preserve
+first-demand order and do not encode canonical atom order.
+
+The union of positive snapshots supplies possible bindings; each world's own
+packed snapshot and frozen seed determine whether an offered instance contributes
+to that world. Catalog presence alone says neither that the atom is true nor that
+the candidate is stable. World membership and pending consequence masks remain
+separate from the identity index. The source visitor still rebuilds its borrowed
+relation grouping and copies one bounded rule instance for each callback.
 
 The following describes the dependency contract, not a second implementation:
 
@@ -130,6 +139,7 @@ offered_instances := source_scan(round_input)
 pending := union_of_exact_chunk_consequences(offered_instances, round_input)
 
 if source_scan_complete and all_required_evaluations_complete:
+    commit_pending_atom_identities
     next_snapshots := world_snapshots union pending
 else:
     retain_incomplete_progress
@@ -137,7 +147,11 @@ else:
 
 Every chunk uses the same round truth. Catalog growth must preserve existing atom
 identities and each world's packed stride. A completed chunk alone cannot commit
-a round. Formula checking similarly preserves the original candidate while
+a round. Identity commit also occurs when the last round adds no consequence:
+underived offered heads still belong to the final catalog. Source snapshots drop
+before the committed vector can move. Finalization transfers that vector into
+the shared Model catalog, with a separate selected-position list per world.
+Formula checking similarly preserves the original candidate while
 searching for a proper-subset model of its frozen reduct.
 
 GPU workgroups and lanes are physical schedules for these operations. They do
@@ -153,6 +167,17 @@ it does not refund work already performed. Keeping spare buffer capacity can
 avoid reallocation while increasing retained storage. An admission limit must
 account for the capacity actually retained, including simultaneously live
 packing, output and transport storage within its stated scope.
+
+The lazy coordinator's `max_host_bytes` is a mixed, explicitly scoped envelope.
+It includes actual committed/pending catalog, AVL/path and ordered-ID capacities,
+their named growth overlap, nested atom payload measures, and requested packed
+transport, source membership/workspace, copied-instance scratch and final model
+positions. The final position allowance bounds logical selected slots; it
+excludes the extra capacity retained by `Model`'s geometrically growing Vec.
+Other allocator overhead and rounding outside the catalog/ordered-ID capacities,
+Arc envelopes, caller inputs and backend-private transport are also excluded.
+Source work includes initialization, identity lookup/insertion, canonical row
+selection and prefix commits; the quota is shared across the whole batch.
 
 Authored payload bounds exclude any costs their API says they exclude, such as
 allocator metadata or driver allocations. They are not process RSS. Dropping a

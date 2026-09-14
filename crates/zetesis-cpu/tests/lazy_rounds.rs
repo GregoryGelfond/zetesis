@@ -431,12 +431,17 @@ fn final_check_metadata_is_reserved_before_execution() {
     let program = program(vec![]);
     let seeds = vec![Seed::new(&program, []).unwrap(); 16];
     let fixed_bytes = (5 * 16 + 2 * 16 + 4 + 1) * size_of::<u32>() + 16 * size_of::<lazy::Check>();
+    // Empty identities still retain their interner header and the temporary
+    // canonical-order Vec header. Neither owner replaces final Check storage.
+    let identity_bytes =
+        usize::try_from(zetesis_core::atom_interner::AtomInterner::new().storage_bytes()).unwrap()
+            + size_of::<Vec<usize>>();
     let limits = lazy::Limits {
         max_atoms: 1,
         max_chunk_rules: 1,
         max_chunk_words: 4,
         max_instance_bytes: 0,
-        max_host_bytes: fixed_bytes,
+        max_host_bytes: fixed_bytes + identity_bytes,
         ..Default::default()
     };
     let complete = lazy::check_with(

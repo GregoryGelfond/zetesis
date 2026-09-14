@@ -110,19 +110,41 @@ immutable round; neither policy changes candidate-carrier discovery.
 `BatchOracle::check_shared_views` accept exact-size, cloneable iterators of
 borrowed seeds. Each clone must preserve occurrence order, length and program
 identity. This lets owned seeds and shared selections use the same source and
-world evaluator without materializing input trees. Demanded catalog atoms and
-completed closures still own their payloads under the existing host budget.
+world evaluator without materializing input trees. The batch interns each
+distinct demanded atom once. Canonically ordered IDs select borrowed rows from
+the committed catalog while callbacks append to a disjoint tail. No per-round
+Union Model or Worlds atom vector duplicates that payload. The visitor still
+rebuilds its borrowed relation grouping and copies each bounded source instance.
 
-The catalog grows on demand. Its atom IDs, frozen seeds, snapshots and pending
-deltas must survive changes in packed-word width. The protocol charges catalog,
-round, chunk, result and optional membership storage against its logical host
-budget. Caller inputs, allocator overhead and backend-private transport are
-outside that budget; the backend must bound its own transport.
+The catalog grows on demand. Its IDs, frozen seeds, snapshots and pending deltas
+survive changes in packed-word width; catalog presence does not establish world
+truth. Successful source scans and evaluation commit all newly demanded
+identities, including underived heads in a final round with no new consequence.
+Finalization transfers the atom vector into one shared Model catalog; each world
+retains its own selected positions. Sparse results retain false catalog atoms too.
+
+`max_source_work` now charges seed initialization, identity comparisons and index
+maintenance, canonical row selection and catalog commits as well as source joins
+and instance copying. One work owner spans the batch; these additional explicit
+charges can change resource stopping points without changing reduct semantics.
+Packed transport remains batch-owned and the injected evaluator keeps its own
+execution accounting.
+
+`max_host_bytes` admits actual catalog/AVL/path and ordered-ID capacities plus
+their named growth overlap, nested payload measures, and requested truth, seed,
+delta, chunk, result, instance scratch and source membership/workspace storage.
+Final model positions have a requested-slot allowance; additional capacity from
+their geometrically growing Vec is excluded. Caller inputs, Arc envelopes,
+allocator overhead and rounding outside the measured catalog/ordered-ID
+capacities, and backend-private transport are also outside that envelope.
+The backend must bound its own transport; this is not a process RSS ceiling.
 
 Failure returns `Failure<E>` with its source, protocol or injected execution
 cause and accumulated progress. No completed checks are published from a batch
-whose required scan or evaluation is incomplete. `Progress::mask_words` is part
-of source work, not extra work to add again. Optional masks may reduce offered
+whose required scan or evaluation is incomplete. Failure during identity commit
+retains discovered catalog counts and charged work but establishes no completed
+round. `Progress::mask_words` includes union-row selection probes under both
+policies and is part of source work, not extra work to add again. Optional masks may reduce offered
 instances while adding mask work and storage; no universal speedup follows.
 
 Completed lazy checks expose `closure()` for borrowing and `into_closure()` for

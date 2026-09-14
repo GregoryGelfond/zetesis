@@ -72,11 +72,12 @@ pub struct Limits {
     /// Maximum admitted host storage envelope: actual committed/pending catalog,
     /// AVL/path and ordered-ID capacities, measured nested atom payload, requested
     /// packed truth/seed/delta/chunk/result storage, source membership/workspace
-    /// and conservative final model-selection slots. Catalog and mask growth
+    /// and requested final model-selection slots. Catalog and mask growth
     /// include their named old/new overlap. Source rows borrow catalog atoms.
-    /// Input program/seeds, Arc envelopes, allocator overhead and rounding outside
-    /// the catalog/ordered-ID capacities, and backend-private transport are
-    /// excluded. This bound is not RSS; a backend bounds its transport separately.
+    /// Input program/seeds, Arc envelopes, allocator overhead, final selection
+    /// Vec capacity beyond its requested slots, rounding outside the catalog and
+    /// ordered-ID capacities, and backend-private transport are excluded. This
+    /// bound is not RSS; a backend bounds its transport separately.
     pub max_host_bytes: usize,
 }
 
@@ -994,8 +995,9 @@ impl Transport {
     }
 
     fn external_bytes(&self, atoms: usize, payload: usize) -> Result<u128, Stop> {
-        // Completed worlds share the catalog. Reserve a conservative selected
-        // position per catalog atom per world; no symbolic snapshot copy exists.
+        // Completed worlds share the catalog. Bound requested selected positions
+        // by one per catalog atom per world; Model Vec capacity slack is excluded
+        // from this requested-payload allowance. No symbolic snapshot copy exists.
         let selected = atoms
             .checked_mul(self.violated.len())
             .and_then(|cells| cells.checked_mul(size_of::<usize>()))
