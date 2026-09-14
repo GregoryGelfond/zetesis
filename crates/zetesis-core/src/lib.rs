@@ -32,6 +32,7 @@ mod candidate;
 mod model;
 mod identity;
 mod atom_lookup;
+pub mod atom_interner;
 mod carrier;
 mod ground;
 pub mod relation;

@@ -105,7 +105,7 @@ impl<'a> AtomKey<'a> {
 
     /// Full signed predicate identity.
     #[must_use]
-    pub fn predicate(&self) -> &Predicate {
+    pub fn predicate(&self) -> &'a Predicate {
         self.pattern.predicate()
     }
 
@@ -128,6 +128,33 @@ impl<'a> AtomKey<'a> {
     #[must_use]
     pub fn compare(&self, atom: &Atom) -> Ordering {
         compare(self, atom)
+    }
+
+    /// Compare complete typed identity without materializing a substitution.
+    /// Charges the same visited descriptors and text prefixes as
+    /// [`Value::compare_identity_with`], including the signed predicate.
+    ///
+    /// # Errors
+    /// Returns the first caller refusal before that comparison; no ordering or
+    /// owned atom is produced after refusal.
+    pub fn compare_identity_with<E>(
+        &self,
+        atom: &Atom,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<Ordering, E> {
+        let order = crate::identity::predicate(self.predicate(), atom.predicate(), &mut before)?;
+        if !order.is_eq() {
+            return Ok(order);
+        }
+        for (column, value) in atom.values().iter().enumerate() {
+            let order = self
+                .argument(column)
+                .compare_identity_with(value, &mut before)?;
+            if !order.is_eq() {
+                return Ok(order);
+            }
+        }
+        Ok(Ordering::Equal)
     }
 
     /// Find this complete identity in a canonically ordered atom set.
