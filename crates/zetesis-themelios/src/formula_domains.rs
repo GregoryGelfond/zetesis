@@ -202,7 +202,7 @@ fn flat(
                     if text.len() <= MAX_ATOMIC_BYTES => {}
                 _ => return Ok(false),
             },
-            _ => return Ok(false),
+            zetesis_core::Term::Variable(_) => return Ok(false),
         }
     }
     Ok(true)
