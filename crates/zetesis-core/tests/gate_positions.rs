@@ -2,8 +2,9 @@
 
 use std::sync::Arc;
 use zetesis_core::{
-    AdmissionLimits, AtomPattern, GateAtom, GroundProgram, Predicate, Program, SeedError,
-    SeedSelection, SeedSelectionError, Sign, StaticLimits, Template, Term, Value,
+    AdmissionLimits, Atom, AtomPattern, GateAtom, GroundProgram, Predicate, Program, SeedError,
+    SeedSelection, SeedSelectionError, Sign, StaticLimits, StructuralValue, Template, Term, Value,
+    ValueLimits, ValueNode,
 };
 
 fn program() -> Program {
@@ -39,6 +40,14 @@ fn program() -> Program {
         Value::Symbol("1".into()),
         Value::Infimum,
         Value::Supremum,
+        Value::Number(-1),
+        Value::Structured(
+            StructuralValue::from_nodes(
+                vec![ValueNode::Tuple { arity: 1 }, ValueNode::Number(1)],
+                ValueLimits::default(),
+            )
+            .unwrap(),
+        ),
     ] {
         let p = AtomPattern::new(
             Predicate::new("value", 1).unwrap(),
@@ -55,6 +64,41 @@ fn tokens(program: &Program) -> Vec<Arc<GateAtom>> {
         .indexed_gate_atoms()
         .map(|token| Arc::new(token.unwrap()))
         .collect()
+}
+
+#[test]
+fn full_carrier_matches_independent_atom_storage_order() {
+    let program = program();
+    let mut expected = Vec::new();
+    // Generate the fixture's entire product independently of AtomIter and its
+    // odometer. For binary tuples the first coordinate changes fastest, so the
+    // subsequent Atom::Ord sort must supply the intended lexicographic order.
+    for predicate in program.predicates().iter().rev() {
+        match predicate.arity() {
+            0 => expected.push(Atom::new(predicate.clone(), vec![]).unwrap()),
+            1 => {
+                for value in program.domain().iter().rev() {
+                    expected.push(Atom::new(predicate.clone(), vec![value.clone()]).unwrap());
+                }
+            }
+            2 => {
+                for second in program.domain().iter().rev() {
+                    for first in program.domain().iter().rev() {
+                        expected.push(
+                            Atom::new(predicate.clone(), vec![first.clone(), second.clone()])
+                                .unwrap(),
+                        );
+                    }
+                }
+            }
+            _ => panic!("fixture uses only nullary, unary and binary signatures"),
+        }
+    }
+    expected.extend_from_within(..);
+    expected.sort();
+    expected.dedup();
+    let actual = program.carrier_atoms().collect::<Result<Vec<_>, _>>().unwrap();
+    assert_eq!(actual, expected);
 }
 
 #[test]

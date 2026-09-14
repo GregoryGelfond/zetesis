@@ -115,12 +115,43 @@ fn nonbase_delimiters_are_refused_before_raising() {
 
 #[test]
 fn raw_choice_shape_is_checked_before_set_canonicalization() {
-    for text in [
-        "{p;p}.", "{p;q}.", "{}.", "1 {p}.", "{p} 1.", "{p:}.", "{p:q}.",
+    use themelios_base::source::Source;
+
+    // Pin the raw relational-profile refusal, not an arbitrary parse/raise or
+    // later admission failure. Duplicate elements and an explicit empty
+    // condition must not disappear before this authored shape check.
+    for (text, feature) in [
+        ("{p;p}.", ProfileFeature::ChoiceCardinality),
+        ("{p;q}.", ProfileFeature::ChoiceCardinality),
+        ("{}.", ProfileFeature::ChoiceCardinality),
+        ("1 {p}.", ProfileFeature::BoundedChoice),
+        ("{p} 1.", ProfileFeature::BoundedChoice),
+        ("{p:}.", ProfileFeature::ConditionalChoice),
+        ("{p:q}.", ProfileFeature::ConditionalChoice),
     ] {
-        assert!(
-            admit(text.to_owned(), AdmissionOptions::default()).is_err(),
-            "{text}"
+        let source_id = SourceId::new(220);
+        let source = Source::new(source_id, text.into()).unwrap();
+        let error = admit(
+            text.into(),
+            AdmissionOptions {
+                source_id,
+                ..AdmissionOptions::default()
+            },
+        )
+        .unwrap_err();
+        let AdmissionFailure::Profile {
+            feature: actual,
+            location,
+        } = error
+        else {
+            panic!("{text}: {error}");
+        };
+        assert_eq!(actual, feature, "{text}");
+        assert_eq!(location.source, source_id);
+        assert_eq!(
+            source.slice(location.span).unwrap(),
+            text.strip_suffix('.').unwrap(),
+            "the original complete choice head must be located: {text}"
         );
     }
 }

@@ -18,6 +18,16 @@ impl std::error::Error for CarrierError {}
 /// tuple state. Each `next` reserves only O(arity) indexes and output values;
 /// a capacity error is returned once and terminates the iterator. As with Rust
 /// string cloning generally, process-wide allocator failure remains possible.
+///
+/// For an admitted [`crate::Program`], successful enumeration of either its full
+/// or gate carrier agrees with sorting and deduplicating that Cartesian carrier
+/// by [`Atom`]'s [`Ord`]: signatures
+/// are unique in `(name, arity, sign)` order, and domain values are unique in
+/// [`Value`]'s storage order. Advancing the last coordinate fastest enumerates
+/// each fixed-arity tuple lexicographically; then advancing the signature agrees
+/// with [`Atom`]'s signature-first comparison. Nullary signatures contribute one
+/// empty tuple even with an empty domain; other arities contribute none there.
+/// This is storage order, not [`Value::compare_terms`] or catalog insertion IDs.
 #[derive(Clone)]
 pub struct AtomIter<'a> {
     predicates: &'a [Predicate],
@@ -91,7 +101,8 @@ impl Iterator for AtomIter<'_> {
 }
 impl FusedIterator for AtomIter<'_> {}
 
-/// Advance a fixed-length tuple. Empty tuples have exactly one assignment.
+/// Advance a fixed-length tuple in lexicographic index order by carrying from
+/// the last coordinate. Empty tuples have exactly one assignment.
 pub(crate) fn advance(coordinates: &mut [usize], radix: usize) -> bool {
     for index in coordinates.iter_mut().rev() {
         if *index < radix.saturating_sub(1) {

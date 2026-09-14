@@ -146,6 +146,16 @@ compiled gate table; ordinary CPU and GPU packing share this resolver. The
 implementation must establish the common predicate/domain order, inseparable
 token construction, program identity and checked indices. The Lean laws prove
 the filtered-list correspondence, not those Rust obligations or membership.
+For the concrete order bridge, admitted signatures and domain values are sorted
+and unique. `AtomIter` advances the last tuple coordinate fastest, giving the
+same lexicographic tuple order as `Atom::Ord`, within its signature-first order.
+Nullary predicates contribute one tuple even when the domain is empty. The
+[full-carrier control](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/tests/gate_positions.rs)
+compares enumeration with an independently generated, sorted and deduplicated
+product, including signed predicates and typed values. This is executable test
+evidence and a source argument, not a Lean proof of Rust's iterator. Canonical
+carrier ranks remain distinct from append-assigned catalog identities and ASP
+term comparison order.
 
 The scalar lazy closure retains one typed `Catalog` for each predicate. Every
 round borrows their existing ordered rows; new consequences remain separate
