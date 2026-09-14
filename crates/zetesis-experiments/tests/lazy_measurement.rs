@@ -37,7 +37,7 @@ fn cpu_routes_check_every_ordered_seed_occurrence() {
         let mut complete = None;
         measurement::measure(&configuration(family), |event| {
             if let Event::Sample(sample) = event {
-                samples.push(sample.clone());
+                samples.push((*sample).clone());
             }
             if let Event::Complete { samples } = event {
                 complete = Some(*samples);
@@ -102,7 +102,7 @@ fn sparse_worlds_omit_cross_world_instances() {
     let mut samples = Vec::new();
     measurement::measure(&configuration(Family::Sparse), |event| {
         if let Event::Sample(sample) = event {
-            samples.push(sample.clone());
+            samples.push((*sample).clone());
         }
         Ok(())
     })

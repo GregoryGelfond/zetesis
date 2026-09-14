@@ -113,14 +113,14 @@ pub fn measure(
                         position,
                         route,
                         message: error.to_string(),
-                        source,
-                        device,
+                        source: source.as_ref(),
+                        device: device.as_ref(),
                     })
                     .map_err(Error::Output)?;
                     return Err(error);
                 }
             };
-            observe(&Event::Sample(Sample {
+            let sample = Sample {
                 case_index,
                 case,
                 phase,
@@ -134,7 +134,8 @@ pub fn measure(
                 queries: measured.queries,
                 source: measured.source,
                 device: measured.device,
-            }))
+            };
+            observe(&Event::Sample(&sample))
             .map_err(Error::Output)?;
             emitted += 1;
         }

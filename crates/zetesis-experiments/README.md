@@ -186,6 +186,9 @@ routes charge different work. Source-round execution, transport and returned
 results are timed; setup, reference comparison and rendering are separate.
 
 Lazy JSON-lines schema 2 adds `independent` and `queries` sample fields.
+The synchronous event borrows its sample and failure receipts; a library
+consumer retaining samples explicitly clones each `Sample`. JSON shape is unchanged
+by that borrowing boundary.
 `independent` sums completed Scalar/Rayon checks' work, catalog work, rounds,
 bindings and derived atoms across every occurrence, including duplicate seeds
 and rejected candidates. Catalog work is already part of work. Its

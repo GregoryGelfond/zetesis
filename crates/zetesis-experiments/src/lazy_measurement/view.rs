@@ -231,8 +231,10 @@ pub struct Sample {
     pub device: Option<DeviceWork>,
 }
 
-/// Synchronous observation stream. A consumer may retain records or derive any
-/// view; the experiment keeps only its current reference and result batches.
+/// Synchronous observation stream borrowing its sample and failure receipts.
+/// A consumer retaining a sample must clone that `Sample` explicitly; serialization
+/// borrows it directly. The experiment keeps only its current reference and
+/// result batches.
 #[derive(Debug, Serialize)]
 #[serde(tag = "event", rename_all = "kebab-case")]
 pub enum Event<'a> {
@@ -270,7 +272,7 @@ pub enum Event<'a> {
         reference_ns: u128,
     },
     /// Successful measurement; no mismatch becomes a successful sample.
-    Sample(Sample),
+    Sample(&'a Sample),
     /// A requested route failed; it is retained outside successful populations.
     Failed {
         /// Ordinal of the attempted case.
@@ -286,9 +288,9 @@ pub enum Event<'a> {
         /// Human view of the typed error returned by measure.
         message: String,
         /// Charged incomplete source progress, if available.
-        source: Option<SourceWork>,
+        source: Option<&'a SourceWork>,
         /// Submitted physical work before failure, if this was a physical GPU route.
-        device: Option<DeviceWork>,
+        device: Option<&'a DeviceWork>,
     },
     /// All requested routes, cases and populations completed.
     Complete {

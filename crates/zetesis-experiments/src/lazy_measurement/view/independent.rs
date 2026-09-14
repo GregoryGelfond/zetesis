@@ -46,6 +46,10 @@ impl IndependentWork {
     }
 }
 
+#[expect(
+    clippy::ref_option,
+    reason = "Serde serialize_with passes a reference to the original Option field."
+)]
 pub(super) fn queries<S: Serializer>(
     statistics: &Option<QueryStatistics>,
     serializer: S,
