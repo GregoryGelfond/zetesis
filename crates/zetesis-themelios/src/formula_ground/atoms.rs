@@ -47,7 +47,7 @@ impl Catalog {
     }
 
     pub(super) fn find(
-        &mut self,
+        &self,
         atom: &Atom,
         bound: (FormulaResource, usize),
         counters: &mut Counters,
@@ -55,10 +55,9 @@ impl Catalog {
         location: Location,
     ) -> Result<Option<usize>, FormulaFailure> {
         self.0
-            .entry_atom_with(atom, Limits::for_atoms(bound.1), || {
+            .find_atom_with(atom, Limits::for_atoms(bound.1), || {
                 counters.work(limits, location)
             })
-            .map(|entry| entry.position())
             .map_err(|error| failure(error, bound, location))
     }
 

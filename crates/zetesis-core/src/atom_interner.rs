@@ -8,11 +8,13 @@
 //! preserves arbitrary original order, duplicate positions and input addresses.
 
 mod index;
+mod query;
 
-use std::{cmp::Ordering, collections::TryReserveError, fmt};
+use std::{collections::TryReserveError, fmt};
 
-use crate::{Atom, AtomKey, Value, identity};
+use crate::{Atom, AtomKey};
 use index::{Index, Node, Step, position};
+use query::Query;
 
 /// Bounds on this interner's population and named storage, independent of truth.
 #[derive(Clone, Copy, Debug)]
@@ -105,8 +107,10 @@ impl<E: std::error::Error + 'static> std::error::Error for Failure<E> {
 
 /// Authoritative unique atoms in first-insertion order, plus an ID-only AVL index.
 ///
-/// Searches use O(log n) node probes and checked typed comparisons. Insertions
-/// use O(log n) path operations and at most two rotations. Vector growth is
+/// Searches use O(log n) node probes and checked typed comparisons without
+/// allocating or changing scratch. A vacant entry repeats that search to prepare
+/// its mutation path; insertion uses O(log n) path operations and at most two
+/// rotations. Vector growth is
 /// geometric (work admission includes possible relocation of live cells even
 /// for in-place allocator growth); commit moves only the pending suffix. Canonical order comes from
 /// the tree, without sorting historical atoms or shifting a sorted index.
@@ -144,13 +148,65 @@ impl AtomInterner {
         get(&self.committed, &self.pending, id)
     }
 
+    /// Find an owned atom's local position in committed and pending identities.
+    ///
+    /// Borrows the owner immutably, allocates nothing and changes no payload,
+    /// index, scratch or capacity observation. Calls `before` before each visited
+    /// AVL node and each compared typed descriptor/text prefix. Search is
+    /// logarithmic in node probes; payload comparison cost is additional.
+    ///
+    /// # Errors
+    /// Current population and storage must satisfy `limits` before probing.
+    /// Returns the first callback refusal without publishing an ID or absence.
+    pub fn find_atom_with<E>(
+        &self,
+        atom: &Atom,
+        limits: Limits,
+        before: impl FnMut() -> Result<(), E>,
+    ) -> Result<Option<usize>, Failure<E>> {
+        self.find(Query::Atom(atom), limits, before)
+    }
+
+    /// Find a checked borrowed substitution without materializing an atom.
+    /// Work, ownership and capacity contracts match [`Self::find_atom_with`].
+    ///
+    /// # Errors
+    /// Same admission and callback failures as [`Self::find_atom_with`].
+    pub fn find_key_with<E>(
+        &self,
+        key: AtomKey<'_>,
+        limits: Limits,
+        before: impl FnMut() -> Result<(), E>,
+    ) -> Result<Option<usize>, Failure<E>> {
+        self.find(Query::Key(key), limits, before)
+    }
+
+    fn find<E>(
+        &self,
+        query: Query<'_>,
+        limits: Limits,
+        mut before: impl FnMut() -> Result<(), E>,
+    ) -> Result<Option<usize>, Failure<E>> {
+        population(self.len(), limits)?;
+        admit(self.storage_bytes(), limits)?;
+        query.search(
+            &self.committed,
+            &self.pending,
+            &self.index.nodes,
+            self.index.root,
+            &mut || before().map_err(Failure::Stopped),
+            |_, _, _, _| Ok(()),
+        )
+    }
+
     /// Current named header and vector capacities, excluding nested payload.
     #[must_use]
     pub fn storage_bytes(&self) -> u128 {
         storage(
             self.committed.capacity(),
             self.pending.capacity(),
-            &self.index,
+            self.index.nodes.capacity(),
+            self.index.path.capacity(),
         )
     }
 
@@ -196,10 +252,12 @@ impl AtomInterner {
     }
 
     /// Find or prepare an entry from an already owned atom, without copying it.
+    /// Occupied entries use the immutable probe without changing scratch. A
+    /// vacant entry repeats the checked search to prepare its insertion path.
     ///
     /// # Errors
-    /// Returns the first work, storage or reservation refusal. Search scratch
-    /// capacity may remain grown; atom membership is unchanged.
+    /// Returns the first work, storage or reservation refusal. Vacant-path
+    /// preparation may retain grown scratch capacity; membership is unchanged.
     pub fn entry_atom_with<'owner, 'key, E>(
         &'owner mut self,
         atom: &'key Atom,
@@ -402,10 +460,15 @@ impl AtomAppender<'_> {
     pub fn get(&self, id: usize) -> Option<&Atom> {
         get(self.committed, self.pending, id)
     }
-    /// Current named capacity, including scratch acquired by a prior lookup.
+    /// Current named capacity, including prior insertion/order scratch.
     #[must_use]
     pub fn storage_bytes(&self) -> u128 {
-        storage(self.committed_capacity, self.pending.capacity(), self.index)
+        storage(
+            self.committed_capacity,
+            self.pending.capacity(),
+            self.index.nodes.capacity(),
+            self.index.path.capacity(),
+        )
     }
     /// Peak named conservative capacity; nested payload remains caller-owned accounting.
     #[must_use]
@@ -422,10 +485,12 @@ impl AtomAppender<'_> {
         }
     }
 
-    /// Search without copying an owned atom; retain a checked insertion path.
+    /// Search without copying an owned atom; prepare a path only when vacant.
+    /// Occupied lookup changes no scratch. A miss repeats the checked search.
     ///
     /// # Errors
-    /// Refusal changes no membership, but may retain admitted scratch capacity.
+    /// Refusal changes no membership. Vacant-path preparation may retain
+    /// admitted scratch capacity.
     pub fn entry_atom_with<'owner, 'key, E>(
         &'owner mut self,
         atom: &'key Atom,
@@ -449,7 +514,7 @@ impl AtomAppender<'_> {
 }
 impl<'a> AtomAppender<'a> {
     fn entry<'key, E>(
-        self,
+        mut self,
         query: Query<'key>,
         limits: Limits,
         mut before: impl FnMut() -> Result<(), E>,
@@ -457,41 +522,16 @@ impl<'a> AtomAppender<'a> {
         let mut checked = || before().map_err(Failure::Stopped);
         population(self.len(), limits)?;
         admit(self.storage_bytes(), limits)?;
-        self.index.path.clear();
-        let mut cursor = self.index.root;
-        let mut found = None;
-        while let Some(next) = cursor {
-            checked()?;
-            let id = position(next);
-            let order = query.compare(
-                self.get(id).expect("index references admitted atom"),
-                &mut checked,
-            )?;
-            if order == Ordering::Equal {
-                found = Some(id);
-                break;
-            }
-            let right = order == Ordering::Greater;
-            let node = self.index.nodes[id];
-            let live = self.storage_bytes();
-            let bound = path_bound(self.len());
-            reserve(
-                &mut self.index.path,
-                1,
-                bound,
-                live,
-                &mut self.index.peak,
-                limits,
-                &mut checked,
-            )?;
-            checked()?;
-            self.index.path.push(Step {
-                id,
-                node,
-                right,
-                changed: false,
-            });
-            cursor = node.children[usize::from(right)];
+        let found = query.search(
+            self.committed,
+            self.pending,
+            &self.index.nodes,
+            self.index.root,
+            &mut checked,
+            |_, _, _, _| Ok(()),
+        )?;
+        if found.is_none() {
+            self.prepare_path(query, limits, &mut checked)?;
         }
         Ok(AtomEntry {
             appender: self,
@@ -499,10 +539,53 @@ impl<'a> AtomAppender<'a> {
             found,
         })
     }
+
+    fn prepare_path<E>(
+        &mut self,
+        query: Query<'_>,
+        limits: Limits,
+        before: &mut impl FnMut() -> Result<(), Failure<E>>,
+    ) -> Result<(), Failure<E>> {
+        let bound = path_bound(self.len());
+        let fixed = storage(
+            self.committed_capacity,
+            self.pending.capacity(),
+            self.index.nodes.capacity(),
+            0,
+        );
+        let Index {
+            nodes,
+            root,
+            path,
+            peak,
+        } = &mut *self.index;
+        path.clear();
+        let found = query.search(
+            self.committed,
+            self.pending,
+            nodes,
+            *root,
+            before,
+            |id, node, right, before| {
+                let live = fixed + cells::<Step>(path.capacity());
+                reserve(path, 1, bound, live, peak, limits, before)?;
+                before()?;
+                path.push(Step {
+                    id,
+                    node: *node,
+                    right,
+                    changed: false,
+                });
+                Ok(())
+            },
+        )?;
+        debug_assert!(found.is_none(), "exclusive vacant entry");
+        Ok(())
+    }
 }
 
 /// One checked lookup, holding the exclusive append path until insertion/drop.
-/// The key is borrowed. Occupied lookup never clones its payload.
+/// The key is borrowed. Occupied lookup never copies payload or mutation scratch.
 pub struct AtomEntry<'owner, 'key> {
     appender: AtomAppender<'owner>,
     query: Query<'key>,
@@ -514,12 +597,12 @@ impl AtomEntry<'_, '_> {
     pub const fn position(&self) -> Option<usize> {
         self.found
     }
-    /// Current named storage after lookup's possible scratch growth.
+    /// Current named storage after possible vacant-path preparation.
     #[must_use]
     pub fn storage_bytes(&self) -> u128 {
         self.appender.storage_bytes()
     }
-    /// Current peak including actual retained lookup capacity.
+    /// Current peak including actual retained vacant-path capacity.
     #[must_use]
     pub fn storage_peak_bytes(&self) -> u128 {
         self.appender.storage_peak_bytes()
@@ -606,53 +689,6 @@ impl AtomEntry<'_, '_> {
     }
 }
 
-#[derive(Clone, Copy)]
-enum Query<'a> {
-    Atom(&'a Atom),
-    Key(AtomKey<'a>),
-}
-impl Query<'_> {
-    fn compare<E>(
-        self,
-        atom: &Atom,
-        before: &mut impl FnMut() -> Result<(), E>,
-    ) -> Result<Ordering, E> {
-        match self {
-            Self::Atom(value) => identity::atom(value, atom, before),
-            Self::Key(value) => value.compare_identity_with(atom, before),
-        }
-    }
-    fn prepare_copy<E>(self, before: &mut impl FnMut() -> Result<(), E>) -> Result<(), E> {
-        let predicate = match self {
-            Self::Atom(atom) => atom.predicate(),
-            Self::Key(key) => key.predicate(),
-        };
-        before()?;
-        for _ in predicate.name().as_bytes() {
-            before()?;
-        }
-        for column in 0..predicate.arity() {
-            before()?;
-            let value: &Value = match self {
-                Self::Atom(atom) => &atom.values()[column],
-                Self::Key(key) => key.argument(column),
-            };
-            if let Value::String(text) | Value::Symbol(text) = value {
-                for _ in text.as_bytes() {
-                    before()?;
-                }
-            }
-        }
-        Ok(())
-    }
-    fn to_atom(self) -> Atom {
-        match self {
-            Self::Atom(atom) => atom.clone(),
-            Self::Key(key) => key.to_atom(),
-        }
-    }
-}
-
 fn get<'a>(committed: &'a [Atom], pending: &'a [Atom], id: usize) -> Option<&'a Atom> {
     if id < committed.len() {
         committed.get(id)
@@ -661,12 +697,12 @@ fn get<'a>(committed: &'a [Atom], pending: &'a [Atom], id: usize) -> Option<&'a 
     }
 }
 
-fn storage(committed: usize, pending: usize, index: &Index) -> u128 {
+fn storage(committed: usize, pending: usize, nodes: usize, path: usize) -> u128 {
     size_of::<AtomInterner>() as u128
         + cells::<Atom>(committed)
         + cells::<Atom>(pending)
-        + cells::<Node>(index.nodes.capacity())
-        + cells::<Step>(index.path.capacity())
+        + cells::<Node>(nodes)
+        + cells::<Step>(path)
 }
 fn cells<T>(count: usize) -> u128 {
     count as u128 * size_of::<T>() as u128

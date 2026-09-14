@@ -59,7 +59,7 @@ fn intern(catalog: &mut Catalog, atom: &Atom) -> usize {
         .map_err(|error| super::failure(error, bound(), location()))
         .unwrap()
 }
-fn find(catalog: &mut Catalog, atom: &Atom) -> Option<usize> {
+fn find(catalog: &Catalog, atom: &Atom) -> Option<usize> {
     catalog
         .find(
             atom,
@@ -112,9 +112,9 @@ fn shared_index_preserves_complete_atom_identity() {
         assert_eq!(intern(&mut catalog, atom), id);
     }
     for (id, atom) in atoms.iter().enumerate() {
-        assert_eq!(find(&mut catalog, atom), Some(id));
+        assert_eq!(find(&catalog, atom), Some(id));
     }
-    assert_eq!(find(&mut catalog, &number(2)), None);
+    assert_eq!(find(&catalog, &number(2)), None);
     assert_eq!(finish(catalog), atoms);
 }
 
@@ -129,7 +129,7 @@ fn growth_preserves_first_occurrence_order() {
         }
     }
     for (id, atom) in atoms.iter().enumerate().rev() {
-        assert_eq!(find(&mut catalog, atom), Some(id));
+        assert_eq!(find(&catalog, atom), Some(id));
     }
     assert_eq!(finish(catalog), atoms);
 }
@@ -149,8 +149,8 @@ fn exhausted_lookup_retains_its_source_cause() {
     }) if actual == location()));
     assert_eq!(counters.work, 0);
     assert_eq!(catalog.len(), 1);
-    assert_eq!(find(&mut catalog, &number(4)), Some(0));
-    assert_eq!(find(&mut catalog, &number(5)), None);
+    assert_eq!(find(&catalog, &number(4)), Some(0));
+    assert_eq!(find(&catalog, &number(5)), None);
     assert_eq!(intern(&mut catalog, &number(5)), 1);
     assert_eq!(finish(catalog), [number(4), number(5)]);
 }
@@ -200,7 +200,7 @@ proptest! {
             let next = reference.len();
             let id = *reference.entry(atom.clone()).or_insert_with(|| { ordered.push(atom.clone()); next });
             prop_assert_eq!(intern(&mut catalog, &atom), id);
-            prop_assert_eq!(find(&mut catalog, &atom), Some(id));
+            prop_assert_eq!(find(&catalog, &atom), Some(id));
         }
         prop_assert_eq!(finish(catalog), ordered);
     }

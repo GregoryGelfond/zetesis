@@ -50,8 +50,13 @@ two regions only after those borrows end, preserving every dense position.
 Canonical order is an ordered position view; it never renumbers the owner.
 Committing an atom does not select it as true in any candidate interpretation.
 
-The builder uses an iterative AVL index: lookup and insertion visit logarithmic
-search paths, with charged comparisons of the actual predicate and value prefixes.
+The builder uses an iterative AVL index. `find_atom_with` and `find_key_with`
+borrow the owner immutably, allocate nothing, and return a local position or
+absence after a checked search of committed and pending identities. Occupied
+entries use that same probe without changing mutation scratch. A vacant entry
+performs a second checked search to prepare its insertion path: repeated queries
+avoid unused path work, while misses pay for both searches. Each search visits a
+logarithmic path, charging the actual predicate and value prefixes compared.
 Canonical traversal visits the index once. Fallible reservations and work checks
 precede publication, so a stopped insertion changes neither membership nor old
 links. Already acquired capacity can remain after failure. The builder's byte

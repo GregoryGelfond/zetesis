@@ -1,7 +1,9 @@
 //! Exact denotation, AVL shape, transaction refusal and scoped prefix controls.
 
+mod probes;
+
 use super::*;
-use crate::{AtomCatalog, AtomPattern, Predicate, Sign, Term, ValueLimits, ValueNode};
+use crate::{AtomCatalog, AtomPattern, Predicate, Sign, Term, Value, ValueLimits, ValueNode};
 use proptest::prelude::*;
 use std::{collections::BTreeSet, convert::Infallible};
 
@@ -324,6 +326,18 @@ fn borrowed_keys_preserve_structural_signed_identity() {
                 .unwrap();
             assert_eq!(id, expected.len());
             expected.push(materialized.clone());
+            assert_eq!(
+                owner
+                    .find_key_with(key, limits(), || Ok::<(), Infallible>(()))
+                    .unwrap(),
+                Some(id)
+            );
+            assert_eq!(
+                owner
+                    .find_atom_with(&materialized, limits(), || Ok::<(), Infallible>(()))
+                    .unwrap(),
+                Some(id)
+            );
             assert_eq!(insert(&mut owner, &materialized), id);
             for actual in &expected {
                 assert_eq!(
