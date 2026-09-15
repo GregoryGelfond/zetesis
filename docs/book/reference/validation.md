@@ -716,33 +716,32 @@ status. A newer source remains unqualified until its own checks complete.
 
 | Population | Covered / instrumented lines | Coverage |
 | --- | ---: | ---: |
-| Workspace, all features, portable tests plus 56 physical Metal tests | 64,769 / 68,278 | 94.86% |
-| CPU-only solver library and CLI, separate instrumentation | 5,426 / 5,732 | 94.66% |
+| Workspace, all features, portable tests plus 56 physical Metal tests | 66,951 / 70,581 | 94.86% |
+| CPU-only solver library and CLI, separate instrumentation | 5,516 / 5,834 | 94.55% |
 
 This snapshot was qualified on 14 September 2026 for version `0.1.1`, compiled
-source [`1918da37`](https://github.com/GregoryGelfond/zetesis/tree/1918da37f552b649f5a2e4ecf55ba8e069076475),
+source [`d8a4a964`](https://github.com/GregoryGelfond/zetesis/tree/d8a4a964e4db8eef535f0d8ff950572df61ba515),
 using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS 26.6.2 with
 Apple M4 Pro Metal. Later updates to this description and the README badge do
 not change that measured source or its compiled documentation and data inputs.
-The CPU performance measurements remain attached to `ca10a5e7`, `f56a5a24` and
-`679ca856`, whose measured executables all report `0.1.0`, in the
-[comparison](performance.md).
+The latest [CPU/Metal measurements](reduct-execution.md) compare the exact
+`9b8cf74c` and `d8a4a964` executables. Earlier measurements retain their own
+compiled sources and versions in the [comparison](performance.md).
 
 Both populations passed their independent 91% floor. The workspace contains
-2,230 profiles: 2,214 portable profiles plus 16 physical profiles from 56 tests
-in 16 groups. The unchanged 272-profile CPU-only population remains separate.
+2,238 profiles: 2,222 portable profiles plus 16 physical profiles from 56 tests
+in 16 groups. The unchanged 275-profile CPU-only population remains separate.
 Before physical profile import, the portable-only workspace report already
-passed its floor at 62,323 of 68,278 lines (91.2783%). One separate explicit-GPU
-device-failure check also passed; its profile and the 17 test-listing profiles
-are excluded from both coverage populations.
+passed its floor at 64,504 of 70,581 lines (91.3900%). Separate explicit-GPU
+device-failure and compiled-profile session checks also passed. Their profiles
+and all test-listing profiles are excluded from both coverage populations.
 
 The portable and external-oracle gates passed for the implementation in this
-checkpoint. The existing Lean 4.33.1 build, axiom audit and source-record checks
-cover 123 semantic modules and 1,160 audited theorems, as recorded with their
+checkpoint. The Lean 4.33.1 build, axiom audit and source-record checks
+cover 127 semantic modules and 1,183 audited theorems, as recorded with their
 source hashes in the
-[verification record](https://github.com/GregoryGelfond/zetesis/blob/1918da37f552b649f5a2e4ecf55ba8e069076475/proofs/verification.json).
-The workspace version update leaves those captured Lean sources unchanged; it does
-not represent another proof execution. These counts describe the checked
+[verification record](https://github.com/GregoryGelfond/zetesis/blob/d8a4a964e4db8eef535f0d8ff950572df61ba515/proofs/verification.json).
+These counts describe the checked
 mathematical library, not verification of the Rust grounder, masks or GPU
 execution. Historical corpus and performance results retain their original
 source identities in the [comparison](performance.md).

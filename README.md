@@ -267,17 +267,18 @@ answer multisets, model counts, objective costs and optimum ties. Reproduce comp
 end-to-end solves from kernel measurements when comparing performance.
 The [validation chapter](docs/book/reference/validation.md) explains which
 claims the corpus, proof and physical execution checks can establish.
-The [performance comparisons](docs/book/reference/performance.md) separate the
-latest prepared-grounding CPU observations from earlier atom-catalog, Table
-and LTO results. A [matched CPU/Metal comparison](docs/book/reference/prepared-metal.md)
-adds complete instrumented solves and lazy-library observations with exact
-timing data. The latest ordinary CPU timings are mixed and RSS changes little;
-the separate instrumented comparison retains a SEND regression and block drift.
-Independent scalar and domain fixtures demonstrate less grounding work, with
-setup costs and small timing regressions retained. There is no general speedup
-or current GPU gain. Selected-output qualification, complete native records,
-timeouts and resource refusals have explicit scopes. The normal release profile
-remains selected. Earlier results retain their source revisions and windows.
+The latest [CPU/Metal comparison](docs/book/reference/reduct-execution.md)
+preserves the checked answer families across 540 planned solve invocations.
+Most timings change little. The task-allocation Metal route uses 21.87% less
+accounted CPU completion storage and takes 10.25% longer; total process
+memory was not measured in that comparison. The remaining cost is concentrated
+in CPU completion of reduct queries. There is no general speedup claim.
+The [performance comparisons](docs/book/reference/performance.md) retain earlier
+grounding, atom-catalog, Table and LTO results with their source revisions and
+measurement scopes. Independent fixtures demonstrate less grounding work;
+work and storage reductions do not by themselves establish faster solves.
+Selected-output qualification, complete native records, timeouts and resource
+refusals have explicit scopes. The normal release profile remains selected.
 
 See [Contributing](CONTRIBUTING.md) for development and verification requirements,
 and [build the book](docs/book/building.md) to read the complete manual locally.

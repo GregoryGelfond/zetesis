@@ -1,6 +1,12 @@
 # Execution performance
 
-The latest prepared-grounding comparison demonstrates reused query capacity and
+The latest [reduct execution comparison](reduct-execution.md) measures complete
+CPU and Metal solves with preserved answer families. The task-allocation Metal
+route trades 21.87% less accounted completion storage for a 10.25% increase in solve
+time, concentrated in CPU residual completion. Most other measured changes are
+small; this does not establish a general speedup or a process-memory reduction.
+
+The earlier prepared-grounding comparison demonstrates reused query capacity and
 less repeated scalar grounding work. Ordinary CPU timings are mixed, with little
 RSS change and some small library regressions. Representation and work reductions
 do not establish a general speedup. The observations below distinguish complete
