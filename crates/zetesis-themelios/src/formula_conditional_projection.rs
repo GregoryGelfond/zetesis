@@ -4,10 +4,7 @@
 //! equivalent to the runtime inner disjunction. Its purpose is to retain every
 //! signature, polarity and parsed atom origin without passing pools upstream.
 
-use themelios_program::program::{
-    Arguments, Atom, Body, BodyElement, ConditionalLiteral, Literal, LiteralInner, Program,
-    Statement,
-};
+use themelios_program::program::{Arguments, Atom, Program, Statement};
 use themelios_program::provenance::{TransformTag, WithProvenance};
 use themelios_program::term::Term;
 use themelios_program::transform::{Rewrite, Visit, rewrite};
@@ -60,118 +57,118 @@ impl Compiler<'_> {
         &mut self,
         statement: &WithProvenance<Statement>,
         projection_nodes: &mut u128,
-    ) -> Result<WithProvenance<Statement>, FormulaFailure> {
-        let (body, reserved_source) = match statement.get() {
-            Statement::Rule(rule) => (rule.body().get(), true),
-            Statement::WeakConstraint(weak) => (weak.body().get(), false),
-            _ => unreachable!("a rule or scoped weak body"),
-        };
-        let pooled = body.elements().any(|element| {
-            matches!(element.get(), BodyElement::Conditional(conditional)
-                if matches!(&conditional.literal.inner, LiteralInner::Atom(atom) if atom_width(atom.get()).1 != 0))
-        });
-        if !pooled {
-            return Ok(statement.clone());
-        }
-        let mut elements = Vec::new();
+    ) -> Result<Vec<WithProvenance<Statement>>, FormulaFailure> {
         let mut payload = Payload::default();
         payload.visit_statement(statement.get());
-        // The rule cursor already reserves its complete source family. A weak
-        // observation has no outer cursor, so reserve its base copy here before
-        // the same per-alternative analysis expansion below.
-        if !reserved_source {
-            *projection_nodes = projection_nodes.saturating_add(payload.nodes + 1);
-            ceiling(
-                FormulaResource::AnalysisNodes,
-                *projection_nodes,
-                self.limits.max_analysis_nodes as u128,
-                self.location,
-            )?;
+        if payload.pools == 0 {
+            return Ok(vec![statement.clone()]);
         }
-        self.budget.charge(
-            ExpansionResource::TermWork,
-            payload.nodes.saturating_mul(2),
+        let mut width = Width(1);
+        width.visit_statement(statement.get());
+        let count = width.0;
+        self.budget
+            .charge(ExpansionResource::TermWork, payload.nodes, self.location)?;
+        self.budget
+            .charge(ExpansionResource::Values, count, self.location)?;
+        *projection_nodes =
+            projection_nodes.saturating_add(count.saturating_mul(payload.nodes + 1));
+        ceiling(
+            FormulaResource::AnalysisNodes,
+            *projection_nodes,
+            self.limits.max_analysis_nodes as u128,
             self.location,
         )?;
-        // Reserve selected source payload plus each expanded conditional's
-        // copied condition before allocating the corresponding body elements.
         self.budget.charge(
             ExpansionResource::ScalarBytes,
-            payload.bytes.saturating_mul(2),
+            count.saturating_mul(payload.bytes.saturating_mul(4)),
             self.location,
         )?;
-        for element in body.elements() {
-            if let BodyElement::Conditional(conditional) = element.get()
-                && let LiteralInner::Atom(atom) = &conditional.literal.inner
-                && atom_width(atom.get()).1 != 0
-            {
-                // The base source copy is already reserved. Extra conditional
-                // copies share a cumulative allowance across every statement
-                // and outer substitution, including weak observations.
-                let count = atom_width(atom.get()).0;
-                *projection_nodes = projection_nodes
-                    .saturating_add(count.saturating_sub(1).saturating_mul(payload.nodes + 1));
-                ceiling(
-                    FormulaResource::AnalysisNodes,
-                    *projection_nodes,
-                    self.limits.max_analysis_nodes as u128,
-                    self.location,
-                )?;
-                let alternatives = self.conditional_atoms(atom.get())?;
-                let mut condition_payload = Payload::default();
-                condition_payload.visit_condition(&conditional.condition);
-                self.budget.charge(
-                    ExpansionResource::TermWork,
-                    condition_payload.nodes,
-                    self.location,
-                )?;
-                self.budget.charge(
-                    ExpansionResource::ScalarBytes,
-                    alternatives.len() as u128
-                        * (condition_payload.bytes + std::mem::size_of::<BodyElement>() as u128),
-                    self.location,
-                )?;
-                self.budget.charge(
-                    ExpansionResource::TermWork,
-                    alternatives.len() as u128 * condition_payload.nodes,
-                    self.location,
-                )?;
-                for alternative in alternatives {
-                    elements.push(BodyElement::Conditional(ConditionalLiteral {
-                        literal: Literal {
-                            negation: conditional.literal.negation,
-                            inner: LiteralInner::Atom(atom.clone().map(|_| alternative)),
-                        },
-                        condition: conditional.condition.clone(),
-                    }));
-                }
-            } else {
-                elements.push(element.get().clone());
-            }
-        }
+        self.budget.charge(
+            ExpansionResource::TermWork,
+            count.saturating_mul(payload.nodes.saturating_mul(4)),
+            self.location,
+        )?;
         self.dependency_projection = true;
-        let mut projection = Projection {
-            body: Some(Body::new(elements)),
-        };
-        Ok(
-            rewrite(Program::of_nodes([statement.clone()]), &mut projection)
-                .statements()
-                .next()
-                .expect("projection retains its statement")
-                .clone(),
-        )
+        let count = usize::try_from(count).expect("bounded analysis alternatives");
+        let mut result = Vec::with_capacity(count);
+        for position in 0..count {
+            let mut projection = Projection { position };
+            let rewritten = rewrite(Program::of_nodes([statement.clone()]), &mut projection);
+            debug_assert_eq!(projection.position, 0);
+            result.push(
+                rewritten
+                    .statements()
+                    .next()
+                    .expect("projection retains statement")
+                    .clone(),
+            );
+        }
+        Ok(result)
     }
 }
 
+/// Cartesian syntax choices preserve every signed signature and argument arity.
+/// Local quantifiers are deliberately not interpreted by this analysis view.
+struct Width(u128);
+impl Visit for Width {
+    fn visit_atom(&mut self, atom: &Atom) {
+        if let Arguments::Pooled(alternatives) = &atom.arguments {
+            self.0 = self.0.saturating_mul(alternatives.len() as u128);
+        }
+        for term in atom.argument_terms().flat_map(Term::subterms) {
+            self.visit_term(term);
+        }
+    }
+    fn visit_term(&mut self, term: &Term) {
+        if let Term::Pool(items) = term {
+            self.0 = self.0.saturating_mul(items.len() as u128);
+        }
+    }
+}
 struct Projection {
-    body: Option<Body>,
+    position: usize,
+}
+impl Projection {
+    fn take(&mut self, width: usize) -> usize {
+        let selected = self.position % width;
+        self.position /= width;
+        selected
+    }
 }
 impl Rewrite for Projection {
     fn tag(&self) -> TransformTag {
-        TransformTag::new("zetesis-conditional-dependencies")
+        TransformTag::new("zetesis-pool-dependencies")
     }
-    fn rewrite_body(&mut self, _: Body) -> Body {
-        self.body.take().expect("one source body")
+    fn rewrite_term(&mut self, term: Term) -> Term {
+        if let Term::Pool(items) = &term {
+            items[self.take(items.len())].clone()
+        } else {
+            term
+        }
+    }
+    fn rewrite_atom(&mut self, mut atom: Atom) -> Atom {
+        // Rewrite's atom hook owns term traversal, as in the upstream default.
+        atom.arguments = match atom.arguments {
+            Arguments::Single(terms) => Arguments::Single(
+                terms
+                    .into_iter()
+                    .map(|term| term.fold(|parts| self.rewrite_term(Term::from(parts))))
+                    .collect(),
+            ),
+            Arguments::Pooled(alternatives) => {
+                let alternatives: Vec<Vec<Term>> = alternatives
+                    .into_iter()
+                    .map(|terms| {
+                        terms
+                            .into_iter()
+                            .map(|term| term.fold(|parts| self.rewrite_term(Term::from(parts))))
+                            .collect()
+                    })
+                    .collect();
+                Arguments::Single(alternatives[self.take(alternatives.len())].clone())
+            }
+        };
+        atom
     }
 }
 

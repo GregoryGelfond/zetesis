@@ -166,7 +166,7 @@ pub enum Resource {
 pub enum Feature {
     /// External calls cannot be evaluated by a pure observation query.
     Term,
-    /// Anonymous variables cannot construct output terms or negative atom keys.
+    /// Anonymous variables cannot construct ordinary output values.
     AnonymousOutput,
     /// Theory atoms or a future body form without a pure finite interpretation.
     Body,
@@ -337,6 +337,7 @@ enum Operand {
     Function(SymbolSign, Name, Vec<Self>),
     Tuple(Vec<Self>),
     Expression(Template),
+    Inverse { slot: usize, expression: Template },
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Pattern {
@@ -353,7 +354,7 @@ struct AtomTest {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Condition {
     Atom(DefaultNegation, Vec<AtomTest>),
-    AtomValue(DefaultNegation, usize),
+    AtomPatternValue(DefaultNegation, usize),
     Compare(DefaultNegation, Template, Vec<(Relation, Template)>),
     Boolean(bool),
     Conditional(Query, Box<Self>),
@@ -367,6 +368,7 @@ struct Guard {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct AggregateElement {
     tuple: Template,
+    atom_pattern_key: bool,
     query: Query,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -379,11 +381,12 @@ enum Binder {
     Atom(Vec<Pattern>),
     Assign(usize, Template),
     Match {
-        pattern: Operand,
+        patterns: Vec<Operand>,
         value: Template,
         complete: usize,
     },
     Aggregate(usize, AggregateQuery),
+    NumericMismatch(AggregateQuery),
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Query {

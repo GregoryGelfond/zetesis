@@ -17,6 +17,9 @@ impl Compiler<'_> {
         variables: &mut Variables,
         body: &mut Vec<LiteralIr>,
     ) -> Result<(), FormulaFailure> {
+        if self.range_comparison(literal, variables, body)? {
+            return Ok(());
+        }
         if literal.negation == DefaultNegation::None
             && let LiteralInner::Atom(atom) = &literal.inner
             && self.positive_literal(atom.get(), variables, body)?
@@ -27,12 +30,12 @@ impl Compiler<'_> {
             && let LiteralInner::Atom(atom) = &literal.inner
             && let Arguments::Single(arguments) = &atom.get().arguments
         {
-            // Ordinary negative arguments remain single-valued. Conditional
-            // consequent alternatives have a separate finite-family boundary.
+            // Pools have already been selected by the enclosing occurrence
+            // cursor. Ranges remain scoped value generators before truth checks.
             for term in arguments.iter().flat_map(Term::subterms) {
                 self.budget
                     .charge(ExpansionResource::TermWork, 1, self.location)?;
-                if matches!(term, Term::Pool(_) | Term::Interval { .. }) {
+                if matches!(term, Term::Pool(_)) {
                     return Err(unsupported(ProfileFeature::Term, self.location).into());
                 }
             }

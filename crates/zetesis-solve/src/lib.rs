@@ -84,6 +84,7 @@ mod closure_session;
 mod formula_session;
 mod session;
 mod world_view;
+mod projection;
 mod error;
 mod completion;
 mod countermodel;
@@ -105,6 +106,7 @@ pub use lazy_execution::{
 pub use optimization::{Optimization, OptimizationStop};
 pub use phase_timing::{PhaseTimings, SolvePhase};
 pub use policy::{Backend, Grounder, Oracle, SourceBatching};
+pub use projection::{ProjectionError, ProjectionLimits, ProjectionResource, ProjectionStatistics};
 pub use semantic_outcome::{AnswerSelection, SemanticOutcome};
 pub use session::{
     AnswerSet, PreparedInput, PreparedProfile, Session, SessionBuilder, SessionModel, Subject,

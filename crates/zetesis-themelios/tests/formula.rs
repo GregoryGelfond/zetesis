@@ -16,9 +16,9 @@ use zetesis_cpu::Control;
 use zetesis_ferraris::Theory;
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, SourceBundle, admit_bundle_formula,
-    admit_extended, admit_formula,
+    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
+    ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
+    ProfileFeature, SourceBundle, admit_bundle_formula, admit_extended, admit_formula,
 };
 
 type Models = BTreeSet<BTreeSet<Atom>>;
@@ -238,19 +238,33 @@ fn negative_maximize_preserves_scored_answers() {
 }
 
 #[test]
-fn unimplemented_source_profiles_are_refused() {
-    for source in ["a|b:c.", "#program base(x). a."] {
-        assert!(
-            admit_formula(
-                source.to_owned(),
-                AdmissionOptions::default(),
-                ExpansionLimits::default(),
-                FormulaLimits::default()
-            )
-            .is_err(),
-            "{source}"
-        );
+fn conditional_disjuncts_preserve_the_complete_source_family() {
+    for (source, expected_sources) in [
+        ("a|b:c.", &["a."][..]),
+        ("c.a|b:c.", &["a.c.", "b.c."][..]),
+        ("{c}.a|b:c.", &["a.", "a.c.", "b.c."][..]),
+    ] {
+        assert_eq!(native(source), expected(expected_sources), "{source}");
     }
+}
+
+#[test]
+fn parameterized_program_parts_remain_located_refusals() {
+    let error = admit_formula(
+        "#program base(x). a.".to_owned(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        error,
+        FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
+            feature: ProfileFeature::ProgramPart,
+            ..
+        }))
+    ));
+    assert!(!error.diagnostics().is_empty());
 }
 
 #[test]

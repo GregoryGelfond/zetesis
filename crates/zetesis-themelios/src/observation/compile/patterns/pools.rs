@@ -2,7 +2,8 @@
 //!
 //! Widths are checked before retaining any Cartesian product. Each selected tree
 //! then pays ordinary source node/text charges before its owned nodes are built.
-//! Arithmetic remains an evaluated consumer and is never inverted into a capture.
+//! Arithmetic selection preserves its expression; the separate inverse planner
+//! recognizes finite one-candidate captures after structural selection.
 
 use super::{Compiler, Error, Operand, Pattern, Term, UnaryOp, evaluated};
 use crate::observation::{ErrorKind, Predicate, Resource};
@@ -145,7 +146,8 @@ impl Compiler<'_> {
         for position in 0..count {
             self.node(1)?;
             self.text(atom.name.as_str())?;
-            let terms = self.selected_operands(arguments, position, 1)?;
+            let mut terms = self.selected_operands(arguments, position, 1)?;
+            self.prepare_inverses(&mut terms);
             let predicate = Predicate::with_sign(
                 atom.name.as_str(),
                 terms.len(),

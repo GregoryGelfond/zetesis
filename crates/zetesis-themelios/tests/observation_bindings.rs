@@ -529,7 +529,6 @@ fn nongenerating_edges_cannot_establish_bindings() {
         "#show. #show X:not X=Y=1.",
         "#show. #show X:not not X=Y=1.",
         "#show. #show X:X=Y=Z.",
-        "#show. #show X:X=Y+1=2.",
         "#show. #show X:f(X)<f(3).",
         "#show. #show X:not f(X)=f(1).",
         "#show. #show X:not not f(X)=f(1).",
@@ -555,7 +554,7 @@ fn nongenerating_edges_cannot_establish_bindings() {
     }
 }
 
-const RESIDUALS: &[(&str, &[&str])] = &[
+const FINITE_BINDINGS: &[(&str, &[&str])] = &[
     ("#show. #show 1:f((X;2))=f(1).", &["1"]),
     ("#show. #show X:(f(X);g(X))=f(1).", &["1"]),
     ("#show. #show X:X+1=2.", &["1"]),
@@ -565,28 +564,35 @@ const RESIDUALS: &[(&str, &[&str])] = &[
 ];
 
 #[test]
-fn remaining_finite_binding_shapes_have_located_refusals() {
-    for (source, _) in RESIDUALS {
-        let Err(FormulaFailure::Observation { error }) = admit_formula(
-            (*source).into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        ) else {
-            panic!("expected remaining binding refusal: {source}");
-        };
-        assert_eq!(
-            error.kind(),
-            &ErrorKind::Unsupported(Feature::UnsafeVariable)
-        );
-        assert!(error.location().is_some());
+fn finite_binding_shapes_produce_the_expected_displays() {
+    for (source, expected) in FINITE_BINDINGS {
+        let input = admit(source);
+        assert_eq!(display(&input, &Model::default()), *expected, "{source}");
     }
 }
 
 #[test]
-#[ignore = "requires absolute CLINGO; complete references for remaining finite bindings"]
-fn remaining_finite_binding_shapes_have_complete_references() {
-    for (source, expected) in RESIDUALS {
+fn observation_bindings_preserve_hidden_answer_identity() {
+    let singleton = Model::new([Atom::new(Predicate::new("hidden", 0).unwrap(), vec![]).unwrap()]);
+    for (source, _) in FINITE_BINDINGS {
+        let hidden = admit(&format!("{{hidden}}. {source}"));
+        let answers = family(&hidden);
+        assert_eq!(answers.len(), 2, "{source}");
+        assert!(
+            answers.iter().any(|(model, _)| model == &Model::default()),
+            "{source}"
+        );
+        assert!(
+            answers.iter().any(|(model, _)| model == &singleton),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+#[ignore = "requires absolute CLINGO; complete references for finite observation bindings"]
+fn finite_binding_shapes_have_complete_references() {
+    for (source, expected) in FINITE_BINDINGS {
         observation_reference::compare(source, &serde_json::json!([expected]));
     }
 }

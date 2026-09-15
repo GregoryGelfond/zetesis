@@ -9,9 +9,11 @@ coverage preserves original models, every frozen M/J reduct, and stable models
 in arbitrary context. Duplicate positions are retained by enumeration; only the
 logical theory treats repeated formulas idempotently.
 
-This does not verify source recognition, Rust cursors, choice-head construction,
-provenance, budgets, arithmetic or completed support. Local choice products are
-submitted together to the existing one-group lowering contract.
+This does not verify source recognition, Rust cursors, scope recognition, choice-head construction,
+provenance, budgets, arithmetic or completed support. Local products are
+submitted together to their existing one-group lowering or objective activation
+contracts. The local occurrence laws below preserve the original element identity;
+they do not equate the consumers' different measures or quantifiers.
 -/
 
 namespace Zetesis.FinitePools
@@ -84,5 +86,59 @@ theorem flattening_changes_original_truth :
     Models (fun atom : Nat => atom = 1)
       [.disj (.atom 1) (.disj (.atom 2) (.atom 3))] := by
   simp [Models, Satisfies]
+
+
+section ScopedOccurrences
+
+universe w
+variable {σ : Type v} {ρ : Type w}
+
+/-- Resolving a constructor or arithmetic context after independent finite
+    child choices has precisely the declared child-binding image. The context
+    is supplied only after its own syntax, safety and arithmetic admission. -/
+theorem value_context_complete (pools : List (List β)) (context : List β → ρ)
+    (result : ρ) :
+    result ∈ (product pools).map context ↔
+      ∃ values, Binds pools values ∧ context values = result := by
+  simp only [List.mem_map, product_complete]
+
+/-- Alternatives of one local element stay inside the surrounding collection.
+    The element identity remains an input to emission, even when two elements
+    have identical value alternatives. This covers source occurrence keys as
+    well as complete tuple or objective keys supplied by the consumer. -/
+def localOccurrences (elements : List σ) (pools : σ → List (List β))
+    (emit : σ → List β → ρ) : List ρ :=
+  elements.flatMap (fun element => (product (pools element)).map (emit element))
+
+/-- A local emitted row has an original element and a complete independent
+    binding. Conversely every such binding is retained. No new enclosing rule
+    or choice group is introduced by this local union. -/
+theorem local_occurrences_complete (elements : List σ) (pools : σ → List (List β))
+    (emit : σ → List β → ρ) (row : ρ) :
+    row ∈ localOccurrences elements pools emit ↔
+      ∃ element ∈ elements, ∃ values,
+        Binds (pools element) values ∧ emit element values = row := by
+  simp only [localOccurrences, List.mem_flatMap, List.mem_map, product_complete]
+
+/-- Grouping a complete key uses any eligible occurrence, not its number of
+    source copies. This same premise can feed choice eligibility, aggregate
+    activity, and objective activation; their downstream measures differ. -/
+theorem local_activity_complete (elements : List σ) (pools : σ → List (List β))
+    (emit : σ → List β → ρ) (active : ρ → Prop) :
+    (∃ row ∈ localOccurrences elements pools emit, active row) ↔
+      ∃ element ∈ elements, ∃ values,
+        Binds (pools element) values ∧ active (emit element values) := by
+  constructor
+  · rintro ⟨row, member, enabled⟩
+    obtain ⟨element, original, values, bound, identity⟩ :=
+      (local_occurrences_complete elements pools emit row).mp member
+    exact ⟨element, original, values, bound, identity.symm ▸ enabled⟩
+  · rintro ⟨element, original, values, bound, enabled⟩
+    have member : emit element values ∈ localOccurrences elements pools emit := by
+      exact (local_occurrences_complete elements pools emit (emit element values)).mpr
+        ⟨element, original, values, bound, rfl⟩
+    exact ⟨emit element values, member, enabled⟩
+
+end ScopedOccurrences
 
 end Zetesis.FinitePools

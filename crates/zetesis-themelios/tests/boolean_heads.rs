@@ -16,9 +16,9 @@ use cases::CASES;
 use proptest::prelude::*;
 use reference::{Models, atom_text, exhaustive, external, holds, native, values};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
-    ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
-    FormulaResource, ProfileFeature, SourceBundle, admit_bundle_formula, admit_formula,
+    AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
+    ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
+    SourceBundle, admit_bundle_formula, admit_formula,
 };
 
 fn input(source: &str) -> AdmittedFormula {
@@ -264,17 +264,17 @@ fn tautologies_preserve_variable_safety() {
 }
 
 #[test]
-fn unsupported_conditions_remain_located_refusals() {
-    for source in ["#true:a;b.", "#true:#false;b.", "#true:1=1;b."] {
-        let error = limited(source, &FormulaLimits::default()).unwrap_err();
-        assert!(!error.diagnostics().is_empty());
-        assert!(matches!(
-            error,
-            FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-                feature: ProfileFeature::ConditionalDisjunction,
-                ..
-            }))
-        ));
+fn conditional_booleans_preserve_eligibility() {
+    for (source, records) in [
+        ("#true:a;b.", vec![vec!["b"]]),
+        ("#true:#false;b.", vec![vec!["b"]]),
+        ("#true:1=1;b.", vec![vec![]]),
+    ] {
+        let expected: Models = records
+            .into_iter()
+            .map(|row| row.into_iter().map(str::to_owned).collect())
+            .collect();
+        assert_eq!(native(&input(source)), expected, "{source}");
     }
 }
 

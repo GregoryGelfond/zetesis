@@ -50,7 +50,9 @@ fn cardinality_keys_pay_their_complete_admission_cost() {
     // N. Each source set element costs one more. Every expanded key has one tuple
     // root, a template + number tag, and its key reference. Positive patterns pay
     // their existing bounded source/matching walks. Negative keys instead pay
-    // their generated function root/children and the AtomValue condition.
+    // their generated function root/children and the atom-pattern condition.
+    // Each concrete argument now owns a tagged value: one traversal node plus
+    // a tuple, tag template and tag symbol (four additional admitted nodes).
     for (source, nodes, expected) in [
         ("#show. #show N:N={}.", 3, "0"),
         ("#show. #show N:N=#count{1}.", 6, "1"),
@@ -61,9 +63,9 @@ fn cardinality_keys_pay_their_complete_admission_cost() {
         ("#show. #show N:N={not -p}.", 10, "1"),
         ("-p. #show. #show N:N={not not -p}.", 10, "1"),
         ("p(f(1)). #show. #show N:N={p(f(1))}.", 14, "1"),
-        ("#show. #show N:N={not p(f(1))}.", 13, "1"),
+        ("#show. #show N:N={not p(f(1))}.", 17, "1"),
         ("p(1).p(2). #show. #show N:N={p(1;2)}.", 22, "2"),
-        ("#show. #show N:N={not p(1;2)}.", 20, "2"),
+        ("#show. #show N:N={not p(1;2)}.", 28, "2"),
         ("p(1).q(1). #show. #show N:N={p(X):q(X)}.", 18, "1"),
         ("p.r. #show. #show N:N={p;not q;not not r}.", 23, "3"),
         ("p. #show. #show N:N={p}. #show f(N):N={p}.", 19, "1 f(1)"),

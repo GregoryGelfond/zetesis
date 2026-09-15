@@ -268,13 +268,29 @@ round, work, value or storage failure returns an error before objective activati
 A finite snapshot during growth does not establish that value generation will
 terminate.
 
-Objective eligibility consumes this completed view. Ordinary acyclic producers
-can supply a more precise absent/optional/required classification. Recursive
-aggregate or conditional producers and their unresolved dependants use the
-conservative relation: a covered atom is optional. Actual costs still test the
+The shared [source-activity module](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_source_activity.rs)
+uses this completed view for objective and projection eligibility. Acyclic
+producer dependencies are evaluated in order. Unresolved components begin with
+optional atoms from complete possible support, then aggregate every producer's
+activity in complete rounds. Each changing round resolves at least one optional
+atom as required or absent; established information cannot be retracted. The
+old and new activity tables are admitted together. This finite refinement does
+not enumerate answer sets or decide whether optional literals can hold together.
+
+Rich producer bodies share the original scoped aggregate, conditional and
+projection lowering. A three-state fold covers their original Boolean truth;
+an optional atom and its negation remain optional. Actual costs still test the
 original model through the objective query, with weight, priority and complete
-tuple resolved from one binding. No second aggregate evaluator or support loop
-is needed for cyclic objectives.
+tuple resolved from one binding. Source activity neither rewrites that model's
+theory nor evaluates its frozen reduct.
+
+An independently established absent producer contributes no objective row or
+redundant zero-cost priority slot. For example, a required `a` makes the proposed
+`n(0)` impossible in `n(N):-N=#count{1:a}`; a downstream observer of that absent
+row need not publish its priority. This can shorten the raw cost vector while
+preserving costs aligned by priority, the complete answer family and optimum
+ties. Other conservative carriers still retain zero slots when the abstraction
+does not establish absence.
 
 The semantic bridge requires more than an empty delta. Complete typed rule and
 value generation must ensure that restricting an original model to any closed

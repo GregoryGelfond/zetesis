@@ -53,6 +53,7 @@ The maintained full index is
 | Does no output mean inconsistency? | `Outcomes.empty_delivery_can_hide_a_valid_model` | Counterexample: absence of delivery is insufficient |
 | When does a collection represent a world view? | `WorldViews.completed_capture_represents_world_view` | Original answer coverage, exact completed classification and complete capture |
 | Does a complete optimal family suffice? | `WorldViews.optimal_family_omits_worse_answer` | A strictly worse original answer witnesses the difference |
+| Can projected enumeration retain full answer-set representatives? | `ProjectedAnswers.retain_covers`, `retain_unique`, `selected_property_survives` | A fixed key domain, exact key comparison and membership/objective selection before projection; storage and completion receipts remain separate |
 
 Each module is available under
 [`proofs/Zetesis`](https://github.com/GregoryGelfond/zetesis/tree/main/proofs/Zetesis).
@@ -73,6 +74,27 @@ and `EvaluatedWitnesses` address finite witnesses and checked construction.
 conditional and signed-head meaning. `CountHeadActivity` distinguishes
 head permission coalesced by atom from aggregate activity coalesced by complete
 tuple. Those equivalence relations cannot be interchanged.
+
+[`ConditionalHeads`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ConditionalHeads.lean)
+keeps a conditional disjunct's permission separate from condition truth in the
+candidate. Its original and frozen formulas explain why a body conjunction is
+not a valid replacement. `ConditionalHeadSupport` relates that head to possible
+producers under the stated finite coverage premise. The
+[conditional-head guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/conditional-heads.md)
+follows the argument.
+
+`FinitePools.value_context_complete` and `local_occurrences_complete` place
+shared finite value expansion below its consumers. A whole-rule product and an
+element-local union have distinct scope meanings; neither may be substituted
+for the other. See the
+[finite-occurrence guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/finite-occurrences.md)
+for the coverage assumptions and concrete cursor obligations.
+
+`ObjectiveEligibility.refinement_covers` preserves covered truth through a
+three-valued activity refinement. `changing_round_decreases` provides the finite
+unknown-count bound when a round resolves at least one optional entry. These
+activity laws serve objective and projection preparation; they do not establish
+that every possible atom occurs in an answer set or prove Rust producer coverage.
 
 `WeightedHeadActivity.formula_original` extends that independent tuple activity
 to signed sums over a complete, duplicate-free key carrier.

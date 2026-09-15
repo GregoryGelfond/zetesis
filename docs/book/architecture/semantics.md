@@ -140,6 +140,13 @@ their combined retained data. Closed query storage is charged only when the
 numeric contribution is retained; source evaluation and its work limits remain
 separate obligations.
 
+`#project` supplies a different observation: a fixed source-prepared atom domain
+defines an equivalence relation between full answers. Enumeration may retain one
+representative per key after membership and objective selection. `#show` still
+controls only display. A projected family can cover every key while omitting
+original answers, so it is not a `WorldView`. See the
+[projected session contract](../rust/sessions.md#projected-enumeration).
+
 Scoped objective bodies reuse the formula operations through an isolated
 temporary builder. The compiler borrows completed producer support, validates
 the body for one outer binding, and then translates reachable formula nodes

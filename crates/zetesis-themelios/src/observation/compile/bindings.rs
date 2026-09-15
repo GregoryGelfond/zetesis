@@ -12,10 +12,12 @@ use super::{
 
 fn structural_children(term: &Template) -> Option<&[Template]> {
     match term {
-        Template::Function(_, _, children) | Template::Tuple(children) => Some(children),
+        Template::Function(_, _, children)
+        | Template::Tuple(children)
+        | Template::Pool(children) => Some(children),
         Template::Unary(UnaryOp::Negate, argument) => match argument.as_ref() {
             Template::Function(_, _, children) => Some(children),
-            _ => None,
+            _ => structural_children(argument),
         },
         _ => None,
     }
@@ -55,6 +57,22 @@ pub(super) fn take_operand(condition: &mut Condition, index: usize, complete: us
 }
 
 impl Compiler<'_> {
+    fn inverse_captures(&self, term: &Template, provided: &mut BTreeSet<usize>) {
+        if let Some(children) = structural_children(term) {
+            for child in children {
+                self.inverse_captures(child, provided);
+            }
+        } else if let Some(slot) = self.inverse_slot(term, provided) {
+            provided.insert(slot);
+        }
+    }
+    pub(super) fn capture_slots(&self, term: &Template) -> BTreeSet<usize> {
+        let mut provided = BTreeSet::new();
+        captures(term, &mut provided);
+        self.inverse_captures(term, &mut provided);
+        provided
+    }
+
     fn structural_inputs(&self, term: &Template, captures: &BTreeSet<usize>) -> bool {
         if let Some(children) = structural_children(term) {
             children
@@ -66,8 +84,7 @@ impl Compiler<'_> {
     }
 
     pub(super) fn structural_capture(&self, pattern: &Template) -> bool {
-        let mut provided = BTreeSet::new();
-        captures(pattern, &mut provided);
+        let provided = self.capture_slots(pattern);
         provided.iter().any(|slot| !self.safe.contains(slot))
             && self.structural_inputs(pattern, &provided)
     }
@@ -96,7 +113,7 @@ impl Compiler<'_> {
         None
     }
 
-    fn structural_pattern(&self, term: Template) -> Result<Operand, Error> {
+    pub(super) fn structural_pattern(&self, term: Template) -> Result<Operand, Error> {
         Ok(match term {
             Template::Variable(slot) => Operand::Variable(slot),
             Template::Value(symbol) => Operand::Value(
@@ -118,10 +135,11 @@ impl Compiler<'_> {
                     .collect::<Result<_, _>>()?,
             ),
             Template::Unary(UnaryOp::Negate, argument)
-                if matches!(argument.as_ref(), Template::Function(_, _, _)) =>
+                if structural_children(&argument).is_some() =>
             {
-                let Template::Function(sign, name, children) = *argument else {
-                    unreachable!()
+                let Operand::Function(sign, name, children) = self.structural_pattern(*argument)?
+                else {
+                    return Err(self.unsupported(Feature::Comparison));
                 };
                 Operand::Function(
                     match sign {
@@ -129,10 +147,7 @@ impl Compiler<'_> {
                         Sign::Negative => Sign::Positive,
                     },
                     name,
-                    children
-                        .into_iter()
-                        .map(|child| self.structural_pattern(child))
-                        .collect::<Result<_, _>>()?,
+                    children,
                 )
             }
             expression => Operand::Expression(expression),
@@ -156,20 +171,31 @@ impl Compiler<'_> {
             return Ok(false);
         };
         let complete = self.slot()?;
-        let mut provided = BTreeSet::new();
-        captures(operand(&conditions[index], pattern), &mut provided);
+
         // Both moved templates remain owned by the binding instruction. Charge
         // the two newly retained guard references before replacing either one.
         self.node(1)?;
         self.node(1)?;
         let pattern = take_operand(&mut conditions[index], pattern, complete);
         let value = take_operand(&mut conditions[index], value, complete);
+        let mut patterns = self.structural_alternatives(pattern)?;
+        for pattern in &mut patterns {
+            self.prepare_inverses(std::slice::from_mut(pattern));
+        }
+        let mut provided = None;
+        for pattern in &patterns {
+            let mut slots = BTreeSet::new();
+            super::patterns::captures(pattern, &mut slots);
+            provided = Some(provided.map_or(slots.clone(), |previous: BTreeSet<usize>| {
+                previous.intersection(&slots).copied().collect()
+            }));
+        }
         binders.push(Binder::Match {
-            pattern: self.structural_pattern(pattern)?,
+            patterns,
             value,
             complete,
         });
-        self.safe.extend(provided);
+        self.safe.extend(provided.unwrap_or_default());
         self.safe.insert(complete);
         Ok(true)
     }

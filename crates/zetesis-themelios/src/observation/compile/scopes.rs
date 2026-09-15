@@ -125,10 +125,16 @@ impl Compiler<'_> {
                 // value and apply default negation to that completed alternative.
                 // function() charges its children; its caller owns the root.
                 compiler.node(1)?;
-                let key = compiler.function(&atom.name, arguments, 1, atom.sign)?;
+                compiler.text(atom.name.as_str())?;
+                compiler.arity(arguments.len())?;
+                let arguments = arguments
+                    .iter()
+                    .map(|term| compiler.anonymous_term(term, 1))
+                    .collect::<Result<_, _>>()?;
+                let key = Template::Function(atom.sign, atom.name.clone(), arguments);
                 let slot = compiler.generate(key)?;
                 compiler.node(1)?;
-                conditions.push(Condition::AtomValue(negation, slot));
+                conditions.push(Condition::AtomPatternValue(negation, slot));
                 slot
             };
             compiler.node(1)?;
@@ -142,6 +148,7 @@ impl Compiler<'_> {
             compiler.node(1)?;
             Ok(AggregateElement {
                 tuple: Template::Tuple(vec![tag, key]),
+                atom_pattern_key: negation != DefaultNegation::None,
                 query,
             })
         })
@@ -181,6 +188,7 @@ impl Compiler<'_> {
                         let query = compiler.finish(positive, conditions)?;
                         Ok(AggregateElement {
                             tuple: Template::Tuple(tuple),
+                            atom_pattern_key: false,
                             query,
                         })
                     })?);

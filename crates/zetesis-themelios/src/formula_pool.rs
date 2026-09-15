@@ -5,10 +5,16 @@
 //! No constructor closure, textual substitution or upstream unpooling is used.
 //! Pool-free alternatives retain the existing scalar/range admission contract.
 
+mod local;
+mod terms;
+use local::{literal_width, select_comparison};
+pub(super) use terms::distribute;
+
 use themelios_base::span::Location;
 use themelios_program::program::{
-    Arguments, Atom, Body, BodyElement, Choice, ChoiceElement, Comparison, DefaultNegation, Head,
-    Literal, LiteralInner, Program, Relation, Statement,
+    Aggregate, Arguments, Atom, Body, BodyElement, Choice, ChoiceElement, Comparison, Condition,
+    DefaultNegation, Disjunction, DisjunctionElement, FunctionAggregate, Guard, HasGuards, Head,
+    HeadAggregate, Literal, LiteralInner, Program, SetAggregate, Statement,
 };
 use themelios_program::provenance::{TransformTag, WithProvenance};
 use themelios_program::term::Term;
@@ -20,6 +26,46 @@ use crate::formula_ir::{Compiler, RuleIr};
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature};
 
 impl Compiler<'_> {
+    /// Weak constraints have the same outer body-product law as rules. Local
+    /// aggregate and conditional scopes remain untouched for their consumers.
+    pub(super) fn body_alternatives(&mut self, body: &Body) -> Result<Vec<Body>, FormulaFailure> {
+        let mut payload = Footprint::default();
+        payload.visit_body(body);
+        self.budget.charge(
+            ExpansionResource::TermWork,
+            payload.nodes.saturating_mul(2),
+            self.location,
+        )?;
+        self.budget.charge(
+            ExpansionResource::ScalarBytes,
+            payload.bytes.saturating_mul(2),
+            self.location,
+        )?;
+        let source = WithProvenance::constructed(Statement::Rule(
+            themelios_program::program::Rule::new(Head::Falsum, body.clone()),
+        ));
+        let mut nodes = 0;
+        let Some(mut cursor) = Cursor::new(
+            &source,
+            0,
+            self.limits,
+            &mut nodes,
+            self.budget,
+            self.location,
+        )?
+        else {
+            return Ok(vec![body.clone()]);
+        };
+        let mut result = Vec::new();
+        while let Some(statement) = cursor.next(self.budget, self.location)? {
+            let Statement::Rule(rule) = statement.get() else {
+                unreachable!("body cursor retains rule")
+            };
+            result.push(rule.body().get().clone());
+        }
+        Ok(result)
+    }
+
     /// Append a bounded family of whole rules, retaining every source occurrence
     /// even when the separate analyzed program later deduplicates equal rules.
     pub(super) fn source_rules(
@@ -53,7 +99,7 @@ impl Compiler<'_> {
                     unreachable!("pool expansion retains a rule")
                 };
                 rules.push(self.rule(rule, origins.to_vec(), choice_source)?);
-                analyzed.push(self.conditional_projection(&statement, projection_nodes)?);
+                analyzed.extend(self.conditional_projection(&statement, projection_nodes)?);
             }
         } else {
             self.budget
@@ -67,7 +113,7 @@ impl Compiler<'_> {
                 return Err(unsupported(ProfileFeature::Statement, self.location).into());
             };
             rules.push(self.rule(rule, origins.to_vec(), choice_source)?);
-            analyzed.push(self.conditional_projection(statement, projection_nodes)?);
+            analyzed.extend(self.conditional_projection(statement, projection_nodes)?);
         }
         Ok(())
     }
@@ -114,15 +160,10 @@ impl<'a> Cursor<'a> {
         )?;
         let Shape {
             widths,
-            admitted,
             local_copies,
         } = shape(rule, scan.pools);
-        // Every residual pool must belong to one of the contexts above. In
-        // particular, conditions/aggregates/body atoms and nested arithmetic
-        // pools do not acquire a guessed expansion law through this pass.
-        if admitted != scan.pools {
-            return Err(unsupported(ProfileFeature::Term, location).into());
-        }
+        // Local scopes validate and expand their own alternatives during IR
+        // compilation. Only ordinary head/body occurrences drive this cursor.
         let count = widths
             .iter()
             .fold(1_u128, |count, width| count.saturating_mul(*width));
@@ -209,76 +250,81 @@ impl<'a> Cursor<'a> {
 
 struct Shape {
     widths: Vec<u128>,
-    admitted: usize,
     local_copies: u128,
 }
 
 fn shape(rule: &themelios_program::program::Rule, capacity: usize) -> Shape {
     let mut widths = Vec::with_capacity(capacity);
-    let mut admitted = 0;
     let mut local_copies = 0_u128;
     match rule.head().get() {
         Head::Literal(literal) => {
-            outer(literal, &mut widths, &mut admitted);
+            outer(literal, &mut widths);
         }
         Head::Disjunction(head) => {
             for element in head.elements() {
-                outer(element.get().literal(), &mut widths, &mut admitted);
+                if unconditional(element.get().condition()) {
+                    outer(element.get().literal(), &mut widths);
+                }
             }
         }
         Head::Choice(choice) => {
+            guard_width(choice.left_guard(), &mut widths);
+            guard_width(choice.right_guard(), &mut widths);
             for element in choice.elements() {
                 if let LiteralInner::Atom(atom) = &element.get().literal().inner {
-                    let (count, pools) = atom_width(atom.get());
-                    admitted += pools;
+                    let (count, _) = atom_width(atom.get());
                     local_copies = local_copies.saturating_add(count.saturating_sub(1));
                 }
             }
         }
+        Head::Aggregate(aggregate) => {
+            guard_width(aggregate.left_guard(), &mut widths);
+            guard_width(aggregate.right_guard(), &mut widths);
+        }
         _ => {}
     }
     for element in rule.body().get().elements() {
-        if let BodyElement::Conditional(conditional) = element.get() {
-            let mut scan = Footprint::default();
-            scan.visit_literal(&conditional.literal);
-            admitted += scan.pools;
-        }
-        if let BodyElement::Literal(literal) = element.get()
-            && literal.negation == DefaultNegation::None
-            && let LiteralInner::Comparison(comparison) = &literal.inner
-        {
-            let comparison = comparison.get();
-            let mut steps = comparison.steps();
-            let (relation, right) = steps.next().expect("comparison has a step");
-            if relation == Relation::Eq && steps.next().is_none() {
-                let pooled = match (comparison.first(), right) {
-                    (Term::Variable(_), Term::Pool(items))
-                    | (Term::Pool(items), Term::Variable(_)) => Some(items.len()),
-                    _ => None,
-                };
-                if let Some(count) = pooled {
-                    widths.push(count as u128);
-                    admitted += 1;
-                }
-            }
+        if let BodyElement::Literal(literal) = element.get() {
+            outer(literal, &mut widths);
+        } else if let BodyElement::Aggregate { aggregate, .. } = element.get() {
+            let guarded: &dyn HasGuards = match aggregate {
+                Aggregate::Function(value) => value,
+                Aggregate::Set(value) => value,
+            };
+            guard_width(guarded.left_guard(), &mut widths);
+            guard_width(guarded.right_guard(), &mut widths);
         }
     }
     Shape {
         widths,
-        admitted,
         local_copies,
     }
 }
 
-fn outer(literal: &Literal, widths: &mut Vec<u128>, admitted: &mut usize) {
-    if let LiteralInner::Atom(atom) = &literal.inner {
-        let (width, pools) = atom_width(atom.get());
-        if pools != 0 {
-            // Keep widened cardinalities until the cumulative template check;
-            // narrowing first could hide an overflowing product.
-            widths.push(width);
-            *admitted += pools;
-        }
+fn outer(literal: &Literal, widths: &mut Vec<u128>) {
+    let (width, pools) = literal_width(literal);
+    if pools != 0 {
+        widths.push(width);
+    }
+}
+
+fn unconditional(condition: &Condition) -> bool {
+    condition.literals().all(|literal| {
+        matches!(
+            (&literal.get().inner, literal.get().negation),
+            (
+                LiteralInner::True,
+                DefaultNegation::None | DefaultNegation::NotNot
+            ) | (LiteralInner::False, DefaultNegation::Not)
+        )
+    })
+}
+
+fn guard_width(guard: Option<&WithProvenance<Guard>>, widths: &mut Vec<u128>) {
+    if let Some(guard) = guard
+        && matches!(guard.get().term, Term::Pool(_))
+    {
+        widths.push(term_width(&guard.get().term) as u128);
     }
 }
 
@@ -332,6 +378,18 @@ pub(super) fn select_atom(mut atom: Atom, mut position: usize) -> Atom {
 struct Select<'a> {
     positions: std::slice::Iter<'a, usize>,
 }
+impl Select<'_> {
+    fn guard(&mut self, guard: Option<&WithProvenance<Guard>>) -> Option<Guard> {
+        guard.map(|guard| {
+            let mut guard = guard.get().clone();
+            if let Term::Pool(items) = &guard.term {
+                guard.term =
+                    items[*self.positions.next().expect("guard occurrence position")].clone();
+            }
+            guard
+        })
+    }
+}
 impl Rewrite for Select<'_> {
     fn tag(&self) -> TransformTag {
         TransformTag::new("zetesis-finite-pools")
@@ -347,24 +405,20 @@ impl Rewrite for Select<'_> {
         }
     }
     fn rewrite_comparison(&mut self, comparison: Comparison) -> Comparison {
-        let mut steps = comparison.steps();
-        let (relation, right) = steps.next().expect("comparison has a step");
-        let select = |term: &Term, positions: &mut std::slice::Iter<'_, usize>| {
-            if let Term::Pool(items) = term {
-                items[*positions.next().expect("equality occurrence position")].clone()
-            } else {
-                term.clone()
-            }
-        };
-        let mut result = Comparison::new(
-            select(comparison.first(), &mut self.positions),
-            relation,
-            select(right, &mut self.positions),
-        );
-        for (relation, term) in steps {
-            result = result.chain(relation, term.clone());
+        let pooled = std::iter::once(comparison.first())
+            .chain(comparison.steps().map(|(_, term)| term))
+            .any(|term| matches!(term, Term::Pool(_)));
+        if pooled {
+            select_comparison(
+                &comparison,
+                *self
+                    .positions
+                    .next()
+                    .expect("comparison occurrence position"),
+            )
+        } else {
+            comparison
         }
-        result
     }
 }
 
@@ -382,10 +436,53 @@ impl Rewrite for Expand<'_, '_> {
             BodyElement::Literal(literal) => {
                 BodyElement::Literal(self.selector.rewrite_literal(literal.clone()))
             }
+            BodyElement::Aggregate {
+                negation,
+                aggregate,
+            } => {
+                let aggregate = match aggregate {
+                    Aggregate::Function(value) => Aggregate::Function(FunctionAggregate::new(
+                        self.selector.guard(value.left_guard()),
+                        value.function(),
+                        value.elements().map(|element| element.get().clone()),
+                        self.selector.guard(value.right_guard()),
+                    )),
+                    Aggregate::Set(value) => Aggregate::Set(SetAggregate::new(
+                        self.selector.guard(value.left_guard()),
+                        value.elements().map(|element| element.get().clone()),
+                        self.selector.guard(value.right_guard()),
+                    )),
+                };
+                BodyElement::Aggregate {
+                    negation: *negation,
+                    aggregate,
+                }
+            }
             other => other.clone(),
         }))
     }
     fn rewrite_head(&mut self, head: Head) -> Head {
+        if let Head::Disjunction(disjunction) = head {
+            return Head::Disjunction(Disjunction::new(disjunction.elements().map(|element| {
+                let literal = element.get().literal();
+                DisjunctionElement::new(
+                    if unconditional(element.get().condition()) {
+                        self.selector.rewrite_literal(literal.clone())
+                    } else {
+                        literal.clone()
+                    },
+                    element.get().condition().clone(),
+                )
+            })));
+        }
+        if let Head::Aggregate(value) = head {
+            return Head::Aggregate(HeadAggregate::new(
+                self.selector.guard(value.left_guard()),
+                value.function(),
+                value.elements().map(|element| element.get().clone()),
+                self.selector.guard(value.right_guard()),
+            ));
+        }
         let Head::Choice(choice) = head else {
             return self.selector.rewrite_head(head);
         };
@@ -412,9 +509,9 @@ impl Rewrite for Expand<'_, '_> {
         // The enclosing rule/head retains parsed origins. Synthesized element
         // nodes truthfully carry constructed provenance, like expanded facts.
         Head::Choice(Choice::new(
-            choice.left_guard().map(|g| g.get().clone()),
+            self.selector.guard(choice.left_guard()),
             elements,
-            choice.right_guard().map(|g| g.get().clone()),
+            self.selector.guard(choice.right_guard()),
         ))
     }
 }

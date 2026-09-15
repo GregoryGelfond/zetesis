@@ -215,8 +215,8 @@ fn activity(
             }
             // Objective dependency admission has already excluded every signed
             // or default-negated disjunctive producer in this observed cone.
-            HeadIr::Disjunction(heads) => {
-                for head in heads {
+            HeadIr::Disjunction(_) | HeadIr::ConditionalDisjunction { .. } => {
+                for head in producer.head.disjuncts() {
                     context.inspect()?;
                     if head
                         .positive_atom()
@@ -334,8 +334,8 @@ fn unique(
                     }
                 }
             }
-            HeadIr::Disjunction(heads) => {
-                for head in heads {
+            HeadIr::Disjunction(_) | HeadIr::ConditionalDisjunction { .. } => {
+                for head in rule.head.disjuncts() {
                     context.inspect()?;
                     if head
                         .positive_atom()

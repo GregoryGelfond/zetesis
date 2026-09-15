@@ -16,9 +16,8 @@ use crate::expansion::Budget;
 use crate::formula::ceiling;
 use crate::formula_ir::{ObjectiveCondition, ObjectiveField, ObjectiveIr, Operation, Prepared};
 use crate::formula_objective_dependencies::Presence;
-use crate::formula_objective_dependencies::eligibility::{
-    Activity, Context, SourceEligibility, model_condition,
-};
+use crate::formula_source_activity::model_query::condition as model_condition;
+use crate::formula_source_activity::{Activity, Context, SourceEligibility};
 use crate::formula_support::{self, CompletedQueries, Counters, Join, Support};
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
 
@@ -39,10 +38,15 @@ pub(super) fn prepare(
         .iter()
         .any(|objective| objective.needs_eligibility_query)
     {
-        Some(SourceEligibility::build(
+        Some(SourceEligibility::build_from_conditions(
             prepared,
             completed,
             presence.retained_entries(),
+            prepared
+                .objectives
+                .iter()
+                .filter(|objective| objective.needs_eligibility_query)
+                .map(|objective| objective.condition.literals()),
             &mut Context {
                 limits,
                 budget,

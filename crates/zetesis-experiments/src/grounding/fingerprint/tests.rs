@@ -160,6 +160,29 @@ fn empty_selection_differs_from_implicit_all_atoms() {
 }
 
 #[test]
+fn projection_domains_change_subject_evidence() {
+    let admit = |condition: &str| {
+        zetesis_themelios::admit_formula(
+            format!("{{p}}. #project p:{condition}."),
+            zetesis_themelios::AdmissionOptions::default(),
+            zetesis_themelios::ExpansionLimits::default(),
+            zetesis_themelios::FormulaLimits::default(),
+        )
+        .unwrap()
+    };
+    let enabled = admit("1=1");
+    let disabled = admit("1=2");
+    // Same rule data and directive layout; only the completed domain differs.
+    assert_eq!(enabled.atoms(), disabled.atoms());
+    assert_eq!(enabled.theory().nodes(), disabled.theory().nodes());
+    assert_eq!(enabled.metadata(), disabled.metadata());
+    assert_ne!(
+        digest(|e| e.projection(enabled.projection())),
+        digest(|e| e.projection(disabled.projection())),
+    );
+}
+
+#[test]
 fn refused_chunk_is_not_partially_hashed() {
     let mut encoding = Encoding::new(3);
     encoding.write(b"abc").unwrap();

@@ -97,18 +97,32 @@ grounding use the same completed relation view. A work, round, value or storage
 failure returns an error before an incomplete objective program can be supplied.
 Recursive value generation may continue indefinitely unless stopped by a limit.
 
-`completed_activity_covers` applies the coverage result to objective activity:
-covered atoms are optional, and an atom outside the carrier is absent. Optional
-retains both truth possibilities; it does not prove simultaneous realizability
-or a particular grounder's priority layout. The actual objective query still
-reads the original model. Weight, priority and complete tuple come from one
-binding, and equal normalized keys contribute once.
+`completed_activity_covers` supplies the initial activity: covered atoms are
+optional, and an atom outside the carrier is absent. `ObjectiveEligibility`'s
+`analyze_covers` composes pointwise atom coverage through original Boolean
+formula operations. Rich bodies use the existing scoped lowering, including
+aggregates and conditional instances; this is not a second aggregate evaluator.
+Optional retains both truth possibilities and does not prove simultaneous
+realizability or a particular grounder's priority layout. The actual objective
+query still reads the original model. Weight, priority and complete tuple come
+from one binding, and equal normalized keys contribute once.
+
+For unresolved components, the runtime aggregates a complete next round beside
+the old activity table. `refinement_covers` preserves coverage of the same
+original truth. `refinement_unknowns_le` and `changing_round_decreases` state the
+finite information measure: each changing round resolves at least one optional
+entry, with exact paired atom positions. The runtime checks that no derived atom
+escapes the completed carrier and no known classification is contradicted.
+These laws assume covered proposals; they do not prove the concrete producer
+traversal, DAG-to-query correspondence, slot identities or resource accounting.
 
 [Rich cyclic objective contracts](../../crates/zetesis-themelios/tests/objective_rich_cycles.rs)
 retain complete scored families, typed values, source-order cases, independent
 carrier refinements and bounded failures. Versioned reference records identify
-zero-cost priority slots that clingo omits. Those metadata differences are
-separate from answer-set identity and optimum ties.
+zero-cost priority slots that clingo omits. When source activity independently
+establishes absence, the corresponding redundant slot is omitted too. Remaining
+conservative-carrier differences are separate from answer-set identity, totals
+aligned by priority and optimum ties.
 
 The Lean laws state the semantic assumptions explicitly. Source safety,
 proposal completeness, checked arithmetic, concrete resource accounting and

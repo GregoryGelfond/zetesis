@@ -18,6 +18,11 @@ use zetesis_themelios::{
 };
 use zetesis_validation::{answers, process};
 
+#[path = "support/ordinary_composition.rs"]
+mod ordinary_composition;
+#[path = "support/projected_families.rs"]
+mod projected_families;
+
 const REPORT_BYTES: usize = 64 * 1024;
 const CLEANUP_TIMEOUT: Duration = Duration::from_secs(1);
 
@@ -53,7 +58,7 @@ struct DisplayRecord {
     displays: Vec<(Vec<String>, u64)>,
 }
 
-fn cases() -> [Case; 11] {
+fn cases() -> Vec<Case> {
     [
         Case {
             source: include_str!("fixtures/language-consumers/symbolic-weight.lp"),
@@ -91,23 +96,7 @@ fn cases() -> [Case; 11] {
                 displays: vec![(vec![], 1), (vec!["a".into()], 1)],
             }),
         },
-        Case {
-            source: include_str!("fixtures/language-consumers/filtered-priority.lp"),
-            file: "filtered-priority.lp",
-            reference_difference: None,
-            answers: BTreeSet::from([
-                Record {
-                    atoms: vec![atom("n", vec![Value::Number(0)])],
-                    costs: vec![(1, 0)],
-                    display: "score(1)".into(),
-                },
-                Record {
-                    atoms: vec![atom("a", vec![]), atom("n", vec![Value::Number(1)])],
-                    costs: vec![(1, 1)],
-                    display: "score(2)".into(),
-                },
-            ]),
-        },
+        filtered_priority(),
         Case {
             source: include_str!("fixtures/language-consumers/arithmetic-keys.lp"),
             file: "arithmetic-keys.lp",
@@ -155,6 +144,29 @@ fn cases() -> [Case; 11] {
             ]),
         },
     ]
+    .into_iter()
+    .chain(ordinary_composition::cases())
+    .collect()
+}
+
+fn filtered_priority() -> Case {
+    Case {
+        source: include_str!("fixtures/language-consumers/filtered-priority.lp"),
+        file: "filtered-priority.lp",
+        reference_difference: None,
+        answers: BTreeSet::from([
+            Record {
+                atoms: vec![atom("n", vec![Value::Number(0)])],
+                costs: vec![(1, 0)],
+                display: "score(1)".into(),
+            },
+            Record {
+                atoms: vec![atom("a", vec![]), atom("n", vec![Value::Number(1)])],
+                costs: vec![(1, 1)],
+                display: "score(2)".into(),
+            },
+        ]),
+    }
 }
 
 fn recursive_alternatives() -> Case {
@@ -316,6 +328,7 @@ fn original_families_retain_their_scored_observations() {
 }
 
 fn families(config: SolveConfig, resources: &ExecutionResources) {
+    projected_families::check(AnswerSelection::All, config, resources);
     for case in cases() {
         let owner = admit(&case);
         let world_view =
@@ -346,6 +359,7 @@ fn optimum_ties_retain_distinct_full_answers() {
 }
 
 fn optimum(config: SolveConfig, resources: &ExecutionResources) {
+    projected_families::check(AnswerSelection::Optimal, config, resources);
     for case in cases() {
         let owner = admit(&case);
         let best = case
@@ -386,6 +400,8 @@ fn device_evidence(outcome: &zetesis_solve::SemanticOutcome, backend: Backend, c
                 | "neutral-minimum.lp"
                 | "cyclic-observer.lp"
                 | "recursive-alternatives.lp"
+                | "pooled-disjuncts.lp"
+                | "pooled-conditions.lp"
         )
     {
         let execution = outcome

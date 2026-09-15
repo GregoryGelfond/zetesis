@@ -244,6 +244,17 @@
 'Zetesis.ConditionalConsumers.empty_body_equivalent' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ConditionalConsumers.unrealized_rule_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ConditionalConsumers.covered_conditionals' depends on axioms: [propext, Quot.sound]
+'Zetesis.ConditionalHeadSupport.head_reduct_of_positive_kept' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ConditionalHeadSupport.stable_has_positive_producer' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ConditionalHeads.instance_original' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ConditionalHeads.instance_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ConditionalHeads.head_original' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ConditionalHeads.head_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ConditionalHeads.empty_is_false' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ConditionalHeads.true_condition_equivalent' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ConditionalHeads.complete_family_equivalent' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ConditionalHeads.covered_assignment' depends on axioms: [propext, Quot.sound]
+'Zetesis.ConditionalHeads.unrealized_assignment' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ConsequentAlternatives.original_semantics' depends on axioms: [propext, Quot.sound]
 'Zetesis.ConsequentAlternatives.frozen_semantics' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ConsequentAlternatives.candidate_consequents' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -495,6 +506,9 @@
 'Zetesis.FinitePools.frozen_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.FinitePools.stable_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.FinitePools.flattening_changes_original_truth' depends on axioms: [propext, Quot.sound]
+'Zetesis.FinitePools.value_context_complete' depends on axioms: [propext, Quot.sound]
+'Zetesis.FinitePools.local_occurrences_complete' depends on axioms: [propext, Quot.sound]
+'Zetesis.FinitePools.local_activity_complete' depends on axioms: [propext, Quot.sound]
 'Zetesis.FiniteTables.indexed_survival_exact' does not depend on any axioms
 'Zetesis.FiniteTables.narrowing_contracts' does not depend on any axioms
 'Zetesis.FiniteTables.narrowing_preserves_rows' does not depend on any axioms
@@ -722,6 +736,10 @@
 'Zetesis.ObjectiveEligibility.disjunction_covers' depends on axioms: [propext]
 'Zetesis.ObjectiveEligibility.optional_contradiction' depends on axioms: [propext]
 'Zetesis.ObjectiveEligibility.absent_excludes' does not depend on any axioms
+'Zetesis.ObjectiveEligibility.analyze_covers' depends on axioms: [propext]
+'Zetesis.ObjectiveEligibility.refinement_covers' depends on axioms: [propext]
+'Zetesis.ObjectiveEligibility.refinement_unknowns_le' depends on axioms: [propext, Quot.sound]
+'Zetesis.ObjectiveEligibility.changing_round_decreases' depends on axioms: [propext, Quot.sound]
 'Zetesis.ObjectivePriorities.selected_presence' depends on axioms: [propext, Quot.sound]
 'Zetesis.ObjectivePriorities.completed_presence' depends on axioms: [propext, Quot.sound]
 'Zetesis.ObjectivePriorities.ignored_priority_preserves_vector' depends on axioms: [propext, Quot.sound]
@@ -745,6 +763,9 @@
 'Zetesis.ObjectiveValues.selected_entry_preserves_key' depends on axioms: [propext]
 'Zetesis.ObjectiveValues.ignored_entry_preserves_cost' depends on axioms: [propext]
 'Zetesis.ObjectiveValues.ignored_entry_preserves_optima' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ObservationBindings.translation_inverse' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ObservationBindings.reflected_inverse' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ObservationBindings.bounded_translation' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Observations.completed_terms_exact' does not depend on any axioms
 'Zetesis.Observations.same_rows_preserve_terms' does not depend on any axioms
 'Zetesis.Observations.necessary_filter_preserves_terms' depends on axioms: [propext]
@@ -841,6 +862,12 @@
 'Zetesis.ProducerScheduling.unaffected_body_old' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ProducerScheduling.selective_step_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ProducerScheduling.empty_selection_closed' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ProjectedAnswers.retain_covers' depends on axioms: [propext, Quot.sound]
+'Zetesis.ProjectedAnswers.retain_unique' depends on axioms: [propext, Quot.sound]
+'Zetesis.ProjectedAnswers.same_equivalence' does not depend on any axioms
+'Zetesis.ProjectedAnswers.covered_key_image' depends on axioms: [propext, Quot.sound]
+'Zetesis.ProjectedAnswers.selected_property_survives' does not depend on any axioms
+'Zetesis.ProjectedAnswers.projection_before_selection_can_lose_optimum' depends on axioms: [propext, Quot.sound]
 'Zetesis.ProjectedConditionals.complete_projection' depends on axioms: [propext, Quot.sound]
 'Zetesis.ProjectedConditionals.original_semantics' depends on axioms: [propext, Quot.sound]
 'Zetesis.ProjectedConditionals.frozen_semantics' depends on axioms: [propext, Classical.choice, Quot.sound]

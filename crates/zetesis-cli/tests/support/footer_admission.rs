@@ -240,7 +240,7 @@ fn every_footer_byte_ceiling_preserves_shared_cpu_refusals() {
 fn footer_capacity_failure_cannot_replace_a_real_source_refusal() {
     let mut options = options("countermodel");
     let failure = crate::run_finalized_with_diagnostics(
-        "#project a/0.".into(),
+        "#external a.".into(),
         &options,
         &mut io::sink(),
         &mut io::sink(),

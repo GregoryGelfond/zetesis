@@ -143,8 +143,13 @@ If generation requires the unavailable refinement, admission returns a located
 `FormulaFailure::Limit`, distinct from source arithmetic failure.
 The [finite-chain contracts](tests/finite_chains.rs) check
 correlation, local scopes, source order, frozen reducts and resource boundaries.
-Nested pools and broader constructor/interval contexts remain restricted;
-admitted consequent alternatives are described below.
+Finite pools distribute through constructors and checked expressions. Ordinary
+head/body/guard occurrences produce complete rule products; choice, aggregate
+and objective selections remain within their original local group. Nested
+intervals use scoped data slots and the same checked expression evaluator.
+Selections cannot supply another alternative's missing binding. The
+[finite occurrence guide](../../proofs/guide/finite-occurrences.md) records these
+separate composition laws and their bounded resource contracts.
 
 Arithmetic uses checked `i32` operations. Undefined or overflowing evaluation
 refuses admission instead of silently dropping a substitution. Descending or
@@ -163,9 +168,16 @@ default-negated and double-negated atoms and Boolean constants. Boolean constant
 create no atoms or support. Complete sibling and body validation precedes
 simplification, so a true head cannot hide unsafe source or exhausted limits.
 
-Conditional disjuncts are limited to empty or explicitly true Boolean conditions.
-General conditional disjunction remains unsupported. Ordinary choices and all
-five function heads admit atomic and Boolean operands with `not` and `not not`.
+Conditional disjuncts admit finite local conditions and independent local
+bindings. Each completed `H:C` contributes `(C → H) ∧ not not C` to the head
+disjunction; an empty family contributes false. The implication remains in the
+frozen reduct. Positive head support requires both the outer body and that
+occurrence's condition. Default-negated, double-negated and Boolean heads retain
+their own truth without acquiring positive producer support. The [conditional-head guide](../../proofs/guide/conditional-heads.md)
+states the original and frozen laws and the finite-scope premises.
+
+Ordinary choices and all five function heads admit atomic and Boolean operands
+with `not` and `not not`.
 Default-negated operands retain candidate-frozen truth and supply no positive
 producer support. Ordinary atomic contributions use the sign and complete atom
 as their key; Boolean contributions retain their written source occurrences.
@@ -182,9 +194,11 @@ Negative anonymous consequents project complete matching atoms before applying
 `not` or `not not`. Multiple anonymous positions and descendants of positive
 constructors and tuples share that contract; arithmetic consumes independently
 bound inputs before matching. Each admitted source alternative retains its own
-projection, separate from universal condition rows. Anonymous inputs inside
-arithmetic or unary wrappers remain unsafe; broader nested pools remain
-unsupported.
+projection, separate from universal condition rows. Comparison consequents also
+disjoin their finite value alternatives before the universal condition family;
+they cannot bind a missing source name. Every reached alternative is evaluated,
+even after a true result. Anonymous inputs inside arithmetic or unary wrappers
+remain unsafe.
 
 Strong-negated predicates have distinct identities and coherence constraints:
 `not p` never implies `-p`. Under default negation, anonymous projections of
@@ -317,36 +331,42 @@ failures retain their typed partial accounting. Required scoped data evaluation
 runs on each completed outer row before activity exclusion and numeric selection, even for ignored rows. Only a retained numeric
 row creates Condition nodes. Source shape checks are shared with objective
 admission; scope and assignment safety remain with the source compiler.
-Pooled conditional consequents share the bounded rule-body dependency projection.
-The analyzed weak statement retains its original weight, priority and tuple;
-`AnalysisBasis::DependencyProjection` identifies its signature/polarity purpose.
+Scoped pools share one bounded dependency projection for analysis. It retains
+all signed predicate dependencies and all selected weight, priority and tuple
+fields; `AnalysisBasis::DependencyProjection` identifies this limited purpose.
 The runtime conditional still disjoins source alternatives inside each local
-condition row. Neither the projected conjunction nor a synthetic producer enters
-the objective query. Ordinary body pools, pooled local conditions, aggregate
-elements, scalar binders and objective fields retain their explicit boundaries;
-[objective pool contracts](tests/objective_pools.rs) record both admissions and
-remaining refusals. The independent pool-free analysis preflight still prevents
+condition row. Neither that analysis projection nor a synthetic producer enters
+the objective query. Ordinary weak-body and guard pools produce complete body
+products; local aggregate/conditional scopes and objective fields expand inside
+their own collection. Nested interval fields reuse scoped data generation.
+Complete weight/priority/tuple keys coalesce by the objective's existing rule.
+The [objective pool contracts](tests/objective_pools.rs) retain located safety and
+resource refusals; the independent pool-free analysis preflight prevents
 unbounded upstream unpooling.
 
 Objective conditions admit default negation, double negation, Boolean truth and
 bounded scalar comparisons on independently bound values. They lower into closed
 queries over original typed model atoms and do not add theory roots or support.
 
-Source eligibility selects an explicit precision plan per objective. Ordinary
-acyclic producers compute absent/optional/required activity directly. Rich finite
-acyclic producers, including aggregate assignments and guards, conditional
-bodies, filtered or joined outputs, multiple/non-unary outputs, nested observer
-chains, constructed values and competing producers, can use the already
-completed possible Support carrier. This is a coverage certificate; the original
-producer formulas determine actual truth. No second source-only aggregate or
-conditional evaluator is introduced. Every positive aggregate head supplies
-possible eligibility independently of its measured contribution.
+Source eligibility selects an explicit precision plan per objective and uses
+the same activity analysis for projection declarations. Acyclic producers are
+evaluated in dependency order. Rich bodies reuse the existing scoped aggregate,
+conditional and projection lowering; a three-state fold computes absent,
+optional or required activity from their original Boolean operations. It does
+not introduce a second aggregate evaluator or solve correlations between
+optional literals. Positive aggregate heads supply possible eligibility
+independently of their measured contribution.
 
-Cyclic producer cones and their unresolved dependants use the same conservative
-carrier, including aggregate assignments, aggregate guards and universal
-conditional bodies: covered atoms are optional, and atoms outside the carrier
-are absent. Eligibility accepts only an immutable view owned by a successfully
-completed support construction. This owner is created after an entire round
+Cyclic producer cones and their unresolved dependants start from completed
+possible support: covered atoms are optional and atoms outside the carrier are
+absent. Each complete round aggregates every producer before resolving optional
+entries, and cannot retract established information. This finite refinement can
+recognize facts in cycles and constant rich bodies. Heads outside its profile
+retain the conservative carrier. Independently absent producers contribute no
+redundant zero-cost priority slot; retained objective queries still evaluate the
+original model and can produce zero costs. Eligibility accepts only an immutable
+view owned by a successfully completed support construction. This owner is
+created after an entire round
 adds no atom, never after a round, work, value or storage limit is reached.
 A source can generate new values indefinitely; exceeding a limit returns a typed
 failure rather than a program with partial objective coverage. For example,
@@ -417,11 +437,21 @@ outside the completed carrier cannot. The original aggregate equalities and
 model-relative objective conditions remain intact. Selected fixed-priority rows
 use the same bounded specialization path as dynamic priorities.
 `FormulaLimits::max_objective_presence_entries` conservatively bounds
-logical presence-planning slots, including completed carrier values,
-rather than allocator bytes. Transient numeric subset construction separately
+logical presence-planning and shared source-activity slots, including completed
+carrier values, predicate traversal, borrowed scope-frame capacity and
+simultaneous old/new activity tables. Projection declarations use this same
+existing limit. These are planning slots rather than allocator bytes.
+Each transient rich producer or projection-condition validation builder uses
+`theory.max_atoms` and `theory.max_nodes` independently, without adding atoms or
+roots to the original theory. Actual objective-body scratch instead uses
+`max_objective_formula_atoms` and `max_objective_formula_nodes`. Activity folding
+does not consume retained `objective.max_condition_nodes`.
+Transient numeric subset construction separately
 uses `max_assignment_values` and the grounding work bound; it can be exponential.
 See [dependency checks](src/formula_objective_dependencies.rs) and
-[presence classification](src/formula_objective_dependencies/presence.rs).
+[presence classification](src/formula_objective_dependencies/presence.rs), plus
+the shared [source activity](src/formula_source_activity.rs) and separate
+[original-model queries](src/formula_source_activity/model_query.rs).
 
 ## Sources, analysis and output views
 
@@ -495,16 +525,40 @@ scope ownership is released separately from retained output payload. See the
 [observation API limits](src/observation.rs) and
 [observation proof guide](../../proofs/guide/observations.md).
 
-L17 remains partly open. Equality chains (`#show X:X=Y=1.`) and structural
-unification (`#show X:f(X)=f(1).`) are admitted. Valid source forms still refused include inverse arithmetic binding
-(`p(2). #show X:p(X+1).`), and anonymous negative cardinality keys
-(`#show N:N={not p(_)}.` or `p(1). #show N:N={not not p(_)}.`).
-Bare-variable equalities and evaluated arithmetic with independently established
-inputs are supported. External calls, theory expressions, anonymous constructed
-values, unsafe free variables and circular aggregate result dependencies remain
-outside the admitted profile; checked arithmetic and resource failures are
-separate outcomes. The [open-query regressions](tests/observation_expressions.rs)
-retain located refusals and complete external reference witnesses.
+Equality chains (`#show X:X=Y=1.`) and structural capture
+(`#show X:f(X)=f(1).`) preserve one complete value across the chain. A single
+unresolved occurrence can be recovered through unary minus, addition,
+subtraction or multiplication by established operands, as in
+`p(2). #show X:p(X+1).`. The complete authored expression is checked after the
+candidate is recovered. Nonintegral or out-of-range candidates give no match;
+reached arithmetic errors remain errors. A zero multiplier cannot supply a
+unique binding. Division, powers, bit operations and multiple unresolved
+occurrences are outside this inverse profile.
+
+Anonymous negative cardinality keys are admitted:
+`#show N:N={not p(_)}.` counts the existential pattern once when no witness
+exists, while `p(1). #show N:N={not not p(_)}.` counts it once when a witness
+exists. Multiple witnesses do not multiply that contribution, and equal
+concrete alternatives coalesce before counting. External calls, theory
+expressions, anonymous constructed values, unsafe free variables and circular
+aggregate result dependencies remain outside the admitted profile. The
+[binding](tests/observation_bindings.rs), [inverse](tests/observation_inverse.rs)
+and [expression](tests/observation_expressions.rs) contracts retain source
+witnesses, complete results and located failures.
+
+`SourceMetadata::project_selection()` records authored projection declarations.
+Formula grounding completes `AdmittedFormula::projection()` as one immutable,
+sorted typed atom domain. Signatures select complete possible-support rows;
+conditional declarations select finite instances using the shared source
+activity contract. A declaration never adds a logical producer or changes
+display selection. Resource failure publishes no partial domain.
+
+Projected enumeration is an explicit library operation over that prepared
+domain. It selects full answer-set representatives after objective selection;
+ordinary enumeration and `WorldView` retain full answer identity. The CLI
+requests projected enumeration when the source contains `#project`. See the
+[projected session API and checked example](../../docs/book/rust/sessions.md#projected-enumeration)
+for key-history limits, cancellation and the separate completion receipt.
 
 Theory atoms, scripting and Rust `@`-functions are not implemented. `#heuristic`
 and `#edge` are excluded from the intended language. Other unsupported directives

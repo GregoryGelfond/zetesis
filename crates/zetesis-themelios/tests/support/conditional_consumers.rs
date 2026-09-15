@@ -1,6 +1,26 @@
 //! Explicit outer substitutions retain equality guards and scoped conditionals.
 
 pub(super) const CASES: &[(&str, &str)] = &[
+    (
+        "{p}.{h(X):X=N..N+1}:-N=#count{1:p}.",
+        "{p}.{h(X):X=0..1}:-0=#count{1:p}.{h(X):X=1..2}:-1=#count{1:p}.",
+    ),
+    (
+        "{p}.h(X):X=N..N+1|z:-N=#count{1:p}.",
+        "{p}.h(X):X=0..1|z:-0=#count{1:p}.h(X):X=1..2|z:-1=#count{1:p}.",
+    ),
+    (
+        "{p}.h(f(X)):X=N+1|k(X):X=N+2:-N=#count{1:p}.",
+        "{p}.h(f(X)):X=1|k(X):X=2:-0=#count{1:p}.h(f(X)):X=2|k(X):X=3:-1=#count{1:p}.",
+    ),
+    (
+        "{p}.q(N):-N=#count{1:p},1=#count{X:X=N..N}.",
+        "{p}.q(0):-0=#count{1:p},1=#count{X:X=0..0}.q(1):-1=#count{1:p},1=#count{X:X=1..1}.",
+    ),
+    (
+        "{p}.q(N):-N=#count{1:p},N=#sum{X:X=N..N}.",
+        "{p}.q(0):-0=#count{1:p},0=#sum{X:X=0..0}.q(1):-1=#count{1:p},1=#sum{X:X=1..1}.",
+    ),
     ("q(N):-N=#count{};p(N):d.", "q(0):-0=#count{};p(0):d."),
     (
         "{d;p(0)}.q(N):-N=#count{};p(N):d.",

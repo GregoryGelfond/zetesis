@@ -7,7 +7,6 @@
 
 mod forwarding;
 mod presence;
-pub(crate) mod eligibility;
 
 pub(crate) use presence::{Presence, check as check_presence};
 
@@ -18,10 +17,11 @@ use themelios_analysis::{
     depend::{DependencyGraph, DependencyKind},
 };
 use themelios_program::program::DefaultNegation;
-use themelios_program::symbol::{Name, Signature};
-use zetesis_core::{Filter, Predicate, Term};
+use themelios_program::symbol::Signature;
+use zetesis_core::{Filter, Term};
 
 use crate::formula_ir::{HeadIr, HeadLiteral, LiteralIr, ObjectiveIr, RuleIr};
+use crate::formula_source_activity::signature;
 
 pub(crate) fn check(
     rules: &[RuleIr],
@@ -171,7 +171,7 @@ fn needs_eligibility_query(
     }) || rules.iter().any(|rule| {
         relevant_head(&rule.head, relevant)
             && match &rule.head {
-                HeadIr::Disjunction(_) => true,
+                HeadIr::Disjunction(_) | HeadIr::ConditionalDisjunction { .. } => true,
                 HeadIr::Choice(group) => group
                     .elements
                     .iter()
@@ -222,7 +222,7 @@ fn dependency_closure(
 
 fn head_profile(rule: &RuleIr) -> bool {
     match &rule.head {
-        HeadIr::Disjunction(_) => false,
+        HeadIr::Disjunction(_) | HeadIr::ConditionalDisjunction { .. } => false,
         HeadIr::Choice(group) => group
             .elements
             .iter()
@@ -234,8 +234,8 @@ fn relevant_head(head: &HeadIr, relevant: &BTreeSet<Signature>) -> bool {
     match head {
         HeadIr::Normal(None) => false,
         HeadIr::Normal(Some(atom)) => relevant.contains(&signature(atom.predicate())),
-        HeadIr::Disjunction(heads) => heads
-            .iter()
+        HeadIr::Disjunction(_) | HeadIr::ConditionalDisjunction { .. } => head
+            .disjuncts()
             .filter_map(HeadLiteral::atom)
             .any(|atom| relevant.contains(&signature(atom.predicate()))),
         HeadIr::Choice(group) => group
@@ -252,11 +252,14 @@ fn total_dependency(
     generated: &BTreeMap<Signature, BTreeSet<usize>>,
 ) -> bool {
     for rule in rules {
-        if let HeadIr::Disjunction(heads) = &rule.head
-            && heads
-                .iter()
-                .filter_map(HeadLiteral::atom)
-                .any(|atom| signature(atom.predicate()) == *producer)
+        if matches!(
+            rule.head,
+            HeadIr::Disjunction(_) | HeadIr::ConditionalDisjunction { .. }
+        ) && rule
+            .head
+            .disjuncts()
+            .filter_map(HeadLiteral::atom)
+            .any(|atom| signature(atom.predicate()) == *producer)
         {
             return false;
         }
@@ -382,11 +385,4 @@ fn observer(
         }
     }
     priorities
-}
-fn signature(predicate: &Predicate) -> Signature {
-    Signature {
-        sign: crate::coherence::source_sign(predicate.sign()),
-        name: Name::new(predicate.name()).expect("validated source predicate"),
-        arity: u32::try_from(predicate.arity()).expect("bounded source arity"),
-    }
 }

@@ -1180,6 +1180,61 @@
     "line": 82
   },
   {
+    "name": "Zetesis.ConditionalHeadSupport.head_reduct_of_positive_kept",
+    "file": "Zetesis/ConditionalHeadSupport.lean",
+    "line": 48
+  },
+  {
+    "name": "Zetesis.ConditionalHeadSupport.stable_has_positive_producer",
+    "file": "Zetesis/ConditionalHeadSupport.lean",
+    "line": 77
+  },
+  {
+    "name": "Zetesis.ConditionalHeads.instance_original",
+    "file": "Zetesis/ConditionalHeads.lean",
+    "line": 32
+  },
+  {
+    "name": "Zetesis.ConditionalHeads.instance_frozen",
+    "file": "Zetesis/ConditionalHeads.lean",
+    "line": 43
+  },
+  {
+    "name": "Zetesis.ConditionalHeads.head_original",
+    "file": "Zetesis/ConditionalHeads.lean",
+    "line": 55
+  },
+  {
+    "name": "Zetesis.ConditionalHeads.head_frozen",
+    "file": "Zetesis/ConditionalHeads.lean",
+    "line": 69
+  },
+  {
+    "name": "Zetesis.ConditionalHeads.empty_is_false",
+    "file": "Zetesis/ConditionalHeads.lean",
+    "line": 85
+  },
+  {
+    "name": "Zetesis.ConditionalHeads.true_condition_equivalent",
+    "file": "Zetesis/ConditionalHeads.lean",
+    "line": 92
+  },
+  {
+    "name": "Zetesis.ConditionalHeads.complete_family_equivalent",
+    "file": "Zetesis/ConditionalHeads.lean",
+    "line": 112
+  },
+  {
+    "name": "Zetesis.ConditionalHeads.covered_assignment",
+    "file": "Zetesis/ConditionalHeads.lean",
+    "line": 139
+  },
+  {
+    "name": "Zetesis.ConditionalHeads.unrealized_assignment",
+    "file": "Zetesis/ConditionalHeads.lean",
+    "line": 147
+  },
+  {
     "name": "Zetesis.ConsequentAlternatives.original_semantics",
     "file": "Zetesis/ConsequentAlternatives.lean",
     "line": 37
@@ -2357,42 +2412,57 @@
   {
     "name": "Zetesis.FinitePools.product_complete",
     "file": "Zetesis/FinitePools.lean",
-    "line": 32
+    "line": 34
   },
   {
     "name": "Zetesis.FinitePools.empty_occurrence",
     "file": "Zetesis/FinitePools.lean",
-    "line": 41
+    "line": 43
   },
   {
     "name": "Zetesis.FinitePools.duplicate_alternative",
     "file": "Zetesis/FinitePools.lean",
-    "line": 45
+    "line": 47
   },
   {
     "name": "Zetesis.FinitePools.independent_equal_occurrences",
     "file": "Zetesis/FinitePools.lean",
-    "line": 49
+    "line": 51
   },
   {
     "name": "Zetesis.FinitePools.original_in_context",
     "file": "Zetesis/FinitePools.lean",
-    "line": 58
+    "line": 60
   },
   {
     "name": "Zetesis.FinitePools.frozen_in_context",
     "file": "Zetesis/FinitePools.lean",
-    "line": 65
+    "line": 67
   },
   {
     "name": "Zetesis.FinitePools.stable_in_context",
     "file": "Zetesis/FinitePools.lean",
-    "line": 73
+    "line": 75
   },
   {
     "name": "Zetesis.FinitePools.flattening_changes_original_truth",
     "file": "Zetesis/FinitePools.lean",
-    "line": 81
+    "line": 83
+  },
+  {
+    "name": "Zetesis.FinitePools.value_context_complete",
+    "file": "Zetesis/FinitePools.lean",
+    "line": 99
+  },
+  {
+    "name": "Zetesis.FinitePools.local_occurrences_complete",
+    "file": "Zetesis/FinitePools.lean",
+    "line": 116
+  },
+  {
+    "name": "Zetesis.FinitePools.local_activity_complete",
+    "file": "Zetesis/FinitePools.lean",
+    "line": 126
   },
   {
     "name": "Zetesis.FiniteTables.indexed_survival_exact",
@@ -3422,32 +3492,52 @@
   {
     "name": "Zetesis.ObjectiveEligibility.possible_support_covers",
     "file": "Zetesis/ObjectiveEligibility.lean",
-    "line": 57
+    "line": 60
   },
   {
     "name": "Zetesis.ObjectiveEligibility.negation_covers",
     "file": "Zetesis/ObjectiveEligibility.lean",
-    "line": 64
+    "line": 67
   },
   {
     "name": "Zetesis.ObjectiveEligibility.conjunction_covers",
     "file": "Zetesis/ObjectiveEligibility.lean",
-    "line": 70
+    "line": 73
   },
   {
     "name": "Zetesis.ObjectiveEligibility.disjunction_covers",
     "file": "Zetesis/ObjectiveEligibility.lean",
-    "line": 76
+    "line": 79
   },
   {
     "name": "Zetesis.ObjectiveEligibility.optional_contradiction",
     "file": "Zetesis/ObjectiveEligibility.lean",
-    "line": 83
+    "line": 86
   },
   {
     "name": "Zetesis.ObjectiveEligibility.absent_excludes",
     "file": "Zetesis/ObjectiveEligibility.lean",
-    "line": 90
+    "line": 93
+  },
+  {
+    "name": "Zetesis.ObjectiveEligibility.analyze_covers",
+    "file": "Zetesis/ObjectiveEligibility.lean",
+    "line": 111
+  },
+  {
+    "name": "Zetesis.ObjectiveEligibility.refinement_covers",
+    "file": "Zetesis/ObjectiveEligibility.lean",
+    "line": 130
+  },
+  {
+    "name": "Zetesis.ObjectiveEligibility.refinement_unknowns_le",
+    "file": "Zetesis/ObjectiveEligibility.lean",
+    "line": 148
+  },
+  {
+    "name": "Zetesis.ObjectiveEligibility.changing_round_decreases",
+    "file": "Zetesis/ObjectiveEligibility.lean",
+    "line": 161
   },
   {
     "name": "Zetesis.ObjectivePriorities.selected_presence",
@@ -3563,6 +3653,21 @@
     "name": "Zetesis.ObjectiveValues.ignored_entry_preserves_optima",
     "file": "Zetesis/ObjectiveValues.lean",
     "line": 96
+  },
+  {
+    "name": "Zetesis.ObservationBindings.translation_inverse",
+    "file": "Zetesis/ObservationBindings.lean",
+    "line": 20
+  },
+  {
+    "name": "Zetesis.ObservationBindings.reflected_inverse",
+    "file": "Zetesis/ObservationBindings.lean",
+    "line": 25
+  },
+  {
+    "name": "Zetesis.ObservationBindings.bounded_translation",
+    "file": "Zetesis/ObservationBindings.lean",
+    "line": 32
   },
   {
     "name": "Zetesis.Observations.completed_terms_exact",
@@ -4033,6 +4138,36 @@
     "name": "Zetesis.ProducerScheduling.empty_selection_closed",
     "file": "Zetesis/ProducerScheduling.lean",
     "line": 104
+  },
+  {
+    "name": "Zetesis.ProjectedAnswers.retain_covers",
+    "file": "Zetesis/ProjectedAnswers.lean",
+    "line": 38
+  },
+  {
+    "name": "Zetesis.ProjectedAnswers.retain_unique",
+    "file": "Zetesis/ProjectedAnswers.lean",
+    "line": 69
+  },
+  {
+    "name": "Zetesis.ProjectedAnswers.same_equivalence",
+    "file": "Zetesis/ProjectedAnswers.lean",
+    "line": 80
+  },
+  {
+    "name": "Zetesis.ProjectedAnswers.covered_key_image",
+    "file": "Zetesis/ProjectedAnswers.lean",
+    "line": 91
+  },
+  {
+    "name": "Zetesis.ProjectedAnswers.selected_property_survives",
+    "file": "Zetesis/ProjectedAnswers.lean",
+    "line": 107
+  },
+  {
+    "name": "Zetesis.ProjectedAnswers.projection_before_selection_can_lose_optimum",
+    "file": "Zetesis/ProjectedAnswers.lean",
+    "line": 116
   },
   {
     "name": "Zetesis.ProjectedConditionals.complete_projection",

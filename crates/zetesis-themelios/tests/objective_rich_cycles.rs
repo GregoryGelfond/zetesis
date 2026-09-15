@@ -216,8 +216,11 @@ fn rich_cycles_preserve_independent_carrier_precision() {
         "#minimize{2@5:r;1@3:p(N);N:n(N)}.r:-#count{1:r}>=0.p(N):-n(N),N=1.n(N):-N=#max{word;1}.",
     ] {
         let input = source_records::admit(source, &FormulaLimits::default()).unwrap();
-        assert_eq!(input.objectives().priorities(), [5, 3]);
-        let records = serde_json::json!([[["n(word)", "r"], [2, 0]]]);
+        // The shared source fold proves p(1) absent: the required symbolic
+        // maximum prevents n(1). Its redundant priority 3 is not published;
+        // the independent required cyclic producer still contributes at 5.
+        assert_eq!(input.objectives().priorities(), [5]);
+        let records = serde_json::json!([[["n(word)", "r"], [2]]]);
         let expected = records
             .as_array()
             .unwrap()

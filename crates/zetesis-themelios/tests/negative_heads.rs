@@ -12,9 +12,9 @@ use serde_json::Value as Json;
 use zetesis_core::{Atom, Sign, Value};
 use zetesis_ferraris::{Node, Theory};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
-    ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
-    FormulaResource, ProfileFeature, SourceBundle, admit_bundle_formula, admit_formula,
+    AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
+    ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
+    SourceBundle, admit_bundle_formula, admit_formula,
 };
 
 type Names = BTreeSet<String>;
@@ -429,17 +429,12 @@ fn negative_heads_do_not_bind_variables() {
 }
 
 #[test]
-fn conditional_negative_disjuncts_remain_explicit_refusals() {
+fn conditional_negative_disjuncts_require_eligibility() {
     let source = "not a:b|c.";
-    let error = input(source).expect_err(source);
-    assert!(matches!(
-        &error,
-        FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-            feature: ProfileFeature::ConditionalDisjunction,
-            ..
-        }))
-    ));
-    assert!(!error.diagnostics().is_empty());
+    assert_eq!(
+        complete(&input(source).unwrap()),
+        Models::from([Names::from(["c".into()])])
+    );
 }
 #[path = "support/objective_boundaries.rs"]
 mod objective_boundaries;

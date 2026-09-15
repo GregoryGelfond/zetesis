@@ -101,7 +101,7 @@ impl Compiler<'_> {
             }
             return Ok(term);
         }
-        let value = self.consequent_expression(term, variables, bindings)?;
+        let value = self.ranged_expression(term, variables, bindings)?;
         let target = self.consequent_slot(variables)?;
         self.budget.charge(
             ExpansionResource::ScalarBytes,

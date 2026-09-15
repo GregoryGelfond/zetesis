@@ -39,57 +39,74 @@ impl Compiler<'_> {
         let mut elements = Vec::new();
         for element in aggregate.elements() {
             let element = element.get();
-            // Preserve the existing per-literal preflight before compiling the
-            // shared choice-condition profile. Negative gates supply no inputs;
-            // their original polarity survives both support and final lowering.
-            for _ in element.condition().literals() {
-                self.budget
-                    .charge(ExpansionResource::TermWork, 1, self.location)?;
-            }
-            let mut local = variables.clone();
-            self.head_global_literal(element.literal(), &mut local)?;
-            let mut condition = self.condition(element.condition(), &mut local)?;
-            let tuple = element
-                .terms()
-                .map(|term| self.aggregate_term(term, &mut local))
-                .collect::<Result<Vec<_>, _>>()?;
-            // A present extremum value is validated even in a statically false rule.
-            // Without bounds only the head choices remain, but source terms and
-            // binding instructions are still compiled and validated below.
-            if aggregate.left_guard().is_some() || aggregate.right_guard().is_some() {
-                match tuple.first() {
-                    Some(Term::Constant(value)) => {
-                        contribution(measure, Some(value), self.location)?;
+            let fields: Vec<_> = element.terms().collect();
+            for (terms, source_condition) in
+                self.local_alternatives(&fields, element.condition())?
+            {
+                for literal in self.literal_alternatives(element.literal())? {
+                    // Preserve the existing per-literal preflight before compiling the
+                    // shared choice-condition profile. Negative gates supply no inputs;
+                    // their original polarity survives both support and final lowering.
+                    for _ in element.condition().literals() {
+                        self.budget
+                            .charge(ExpansionResource::TermWork, 1, self.location)?;
                     }
-                    None => {
-                        contribution(measure, None, self.location)?;
+                    let mut local = variables.clone();
+                    self.head_global_literal(&literal, &mut local)?;
+                    let mut condition = self.condition(&source_condition, &mut local)?;
+                    let tuple = terms
+                        .iter()
+                        .map(|term| {
+                            if matches!(
+                                term,
+                                themelios_program::term::Term::Variable(_)
+                                    | themelios_program::term::Term::Symbolic(_)
+                            ) {
+                                self.aggregate_term(term, &mut local)
+                            } else {
+                                self.generated_term(term, &mut local, &mut condition)
+                            }
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    // A present extremum value is validated even in a statically false rule.
+                    // Without bounds only the head choices remain, but source terms and
+                    // binding instructions are still compiled and validated below.
+                    if aggregate.left_guard().is_some() || aggregate.right_guard().is_some() {
+                        match tuple.first() {
+                            Some(Term::Constant(value)) => {
+                                contribution(measure, Some(value), self.location)?;
+                            }
+                            None => {
+                                contribution(measure, None, self.location)?;
+                            }
+                            Some(Term::Variable(_)) => {}
+                        }
                     }
-                    Some(Term::Variable(_)) => {}
+                    let (head, body_variables) =
+                        self.element_head(&literal, &mut local, &mut condition)?;
+                    self.variable_limit(&local)?;
+                    local.safety(self.location)?;
+                    debug_assert!(condition.iter().all(|literal| matches!(
+                        literal,
+                        LiteralIr::Bind { .. }
+                            | LiteralIr::Atom(..)
+                            | LiteralIr::ProjectedAtom(..)
+                            | LiteralIr::PatternAtom(_)
+                            | LiteralIr::ArgumentCheck { .. }
+                            | LiteralIr::Range { .. }
+                            | LiteralIr::Compare(..)
+                            | LiteralIr::TupleCompare(..)
+                            | LiteralIr::Guard(_)
+                    )));
+                    elements.push(Element {
+                        key: HeadElementKey::Tuple(tuple),
+                        head,
+                        condition,
+                        body_variables,
+                        variables: local.count,
+                    });
                 }
             }
-            let (head, body_variables) =
-                self.element_head(element.literal(), &mut local, &mut condition)?;
-            self.variable_limit(&local)?;
-            local.safety(self.location)?;
-            debug_assert!(condition.iter().all(|literal| matches!(
-                literal,
-                LiteralIr::Bind { .. }
-                    | LiteralIr::Atom(..)
-                    | LiteralIr::ProjectedAtom(..)
-                    | LiteralIr::PatternAtom(_)
-                    | LiteralIr::ArgumentCheck { .. }
-                    | LiteralIr::Range { .. }
-                    | LiteralIr::Compare(..)
-                    | LiteralIr::TupleCompare(..)
-                    | LiteralIr::Guard(_)
-            )));
-            elements.push(Element {
-                key: HeadElementKey::Tuple(tuple),
-                head,
-                condition,
-                body_variables,
-                variables: local.count,
-            });
         }
         Ok((measure, elements))
     }

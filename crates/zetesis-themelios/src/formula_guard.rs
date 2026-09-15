@@ -153,6 +153,62 @@ impl Compiler<'_> {
         }))
     }
 
+    /// Data-valued alternatives are generated before their truth is tested.
+    /// Source variables remain inputs: these comparisons never bind a name.
+    pub(super) fn ranged_guard(
+        &mut self,
+        comparison: &Comparison,
+        negation: DefaultNegation,
+        variables: &mut Variables,
+        bindings: &mut Vec<LiteralIr>,
+    ) -> Result<Guard, FormulaFailure> {
+        let mut steps = comparison.steps();
+        let (relation, right) = steps.next().expect("comparison step");
+        if negation == DefaultNegation::NotNot
+            && relation == Relation::Eq
+            && steps.next().is_none()
+            && let (value, Term::Interval { lower, upper })
+            | (Term::Interval { lower, upper }, value) = (comparison.first(), right)
+        {
+            let value = self.ranged_expression(value, variables, bindings)?;
+            let lower = self.ranged_expression(lower, variables, bindings)?;
+            let upper = self.ranged_expression(upper, variables, bindings)?;
+            self.budget.charge(
+                ExpansionResource::ScalarBytes,
+                std::mem::size_of::<GuardComparison>() as u128,
+                self.location,
+            )?;
+            return Ok(Guard::Comparisons {
+                negation,
+                comparisons: vec![GuardComparison::Range(value, lower, upper)],
+            });
+        }
+        let mut left = self.generated_term(comparison.first(), variables, bindings)?;
+        let mut comparisons = Vec::new();
+        for (relation, right) in comparison.steps() {
+            let right = self.generated_term(right, variables, bindings)?;
+            self.budget
+                .charge(ExpansionResource::TermWork, 1, self.location)?;
+            self.budget.charge(
+                ExpansionResource::ScalarBytes,
+                (std::mem::size_of::<GuardComparison>()
+                    + 2 * std::mem::size_of::<crate::formula_ir::Operation>())
+                    as u128,
+                self.location,
+            )?;
+            comparisons.push(GuardComparison::Scalar(
+                scalar(left),
+                relation,
+                scalar(right.clone()),
+            ));
+            left = right;
+        }
+        Ok(Guard::Comparisons {
+            negation,
+            comparisons,
+        })
+    }
+
     fn interval_equality(
         &mut self,
         comparison: &Comparison,
@@ -177,5 +233,14 @@ impl Compiler<'_> {
             self.expression(lower, variables)?,
             self.expression(upper, variables)?,
         )))
+    }
+}
+
+fn scalar(term: zetesis_core::Term) -> Expression {
+    Expression {
+        nodes: vec![match term {
+            zetesis_core::Term::Constant(value) => crate::formula_ir::Operation::Constant(value),
+            zetesis_core::Term::Variable(slot) => crate::formula_ir::Operation::Variable(slot),
+        }],
     }
 }

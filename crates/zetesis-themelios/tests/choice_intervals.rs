@@ -78,7 +78,7 @@ fn record(admitted: &AdmittedFormula, mask: usize) -> Record {
             &Control::default(),
         )
         .unwrap();
-    // These fixtures deliberately have no strings or compound display terms.
+    // These fixtures have no whitespace inside a displayed atom.
     let mut atoms: Vec<_> = rendered
         .text()
         .split_whitespace()
@@ -296,6 +296,61 @@ fn tiny_expansions_match_every_frozen_pair_including_non_subsets() {
     assert_eq!(worlds, 10_439);
 }
 
+#[test]
+fn nested_choice_values_retain_one_group() {
+    // Keep the historical record untouched, but exercise its newly admitted
+    // source against an independently written complete group.
+    let cases = cases();
+    let case = cases
+        .iter()
+        .find(|case| case["name"] == "nested_interval_still_refused")
+        .unwrap();
+    let source = input(case["source"].as_str().unwrap()).unwrap();
+    let expanded = input("{p(f(1));p(f(2))}.").unwrap();
+    assert_eq!(
+        source.atoms().iter().collect::<BTreeSet<_>>(),
+        expanded.atoms().iter().collect()
+    );
+    let expected: Vec<Record> = vec![
+        (vec![], None),
+        (vec!["p(f(1))".into()], None),
+        (vec!["p(f(1))".into(), "p(f(2))".into()], None),
+        (vec!["p(f(2))".into()], None),
+    ];
+    assert_eq!(complete(&source), expected);
+    assert_eq!(complete(&source), complete(&expanded));
+    assert_eq!(source.atoms().len(), 2);
+    for outer in 0..4 {
+        let frozen = values(source.theory(), outer, None);
+        let other = values(
+            expanded.theory(),
+            remap(outer, source.atoms(), expanded.atoms()),
+            None,
+        );
+        assert_eq!(
+            holds(source.theory(), &frozen),
+            holds(expanded.theory(), &other)
+        );
+        for inner in 0..4 {
+            assert_eq!(
+                holds(
+                    source.theory(),
+                    &values(source.theory(), inner, Some(&frozen))
+                ),
+                holds(
+                    expanded.theory(),
+                    &values(
+                        expanded.theory(),
+                        remap(inner, source.atoms(), expanded.atoms()),
+                        Some(&other)
+                    )
+                ),
+                "M={outer}, J={inner}",
+            );
+        }
+    }
+}
+
 fn refused(error: &FormulaFailure, expected: &str) -> bool {
     match (expected, error) {
         ("UnsafeVariable", FormulaFailure::UnsafeVariable { .. })
@@ -353,6 +408,7 @@ fn excluded_endpoints_syntax_and_unsafe_scopes_remain_typed_refusals() {
                     | "ordinary_head_expression_still_refused"
                     | "pooled_interval_argument"
                     | "pooled_argument_rows"
+                    | "nested_interval_still_refused"
             )
     }) {
         let Err(error) = input(case["source"].as_str().unwrap()) else {
@@ -378,7 +434,7 @@ fn excluded_endpoints_syntax_and_unsafe_scopes_remain_typed_refusals() {
         assert!(!error.diagnostics().is_empty());
         count += 1;
     }
-    assert_eq!(count, 16);
+    assert_eq!(count, 15);
     assert!(
         admit_extended(
             "1{p(1..2)}1.".into(),

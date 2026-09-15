@@ -292,13 +292,10 @@ fn feature(error: &FormulaFailure, predicted: ProfileFeature) -> bool {
 #[test]
 fn excluded_head_forms_remain_located_refusals() {
     for (source, predicted) in [
-        ("d(1).p((X..X+1)+1)|q:-d(X).", ProfileFeature::Term),
+        // Nested arithmetic ranges now have complete original/frozen expansion controls in finite_pools.rs.
         ("p(a..b)|q.", ProfileFeature::Term),
         // Finite pools, including this former a(1;2)|b refusal, have dedicated tests.
-        (
-            "d(1).a(X+1):d(X)|b.",
-            ProfileFeature::ConditionalDisjunction,
-        ),
+        // Evaluated conditional heads share the scoped head-generation contract.
         // Evaluated signed singleton heads have model/reduct tests in negative_heads.rs.
         // Constructor choice heads are covered by finite_values.rs.
         ("{p(a..b)}.", ProfileFeature::Term),

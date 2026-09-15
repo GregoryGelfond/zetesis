@@ -1,4 +1,4 @@
-//! Finite source eligibility from ordinary activity and complete possible support.
+//! Shared finite source activity for objectives and projection declarations.
 //!
 //! Required/possible activity is a source grounding abstraction, not answer-set
 //! realization. Optional means retained as a grounding possibility; it does not
@@ -6,20 +6,21 @@
 //! `a,not a` can retain a priority while its original-model query is always false.
 //! Choices stay optional even when constraints force an answer.
 //! The original theory is never read or changed by this certificate.
+//! Completed support and whole-producer refinement establish source coverage;
+//! the separate `model_query` module constructs original-model objective queries
+//! only after row eligibility. Its retained-node limit does not bound activity.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use themelios_base::span::Location;
 use themelios_program::program::DefaultNegation;
-use themelios_program::symbol::Signature;
-use zetesis_core::{Atom, AtomPattern};
-pub(crate) mod query;
+use themelios_program::symbol::{Name, Signature};
+use zetesis_core::{Atom, AtomPattern, Predicate};
+pub(crate) mod model_query;
 mod cyclic;
 mod possible;
+mod roots;
 
-pub(crate) use query::condition as model_condition;
-
-use super::signature;
 use crate::expansion::Budget;
 use crate::formula::ceiling;
 use crate::formula_binding::Binding;
@@ -55,7 +56,7 @@ pub(crate) enum Activity {
 }
 
 impl Activity {
-    fn negate(self) -> Self {
+    pub(crate) fn negate(self) -> Self {
         match self {
             Self::Absent => Self::Required,
             Self::Optional => Self::Optional,
@@ -149,17 +150,16 @@ impl Context<'_> {
     /// Reserve the coexisting closure, pending traversal and remaining set
     /// before inserting any new predicate. Legacy certificate storage remains
     /// included throughout this independent certificate's construction.
-    fn closure(
+    fn closure<'a>(
         &mut self,
         graph: &themelios_analysis::depend::DependencyGraph,
         retained: usize,
-        roots: impl IntoIterator<Item = Signature>,
+        conditions: impl IntoIterator<Item = &'a [LiteralIr]>,
     ) -> Result<BTreeSet<Signature>, FormulaFailure> {
         let mut relevant = BTreeSet::new();
         let mut pending = Vec::new();
-        for root in roots {
-            self.work()?;
-            self.discover(root, retained, &mut relevant, &mut pending)?;
+        for condition in conditions {
+            self.source_roots(condition, retained, &mut relevant, &mut pending)?;
         }
         while let Some(predicate) = pending.pop() {
             self.work()?;
@@ -201,35 +201,18 @@ impl Context<'_> {
 }
 
 impl SourceEligibility {
-    pub(crate) fn build(
+    /// Discover all scoped atom dependencies and complete their shared activity.
+    /// This never adds the observing conditions to logical producers.
+    pub(crate) fn build_from_conditions<'a>(
         prepared: &Prepared,
         completed_support: &CompletedQueries<'_>,
         retained: usize,
+        conditions: impl IntoIterator<Item = &'a [LiteralIr]>,
         context: &mut Context<'_>,
     ) -> Result<Self, FormulaFailure> {
         let support = completed_support.support();
         let graph = prepared.analysis.dependencies();
-        let relevant = context.closure(
-            graph,
-            retained,
-            prepared
-                .objectives
-                .iter()
-                .filter(|objective| objective.needs_eligibility_query)
-                .flat_map(|objective| {
-                    objective
-                        .condition
-                        .literals()
-                        .iter()
-                        .filter_map(|literal| match literal {
-                            LiteralIr::Atom(_, atom) => Some(signature(atom.predicate())),
-                            LiteralIr::PatternAtom(pattern) => {
-                                Some(signature(pattern.atom.predicate()))
-                            }
-                            _ => None,
-                        })
-                }),
-        )?;
+        let relevant = context.closure(graph, retained, conditions)?;
         // The dependency sets coexist with the completed atom table. These
         // logical planning slots are independent of allocator representation.
         let temporary = retained.saturating_add(relevant.len().saturating_mul(3));
@@ -252,7 +235,7 @@ impl SourceEligibility {
                 }
             }
             let Some(predicate) = ready else {
-                result.cyclic(support, &remaining, temporary, context)?;
+                result.cyclic(prepared, support, &remaining, temporary, context)?;
                 break;
             };
             result.predicate(prepared, &predicate, support, temporary, context)?;
@@ -270,6 +253,33 @@ impl SourceEligibility {
         temporary: usize,
         context: &mut Context<'_>,
     ) -> Result<(), FormulaFailure> {
+        let mut derived = Self::default();
+        self.derive_predicate(
+            prepared,
+            predicate,
+            support,
+            temporary.saturating_add(self.atoms.len()),
+            &mut derived,
+            context,
+        )?;
+        // The complete new predicate is published only after its producer
+        // traversal. Moving each entry does not create a second atom payload.
+        for (atom, activity) in derived.atoms {
+            context.work()?;
+            self.atoms.insert(atom, activity);
+        }
+        Ok(())
+    }
+
+    fn derive_predicate(
+        &self,
+        prepared: &Prepared,
+        predicate: &Signature,
+        support: &Support<'_>,
+        temporary: usize,
+        derived: &mut Self,
+        context: &mut Context<'_>,
+    ) -> Result<(), FormulaFailure> {
         let produces = |rule: &RuleIr| match &rule.head {
             HeadIr::Normal(Some(head)) => signature(head.predicate()) == *predicate,
             HeadIr::Choice(group) => group
@@ -277,8 +287,9 @@ impl SourceEligibility {
                 .iter()
                 .filter_map(|element| element.head.positive_atom())
                 .any(|head| signature(head.predicate()) == *predicate),
-            HeadIr::Disjunction(heads) => heads
-                .iter()
+            HeadIr::Disjunction(_) | HeadIr::ConditionalDisjunction { .. } => rule
+                .head
+                .disjuncts()
                 .filter_map(|head| head.positive_atom())
                 .any(|head| signature(head.predicate()) == *predicate),
             HeadIr::Normal(None) => false,
@@ -290,17 +301,13 @@ impl SourceEligibility {
                 continue;
             }
             context.location = rule.location;
-            precise &= ordinary(&rule.body)
-                && match &rule.head {
-                    HeadIr::Choice(group) => group
-                        .elements
-                        .iter()
-                        .all(|element| ordinary(&element.condition)),
-                    HeadIr::Disjunction(heads) => {
-                        heads.iter().all(|head| head.positive_atom().is_some())
-                    }
-                    HeadIr::Normal(_) => true,
-                };
+            precise &= match &rule.head {
+                HeadIr::Choice(_) | HeadIr::Normal(_) => true,
+                HeadIr::Disjunction(heads) => {
+                    heads.iter().all(|head| head.positive_atom().is_some())
+                }
+                HeadIr::ConditionalDisjunction { .. } => false,
+            };
         }
         if precise {
             for rule in &prepared.rules {
@@ -308,16 +315,16 @@ impl SourceEligibility {
                 if !produces(rule) {
                     continue;
                 }
-                self.rule(rule, predicate, support, temporary, context)?;
+                self.rule(rule, predicate, support, temporary, derived, context)?;
             }
         } else {
-            // Completed finite Support is a truth upper carrier for every
-            // admitted rich producer. Query truth remains with original atoms;
-            // no source-only aggregate or conditional evaluator is introduced.
+            // Unsupported head classification retains completed Support as an
+            // upper carrier. Rich bodies of classified producers instead share
+            // the original scoped lowering and independent activity fold.
             for candidate in support.predicates() {
                 context.work()?;
                 if signature(candidate) == *predicate {
-                    self.possible(candidate, support, temporary, context)?;
+                    derived.possible(candidate, support, temporary, context)?;
                     break;
                 }
             }
@@ -326,11 +333,12 @@ impl SourceEligibility {
     }
 
     fn rule(
-        &mut self,
+        &self,
         rule: &RuleIr,
         predicate: &Signature,
         support: &Support<'_>,
         temporary: usize,
+        derived: &mut Self,
         context: &mut Context<'_>,
     ) -> Result<(), FormulaFailure> {
         context.location = rule.location;
@@ -341,10 +349,11 @@ impl SourceEligibility {
             context.counters,
             rule.location,
         )? {
-            let body = self.activity(&rule.body, &rule.body_binding(&binding), context)?;
+            let body =
+                self.producer_activity(&rule.body, &rule.body_binding(&binding), support, context)?;
             match &rule.head {
                 HeadIr::Normal(Some(head)) => {
-                    self.retain(head, &binding, body, temporary, context)?;
+                    derived.retain(head, &binding, body, temporary, context)?;
                 }
                 HeadIr::Disjunction(heads) => {
                     if heads.iter().any(|head| head.positive_atom().is_none()) {
@@ -352,7 +361,7 @@ impl SourceEligibility {
                     }
                     for head in heads.iter().filter_map(|head| head.positive_atom()) {
                         if signature(head.predicate()) == *predicate {
-                            self.retain(
+                            derived.retain(
                                 head,
                                 &binding,
                                 body.min(Activity::Optional),
@@ -361,6 +370,11 @@ impl SourceEligibility {
                             )?;
                         }
                     }
+                }
+                HeadIr::ConditionalDisjunction { .. } => {
+                    // Rich local eligibility uses completed support above;
+                    // model truth remains with the exact original query.
+                    return Err(refusal(rule.location));
                 }
                 HeadIr::Choice(group) => {
                     for element in &group.elements {
@@ -383,12 +397,13 @@ impl SourceEligibility {
                             context.counters,
                             rule.location,
                         )? {
-                            let eligible = self.activity(
+                            let eligible = self.producer_activity(
                                 &element.condition,
                                 &element.body_binding(&row),
+                                support,
                                 context,
                             )?;
-                            self.retain(
+                            derived.retain(
                                 head,
                                 &row,
                                 body.min(eligible).min(Activity::Optional),
@@ -426,6 +441,24 @@ impl SourceEligibility {
         Ok(())
     }
 
+    pub(crate) fn atom_activity(&self, atom: &Atom) -> Activity {
+        self.atoms.get(atom).copied().unwrap_or(Activity::Absent)
+    }
+
+    fn producer_activity(
+        &self,
+        literals: &[LiteralIr],
+        binding: &Binding,
+        support: &Support<'_>,
+        context: &mut Context<'_>,
+    ) -> Result<Activity, FormulaFailure> {
+        if ordinary(literals) {
+            self.activity(literals, binding, context)
+        } else {
+            crate::formula_ground::source_activity(literals, binding, support, self, context)
+        }
+    }
+
     /// Source truth coverage is evaluated without constructing or charging a
     /// retained model query. Every literal is visited even after known absence.
     pub(crate) fn activity(
@@ -440,7 +473,7 @@ impl SourceEligibility {
             let activity = match literal {
                 LiteralIr::Atom(negation, pattern) => {
                     let atom = context.atom(pattern, binding)?;
-                    let activity = self.atoms.get(&atom).copied().unwrap_or(Activity::Absent);
+                    let activity = self.atom_activity(&atom);
                     if *negation == DefaultNegation::Not {
                         activity.negate()
                     } else {
@@ -452,7 +485,7 @@ impl SourceEligibility {
                 | LiteralIr::ProjectedAtom(..) => Activity::Optional,
                 LiteralIr::PatternAtom(pattern) => {
                     let atom = context.atom(&pattern.atom, binding)?;
-                    self.atoms.get(&atom).copied().unwrap_or(Activity::Absent)
+                    self.atom_activity(&atom)
                 }
                 // The complete Join already checked these ordinary data filters.
                 LiteralIr::ArgumentCheck { .. } | LiteralIr::TupleCompare(..) => Activity::Required,
@@ -467,5 +500,13 @@ impl SourceEligibility {
             result = result.min(activity);
         }
         Ok(result)
+    }
+}
+
+pub(crate) fn signature(predicate: &Predicate) -> Signature {
+    Signature {
+        sign: crate::coherence::source_sign(predicate.sign()),
+        name: Name::new(predicate.name()).expect("validated source predicate"),
+        arity: u32::try_from(predicate.arity()).expect("bounded source arity"),
     }
 }

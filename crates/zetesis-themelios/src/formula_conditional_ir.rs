@@ -20,6 +20,15 @@ pub(crate) struct ConditionalIr {
 pub(crate) enum Consequent {
     Atoms(DefaultNegation, Vec<Alternative>),
     Guard(Guard),
+    /// Disjoin complete data alternatives before the universal condition row.
+    Guards(Vec<GuardAlternative>),
+}
+
+pub(crate) struct GuardAlternative {
+    pub guard: Guard,
+    /// Value generators only; these do not contribute logical source atoms.
+    pub bindings: Vec<LiteralIr>,
+    pub variables: usize,
 }
 
 pub(crate) struct Alternative {
@@ -38,6 +47,42 @@ pub(crate) enum ConsequentOperand {
 }
 
 impl Compiler<'_> {
+    /// Bound one independent alternative's copied scope and instruction owners.
+    pub(super) fn alternative_scope(
+        &mut self,
+        work: u128,
+        carrier_bytes: usize,
+        condition: &Variables,
+    ) -> Result<Variables, FormulaFailure> {
+        self.budget.charge(
+            ExpansionResource::TermWork,
+            work * 2
+                + condition.named.len() as u128
+                + condition.safe.len() as u128
+                + condition.argument_inputs.len() as u128,
+            self.location,
+        )?;
+        // Each alternative owns its scope and binding plan. Reserve selected
+        // map/set payload and three instruction-vector equivalents (source,
+        // pending, scheduled) before cloning or allocating them. Tree allocator
+        // overhead remains outside logical byte accounting.
+        let scope_bytes = condition
+            .named
+            .keys()
+            .map(|name| name.len() as u128 + std::mem::size_of::<(String, usize)>() as u128)
+            .sum::<u128>()
+            + (condition.safe.len() + condition.argument_inputs.len()) as u128
+                * std::mem::size_of::<usize>() as u128;
+        self.budget.charge(
+            ExpansionResource::ScalarBytes,
+            scope_bytes
+                + carrier_bytes as u128
+                + (work + 1) * 3 * std::mem::size_of::<LiteralIr>() as u128,
+            self.location,
+        )?;
+        Ok(condition.clone())
+    }
+
     pub(super) fn conditional_syntax(
         &mut self,
         conditional: &ConditionalLiteral,
@@ -99,19 +144,20 @@ impl Compiler<'_> {
             };
             self.budget
                 .charge(ExpansionResource::TermWork, 1, self.location)?;
-            let mut local = variables.clone();
-            let condition = &conditional.condition;
-            let mut condition = self.condition(condition, &mut local)?;
-            self.bindings(&mut condition, &mut local)?;
-            self.variable_limit(&local)?;
-            local.safety(self.location)?;
-            // A positive consequent must not repair an unsafe condition.
-            let consequent = self.conditional_consequent(&conditional.literal, &mut local)?;
-            body.push(LiteralIr::Conditional(ConditionalIr {
-                consequent,
-                condition,
-                variables: local.count,
-            }));
+            for condition in self.condition_alternatives(&conditional.condition)? {
+                let mut local = variables.clone();
+                let mut condition = self.condition(&condition, &mut local)?;
+                self.bindings(&mut condition, &mut local)?;
+                self.variable_limit(&local)?;
+                local.safety(self.location)?;
+                // A positive consequent must not repair an unsafe condition.
+                let consequent = self.conditional_consequent(&conditional.literal, &mut local)?;
+                body.push(LiteralIr::Conditional(ConditionalIr {
+                    consequent,
+                    condition,
+                    variables: local.count,
+                }));
+            }
         }
         Ok(())
     }
@@ -132,6 +178,25 @@ impl Compiler<'_> {
             }
             return Ok(Consequent::Atoms(literal.negation, alternatives));
         }
+        if let LiteralInner::Comparison(comparison) = &literal.inner {
+            let terms = || {
+                std::iter::once(comparison.get().first())
+                    .chain(comparison.get().steps().map(|(_, term)| term))
+            };
+            let count = terms().flat_map(Term::subterms).count() as u128;
+            self.budget
+                .charge(ExpansionResource::TermWork, count, self.location)?;
+            if terms()
+                .flat_map(Term::subterms)
+                .any(|term| matches!(term, Term::Pool(_) | Term::Interval { .. }))
+            {
+                let mut alternatives = Vec::new();
+                for literal in self.literal_alternatives(literal)? {
+                    alternatives.push(self.guard_alternative(&literal, variables, count)?);
+                }
+                return Ok(Consequent::Guards(alternatives));
+            }
+        }
         let guard = if let LiteralInner::Comparison(comparison) = &literal.inner {
             self.comparison_guard(comparison.get(), literal.negation, variables)?
         } else {
@@ -142,5 +207,46 @@ impl Compiler<'_> {
         };
         variables.safety(self.location)?;
         Ok(Consequent::Guard(guard))
+    }
+
+    fn guard_alternative(
+        &mut self,
+        literal: &Literal,
+        condition: &Variables,
+        work: u128,
+    ) -> Result<GuardAlternative, FormulaFailure> {
+        let LiteralInner::Comparison(comparison) = &literal.inner else {
+            unreachable!("comparison alternatives retain their kind")
+        };
+        let mut local =
+            self.alternative_scope(work, std::mem::size_of::<GuardAlternative>(), condition)?;
+        let mut bindings = Vec::new();
+        let ranged = std::iter::once(comparison.get().first())
+            .chain(comparison.get().steps().map(|(_, term)| term))
+            .flat_map(Term::subterms)
+            .any(|term| matches!(term, Term::Interval { .. }));
+        let guard = if ranged {
+            self.ranged_guard(
+                comparison.get(),
+                literal.negation,
+                &mut local,
+                &mut bindings,
+            )?
+        } else {
+            let LiteralIr::Guard(guard) =
+                self.comparison_guard(comparison.get(), literal.negation, &mut local)?
+            else {
+                unreachable!("comparison guard")
+            };
+            guard
+        };
+        self.bindings(&mut bindings, &mut local)?;
+        self.variable_limit(&local)?;
+        local.safety(self.location)?;
+        Ok(GuardAlternative {
+            guard,
+            bindings,
+            variables: local.count,
+        })
     }
 }

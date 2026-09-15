@@ -66,6 +66,34 @@ impl Builder<'_> {
                     }
                     disjunction
                 }
+                Consequent::Guards(alternatives) => {
+                    let mut value = false;
+                    for alternative in alternatives {
+                        let mut rows = Join::new(
+                            &alternative.bindings,
+                            &binding,
+                            alternative.variables,
+                            support,
+                            self.budget,
+                            location,
+                        )?;
+                        while let Some(row) =
+                            rows.next(self.limits, self.budget, &mut self.counters, location)?
+                        {
+                            // Every value alternative is evaluated, including
+                            // those after a true result: errors cannot disappear.
+                            self.work(location)?;
+                            value |= alternative.guard.evaluate(
+                                &row,
+                                self.limits,
+                                self.budget,
+                                &mut self.counters,
+                                location,
+                            )?;
+                        }
+                    }
+                    boolean(value)
+                }
                 Consequent::Guard(guard) => boolean(guard.evaluate(
                     &binding,
                     self.limits,

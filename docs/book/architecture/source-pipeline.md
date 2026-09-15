@@ -15,10 +15,10 @@ The [source API guide](../rust/source.md) describes the public entry points;
 original source catalog
   → parsed and raised themelios program
   → bounded normalization and scope analysis
-  → prepared rules, objective observations and dependency plans
+  → prepared rules, objective/projection declarations and dependency plans
   → completed possible-positive support
   → complete bindings and original formula instances
-  → validated theory + atom catalog + objectives + source metadata
+  → validated theory + atom catalog + objectives + fixed projection domain + metadata
 ```
 
 The arrows describe dependencies, not independent copies of every intermediate
@@ -35,6 +35,9 @@ answer set. Final grounding owns a separate emitted-atom catalog because the
 theory's dense universe is a different object from the possible-support bound.
 Objective queries borrow completed support and own bounded transient formula
 scratch. Their atoms and roots cannot become program producers.
+Projection declarations also borrow that support. They retain a fixed subset of
+possible atoms for enumeration identity, without creating source producers or
+program roots. This domain is distinct from the emitted theory's dense IDs.
 
 `GroundingOptions` selects the positive-join execution strategy before formula
 materialization. The default `Indexed` strategy probes the shortest applicable
@@ -78,7 +81,7 @@ those instructions rather than interpreting the plan as new program semantics.
 | Formula preparation | `formula`, `formula::preparation`, `formula_ir` | Public owned preparation, scoped rule/objective IR and cumulative budgets |
 | Source occurrences and alternatives | `formula_choice_source`, `formula_pool` | Original Boolean choice occurrences and bounded pool alternatives |
 | Upstream analysis | `formula_analysis`, `formula_conditional_projection` | Bounded pool-free input and an explicit analysis basis |
-| Value and pattern lowering | `formula_value_ir`, `formula_pattern_ir`, `formula_projection_ir` | Evaluated positions, structural captures and anonymous negative projection |
+| Value and pattern lowering | `formula_value_ir`, `formula_range_ir`, `formula_pattern_ir`, `formula_projection_ir` | Shared bounded value/range fold, structural captures and anonymous negative projection |
 | Scalar bindings | `formula_binding_ir`, `formula_binding_guard`, `formula_binding_plan` | Safe producers, finite envelopes and dependency order; original guards remain |
 | Aggregate bindings | `formula_aggregate_ir`, `formula_assignment_ir`, `formula_assignment_plan` | Element scopes, assignment applicability and required/produced inputs |
 | Binding execution | `formula_binding_cursor`, `formula_assignment` | Bounded scalar/range and aggregate proposals over complete relational rows |
@@ -89,8 +92,11 @@ those instructions rather than interpreting the plan as new program semantics.
 | Formula emission | `formula_ground`, `formula_guard`, `formula_conditional` | Original implications, aggregate conditions and universal instances |
 | Optional formula factoring | `formula_factor` | Qualified existential components with the complete-join path as fallback |
 | Optional count certificates | `formula_count_plan` | Capture, derivation and emitted correspondence to the original theory |
-| Objective source preparation | `formula_weak`, `formula_ir::objective_scope`, `formula_objective_dependencies` | Scoped weak bodies, per-objective eligibility precision and original-model queries |
+| Source activity | `formula_source_activity` | Bounded absent/optional/required producer refinement over completed support, shared by objectives and projection |
+| Original-model queries | `formula_source_activity::model_query` | Closed conditions over full original atom identities, separate from source activity and reduct formulas |
+| Objective source preparation | `formula_weak`, `formula_ir::objective_scope`, `formula_objective_dependencies` | Scoped weak bodies and independently applicable objective precision plans |
 | Objective materialization | `formula_ground::objectives`, `formula_ground::scoped_body` | Retained objective templates and bounded body validation without producer support |
+| Projection declarations | `formula_project_ir`, `formula_ground::projection`, `metadata::projection` | Fixed complete projection domain; no change to original theory or displayed atoms |
 | Observation and metadata | `metadata`, `observation` | Source directives and views of a supplied full model |
 | Objective bounds | `objective_bound` | Optional score bounds with their own admission and work limits |
 | Measurement | `grounding_observer` | Injected phase/work observations, separate from semantic completion |
@@ -118,9 +124,17 @@ The existing expression evaluator and binding schedule serve these scopes; their
 placement determines when evaluation is required.
 
 `formula_ground::scoped_body` shares the original body-lowering operation between
-objective query construction and validation of discarded rule rows. The caller
+objective query construction, source activity and validation of discarded rule rows. The caller
 selects the applicable scratch ceilings and retains cumulative source work.
 Discarding the resulting scratch does not discard errors or charged work.
+
+The source-activity fold computes absent, optional or required truth on the
+validated body. The unresolved dependency region refines one complete previous
+table in simultaneous rounds; this is not a separate evaluator per strongly
+connected component. A changing round resolves an optional entry; it never
+reclassifies an already known entry. The finite optional-entry count bounds the
+rounds. This abstraction does not decide correlations among optional atoms, and
+it does not replace original-model query evaluation or reduct satisfaction.
 
 Both scratch and retained formula construction begin with the same canonical
 constants: `FALSUM` represents bottom, and `VERUM` represents bottom implying

@@ -7,6 +7,8 @@ use crate::{Backend, Grounder, Oracle, PhaseTimings, PreparedProfile, SemanticOu
 /// An unsuccessful preparation or execution operation; never evidence of UNSAT.
 #[derive(Debug)]
 pub enum SolveError {
+    /// Fixed-domain answer projection failed after preserving full membership.
+    Projection(crate::ProjectionError),
     /// The owned CPU pool or batch could not be admitted.
     Batch(zetesis_cpu::BatchError),
     /// A prepared CPU receipt could not be read; checked models remain retained.
@@ -65,6 +67,7 @@ pub enum SolveError {
 impl fmt::Display for SolveError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Projection(error) => error.fmt(formatter),
             Self::Batch(error) => error.fmt(formatter),
             Self::QueryObservation(error) => write!(formatter, "query observation: {error}"),
             Self::CompletionPool(error) => write!(formatter, "completion worker pool: {error}"),
@@ -94,6 +97,7 @@ impl fmt::Display for SolveError {
 impl std::error::Error for SolveError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::Projection(error) => Some(error),
             Self::Batch(error) => Some(error),
             Self::QueryObservation(error) => Some(error.as_ref()),
             Self::CompletionPool(error) => Some(error),

@@ -2,13 +2,16 @@
 
 mod compile;
 mod selection;
+mod projection;
+
+pub use projection::{PreparedProjection, ProjectSelection};
 
 pub use selection::{AtomSelection, AtomSelectionError, AtomSelectionLimits, OutputSelection};
 
 pub use compile::{MetadataError, MetadataFeature, MetadataLimits, MetadataResource};
 
 use themelios_base::span::Location;
-use themelios_program::program::{Program as SourceProgram, Show, Statement};
+use themelios_program::program::{Program as SourceProgram, Project, Show, Statement};
 use themelios_program::provenance::Origin;
 use themelios_program::provenance::WithProvenance;
 use themelios_program::raise::{Occurrences, StatementOccurrence};
@@ -24,8 +27,9 @@ use crate::{
     AdmissionFailure, ExpansionFailure, ExpansionLimits, ExpansionResource, ProfileFeature,
 };
 
-/// An accepted metadata directive. None constructs a logical rule, domain
-/// value, candidate atom, or projection of stable-model identity.
+/// An accepted metadata directive. These declarations construct no logical
+/// rule or atom. Projection declarations select a separate explicit enumeration
+/// policy only after their fixed original-atom domain has completed.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SourceDirective {
     /// `#defined p/n.` declares an intended signature for source diagnostics.
@@ -37,6 +41,10 @@ pub enum SourceDirective {
     ShowEmpty,
     /// A term-valued observation; it does not activate signature-only output.
     ShowTerm,
+    /// Signed predicate selected for explicit projected enumeration.
+    ProjectSignature(Predicate),
+    /// An atom/body declaration requiring completed source grounding.
+    ProjectAtom,
 }
 
 /// One original metadata occurrence, before equal directives are deduplicated.
@@ -65,6 +73,7 @@ pub struct SourceMetadata {
     directives: Vec<LocatedDirective>,
     output: OutputSelection,
     observations: crate::observation::ObservationProgram,
+    projection: ProjectSelection,
 }
 
 /// Collection state cannot be observed as a completed output policy. Signature
@@ -74,6 +83,7 @@ pub(crate) struct Builder {
     directives: Vec<LocatedDirective>,
     output: selection::Builder,
     pub(crate) observations: crate::observation::ObservationProgram,
+    pub(crate) projection: ProjectSelection,
 }
 
 impl SourceMetadata {
@@ -110,6 +120,13 @@ impl SourceMetadata {
         &self.observations
     }
 
+    /// Authored projection policy, separate from display and full answer identity.
+    /// Atom/body declarations are completed only by source grounding.
+    #[must_use]
+    pub fn project_selection(&self) -> &ProjectSelection {
+        &self.projection
+    }
+
     pub(crate) fn into_observations(self) -> crate::observation::ObservationProgram {
         self.observations
     }
@@ -123,6 +140,7 @@ impl Builder {
             directives: self.directives,
             output: self.output.finish(),
             observations: self.observations,
+            projection: self.projection.finish(),
         }
     }
 }
@@ -134,7 +152,10 @@ pub(crate) fn check_syntax(
 ) -> Result<(), AdmissionFailure> {
     let location = parsed.location(statement.syntax().text_range());
     match statement {
-        ast::Statement::Defined(_) => {}
+        ast::Statement::Project(_) if !formula => {
+            return Err(unsupported(ProfileFeature::Statement, location));
+        }
+        ast::Statement::Defined(_) | ast::Statement::Project(_) => {}
         ast::Statement::Show(show) => {
             if !formula
                 && (show.term().is_some() || show.colon_token().is_some() || show.body().is_some())
@@ -155,7 +176,7 @@ pub(crate) fn check_count(
     for statement in parsed.tree().statements() {
         if matches!(
             statement,
-            ast::Statement::Defined(_) | ast::Statement::Show(_)
+            ast::Statement::Defined(_) | ast::Statement::Show(_) | ast::Statement::Project(_)
         ) {
             let location = parsed.location(statement.syntax().text_range());
             let observed = (*used as u128) + 1;
@@ -211,7 +232,10 @@ fn collect_carriers<'a>(
     formula: bool,
 ) -> Result<(), AdmissionFailure> {
     for carrier in carriers {
-        if !matches!(carrier.get(), Statement::Defined(_) | Statement::Show(_)) {
+        if !matches!(
+            carrier.get(),
+            Statement::Defined(_) | Statement::Show(_) | Statement::Project(_)
+        ) {
             continue;
         }
         for origin in carrier.provenance().origins() {
@@ -228,6 +252,10 @@ fn collect_carriers<'a>(
                 // themelios names its faithful `#show.` value `Show::All`;
                 // clingo interprets the empty directive as show nothing.
                 Statement::Show(Show::All) => SourceDirective::ShowEmpty,
+                Statement::Project(Project::Signature(signature)) => {
+                    SourceDirective::ProjectSignature(predicate(signature, *location)?)
+                }
+                Statement::Project(Project::Atom { .. }) => SourceDirective::ProjectAtom,
                 Statement::Show(_) if formula => SourceDirective::ShowTerm,
                 Statement::Show(_) => return Err(unsupported(ProfileFeature::ShowTerm, *location)),
                 _ => continue,
@@ -238,6 +266,10 @@ fn collect_carriers<'a>(
                     metadata.output.include(signature.clone());
                 }
                 SourceDirective::ShowEmpty => metadata.output.mark_explicit(),
+                SourceDirective::ProjectSignature(signature) => {
+                    metadata.projection.signature(signature.clone());
+                }
+                SourceDirective::ProjectAtom => metadata.projection.atom(),
             }
             metadata.directives.push(LocatedDirective {
                 directive,
@@ -248,7 +280,10 @@ fn collect_carriers<'a>(
     Ok(())
 }
 
-fn predicate(signature: &Signature, location: Location) -> Result<Predicate, AdmissionFailure> {
+pub(crate) fn predicate(
+    signature: &Signature,
+    location: Location,
+) -> Result<Predicate, AdmissionFailure> {
     let arity = usize::try_from(signature.arity)
         .expect("supported Rust targets represent u32 arities in usize");
     Predicate::with_sign(

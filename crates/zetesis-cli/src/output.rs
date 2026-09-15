@@ -178,6 +178,8 @@ fn summary(
     out.optional_number(view.verified_models)?;
     out.text(",\"checked\":")?;
     out.optional_number(view.checked)?;
+    out.text(",\"projection\":")?;
+    write_projection(&mut out, view.projection)?;
     out.text(",\"interruption\":")?;
     write_interruption(&mut out, view.interruption)?;
     out.text(",\"publication_stop\":")?;
@@ -294,6 +296,7 @@ fn error_kind(error: &RunError) -> &'static str {
         RunError::Input(_) => "input",
         RunError::TimeLimitRange { .. } => "time_limit_range",
         RunError::Observation(_) => "observation",
+        RunError::Projection(_) => "answer_projection",
         RunError::JsonRecord(_) => "json_record",
         RunError::ObservationOutputLimit { .. } => "observation_output_limit",
         RunError::MixedStandardInput => "mixed_standard_input",
@@ -594,6 +597,22 @@ fn optional_number(out: &mut Buffer, value: Option<u128>) -> Result<(), RunError
     }
 }
 
+fn write_projection(
+    out: &mut Buffer,
+    projection: Option<&zetesis_solve::ProjectionStatistics>,
+) -> Result<(), RunError> {
+    let Some(projection) = projection else {
+        return out.text("null");
+    };
+    out.text(&format!("{{\"complete\":{}", projection.complete))?;
+    out.number_field("representatives", projection.representatives)?;
+    out.number_field("duplicates", projection.duplicates)?;
+    out.number_field("work", projection.work)?;
+    out.number_field("retained_bytes", projection.retained_bytes)?;
+    out.number_field("peak_bytes", projection.peak_bytes)?;
+    out.text("}")
+}
+
 fn write_optimization(
     out: &mut Buffer,
     optimization: Option<&crate::Optimization>,
@@ -619,6 +638,7 @@ fn write_optimization(
 
 // Borrow the retained semantic evidence; publication does not manufacture it.
 struct SummaryView<'a> {
+    projection: Option<&'a zetesis_solve::ProjectionStatistics>,
     completion: Option<Completion>,
     optimum_proved: bool,
     published_models: usize,
@@ -640,6 +660,7 @@ impl<'a> SummaryView<'a> {
             Ok(progress) => {
                 let semantic = progress.semantic();
                 Self {
+                    projection: semantic.and_then(crate::SemanticOutcome::projection),
                     completion: semantic.and_then(crate::SemanticOutcome::completion),
                     optimum_proved: semantic.is_some_and(crate::SemanticOutcome::optimum_proved),
                     published_models: progress.publication.models,
@@ -659,6 +680,9 @@ impl<'a> SummaryView<'a> {
             Err(failure) => {
                 let partial = failure.partial_report.as_deref();
                 Self {
+                    projection: failure
+                        .semantic()
+                        .and_then(crate::SemanticOutcome::projection),
                     completion: partial.and_then(|p| p.completion),
                     optimum_proved: failure
                         .semantic()

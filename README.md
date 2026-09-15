@@ -237,13 +237,18 @@ conditions determine costs, independently of answer-set membership. Remaining
 source scopes and explicit clingo reporting differences are documented alongside
 the supported contracts.
 
-Finite scoped weak constraints can use aggregate
-assignments and universal conditionals, including pooled conditional consequents;
-their costs read the original answer without adding rules or support. Broader
-weak-body pools and observation binding contexts remain explicit obligations.
-Observations can bind positive equality chains and capture constructor or tuple
-components from finite values, while preserving each original model beside its
-completed display.
+Finite pools and nested intervals share bounded occurrence expansion across
+rules, local elements and objectives. Scoped weak constraints can use aggregate
+assignments and universal conditionals; their costs read the original answer
+without adding rules or support. Observations support finite constructor/tuple
+capture, pooled equality alternatives and single-occurrence arithmetic inversion
+within the documented checked-scalar profile.
+
+`#project` declares a fixed domain for projected enumeration. Each representative
+remains a full answer set, objective selection happens first, and `#show` controls
+display independently. The library's `WorldView` still retains the complete
+original family. Source activity, model truth and projection completion have
+separate contracts and receipts.
 
 Directed finite affine comparison chains can bind several variables while
 retaining the original correlations and checked source arithmetic.

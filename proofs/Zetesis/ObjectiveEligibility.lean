@@ -1,4 +1,5 @@
 import Zetesis.ObjectiveConditions
+import Std.Tactic
 
 /-!
 # Source activity and model-relative conditions
@@ -17,6 +18,8 @@ and Rust resource completion remain separate obligations. In particular, an inco
 -/
 
 namespace Zetesis.ObjectiveEligibility
+
+universe u
 
 /-- Optional is a grounding possibility, not a jointly realizable witness. -/
 inductive Activity where
@@ -90,5 +93,94 @@ provided the source classifier established the stated coverage premise. -/
 theorem absent_excludes (truth : Bool) (covered : Covers .absent truth) :
     truth = false := by
   exact covered
+
+/-- Fold original Boolean formula operations without testing correlations
+between atom occurrences. Implication is represented as negation/disjunction
+by the existing original-query translation, never by a reduct rewrite. -/
+def analyze {A : Type u} (atoms : A → Activity) : ObjectiveConditions.Query A → Activity
+  | .boolean false => .absent
+  | .boolean true => .required
+  | .atom atom => atoms atom
+  | .neg operand => negate (analyze atoms operand)
+  | .conj left right => conjunction (analyze atoms left) (analyze atoms right)
+  | .disj left right => disjunction (analyze atoms left) (analyze atoms right)
+
+/-- Pointwise atom coverage suffices for coverage of every finite original
+formula query. The proof follows its constructors and reuses the three
+operation laws; it requires no independence or realization assumption. -/
+theorem analyze_covers {A : Type u} (atoms : A → Activity) (model : A → Bool)
+    (query : ObjectiveConditions.Query A)
+    (covered : ∀ atom, Covers (atoms atom) (model atom)) :
+    Covers (analyze atoms query) (ObjectiveConditions.evaluate model query) := by
+  induction query with
+  | boolean value => cases value <;> rfl
+  | atom atom => exact covered atom
+  | neg operand ih => exact negation_covers _ _ ih
+  | conj left right first second => exact conjunction_covers _ _ _ _ first second
+  | disj left right first second => exact disjunction_covers _ _ _ _ first second
+
+/-- Refinement may resolve an optional atom, but retains already established
+information. A runtime consumer separately checks consistent proposals. -/
+def refine : Activity → Activity → Activity
+  | .optional, proposed => proposed
+  | known, _ => known
+
+/-- Retaining known information or adopting a covered proposal preserves
+coverage of the same original truth. No new candidate is chosen. -/
+theorem refinement_covers (old proposed : Activity) (truth : Bool)
+    (oldCovered : Covers old truth) (proposedCovered : Covers proposed truth) :
+    Covers (refine old proposed) truth := by
+  cases old with
+  | absent => exact oldCovered
+  | optional => exact proposedCovered
+  | required => exact oldCovered
+
+/-- Count the still-optional entries in a finite activity carrier. Each resolved
+entry removes one uncertainty, independently of whether it becomes absent or
+required. This supplies the decreasing measure for complete changing rounds. -/
+def unknowns : List Activity → Nat
+  | [] => 0
+  | .optional :: rest => 1 + unknowns rest
+  | _ :: rest => unknowns rest
+
+/-- Paired old/new lists retain exact atom positions. A complete refinement
+round cannot increase the number of optional entries. -/
+theorem refinement_unknowns_le (pairs : List (Activity × Activity)) :
+    unknowns (pairs.map (fun pair => refine pair.1 pair.2)) ≤
+      unknowns (pairs.map Prod.fst) := by
+  induction pairs with
+  | nil => exact Nat.le_refl 0
+  | cons pair rest ih =>
+    rcases pair with ⟨old, proposed⟩
+    cases old <;> cases proposed <;> simp_all [refine, unknowns] <;> omega
+
+/-- A round that resolves at least one optional entry strictly decreases a
+natural-number measure. Thus complete changing rounds cannot continue forever
+on one finite atom carrier; a final unchanged round establishes termination.
+This does not prove the Rust producer traversal or its carrier correspondence. -/
+theorem changing_round_decreases (pairs : List (Activity × Activity))
+    (changed : ∃ pair ∈ pairs, pair.1 = .optional ∧ pair.2 ≠ .optional) :
+    unknowns (pairs.map (fun pair => refine pair.1 pair.2)) <
+      unknowns (pairs.map Prod.fst) := by
+  induction pairs with
+  | nil => simp at changed
+  | cons pair rest ih =>
+    have bound :
+        unknowns (rest.map (fun pair => refine pair.1 pair.2)) ≤
+          unknowns (rest.map Prod.fst) := by
+      exact refinement_unknowns_le rest
+    obtain ⟨selected, member, optional, resolved⟩ := changed
+    cases List.mem_cons.mp member with
+    | inl same =>
+      subst selected
+      rcases pair with ⟨old, proposed⟩
+      cases old <;> cases proposed <;> simp_all [refine, unknowns] <;> omega
+    | inr inside =>
+      have strict :
+          unknowns (rest.map (fun pair => refine pair.1 pair.2)) <
+            unknowns (rest.map Prod.fst) := by
+        exact ih ⟨selected, inside, optional, resolved⟩
+      rcases pair with ⟨old, proposed⟩
+      cases old <;> cases proposed <;> simp_all [refine, unknowns] <;> omega
 
 end Zetesis.ObjectiveEligibility

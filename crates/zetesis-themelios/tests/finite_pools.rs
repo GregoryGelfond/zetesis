@@ -31,7 +31,117 @@ fn limited(
 
 // Independently handwritten expansions. The Cartesian family remains a family
 // of rules; element expansion retains one choice and its original bounds.
+const BOOLEAN_OCCURRENCE_POOL: &str = "{p(1);p(2)}.1{#true:p(1;2)}1.";
+
 const CASES: &[(&str, &str)] = &[
+    ("{d(1);d(2)}.q:-X=(1;2):d(X).", "{d(1);d(2)}.q."),
+    ("{d(1);d(2)}.q:-X=(1;3):d(X).", "{d(1);d(2)}.q:-not d(2)."),
+    ("{d(1);d(2)}.q:-not X=(1;2):d(X).", "{d(1);d(2)}.q."),
+    ("{d(1);d(2)}.q:-f(X)=f(1..2):d(X).", "{d(1);d(2)}.q."),
+    ("{q}.q:-1<(1..2)<2:#true.", "{q}."),
+    ("p(X):-X=(1..2)..3.", "p(X):-X=1..3.p(X):-X=2..3."),
+    ("p(X):-X=0..(1..2).", "p(X):-X=0..1.p(X):-X=0..2."),
+    (
+        "p:-not not 2=(1..2)..3.",
+        "p:-not not 2=1..3.p:-not not 2=2..3.",
+    ),
+    (
+        "p:-not not 0=(1..2)..3.",
+        "p:-not not 0=1..3.p:-not not 0=2..3.",
+    ),
+    (
+        "{p(f(1));p(f(2))}.q:-2{p(f(1..2))}2.",
+        "{p(f(1));p(f(2))}.q:-2{p(f(1));p(f(2))}2.",
+    ),
+    (
+        "{p(f(1));p(f(2))}.q:-1{p(f(X)):X=1..2}1.",
+        "{p(f(1));p(f(2))}.q:-1{p(f(1));p(f(2))}1.",
+    ),
+    (
+        "{p(f(1));p(f(2))}.q:-1{p(f(1;1;2))}1.",
+        "{p(f(1));p(f(2))}.q:-1{p(f(1));p(f(2))}1.",
+    ),
+    ("(0;1){p}1.", "0{p}1.1{p}1."),
+    (
+        "{p}.q:-#count{1:p}=(0;1).",
+        "{p}.q:-#count{1:p}=0.q:-#count{1:p}=1.",
+    ),
+    (
+        "{p}.q:-#count{1:p}=(0..1)+0.",
+        "{p}.q:-#count{1:p}=0.q:-#count{1:p}=1.",
+    ),
+    ("(0..1){p}1.", "0{p}1.1{p}1."),
+    ("1#count{f(1..2):p}1.", "1#count{f(1):p;f(2):p}1."),
+    (BOOLEAN_OCCURRENCE_POOL, "{p(1);p(2)}.:-not p(1),not p(2)."),
+    (
+        "{p(1);p(2)}.1{#true:p(X),X=1..2}1.",
+        "{p(1);p(2)}.:-not p(1),not p(2).",
+    ),
+    (
+        "{p(1);p(2)}.1{#true:p(X)}1.",
+        "{p(1);p(2)}.:-not p(1),not p(2).",
+    ),
+    (
+        "{p(1);p(2)}.1{#true:p(1);#true:p(2)}1.",
+        "{p(1);p(2)}.:-not p(1),not p(2).:-p(1),p(2).",
+    ),
+    (
+        "{p}.q:-#count{f(1..2):p}=2.",
+        "{p}.q:-#count{f(1):p;f(2):p}=2.",
+    ),
+    (
+        "1#count{(1;2):p(1;2)}1.",
+        "1#count{1:p(1);1:p(2);2:p(1);2:p(2)}1.",
+    ),
+    ("p(X):-q(1;2),X=1.", "p(X):-q(1),X=1.p(X):-q(2),X=1."),
+    ("{p(X):X=(1;2)}.", "{p(X):X=1;p(X):X=2}."),
+    ("p:-#count{X:X=(1;2)}>0.", "p:-#count{X:X=1;X:X=2}>0."),
+    ("p(1+(1;2));q.", "p(2);q.p(3);q."),
+    ("p(f(1)).q:-p(f(1..2)).", "p(f(1)).q:-p(f(1)).q:-p(f(2))."),
+    (
+        "{p(f(1));p(f(2))}.q:-not p(f(1..2)).",
+        "{p(f(1));p(f(2))}.q:-not p(f(1)).q:-not p(f(2)).",
+    ),
+    ("p(f(X)):-X=f(1..2).", "p(f(f(1))).p(f(f(2)))."),
+    ("{p(1);p(2)}.q:-p(1;2).", "{p(1);p(2)}.q:-p(1).q:-p(2)."),
+    (
+        "{p(1);p(2)}.q:-not p(1;2).",
+        "{p(1);p(2)}.q:-not p(1).q:-not p(2).",
+    ),
+    (
+        "{p(1);p(2)}.q:-not not p(1;2).",
+        "{p(1);p(2)}.q:-not not p(1).q:-not not p(2).",
+    ),
+    (
+        "{p(f(1));p(f(2))}.q:-p(f((1;2))).",
+        "{p(f(1));p(f(2))}.q:-p(f(1)).q:-p(f(2)).",
+    ),
+    (
+        "d(1).q:-d(X),not p(f(X;2)).",
+        "d(1).q:-d(X),not p(f(X)).q:-d(X),not p(f(2)).",
+    ),
+    ("{p(1);p(2)}.{q:p(1;2)}.", "{p(1);p(2)}.{q:p(1);q:p(2)}."),
+    (
+        "{p(1);p(2)}.q:-p(1):p(1;2).",
+        "{p(1);p(2)}.q:-p(1):p(1);p(1):p(2).",
+    ),
+    (
+        "{p(1);p(2)}.q:-2=#count{(1;2):p(1;2)}.",
+        "{p(1);p(2)}.q:-2=#count{1:p(1);2:p(1);1:p(2);2:p(2)}.",
+    ),
+    (
+        "p(X):-X=(1;2),(0;1)<X<3.",
+        "p(X):-X=1,0<X<3.p(X):-X=1,1<X<3.p(X):-X=2,0<X<3.p(X):-X=2,1<X<3.",
+    ),
+    ("p(f(1..2)).", "p(f(1)).p(f(2))."),
+    ("d(1).p(f(X..X+1)):-d(X).", "d(1).p(f(1)).p(f(2))."),
+    ("d(1).p((X..X+1)+1)|q:-d(X).", "d(1).p(2)|q.p(3)|q."),
+    ("p(f(1..2));q.", "p(f(1));q.p(f(2));q."),
+    ("1{p(f(1..2))}1.", "1{p(f(1));p(f(2))}1."),
+    (
+        "p(f((1;2)),(3;4));q.",
+        "p(f(1),3);q.p(f(1),4);q.p(f(2),3);q.p(f(2),4);q.",
+    ),
     ("a(X):-X=(1;2;4).", "a(1).a(2).a(4)."),
     ("a(X):-(1;2)=X.", "a(1).a(2)."),
     ("p(X,Y):-X=(1;2),Y=(X;X+1).", "p(1,1).p(1,2).p(2,2).p(2,3)."),
@@ -299,14 +409,81 @@ fn independent_limits_are_inclusive_and_failure_retains_source_location() {
 }
 
 #[test]
-fn residual_contexts_and_unsafe_or_undefined_alternatives_remain_refused() {
+fn a_true_conditional_guard_does_not_hide_later_undefined_values() {
+    for source in ["d(0).q:-1=(1;1/X):d(X).", "d(0).q:-1=(1..2)/X:d(X)."] {
+        let error = limited(
+            source,
+            ExpansionLimits::default(),
+            &FormulaLimits::default(),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(error, FormulaFailure::Expansion(ExpansionFailure::Evaluation { location, .. })
+            if !location.span.is_empty()),
+            "{source}: {error}"
+        );
+    }
+}
+
+#[test]
+fn conditional_value_alternatives_cannot_bind_source_names() {
+    for source in ["q:-X=(1;2):#true.", "q:-X=1..2:#true."] {
+        let error = limited(
+            source,
+            ExpansionLimits::default(),
+            &FormulaLimits::default(),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(error, FormulaFailure::UnsafeVariable { .. }),
+            "{source}: {error}"
+        );
+    }
+}
+
+#[test]
+fn local_value_owners_respect_each_expansion_ceiling() {
     for source in [
-        "p(X):-q(1;2),X=1.",
+        "{d(1);d(2)}.q:-f(X)=f(1..2):d(X).",
+        "{p(f(1));p(f(2))}.q:-2{p(f(1..2))}2.",
+    ] {
+        let expected = native(&input(source));
+        for resource in [
+            ExpansionResource::TermWork,
+            ExpansionResource::Values,
+            ExpansionResource::ScalarBytes,
+        ] {
+            let configured = |limit| {
+                let mut bounds = ExpansionLimits::default();
+                match resource {
+                    ExpansionResource::TermWork => bounds.max_term_work = limit,
+                    ExpansionResource::Values => bounds.max_values = limit,
+                    ExpansionResource::ScalarBytes => bounds.max_scalar_bytes = limit,
+                    _ => unreachable!(),
+                }
+                bounds
+            };
+            let exact = first_success(|limit| {
+                limited(source, configured(limit), &FormulaLimits::default()).is_ok()
+            });
+            let error =
+                limited(source, configured(exact - 1), &FormulaLimits::default()).unwrap_err();
+            assert!(
+                matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit { resource: actual, location, .. })
+                if actual == resource && !location.span.is_empty()),
+                "{source}: {error}"
+            );
+            let accepted = limited(source, configured(exact), &FormulaLimits::default()).unwrap();
+            assert_eq!(native(&accepted), expected, "{source}: {resource:?}");
+        }
+    }
+}
+
+#[test]
+fn unsafe_or_undefined_alternatives_remain_located_refusals() {
+    for source in [
         "p:-not X=(1;2).",
         "p:-X<(1;2).",
-        "{p(X):X=(1;2)}.",
-        "p:-#count{X:X=(1;2)}>0.",
-        "p(1+ (1;2));q.",
         "p(X;1):-#true.",
         "{p(2..1;X)}.",
         "p(1/0;2);q.",
@@ -323,7 +500,7 @@ fn residual_contexts_and_unsafe_or_undefined_alternatives_remain_refused() {
 
 #[test]
 #[ignore = "requires an independently installed clingo"]
-fn all_pool_cases_match_complete_clingo_models() {
+fn pool_cases_match_declared_clingo_families() {
     for &(source, _) in CASES {
         let raw = reference::external(source, true);
         assert_eq!(raw["Models"]["More"], "no");
@@ -341,7 +518,32 @@ fn all_pool_cases_match_complete_clingo_models() {
                     .collect()
             })
             .collect();
-        assert_eq!(native(&input(source)), models, "{source}");
+        let native = native(&input(source));
+        if source == BOOLEAN_OCCURRENCE_POOL {
+            // The adopted Boolean-choice extension retains one written key
+            // across pool alternatives. Clingo splits this pool into two
+            // contributions, unlike its one-element variable/interval forms.
+            // Check both complete families explicitly; neither is a parity claim.
+            assert_eq!(
+                native,
+                Models::from([
+                    BTreeSet::from(["p(1)".into()]),
+                    BTreeSet::from(["p(2)".into()]),
+                    BTreeSet::from(["p(1)".into(), "p(2)".into()]),
+                ]),
+                "adopted one-occurrence semantics: {source}"
+            );
+            assert_eq!(
+                models,
+                Models::from([
+                    BTreeSet::from(["p(1)".into()]),
+                    BTreeSet::from(["p(2)".into()]),
+                ]),
+                "clingo pool expansion: {source}"
+            );
+        } else {
+            assert_eq!(native, models, "{source}");
+        }
     }
 }
 

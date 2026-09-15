@@ -86,7 +86,7 @@ impl<'source> Support<'source> {
         })
     }
 
-    pub(super) fn contains(
+    pub(crate) fn contains(
         &self,
         key: &AtomKey<'_>,
         limits: &FormulaLimits,

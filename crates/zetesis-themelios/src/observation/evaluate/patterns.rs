@@ -4,14 +4,14 @@ use super::{Bound, Error, Metric, Operand, Reference, Resource, Symbol, Value, W
 
 pub(super) fn slots(operand: &Operand) -> usize {
     match operand {
-        Operand::Variable(_) => 1,
+        Operand::Variable(_) | Operand::Inverse { .. } => 1,
         Operand::Function(_, _, arguments) | Operand::Tuple(arguments) => {
             arguments.iter().map(slots).sum()
         }
         _ => 0,
     }
 }
-fn symbol(value: &Value, work: &mut Work<'_>) -> Result<Symbol, Error> {
+pub(super) fn symbol(value: &Value, work: &mut Work<'_>) -> Result<Symbol, Error> {
     let mut metric = Metric::default();
     work.measure_reference(Reference::Value(value), 1, &mut metric)?;
     work.construction_check(metric)?;
@@ -76,6 +76,9 @@ fn matches_symbol(
             undo.push(*slot);
             Ok(true)
         }
+        Operand::Inverse { slot, expression } => {
+            super::inverse::bind(*slot, expression, value, binding, undo, work)
+        }
         Operand::Any | Operand::Expression(_) => Ok(true),
         Operand::Function(_, _, _) | Operand::Tuple(_) => {
             let Some((arguments, values)) = children(pattern, value, work)? else {
@@ -138,7 +141,9 @@ fn test_symbol(
     }
     match pattern {
         Operand::Any => Ok(true),
-        Operand::Expression(expression) => expression_matches(expression, value, binding, work),
+        Operand::Expression(expression) | Operand::Inverse { expression, .. } => {
+            expression_matches(expression, value, binding, work)
+        }
         Operand::Function(_, _, _) | Operand::Tuple(_) => {
             let Some((arguments, values)) = children(pattern, value, work)? else {
                 return Ok(false);
@@ -203,37 +208,6 @@ pub(super) fn test_value(
     }
     let value = symbol(value, work)?;
     test_symbol(pattern, &value, binding, work)
-}
-
-pub(super) fn atom_value(
-    value: &Symbol,
-    atom: &super::Atom,
-    work: &mut Work<'_>,
-) -> Result<bool, Error> {
-    let Symbol::Function {
-        sign,
-        name,
-        arguments,
-    } = value
-    else {
-        unreachable!("an atom key is a signed function")
-    };
-    work.step(1 + name.as_str().len() as u128 + atom.predicate().name().len() as u128)?;
-    if crate::coherence::core_sign(*sign) != atom.predicate().sign()
-        || name.as_str() != atom.predicate().name()
-        || arguments.len() != atom.values().len()
-    {
-        return Ok(false);
-    }
-    for (expected, actual) in arguments.iter().zip(atom.values()) {
-        if !work
-            .compare_reference(Reference::Symbol(expected), Reference::Value(actual))?
-            .is_eq()
-        {
-            return Ok(false);
-        }
-    }
-    Ok(true)
 }
 
 /// Copy one matched original atom only after complete payload preflight.

@@ -12,8 +12,8 @@ use crate::formula_binding::Binding;
 
 use super::{Atom, Builder, Node, Purpose};
 use crate::formula_ir::LiteralIr;
-use crate::formula_objective_dependencies::eligibility::Context;
-use crate::formula_objective_dependencies::eligibility::query::Query;
+use crate::formula_source_activity::model_query::Query;
+use crate::formula_source_activity::{Activity, Context, SourceEligibility};
 use crate::formula_support::{self, Support};
 use crate::{ExpansionResource, FormulaFailure};
 use zetesis_objective::{Condition, ConditionNode};
@@ -31,6 +31,19 @@ pub(super) fn validate(
     context: &mut Context<'_>,
 ) -> Result<ValidatedBody, FormulaFailure> {
     validate_with_purpose(literals, binding, support, context, Purpose::Objective)
+}
+
+/// Source activity uses the same complete scoped lowering as original-model
+/// queries, with theory scratch ceilings and no retained query publication.
+pub(crate) fn source_activity(
+    literals: &[LiteralIr],
+    binding: &Binding,
+    support: &Support<'_>,
+    eligibility: &SourceEligibility,
+    context: &mut Context<'_>,
+) -> Result<Activity, FormulaFailure> {
+    validate_with_purpose(literals, binding, support, context, Purpose::Validation)?
+        .source_activity(eligibility, context)
 }
 
 pub(super) fn validate_with_purpose(
@@ -66,6 +79,39 @@ pub(super) fn validate_with_purpose(
 }
 
 impl ValidatedBody {
+    /// Fold independent source-atom possibilities over the lowered DAG. An
+    /// optional atom and its negation remain optional even when correlated;
+    /// this is neither satisfiability nor a frozen-reduct evaluation.
+    pub(super) fn source_activity(
+        &self,
+        eligibility: &SourceEligibility,
+        context: &mut Context<'_>,
+    ) -> Result<Activity, FormulaFailure> {
+        let count = self.root + 1;
+        context.budget.charge(
+            ExpansionResource::ScalarBytes,
+            (count as u128).saturating_mul(std::mem::size_of::<Activity>() as u128),
+            context.location,
+        )?;
+        let mut values: Vec<Activity> = reserved(count, context)?;
+        for node in self.nodes.iter().take(count) {
+            context.counters.work(context.limits, context.location)?;
+            let activity = match *node {
+                Node::False => Activity::Absent,
+                Node::Atom(atom) => eligibility.atom_activity(&self.atoms[atom]),
+                Node::And(left, right) => values[left].min(values[right]),
+                Node::Or(left, right) => values[left].max(values[right]),
+                Node::Implies(left, right) => values[left].negate().max(values[right]),
+            };
+            values.push(activity);
+        }
+        Ok(values[self.root])
+    }
+
+    /// A canonical false body cannot contribute a source projection instance.
+    pub(super) fn is_false(&self) -> bool {
+        self.root == super::FALSUM
+    }
     /// Boolean implication is translated only for a complete original model.
     /// The same rewrite is invalid for frozen Ferraris reducts.
     pub(super) fn condition(self, context: &mut Context<'_>) -> Result<Condition, FormulaFailure> {

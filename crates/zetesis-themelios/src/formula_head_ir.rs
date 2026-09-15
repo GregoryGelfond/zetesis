@@ -29,8 +29,11 @@ impl Compiler<'_> {
             Head::Literal(literal) => self.head_global_literal(literal, variables),
             Head::Disjunction(disjunction) => {
                 for element in disjunction.elements() {
-                    self.true_head_condition(element.get().condition())?;
-                    self.head_global_literal(element.get().literal(), variables)?;
+                    self.disjunct_globals(
+                        element.get().literal(),
+                        element.get().condition(),
+                        variables,
+                    )?;
                 }
                 Ok(())
             }
@@ -114,18 +117,45 @@ impl Compiler<'_> {
             }
             Head::Disjunction(disjunction) => {
                 let mut heads = Vec::new();
+                let mut elements = Vec::new();
+                let outer = variables.clone();
                 for element in disjunction.elements() {
                     ceiling(
                         FormulaResource::DisjunctionElements,
-                        heads.len() as u128 + 1,
+                        heads.len() as u128 + elements.len() as u128 + 1,
                         self.limits.max_disjunction_elements as u128,
                         self.location,
                     )?;
-                    // Generated arguments share outer bindings; each emitted
-                    // rule retains its original disjunction, without shifting.
-                    heads.push(self.head_literal(element.get().literal(), variables, values)?);
+                    if self.true_head_condition(element.get().condition())? {
+                        // Unconditional generators retain the outer Cartesian family.
+                        heads.push(self.head_literal(
+                            element.get().literal(),
+                            variables,
+                            values,
+                        )?);
+                    } else {
+                        self.conditional_disjunct(
+                            element.get().literal(),
+                            element.get().condition(),
+                            &outer,
+                            &mut elements,
+                        )?;
+                    }
                 }
-                Some(HeadIr::Disjunction(heads))
+                ceiling(
+                    FormulaResource::DisjunctionElements,
+                    heads.len() as u128 + elements.len() as u128,
+                    self.limits.max_disjunction_elements as u128,
+                    self.location,
+                )?;
+                Some(if elements.is_empty() {
+                    HeadIr::Disjunction(heads)
+                } else {
+                    HeadIr::ConditionalDisjunction {
+                        ordinary: heads,
+                        elements,
+                    }
+                })
             }
             Head::Choice(_) | Head::Aggregate(_) => None,
             Head::TheoryAtom(_) => {
@@ -261,6 +291,15 @@ impl Compiler<'_> {
                     self.budget
                         .charge(ExpansionResource::ScalarBytes, bytes, self.location)?;
                     crate::compile::validate_scalar(symbol, self.location)?;
+                }
+                Term::Interval { lower, upper } => {
+                    self.head_slot(variables, fresh)?;
+                    for bound in [lower, upper] {
+                        if matches!(bound.as_ref(), Term::Symbolic(symbol) if !matches!(symbol, Symbol::Number(_)))
+                        {
+                            return Err(unsupported(ProfileFeature::Term, self.location).into());
+                        }
+                    }
                 }
                 Term::UnaryOperation { .. }
                 | Term::BinaryOperation { .. }

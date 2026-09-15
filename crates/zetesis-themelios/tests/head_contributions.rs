@@ -236,21 +236,57 @@ fn neutral_rows_cannot_hide_undefined_bindings() {
 }
 
 #[test]
-fn neutral_rows_cannot_hide_unsupported_tuple_terms() {
+fn neutral_tuple_fields_preserve_undefined_arithmetic() {
     let error = limited(
         "d(0).#sum{word,1/X:a:d(X)}=0.",
         ExpansionLimits::default(),
         &FormulaLimits::default(),
     )
-    .expect_err("unsupported tuple syntax remains a profile failure");
-    assert!(matches!(
-        error,
-        FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
-            feature: ProfileFeature::Aggregate,
-            ..
-        }))
-    ));
+    .expect_err("neutral contribution does not skip tuple evaluation");
+    assert!(
+        matches!(
+            error,
+            FormulaFailure::Expansion(ExpansionFailure::Evaluation {
+                error: themelios_program::term::EvalError::Undefined,
+                ..
+            })
+        ),
+        "{error}"
+    );
     assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+}
+
+#[test]
+fn bound_neutral_tuple_fields_preserve_source_permissions() {
+    let admitted = input("d(1;2).#sum{word,1/X:a:d(X)}=0.");
+    assert_eq!(native(&admitted), native(&input("d(1;2).{a}.")));
+    assert_eq!(native(&admitted), exhaustive(&admitted));
+}
+
+#[test]
+fn evaluated_neutral_tuple_fields_keep_distinct_key_limits() {
+    let source = "d(1;2).#sum{word,1/X:a:d(X)}=0.";
+    let mut limits = FormulaLimits::default();
+    limits.aggregate.max_elements = 1;
+    let error = limited(source, ExpansionLimits::default(), &limits).unwrap_err();
+    assert!(
+        matches!(
+            error,
+            FormulaFailure::Limit {
+                resource: FormulaResource::AggregateElements,
+                limit: 1,
+                observed: 2,
+                ..
+            }
+        ),
+        "{error}"
+    );
+    assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+    limits.aggregate.max_elements = 2;
+    assert_eq!(
+        native(&limited(source, ExpansionLimits::default(), &limits).unwrap()),
+        native(&input("d(1;2).{a}."))
+    );
 }
 
 #[test]

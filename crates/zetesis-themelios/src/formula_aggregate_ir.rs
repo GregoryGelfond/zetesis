@@ -84,11 +84,13 @@ impl Compiler<'_> {
         &mut self,
         choice: &Choice,
         variables: &mut Variables,
+        values: &mut Vec<LiteralIr>,
     ) -> Result<Vec<AggregateGuard>, FormulaFailure> {
         self.guards(
             choice.left_guard().map(WithProvenance::get),
             choice.right_guard().map(WithProvenance::get),
             variables,
+            values,
         )
     }
     pub(super) fn guards(
@@ -96,18 +98,19 @@ impl Compiler<'_> {
         left: Option<&Guard>,
         right: Option<&Guard>,
         variables: &mut Variables,
+        values: &mut Vec<LiteralIr>,
     ) -> Result<Vec<AggregateGuard>, FormulaFailure> {
         let mut guards = Vec::new();
         if let Some(left) = left {
             guards.push(AggregateGuard {
                 relation: reverse(left.relation.unwrap_or(Relation::Le)),
-                bound: self.aggregate_expression(&left.term, variables)?,
+                bound: self.aggregate_expression(&left.term, variables, values)?,
             });
         }
         if let Some(right) = right {
             guards.push(AggregateGuard {
                 relation: right.relation.unwrap_or(Relation::Le),
-                bound: self.aggregate_expression(&right.term, variables)?,
+                bound: self.aggregate_expression(&right.term, variables, values)?,
             });
         }
         Ok(guards)
@@ -116,6 +119,7 @@ impl Compiler<'_> {
         &mut self,
         term: &Term,
         variables: &mut Variables,
+        values: &mut Vec<LiteralIr>,
     ) -> Result<Expression, FormulaFailure> {
         if let Some(value) = sentinel(term) {
             self.value(&value)?;
@@ -123,12 +127,13 @@ impl Compiler<'_> {
                 nodes: vec![Operation::Constant(value)],
             });
         }
-        self.expression(term, variables)
+        self.ranged_expression(term, variables, values)
     }
     pub(super) fn body_guards(
         &mut self,
         source: &Body,
         variables: &mut Variables,
+        values: &mut Vec<LiteralIr>,
     ) -> Result<Vec<Vec<AggregateGuard>>, FormulaFailure> {
         let mut result = Vec::new();
         for element in source.elements() {
@@ -141,6 +146,7 @@ impl Compiler<'_> {
                     guarded.left_guard().map(WithProvenance::get),
                     guarded.right_guard().map(WithProvenance::get),
                     variables,
+                    values,
                 )?);
             }
         }
@@ -218,53 +224,77 @@ impl Compiler<'_> {
                     return Err(unsupported(ProfileFeature::Aggregate, self.location).into());
                 }
                 for element in aggregate.elements() {
-                    let mut local = variables.clone();
-                    let mut condition = self.condition(element.get().condition(), &mut local)?;
-                    let tuple = element
-                        .get()
-                        .terms()
-                        .map(|term| self.aggregate_term(term, &mut local))
-                        .collect::<Result<Vec<_>, _>>()?;
-                    if matches!(
-                        aggregate.function(),
-                        AggregateFunction::Min | AggregateFunction::Max
-                    ) && tuple.is_empty()
+                    let fields: Vec<_> = element.get().terms().collect();
+                    for (terms, source_condition) in
+                        self.local_alternatives(&fields, element.get().condition())?
                     {
-                        return Err(unsupported(ProfileFeature::Aggregate, self.location).into());
+                        let mut local = variables.clone();
+                        let mut condition = self.condition(&source_condition, &mut local)?;
+                        let tuple = terms
+                            .iter()
+                            .map(|term| {
+                                if matches!(term, Term::Variable(_) | Term::Symbolic(_)) {
+                                    self.aggregate_term(term, &mut local)
+                                } else {
+                                    self.generated_term(term, &mut local, &mut condition)
+                                }
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+                        if matches!(
+                            aggregate.function(),
+                            AggregateFunction::Min | AggregateFunction::Max
+                        ) && tuple.is_empty()
+                        {
+                            return Err(
+                                unsupported(ProfileFeature::Aggregate, self.location).into()
+                            );
+                        }
+                        self.bindings(&mut condition, &mut local)?;
+                        local.safety(self.location)?;
+                        elements.push(AggregateElementIr {
+                            key: AggregateKey::Tuple(tuple),
+                            condition,
+                            variables: local.count,
+                        });
                     }
-                    self.bindings(&mut condition, &mut local)?;
-                    local.safety(self.location)?;
-                    elements.push(AggregateElementIr {
-                        key: AggregateKey::Tuple(tuple),
-                        condition,
-                        variables: local.count,
-                    });
                 }
                 aggregate.function()
             }
             Aggregate::Set(aggregate) => {
                 for element in aggregate.elements() {
-                    let mut local = variables.clone();
-                    let (literal, mut condition) = match element.get() {
-                        SetElement::Literal(literal) => (literal, Vec::new()),
-                        SetElement::ConditionalLiteral(value) => (
-                            &value.literal,
-                            self.condition(&value.condition, &mut local)?,
-                        ),
+                    let (literal, source_condition) = match element.get() {
+                        SetElement::Literal(literal) => (literal, Condition::new([])),
+                        SetElement::ConditionalLiteral(value) => {
+                            (&value.literal, value.condition.clone())
+                        }
                     };
-                    let LiteralIr::Atom(DefaultNegation::None, atom) =
-                        self.literal(literal, &mut local)?
-                    else {
-                        return Err(unsupported(ProfileFeature::Aggregate, self.location).into());
-                    };
-                    condition.push(LiteralIr::Atom(DefaultNegation::None, atom.clone()));
-                    self.bindings(&mut condition, &mut local)?;
-                    local.safety(self.location)?;
-                    elements.push(AggregateElementIr {
-                        key: AggregateKey::Atom(atom),
-                        condition,
-                        variables: local.count,
-                    });
+                    for alternative in self.condition_alternatives(&source_condition)? {
+                        for selected in self.literal_alternatives(literal)? {
+                            let mut local = variables.clone();
+                            let mut condition = self.condition(&alternative, &mut local)?;
+                            let themelios_program::program::LiteralInner::Atom(atom) =
+                                &selected.inner
+                            else {
+                                return Err(
+                                    unsupported(ProfileFeature::Aggregate, self.location).into()
+                                );
+                            };
+                            if selected.negation != DefaultNegation::None {
+                                return Err(
+                                    unsupported(ProfileFeature::Aggregate, self.location).into()
+                                );
+                            }
+                            let atom =
+                                self.positive_atom_key(atom.get(), &mut local, &mut condition)?;
+                            self.bindings(&mut condition, &mut local)?;
+                            local.safety(self.location)?;
+                            elements.push(AggregateElementIr {
+                                key: AggregateKey::Atom(atom),
+                                condition,
+                                variables: local.count,
+                            });
+                        }
+                    }
                 }
                 AggregateFunction::Count
             }

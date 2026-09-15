@@ -26,16 +26,30 @@ const DEFAULT_OBJECTIVE_PRESENCE_ENTRIES: usize = 16_384;
 /// means unlimited. Source parsing and scalar expansion retain their own limits.
 #[derive(Clone, Copy, Debug)]
 pub struct FormulaLimits {
-    /// Conservative predicate, tuple, weight and completed carrier/value entry
-    /// ceiling in objective-presence plans. Transient numeric subsets have the
-    /// assignment value ceiling; allocator overhead and capacity are excluded.
+    /// Distinct typed atoms in the completed source projection domain.
+    pub max_project_atoms: usize,
+    /// Final retained projection vector capacity and logical atom payload.
+    /// The temporary interner/order envelope is independently derived from
+    /// `max_project_atoms`; new payload copies also consume `ScalarBytes`.
+    /// Excludes source support and allocator metadata; this is not process RSS.
+    pub max_project_bytes: usize,
+    /// Conservative slots for objective-presence plans and shared source
+    /// activity used by objectives and projection declarations. Includes
+    /// predicate traversal, borrowed scope-frame capacity, completed carrier
+    /// values and simultaneous old/new activity entries. These are logical
+    /// planning slots, not allocator bytes; transient numeric subsets retain
+    /// the independent assignment value ceiling.
     pub max_objective_presence_entries: usize,
     /// Typed atoms in one transient scoped objective-body formula. This scratch
     /// catalog cannot add atoms to the original theory or consume its atom cap.
+    /// Source-activity and projection validation instead apply `theory.max_atoms`
+    /// independently to each temporary builder, without adding original atoms.
     pub max_objective_formula_atoms: usize,
     /// DAG nodes in one transient scoped objective-body formula, including
-    /// validation of rows later ignored for nonnumeric fields. Retained query
-    /// nodes have the independent `objective.max_condition_nodes` ceiling.
+    /// validation of rows later ignored for nonnumeric fields. Source-activity
+    /// and projection validation instead apply `theory.max_nodes` independently
+    /// to each temporary builder. Retained original-model objective query nodes
+    /// have the independent `objective.max_condition_nodes` ceiling.
     pub max_objective_formula_nodes: usize,
     /// Distinct scalar values in the logical source, independent of join work.
     pub max_domain_values: usize,
@@ -99,6 +113,8 @@ pub struct FormulaLimits {
 impl Default for FormulaLimits {
     fn default() -> Self {
         Self {
+            max_project_atoms: 1_000_000,
+            max_project_bytes: 67_108_864,
             // Match the bounded aggregate-plan row scale; this counts borrowed
             // pointer slots, not source bytes or semantic candidate atoms.
             max_objective_presence_entries: DEFAULT_OBJECTIVE_PRESENCE_ENTRIES,
@@ -131,13 +147,17 @@ impl Default for FormulaLimits {
 /// Resources counted by the separate formula admission boundary.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FormulaResource {
+    /// Distinct completed source projection atoms.
+    ProjectAtoms,
+    /// Named completed source projection capacity and payload.
+    ProjectBytes,
     /// Signed coefficient width required by finite integer binding analysis.
     /// The implementation capacity is fixed at 64 bits.
     BindingCoefficientBits,
     /// Signed accumulation width required by finite integer binding analysis.
     /// The implementation capacity is fixed at 128 bits.
     BindingBoundBits,
-    /// Simultaneously retained entries in completed objective-presence planning.
+    /// Simultaneous objective-presence and shared source-activity planning slots.
     ObjectivePresenceEntries,
     /// Distinct finite scalar values.
     DomainValues,
@@ -234,6 +254,12 @@ pub enum FormulaFailure {
     /// checked statement view. This refuses compilation, never answer sets.
     ChoiceSource {
         /// Original enclosing rule, or the source whose identity disagreed.
+        location: Location,
+    },
+    /// Source activity disagrees with completed support or previously established
+    /// information. No projection or objective program is published.
+    SourceActivity {
+        /// Source occurrence being prepared when the invariant was checked.
         location: Location,
     },
     /// Located bounded observation compilation failure.
@@ -341,6 +367,7 @@ impl FormulaFailure {
             | Self::SupportRelation { location, .. }
             | Self::SupportTable { location, .. }
             | Self::ChoiceSource { location }
+            | Self::SourceActivity { location }
             | Self::Limit { location, .. }
             | Self::UnsafeVariable { location, .. }
             | Self::UnboundArgumentInput { location, .. }
@@ -368,6 +395,9 @@ impl fmt::Display for FormulaFailure {
             Self::ChoiceSource { .. } => {
                 f.write_str("Boolean choice source occurrences could not be preserved")
             }
+            Self::SourceActivity { .. } => f.write_str(
+                "source activity disagrees with completed support or established information",
+            ),
             Self::Expansion(error) => error.fmt(f),
             Self::Include(error) => error.fmt(f),
             Self::Limit {
@@ -499,6 +529,13 @@ impl AdmittedFormula {
     pub fn metadata(&self) -> &SourceMetadata {
         &self.metadata
     }
+
+    /// Fixed projection domain completed with this exact original source.
+    /// It changes only explicitly requested enumeration identity.
+    #[must_use]
+    pub fn projection(&self) -> &crate::PreparedProjection {
+        &self.compiled.projection
+    }
 }
 
 /// A bounded finite formula theory with the complete original include catalog.
@@ -581,6 +618,12 @@ impl AdmittedFormulaBundle {
     pub fn metadata(&self) -> &SourceMetadata {
         &self.metadata
     }
+
+    /// Fixed projection domain completed with this original source bundle.
+    #[must_use]
+    pub fn projection(&self) -> &crate::PreparedProjection {
+        &self.compiled.projection
+    }
 }
 
 /// A formula refusal retaining original bundle bytes for every diagnostic.
@@ -629,6 +672,7 @@ pub enum AnalysisBasis {
 
 #[derive(Debug)]
 pub(crate) struct Compiled {
+    pub projection: crate::PreparedProjection,
     pub analysis_basis: AnalysisBasis,
     pub analysis: themelios_analysis::Analysis,
     pub analyzed: SourceProgram,

@@ -7,7 +7,7 @@ use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
 
 use super::*;
 use crate::ExpansionLimits;
-use crate::formula_objective_dependencies::eligibility::Context;
+use crate::formula_source_activity::Context;
 
 fn location() -> Location {
     Location {

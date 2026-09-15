@@ -4,8 +4,8 @@
 //! aggregate tuples therefore never enlarge the original program's universe.
 
 use themelios_program::program::{
-    Body, BodyElement, DefaultNegation, LiteralInner, OptimizeElement, Statement, WeakConstraint,
-    Weight,
+    Body, BodyElement, Condition, DefaultNegation, LiteralInner, OptimizeElement, Statement,
+    WeakConstraint, Weight,
 };
 #[path = "formula_objective_scope/selection.rs"]
 mod selection;
@@ -26,7 +26,7 @@ impl Compiler<'_> {
         objectives: &mut Vec<ObjectiveIr>,
         declarations: &mut Vec<Location>,
         projection_nodes: &mut u128,
-    ) -> Result<Option<WithProvenance<Statement>>, FormulaFailure> {
+    ) -> Result<Option<Vec<WithProvenance<Statement>>>, FormulaFailure> {
         if let Statement::WeakConstraint(weak) = statement.get()
             && selection::scoped(weak, self.budget, self.location)?
         {
@@ -44,7 +44,9 @@ impl Compiler<'_> {
                 objectives,
                 declarations,
             )?;
-            return Ok(Some(statement.clone()));
+            return Ok(Some(
+                self.conditional_projection(statement, projection_nodes)?,
+            ));
         }
         Ok(None)
     }
@@ -91,15 +93,35 @@ impl Compiler<'_> {
         }
         evidence.sort_unstable();
         evidence.dedup();
-        let objective = self.scoped_objective(
-            weak.body().get(),
-            weak.weight(),
-            weak.terms(),
-            evidence,
-            WeightPolarity::AsWritten,
-        )?;
+        let fields: Vec<_> = std::iter::once(weak.weight().term())
+            .chain(weak.weight().priority())
+            .chain(weak.terms())
+            .collect();
         declarations.extend_from_slice(origins);
-        objectives.push(objective);
+        for body in self.body_alternatives(weak.body().get())? {
+            let alternatives = self.local_alternatives(&fields, &Condition::new([]))?;
+            for (terms, _) in &alternatives {
+                let mut terms = terms.iter();
+                let mut weight =
+                    themelios_program::program::weight(terms.next().expect("weight field").clone());
+                if weak.weight().priority().is_some() {
+                    weight = weight.at_priority(terms.next().expect("priority field").clone());
+                }
+                self.budget.charge(
+                    ExpansionResource::Origins,
+                    evidence.len() as u128,
+                    self.location,
+                )?;
+                let objective = self.scoped_objective(
+                    &body,
+                    &weight,
+                    terms,
+                    evidence.clone(),
+                    WeightPolarity::AsWritten,
+                )?;
+                objectives.push(objective);
+            }
+        }
         Ok(())
     }
 
@@ -117,6 +139,17 @@ impl Compiler<'_> {
         &mut self,
         element: &OptimizeElement,
     ) -> Result<bool, FormulaFailure> {
+        for term in std::iter::once(element.weight().term())
+            .chain(element.weight().priority())
+            .chain(element.terms())
+            .flat_map(Term::subterms)
+        {
+            self.budget
+                .charge(ExpansionResource::TermWork, 1, self.location)?;
+            if matches!(term, Term::Interval { .. }) {
+                return Ok(true);
+            }
+        }
         selection::condition(element.condition(), self.budget, self.location)
     }
 
@@ -143,6 +176,23 @@ impl Compiler<'_> {
         Ok(objective)
     }
 
+    fn scoped_field(
+        &mut self,
+        term: &Term,
+        variables: &mut Variables,
+        body: &mut Vec<LiteralIr>,
+    ) -> Result<super::ObjectiveField, FormulaFailure> {
+        if term
+            .subterms()
+            .any(|term| matches!(term, Term::Interval { .. }))
+        {
+            return self
+                .ranged_expression(term, variables, body)
+                .map(super::ObjectiveField::Expression);
+        }
+        self.objective_field(term, variables)
+    }
+
     fn scoped_body<'source>(
         &mut self,
         source: &Body,
@@ -154,14 +204,23 @@ impl Compiler<'_> {
         let mut variables = Variables::default();
         // Fields belong to the outer scope, even when only a local aggregate
         // mentions the same name. Local conditions cannot establish their safety.
-        let weight = self.objective_field(source_weight.term(), &mut variables)?;
-        let priority = self.objective_priority(source_weight.priority(), &mut variables)?;
-        let tuple = terms
-            .map(|term| self.objective_field(term, &mut variables))
-            .collect::<Result<Vec<_>, _>>()?;
         let mut body = Vec::new();
+        let weight = self.scoped_field(source_weight.term(), &mut variables, &mut body)?;
+        let priority = match source_weight.priority() {
+            Some(term)
+                if term
+                    .subterms()
+                    .any(|term| matches!(term, Term::Interval { .. })) =>
+            {
+                self.ranged_expression(term, &mut variables, &mut body)?
+            }
+            other => self.objective_priority(other, &mut variables)?,
+        };
+        let tuple = terms
+            .map(|term| self.scoped_field(term, &mut variables, &mut body))
+            .collect::<Result<Vec<_>, _>>()?;
         self.body_literals(source, &mut variables, &mut body)?;
-        let guards = self.body_guards(source, &mut variables)?;
+        let guards = self.body_guards(source, &mut variables, &mut body)?;
         let assignments = self.assignment_targets(source, &guards, &mut variables)?;
         self.bindings(&mut body, &mut variables)?;
         variables.safety(self.location)?;

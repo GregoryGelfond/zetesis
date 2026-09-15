@@ -55,13 +55,15 @@ fn check_profile(
         if extended
             && matches!(
                 statement,
-                ast::Statement::Defined(_) | ast::Statement::Show(_)
+                ast::Statement::Defined(_) | ast::Statement::Show(_) | ast::Statement::Project(_)
             )
         {
-            if formula
-                && let ast::Statement::Show(show) = &statement
-                && let Some(body) = show.body()
-            {
+            let body = match &statement {
+                ast::Statement::Show(show) => show.body(),
+                ast::Statement::Project(project) => project.body(),
+                _ => None,
+            };
+            if formula && let Some(body) = body {
                 for (index, element) in body.elements().enumerate() {
                     if index >= options.max_body_elements {
                         return Err(AdmissionFailure::Limit {

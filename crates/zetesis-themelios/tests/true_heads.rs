@@ -14,8 +14,7 @@ use zetesis_ferraris::{Node, Theory};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
     ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
-    FormulaResource, InputLimit, ProfileFeature, SourceBundle, admit_bundle_formula,
-    admit_extended, admit_formula,
+    FormulaResource, InputLimit, SourceBundle, admit_bundle_formula, admit_extended, admit_formula,
 };
 
 type Names = BTreeSet<String>;
@@ -262,31 +261,24 @@ fn true_head_range_products_match_handwritten_frozen_formulas() {
     }
 }
 
-fn profile(error: &FormulaFailure, expected: ProfileFeature) -> bool {
-    matches!(error, FormulaFailure::Expansion(ExpansionFailure::Admission(
-        AdmissionFailure::Profile { feature, .. }
-    )) if *feature == expected)
-}
-
 #[test]
-fn conditional_disjunction_boundaries_remain_located() {
-    for source in [
-        "p:#false;q:#true.",
-        "p:not #true;q:#true.",
-        "p:not not #false;q:#true.",
-        "p:a;q:#true.",
-        "p:not a;q:#true.",
-        "p:not not a;q:#true.",
-        "p:1=1;q:#true.",
-        "p:#true,a;q:#true.",
-        "p(X):X=1..2;q:#true.",
+fn conditional_disjunctions_preserve_finite_families() {
+    for (source, models) in [
+        ("p:#false;q:#true.", json!([["q"]])),
+        ("p:not #true;q:#true.", json!([["q"]])),
+        ("p:not not #false;q:#true.", json!([["q"]])),
+        ("p:a;q:#true.", json!([["q"]])),
+        ("p:not a;q:#true.", json!([["p"], ["q"]])),
+        ("p:not not a;q:#true.", json!([["q"]])),
+        ("p:1=1;q:#true.", json!([["p"], ["q"]])),
+        ("p:#true,a;q:#true.", json!([["q"]])),
+        ("p(X):X=1..2;q:#true.", json!([["p(1)"], ["p(2)"], ["q"]])),
     ] {
-        let error = input(source).expect_err(source);
-        assert!(
-            profile(&error, ProfileFeature::ConditionalDisjunction),
-            "{source}: {error}"
+        assert_eq!(
+            complete(&input(source).unwrap()),
+            expected(&models),
+            "{source}"
         );
-        assert!(!error.diagnostics().is_empty());
     }
 }
 

@@ -538,40 +538,18 @@ fn atom_pattern_cases_match_complete_clingo_displays() {
     }
 }
 
-const OPEN_QUERY_SHAPES: &[(&str, zetesis_themelios::observation::Feature)] = &[
-    (
-        "p(2). #show. #show X:p(X+1).",
-        zetesis_themelios::observation::Feature::UnsafeVariable,
-    ),
-    (
-        "#show. #show N:N={not p(_)}.",
-        zetesis_themelios::observation::Feature::AnonymousOutput,
-    ),
-    (
-        "p(1). #show. #show N:N={not not p(_)}.",
-        zetesis_themelios::observation::Feature::AnonymousOutput,
-    ),
-];
 #[test]
-fn open_query_shapes_have_located_refusals() {
-    for (source, feature) in OPEN_QUERY_SHAPES {
-        let Err(zetesis_themelios::FormulaFailure::Observation { error }) = admit_formula(
-            (*source).into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        ) else {
-            panic!("expected observation refusal: {source}")
-        };
-        assert_eq!(error.kind(), &ErrorKind::Unsupported(*feature), "{source}");
-        assert!(error.location().is_some());
-    }
+fn inverse_atom_patterns_select_the_complete_integer() {
+    assert_eq!(terms("p(2). #show. #show X:p(X+1)."), ["1"]);
 }
+
 #[test]
-#[ignore = "requires absolute CLINGO; records valid source shapes still outside the profile"]
-fn open_query_shapes_are_valid_complete_reference_queries() {
-    for (source, _) in OPEN_QUERY_SHAPES {
-        observation_reference::compare(source, &serde_json::json!([["1"]]));
+fn anonymous_cardinality_patterns_apply_default_negation() {
+    for source in [
+        "#show. #show N:N={not p(_)}.",
+        "p(1). #show. #show N:N={not not p(_)}.",
+    ] {
+        assert_eq!(terms(source), ["1"], "{source}");
     }
 }
 

@@ -10,7 +10,9 @@ use sha2::{Digest, Sha256};
 use themelios_base::span::Location;
 use zetesis_core::{Atom, Predicate, Sign};
 use zetesis_ferraris::{Node, Theory};
-use zetesis_themelios::{AdmittedFormulaBundle, SourceDirective, SourceMetadata};
+use zetesis_themelios::{
+    AdmittedFormulaBundle, PreparedProjection, SourceDirective, SourceMetadata,
+};
 
 use super::Error;
 
@@ -50,7 +52,7 @@ pub enum SubjectFingerprint {
     },
 }
 
-const FORMAT: &str = "zetesis-execution-subject-v1";
+const FORMAT: &str = "zetesis-execution-subject-v2";
 
 pub(super) fn subject(
     subject: &AdmittedFormulaBundle,
@@ -84,6 +86,7 @@ pub(super) fn subject(
     encoding.origins(subject.objective_origins())?;
     encoding.locations(subject.objective_declarations())?;
     encoding.metadata(subject.metadata())?;
+    encoding.projection(subject.projection())?;
     Ok(SubjectFingerprint::Available {
         format: FORMAT,
         bytes: encoding.bytes,
@@ -206,6 +209,11 @@ impl Encoding {
                 }
                 SourceDirective::ShowEmpty => self.tag(2)?,
                 SourceDirective::ShowTerm => self.tag(3)?,
+                SourceDirective::ProjectSignature(predicate) => {
+                    self.tag(4)?;
+                    self.predicate(predicate)?;
+                }
+                SourceDirective::ProjectAtom => self.tag(5)?,
             }
             self.location(located.location())?;
         }
@@ -215,6 +223,14 @@ impl Encoding {
             self.predicate(predicate)?;
         }
         self.count(0) // complete term-observation plan count, checked before encoding
+    }
+    fn projection(&mut self, domain: &PreparedProjection) -> Result<(), Error> {
+        self.tag(u8::from(domain.is_explicit()))?;
+        self.count(domain.atoms().len())?;
+        for atom in domain.atoms() {
+            self.atom(atom)?;
+        }
+        Ok(())
     }
 }
 

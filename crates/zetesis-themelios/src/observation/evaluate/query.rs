@@ -16,6 +16,43 @@ enum Choice {
     Value(usize),
 }
 
+impl Choice {
+    /// Apply one cursor choice while leaving every captured value in the
+    /// current depth's undo owner, including when matching refuses or fails.
+    fn bind<'a>(
+        self,
+        binder: &Binder,
+        alternatives: Option<&values::Values>,
+        atoms: &ModelRows<'a>,
+        binding: &mut [Option<Bound<'a>>],
+        undo: &mut Vec<usize>,
+        work: &mut Work<'_>,
+    ) -> Result<bool, Error> {
+        match (binder, self) {
+            (Binder::NumericMismatch(aggregate), Self::Value(_)) => {
+                scopes::aggregate(aggregate, atoms, binding, work)?;
+                Ok(false)
+            }
+            (Binder::Atom(alternatives), Self::Atom { alternative, row }) => matches(
+                &alternatives[alternative],
+                atoms.get(row),
+                binding,
+                undo,
+                true,
+                work,
+            ),
+            (
+                binder @ (Binder::Aggregate(_, _) | Binder::Assign(_, _) | Binder::Match { .. }),
+                Self::Value(cursor),
+            ) => {
+                let owned = owned_binding(binder, alternatives, cursor, atoms, binding, work)?;
+                retain_binding(binder, owned, cursor, binding, undo, work)
+            }
+            _ => unreachable!("query cursors preserve binder kind"),
+        }
+    }
+}
+
 enum Cursor {
     Atoms(AtomChoices),
     Values(usize),
@@ -57,7 +94,10 @@ fn cursors(
     for binder in &query.binders {
         cursors.push(match binder {
             Binder::Atom(patterns) => Cursor::Atoms(AtomChoices::new(patterns, atoms, work)?),
-            Binder::Assign(..) | Binder::Match { .. } | Binder::Aggregate(..) => Cursor::Values(0),
+            Binder::Assign(..)
+            | Binder::Match { .. }
+            | Binder::Aggregate(..)
+            | Binder::NumericMismatch(_) => Cursor::Values(0),
         });
     }
     Ok(cursors)
@@ -76,7 +116,11 @@ fn undo_slots(query: &Query, work: &Work<'_>) -> Result<Vec<Vec<usize>>, Error> 
                 .max()
                 .unwrap_or(0),
             Binder::Assign(_, _) | Binder::Aggregate(_, _) => 1,
-            Binder::Match { pattern, .. } => patterns::slots(pattern) + 1,
+            Binder::NumericMismatch(_) => 0,
+            Binder::Match {
+                patterns: alternatives,
+                ..
+            } => alternatives.iter().map(patterns::slots).max().unwrap_or(0) + 1,
         };
         undos.push(work.reserve(count)?);
     }
@@ -91,6 +135,11 @@ fn owned_binding(
     binding: &[Option<Bound<'_>>],
     work: &mut Work<'_>,
 ) -> Result<(usize, Symbol, Metric), Error> {
+    let cursor = if let Binder::Match { patterns, .. } = binder {
+        cursor / patterns.len()
+    } else {
+        cursor
+    };
     match binder {
         Binder::Assign(slot, expression)
         | Binder::Match {
@@ -132,7 +181,9 @@ fn owned_binding(
             work.local_bytes += metric.payload();
             Ok((*slot, value, metric))
         }
-        Binder::Atom(_) => unreachable!("relational bindings use borrowed atom matching"),
+        Binder::Atom(_) | Binder::NumericMismatch(_) => {
+            unreachable!("this binder does not retain a scalar")
+        }
     }
 }
 
@@ -144,7 +195,7 @@ fn choice_count(
 ) -> Result<usize, Error> {
     Ok(match binder {
         Binder::Atom(_) => unreachable!("atom cursors enumerate predicate ranges"),
-        Binder::Aggregate(_, _) => 1,
+        Binder::Aggregate(_, _) | Binder::NumericMismatch(_) => 1,
         Binder::Assign(_, expression)
         | Binder::Match {
             value: expression, ..
@@ -152,9 +203,21 @@ fn choice_count(
             if expression.multiple() && alternatives.is_none() {
                 *alternatives = Some(values::collect(expression, binding, work)?);
             }
-            alternatives
+            let values = alternatives
                 .as_ref()
-                .map_or(1, |values| values.values.len())
+                .map_or(1, |values| values.values.len());
+            let patterns = if let Binder::Match { patterns, .. } = binder {
+                patterns.len()
+            } else {
+                1
+            };
+            values.checked_mul(patterns).ok_or_else(|| {
+                work.error(ErrorKind::Limit {
+                    resource: Resource::Bindings,
+                    observed: (values as u128) * (patterns as u128),
+                    limit: u128::from(work.limits.max_bindings),
+                })
+            })?
         }
     })
 }
@@ -164,13 +227,24 @@ fn choice_count(
 fn retain_binding(
     binder: &Binder,
     owned: (usize, Symbol, Metric),
+    cursor: usize,
     binding: &mut [Option<Bound<'_>>],
     undo: &mut Vec<usize>,
     work: &mut Work<'_>,
 ) -> Result<bool, Error> {
     let (slot, value, metric) = owned;
-    let matched = if let Binder::Match { pattern, .. } = binder {
-        patterns::bind_symbol(pattern, &value, binding, undo, work)
+    let matched = if let Binder::Match {
+        patterns: alternatives,
+        ..
+    } = binder
+    {
+        patterns::bind_symbol(
+            &alternatives[cursor % alternatives.len()],
+            &value,
+            binding,
+            undo,
+            work,
+        )
     } else {
         Ok(true)
     };
@@ -227,37 +301,15 @@ pub(super) fn visit<'a>(
                 depth -= 1;
                 continue;
             };
-            match (&query.binders[depth], choice) {
-                (Binder::Atom(alternatives), Choice::Atom { alternative, row }) => {
-                    if !matches(
-                        &alternatives[alternative],
-                        atoms.get(row),
-                        &mut binding,
-                        &mut undos[depth],
-                        true,
-                        work,
-                    )? {
-                        continue;
-                    }
-                }
-                (
-                    binder
-                    @ (Binder::Aggregate(_, _) | Binder::Assign(_, _) | Binder::Match { .. }),
-                    Choice::Value(cursor),
-                ) => {
-                    let owned = owned_binding(
-                        binder,
-                        alternatives[depth].as_ref(),
-                        cursor,
-                        atoms,
-                        &binding,
-                        work,
-                    )?;
-                    if !retain_binding(binder, owned, &mut binding, &mut undos[depth], work)? {
-                        continue;
-                    }
-                }
-                _ => unreachable!("query cursors preserve binder kind"),
+            if !choice.bind(
+                &query.binders[depth],
+                alternatives[depth].as_ref(),
+                atoms,
+                &mut binding,
+                &mut undos[depth],
+                work,
+            )? {
+                continue;
             }
             if depth + 1 == query.binders.len() {
                 if !complete(query, atoms, &mut binding, work, visitor)? {

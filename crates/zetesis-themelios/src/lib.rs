@@ -40,8 +40,10 @@ mod metadata;
 mod formula;
 mod formula_choice_source;
 mod formula_ir;
+mod formula_project_ir;
 mod formula_value;
 mod formula_value_ir;
+mod formula_range_ir;
 mod formula_aggregate_ir;
 mod formula_analysis;
 mod formula_pool;
@@ -49,6 +51,7 @@ mod formula_assignment_ir;
 mod formula_assignment;
 mod formula_assignment_plan;
 mod formula_objective_dependencies;
+mod formula_source_activity;
 mod formula_ground;
 mod grounding_observer;
 mod formula_factor;
@@ -120,8 +123,8 @@ pub use grounding_observer::{
 pub use grounding_options::{DomainLimits, GroundingOptions, JoinStrategy};
 pub use metadata::{
     AtomSelection, AtomSelectionError, AtomSelectionLimits, LocatedDirective, MetadataError,
-    MetadataFeature, MetadataLimits, MetadataResource, OutputSelection, SourceDirective,
-    SourceMetadata,
+    MetadataFeature, MetadataLimits, MetadataResource, OutputSelection, PreparedProjection,
+    ProjectSelection, SourceDirective, SourceMetadata,
 };
 
 /// Explicit host admission ceilings. Zero means that no resource of that kind

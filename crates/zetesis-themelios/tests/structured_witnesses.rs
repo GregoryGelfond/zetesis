@@ -468,9 +468,14 @@ fn witness_capture_limit_is_inclusive() {
 
 #[test]
 fn witness_nodes_obey_the_value_ceiling() {
-    // One selected consequent alternative precedes the charged pattern nodes;
-    // a source sign wrapper remains a node even when its sign is folded.
-    for (source, exact) in [("q:-p(f(X)):#true.", 3), ("q:-p(-f(X)):#true.", 4)] {
+    // One complete condition selection and one selected consequent precede
+    // pattern nodes. The flat control isolates those two occurrence units;
+    // f(X) adds two nodes, and a source sign wrapper adds one even when folded.
+    for (source, exact) in [
+        ("q:-p(X):#true.", 2),
+        ("q:-p(f(X)):#true.", 4),
+        ("q:-p(-f(X)):#true.", 5),
+    ] {
         for cap in [exact - 1, exact] {
             let result = zetesis_themelios::prepare_formula(
                 source.into(),
@@ -486,8 +491,8 @@ fn witness_nodes_obey_the_value_ceiling() {
             } else {
                 assert!(
                     matches!(result, Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
-                    resource: ExpansionResource::Values, observed, ..
-                })) if observed == exact as u128),
+                    resource: ExpansionResource::Values, limit, observed, ..
+                })) if limit == cap as u128 && observed == exact as u128),
                     "{source}"
                 );
             }

@@ -216,6 +216,7 @@ impl WorldView {
         // the missing prefix of an already consumed session.
         let subject = request.subject();
         let mut session = request
+            .full_identity()
             .selection(AnswerSelection::All)
             .start_with(observations)
             .map_err(|error| WorldViewFailure {

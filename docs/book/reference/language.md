@@ -68,13 +68,23 @@ source-work and derived-atom limits; these formula limits do not describe it.
 | --- | --- | --- |
 | Normal rules and constraints | Safe finite relational rules, default and double negation, singleton unbounded choices | More general constructs use the formula profile |
 | Strong negation | Signed atom identities and coherence constraints; signed source and observation forms | Remaining constructor and condition profiles still apply |
-| Disjunction | Finite signed/evaluated disjunctive heads, including admitted top-level numeric intervals; direct formula compilation without shifting | Nontrivial conditional disjuncts and unsupported nested pools |
-| Boolean literals | Signed `#true`/`#false` in rule bodies and choice/aggregate conditions; Boolean singleton heads and Boolean disjuncts with empty or explicitly true conditions; signed Boolean choice and function-head elements | Separate objective/observation condition profiles |
-| Logical values | Closed signed functions, tuples, strings and extremal terms; complete variable copying, finite construction from bound inputs and structural comparisons | Nested pools/intervals and broader expression contexts remain restricted |
+| Disjunction | Finite signed/evaluated disjunctive heads and conditional disjuncts with independent local bindings; direct formula compilation without shifting | Unresolved local bindings and unsupported inverse generators |
+| Boolean literals | Signed `#true`/`#false` in rule bodies and choice/aggregate conditions; Boolean singleton heads and disjuncts with finite local conditions; signed Boolean choice and function-head elements | Separate objective/observation condition profiles |
+| Logical values | Closed signed functions, tuples, strings and extremal terms; complete variable copying, finite construction from bound inputs, nested pools/intervals and structural comparisons | Unbound expression inputs and unbounded recursive construction |
 | Positive witnesses | Constructor/tuple patterns preserve sign, name, arity and complete supporting atoms; evaluated positions consume bound inputs | Arithmetic inversion; a negative atom cannot supply a missing binding |
 | Comparisons | Equality/disequality, structural ordering, admitted flat-tuple equality and complete comparison chains, including default/double negation; directed finite integer-affine chains can bind several unresolved variables | Nonlinear inverse binders and simultaneous systems without directed finite bounds |
-| Finite generators | Scalar equality, admitted flat-tuple equality, closed integer bounds, dependent intervals and finite scoped rule/head pools | Unsupported body/local pool contexts and broader nested interval construction |
-| Universal body conditionals | Complete local implication families with signed consequent alternatives, positive local witnesses and finite anonymous projections under `not` or `not not` | Unsupported local generators and nested pools |
+| Finite generators | Scalar equality, admitted flat-tuple equality, closed integer bounds, dependent intervals and scoped finite pools in rules, local elements and objectives | Unresolved or circular binding dependencies and unsupported arithmetic inversion |
+| Universal body conditionals | Complete local implication families with signed atom and comparison alternatives, scoped pools/intervals, positive local witnesses and finite anonymous projections under `not` or `not not` | Unbound local inputs and unsupported arithmetic inversion |
+
+A conditional disjunct `H:C` contributes `(C → H) ∧ not not C` at each
+completed local binding. Those instances join the same head disjunction;
+an empty family contributes false. Each local condition starts with the same
+outer bindings, and its private variables cannot bind the enclosing rule.
+The condition determines eligibility, while its original implication remains
+in the frozen reduct. A positive head atom obtains support only from its own
+condition together with the rule body; default and double negation retain their
+original form. See the [conditional-head laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/conditional-heads.md)
+and [complete-family controls](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/conditional_heads.rs).
 
 For example, `q(X) :- d(X), p(X+1).` checks the complete supporting `p` atom
 after `d(X)` binds `X`. By contrast, `q(X) :- p(X+1).` requires arithmetic
@@ -171,11 +181,45 @@ establish any of them:
 
 Anonymous inputs inside arithmetic or unary wrappers,
 classical-negative anonymous predicates and genuinely unbound named inputs
-remain refused. These safety boundaries are distinct from the remaining nested
-pool and local-generator implementation gaps. See the
+remain refused. Expanding a pool does not let one alternative supply another
+alternative's missing input. See the
 [conditional contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/consequent_alternatives.rs)
 and the finite-carrier laws in
 [`ProjectedConditionals`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ProjectedConditionals.lean).
+
+Finite pools retain source occurrence boundaries. In an ordinary rule, each
+head, body or guard occurrence chooses independently and the product emits
+complete rules. Thus `q :- p(1;2).` supplies the two rules `q :- p(1).` and
+`q :- p(2).`; it does not require both body atoms. Pool alternatives inside a
+choice, aggregate or optimization element remain in that same group. Complete
+atom or tuple keys still coalesce by the group's established semantics. Boolean
+choice contributions retain their original source occurrence keys.
+
+A local conditional condition has its own environment for every pool selection.
+Universal body conditions contribute separate conjuncts; conditional head
+instances remain alternatives in one disjunction. A bound variable shared within
+one occurrence keeps its identity, while identical pool spellings in two
+occurrences do not force equal selections.
+
+Comparison consequents use the same inner alternative order. For example,
+`q :- X=(1;2) : d(X).` requires each completed `d(X)` condition to have at least
+one matching value alternative. Comparison alternatives cannot bind a missing
+source name. A range in the middle of a comparison chain chooses one value for
+both adjacent tests. All reached alternatives are evaluated, including those
+after a true result, so undefined arithmetic cannot disappear through a
+short-circuit.
+
+Nested pools distribute through constructors and checked expressions before
+scope compilation. Nested intervals use fresh data slots in that scope; their
+values are combined with the other constructor arguments only after the required
+inputs are bound. Every interval occurrence is independent, including repeated
+spellings. An empty range can yield no instances, but cannot hide an unsafe
+source name or a required arithmetic failure. Source expansion, value storage,
+substitution and work limits still refuse the whole operation. The
+[finite occurrence controls](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/finite_pools.rs)
+compare complete answers and every original/frozen pair with explicit expansions.
+Their mathematical coverage premises are described in the
+[finite occurrence guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/finite-occurrences.md).
 
 ## Choices and aggregates
 
@@ -241,12 +285,18 @@ coalesce; repeated Boolean elements retain their separate occurrence keys.
 This Boolean counting rule is an adopted language extension. Its intended
 reduct laws and the remaining source-to-implementation correspondence are
 separated in the [Lean proof boundary](../lean/correspondence.md).
+Pool alternatives in one Boolean element also share that element's key.
+Thus `{p(1);p(2)}.1{#true:p(1;2)}1.` admits `{p(1)}`, `{p(2)}` and
+`{p(1),p(2)}` under this contract, like the single element `#true:p(X)`.
+Writing `#true:p(1);#true:p(2)` instead introduces two keys and excludes the
+both-atom answer. Clingo treats this pooled condition like the latter form;
+this specific case is an explicit semantic difference, not a parity claim.
 
 | Aggregate form | Implemented scope | Remaining boundary |
 | --- | --- | --- |
 | Body `#count`, `#sum`, `#sum+` | Finite comparisons against complete logical bounds, recursive eligibility, complete-tuple coalescing and fresh-target assignments with completed finite support | Unresolved dependencies within a binding scope and unsupported local generators |
 | Body `#min`, `#max` | Comparisons over complete logical values; empty extrema; dependency-ordered assignments with completed finite support | Missing tuple values, the numeric endpoint guard below and unsupported local consumers |
-| Assignment consumers | Dependency-ordered scalar/tuple filters and equalities, evaluated positive arguments/heads, admitted outer negative atoms, finite outer ranges, logical choice bounds, nonbinding aggregate guards and universal conditionals; objective dependencies can include several assignments and recursive producers with completed finite support | Broader local scopes and unresolved dependencies within a binding scope |
+| Assignment consumers | Dependency-ordered scalar/tuple filters and equalities, evaluated arguments/heads, outer negative atoms and ranges, logical choice bounds and nonbinding aggregate guards; complete outer proposals can feed finite local choice, aggregate-element, conditional-head and universal-conditional scopes while retaining the original equality | Unresolved dependencies within a binding scope and local generators outside the admitted finite profiles |
 | `#count` heads | Positive atomic permission coalesced by head atom and signed activity coalesced by complete tuple, including both alias directions, Boolean operands and objective dependencies | Unsupported local eligibility scopes |
 | `#sum`, `#sum+` heads | Signed numeric `#sum` and positive-only numeric `#sum+`; missing/nonnumeric measures contribute zero; positive atomic permission is independent of numeric contribution, including nonpositive `#sum+` weights and objective dependencies | Unsupported local eligibility scopes |
 | `#min`, `#max` heads | Complete first values use ASP term order; missing values are neutral under the declared extension; positive atomic permission coalesces by head atom and signed activity by complete tuple, including both alias directions, Boolean operands and objective dependencies | The numeric endpoint guard and unsupported local eligibility scopes |
@@ -394,14 +444,21 @@ Pooled conditional consequents in weak bodies retain their local alternatives:
 `p(X;X+1):d(X)` requires, for each completed `d(X)` binding, at least one of
 `p(X)` and `p(X+1)`. Negation applies to each alternative before their disjunction.
 The analyzed program uses the same bounded signature/polarity projection as rule
-bodies and reports `AnalysisBasis::DependencyProjection`; its conjunction of
-projected occurrences is not the objective's truth condition. Weight, priority,
-complete tuple and runtime query remain attached to the original weak constraint.
-Pools in ordinary weak-body atoms, local conditions and aggregate elements remain
-restricted, as do pooled scalar binders and objective fields; the
-[objective pool contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_pools.rs)
-retain exact witnesses. Unresolved dependencies within a binding scope and
-unsupported local generators remain restricted.
+bodies and reports `AnalysisBasis::DependencyProjection`; this bounded syntax
+projection preserves signed dependencies and arities, not the objective's truth
+condition. Weight, priority, complete tuple and runtime query remain attached to
+the original weak constraint.
+
+Pools in ordinary weak-body atoms and guards form independent observations.
+Pools in local conditions or aggregate tuples remain local to their element;
+weight, priority and complete objective-tuple pools form independent complete
+keys. Repeated complete keys still contribute once if any corresponding
+condition is true. Nested interval fields use the same scoped data generators.
+The [objective pool contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_pools.rs)
+compare the complete scored families with explicit observations. An alternative
+must establish its own required bindings: `d(X;X+1)` cannot use the first
+alternative to make `X` safe in the second. Unresolved binding dependencies and
+unsupported arithmetic inversion remain refused.
 
 For example:
 
@@ -424,13 +481,26 @@ original theory and retained `objective.max_condition_nodes`; cumulative source
 work and value budgets still apply. The [scoped objective contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/objective_scopes.rs)
 check full costs, scope, required errors and independent limits.
 
-Each objective has its own source-eligibility plan. Ordinary activity can prove
-an atom absent or required, or leave it optional. Rich producer cones and their
-recursive dependencies use completed possible support where a more precise
-classification is unavailable, including aggregate assignments, aggregate guards
-and universal conditionals. The complete finite carrier covers true atoms without
-claiming that every proposed row is realizable. Original-model queries decide
-which retained contributions actually count.
+Transient rich producer and projection-condition validation instead apply
+`theory.max_atoms` and `theory.max_nodes` independently to each temporary
+builder. They do not add atoms or roots to the original theory.
+`max_objective_presence_entries` bounds shared source-activity planning slots,
+including predicate and scope traversal and simultaneous old/new activity
+tables, as well as objective-presence carriers. These limits count their stated
+formula or planning populations. They are not allocator or process-memory caps;
+activity folding does not consume retained `objective.max_condition_nodes`.
+
+Each objective has its own source-eligibility plan. The shared source-activity
+fold reads the existing lowered bodies, including aggregate assignments, guards
+and universal conditionals. It can establish absent or required atoms, or leave
+them optional. Recursive dependencies start from completed possible support and
+refine only after aggregating every producer for a whole round. An optional atom
+and its negation remain optional; the analysis does not decide their joint
+realizability. Heads outside this refinement profile retain the conservative
+carrier. An independently absent producer supplies no row or redundant zero-cost
+priority slot, while original-model queries determine the actual costs of all
+retained rows. Removing an always-zero slot preserves costs aligned by priority
+and every optimum tie, although the raw vector becomes shorter.
 
 A completed support round adds no new positive head atom after all its joins and
 binding proposals finish. Resource exhaustion returns a typed failure, not a
@@ -495,7 +565,8 @@ answer-set identity. Shown terms can use checked arithmetic, constructors,
 tuples, finite intervals and pools. Conditions admit signed atoms, Boolean
 operands, scalar comparisons and directed equalities, aggregates and universal
 conditionals. Positive patterns bind structural components from actual model
-atoms; arithmetic in a pattern consumes established inputs. Nested structural
+atoms. Arithmetic reads established inputs or uses the inverse profile for one
+unresolved occurrence described below. Nested structural
 pool alternatives preserve their own captures, and only captures common to
 every alternative can supply another body element without an independent binder.
 
@@ -504,8 +575,8 @@ comparison chain. A middle pool or interval chooses one value shared by both
 adjacent comparisons; the original guards remain. Positive constructor and tuple
 equalities can capture ordered components from a finite evaluated operand in
 either direction, preserving sign, constructor identity and repeated-variable
-agreement. Arithmetic positions consume established inputs or structural captures
-from the same pattern; they do not invert arithmetic. Strict comparisons and
+agreement. Arithmetic positions can read structural captures from the same
+pattern or supply one admitted inverse candidate. Strict comparisons and
 default-negated chains remain consumers.
 
 Local scopes retain their own variables. Aggregate keys remain complete tuples;
@@ -515,9 +586,9 @@ must be independently established. Constructor-valued `#min` and `#max` equality
 guards use the actual supplied-model measure for the same structural capture and
 retain every original guard. Empty extrema remain `#sup` and `#inf`. Numeric
 aggregate comparisons retain their widened arithmetic; structural capture does
-not narrow a `#count` or `#sum` measure to an ordinary scalar value. A failed query returns a typed error rather
-than partial shown output. These operations neither add values to the grounding
-domain nor create atom support.
+not narrow a `#count` or `#sum` measure to an ordinary scalar value. A failed query
+returns a typed error rather than partial shown output. These operations neither
+add values to the grounding domain nor create atom support.
 
 Anonymous atom matching projects over the supplied model before applying
 default negation. zetesis applies this rule uniformly to both strong signs.
@@ -527,9 +598,9 @@ extension: clingo 5.8.2 rejects that form as unsafe. Separate
 [diagnostic fixtures](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/fixtures/observation-strong-anonymous.jsonl)
 record the difference; it is not a parity pass or an answer-set semantics change.
 
-L17 remains open. These valid finite forms still receive located refusals:
+Finite observation binding includes the following forms:
 
-| Remaining observation context | Exact source witness |
+| Observation context | Exact source witness |
 | --- | --- |
 | Arithmetic inversion in an atom | `p(2). #show. #show X:p(X+1).` |
 | Arithmetic inversion in an equality | `#show. #show X:X+1=2.` |
@@ -538,14 +609,60 @@ L17 remains open. These valid finite forms still receive located refusals:
 | Anonymous keys under negated cardinality elements | `#show. #show N:N={not p(_)}.` and `p(1). #show. #show N:N={not not p(_)}.` |
 | Structural equality against a numeric aggregate | `#show. #show X:f(X)=#count{}.` and `#show. #show X:f(X)=#sum{2147483647,a;1,b}.` |
 
-The [binding contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/observation_bindings.rs)
+One unresolved occurrence can be recovered through unary minus, addition,
+subtraction or multiplication by already bound operands. The evaluator checks
+the complete authored expression after deriving the candidate. An out-of-range
+or nonintegral inverse supplies no scalar match; reached undefined authored
+arithmetic still returns an error. A zero multiplier is refused as an unsafe
+binder because it cannot provide a unique inverse.
+Division, powers, bit operations, multiple unresolved occurrences and
+simultaneous equations are not inverse binders in this profile.
+
+Capturing pool alternatives retain independent bindings. Fully bound alternatives
+can supply finite values after earlier binders run. Anonymous cardinality keys
+preserve the complete signed atom pattern and default-negation kind. A pattern
+contributes once when its existential condition holds, regardless of how many
+atoms witness it; equal concrete branches coalesce before counting. The numeric
+aggregate examples above have an impossible constructor match and show no value. They neither coerce
+numbers into constructors nor narrow widened aggregate arithmetic.
+
+The [binding contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/observation_bindings.rs),
+[inverse contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/observation_inverse.rs)
 and [expression contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/observation_expressions.rs)
-preserve these original sources and complete external comparisons. The numeric
-aggregate examples need recognition of an impossible structural match; they are
-not undefined arithmetic. Cyclic or unseeded local bindings and missing extremum
-measures retain their separate explicit boundaries.
-Projection through `#project` is not implemented and is not silently treated as
-`#show`.
+retain original source witnesses. Cyclic or unseeded local bindings and missing
+measures in authored extremum elements retain their separate explicit boundaries;
+an empty extremum itself remains valid. Source-template limits bound admitted
+alternatives, while each observation operation has independent work, substitution,
+symbol construction, live local payload and output limits. Those named limits do
+not describe process RSS.
+
+### Projected enumeration
+
+`#project p/1.` selects all original possible atoms with that signed predicate.
+`#project p(X):body.` selects the finite instances retained by source activity.
+All declarations contribute to one fixed domain. They do not produce logical
+heads, change the original theory or choose which atoms `#show` displays.
+
+The CLI returns one full answer-set representative for each distinct restriction
+to that domain. An explicit empty domain has one class for a nonempty selected
+family. Objective selection happens before representatives are chosen. A model
+count limits representatives; full-model verification and optimization counts
+remain separate. Programs without `#project` retain full answer identity.
+
+Source activity is an independent-literal abstraction computed during grounding,
+not a query evaluated on each answer. For example, `{p;q}. #project p:q,not q.`
+still selects `p`: both literals remain optional source possibilities. In
+`q. {p}. #project p:not q.`, the required fact makes the declaration inactive.
+Complete producer refinement also recognizes facts in dependency cycles and
+constant aggregate conditions. It does not solve correlations between optional
+literals. Declaration atoms absent from original possible support are omitted.
+
+The library requests this behavior explicitly through
+[`SessionBuilder::projected`](../rust/sessions.md#projected-enumeration).
+`WorldView` always collects the complete original answer family. The current
+projection source profile uses eager formula grounding; work and retained-domain
+limits can refuse preparation, and separate history limits can stop enumeration
+without claiming complete projected coverage.
 
 Ordered input bundles support includes and global constants with bounded
 source traversal and retained resolution evidence. Parameter-free `#program base`

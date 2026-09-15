@@ -15,7 +15,8 @@ pub enum SolveStage {
     SourcePreparation,
     /// Explicit finite instance materialization, including attempted failures.
     Grounding,
-    /// Solver setup, search, coordinator waits and objective scoring.
+    /// Solver setup, search, coordinator waits, objective scoring and projected
+    /// answer identity. Display and rendering remain observation/output work.
     Solving,
     /// Observation, rendering and output, including failed writes.
     ObservationOutput,

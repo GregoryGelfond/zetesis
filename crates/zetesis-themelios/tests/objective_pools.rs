@@ -94,12 +94,22 @@ fn analysis_projection_retains_complete_weak_fields() {
                 _ => None,
             })
             .collect();
-        assert_eq!(original.len(), projected.len(), "{}", case.name);
-        for (original, projected) in original.iter().zip(projected) {
-            assert_eq!(original.weight(), projected.weight(), "{}", case.name);
-            assert_eq!(
-                original.terms().collect::<Vec<_>>(),
-                projected.terms().collect::<Vec<_>>(),
+        for original in &original {
+            assert!(
+                projected
+                    .iter()
+                    .any(|projected| original.weight() == projected.weight()
+                        && original.terms().eq(projected.terms())),
+                "{}",
+                case.name
+            );
+        }
+        for projected in projected {
+            assert!(
+                original
+                    .iter()
+                    .any(|original| original.weight() == projected.weight()
+                        && original.terms().eq(projected.terms())),
                 "{}",
                 case.name
             );
@@ -201,35 +211,69 @@ fn projected_analysis_has_an_inclusive_node_limit() {
 }
 
 #[test]
-fn unrelated_pool_contexts_keep_located_refusals() {
-    use zetesis_themelios::{AdmissionFailure, ExpansionFailure, ProfileFeature};
-    for (source, feature) in [
+fn finite_objective_occurrences_preserve_complete_scored_families() {
+    for (source, expanded) in [
+        (
+            "{p}.:~#count{1:p}=(0;1).[(1;2)]",
+            "{p}.:~#count{1:p}=0.[1]:~#count{1:p}=1.[1]:~#count{1:p}=0.[2]:~#count{1:p}=1.[2]",
+        ),
+        (
+            "{p}.:~#count{1:p}=(0..1)+0.[1]",
+            "{p}.:~#count{1:p}=0.[1]:~#count{1:p}=1.[1]",
+        ),
         (
             "d(1;2).p(1).:~d(X),p(X;X+1).[X@X,X]",
-            ProfileFeature::PooledArguments,
+            "d(1;2).p(1).:~d(X),p(X).[X@X,X]:~d(X),p(X+1).[X@X,X]",
         ),
-        ("p(1).:~X=(1;2),p(X).[X@X,X]", ProfileFeature::Term),
         (
-            "d(1;2).p(1).p(3).:~p(X):d(X;X+1).[1]",
-            ProfileFeature::PooledArguments,
+            "p(1).:~X=(1;2),p(X).[X@X,X]",
+            "p(1).:~X=1,p(X).[X@X,X]:~X=2,p(X).[X@X,X]",
         ),
-        ("p(1).:~#count{(1;2):p(1)}>0.[1]", ProfileFeature::Aggregate),
+        (
+            "d(1;2).e(1;2;3).p(1).p(3).:~p(X):d(X),e(X;X+1).[1]",
+            "d(1;2).e(1;2;3).p(1).p(3).:~p(X):d(X),e(X);p(X):d(X),e(X+1).[1]",
+        ),
+        (
+            "p(1).:~#count{(1;2):p(1)}>0.[1]",
+            "p(1).:~#count{1:p(1);2:p(1)}>0.[1]",
+        ),
         (
             "p(1).:~#count{1:p(1;2)}>0.[1]",
-            ProfileFeature::PooledArguments,
+            "p(1).:~#count{1:p(1);1:p(2)}>0.[1]",
         ),
-        ("p(1).#minimize{1:p(1;2)}.", ProfileFeature::PooledArguments),
-        ("p(1).:~p(1).[(1;2)]", ProfileFeature::Term),
+        (
+            "p(1).#minimize{1:p(1;2)}.",
+            "p(1).#minimize{1:p(1);1:p(2)}.",
+        ),
+        ("p(1).:~p(1).[(1;2)]", "p(1).:~p(1).[1]:~p(1).[2]"),
+        ("{p}.:~p.[1@(1;2)]", "{p}.:~p.[1@1]:~p.[1@2]"),
+        ("{p}.:~p.[(1;1),f((2;3))]", "{p}.:~p.[1,f(2)]:~p.[1,f(3)]"),
+        ("{p}.:~p.[1,f(1..2)]", "{p}.:~p.[1,f(1)]:~p.[1,f(2)]"),
+        ("{p}.:~p.[1..2]", "{p}.:~p.[1]:~p.[2]"),
+        (
+            "{p(f(1));p(f(2))}.:~p(f((1;2))).[(1;2)]",
+            "{p(f(1));p(f(2))}.:~p(f(1)).[1]:~p(f(1)).[2]:~p(f(2)).[1]:~p(f(2)).[2]",
+        ),
     ] {
-        let error = source_records::admit(source, &FormulaLimits::default()).unwrap_err();
-        assert!(
-            matches!(error, FormulaFailure::Expansion(ExpansionFailure::Admission(
-            AdmissionFailure::Profile { feature: actual, location }
-        )) if actual == feature && !location.span.is_empty()),
-            "{source}: {error}"
-        );
-        assert!(!error.diagnostics().is_empty());
+        let original = source_records::admit(source, &FormulaLimits::default())
+            .unwrap_or_else(|error| panic!("{source}: {error}"));
+        let expanded = source_records::admit(expanded, &FormulaLimits::default()).unwrap();
+        let actual = source_records::exhaustive(&original);
+        assert!(!actual.is_empty(), "nonempty finite family: {source}");
+        assert_eq!(actual, source_records::exhaustive(&expanded), "{source}");
+        assert_eq!(original.source().text(), source);
     }
+}
+
+#[test]
+fn local_pool_alternatives_do_not_borrow_another_alternatives_binder() {
+    let source = "d(1;2).p(1).p(3).:~p(X):d(X;X+1).[1]";
+    let error = source_records::admit(source, &FormulaLimits::default()).unwrap_err();
+    assert!(
+        matches!(error, FormulaFailure::UnboundArgumentInput { .. }),
+        "{error}"
+    );
+    assert!(!error.diagnostics().is_empty());
 }
 
 #[test]

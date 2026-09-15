@@ -131,12 +131,22 @@ pub(super) fn aggregate(
     let result = (|| {
         for element in &query.elements {
             visit(&element.query, atoms, outer, work, &mut |binding, work| {
-                super::values::each(&element.tuple, binding, work, |tuple, metric, work| {
-                    if eligible(query.function, &tuple) {
-                        key(tuple, metric, &mut keys, work)?;
-                    }
-                    Ok(())
-                })?;
+                super::values::each(
+                    &element.tuple,
+                    binding,
+                    work,
+                    |mut tuple, mut metric, work| {
+                        if element.atom_pattern_key {
+                            super::anonymous::normalize_key(&mut tuple, work)?;
+                            metric = Metric::default();
+                            work.symbol_check(&tuple, 1, &mut metric)?;
+                        }
+                        if eligible(query.function, &tuple) {
+                            key(tuple, metric, &mut keys, work)?;
+                        }
+                        Ok(())
+                    },
+                )?;
                 Ok(true)
             })?;
         }

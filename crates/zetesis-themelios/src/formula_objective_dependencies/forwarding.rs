@@ -73,8 +73,8 @@ fn definitions(rules: &[RuleIr]) -> BTreeMap<Signature, Option<&RuleIr>> {
         match &rule.head {
             HeadIr::Normal(Some(atom)) => record(atom),
             HeadIr::Normal(None) => {}
-            HeadIr::Disjunction(heads) => {
-                for head in heads {
+            HeadIr::Disjunction(_) | HeadIr::ConditionalDisjunction { .. } => {
+                for head in rule.head.disjuncts() {
                     if let Some(atom) = head.atom() {
                         record(atom);
                     }

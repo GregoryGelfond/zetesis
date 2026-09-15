@@ -5,6 +5,8 @@ mod patterns;
 mod query;
 mod rows;
 mod values;
+mod inverse;
+mod anonymous;
 
 use std::cmp::Ordering;
 
@@ -479,9 +481,11 @@ fn resolve<'a>(operand: &'a Operand, binding: &'a [Option<Bound<'_>>]) -> Option
     match operand {
         Operand::Value(value) => Some(Reference::Value(value)),
         Operand::Variable(slot) => binding[*slot].as_ref().map(Bound::borrow),
-        Operand::Any | Operand::Function(_, _, _) | Operand::Tuple(_) | Operand::Expression(_) => {
-            None
-        }
+        Operand::Any
+        | Operand::Function(_, _, _)
+        | Operand::Tuple(_)
+        | Operand::Expression(_)
+        | Operand::Inverse { .. } => None,
     }
 }
 fn matches<'a>(
@@ -585,14 +589,14 @@ fn condition(
             }
             Ok(false)
         }
-        Condition::AtomValue(negation, slot) => {
+        Condition::AtomPatternValue(negation, slot) => {
             let Some(Reference::Symbol(value)) = binding[*slot].as_ref().map(Bound::borrow) else {
                 unreachable!("a generated atom key is an owned symbol")
             };
             let mut present = false;
             for row in atoms.symbol(value, work)? {
                 let atom = atoms.get(row);
-                if patterns::atom_value(value, atom, work)? {
+                if anonymous::atom(value, atom, work)? {
                     present = true;
                     break;
                 }

@@ -53,6 +53,7 @@ enum Prepared<'a> {
 pub struct PreparedInput<'a> {
     input: Prepared<'a>,
     metadata: Option<&'a SourceMetadata>,
+    projection: Option<&'a zetesis_themelios::PreparedProjection>,
 }
 impl<'a> PreparedInput<'a> {
     /// Reuse an admitted native relational program without source metadata.
@@ -64,6 +65,7 @@ impl<'a> PreparedInput<'a> {
         Self {
             input: Prepared::Relational(program),
             metadata: None,
+            projection: None,
         }
     }
     /// Reuse an admitted normal program and its source metadata.
@@ -72,6 +74,7 @@ impl<'a> PreparedInput<'a> {
         Self {
             input: Prepared::Relational(owner.program()),
             metadata: Some(owner.metadata()),
+            projection: None,
         }
     }
     /// Reuse an admitted original-source bundle without loading its files again.
@@ -80,6 +83,7 @@ impl<'a> PreparedInput<'a> {
         Self {
             input: Prepared::Relational(owner.program()),
             metadata: Some(owner.metadata()),
+            projection: None,
         }
     }
     /// Reuse a formula owner, preserving its exact atom indexing and objectives.
@@ -97,6 +101,7 @@ impl<'a> PreparedInput<'a> {
                 ),
             }),
             metadata: Some(owner.metadata()),
+            projection: Some(owner.projection()),
         }
     }
     /// Reuse a formula bundle with its original metadata and objective program.
@@ -114,6 +119,7 @@ impl<'a> PreparedInput<'a> {
                 ),
             }),
             metadata: Some(owner.metadata()),
+            projection: Some(owner.projection()),
         }
     }
     /// Reuse the supplied complete graph. Auto chooses eager execution; explicit
@@ -124,6 +130,7 @@ impl<'a> PreparedInput<'a> {
         Self {
             input: Prepared::Ground(owner),
             metadata: None,
+            projection: None,
         }
     }
     /// Representation used for strategy compatibility checks.
@@ -139,6 +146,13 @@ impl<'a> PreparedInput<'a> {
     #[must_use]
     pub const fn metadata(self) -> Option<&'a SourceMetadata> {
         self.metadata
+    }
+
+    /// Fixed source projection domain compiled with this coherent input.
+    /// An absent or implicit domain leaves ordinary full enumeration unchanged.
+    #[must_use]
+    pub const fn projection(self) -> Option<&'a zetesis_themelios::PreparedProjection> {
+        self.projection
     }
     pub(crate) fn subject(self) -> Subject {
         match self.input {
@@ -274,9 +288,26 @@ pub struct SessionBuilder<'a> {
     selection: AnswerSelection,
     resources: ExecutionResources,
     measurements: Option<crate::SolveMeasurements>,
+    projection: Option<crate::ProjectionLimits>,
 }
 
 impl<'a> SessionBuilder<'a> {
+    /// Return one full answer-set representative per source `#project` key.
+    /// Objective selection happens first. This changes enumeration identity,
+    /// not membership, scoring or the atoms retained in each representative.
+    /// `config.models` counts representatives; zero requests all classes.
+    /// Construction only records the request. Starting requires a completed
+    /// explicit projection domain; history limits are independent of search.
+    #[must_use]
+    pub const fn projected(mut self, limits: crate::ProjectionLimits) -> Self {
+        self.projection = Some(limits);
+        self
+    }
+
+    pub(crate) const fn full_identity(mut self) -> Self {
+        self.projection = None;
+        self
+    }
     /// Choose the answer family. The default is optimal ties when an objective
     /// is present; inputs without objectives always enumerate their full family.
     #[must_use]
@@ -377,12 +408,36 @@ impl<'a> SessionBuilder<'a> {
     }
 
     pub(crate) fn start_with(
-        self,
+        mut self,
         observations: &mut impl ExecutionSink,
     ) -> Result<Session<'a>, SolveFailure> {
         let phases = self
             .measurements
             .unwrap_or_else(|| crate::SolveMeasurements::new(self.config.stats));
+        let projected_limit = self.config.models;
+        let projection = self
+            .projection
+            .map(|limits| {
+                let _solving = phases.stage(crate::SolveStage::Solving);
+                self.control
+                    .poll()
+                    .map_err(crate::ProjectionError::Control)?;
+                let domain = self
+                    .input
+                    .projection()
+                    .ok_or(crate::ProjectionError::MissingDeclaration)?;
+                crate::projection::Projection::new(domain, limits)
+            })
+            .transpose()
+            .map_err(|error| {
+                let mut failure = SolveFailure::from(SolveError::Projection(error));
+                failure.subject = Some(self.input.subject());
+                failure.phase_timings = phases.snapshot().map(Box::new);
+                failure
+            })?;
+        if projection.is_some() {
+            self.config.models = 0;
+        }
         let result = Session::initialize(
             self.input,
             self.config,
@@ -399,6 +454,9 @@ impl<'a> SessionBuilder<'a> {
                 control: self.control,
                 phases,
                 subject: self.input.subject(),
+                projection,
+                projected_limit,
+                projection_done: false,
             }),
             Err(error) => {
                 let mut failure = SolveFailure::from(error);
@@ -444,6 +502,9 @@ pub struct Session<'a> {
     control: Control,
     phases: crate::SolveMeasurements,
     subject: Subject,
+    projection: Option<crate::projection::Projection<'a>>,
+    projected_limit: usize,
+    projection_done: bool,
 }
 impl<'a> Session<'a> {
     /// Compose answer selection, execution resources and preparation
@@ -463,6 +524,7 @@ impl<'a> Session<'a> {
             selection: AnswerSelection::Optimal,
             resources: ExecutionResources::default(),
             measurements: None,
+            projection: None,
         }
     }
 
@@ -560,6 +622,7 @@ impl<'a> Session<'a> {
             let interruption = Interruption::Preparation(stop);
             return Ok((
                 State::Stopped(Box::new(SemanticOutcome {
+                    projection: None,
                     subject: Some(input.subject()),
                     selection: Some(selection),
                     verified: 0,
@@ -621,13 +684,23 @@ impl<'a> Session<'a> {
     /// optimized outcome can be available while retained ties await delivery.
     #[must_use]
     pub fn outcome(&self) -> Option<SemanticOutcome> {
-        match &self.state {
+        if self.projection_done {
+            return Some(self.progress());
+        }
+        let mut outcome = match &self.state {
             State::Closure(state) => state.terminal().then(|| state.outcome()),
             State::Formula(state) => state
                 .finished()
                 .then(|| state.outcome(self.phases.recorder())),
             State::Stopped(outcome) => Some((**outcome).clone()),
+        };
+        if let Some(outcome) = &mut outcome {
+            outcome.projection = self
+                .projection
+                .as_ref()
+                .map(crate::projection::Projection::statistics);
         }
+        outcome
     }
     /// End an unfinished session and retain its current evidence. Coverage stays
     /// unavailable unless the retained engine already established a terminal state.
@@ -648,11 +721,25 @@ impl<'a> Session<'a> {
     /// the recorded coverage determines whether enumeration is complete.
     #[must_use]
     pub fn progress(&self) -> SemanticOutcome {
-        match &self.state {
+        let mut outcome = match &self.state {
             State::Closure(state) => state.outcome(),
             State::Formula(state) => state.outcome(self.phases.recorder()),
             State::Stopped(outcome) => (**outcome).clone(),
+        };
+        outcome.projection = self
+            .projection
+            .as_ref()
+            .map(crate::projection::Projection::statistics);
+        if self.projection_done
+            && self.projected_limit != 0
+            && outcome
+                .projection
+                .is_some_and(|stats| stats.representatives >= self.projected_limit)
+            && outcome.search_state.is_none()
+        {
+            outcome.search_state = Some(crate::SearchState::RequestedModels);
         }
+        outcome
     }
     /// Pull the next answer using synchronous typed execution observations.
     ///
@@ -673,6 +760,58 @@ impl<'a> Session<'a> {
     }
 
     pub(crate) fn pull(
+        &mut self,
+        observations: &mut impl ExecutionSink,
+    ) -> Option<Result<AnswerSet, SolveFailure>> {
+        if self.projection_done {
+            return None;
+        }
+        loop {
+            let next = self.pull_original(observations);
+            let Some(projection) = self.projection.as_mut() else {
+                return next;
+            };
+            match next {
+                Some(Ok(answer)) => {
+                    let solving = self.phases.stage(crate::SolveStage::Solving);
+                    let inserted = projection.insert(answer.interpretation(), &self.control);
+                    drop(solving);
+                    match inserted {
+                        Ok(false) => {}
+                        Ok(true) => {
+                            self.projection_done = self.projected_limit != 0
+                                && projection.statistics().representatives >= self.projected_limit;
+                            return Some(Ok(answer));
+                        }
+                        Err(error) => {
+                            self.projection_done = true;
+                            let mut failure = SolveFailure::from(SolveError::Projection(error));
+                            failure.subject = Some(self.subject.clone());
+                            failure.semantic = Some(Box::new(self.progress()));
+                            failure.phase_timings = self.phase_timings().map(Box::new);
+                            return Some(Err(failure));
+                        }
+                    }
+                }
+                Some(Err(error)) => {
+                    self.projection_done = true;
+                    return Some(Err(error));
+                }
+                None => {
+                    self.projection_done = true;
+                    let complete =
+                        self.progress().completion() == Some(crate::Completion::Exhausted);
+                    self.projection
+                        .as_mut()
+                        .expect("projected stream")
+                        .finish(complete);
+                    return None;
+                }
+            }
+        }
+    }
+
+    fn pull_original(
         &mut self,
         observations: &mut impl ExecutionSink,
     ) -> Option<Result<AnswerSet, SolveFailure>> {

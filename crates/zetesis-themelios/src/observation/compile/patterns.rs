@@ -12,9 +12,9 @@ use super::{
 };
 use themelios_program::program::Atom;
 
-fn captures(operand: &Operand, slots: &mut BTreeSet<usize>) {
+pub(super) fn captures(operand: &Operand, slots: &mut BTreeSet<usize>) {
     match operand {
-        Operand::Variable(slot) => {
+        Operand::Variable(slot) | Operand::Inverse { slot, .. } => {
             slots.insert(*slot);
         }
         Operand::Function(_, _, arguments) | Operand::Tuple(arguments) => {
@@ -35,7 +35,7 @@ fn provided(pattern: &Pattern) -> BTreeSet<usize> {
 }
 fn evaluated(operand: &Operand) -> bool {
     match operand {
-        Operand::Expression(_) => true,
+        Operand::Expression(_) | Operand::Inverse { .. } => true,
         Operand::Function(_, _, arguments) | Operand::Tuple(arguments) => {
             arguments.iter().any(evaluated)
         }
@@ -114,6 +114,9 @@ impl Compiler<'_> {
         for argument in arguments {
             terms.push(self.operand(argument, bind, 1)?);
         }
+        if bind {
+            self.prepare_inverses(&mut terms);
+        }
         let predicate = Predicate::with_sign(
             atom.name.as_str(),
             terms.len(),
@@ -177,6 +180,13 @@ impl Compiler<'_> {
                 .all(|argument| self.operand_ready(argument, captures)),
             _ => true,
         }
+    }
+    pub(super) fn prepare_inverses(&self, terms: &mut [Operand]) {
+        let mut available = BTreeSet::new();
+        for term in terms.iter() {
+            captures(term, &mut available);
+        }
+        self.inverse_operands(terms, &available);
     }
     pub(super) fn patterns_ready(&self, patterns: &[Pattern]) -> bool {
         patterns.iter().all(|pattern| {

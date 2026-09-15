@@ -1,8 +1,8 @@
 //! Aggregate reference cases include recursive formulas whose classical truth
 //! tables agree but whose reducts have different subset models.
 //!
-//! The fixture contains 321 sources: 313 admitted comparisons/assignments and
-//! eight explicit refusals, including two unsafe programs. The portable test
+//! The fixture contains 321 sources: 315 admitted comparisons/assignments and
+//! six explicit refusals, including two unsafe programs. The portable test
 //! compares every admission with independent exhaustive reduct enumeration;
 //! the optional test reruns the full external reference campaign. A recorded
 //! unsupported case is a refusal regression, never a compatibility pass.
@@ -146,6 +146,7 @@ fn exhaustive(input: &AdmittedFormula) -> (BTreeSet<BTreeSet<Atom>>, Option<Vec<
 enum Refusal {
     Unsafe,
     Feature(ProfileFeature),
+    Evaluation,
 }
 
 fn expected_refusal(name: &str) -> Option<Refusal> {
@@ -156,10 +157,11 @@ fn expected_refusal(name: &str) -> Option<Refusal> {
         | "count_unsafe_local"
         | "set_body_duplicate_atom"
         | "set_body_signed_literal_keys" => Some(Refusal::Unsafe),
-        "count_interval_tuple"
-        | "set_body_excluded_middle"
-        | "sum_local_undefined"
-        | "ground_tuple_interval" => Some(Refusal::Feature(ProfileFeature::Aggregate)),
+        "set_body_excluded_middle" => Some(Refusal::Feature(ProfileFeature::Aggregate)),
+        // Finite aggregate tuple expressions are admitted, but reached 1/0
+        // remains an evaluation failure. clingo's discarded-term result is
+        // retained as reference data, not substituted for this source contract.
+        "sum_local_undefined" => Some(Refusal::Evaluation),
         _ => None,
     }
 }
@@ -168,6 +170,10 @@ fn assert_refusal(error: &FormulaFailure, expected: Refusal) {
     assert!(!error.diagnostics().is_empty(), "located source refusal");
     match expected {
         Refusal::Unsafe => assert!(matches!(error, FormulaFailure::UnsafeVariable { .. })),
+        Refusal::Evaluation => assert!(matches!(
+            error,
+            FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })
+        )),
         Refusal::Feature(expected) => {
             let FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
                 feature,
@@ -221,7 +227,7 @@ fn recorded_aggregate_comparisons_match_exhaustive_reduct_models() {
             admitted += 1;
         }
     }
-    assert_eq!((admitted, refused), (313, 8));
+    assert_eq!((admitted, refused), (315, 6));
 }
 
 #[test]

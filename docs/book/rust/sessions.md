@@ -171,6 +171,72 @@ or query interfaces requires a separate adapter contract.
 
 ## Reuse and identity
 
+### Projected enumeration
+
+`SessionBuilder::projected(ProjectionLimits::default())` requests one full
+`AnswerSet` per key in the prepared source's explicit `#project` domain. The
+key is the answer's restriction to that fixed atom domain. Hidden atoms remain
+in the returned interpretation; `#show` remains a separate display operation.
+Without this request the library enumerates full answer identities.
+
+The grounder completes the domain with the original source owner.
+`PreparedInput::projection()` exposes that immutable domain. A projected request
+without an explicit declaration returns `ProjectionError::MissingDeclaration`.
+An explicit empty domain has one class if the selected family is nonempty.
+The current source door uses finite formula admission and eager grounding.
+
+Objective selection precedes projection. Two answers with the same key can have
+different costs, so discarding one before optimization could discard an optimum.
+The requested model count bounds representatives, while original membership,
+candidate and objective accounting continue to describe full answers.
+`SemanticOutcome::projection()` separately reports representatives, duplicates,
+charged work, named storage capacity and whether the selected key image was
+completely enumerated. Search exhaustion or a proved optimum alone does not
+establish complete delivery of representatives.
+
+History limits are independent of search and objective limits. `max_keys` counts
+distinct keys; duplicates need no additional entry. `max_bytes` bounds the history
+header, packed keys, lookup index and reusable current-key buffer, including
+replacement overlap. The borrowed prepared domain, full answers and solver state
+have separate owners and limits. The peak receipt records allocated capacities;
+an unallocated refused request does not increase it. `max_work` charges domain
+probes, key resets, hashing, comparisons, copies and index visits, including
+collision handling and failed attempts. These are named operation and capacity
+allowances, not instruction counts or process RSS.
+
+A refused key is not returned, earlier representatives remain valid, and the failure retains
+original verification evidence. Cancellation and history exhaustion never prove
+unsatisfiability. The CLI requests projection when the source declares
+`#project`; its JSON outcome includes the separate projection receipt.
+That receipt describes enumeration through the session. External rendering or
+writer delivery can still fail after the session returns a representative.
+
+`WorldView` always denotes the complete original answer family.
+`SessionBuilder::collect` therefore selects all full identities, overriding both
+objective selection and a prior projected request. Use a streaming session for
+representatives. The laws in `Zetesis.ProjectedAnswers` distinguish original
+membership, selected properties and equality of the represented key image;
+they do not verify the concrete Rust history or source-domain construction.
+
+This checked example compares the four original answers with their two
+projection classes. `#show.` hides every atom in displayed output, but it does
+not erase the full interpretations or merge their projection keys.
+
+```rust
+# extern crate zetesis_solve;
+# extern crate zetesis_cpu;
+# extern crate zetesis_themelios;
+{{#include ../examples/projected-answers.rs:example}}
+```
+
+Run it from the checkout root with:
+
+```sh
+cargo run --locked -p zetesis-solve --no-default-features --example book-projected-answers
+```
+
+### Composing requests
+
 `Session::builder(input, config, control)` composes a request before execution.
 Use `selection(AnswerSelection::All)` for unrestricted enumeration, or retain
 the default objective selection. `resources(&resources)` supplies reusable

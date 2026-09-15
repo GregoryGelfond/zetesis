@@ -61,6 +61,8 @@ pub struct Report {
 /// A failed input, transport, or backend operation; never a claim of UNSAT.
 #[derive(Debug)]
 pub enum RunError {
+    /// Fixed-domain projected enumeration failed with full membership retained.
+    Projection(zetesis_solve::ProjectionError),
     /// Reading a bounded standard-input source failed before semantic admission.
     Input(io::Error),
     /// The requested process deadline cannot be represented by the host clock.
@@ -176,6 +178,7 @@ impl fmt::Display for RunError {
             f.write_str("source admission: ")?;
         }
         match self {
+            Self::Projection(error) => error.fmt(f),
             Self::Input(error) => write!(f, "standard input ('-'): {error}"),
             Self::TimeLimitRange { seconds } => write!(f, "--time-limit {seconds}: time limit exceeds the platform clock range"),
             Self::MixedStandardInput => f.write_str(
@@ -272,6 +275,7 @@ impl RunError {
 impl std::error::Error for RunError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::Projection(error) => Some(error),
             Self::Input(error) => Some(error),
             Self::Admission(error) => Some(error),
             Self::Expansion(error) => Some(error),
@@ -707,6 +711,7 @@ impl From<zetesis_solve::SolveError> for RunError {
     fn from(error: zetesis_solve::SolveError) -> Self {
         use zetesis_solve::SolveError;
         match error {
+            SolveError::Projection(error) => Self::Projection(error),
             SolveError::Batch(error) => Self::Batch(error),
             SolveError::QueryObservation(error) => Self::QueryObservation(error),
             SolveError::CompletionPool(error) => Self::CompletionPool(error),

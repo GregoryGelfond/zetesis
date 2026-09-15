@@ -3,7 +3,8 @@
 use crate::{Completion, Interruption, Optimization, SearchState};
 
 /// The answer family requested by a semantic session, independently of whether
-/// it was completely searched or delivered.
+/// it was completely searched or delivered. Optional projected enumeration
+/// selects representatives only after establishing this original family choice.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AnswerSelection {
     /// All full answer sets of the original program, regardless of objectives.
@@ -20,6 +21,7 @@ pub enum AnswerSelection {
 /// Neither missing coverage nor a zero publication count establishes UNSAT.
 #[derive(Clone, Debug)]
 pub struct SemanticOutcome {
+    pub(crate) projection: Option<crate::ProjectionStatistics>,
     pub(crate) subject: Option<crate::Subject>,
     pub(crate) selection: Option<AnswerSelection>,
     pub(crate) verified: u64,
@@ -45,6 +47,7 @@ impl SemanticOutcome {
     #[must_use]
     pub const fn interrupted_before_start(interruption: Interruption) -> Self {
         Self {
+            projection: None,
             subject: None,
             selection: None,
             verified: 0,
@@ -68,6 +71,14 @@ impl SemanticOutcome {
     #[must_use]
     pub const fn selection(&self) -> Option<AnswerSelection> {
         self.selection
+    }
+
+    /// Distinct projected representatives when projection was requested.
+    /// Absence denotes full answer identity. Full-model search coverage and
+    /// optimum evidence remain independent of projected-stream completion.
+    #[must_use]
+    pub const fn projection(&self) -> Option<&crate::ProjectionStatistics> {
+        self.projection.as_ref()
     }
 
     /// Original immutable semantic subject, before any candidate restrictions.

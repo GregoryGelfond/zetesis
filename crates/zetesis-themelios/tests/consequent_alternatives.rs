@@ -49,6 +49,15 @@ fn corpus_models() -> Models {
 // Independent finite substitutions. OR consequents distribute into the complete
 // rule family below; conditions retain their own universal rows.
 const CASES: &[(&str, &str)] = &[
+    ("q:-not p(f(_,(1;2))):#true.", "q."),
+    (
+        "{p(f(1,1));p(f(2,2))}.q:-not p(f(_,(1;2))):#true.",
+        "{p(f(1,1));p(f(2,2))}.q:-not p(f(1,1)).q:-not p(f(2,2)).",
+    ),
+    (
+        "{p(f(1,1));p(f(2,2))}.q:-not not p(f(_,(1;2))):#true.",
+        "{p(f(1,1));p(f(2,2))}.q:-not not p(f(1,1)).q:-not not p(f(2,2)).",
+    ),
     ("q(N):-N=#count{};not p(N,_):d.", "q(0)."),
     (
         "{d;p(0,1)}.q(N):-N=#count{};not p(N,_):d.",
@@ -420,22 +429,25 @@ fn empty_witnesses_preserve_signed_false() {
 #[test]
 fn structured_witnesses_preserve_frozen_projection() {
     for (polarity, sign) in [(1, "not "), (2, "not not ")] {
-        let source = format!("{{p(f(1,1));p(f(2,1));p(f(1,2));c}}.q:-{sign}p(f(_,X..X+1)):X=1,c.");
-        let witnesses = Formula::Or(
-            Box::new(Formula::atom("p(f(1,1))")),
-            Box::new(Formula::atom("p(f(2,1))")),
-        );
-        let alternatives = Formula::Or(
-            Box::new(witnesses.sign(polarity)),
-            Box::new(Formula::atom("p(f(1,2))").sign(polarity)),
-        );
-        compare_root(
-            &input(&source),
-            &Formula::implies(
-                Formula::implies(Formula::atom("c"), alternatives),
-                Formula::atom("q"),
-            ),
-        );
+        for term in ["X..X+1", "(X;X+1)", "(1;2)"] {
+            let source =
+                format!("{{p(f(1,1));p(f(2,1));p(f(1,2));c}}.q:-{sign}p(f(_,{term})):X=1,c.");
+            let witnesses = Formula::Or(
+                Box::new(Formula::atom("p(f(1,1))")),
+                Box::new(Formula::atom("p(f(2,1))")),
+            );
+            let alternatives = Formula::Or(
+                Box::new(witnesses.sign(polarity)),
+                Box::new(Formula::atom("p(f(1,2))").sign(polarity)),
+            );
+            compare_root(
+                &input(&source),
+                &Formula::implies(
+                    Formula::implies(Formula::atom("c"), alternatives),
+                    Formula::atom("q"),
+                ),
+            );
+        }
     }
 }
 
@@ -493,22 +505,6 @@ fn empty_condition_rows_defer_projection_values() {
         native(&input("q:-not p(f(_,1/X)):X=2..1.")),
         native(&input("q."))
     );
-}
-
-#[test]
-fn nested_pools_retain_their_admission_boundary() {
-    assert!(matches!(
-        limited(
-            "q:-not p(f(_,(1;2))):#true.",
-            ExpansionLimits::default(),
-            &FormulaLimits::default()
-        ),
-        Err(FormulaFailure::Expansion(
-            zetesis_themelios::ExpansionFailure::Admission(
-                zetesis_themelios::AdmissionFailure::Profile { .. }
-            )
-        ))
-    ));
 }
 
 #[test]

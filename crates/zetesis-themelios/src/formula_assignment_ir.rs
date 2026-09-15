@@ -6,6 +6,7 @@ use themelios_program::program::{
 use zetesis_core::{AtomPattern, Term};
 
 use crate::diagnostic::unsupported;
+use crate::formula_conditional_ir::{Consequent, ConsequentOperand};
 use crate::formula_ir::{
     AggregateElementIr, AggregateGuard, AggregateIr, AggregateKey, Compiler, Expression, LiteralIr,
     Operation, Projection, Variables,
@@ -269,33 +270,7 @@ impl Compiler<'_> {
                 false
             }
             LiteralIr::Conditional(conditional) => {
-                let consequent_uses = match &conditional.consequent {
-                    crate::formula_conditional_ir::Consequent::Atoms(_, alternatives) => {
-                        let mut uses = false;
-                        for alternative in alternatives {
-                            uses |= match &alternative.operand {
-                                crate::formula_conditional_ir::ConsequentOperand::Atom(atom) => {
-                                    self.pattern_uses(atom, variable)?
-                                }
-                                crate::formula_conditional_ir::ConsequentOperand::Projection(
-                                    projection,
-                                ) => self.projection_uses(projection, variable)?,
-                            };
-                            for literal in &alternative.bindings {
-                                uses |= self.literal_uses(literal, variable)?;
-                            }
-                        }
-                        uses
-                    }
-                    crate::formula_conditional_ir::Consequent::Guard(guard) => {
-                        let mut uses = false;
-                        for expression in guard.expressions() {
-                            uses |= self.expression_uses(expression, variable)?;
-                        }
-                        uses
-                    }
-                };
-                if consequent_uses {
+                if self.consequent_uses(&conditional.consequent, variable)? {
                     return Ok(true);
                 }
                 for literal in &conditional.condition {
@@ -335,5 +310,45 @@ impl Compiler<'_> {
                     || self.expression_uses(upper, variable)?
             }
         })
+    }
+
+    /// Visit every local alternative before the enclosing condition scope is read.
+    fn consequent_uses(
+        &mut self,
+        consequent: &Consequent,
+        variable: usize,
+    ) -> Result<bool, FormulaFailure> {
+        let mut uses = false;
+        match consequent {
+            Consequent::Atoms(_, alternatives) => {
+                for alternative in alternatives {
+                    uses |= match &alternative.operand {
+                        ConsequentOperand::Atom(atom) => self.pattern_uses(atom, variable)?,
+                        ConsequentOperand::Projection(projection) => {
+                            self.projection_uses(projection, variable)?
+                        }
+                    };
+                    for literal in &alternative.bindings {
+                        uses |= self.literal_uses(literal, variable)?;
+                    }
+                }
+            }
+            Consequent::Guards(alternatives) => {
+                for alternative in alternatives {
+                    for expression in alternative.guard.expressions() {
+                        uses |= self.expression_uses(expression, variable)?;
+                    }
+                    for literal in &alternative.bindings {
+                        uses |= self.literal_uses(literal, variable)?;
+                    }
+                }
+            }
+            Consequent::Guard(guard) => {
+                for expression in guard.expressions() {
+                    uses |= self.expression_uses(expression, variable)?;
+                }
+            }
+        }
+        Ok(uses)
     }
 }

@@ -57,7 +57,10 @@ fn composed_carrier_limits_are_inclusive() {
             }
         }
         let input = attempt(upper).unwrap();
-        assert_eq!(input.objectives().priorities(), [3]);
+        // The fixed symbolic maximum excludes n(1), hence every p(N).
+        // Carrier preparation still runs under both inclusive ceilings even
+        // though no numeric objective row survives source activity.
+        assert!(input.objectives().priorities().is_empty());
         assert_eq!(source_records::exhaustive(&input), expected);
         let failure = attempt(upper - 1).unwrap_err();
         assert!(

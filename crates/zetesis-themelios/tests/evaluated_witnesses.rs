@@ -36,6 +36,17 @@ fn input(source: &str) -> AdmittedFormula {
 // These independently written finite substitutions retain whole source atoms.
 // Data equality selects alternatives; it contributes no logical support itself.
 const CASES: &[(&str, &str)] = &[
+    // Former syntax refusals now retain complete occurrence semantics.
+    ("p(1,2).q:-p(X,X+(1;2)):#true.", "p(1,2).q:-p(1,2)."),
+    ("p(1,2).q:-p(X,X+(1..2)):#true.", "p(1,2).q:-p(1,2)."),
+    (
+        "{p(1,2);p(1,3);p(2,5)}.q:-p(X,X+(1;2)):#true.",
+        "{p(1,2);p(1,3);p(2,5)}.q:-p(1,2).q:-p(1,3).",
+    ),
+    (
+        "{p(1,2);p(1,3);p(2,5)}.q:-p(X,X+(1..2)):#true.",
+        "{p(1,2);p(1,3);p(2,5)}.q:-p(1,2).q:-p(1,3).",
+    ),
     (
         "{p(1,2);p(2,4)}.q:-p(X,X+1):#true.",
         "{p(1,2);p(2,4)}.q:-p(1,2).",
@@ -349,31 +360,6 @@ fn negative_witnesses_cannot_supply_inputs() {
 }
 
 #[test]
-fn nested_alternatives_remain_explicit_refusals() {
-    for source in [
-        "p(1,2).q:-p(X,X+(1;2)):#true.",
-        "p(1,2).q:-p(X,X+(1..2)):#true.",
-    ] {
-        assert!(
-            matches!(
-                limited(
-                    source,
-                    ExpansionLimits::default(),
-                    &FormulaLimits::default()
-                ),
-                Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
-                    zetesis_themelios::AdmissionFailure::Profile {
-                        feature: zetesis_themelios::ProfileFeature::Term,
-                        ..
-                    }
-                )))
-            ),
-            "{source}"
-        );
-    }
-}
-
-#[test]
 fn undefined_arithmetic_requires_a_complete_row() {
     for source in ["q:-p(X,X/0):#true.", "p(g(1,2)).q:-p(f(X,X/0)):#true."] {
         assert!(
@@ -454,11 +440,12 @@ fn prepared_grounding_preserves_witness_models() {
 
 #[test]
 fn compiled_checks_retain_original_source() {
-    let source = CASES[0].0;
+    let source = "p(1,2).q:-p(X,X+(1;2)):#true.";
     let admitted = input(source);
     assert_eq!(admitted.source().text(), source);
-    assert!(admitted.formula_origins().iter().flatten()
-        .any(|location| admitted.source().slice(location.span).unwrap() == "q:-p(X,X+1):#true."));
+    assert!(admitted.formula_origins().iter().flatten().any(|location| {
+        admitted.source().slice(location.span).unwrap() == "q:-p(X,X+(1;2)):#true."
+    }));
 }
 
 #[test]

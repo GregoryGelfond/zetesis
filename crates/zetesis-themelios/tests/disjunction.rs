@@ -1,4 +1,4 @@
-//! Signed unconditional source disjunctions retain their original reduct.
+//! Finite signed source disjunctions retain their original reduct.
 //! Hand-written formula trees are independent of source normalization and SAT.
 
 #[path = "support/objective_dependency_records.rs"]
@@ -291,64 +291,65 @@ fn unrelated_objectives_preserve_presence_priorities_and_tuple_identity() {
 }
 
 #[test]
-fn excluded_heads_remain_located_refusals() {
-    for case in cases()
+fn unsafe_disjunct_variables_remain_located_refusals() {
+    let cases = cases();
+    let unsafe_cases: Vec<_> = cases
         .iter()
-        // The immutable fixture records a historical arithmetic refusal.
-        // Current scalar/interval, negated-head, finite-pool and true/empty-condition semantics
-        // have dedicated tests.
-        .filter(|case| {
-            case["expected_native"] == "refuse"
-                && case["expected_refusal"] != "ObjectiveDisjunctionDependency"
-                && !matches!(
-                    case["name"].as_str().unwrap(),
-                    "variable-arithmetic-head"
-                        | "interval-head"
-                        | "default-negated-head"
-                        | "conditional-empty-head"
-                        | "pooled-head"
-                        | "infinite-head"
-                )
-        })
-    {
+        .filter(|case| case["expected_refusal"] == "UnsafeVariable")
+        .collect();
+    assert_eq!(unsafe_cases.len(), 2);
+    for case in unsafe_cases {
         let error =
             input(case["source"].as_str().unwrap()).expect_err(case["name"].as_str().unwrap());
         assert!(!error.diagnostics().is_empty());
-        if case["expected_refusal"] == "UnsafeVariable" {
-            assert!(
-                matches!(error, FormulaFailure::UnsafeVariable { .. }),
-                "{error}"
-            );
-        } else {
-            let feature = match case["expected_refusal"].as_str().unwrap() {
-                "ConditionalDisjunction" | "conditional disjunction element" => {
-                    ProfileFeature::ConditionalDisjunction
-                }
-                "NegatedHead" => ProfileFeature::NegatedHead,
-                "PooledArguments" => ProfileFeature::PooledArguments,
-                "generated/interval disjunction head" | "generated disjunction head" => {
-                    ProfileFeature::Term
-                }
-                other => panic!("unclassified refusal {other}"),
-            };
-            assert!(
-                matches!(error, FormulaFailure::Expansion(ExpansionFailure::Admission(
-                AdmissionFailure::Profile { feature: actual, .. }
-            )) if actual == feature),
-                "{}: expected {feature:?}, got {error:?}",
-                case["name"]
-            );
-        }
+        assert!(
+            matches!(error, FormulaFailure::UnsafeVariable { .. }),
+            "{error}"
+        );
     }
-    assert!(
-        admit_extended(
-            "a | b.".to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default()
-        )
-        .is_err(),
-        "relational S0 remains explicit"
+}
+
+#[test]
+fn relational_admission_still_declines_disjunctions() {
+    let error = admit_extended(
+        "a | b.".to_owned(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        error,
+        ExpansionFailure::Admission(AdmissionFailure::Profile {
+            feature: ProfileFeature::Head,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn conditional_head_preserves_the_recorded_complete_family() {
+    let cases = cases();
+    let case = cases
+        .iter()
+        .find(|case| case["name"] == "conditional-head")
+        .unwrap();
+    // Preserve the historical refusal label and raw reference. Current source
+    // support is checked independently against this complete original family.
+    let admitted = input(case["source"].as_str().unwrap()).unwrap();
+    let mut search =
+        StableModels::new(admitted.theory(), Limits::default(), Control::default()).unwrap();
+    let mut found = Models::new();
+    for model in search.by_ref() {
+        assert!(found.insert(projected(&admitted, &model.unwrap())));
+    }
+    assert!(search.exhausted());
+    assert_eq!(
+        found,
+        expected(&serde_json::json!([["a(1)", "d(1)"], ["b", "d(1)"]]))
     );
+    let reference = &case["reference"][0]["normalized"];
+    assert_eq!(reference["status"], "complete");
+    assert_eq!(found, expected(&reference["models"]));
 }
 
 #[test]

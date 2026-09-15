@@ -529,7 +529,13 @@ fn mock_report_parser_refuses_unsupported_feature_flags() {
 
 #[test]
 fn oracle_campaigns_continue_after_independent_failures() {
-    for failed in ["", "arithmetic_validation", "arithmetic_validation,formula"] {
+    const CAMPAIGNS: usize = 14;
+    for (failed, failed_positions) in [
+        ("", &[][..]),
+        ("arithmetic_validation", &[1][..]),
+        ("arithmetic_validation,formula", &[1, CAMPAIGNS][..]),
+        ("projected_reference", &[3][..]),
+    ] {
         let fixture = Fixture::new();
         let result = fixture
             .command("scripts/check.sh")
@@ -546,20 +552,21 @@ fn oracle_campaigns_continue_after_independent_failures() {
             .lines()
             .filter(|line| line.starts_with("cargo test "))
             .collect();
-        assert_eq!(campaigns.len(), 13);
+        assert_eq!(campaigns.len(), CAMPAIGNS);
         assert!(campaigns.iter().all(|line| line.contains("--no-fail-fast")));
+        assert!(campaigns[0].contains("--test conditional_heads"));
+        assert!(campaigns[2].contains("--test projected_reference"));
         let records: Vec<_> = fs::read_dir(fixture.root().join("target/oracle-checks"))
             .unwrap()
             .map(|entry| entry.unwrap().path())
             .collect();
         assert_eq!(records.len(), 1);
-        for index in 1..=13 {
-            let expected =
-                if (index == 1 && !failed.is_empty()) || (index == 13 && failed.contains(',')) {
-                    "23\n"
-                } else {
-                    "0\n"
-                };
+        for index in 1..=CAMPAIGNS {
+            let expected = if failed_positions.contains(&index) {
+                "23\n"
+            } else {
+                "0\n"
+            };
             assert_eq!(
                 fs::read_to_string(records[0].join(format!("{index}.exit"))).unwrap(),
                 expected

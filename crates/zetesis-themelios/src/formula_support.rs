@@ -305,6 +305,31 @@ fn derive_rule(
                     derivation.head(head, &binding, rule.location)?;
                 }
             }
+            HeadIr::ConditionalDisjunction { ordinary, elements } => {
+                for head in ordinary.iter().filter_map(|head| head.positive_atom()) {
+                    derivation.head(head, &binding, rule.location)?;
+                }
+                for element in elements {
+                    let mut local = Join::local_head(
+                        &element.condition,
+                        &binding.prefix(element.outer_variables),
+                        element.body_variables..element.variables,
+                        support,
+                        derivation.budget,
+                        rule.location,
+                    )?;
+                    while let Some(binding) = local.next(
+                        limits,
+                        derivation.budget,
+                        derivation.counters,
+                        rule.location,
+                    )? {
+                        if let Some(head) = element.head.positive_atom() {
+                            derivation.head(head, &binding, rule.location)?;
+                        }
+                    }
+                }
+            }
             HeadIr::Choice(group) => {
                 crate::formula_head_aggregate::validate_group(
                     group,
@@ -550,15 +575,27 @@ impl<'a, 'source> Join<'a, 'source> {
         budget: &mut Budget,
         location: Location,
     ) -> Result<Self, FormulaFailure> {
-        let mut join = Self::new(
+        Self::local_head(
             &element.condition,
             prefix,
-            element.variables,
+            element.body_variables..element.variables,
             support,
             budget,
             location,
-        )?;
-        join.stage_head(element.body_variables..element.variables);
+        )
+    }
+
+    /// Choice and conditional heads share one condition/head frame boundary.
+    pub(super) fn local_head(
+        literals: &'a [LiteralIr],
+        prefix: &Binding,
+        head_slots: std::ops::Range<usize>,
+        support: &'a Support<'source>,
+        budget: &mut Budget,
+        location: Location,
+    ) -> Result<Self, FormulaFailure> {
+        let mut join = Self::new(literals, prefix, head_slots.end, support, budget, location)?;
+        join.stage_head(head_slots);
         Ok(join)
     }
 

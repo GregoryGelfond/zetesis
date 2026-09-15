@@ -165,7 +165,7 @@ fn diagnostic_truncation_is_a_transport_failure_before_false_completion() {
 fn admission_and_materialization_failures_retain_causes_and_locations() {
     for (source, arguments, expected) in [
         ("p(X).", vec!["--oracle", "closure"], "expansion"),
-        ("#project a/0.", vec!["--oracle", "countermodel"], "formula"),
+        ("#external a.", vec!["--oracle", "countermodel"], "formula"),
         (
             "a.",
             vec![

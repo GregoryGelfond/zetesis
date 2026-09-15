@@ -88,7 +88,11 @@ fn boundary_sources_have_declared_scored_answers() {
             ),
             "cyclic-aggregate" => (vec![0], serde_json::json!([[["p"], [1]]])),
             "cyclic-conditional" => (vec![0], serde_json::json!([[["d"], [0]]])),
-            "cyclic-priority" => (vec![1, 0], serde_json::json!([[["n(1)", "p"], [1, 0]]])),
+            // The nonnegative count guard establishes p even in its cycle.
+            // The complete count assignment therefore excludes n(0), so its
+            // redundant zero-cost priority is absent. The original family and
+            // priority-1 cost agree with the retained independent capture.
+            "cyclic-priority" => (vec![1], serde_json::json!([[["n(1)", "p"], [1]]])),
             "cyclic-multiple-observer" => (vec![1], serde_json::json!([[["n(1,2)", "p"], [2]]])),
             name => panic!("unclassified boundary source {name}"),
         };

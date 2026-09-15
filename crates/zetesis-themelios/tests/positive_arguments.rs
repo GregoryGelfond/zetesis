@@ -23,6 +23,23 @@ fn input(source: &str) -> AdmittedFormula {
 // Explicit finite substitutions retain each whole supporting atom. Arithmetic
 // selects eligible substitutions; it supplies neither a premise nor an inverse.
 const CASES: &[(&str, &str)] = &[
+    // Former syntax refusals now retain complete occurrence semantics.
+    (
+        "d(1).p(2).q(X):-d(X),p(X+(1;2)).",
+        "d(1).p(2).q(1):-d(1),p(2).",
+    ),
+    (
+        "d(1).p(2).q(X):-d(X),p(X+(1..2)).",
+        "d(1).p(2).q(1):-d(1),p(2).",
+    ),
+    (
+        "d(1).{p(2);p(3);p(4)}.q(X):-d(X),p(X+(1;2)).",
+        "d(1).{p(2);p(3);p(4)}.q(1):-d(1),p(2).q(1):-d(1),p(3).",
+    ),
+    (
+        "d(1).{p(2);p(3);p(4)}.q(X):-d(X),p(X+(1..2)).",
+        "d(1).{p(2);p(3);p(4)}.q(1):-d(1),p(2).q(1):-d(1),p(3).",
+    ),
     ("d(1).p(2).q(X):-d(X),p(X+1).", "d(1).p(2).q(1):-d(1),p(2)."),
     ("d(1).p(2).q(X):-p(X+1),d(X).", "d(1).p(2).q(1):-p(2),d(1)."),
     ("p(2).q(X):-X=1,p(X+1).", "p(2).q(1):-p(2)."),
@@ -287,32 +304,6 @@ fn aggregate_proposals_must_match_captured_arguments() {
         native(&input("p(2).q(N):-N=#count{},p(N+1).")),
         native(&input("p(2)."))
     );
-}
-
-#[test]
-fn arithmetic_alternatives_remain_typed_refusals() {
-    for source in [
-        "d(1).p(2).q(X):-d(X),p(X+(1;2)).",
-        "d(1).p(2).q(X):-d(X),p(X+(1..2)).",
-    ] {
-        assert!(
-            matches!(
-                admit_formula(
-                    source.into(),
-                    AdmissionOptions::default(),
-                    ExpansionLimits::default(),
-                    FormulaLimits::default()
-                ),
-                Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
-                    zetesis_themelios::AdmissionFailure::Profile {
-                        feature: zetesis_themelios::ProfileFeature::Term,
-                        ..
-                    }
-                )))
-            ),
-            "{source}"
-        );
-    }
 }
 
 #[test]

@@ -3,7 +3,9 @@
 use std::collections::BTreeMap;
 
 use themelios_base::span::Location;
-use themelios_program::program::{Arguments, BodyElement, LiteralInner, Program, Show, Statement};
+use themelios_program::program::{
+    Arguments, BodyElement, LiteralInner, Program, Project, Show, Statement,
+};
 use themelios_program::provenance::Origin;
 use themelios_program::symbol::Symbol;
 use themelios_program::term::{Term, Variable};
@@ -124,6 +126,14 @@ struct Preflight {
     bytes: usize,
     origins: usize,
 }
+
+#[derive(Default)]
+struct ParsedOrigins {
+    first: Option<Location>,
+    second: Option<Location>,
+    count: usize,
+}
+
 impl Preflight {
     fn check(
         &self,
@@ -147,6 +157,29 @@ impl Preflight {
             feature,
             location: self.location,
         }
+    }
+    fn origins<'a>(
+        &mut self,
+        origins: impl Iterator<Item = &'a Origin>,
+    ) -> Result<ParsedOrigins, MetadataError> {
+        let mut parsed = ParsedOrigins::default();
+        for origin in origins {
+            self.check(
+                MetadataResource::Origins,
+                self.origins as u128 + 1,
+                self.limits.max_origins,
+            )?;
+            self.origins += 1;
+            if let Origin::Parsed(location) = origin {
+                parsed.count += 1;
+                if parsed.first.is_none() {
+                    parsed.first = Some(*location);
+                } else if parsed.second.is_none() {
+                    parsed.second = Some(*location);
+                }
+            }
+        }
+        Ok(parsed)
     }
     fn node(&mut self, depth: usize) -> Result<(), MetadataError> {
         self.check(
@@ -312,6 +345,13 @@ impl SourceMetadata {
                 continue;
             }
             match carrier.get() {
+                Statement::Project(Project::Signature(signature)) => {
+                    let location = crate::extended::origin(carrier, fallback);
+                    let predicate = super::predicate(signature, location)
+                        .map_err(|error| MetadataError::Compilation(error.into()))?;
+                    metadata.projection.signature(predicate);
+                }
+                Statement::Project(Project::Atom { .. }) => metadata.projection.atom(),
                 Statement::Show(Show::All) => metadata.output.mark_explicit(),
                 Statement::Show(Show::Signature(signature)) => {
                     let location = crate::extended::origin(carrier, fallback);
@@ -377,31 +417,16 @@ fn validate(
         )?;
         if !matches!(
             carrier.get(),
-            Statement::Const(_) | Statement::Show(_) | Statement::Defined(_)
+            Statement::Const(_)
+                | Statement::Show(_)
+                | Statement::Defined(_)
+                | Statement::Project(_)
         ) {
             continue;
         }
         input.node(1)?;
-        let mut first_parsed = None;
-        let mut second_parsed = None;
-        let mut parsed_count = 0_usize;
-        for origin in carrier.provenance().origins() {
-            input.check(
-                MetadataResource::Origins,
-                input.origins as u128 + 1,
-                limits.max_origins,
-            )?;
-            input.origins += 1;
-            if let Origin::Parsed(location) = origin {
-                parsed_count += 1;
-                if first_parsed.is_none() {
-                    first_parsed = Some(*location);
-                } else if second_parsed.is_none() {
-                    second_parsed = Some(*location);
-                }
-            }
-        }
-        input.location = first_parsed.unwrap_or(fallback);
+        let parsed = input.origins(carrier.provenance().origins())?;
+        input.location = parsed.first.unwrap_or(fallback);
         match carrier.get() {
             Statement::Const(constant) => {
                 if constant.policy.is_some() {
@@ -419,24 +444,40 @@ fn validate(
                 .map_err(MetadataError::Expansion)?;
                 if let Some(first) = constants
                     .insert(constant.name.as_str(), input.location)
-                    .or_else(|| second_parsed.and(first_parsed))
+                    .or_else(|| parsed.second.and(parsed.first))
                 {
                     return Err(MetadataError::Expansion(
                         ExpansionFailure::DuplicateConstant {
                             name: constant.name.as_str().into(),
                             first,
-                            duplicate: second_parsed.unwrap_or(input.location),
+                            duplicate: parsed.second.unwrap_or(input.location),
                         },
                     ));
                 }
                 input.term(&constant.value, 1, true)?;
             }
             Statement::Show(show) => {
-                metadata += parsed_count.max(1) as u128;
+                metadata += parsed.count.max(1) as u128;
                 input.show(show)?;
             }
+            Statement::Project(project) => {
+                metadata += parsed.count.max(1) as u128;
+                match project {
+                    Project::Signature(signature) => input.text(signature.name.as_str())?,
+                    Project::Atom { atom, .. } => {
+                        // This door records declarations; body safety and complete
+                        // finite grounding belong to formula preparation.
+                        input.text(atom.get().name.as_str())?;
+                        for arguments in atom.get().alternatives() {
+                            for term in arguments {
+                                input.term(term, 1, false)?;
+                            }
+                        }
+                    }
+                }
+            }
             Statement::Defined(defined) => {
-                metadata += parsed_count.max(1) as u128;
+                metadata += parsed.count.max(1) as u128;
                 input.text(defined.signature.name.as_str())?;
             }
             _ => unreachable!("relevant statement checked"),

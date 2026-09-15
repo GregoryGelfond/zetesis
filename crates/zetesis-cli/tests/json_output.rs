@@ -47,6 +47,42 @@ fn hidden_choices(oracle: &str) -> (Report, Json) {
 }
 
 #[test]
+fn source_projection_selects_full_representatives() {
+    let (report, value) = solve("{p;q}. #project p/0. #show.", &options(&[]));
+    assert_eq!(report.unwrap().models, 2);
+    let models = value["models"].as_array().unwrap();
+    assert_eq!(models.len(), 2);
+    let mut keys = std::collections::BTreeSet::new();
+    for answer in models {
+        let full = answer["model"]["full_model"].as_array().unwrap();
+        keys.insert(full.iter().any(|atom| atom["predicate"] == "p"));
+        assert_eq!(answer["model"]["shown"]["atom_indices"], json!([]));
+    }
+    assert_eq!(keys.len(), 2);
+    assert_eq!(value["outcome"]["verified_models"], 4);
+    assert_eq!(value["outcome"]["projection"]["representatives"], 2);
+    assert_eq!(value["outcome"]["projection"]["duplicates"], 2);
+    assert_eq!(value["outcome"]["projection"]["complete"], true);
+}
+
+#[test]
+fn requested_projection_remains_incomplete() {
+    let mut options = options(&[]);
+    options.models = 1;
+    let (report, value) = solve("{p;q}. #project p/0.", &options);
+    assert_eq!(report.unwrap().completion, Completion::RequestedModels);
+    assert_eq!(value["models"].as_array().unwrap().len(), 1);
+    assert_eq!(value["outcome"]["projection"]["complete"], false);
+}
+
+#[test]
+fn implicit_projection_has_no_history() {
+    let (report, value) = solve("{p;q}. #show p/0.", &options(&[]));
+    assert_eq!(report.unwrap().models, 4);
+    assert!(value["outcome"]["projection"].is_null());
+}
+
+#[test]
 fn elenctic_comments_do_not_change_answer_sets() {
     // Contradictory external test expectations must have no solver effect.
     let source = "a. {b}. #show a/0. #show b/0.";

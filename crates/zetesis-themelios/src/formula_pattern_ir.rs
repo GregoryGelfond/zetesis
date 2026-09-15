@@ -48,6 +48,30 @@ impl Compiler<'_> {
         self.pattern_atom(atom, variables, Some(checks))
     }
 
+    /// Witnesses select relational rows, never invert arithmetic or enumerate a
+    /// global value universe. Extracted names stay private to this alternative;
+    /// evaluated positions consume those names after matching. The whole captured
+    /// source atom remains the emitted logical consequent.
+    pub(super) fn positive_atom_key(
+        &mut self,
+        atom: &Atom,
+        local: &mut Variables,
+        bindings: &mut Vec<LiteralIr>,
+    ) -> Result<AtomPattern, FormulaFailure> {
+        if let Some(pattern) = self.positive_witness(atom, local, bindings)? {
+            let atom = self.consequent_capture(&pattern.atom)?;
+            bindings.push(LiteralIr::PatternAtom(pattern));
+            Ok(atom)
+        } else {
+            let atom = self.atom(atom, local, true)?;
+            bindings.push(LiteralIr::Atom(
+                themelios_program::program::DefaultNegation::None,
+                self.consequent_capture(&atom)?,
+            ));
+            Ok(atom)
+        }
+    }
+
     fn pattern_atom(
         &mut self,
         atom: &Atom,
@@ -243,7 +267,7 @@ impl Compiler<'_> {
         for node in term.subterms() {
             self.budget
                 .charge(ExpansionResource::TermWork, 1, self.location)?;
-            if matches!(node, Term::Pool(_) | Term::Interval { .. }) {
+            if matches!(node, Term::Pool(_)) {
                 return Err(unsupported(ProfileFeature::Term, self.location).into());
             }
             bytes += (std::mem::size_of::<Term>() + std::mem::size_of::<Operation>()) as u128;
@@ -264,8 +288,27 @@ impl Compiler<'_> {
             self.location,
         )?;
         reserve(checks, 1, self.budget, self.location)?;
-        let value = self.expression(term, variables)?;
-        for input in value.inputs() {
+        let first_range = checks.len();
+        let value = self.ranged_expression(term, variables, checks)?;
+        let inputs = value
+            .inputs()
+            .chain(checks[first_range..].iter().flat_map(|instruction| {
+                let LiteralIr::Range { lower, upper, .. } = instruction else {
+                    unreachable!("range lowering emits ranges")
+                };
+                lower.inputs().chain(upper.inputs())
+            }));
+        for input in inputs {
+            let mut generated = false;
+            for instruction in &checks[first_range..] {
+                self.budget
+                    .charge(ExpansionResource::TermWork, 1, self.location)?;
+                generated |=
+                    matches!(instruction, LiteralIr::Range { target, .. } if *target == input);
+            }
+            if generated {
+                continue;
+            }
             self.budget
                 .charge(ExpansionResource::TermWork, 1, self.location)?;
             if !variables.argument_inputs.contains(&input) {

@@ -2,9 +2,11 @@
 
 mod objectives;
 mod scoped_body;
+pub(crate) use scoped_body::source_activity;
 mod atoms;
 mod nodes;
 mod metadata;
+mod projection;
 #[cfg(test)]
 mod constants;
 
@@ -54,6 +56,7 @@ pub(crate) fn ground(
 
     let profile = Profile::new(observer);
     let Instantiation {
+        projection,
         builder,
         objectives,
         objective_origins,
@@ -80,6 +83,7 @@ pub(crate) fn ground(
         |collector| collector.finish(&theory),
     );
     Ok(Compiled {
+        projection,
         analysis_basis,
         analysis,
         analyzed,
@@ -96,6 +100,7 @@ pub(crate) fn ground(
 /// Source-dependent construction owns possible support only while joins use it.
 /// The returned builder owns emitted atoms, not a borrowed support catalog.
 struct Instantiation<'a> {
+    projection: crate::PreparedProjection,
     builder: Builder<'a>,
     objectives: zetesis_objective::ObjectiveProgram,
     objective_origins: Vec<Vec<Location>>,
@@ -146,6 +151,8 @@ fn instantiate<'a>(
         profile.phase(GroundingPhase::ObjectiveActivation, None, || {
             objectives::prepare(&prepared, &queries, limits, budget, &mut counters, location)
         })?;
+    let projection =
+        projection::prepare(&prepared, &queries, limits, budget, &mut counters, location)?;
     let mut builder = profile.phase(GroundingPhase::FormulaInitialization, None, || {
         let mut builder = Builder::empty(
             limits,
@@ -192,6 +199,7 @@ fn instantiate<'a>(
     }
     drop(domains);
     Ok(Instantiation {
+        projection,
         builder,
         objectives,
         objective_origins,
@@ -563,7 +571,7 @@ impl Builder<'_> {
         support: &Support<'_>,
         location: Location,
     ) -> Result<(), FormulaFailure> {
-        let mut context = crate::formula_objective_dependencies::eligibility::Context {
+        let mut context = crate::formula_source_activity::Context {
             limits: self.limits,
             budget: self.budget,
             counters: &mut self.counters,
@@ -748,8 +756,72 @@ impl Builder<'_> {
                 let formula = self.node(Node::Implies(body, disjunction), rule.location)?;
                 self.root(formula, rule)
             }
+            HeadIr::ConditionalDisjunction { ordinary, elements } => {
+                let mut disjunction = FALSUM;
+                let mut count = 0;
+                for head in ordinary {
+                    let literal = self.disjunct_instance(head, assignment, VERUM, body, rule)?;
+                    disjunction = self.or(disjunction, literal, rule.location)?;
+                    count += 1;
+                }
+                for element in elements {
+                    let mut local = Join::local_head(
+                        &element.condition,
+                        &assignment.prefix(element.outer_variables),
+                        element.body_variables..element.variables,
+                        support,
+                        self.budget,
+                        rule.location,
+                    )?;
+                    while let Some(binding) =
+                        local.next(self.limits, self.budget, &mut self.counters, rule.location)?
+                    {
+                        count += 1;
+                        ceiling(
+                            FormulaResource::DisjunctionElements,
+                            count,
+                            self.limits.max_disjunction_elements as u128,
+                            rule.location,
+                        )?;
+                        let condition = self.body(
+                            &element.condition,
+                            &binding.prefix(element.body_variables),
+                            rule.location,
+                            support,
+                        )?;
+                        let literal =
+                            self.disjunct_instance(&element.head, &binding, condition, body, rule)?;
+                        disjunction = self.or(disjunction, literal, rule.location)?;
+                    }
+                }
+                // Exhaustion, not a stopped prefix, establishes the empty disjunction.
+                let formula = self.node(Node::Implies(body, disjunction), rule.location)?;
+                self.root(formula, rule)
+            }
             HeadIr::Choice(group) => self.choice(rule, group, body, assignment, support),
         }
+    }
+    fn disjunct_instance(
+        &mut self,
+        head: &HeadLiteral,
+        binding: &Binding,
+        condition: usize,
+        body: usize,
+        rule: &RuleIr,
+    ) -> Result<usize, FormulaFailure> {
+        let (literal, atom) = self.head_literal(head, binding, rule.location)?;
+        if let Some(atom) = atom {
+            if head.positive_atom().is_some() {
+                let permission = self.and(body, condition, rule.location)?;
+                self.producer(atom, permission, rule)?;
+            } else {
+                self.head_origins(atom, rule)?;
+            }
+        }
+        let implication = self.node(Node::Implies(condition, literal), rule.location)?;
+        let absent = self.neg(condition, rule.location)?;
+        let eligible = self.neg(absent, rule.location)?;
+        self.and(implication, eligible, rule.location)
     }
     pub(super) fn producer(
         &mut self,

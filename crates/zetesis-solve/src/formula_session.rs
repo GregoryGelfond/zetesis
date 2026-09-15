@@ -303,6 +303,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             statistics.and_then(|statistics| statistics.phase_timings),
         );
         SemanticOutcome {
+            projection: None,
             subject: Some(crate::Subject::Theory(self.input.theory.clone())),
             selection: Some(self.selection),
             verified: statistics.map_or(0, |s| s.stable_models),

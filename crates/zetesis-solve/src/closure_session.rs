@@ -193,6 +193,7 @@ impl<'a> ClosureSession<'a> {
 
     pub(crate) fn outcome(&self) -> SemanticOutcome {
         SemanticOutcome {
+            projection: None,
             subject: Some(crate::Subject::Program(self.program.clone())),
             selection: Some(crate::AnswerSelection::All),
             verified: self.verified,

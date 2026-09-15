@@ -14,6 +14,7 @@ use themelios_program::program::AggregateFunction;
 enum AggregateTarget {
     Variable(usize),
     Structure,
+    NumericMismatch,
 }
 
 impl Compiler<'_> {
@@ -90,6 +91,37 @@ impl Compiler<'_> {
         }
         Ok(())
     }
+    fn bind_ready_alternative(
+        &mut self,
+        conditions: &mut [Condition],
+        binders: &mut Vec<Binder>,
+    ) -> Result<bool, Error> {
+        let selected = conditions
+            .iter()
+            .enumerate()
+            .find_map(|(index, condition)| {
+                let Condition::Compare(_, first, steps) = condition else {
+                    return None;
+                };
+                std::iter::once(first)
+                    .chain(steps.iter().map(|(_, term)| term))
+                    .enumerate()
+                    .find(|(_, term)| term.multiple() && self.ready(term))
+                    .map(|(operand, _)| (index, operand))
+            });
+        let Some((index, operand)) = selected else {
+            return Ok(false);
+        };
+        // A potential capture can become a consumer after an earlier binder.
+        // Lift it once now, preserving the same value on both comparison edges.
+        let slot = self.slot()?;
+        self.node(1)?;
+        let term = take_operand(&mut conditions[index], operand, slot);
+        binders.push(Binder::Assign(slot, term));
+        self.safe.insert(slot);
+        Ok(true)
+    }
+
     fn aggregate_assignment(&self, condition: &Condition) -> Option<(usize, AggregateTarget)> {
         let Condition::Aggregate(DefaultNegation::None, aggregate, guards) = condition else {
             return None;
@@ -110,14 +142,25 @@ impl Compiler<'_> {
                 return (!self.safe.contains(&slot))
                     .then_some((index, AggregateTarget::Variable(slot)));
             }
-            // Only extrema return structural values. Numeric comparisons stay
-            // wide; a constructor pattern must not force them through i32 merely
-            // to discover that an integer cannot match that constructor.
-            (matches!(
+            // Extrema may return structural values. Numeric measures remain
+            // wide; an impossible constructor match still evaluates the measure
+            // without constructing an i32 aggregate-result binding.
+            if !self.structural_capture(&guard.bound) {
+                return None;
+            }
+            if matches!(
                 aggregate.function,
                 AggregateFunction::Min | AggregateFunction::Max
-            ) && self.structural_capture(&guard.bound))
-            .then_some((index, AggregateTarget::Structure))
+            ) {
+                Some((index, AggregateTarget::Structure))
+            } else if matches!(
+                guard.bound,
+                Template::Function(_, _, _) | Template::Tuple(_)
+            ) {
+                Some((index, AggregateTarget::NumericMismatch))
+            } else {
+                None
+            }
         })
     }
     fn bind_aggregate(
@@ -136,9 +179,21 @@ impl Compiler<'_> {
         else {
             return Ok(false);
         };
+        if matches!(target, AggregateTarget::NumericMismatch) {
+            let Condition::Aggregate(_, aggregate, guards) = conditions.remove(index) else {
+                unreachable!()
+            };
+            let provided = self.capture_slots(&guards[guard_index].bound);
+            // Evaluation still visits the authored aggregate and its diagnostics,
+            // but its numeric measure cannot match this constructor/tuple.
+            binders.push(Binder::NumericMismatch(aggregate));
+            self.safe.extend(provided);
+            return Ok(true);
+        }
         let slot = match target {
             AggregateTarget::Variable(slot) => slot,
             AggregateTarget::Structure => self.slot()?,
+            AggregateTarget::NumericMismatch => unreachable!("handled above"),
         };
         let Condition::Aggregate(_, aggregate, mut guards) = conditions.remove(index) else {
             unreachable!()
@@ -185,6 +240,9 @@ impl Compiler<'_> {
                 let (slot, expression) = generated.remove(index);
                 self.safe.insert(slot);
                 binders.push(Binder::Assign(slot, expression));
+                continue;
+            }
+            if self.bind_ready_alternative(&mut conditions, &mut binders)? {
                 continue;
             }
             let before = binders.len();

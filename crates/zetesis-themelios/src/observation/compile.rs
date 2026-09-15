@@ -4,6 +4,9 @@ mod scopes;
 mod patterns;
 mod plan;
 mod bindings;
+mod inverse;
+mod alternatives;
+mod anonymous;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -34,6 +37,7 @@ struct Compiler<'a> {
     used: BTreeSet<usize>,
     scope_outer: usize,
     pool_binding: bool,
+    capture_pools: bool,
 }
 impl Compiler<'_> {
     fn error(&self, kind: ErrorKind) -> Error {
@@ -179,11 +183,14 @@ impl Compiler<'_> {
                 Template::Absolute(Box::new(self.template(argument, depth + 1)?))
             }
             Term::Pool(arguments) => {
-                let mut values = Vec::new();
-                for argument in arguments {
-                    values.push(self.template(argument, depth + 1)?);
-                }
-                Template::Pool(values)
+                let previous = self.pool_binding;
+                self.pool_binding |= self.capture_pools;
+                let result = arguments
+                    .iter()
+                    .map(|argument| self.template(argument, depth + 1))
+                    .collect::<Result<_, _>>();
+                self.pool_binding = previous;
+                Template::Pool(result?)
             }
             Term::Interval { lower, upper } => Template::Interval(
                 Box::new(self.template(lower, depth + 1)?),
@@ -244,12 +251,11 @@ impl Compiler<'_> {
                 Condition::Atom(literal.negation, self.atom_tests(atom.get())?)
             }
             LiteralInner::Comparison(comparison) => {
-                let first = self.template(comparison.get().first(), 1)?;
-                let first = self.lift(first)?;
+                let first = self.comparison_template(comparison.get().first(), literal.negation)?;
                 let mut steps = Vec::new();
                 for (relation, right) in comparison.get().steps() {
-                    let right = self.template(right, 1)?;
-                    steps.push((relation, self.lift(right)?));
+                    let right = self.comparison_template(right, literal.negation)?;
+                    steps.push((relation, right));
                 }
                 Condition::Compare(literal.negation, first, steps)
             }
@@ -258,6 +264,22 @@ impl Compiler<'_> {
                 Condition::Boolean(truth != (literal.negation == DefaultNegation::Not))
             }
         })
+    }
+    fn comparison_template(
+        &mut self,
+        term: &Term,
+        negation: DefaultNegation,
+    ) -> Result<Template, Error> {
+        let previous = self.capture_pools;
+        self.capture_pools = negation == DefaultNegation::None;
+        let result = self.template(term, 1);
+        self.capture_pools = previous;
+        let term = result?;
+        if negation == DefaultNegation::None && self.structural_capture(&term) {
+            Ok(term)
+        } else {
+            self.lift(term)
+        }
     }
     fn literal(
         &mut self,
@@ -397,6 +419,7 @@ pub(crate) fn compile(
         used: BTreeSet::new(),
         scope_outer: 0,
         pool_binding: false,
+        capture_pools: false,
     };
     let mut result = ObservationProgram::default();
     for entry in source.statements() {

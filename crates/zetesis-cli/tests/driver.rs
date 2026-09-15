@@ -91,7 +91,7 @@ fn cancelled_invocation_never_claims_unsat() {
 
 #[test]
 fn admission_errors_keep_source_positions() {
-    let source = "#project a/0.";
+    let source = "#external a.";
     let error = run(
         source.into(),
         &options(&[]),

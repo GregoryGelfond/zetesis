@@ -4,4 +4,4 @@
 {"name":"repeated_disjunct","source":"a|a.#minimize{1:not a}.","priorities":[0],"reference_priorities":[0],"records":[[["a"],[0]]],"reference_records":[[["a"],[0]]]}
 {"name":"extra_high_priority_ties","source":"a.a|b.1{c;d}1.#minimize{1@100:b;1@0:c;1@0:d}.","priorities":[100,0],"reference_priorities":[0],"records":[[["a","c"],[0,1]],[["a","d"],[0,1]]],"reference_records":[[["a","c"],[1]],[["a","d"],[1]]]}
 {"name":"extra_low_priority_order","source":"a.a|b.{c;d}.#minimize{1@0:b;1@100:c;2@100:d}.","priorities":[100,0],"reference_priorities":[100],"records":[[["a"],[0,0]],[["a","c"],[1,0]],[["a","c","d"],[3,0]],[["a","d"],[2,0]]],"reference_records":[[["a"],[0]],[["a","c"],[1]],[["a","c","d"],[3]],[["a","d"],[2]]]}
-{"name":"cyclic_fact_zero_slot","source":"a.a:-b.b:-a.#minimize{1:not a}.","priorities":[0],"reference_priorities":[],"records":[[["a","b"],[0]]],"reference_records":[[["a","b"],null]]}
+{"name":"cyclic_fact_zero_slot","source":"a.a:-b.b:-a.#minimize{1:not a}.","priorities":[],"reference_priorities":[],"records":[[["a","b"],null]],"reference_records":[[["a","b"],null]]}

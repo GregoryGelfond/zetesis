@@ -31,9 +31,14 @@ pub(crate) fn solve(
         options,
         control,
     };
-    let mut session = Session::builder(input, options.into(), control.clone())
-        .measurements(phases)
-        .start_observed(diagnostics)?;
+    let mut request = Session::builder(input, options.into(), control.clone()).measurements(phases);
+    if input
+        .projection()
+        .is_some_and(zetesis_themelios::PreparedProjection::is_explicit)
+    {
+        request = request.projected(zetesis_solve::ProjectionLimits::default());
+    }
+    let mut session = request.start_observed(diagnostics)?;
     let mut progress = Progress::new();
     loop {
         let next = session.next_observed(diagnostics);
@@ -95,6 +100,16 @@ fn complete(
     }
     let _output = phases.enter(SolvePhase::ObservationOutput);
     let result = (|| {
+        if let Some(projection) = progress
+            .semantic()
+            .and_then(crate::SemanticOutcome::projection)
+        {
+            writeln!(
+                diagnostics,
+                "Projection: {} representatives, {} duplicate answers, complete={}",
+                projection.representatives, projection.duplicates, projection.complete
+            )?;
+        }
         if let Some(statistics) = progress
             .semantic()
             .and_then(crate::SemanticOutcome::countermodel_statistics)

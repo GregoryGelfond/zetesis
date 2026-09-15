@@ -63,6 +63,16 @@ original-answer coverage, completed accounting and complete capture; its prefix
 law applies to interruptions and retention refusals. A selected optimum or the
 remaining suffix of an already consumed session cannot replace that family.
 
+`ProjectedAnswers.covered_key_image` identifies the key image represented by a
+selected family. `selected_property_survives` preserves answer-set membership
+and established optimality because representatives remain selected original
+answers. These laws assume a fixed key and complete representative coverage.
+`retain_covers` and `retain_unique` establish the coverage and uniqueness
+invariants for one exact identity decision over an already consumed prefix.
+They do not prove source `#project` compilation, concrete history lookup,
+allocation, cancellation or receipt updates. `WorldView` collection retains
+full identity and does not use projected representatives as a complete family.
+
 A shared `GpuFormulaProfile` retains one exact compiled pipeline, context and
 gate projection. Each oracle starts with fresh residency, epochs and execution
 counters. This does not change the masked satisfaction or frozen-reduct laws.
@@ -594,8 +604,8 @@ The Rust [support builder](https://github.com/GregoryGelfond/zetesis/blob/main/c
 creates `CompletedCatalog` only after an admitted round establishes no new atom.
 For selective traversal, completed old-head history and complete wake coverage
 justify that conclusion even when no producer needs another snapshot. Its immutable
-`CompletedSupport` view supplies the same typed rows to objective eligibility
-and final grounding. Intermediate snapshots and resource-stopped rounds cannot
+`CompletedSupport` view supplies the same typed rows to source activity,
+projection-domain preparation and final grounding. Intermediate snapshots and resource-stopped rounds cannot
 supply this capability. The types enforce the completion handoff; they do not
 prove that Rust's source generation establishes `ProjectionCompatible`.
 The [support proof guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/source-support.md)

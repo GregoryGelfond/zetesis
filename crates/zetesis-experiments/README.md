@@ -457,6 +457,10 @@ source evidence and complete native model collection. A fingerprint is available
 only when its full specified identity view can be formed; unavailability is
 explicit. The currently unavailable full term-observation fingerprint must not
 be replaced with a weaker hash and called equivalent.
+The `zetesis-execution-subject-v2` framing includes the completed projection
+domain and its explicit-declaration flag. A domain change therefore cannot hide
+behind identical program formulas or directive locations. Its digest is not
+interchangeable with the earlier framing version.
 
 Objectives, including inactive declarations, are refused by this profile.
 It measures eager formula admission, not lazy grounding. Detailed rule attribution

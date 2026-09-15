@@ -17,7 +17,7 @@
 {"name":"negated-count-guard","priorities":[0],"records":[[["q(0)"],[0]]],"reference_priorities":[0],"reference_records":[[["q(0)"],[0]]],"source":"q(N):-N=#count{},not N!=#count{}.#minimize{N:q(N)}."}
 {"name":"choice-count-guard","priorities":[0],"records":[[[],[0]],[["q"],[1]]],"reference_priorities":[0],"reference_records":[[[],[0]],[["q"],[1]]],"source":"{q}:-N=#count{},N<=#count{}.#minimize{1:q}."}
 {"name":"negative-count-consumer","priorities":[0],"records":[[["q(0)"],[1]]],"reference_priorities":[0],"reference_records":[[["q(0)"],[1]]],"source":"q(N):-N=#count{},not p(N).#minimize{1,N:q(N)}."}
-{"name":"double-negative-count-consumer","priorities":[0],"records":[[[],[0]]],"reference_priorities":[],"reference_records":[[[],null]],"source":"{q}:-N=#count{},not not p(N).#minimize{1:q}."}
+{"name":"double-negative-count-consumer","priorities":[],"records":[[[],null]],"reference_priorities":[],"reference_records":[[[],null]],"source":"{q}:-N=#count{},not not p(N).#minimize{1:q}."}
 {"name":"anonymous-count-consumer","priorities":[0],"records":[[[],[0]],[["q"],[1]]],"reference_priorities":[0],"reference_records":[[[],[0]],[["q"],[1]]],"source":"#count{1:q}:-N=#count{},not p(N,_).#minimize{1:q}."}
 {"name":"range-count-consumer","priorities":[0],"records":[[["q(0)","q(1)"],[2]]],"reference_priorities":[0],"reference_records":[[["q(0)","q(1)"],[2]]],"source":"q(K):-N=#count{},K=N..N+1.#minimize{1,K:q(K)}."}
 {"name":"range-choice-consumer","priorities":[0],"records":[[["q"],[1]]],"reference_priorities":[0],"reference_records":[[["q"],[1]]],"source":"K{q}:-N=#count{},K=N..N+1.#minimize{1:q}."}

@@ -14,7 +14,7 @@ use themelios_program::program::{
     Arguments, Body, BodyElement, Choice, DefaultNegation, Direction, HasGuards, Head, Literal,
     LiteralInner, Optimize, OptimizeElement, Program as SourceProgram, Relation, Rule, Statement,
 };
-use themelios_program::provenance::{Origin, TransformTag};
+use themelios_program::provenance::{Origin, TransformTag, WithProvenance};
 use themelios_program::symbol::Symbol;
 use themelios_program::term::{BinaryOp, Term, TermParts, UnaryOp, Variable};
 use themelios_program::transform::{Rewrite, rewrite};
@@ -37,6 +37,8 @@ pub(crate) struct Prepared {
     pub analysis_basis: crate::AnalysisBasis,
     pub analyzed: SourceProgram,
     pub rules: Vec<RuleIr>,
+    pub projection: Vec<RuleIr>,
+    pub project_selection: crate::ProjectSelection,
     pub objectives: Vec<ObjectiveIr>,
     pub objective_declarations: Vec<Location>,
     /// Extrema tuple carriers selected for an optional numeric-weight precision
@@ -143,7 +145,26 @@ impl RuleIr {
 pub(crate) enum HeadIr {
     Normal(Option<AtomPattern>),
     Disjunction(Vec<HeadLiteral>),
+    ConditionalDisjunction {
+        ordinary: Vec<HeadLiteral>,
+        elements: Vec<crate::formula_conditional_head_ir::ConditionalHeadIr>,
+    },
     Choice(ChoiceIr),
+}
+impl HeadIr {
+    /// Syntactic head occurrences only; local conditions keep their own scope.
+    pub(crate) fn disjuncts(&self) -> impl Iterator<Item = &HeadLiteral> {
+        let (ordinary, elements) = match self {
+            Self::Disjunction(heads) => (heads.as_slice(), &[][..]),
+            Self::ConditionalDisjunction { ordinary, elements } => {
+                (ordinary.as_slice(), elements.as_slice())
+            }
+            Self::Normal(_) | Self::Choice(_) => (&[][..], &[][..]),
+        };
+        ordinary
+            .iter()
+            .chain(elements.iter().map(|element| &element.head))
+    }
 }
 /// One activated group owns both its permission elements and numeric measure.
 pub(crate) struct ChoiceIr {
@@ -326,6 +347,8 @@ pub(crate) fn prepare(
 ) -> Result<Prepared, FormulaFailure> {
     let constants = extended::resolve(source, budget, fallback)?;
     let mut rules = Vec::new();
+    let mut projection = Vec::new();
+    let mut project_selection = crate::ProjectSelection::default();
     let mut analyzed = Vec::new();
     let mut pool_projection_nodes = 0;
     let mut objectives = Vec::new();
@@ -348,18 +371,18 @@ pub(crate) fn prepare(
             continue;
         }
         compiler.location = extended::origin(carrier, fallback);
-        let mut normalizer = Normalizer {
-            constants: &constants,
-            budget: compiler.budget,
-            location: compiler.location,
-            failure: None,
-        };
-        let rewritten = rewrite(SourceProgram::of_nodes([carrier.clone()]), &mut normalizer);
-        if let Some(error) = normalizer.failure {
-            return Err(error.into());
-        }
+        let rewritten = compiler.normalize_statement(carrier, &constants)?;
         let statement = rewritten.statements().next().expect("rewrite keeps a rule");
         let origins = extended::parsed_origins(carrier);
+        if compiler.project_statement(
+            statement,
+            &origins,
+            &mut pool_projection_nodes,
+            &mut projection,
+            &mut project_selection,
+        )? {
+            continue;
+        }
         if let Some(observation) = compiler.objective_statement(
             statement,
             &origins,
@@ -367,10 +390,14 @@ pub(crate) fn prepare(
             &mut objective_declarations,
             &mut pool_projection_nodes,
         )? {
-            analyzed.push(observation);
+            analyzed.extend(observation);
             continue;
         }
-        if let Some(facts) = fact_expansion::facts(statement, compiler.budget, compiler.location)? {
+        if let Some(facts) = if generated_fact(statement.get()) {
+            None
+        } else {
+            fact_expansion::facts(statement, compiler.budget, compiler.location)?
+        } {
             compiler.budget.charge(
                 ExpansionResource::Origins,
                 (facts.len() as u128).saturating_mul(origins.len() as u128),
@@ -410,6 +437,8 @@ pub(crate) fn prepare(
         analysis_basis,
         analyzed,
         rules,
+        projection,
+        project_selection: project_selection.finish(),
         objectives,
         objective_declarations,
         objective_extrema,
@@ -466,15 +495,10 @@ struct Normalizer<'a> {
     location: Location,
     failure: Option<ExpansionFailure>,
 }
-impl Rewrite for Normalizer<'_> {
-    fn tag(&self) -> TransformTag {
-        TransformTag::new("zetesis-finite-formula")
-    }
-    fn rewrite_term(&mut self, term: Term) -> Term {
-        if self.failure.is_some() {
-            return term;
-        }
-        let result = (|| {
+
+impl Normalizer<'_> {
+    fn normalize_node(&mut self, term: Term) -> Result<Term, ExpansionFailure> {
+        (|| {
             // Aggregate-local admission accepts real sentinel tuple values and
             // bounds. Other source contexts retain their own scalar checks.
             if matches!(term, Term::Symbolic(Symbol::Infimum | Symbol::Supremum)) {
@@ -508,7 +532,30 @@ impl Rewrite for Normalizer<'_> {
                 return Ok(term);
             }
             extended::normalize_node(term, self.constants, self.budget, self.location)
-        })();
+        })()
+    }
+}
+impl Rewrite for Normalizer<'_> {
+    fn tag(&self) -> TransformTag {
+        TransformTag::new("zetesis-finite-formula")
+    }
+    fn rewrite_term(&mut self, term: Term) -> Term {
+        if self.failure.is_some() {
+            return term;
+        }
+        let result =
+            crate::formula_pool::distribute(term, self.budget, self.location).and_then(|term| {
+                match term.into_parts() {
+                    TermParts::Pool(items) => {
+                        let mut normalized = Vec::with_capacity(items.len());
+                        for item in items {
+                            normalized.push(self.normalize_node(item)?);
+                        }
+                        Ok(Term::pool(normalized).expect("source alternatives remain nonempty"))
+                    }
+                    parts => self.normalize_node(Term::from(parts)),
+                }
+            });
         match result {
             Ok(term) => term,
             Err(error) => {
@@ -560,12 +607,34 @@ pub(super) struct Compiler<'a> {
     pub(super) options: AdmissionOptions,
     pub(super) limits: &'a FormulaLimits,
     pub(super) budget: &'a mut Budget,
-    domain: BTreeSet<Value>,
+    pub(super) domain: BTreeSet<Value>,
     pub(super) next_aggregate: usize,
     pub(super) dependency_projection: bool,
     pub(super) location: Location,
 }
 impl Compiler<'_> {
+    /// Keep the rewritten owner private until every normalization step has succeeded.
+    fn normalize_statement(
+        &mut self,
+        statement: &WithProvenance<Statement>,
+        constants: &BTreeMap<String, Symbol>,
+    ) -> Result<SourceProgram, ExpansionFailure> {
+        let mut normalizer = Normalizer {
+            constants,
+            budget: self.budget,
+            location: self.location,
+            failure: None,
+        };
+        let rewritten = rewrite(
+            SourceProgram::of_nodes([statement.clone()]),
+            &mut normalizer,
+        );
+        match normalizer.failure {
+            Some(error) => Err(error),
+            None => Ok(rewritten),
+        }
+    }
+
     fn fact_rule(
         &mut self,
         head: AtomPattern,
@@ -628,7 +697,26 @@ impl Compiler<'_> {
                 evidence.len() as u128,
                 self.location,
             )?;
-            objectives.push(self.objective(element.get(), evidence, polarity)?);
+            let source = element.get();
+            let fields: Vec<_> = std::iter::once(source.weight().term())
+                .chain(source.weight().priority())
+                .chain(source.terms())
+                .collect();
+            for (terms, condition) in self.local_alternatives(&fields, source.condition())? {
+                let mut terms = terms.into_iter();
+                let mut weight =
+                    themelios_program::program::weight(terms.next().expect("weight field"));
+                if source.weight().priority().is_some() {
+                    weight = weight.at_priority(terms.next().expect("priority field"));
+                }
+                let alternative = OptimizeElement::new(weight, terms, condition);
+                self.budget.charge(
+                    ExpansionResource::Origins,
+                    evidence.len() as u128,
+                    self.location,
+                )?;
+                objectives.push(self.objective(&alternative, evidence.clone(), polarity)?);
+            }
         }
         Ok(())
     }
@@ -799,8 +887,8 @@ impl Compiler<'_> {
         // Source head names are global even when their value is only needed
         // after body selection. Declare them before cloning element-local scopes.
         self.head_globals(rule.head().get(), &mut variables)?;
-        let aggregate_guards = self.body_guards(rule.body().get(), &mut variables)?;
-        let choice_guards = self.head_guards(rule.head().get(), &mut variables)?;
+        let aggregate_guards = self.body_guards(rule.body().get(), &mut variables, &mut body)?;
+        let choice_guards = self.head_guards(rule.head().get(), &mut variables, &mut body)?;
         let assignments =
             self.assignment_targets(rule.body().get(), &aggregate_guards, &mut variables)?;
         self.bindings(&mut body, &mut variables)?;
@@ -879,9 +967,10 @@ impl Compiler<'_> {
         &mut self,
         head: &Head,
         variables: &mut Variables,
+        values: &mut Vec<LiteralIr>,
     ) -> Result<Vec<AggregateGuard>, FormulaFailure> {
         match head {
-            Head::Choice(choice) => self.choice_guards(choice, variables),
+            Head::Choice(choice) => self.choice_guards(choice, variables, values),
             Head::Aggregate(aggregate) => self.guards(
                 aggregate
                     .left_guard()
@@ -890,6 +979,7 @@ impl Compiler<'_> {
                     .right_guard()
                     .map(themelios_program::provenance::WithProvenance::get),
                 variables,
+                values,
             ),
             _ => Ok(Vec::new()),
         }
@@ -912,31 +1002,42 @@ impl Compiler<'_> {
                 )
             });
         for element in choice.elements() {
-            let mut local = variables.clone();
-            self.head_global_literal(element.get().literal(), &mut local)?;
-            let mut condition = self.condition(element.get().condition(), &mut local)?;
-            let (head, body_variables) =
-                self.element_head(element.get().literal(), &mut local, &mut condition)?;
-            let key = match &head.operand {
-                HeadOperand::Atom(_) => HeadElementKey::Atom,
-                HeadOperand::Boolean(_) => {
-                    // The owned analysis set forgets Boolean multiplicity; it
-                    // represents dependencies, not this group's exact measure.
-                    self.dependency_projection = true;
-                    HeadElementKey::BooleanOccurrences(
-                        self.boolean_occurrences(element.get(), source_booleans.next())?,
-                    )
-                }
+            let boolean = if matches!(
+                element.get().literal().inner,
+                LiteralInner::True | LiteralInner::False
+            ) {
+                self.dependency_projection = true;
+                Some(self.boolean_occurrences(element.get(), source_booleans.next())?)
+            } else {
+                None
             };
-            self.variable_limit(&local)?;
-            local.safety(self.location)?;
-            elements.push(Element {
-                key,
-                head,
-                condition,
-                body_variables,
-                variables: local.count,
-            });
+            for alternative in self.condition_alternatives(element.get().condition())? {
+                let mut local = variables.clone();
+                self.head_global_literal(element.get().literal(), &mut local)?;
+                let mut condition = self.condition(&alternative, &mut local)?;
+                let (head, body_variables) =
+                    self.element_head(element.get().literal(), &mut local, &mut condition)?;
+                let key = match &boolean {
+                    None => HeadElementKey::Atom,
+                    Some(origins) => {
+                        self.budget.charge(
+                            ExpansionResource::Origins,
+                            origins.len() as u128,
+                            self.location,
+                        )?;
+                        HeadElementKey::BooleanOccurrences(origins.clone())
+                    }
+                };
+                self.variable_limit(&local)?;
+                local.safety(self.location)?;
+                elements.push(Element {
+                    key,
+                    head,
+                    condition,
+                    body_variables,
+                    variables: local.count,
+                });
+            }
         }
         if source_booleans.next().is_some() {
             return Err(FormulaFailure::ChoiceSource {
@@ -1203,4 +1304,31 @@ pub(crate) fn check_objectives(
         }
     }
     Ok(())
+}
+
+/// Closed scalar/flat range facts keep their direct finite expansion. A
+/// constructor containing an interval uses the same scoped generator as heads.
+fn generated_fact(statement: &Statement) -> bool {
+    let Statement::Rule(rule) = statement else {
+        return false;
+    };
+    let Head::Literal(literal) = rule.head().get() else {
+        return false;
+    };
+    let LiteralInner::Atom(atom) = &literal.inner else {
+        return false;
+    };
+    atom.get()
+        .argument_terms()
+        .flat_map(Term::subterms)
+        .any(|term| {
+            matches!(
+                term,
+                Term::Function { .. }
+                    | Term::Tuple(_)
+                    | Term::UnaryOperation { .. }
+                    | Term::BinaryOperation { .. }
+                    | Term::Absolute(_)
+            )
+        })
 }

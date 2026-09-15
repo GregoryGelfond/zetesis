@@ -173,6 +173,7 @@ pub(super) fn same_subject(a: &AdmittedFormulaBundle, b: &AdmittedFormulaBundle)
         && a.objective_declarations() == b.objective_declarations()
         && a.objectives().templates() == b.objectives().templates()
         && a.metadata() == b.metadata()
+        && a.projection() == b.projection()
 }
 
 pub(super) fn objective_free(subject: &AdmittedFormulaBundle) -> Result<(), Error> {
