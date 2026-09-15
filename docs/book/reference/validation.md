@@ -716,11 +716,11 @@ status. A newer source remains unqualified until its own checks complete.
 
 | Population | Covered / instrumented lines | Coverage |
 | --- | ---: | ---: |
-| Workspace, all features, portable tests plus 56 physical Metal tests | 66,951 / 70,581 | 94.86% |
-| CPU-only solver library and CLI, separate instrumentation | 5,516 / 5,834 | 94.55% |
+| Workspace, all features, portable tests plus 56 physical Metal tests | 69,244 / 73,135 | 94.68% |
+| CPU-only solver library and CLI, separate instrumentation | 5,966 / 6,311 | 94.53% |
 
-This snapshot was qualified on 14 September 2026 for version `0.1.1`, compiled
-source [`d8a4a964`](https://github.com/GregoryGelfond/zetesis/tree/d8a4a964e4db8eef535f0d8ff950572df61ba515),
+This snapshot was qualified on 15 September 2026 UTC for version `0.1.3`, compiled
+source [`994fbb79`](https://github.com/GregoryGelfond/zetesis/tree/994fbb79f9a9e0a4398293f094fa2fbe0c3fbc17),
 using Rust 1.97.1, cargo-llvm-cov 0.8.7 and LLVM 22.1.6 on macOS 26.6.2 with
 Apple M4 Pro Metal. Later updates to this description and the README badge do
 not change that measured source or its compiled documentation and data inputs.
@@ -729,18 +729,18 @@ The latest [CPU/Metal measurements](reduct-execution.md) compare the exact
 compiled sources and versions in the [comparison](performance.md).
 
 Both populations passed their independent 91% floor. The workspace contains
-2,238 profiles: 2,222 portable profiles plus 16 physical profiles from 56 tests
-in 16 groups. The unchanged 275-profile CPU-only population remains separate.
+2,267 profiles: 2,251 portable profiles plus 16 physical profiles from 56 tests
+in 16 groups. The 277-profile CPU-only population remains separate.
 Before physical profile import, the portable-only workspace report already
-passed its floor at 64,504 of 70,581 lines (91.3900%). Separate explicit-GPU
+passed its floor at 66,797 of 73,135 lines (91.3338%). Separate explicit-GPU
 device-failure and compiled-profile session checks also passed. Their profiles
 and all test-listing profiles are excluded from both coverage populations.
 
 The portable and external-oracle gates passed for the implementation in this
 checkpoint. The Lean 4.33.1 build, axiom audit and source-record checks
-cover 127 semantic modules and 1,183 audited theorems, as recorded with their
+cover 131 semantic modules and 1,210 audited theorems, as recorded with their
 source hashes in the
-[verification record](https://github.com/GregoryGelfond/zetesis/blob/d8a4a964e4db8eef535f0d8ff950572df61ba515/proofs/verification.json).
+[verification record](https://github.com/GregoryGelfond/zetesis/blob/994fbb79f9a9e0a4398293f094fa2fbe0c3fbc17/proofs/verification.json).
 These counts describe the checked
 mathematical library, not verification of the Rust grounder, masks or GPU
 execution. Historical corpus and performance results retain their original
