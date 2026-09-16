@@ -139,6 +139,34 @@ fn counters_and_driver_time_come_from_the_retained_records() {
 }
 
 #[test]
+fn closure_route_work_is_read_from_its_summed_receipt() {
+    let mut only = report(&["generated/chain-1000.lp"], &[&[2_000_000]], &[1], None);
+    // The closure route reports no formula search; its typed receipt sums
+    // the work of every completed check instead.
+    let stdout = json!({
+        "outcome": {"published_models": 1},
+        "statistics": {"search": null,
+                       "closure_execution": {"grounder": "lazy", "completed_checks": 1,
+                                             "stopped_checks": 0, "work": 4321}}
+    })
+    .to_string();
+    for sample in only["report"]["samples"].as_array_mut().unwrap() {
+        if sample["slot"]["producer"]["solver"] == "native" {
+            sample["capture"]["stdout"]["data"] = json!(stdout);
+        }
+    }
+    let comparison = compare(&[Labelled {
+        label: "only",
+        report: &only,
+    }])
+    .unwrap();
+    let encoded = serde_json::to_value(&comparison).unwrap();
+    let native = &encoded["cells"][0]["profiles"][0]["reports"]["only"];
+    assert_eq!(native["search_work"], 4321);
+    assert_eq!(native["published_models"], 1);
+}
+
+#[test]
 fn non_pass_cells_are_reported_by_decision_not_averaged() {
     let refused = report(
         &["generated/producer-chain-700.lp"],

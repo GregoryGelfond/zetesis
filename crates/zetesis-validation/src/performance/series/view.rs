@@ -110,7 +110,9 @@ pub struct Passed {
     /// statistics; absent when the route does not report them.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub candidates_examined: Option<u64>,
-    /// Charged search work, from the first timed record's typed statistics.
+    /// Charged work, from the first timed record's typed statistics: the
+    /// formula route's search work, or the independent closure route's work
+    /// summed over its completed checks.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub search_work: Option<u64>,
     /// Median of each measured phase's interval.
@@ -646,9 +648,11 @@ fn native(labelled: &Labelled<'_>, case: usize, profile: usize) -> Result<Native
                 .as_ref()
                 .and_then(|document| document["statistics"]["search"]["candidates"].as_u64())
         }),
-        search_work: stdout
-            .as_ref()
-            .and_then(|document| document["statistics"]["search"]["work"].as_u64()),
+        search_work: stdout.as_ref().and_then(|document| {
+            document["statistics"]["search"]["work"]
+                .as_u64()
+                .or_else(|| document["statistics"]["closure_execution"]["work"].as_u64())
+        }),
         phases,
     }))
 }
