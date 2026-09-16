@@ -331,6 +331,21 @@ impl Selection {
             Self::All | Self::FirstNew(_) => RowSet::Current,
         }
     }
+
+    /// The source occurrence visited at a join depth. An incremental round
+    /// visits its new rows first: they are the fewest, and the variables they
+    /// bind turn every other occurrence into a bound-prefix window instead of
+    /// a scan. The remaining occurrences keep their body order.
+    fn occurrence(self, depth: usize) -> usize {
+        match self {
+            Self::All => depth,
+            Self::FirstNew(pivot) => match depth {
+                0 => pivot,
+                depth if depth <= pivot => depth - 1,
+                depth => depth,
+            },
+        }
+    }
 }
 
 struct RoundWorkspace<'a> {
@@ -619,8 +634,9 @@ fn visit_with<'source, E: From<Stop>>(
             clear(assignment, &mut undo[depth]);
             continue;
         }
-        let pattern = &template.positive()[depth];
-        let tuples = relations.selected(pattern.predicate(), selection.rows(depth))?;
+        let occurrence = selection.occurrence(depth);
+        let pattern = &template.positive()[occurrence];
+        let tuples = relations.selected(pattern.predicate(), selection.rows(occurrence))?;
         let cursor = &mut cursors[depth];
         if cursor.is_none() {
             *cursor = Some(window::matching_prefix(pattern, tuples, assignment, work)?);
@@ -641,7 +657,7 @@ fn visit_with<'source, E: From<Stop>>(
         if bind(pattern, atom, assignment, &mut undo[depth], work)?
             && guards(template, assignment, seed, work)?
             && match membership.as_mut() {
-                Some(membership) => membership.extend(depth, index, work)?,
+                Some(membership) => membership.extend(occurrence, index, work)?,
                 None => true,
             }
         {

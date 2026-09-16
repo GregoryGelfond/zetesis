@@ -125,17 +125,24 @@ fn path_delta_avoids_old_row_probes() {
         assert_eq!(full.statistics().bindings, full_bindings);
         assert_eq!(delta.statistics().bindings, delta_bindings);
         assert_eq!(full.statistics().tuple_probes, full_probes);
-        assert_eq!(delta.statistics().tuple_probes, delta_bindings);
+        // A round visits its new rows first. Every probe after the first
+        // incremental round is a binding; that round also visits each new
+        // edge as its own pivot, finding no earlier reach row.
+        assert_eq!(
+            delta.statistics().tuple_probes,
+            delta_bindings + u64::try_from(edges).unwrap()
+        );
     }
 }
 
 #[test]
 fn repeated_occurrence_fanout_reduces_inclusive_work() {
     // Positive fanout dimensions preserve the additional seen-consequence round.
-    for (edges, labels, rounds, full_bindings, delta_bindings, full_probes, delta_probes) in [
-        (4, 3, 7, 254, 57, 298, 74),
-        (8, 8, 11, 3695, 601, 4048, 674),
-    ] {
+    // `rejected` counts the whole-row rejections the fixture's repeated label
+    // occurrence produces under either schedule.
+    for (edges, labels, rounds, full_bindings, delta_bindings, full_probes, rejected) in
+        [(4, 3, 7, 254, 57, 298, 17), (8, 8, 11, 3695, 601, 4048, 73)]
+    {
         let (program, expected) = path(edges, labels);
         let full = complete(&program, Schedule::Full);
         let delta = complete(&program, Schedule::Delta);
@@ -144,7 +151,14 @@ fn repeated_occurrence_fanout_reduces_inclusive_work() {
         assert_eq!(full.statistics().bindings, full_bindings);
         assert_eq!(delta.statistics().bindings, delta_bindings);
         assert_eq!(full.statistics().tuple_probes, full_probes);
-        assert_eq!(delta.statistics().tuple_probes, delta_probes);
+        // Beyond its bindings and rejections, the delta schedule probes each
+        // new edge and each new label at both label occurrences once, in the
+        // first incremental round, where they lead as pivots and find no
+        // older row to join.
+        assert_eq!(
+            delta.statistics().tuple_probes,
+            delta_bindings + rejected + u64::try_from(edges + 2 * labels).unwrap()
+        );
         // These are complete candidate receipts: partition initialization,
         // reads/writes, canonical preparation, pending publication, extraction
         // and final gate comparison are all inside the charged total.
