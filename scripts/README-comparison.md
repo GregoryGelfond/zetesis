@@ -49,6 +49,36 @@ the runner executable as well as both solvers, the manifest, license and selecte
 source closure before execution, then recheck the seals afterward. Seals do not
 attest dynamic libraries, hardware state or transient changes between checks.
 
+## The fixed series
+
+`--suite series` measures twenty fixed cells through the instrumented matrix:
+generated family programs (independent sets, disjunction, tied optima,
+closures, chains, stratified negation, a producer chain) at sizes whose complete
+native output fits 16 MiB, three amended queens boards and two unchanged
+entries. Add `--profile cpu-auto` for the shipped defaults; the report retains
+the grounding mode each cell took. `--time-limit SECONDS` gives every native
+profile a cooperative deadline; `--oracle closure|countermodel` requests a
+reduct procedure explicitly for every profile. The series raises the per-record, capture,
+report and native-decoding byte ceilings to what its cells need (16 MiB per
+record); raw reports are large and stay with their builds. Then derive the
+retained comparison:
+
+```sh
+zetesis-perf examples/kr-domains --suite series --profile cpu-auto \
+  --warmups 1 --repetitions 3 --timeout-seconds 30 --campaign-seconds 3600 \
+  --zetesis /path/to/zetesis --clingo /path/to/clingo \
+  --report /new/path/series-after.json
+
+zetesis-series --report main=/path/series-main.json \
+  --report before=/path/series-before.json --report after=/path/series-after.json \
+  --json /new/path/series-comparison.json
+```
+
+The view prints Markdown tables of medians, ratios and counters and refuses
+reports whose cells or profiles differ. Run the baseline again beside every
+comparison: a change that also appears in the baseline column is drift, not
+a gain.
+
 ## Separate memory observations
 
 `--memory-runs N` appends zero through 41 paired resource observations per case.

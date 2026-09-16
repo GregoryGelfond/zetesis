@@ -29,8 +29,8 @@ pub enum Family {
     IndependentNegationAggregate,
     /// `p(X) | q(X)` over `n` values: 2ⁿ answers.
     Disjunction,
-    /// Choose exactly two of `n` under an objective every answer ties on:
-    /// C(n,2) optimal answers of cost zero.
+    /// Choose exactly two of `n` and pay one per chosen atom: C(n,2) optimal
+    /// answers, every one at cost two.
     Ties,
     /// Transitive closure of a path of `n` nodes given as edge facts.
     TransitivePath,
@@ -139,7 +139,7 @@ impl Family {
             }
             Self::Disjunction => format!("d(1..{size}).\np(X) | q(X) :- d(X).\n"),
             Self::Ties => format!(
-                "n(1..{size}).\n{{ p(X) }} :- n(X).\n:- #count{{X:p(X)}} != 2.\n#minimize{{ 1,X : q(X) }}.\n"
+                "n(1..{size}).\n{{ p(X) }} :- n(X).\n:- #count{{X:p(X)}} != 2.\n#minimize{{ 1,X : p(X) }}.\n"
             ),
             Self::TransitivePath => format!(
                 "{}reach(X,Y) :- e(X,Y).\nreach(X,Z) :- reach(X,Y), e(Y,Z).\n",
@@ -177,7 +177,7 @@ impl Family {
         };
         let count = NonZeroU64::new(count).ok_or(Error::Size { family: self, size })?;
         Ok(match self {
-            Self::Ties => Contract::optimal_family(count, vec![0]),
+            Self::Ties => Contract::optimal_family(count, vec![2]),
             _ => Contract::complete_family(count),
         })
     }

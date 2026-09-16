@@ -63,7 +63,7 @@ fn positive_sources_keep_their_derivation_shapes() {
     );
     assert_eq!(
         Family::Ties.source(3).unwrap(),
-        "n(1..3).\n{ p(X) } :- n(X).\n:- #count{X:p(X)} != 2.\n#minimize{ 1,X : q(X) }.\n"
+        "n(1..3).\n{ p(X) } :- n(X).\n:- #count{X:p(X)} != 2.\n#minimize{ 1,X : p(X) }.\n"
     );
 }
 
@@ -121,10 +121,12 @@ fn complete_family_counts_follow_their_closed_forms() {
 }
 
 #[test]
-fn the_tied_optimisation_family_declares_its_zero_cost() {
+fn the_tied_optimisation_family_declares_its_shared_cost() {
+    // Every answer chooses exactly two atoms and pays one per atom, so every
+    // answer is an optimum at cost two.
     let contract = Family::Ties.contract(4).unwrap();
     assert_eq!(contract.family(), Selection::Optimal);
-    assert_eq!(contract.cost(), Some(&[0][..]));
+    assert_eq!(contract.cost(), Some(&[2][..]));
     assert_eq!(contract.model_count(), Some(6));
     assert_eq!(Family::Disjunction.contract(5).unwrap().cost(), None);
 }

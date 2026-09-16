@@ -240,6 +240,43 @@ The [manual's runnable client](../../docs/book/reference/validation.md#compare-a
 shows a complete N=4 comparison using this API, with explicit executable paths
 and a new report destination.
 
+### Measure a fixed series of cells
+
+`performance::series::workloads(&Corpus, WorkloadLimits)` returns the twenty
+cells on which a sequence of solver changes is measured: fifteen generated
+programs, three constant-amended queens boards and two unchanged corpus
+entries, in a fixed order. `performance::families::Family` generates the
+programs: each family is one shape with one size (independent sets in choice
+and negation form, disjunction, tied optima, transitive closures, derivation
+chains, stratified negation, a producer chain), its bytes a pure function of
+the family and the size, its complete family a closed form the contract
+states. `Workload::generated(family, size, limits)` admits one as a sealed
+workload with entry `generated/<family>-<size>.lp`; the report retains the
+family, size, byte count and digest, and materialization checks that the
+generator still produces those bytes. Generated cells reach routes the corpus
+never takes, in particular the closure route; sizes keep every cell's
+complete native JSON output under `series::CAPTURE_BYTES`.
+
+`zetesis-perf --suite series` runs the cells through the instrumented matrix.
+The `cpu-auto` profile requests the shipped defaults, automatic grounding and
+oracle; the observation retains the grounding mode actually taken, so an
+automatic cell cannot be read as an explicit eager or lazy one. `--time-limit`
+adds a cooperative deadline to every native profile, which changes what the
+solver polls at every charged unit and is therefore part of the profile's
+identity; `--oracle` requests a reduct procedure explicitly. Cells a change is meant to move, a refusal or a timeout, stay in the
+set: their typed decisions are the observation.
+
+`zetesis-series --report LABEL=PATH …` derives one comparison from published
+reports over the same cells and profiles: exact integer medians of the timed
+native and reference intervals, later-over-earlier ratios of medians in the
+order given, the counters the native records carry (published models,
+candidates examined, charged search work, driver and phase medians), and each
+report's native executable seal. A cell that did not pass is listed by its
+decisions, never averaged. `--json` writes the derived comparison for
+retention beside the manual's observations; the raw reports stay with their
+builds. See [series cells](tests/series_cells.rs), [family
+generation](tests/performance_families.rs) and [the view](tests/series_view.rs).
+
 ## Compose capture, contracts and publication
 
 | Library capability | Boundary |

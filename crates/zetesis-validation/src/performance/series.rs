@@ -15,9 +15,10 @@ pub use view::{
     ViewError, compare,
 };
 
-use super::Error;
 use super::families::Family;
 use super::matrix::{ConstantAmendment, Workload, WorkloadLimits};
+use super::{Error, Limits};
+use crate::answers::native_json;
 use crate::examples;
 
 /// Number of cells in the series.
@@ -55,6 +56,25 @@ const ORIGINAL: [&str; 2] = [
     "standalone/send-money/send-money.lp",
     "scenarios/task-allocation/variant-04/05-larger-mix.lp",
 ];
+
+/// Campaign ceilings raised to what the cells need: one complete native
+/// record per invocation up to [`CAPTURE_BYTES`], and cumulative capture and
+/// report ceilings for two hundred such records. Larger ceilings in `base`
+/// are kept; timeouts and deadlines are not touched.
+#[must_use]
+pub fn limits(mut base: Limits) -> Limits {
+    base.process.max_output_bytes = base.process.max_output_bytes.max(CAPTURE_BYTES);
+    base.max_total_capture_bytes = base.max_total_capture_bytes.max(200 * CAPTURE_BYTES);
+    base.max_report_bytes = base.max_report_bytes.max(base.max_total_capture_bytes);
+    base
+}
+
+/// Native record decoding ceilings raised to [`CAPTURE_BYTES`] per record.
+#[must_use]
+pub fn native_answers(mut base: native_json::Limits) -> native_json::Limits {
+    base.report.max_input_bytes = base.report.max_input_bytes.max(CAPTURE_BYTES);
+    base
+}
 
 /// The cells, in schedule order.
 ///

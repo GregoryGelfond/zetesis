@@ -55,7 +55,13 @@ fn report(cases: &[&str], native: &[&[u64]], reference: &[u64], refused: Option<
         "plan": {"profiles": [{"backend": "cpu", "oracle": "auto", "grounder": "auto",
                                "workers": 4, "completion_workers": 4, "batch_size": 64,
                                "max_completion_scratch_bytes": 268_435_456}]},
-        "before": [{"requested": "/bin/native", "sha256": "ab".repeat(32), "bytes": 1}],
+        "before": [
+            {"requested": "/bin/native", "sha256": "ab".repeat(32), "bytes": 1},
+            {"requested": "/bin/clingo", "sha256": "cd".repeat(32), "bytes": 1},
+            {"requested": "/corpus/manifest.json", "sha256": "ef".repeat(32), "bytes": 1}
+        ],
+        "started_unix_ns": 1_000_000_000_000_000_000u64,
+        "finished_unix_ns": 1_000_000_000_060_000_000u64,
         "samples": samples
     }})
 }
@@ -195,5 +201,96 @@ fn provenance_names_each_report_native_seal() {
     .unwrap();
     let encoded = serde_json::to_value(&comparison).unwrap();
     assert_eq!(encoded["provenance"]["a"]["native_sha256"], "ab".repeat(32));
+    assert_eq!(
+        encoded["provenance"]["a"]["reference_sha256"],
+        "cd".repeat(32)
+    );
+    assert_eq!(
+        encoded["provenance"]["a"]["manifest_sha256"],
+        "ef".repeat(32)
+    );
+    assert_eq!(
+        encoded["provenance"]["a"]["started_unix_ns"],
+        1_000_000_000_000_000_000u64
+    );
+    assert_eq!(
+        encoded["provenance"]["a"]["finished_unix_ns"],
+        1_000_000_000_060_000_000u64
+    );
     assert_eq!(encoded["provenance"]["a"]["passed"], true);
+}
+
+#[test]
+fn cells_are_labelled_by_family_or_by_amended_entry() {
+    let mut one = report(
+        &[
+            "generated/chain-1000.lp",
+            "standalone/n-queens/variant-01.lp",
+            "standalone/n-queens/variant-01.lp",
+            "standalone/send-money/send-money.lp",
+        ],
+        &[&[1], &[1], &[1], &[1]],
+        &[1, 1, 1, 1],
+        None,
+    );
+    one["report"]["workloads"] = json!([
+        {"entry": "generated/chain-1000.lp", "generated": {"family": "chain", "size": 1000}},
+        {"entry": "standalone/n-queens/variant-01.lp", "amended": true,
+         "sources": [{"edits": [{"before": "8", "after": "10"}]}]},
+        {"entry": "standalone/n-queens/variant-01.lp", "amended": true,
+         "sources": [{"edits": [{"before": "8", "after": "11"}]}]},
+        {"entry": "standalone/send-money/send-money.lp", "amended": false, "sources": []}
+    ]);
+    let comparison = compare(&[Labelled {
+        label: "a",
+        report: &one,
+    }])
+    .unwrap();
+    let labels: Vec<_> = comparison
+        .cells
+        .iter()
+        .map(|cell| cell.label.as_str())
+        .collect();
+    assert_eq!(
+        labels,
+        [
+            "chain-1000",
+            "n-queens/variant-01 8→10",
+            "n-queens/variant-01 8→11",
+            "send-money/send-money"
+        ]
+    );
+    let markdown = comparison.markdown();
+    assert!(markdown.contains("| n-queens/variant-01 8→11 |"));
+}
+
+#[test]
+fn blocked_positions_name_their_blocking_decision() {
+    let mut one = report(&["generated/stratified-16.lp"], &[&[1, 1]], &[1], None);
+    // The qualification position timed out and the timed positions were
+    // never launched; the view reports the blocking decision, not only the
+    // count of positions it blocked.
+    let samples = one["report"]["samples"].as_array_mut().unwrap();
+    let blocker = samples
+        .iter()
+        .position(|s| s["slot"]["phase"] == "qualification")
+        .unwrap();
+    samples[blocker]["decision"] = json!("timeout");
+    for sample in samples.iter_mut() {
+        if sample["slot"]["phase"] == "timed" && sample["slot"]["producer"]["solver"] == "native" {
+            sample["decision"] = json!("not_attempted");
+            sample["blocked_by"] = json!(blocker);
+            sample["capture"] = Value::Null;
+        }
+    }
+    let comparison = compare(&[Labelled {
+        label: "a",
+        report: &one,
+    }])
+    .unwrap();
+    let encoded = serde_json::to_value(&comparison).unwrap();
+    assert_eq!(
+        encoded["cells"][0]["profiles"][0]["reports"]["a"]["decisions"],
+        json!({"blocked by timeout": 2})
+    );
 }

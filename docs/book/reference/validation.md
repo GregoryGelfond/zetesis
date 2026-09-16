@@ -223,6 +223,27 @@ and costs against clingo; hidden clingo atoms are unavailable. It adds neither
 time-to-first-answer nor RSS observations. A single pair does not establish a
 performance trend.
 
+### Measure the series
+
+A sequence of solver changes is measured on one fixed cell set, so that each
+change's effect and the sequence's cumulative effect rest on the same
+observations. `performance::series::workloads` names twenty cells: fifteen
+generated programs from `performance::families` (one shape and one size each,
+byte-exact, with closed-form complete families as their contracts), three
+amended queens boards and two unchanged entries. The generated programs reach
+routes the corpus does not: the closure route, deep derivation, cyclic and
+stratified negation, refused admissions. `zetesis-perf --suite series` runs
+them through the instrumented matrix; `--profile cpu-auto` requests the shipped
+defaults and the observation retains the grounding mode each cell took;
+`--time-limit` adds a cooperative deadline to every native profile.
+
+`zetesis-series` derives one comparison from published reports of the same
+cells: exact medians, later-over-earlier ratios, the retained counters and each
+report's native seal, with cells that did not pass listed by decision. The
+[comparison guide](https://github.com/GregoryGelfond/zetesis/blob/main/scripts/README-comparison.md#the-fixed-series)
+gives the commands. Retained series comparisons live beside the other
+[recorded observations](observations/README.md).
+
 ### Performance evidence
 
 The [current comparison](performance.md) reports ordinary CPU wall time and

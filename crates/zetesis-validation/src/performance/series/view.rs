@@ -141,6 +141,10 @@ pub struct ProfileRow {
 pub struct Cell {
     /// The workload's entry path.
     pub entry: String,
+    /// A short distinct name: the generated program's stem, or the entry's
+    /// last two path components with the recorded constant edit of an
+    /// amended entry.
+    pub label: String,
     /// One row per requested native profile.
     pub profiles: Vec<ProfileRow>,
     /// The reference solver's timing by report label, where it passed.
@@ -152,6 +156,15 @@ pub struct Cell {
 pub struct Provenance {
     /// SHA-256 of the native executable the report sealed.
     pub native_sha256: String,
+    /// SHA-256 of the reference executable the report sealed.
+    pub reference_sha256: String,
+    /// SHA-256 of the corpus manifest the report sealed.
+    pub manifest_sha256: String,
+    /// When the campaign started, Unix nanoseconds.
+    pub started_unix_ns: u64,
+    /// When the campaign finished, Unix nanoseconds; absent if it did not.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finished_unix_ns: Option<u64>,
     /// The report's own `passed` verdict.
     pub passed: bool,
     /// The report's own `accounted` verdict.
@@ -199,8 +212,10 @@ pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
         labels.push(labelled.label.to_owned());
         provenance.insert(labelled.label.to_owned(), self::provenance(labelled)?);
     }
+    let workloads = first.report["report"]["workloads"].as_array();
     let mut cells = Vec::with_capacity(entries.len());
     for (index, entry) in entries.iter().enumerate() {
+        let label = label(entry, workloads.and_then(|workloads| workloads.get(index)));
         let mut rows = Vec::with_capacity(requested.len());
         for (profile, request) in requested.iter().enumerate() {
             let mut records = BTreeMap::new();
@@ -222,6 +237,7 @@ pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
         }
         cells.push(Cell {
             entry: entry.clone(),
+            label,
             profiles: rows,
             reference,
         });
@@ -279,7 +295,7 @@ impl fmt::Display for Markdown<'_> {
             writeln!(f)?;
             for cell in &comparison.cells {
                 let row = &cell.profiles[profile];
-                write!(f, "| {} |", stem(&cell.entry))?;
+                write!(f, "| {} |", cell.label)?;
                 for label in &comparison.labels {
                     write!(f, " {} |", native_cell(row.reports.get(label)))?;
                 }
@@ -303,7 +319,7 @@ impl fmt::Display for Markdown<'_> {
         }
         writeln!(f)?;
         for cell in &comparison.cells {
-            write!(f, "| {} |", stem(&cell.entry))?;
+            write!(f, "| {} |", cell.label)?;
             for label in &comparison.labels {
                 match cell.reference.get(label) {
                     Some(timing) => write!(f, " {} |", timing_cell(timing))?,
@@ -318,7 +334,7 @@ impl fmt::Display for Markdown<'_> {
         )?;
         for cell in &comparison.cells {
             for (index, row) in cell.profiles.iter().enumerate() {
-                write!(f, "| {} | {index} |", stem(&cell.entry))?;
+                write!(f, "| {} | {index} |", cell.label)?;
                 match row.reports.get(last) {
                     Some(Native::Passed(passed)) => writeln!(
                         f,
@@ -367,13 +383,21 @@ impl fmt::Display for Profile<'_> {
     }
 }
 
-fn stem(entry: &str) -> &str {
-    entry
-        .rsplit('/')
-        .next()
-        .unwrap_or(entry)
-        .strip_suffix(".lp")
-        .unwrap_or(entry)
+fn label(entry: &str, workload: Option<&Value>) -> String {
+    let path = entry.strip_suffix(".lp").unwrap_or(entry);
+    if workload.is_some_and(|workload| workload.get("generated").is_some()) {
+        return path.rsplit('/').next().unwrap_or(path).to_owned();
+    }
+    let components: Vec<&str> = path.rsplit('/').take(2).collect();
+    let label = components.into_iter().rev().collect::<Vec<_>>().join("/");
+    match workload
+        .filter(|workload| workload["amended"] == true)
+        .and_then(|workload| workload["sources"][0]["edits"][0].as_object())
+        .and_then(|edit| Some((edit["before"].as_str()?, edit["after"].as_str()?)))
+    {
+        Some((before, after)) => format!("{label} {before}→{after}"),
+        None => label,
+    }
 }
 
 fn native_cell(record: Option<&Native>) -> String {
@@ -469,14 +493,24 @@ fn provenance(labelled: &Labelled<'_>) -> Result<Provenance, ViewError> {
         label: labelled.label.into(),
         field,
     };
-    let native_sha256 = labelled.report["report"]["before"]
-        .as_array()
-        .and_then(|seals| seals.first())
-        .and_then(|seal| seal["sha256"].as_str())
-        .ok_or(malformed("report.before[0].sha256"))?
-        .to_owned();
+    // The campaign seals the native executable, the reference executable and
+    // the manifest first, in that order, before the sources.
+    let seal = |index: usize, field| {
+        labelled.report["report"]["before"]
+            .as_array()
+            .and_then(|seals| seals.get(index))
+            .and_then(|seal| seal["sha256"].as_str())
+            .map(str::to_owned)
+            .ok_or(malformed(field))
+    };
     Ok(Provenance {
-        native_sha256,
+        native_sha256: seal(0, "report.before[0].sha256")?,
+        reference_sha256: seal(1, "report.before[1].sha256")?,
+        manifest_sha256: seal(2, "report.before[2].sha256")?,
+        started_unix_ns: labelled.report["report"]["started_unix_ns"]
+            .as_u64()
+            .ok_or(malformed("report.started_unix_ns"))?,
+        finished_unix_ns: labelled.report["report"]["finished_unix_ns"].as_u64(),
         passed: labelled.report["passed"]
             .as_bool()
             .ok_or(malformed("passed"))?,
@@ -542,12 +576,25 @@ fn native(labelled: &Labelled<'_>, case: usize, profile: usize) -> Result<Native
     let records = timed(labelled, case, |producer| {
         producer["solver"] == "native" && producer["profile"].as_u64() == Some(profile as u64)
     })?;
+    let all = samples(labelled)?;
     let mut decisions = BTreeMap::new();
     for record in &records {
         let decision = record["decision"].as_str().unwrap_or("unknown");
-        if decision != "pass" {
-            *decisions.entry(decision.to_owned()).or_insert(0) += 1;
+        if decision == "pass" {
+            continue;
         }
+        // A position the campaign never launched is described by the
+        // decision that disabled its cell, when the record names it.
+        let name = match record["blocked_by"]
+            .as_u64()
+            .and_then(|index| usize::try_from(index).ok())
+            .and_then(|index| all.get(index))
+            .and_then(|blocker| blocker["decision"].as_str())
+        {
+            Some(blocker) if decision == "not_attempted" => format!("blocked by {blocker}"),
+            _ => decision.to_owned(),
+        };
+        *decisions.entry(name).or_insert(0) += 1;
     }
     if records.is_empty() {
         return Err(ViewError::Malformed {

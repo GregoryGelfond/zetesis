@@ -73,6 +73,26 @@ fn series_cells_have_distinct_identities_and_the_expected_provenance() {
 }
 
 #[test]
+fn series_limits_raise_only_the_ceilings_the_cells_need() {
+    use zetesis_validation::{answers::native_json, performance::Limits};
+    let base = Limits::default();
+    let limits = series::limits(base);
+    assert_eq!(limits.process.max_output_bytes, series::CAPTURE_BYTES);
+    assert!(limits.max_total_capture_bytes >= 40 * series::CAPTURE_BYTES);
+    assert!(limits.max_report_bytes >= limits.max_total_capture_bytes);
+    assert_eq!(limits.process.timeout, base.process.timeout);
+    let answers = series::native_answers(native_json::Limits::default());
+    assert_eq!(answers.report.max_input_bytes, series::CAPTURE_BYTES);
+    // A caller's larger ceiling is kept.
+    let mut wide = Limits::default();
+    wide.process.max_output_bytes = 64 * 1024 * 1024;
+    assert_eq!(
+        series::limits(wide).process.max_output_bytes,
+        64 * 1024 * 1024
+    );
+}
+
+#[test]
 fn series_cells_respect_the_per_invocation_capture_ceiling() {
     // Every cell's complete native JSON output was measured below 16 MiB at
     // 896a5f73 (the largest, queens 01 at N = 11, near 10 MiB); the workload

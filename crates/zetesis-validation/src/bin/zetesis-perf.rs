@@ -48,6 +48,9 @@ struct Options {
     /// omission imposes none.
     #[arg(long)]
     time_limit: Option<std::num::NonZeroU64>,
+    /// Requested native reduct procedure for every matrix profile (default auto).
+    #[arg(long, value_enum)]
+    oracle: Option<OracleArgument>,
     /// Per-invocation stdout/stderr ceiling (default retains the established protocol bound).
     #[arg(long)]
     sample_bytes: Option<usize>,
@@ -103,6 +106,7 @@ fn execute(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
         || options.batch_size.is_some()
         || options.native_report_bytes.is_some()
         || options.time_limit.is_some()
+        || options.oracle.is_some()
     {
         return Err("matrix controls require --profile, --suite corpus or --suite series".into());
     }
@@ -235,6 +239,23 @@ enum JoinArgument {
     Table,
 }
 
+#[derive(Clone, Copy, ValueEnum)]
+enum OracleArgument {
+    Auto,
+    Closure,
+    Countermodel,
+}
+
+impl From<OracleArgument> for zetesis_validation::selected::Oracle {
+    fn from(value: OracleArgument) -> Self {
+        match value {
+            OracleArgument::Auto => Self::Auto,
+            OracleArgument::Closure => Self::Closure,
+            OracleArgument::Countermodel => Self::Countermodel,
+        }
+    }
+}
+
 impl From<JoinArgument> for zetesis_validation::selected::FormulaJoins {
     fn from(value: JoinArgument) -> Self {
         match value {
@@ -245,7 +266,7 @@ impl From<JoinArgument> for zetesis_validation::selected::FormulaJoins {
 }
 
 fn execution_profiles(options: &Options) -> Vec<zetesis_validation::selected::NativeExecution> {
-    use zetesis_validation::selected::{Backend, Grounder, NativeExecution};
+    use zetesis_validation::selected::{Backend, Grounder, NativeExecution, Oracle};
     let defaults = [
         ProfileArgument::CpuEager,
         ProfileArgument::CpuLazy,
@@ -281,6 +302,7 @@ fn execution_profiles(options: &Options) -> Vec<zetesis_validation::selected::Na
                     .batch_size
                     .unwrap_or(std::num::NonZeroUsize::new(64).expect("64 is nonzero")),
                 time_limit_seconds: options.time_limit,
+                oracle: options.oracle.map_or(Oracle::Auto, Into::into),
                 ..NativeExecution::default()
             }
         })
@@ -309,6 +331,11 @@ fn matrix(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
     let mut native_answers = zetesis_validation::answers::native_json::Limits::default();
     if let Some(bytes) = options.native_report_bytes {
         native_answers.report.max_input_bytes = bytes;
+    }
+    // The series knows its own record sizes; ceilings below them are raised.
+    if matches!(options.suite, SuiteArgument::Series) {
+        limits = zetesis_validation::performance::series::limits(limits);
+        native_answers = zetesis_validation::performance::series::native_answers(native_answers);
     }
     let plan = matrix::Plan::new(
         suite,
