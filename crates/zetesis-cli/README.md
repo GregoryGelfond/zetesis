@@ -205,11 +205,17 @@ whole batch incomplete. See [parallel execution](../../docs/book/rust/parallel.m
 Independent relational CPU execution prepares query dimensions once per session
 and retains empty workspace capacities across batches. `--max-source-work` bounds
 that preparation separately from candidate `--max-work`.
-`--max-closure-bytes` bounds one candidate's named storage;
+`--max-closure-bytes` bounds one candidate's reserved named capacity;
 `--max-closure-batch-bytes` admits preparation, idle retained workspaces and
 assigned candidate allowances together. Preparation refusal and individual
 candidate refusal retain different interruption kinds. See the
 [ownership contract](../../docs/book/architecture/ownership.md#memory-contracts).
+
+Every byte ceiling in `--help-all` says which quantity it bounds: reserved
+capacity (counted when it is admitted, so it exceeds resident memory), canonical
+or encoded payload (the bytes a record or key occupies once written, without
+capacity or allocator slack), or the original bytes of a file. None is process
+RSS.
 
 ## Statistics and resource limits
 

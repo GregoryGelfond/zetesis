@@ -89,7 +89,7 @@ pub struct Options {
     /// Library callers supply their own Control instead of this process option.
     #[arg(long, value_name = "SECONDS")]
     pub time_limit: Option<u64>,
-    /// Maximum JSON bytes per model record or terminal outcome; not an all-model buffer.
+    /// Maximum encoded JSON bytes per model record or terminal outcome; not an all-model buffer.
     #[arg(long, default_value_t = 8_388_608, hide_short_help = true)]
     pub max_json_record_bytes: usize,
     /// Cumulative candidate restriction preparation/traversal or formula search work.
@@ -104,7 +104,8 @@ pub struct Options {
     /// Maximum logical nodes in retained formula projection history.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_projection_nodes, hide_short_help = true)]
     pub max_projection_nodes: usize,
-    /// Maximum named projection-history capacity, including growth overlap.
+    /// Maximum reserved projection-history capacity, including growth overlap;
+    /// capacity is counted before it is written, so this exceeds resident bytes.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_projection_bytes, hide_short_help = true)]
     pub max_projection_bytes: usize,
     /// Override source-expansion and eager formula-grounding work ceilings.
@@ -115,7 +116,7 @@ pub struct Options {
     /// lookup, index construction, copying and commit work.
     #[arg(long, hide_short_help = true)]
     pub max_expansion_work: Option<usize>,
-    /// Maximum authored bytes for eager formula support views, indexes and queries.
+    /// Maximum reserved capacity for eager formula support views, indexes and queries.
     ///
     /// Source atoms, allocator/tree overhead and other grounding state are excluded.
     #[arg(long, default_value_t = zetesis_themelios::FormulaLimits::default().max_support_bytes, hide_short_help = true)]
@@ -158,7 +159,8 @@ pub struct Options {
     /// Distinct enabled terms per displayed model.
     #[arg(long, default_value_t = 65_536, hide_short_help = true)]
     pub max_observation_terms: usize,
-    /// Retained observation payload and complete Answer record bytes.
+    /// Retained observation payload and complete Answer record bytes, counted as
+    /// canonical text rather than as capacity.
     #[arg(long, default_value_t = 8_388_608, hide_short_help = true)]
     pub max_observation_bytes: usize,
     /// Cumulative work for optional incumbent candidate bounds. Zero disables
@@ -171,7 +173,7 @@ pub struct Options {
     /// Maximum distinct objective contribution keys retained per stable model.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_objective_keys, hide_short_help = true)]
     pub max_objective_keys: usize,
-    /// Maximum encoded objective contribution bytes per stable model.
+    /// Maximum canonical encoded objective contribution bytes per stable model.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_objective_key_bytes, hide_short_help = true)]
     pub max_objective_key_bytes: usize,
     /// Maximum tied incumbent models retained while proving an optimum.
@@ -192,12 +194,13 @@ pub struct Options {
     /// Exact formula completion workers; one retains the scalar CPU cursor.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.completion_workers, hide_short_help = true)]
     pub completion_workers: NonZeroUsize,
-    /// Maximum named cold reduct preparation and each query's retained bytes.
-    /// Shared theory payload and allocator metadata are excluded.
+    /// Maximum reserved capacity for cold reduct preparation and for each query's
+    /// retained workspace. Shared theory payload and allocator metadata are excluded.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_reduct_bytes, hide_short_help = true)]
     pub max_reduct_bytes: u64,
-    /// Maximum shared prepared reduct, worker query and transient/result bytes, excluding the
-    /// scalar cursor, allocator/table overhead, thread stacks and GPU storage.
+    /// Maximum reserved capacity for the shared prepared reduct, worker queries and
+    /// transient/result slots, excluding the scalar cursor, allocator/table overhead,
+    /// thread stacks and GPU storage.
     /// Optional class preparation/checking uses the same ceiling independently.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_completion_scratch_bytes, hide_short_help = true)]
     pub max_completion_scratch_bytes: u64,
@@ -205,7 +208,8 @@ pub struct Options {
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_candidates, hide_short_help = true)]
     pub max_candidates: u64,
     /// Maximum copied payload for necessary candidate restrictions, including
-    /// temporary templates. Allocator and index overhead are excluded.
+    /// temporary templates: canonical bytes, excluding spare capacity and
+    /// allocator/index overhead.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_candidate_bytes, hide_short_help = true)]
     pub max_candidate_bytes: usize,
     /// Maximum gate tuples retained by the incremental candidate cursor.
@@ -218,11 +222,12 @@ pub struct Options {
     /// check; formula search and GPU propagation have separate limits.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_work, hide_short_help = true)]
     pub max_work: u64,
-    /// Maximum named storage bytes per independent lazy CPU closure.
+    /// Maximum reserved named capacity per independent lazy CPU closure, including
+    /// spare capacity and replacement overlap; not resident bytes.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_closure_bytes, hide_short_help = true)]
     pub max_closure_bytes: usize,
-    /// Collective independent CPU preparation, idle cache and assigned closure
-    /// storage allowance. Also bounds immutable query preparation bytes.
+    /// Collective reserved capacity for independent CPU preparation, the idle cache
+    /// and assigned closure allowances. Also bounds immutable query preparation bytes.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_closure_batch_bytes, hide_short_help = true)]
     pub max_closure_batch_bytes: usize,
     /// Device propagation work per formula candidate, independent of CPU work.
@@ -242,7 +247,7 @@ pub struct Options {
     /// Also sets the eager formula atom ceiling.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_atoms, hide_short_help = true)]
     pub max_atoms: usize,
-    /// Maximum bytes in each original file or standard input before parsing.
+    /// Maximum original bytes in each file or standard input before parsing.
     #[arg(long, default_value_t = 1_048_576, hide_short_help = true)]
     pub max_source_bytes: usize,
     /// Maximum explicit input root occurrences, including repeated filenames.
@@ -264,7 +269,7 @@ pub struct Options {
     /// Also sets the eager formula theory-root ceiling.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_ground_rules, hide_short_help = true)]
     pub max_ground_rules: usize,
-    /// Maximum accounted batch bytes, excluding allocator/driver overhead.
+    /// Maximum reserved batch capacity, excluding allocator/driver overhead.
     /// Lazy GPU reserves half for source state and half for transient transport.
     /// Shared CPU rounds use the full allowance for source/world state.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_batch_bytes, hide_short_help = true)]

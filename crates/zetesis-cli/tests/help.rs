@@ -118,3 +118,40 @@ fn device_help_remains_available_without_discovery() {
     assert_eq!(error.kind(), clap::error::ErrorKind::DisplayHelp);
     assert!(error.to_string().contains("zetesis devices"));
 }
+
+#[test]
+fn every_byte_ceiling_names_the_quantity_it_bounds() {
+    // A byte ceiling is read against a resident-memory figure unless it says
+    // what it counts: reserved capacity, canonical or encoded payload, or the
+    // original bytes of a file. Each option's help must say which.
+    let full = help("--help-all");
+    let mut options = Vec::new();
+    let mut entries: Vec<(&str, String)> = Vec::new();
+    for line in full.lines() {
+        let trimmed = line.trim_start();
+        if let Some(rest) = trimmed.strip_prefix("--") {
+            let name = rest
+                .split(|c: char| c.is_whitespace() || c == '=')
+                .next()
+                .unwrap();
+            options.push(name);
+            entries.push((name, String::new()));
+        } else if let Some((_, text)) = entries.last_mut() {
+            text.push_str(trimmed);
+            text.push(' ');
+        }
+    }
+    let ceilings: Vec<_> = entries
+        .iter()
+        .filter(|(name, _)| name.ends_with("-bytes"))
+        .collect();
+    assert_eq!(ceilings.len(), 14, "{options:?}");
+    for (name, text) in ceilings {
+        assert!(
+            ["reserved", "canonical", "encoded", "original"]
+                .iter()
+                .any(|quantity| text.contains(quantity)),
+            "--{name} does not say which bytes it bounds: {text}"
+        );
+    }
+}
