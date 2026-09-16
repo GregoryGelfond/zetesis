@@ -111,6 +111,66 @@ carries the charged closure work summed over completed checks, from 88,672
 units for the producer chain to 470,272,422 for the independent-negation
 cell at size 10.
 
+## Item 4: the deadline timer
+
+Four campaigns on 16 September 2026 between 20:36:00 and 20:55:40 UTC,
+same machine and clingo as above, each binary once without a deadline and
+once with `--time-limit 3600`, a deadline no cell reaches:
+[series-7d7413ae-cpu-auto.json](series-7d7413ae-cpu-auto.json) with its
+[table view](series-7d7413ae-cpu-auto-tables.md) compares the runs without
+a deadline, and
+[series-7d7413ae-cpu-auto-deadline.json](series-7d7413ae-cpu-auto-deadline.json)
+with its [table view](series-7d7413ae-cpu-auto-deadline-tables.md) the runs
+with one. `main` is the 896a5f73 executable rerun as the control; `after`
+is built from `7d7413ae1b1ee220d534be7b0df37854e4ab0966` (SHA-256
+`0e8814954b5eec03e1b82b3ec6abb9f7447abb3d4d15a0eae4588e70cba946c5`), where
+a timer thread marks the deadline and a poll reads flags only. The four raw
+reports are not published; their SHA-256 are
+`5e0417247174ce6d30ac82ea8d858cbf0038d3d3a90043babe7409758e327b33` (main),
+`3a3cdee586ff966098241f143270b0bd850e0f1610e636b843552576cfd4e2ed` (main
+with deadline),
+`269e16be5df8480e48b20bd091c9ed373c8e80a260771d32e9f00a5d527e6157` (after)
+and `cb73be7a754b940edbef5d46fb3b70c3232a89e7f5d8fb4fe19875bb1449aae9`
+(after with deadline).
+
+The quantity this step changes is the cost of an unreached deadline, the
+ratio of a cell's native median with `--time-limit 3600` to the same cell's
+median without it, read across the two views for each binary:
+
+| Cell | main | main+deadline | ratio | after | after+deadline | ratio |
+|---|---:|---:|---:|---:|---:|---:|
+| independent-choice-12 | 23.0 | 30.1 | 1.306 | 22.3 | 23.1 | 1.036 |
+| independent-choice-16 | 197.4 | 241.5 | 1.224 | 203.5 | 193.8 | 0.953 |
+| independent-negation-8 | 110.5 | 199.9 | 1.809 | 110.5 | 107.4 | 0.972 |
+| independent-negation-10 | 1423.3 | 2557.3 | 1.797 | 1381.8 | 1367.2 | 0.989 |
+| independent-negation-aggregate-16 | 350.4 | 407.3 | 1.162 | 310.8 | 299.9 | 0.965 |
+| disjunction-12 | 218.1 | 357.5 | 1.639 | 213.2 | 211.4 | 0.991 |
+| ties-50 | 182.7 | 332.5 | 1.820 | 185.1 | 186.9 | 1.010 |
+| transitive-path-100 | 32.6 | 59.6 | 1.830 | 31.4 | 30.3 | 0.965 |
+| transitive-path-200 | 186.4 | 364.8 | 1.957 | 178.0 | 182.1 | 1.023 |
+| transitive-dense-40 | 39.7 | 79.8 | 2.010 | 38.8 | 39.0 | 1.004 |
+| chain-1000 | 101.0 | 207.3 | 2.053 | 95.9 | 98.2 | 1.024 |
+| chain-2000 | 356.5 | 775.1 | 2.174 | 345.2 | 347.5 | 1.007 |
+| chain-arithmetic-1000 | 10.0 | 14.1 | 1.412 | 9.2 | 9.9 | 1.073 |
+| stratified-16 | n/a | n/a | n/a | n/a | n/a | n/a |
+| producer-chain-700 | 26.9 | 30.3 | 1.126 | 25.9 | 23.6 | 0.913 |
+| n-queens/variant-01 8→10 | 125.0 | 438.4 | 3.506 | 122.4 | 123.9 | 1.012 |
+| n-queens/variant-01 8→11 | 455.6 | 2002.2 | 4.395 | 460.9 | 467.7 | 1.015 |
+| n-queens/variant-04 8→11 | 310.8 | 1303.6 | 4.194 | 314.4 | 329.1 | 1.047 |
+| send-money/send-money | 49.7 | 108.7 | 2.186 | 49.9 | 49.2 | 0.986 |
+| variant-04/05-larger-mix | 342.2 | 1138.0 | 3.325 | 328.3 | 341.1 | 1.039 |
+
+On the control an unreached deadline costs between 13 percent and a factor
+of 4.4, most on the formula-route cells (the queens boards and the task
+allocation mix) where a charged unit is shortest and the clock read that
+each poll made dominated it. On the changed executable the same ratio lies
+between 0.91 and 1.07, inside the spread of three timed rounds. Without a
+deadline the two executables agree: after/main lies between 0.89 and 1.03
+across the nineteen passing cells, so the timer thread costs nothing
+measurable when it is idle. The audit's description of a "strided" poll in
+the shared completion budget was inaccurate: that budget polls on each
+refill of a 64-permit grant to amortise its lock, and it is unchanged.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
