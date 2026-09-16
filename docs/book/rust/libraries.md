@@ -206,7 +206,8 @@ and dictionary lookup use checked AVL indexes containing only IDs and links;
 insertion does not shift a historical sorted ID sequence. Typed comparisons,
 transactional index updates and column/vector growth still have admitted costs.
 Canonical row access uses an explicitly prepared ordered view, invalidated by a
-successful append. Standalone immutable `Relation::from_atoms` and `from_catalog`
+successful append and restored by merging the appended rows into the previous
+view rather than by traversing the index again. Standalone immutable `Relation::from_atoms` and `from_catalog`
 instead build a sorted dictionary index for binary search; those relations do
 not offer append operations.
 

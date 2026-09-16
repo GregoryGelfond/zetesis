@@ -20,7 +20,9 @@
 //!
 //! The pre-1.0 `Catalog::ordered_row` operation is replaced by explicit
 //! [`Catalog::prepare_ordered`] and [`Catalog::ordered`] views. A missing prepared
-//! view denotes required preparation, never an empty relation. Relation and
+//! view denotes required preparation, never an empty relation; preparation
+//! after appends merges them into the previous view, whose two runs
+//! [`Catalog::ordered_runs`] keeps borrowable. Relation and
 //! catalog work now charge actual typed descriptor/text-prefix comparisons;
 //! previous numerical work ceilings are not equivalent units.
 //!

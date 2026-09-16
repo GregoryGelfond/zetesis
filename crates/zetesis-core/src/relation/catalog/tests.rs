@@ -739,3 +739,116 @@ fn ordered_ids_preserve_complete_typed_identity() {
         }
     }
 }
+
+fn ids(catalog: &Catalog) -> Vec<usize> {
+    let rows = catalog.ordered().expect("prepared");
+    (0..rows.len())
+        .map(|position| rows.row_id(position).unwrap())
+        .collect()
+}
+
+#[test]
+fn preparation_keeps_the_view_it_merged_from_and_the_run_it_merged_in() {
+    let mut catalog = owner();
+    for value in [4, 2] {
+        catalog.insert(atom(value, 0), Limits::default()).unwrap();
+    }
+    catalog.prepare_ordered(Limits::default()).unwrap();
+    assert_eq!(ids(&catalog), [1, 0]);
+    for value in [3, 1] {
+        catalog.insert(atom(value, 0), Limits::default()).unwrap();
+    }
+    assert!(catalog.ordered().is_none());
+    assert!(catalog.ordered_runs().is_none());
+    catalog.prepare_ordered(Limits::default()).unwrap();
+    assert_eq!(ids(&catalog), [3, 1, 2, 0]);
+    let (before, appended) = catalog.ordered_runs().unwrap();
+    assert_eq!(before, [1, 0]);
+    assert_eq!(appended, [3, 2]);
+    // A preparation with nothing appended reuses the view and keeps the runs.
+    catalog
+        .prepare_ordered(Limits {
+            max_work: 0,
+            ..Limits::default()
+        })
+        .unwrap();
+    assert_eq!(catalog.ordered_runs().unwrap(), (&[1, 0][..], &[3, 2][..]));
+}
+
+#[test]
+fn the_first_preparation_is_one_run_over_nothing() {
+    let mut catalog = owner();
+    for value in [9, 2, 5] {
+        catalog.insert(atom(value, 0), Limits::default()).unwrap();
+    }
+    catalog.prepare_ordered(Limits::default()).unwrap();
+    let (before, appended) = catalog.ordered_runs().unwrap();
+    assert!(before.is_empty());
+    assert_eq!(appended, [1, 2, 0]);
+}
+
+#[test]
+fn one_append_to_a_large_extent_costs_a_search_and_a_copy_not_a_traversal() {
+    let mut catalog = owner();
+    for value in 0..2048 {
+        catalog
+            .insert(atom(value * 2, 0), Limits::default())
+            .unwrap();
+    }
+    catalog.prepare_ordered(Limits::default()).unwrap();
+    catalog.insert(atom(1, 0), Limits::default()).unwrap();
+    let work = catalog
+        .prepare_ordered(Limits::default())
+        .unwrap()
+        .storage()
+        .construction_work;
+    // The merged copy writes 2,049 ids; locating the new row compares against
+    // about eleven of them. Traversing the index again would cost twice that.
+    assert!(work > 2048, "{work}");
+    assert!(work < 2048 + 256, "{work}");
+    assert_eq!(ids(&catalog)[..3], [0, 2048, 1]);
+    assert_eq!(catalog.ordered_runs().unwrap().1, [2048]);
+}
+
+proptest! {
+    #[test]
+    fn incremental_preparation_matches_a_rebuild(
+        rows in proptest::collection::vec((-8i32..8, -8i32..8), 1..40),
+        prepare in proptest::collection::vec(any::<bool>(), 40),
+    ) {
+        let mut incremental = owner();
+        // The view at the last preparation that merged, and its runs; a
+        // preparation with nothing appended keeps both.
+        let mut merged_from: Vec<usize> = Vec::new();
+        let mut runs: Option<(Vec<usize>, Vec<usize>)> = None;
+        for (index, (left, right)) in rows.iter().enumerate() {
+            incremental.insert(atom(*left, *right), Limits::default()).unwrap();
+            if prepare[index] {
+                let grew = incremental.ordered().is_none();
+                incremental.prepare_ordered(Limits::default()).unwrap();
+                let mut rebuilt = owner();
+                for (left, right) in &rows[..=index] {
+                    rebuilt.insert(atom(*left, *right), Limits::default()).unwrap();
+                }
+                rebuilt.prepare_ordered(Limits::default()).unwrap();
+                prop_assert_eq!(ids(&incremental), ids(&rebuilt));
+                let (before, appended) = incremental.ordered_runs().unwrap();
+                if grew {
+                    if !before.is_empty() {
+                        prop_assert_eq!(before.to_vec(), merged_from.clone());
+                    }
+                    let mut union: Vec<usize> = before.iter().chain(appended).copied().collect();
+                    union.sort_unstable();
+                    let mut all = ids(&incremental);
+                    all.sort_unstable();
+                    prop_assert_eq!(union, all);
+                    merged_from = ids(&incremental);
+                    runs = Some((before.to_vec(), appended.to_vec()));
+                } else if let Some((kept_before, kept_appended)) = &runs {
+                    prop_assert_eq!(before, &kept_before[..]);
+                    prop_assert_eq!(appended, &kept_appended[..]);
+                }
+            }
+        }
+    }
+}

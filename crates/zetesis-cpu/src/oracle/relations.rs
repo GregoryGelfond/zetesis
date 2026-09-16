@@ -152,10 +152,8 @@ impl Catalogs {
 
     pub(super) fn prepare_delta(&mut self, work: &mut Work<'_>) -> Result<(), Stop> {
         self.prepare(work)?;
-        for relation in self.relations.values_mut() {
-            relation
-                .partition
-                .prepare(&relation.catalog, &mut self.bytes, work)?;
+        for relation in self.relations.values() {
+            relation.partition.prepare(&relation.catalog, work)?;
         }
         Ok(())
     }

@@ -425,10 +425,18 @@ without revisiting their rows.
 
 Scalar reduct closure uses the same per-predicate catalog. Before each round it
 prepares a complete ordered ID view for each changed extent and reuses that view
-for the round's joins. Preparation traverses O(n) row IDs and accounts its cache
-and traversal capacity. Subsequent indexed row access is constant time and
-borrows the authoritative tuple. A duplicate or refused insertion preserves an
-existing prepared extent; a successful append invalidates it.
+for the round's joins. The first preparation of a relation traverses its O(n)
+row IDs. A later preparation merges the `d` rows appended since the previous
+one: it sorts them by typed comparison, locates each among the previous view by
+binary search, O(d log n) comparisons, and writes the merged view in one linear
+copy of n + d IDs without a comparison. The view it started from and the sorted
+run it merged in remain borrowable until the next merge. Subsequent indexed row
+access is constant time and borrows the authoritative tuple. A duplicate or
+refused insertion preserves an existing prepared extent; a successful append
+invalidates it. Over a derivation of depth R in which one relation grows to n
+rows, the views therefore cost O(n log n) charged comparisons plus O(n R) ID
+copies at memory-copy speed, where each round previously traversed the whole
+extent twice.
 
 Scalar closure first visits every template against empty derived truth, including
 facts, zero-positive rules and constraints under the frozen candidate. In each
@@ -437,9 +445,12 @@ row: earlier occurrences select Old rows, that occurrence selects New rows, and
 later occurrences select Current rows. These disjoint choices preserve repeated
 predicates and source occurrences. Newness uses stable per-predicate insertion
 IDs, never canonical ranks, which can move when a smaller tuple is appended.
-For mixed extents, one derived ID buffer partitions the canonical rows into
-ordered Old and New slices. It shares the sole tuple payload owner and is cached
-by both old cutoff and current extent. All-old and all-new extents reuse the
+For mixed extents, the Old and New slices are the catalog's two runs: the view
+it merged from and the run it merged in, each in canonical order and each
+sharing the sole tuple payload owner. The round cutoff advances after the
+round's joins and before its heads are appended, so the run the next
+preparation starts from is exactly the Old extent; the partition keeps only that
+cutoff and checks it against the runs. All-old and all-new extents reuse the
 complete ordered view or an empty slice.
 
 A round completes every selected binding and constraint before advancing its

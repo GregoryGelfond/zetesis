@@ -59,23 +59,14 @@ fn age_tracks_insertion_identity_when_canonical_ranks_move() {
     assert_rows(&catalogs, RowSet::Current, &[3, 1, 2, 0], &[1, 2, 3, 4]);
     assert_rows(&catalogs, RowSet::Old, &[1, 0], &[2, 4]);
     assert_rows(&catalogs, RowSet::New, &[3, 2], &[1, 3]);
+    // The views are the catalog's own runs: the partition owns no buffer.
+    assert_eq!(catalogs.owned_bytes(), before);
     let predicate = Predicate::new("p", 1).unwrap();
-    let partition = &catalogs.relations[&predicate].partition;
-    assert_eq!(partition.ids, [1, 0, 3, 2]);
-    assert_eq!(
-        catalogs.owned_bytes() - before,
-        (partition.ids.capacity() * size_of::<usize>()) as u128
-    );
-    let address = partition.ids.as_ptr();
-    let retained = catalogs.owned_bytes();
-    let before = work.statistics.catalog_work;
+    assert_eq!(catalogs.relations[&predicate].partition.old_end, 2);
+    let charged = work.statistics.catalog_work;
     catalogs.prepare_delta(&mut work).unwrap();
-    assert_eq!(work.statistics.catalog_work - before, 1); // Exact extent/cutoff cache check.
-    assert_eq!(
-        catalogs.relations[&predicate].partition.ids.as_ptr(),
-        address
-    );
-    assert_eq!(catalogs.owned_bytes(), retained);
+    assert_eq!(work.statistics.catalog_work - charged, 1); // One cutoff check.
+    assert_eq!(catalogs.owned_bytes(), before);
     catalogs.advance(&mut work).unwrap();
     catalogs.prepare_delta(&mut work).unwrap();
     assert_rows(&catalogs, RowSet::Old, &[3, 1, 2, 0], &[1, 2, 3, 4]);
@@ -83,27 +74,41 @@ fn age_tracks_insertion_identity_when_canonical_ranks_move() {
 }
 
 #[test]
-fn partition_capacity_is_admitted_before_preparation() {
+fn a_refused_merge_keeps_the_old_view_and_publishes_no_partial_run() {
+    // As `mixed`, but the merge of the second round's rows is refused for
+    // bytes: the first round's view stays borrowable, the delta views are
+    // unavailable, and the merge succeeds once the ceiling is raised.
     let control = Control::default();
     let mut work = work(&control);
-    let mut catalogs = mixed(&mut work);
+    let mut catalogs = Catalogs::default();
+    for value in [4, 2] {
+        catalogs.insert(atom(value), 0, &mut work).unwrap();
+    }
+    catalogs.prepare_delta(&mut work).unwrap();
+    catalogs.advance(&mut work).unwrap();
     let retained = catalogs.owned_bytes();
-    work.limits.max_closure_bytes = usize::try_from(retained).unwrap();
+    for value in [3, 1] {
+        catalogs.insert(atom(value), 0, &mut work).unwrap();
+    }
+    let appended = catalogs.owned_bytes();
+    work.limits.max_closure_bytes = usize::try_from(appended).unwrap();
     assert_eq!(catalogs.prepare_delta(&mut work), Err(Stop::StorageLimit));
-    assert_eq!(catalogs.owned_bytes(), retained);
-    assert_rows(&catalogs, RowSet::Current, &[3, 1, 2, 0], &[1, 2, 3, 4]);
+    assert_eq!(catalogs.owned_bytes(), appended);
+    assert!(appended > retained);
+    let predicate = Predicate::new("p", 1).unwrap();
     assert!(matches!(
-        catalogs.selected(&Predicate::new("p", 1).unwrap(), RowSet::New),
+        catalogs.selected(&predicate, RowSet::New),
         Err(Stop::InvalidProgram)
     ));
     work.limits = Limits::default();
     catalogs.prepare_delta(&mut work).unwrap();
+    assert_rows(&catalogs, RowSet::Current, &[3, 1, 2, 0], &[1, 2, 3, 4]);
     assert_rows(&catalogs, RowSet::Old, &[1, 0], &[2, 4]);
     assert_rows(&catalogs, RowSet::New, &[3, 2], &[1, 3]);
 }
 
 #[test]
-fn interrupted_partition_never_publishes_partial_rows() {
+fn an_interrupted_delta_preparation_charges_exactly_its_limit() {
     let control = Control::default();
     let mut observed = work(&control);
     let mut reference = mixed(&mut observed);
@@ -119,11 +124,9 @@ fn interrupted_partition_never_publishes_partial_rows() {
         assert_eq!(catalogs.prepare_delta(&mut limited), Err(Stop::WorkLimit));
         assert_eq!(limited.statistics.work, max_work);
         assert_eq!(limited.statistics.catalog_work, max_work);
+        // The catalog merged its runs when `mixed` prepared it, so every view
+        // is already whole; the interrupted check published nothing new.
         assert_rows(&catalogs, RowSet::Current, &[3, 1, 2, 0], &[1, 2, 3, 4]);
-        assert!(matches!(
-            catalogs.selected(&Predicate::new("p", 1).unwrap(), RowSet::New),
-            Err(Stop::InvalidProgram)
-        ));
         limited.limits = Limits::default();
         catalogs.prepare_delta(&mut limited).unwrap();
         assert_rows(&catalogs, RowSet::Old, &[1, 0], &[2, 4]);
@@ -138,16 +141,9 @@ fn extraction_retires_delta_identity_but_retains_empty_capacity() {
     let mut catalogs = mixed(&mut work);
     catalogs.prepare_delta(&mut work).unwrap();
     let predicate = Predicate::new("p", 1).unwrap();
-    let address = catalogs.relations[&predicate].partition.ids.as_ptr();
-    let capacity = catalogs.relations[&predicate].partition.ids.capacity();
     let model = catalogs.take_model(&mut work).unwrap();
     assert_eq!(model, Model::new([1, 2, 3, 4].map(atom)));
-    let partition = &catalogs.relations[&predicate].partition;
-    assert_eq!(partition.old_end, 0);
-    assert_eq!(partition.prepared, None);
-    assert!(partition.ids.is_empty());
-    assert_eq!(partition.ids.capacity(), capacity);
-    assert_eq!(partition.ids.as_ptr(), address);
+    assert_eq!(catalogs.relations[&predicate].partition.old_end, 0);
     catalogs.insert(atom(9), 0, &mut work).unwrap();
     catalogs.prepare_delta(&mut work).unwrap();
     assert_rows(&catalogs, RowSet::Old, &[], &[]);
