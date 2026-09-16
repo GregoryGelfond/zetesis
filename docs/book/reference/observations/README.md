@@ -64,6 +64,31 @@ application comparisons. The provenance preserves the native versus explicit
 Apple target/package recipe distinction; matching top-level GPU features does
 not establish full transitive build equivalence or isolate one change's effect.
 
+## Series baseline
+
+[series-896a5f73-cpu-auto.json](series-896a5f73-cpu-auto.json) and its
+[table view](series-896a5f73-cpu-auto-tables.md) are the derived comparison
+of one `zetesis-perf --suite series --profile cpu-auto` campaign on the
+executable built from `896a5f73fc9d3def3b0b4dd3ce3a1904dc7555ed`
+(SHA-256 `a7e3c81305a6bbaef8757f1a83d1cc5159e6bdf7664a9e1c7534993e2075b5d2`)
+against clingo 5.8.2, observed on 16 September 2026 from 18:40:01 to
+18:41:08 UTC on an AMD Ryzen 7 7840U under Linux. One warmup and three timed
+rounds per cell and producer; the raw report of 481 MB, which retains every
+native record, is not published; its SHA-256 is
+`aac1254e8123a7f756d47c3ca7a11e96a0724a72b4ceb86bc40ca3efcbf77319`. Nineteen
+cells pass complete-family parity; the stratified cell reaches its 30-second
+process deadline in qualification, which disables its later positions, and
+the derived view reports that decision rather than a time. This is the
+first column of the series that measures the changes following the audit of
+15 September; later comparisons add their own columns from their own
+campaigns, always beside a fresh baseline column.
+
+The derived view (`zetesis-series --json`) keeps exact integer medians,
+minimum and maximum of the timed intervals per cell and producer, the
+counters the native records carry, the decisions of cells that did not pass,
+and each report's native, reference and manifest seals. It is a derived
+observation view, not an archive of the report.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
