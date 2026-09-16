@@ -15,6 +15,7 @@
 
 mod capture;
 mod config;
+pub mod families;
 pub mod matrix;
 mod record;
 mod run;

@@ -41,6 +41,34 @@ pub struct Contract {
     pub(super) notes: Vec<String>,
 }
 impl Contract {
+    /// The complete ordinary family of a satisfiable program with `count`
+    /// answers, without witnesses or required symbols. A generated program's
+    /// closed-form count is the intended producer.
+    #[must_use]
+    pub fn complete_family(count: std::num::NonZeroU64) -> Self {
+        Self {
+            satisfiability: Satisfiability::Sat,
+            family: Family::All,
+            model_count: Some(count.get()),
+            cost: None,
+            witnesses: Vec::new(),
+            required_symbols: Vec::new(),
+            notes: Vec::new(),
+        }
+    }
+    /// The complete family of final optimum ties with `count` answers at `cost`.
+    #[must_use]
+    pub fn optimal_family(count: std::num::NonZeroU64, cost: Vec<i64>) -> Self {
+        Self {
+            satisfiability: Satisfiability::Sat,
+            family: Family::Optimal,
+            model_count: Some(count.get()),
+            cost: Some(cost),
+            witnesses: Vec::new(),
+            required_symbols: Vec::new(),
+            notes: Vec::new(),
+        }
+    }
     /// Required satisfiability.
     #[must_use]
     pub const fn satisfiability(&self) -> Satisfiability {

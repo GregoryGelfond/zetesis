@@ -2094,6 +2094,7 @@ dependencies = [
  "clap",
  "nix",
  "proc-macro2",
+ "proptest",
  "rustix",
  "serde",
  "serde_json",
