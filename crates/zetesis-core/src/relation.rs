@@ -19,10 +19,12 @@
 //! Structured-value clones already share their payload through `Arc`.
 //!
 //! The pre-1.0 `Catalog::ordered_row` operation is replaced by explicit
-//! [`Catalog::prepare_ordered`] and [`Catalog::ordered`] views. A missing prepared
-//! view denotes required preparation, never an empty relation; preparation
-//! after appends merges them into the previous view, whose two runs
-//! [`Catalog::ordered_runs`] keeps borrowable. Relation and
+//! [`Catalog::prepare_ordered`] and [`Catalog::ordered`] views over sorted runs.
+//! A missing prepared view denotes required preparation, never an empty
+//! relation; preparation after appends sorts them into a new run and keeps the
+//! older runs as geometrically shrinking levels, so no preparation copies the
+//! whole extent. [`Catalog::canonical`] merges the runs into one sequence when
+//! rank access is needed. Relation and
 //! catalog work now charge actual typed descriptor/text-prefix comparisons;
 //! previous numerical work ceilings are not equivalent units.
 //!
@@ -38,7 +40,7 @@ mod storage;
 mod selection;
 mod catalog;
 
-pub use catalog::{Catalog, CatalogFailure, ExtractedAtoms, Insertion, Lookup, OrderedRows};
+pub use catalog::{Catalog, CatalogFailure, ExtractedAtoms, Insertion, Lookup, Runs};
 
 pub use selection::{Equality, Mask, Query, QueryAttempt, Selection};
 
@@ -106,6 +108,9 @@ pub enum Failure {
     Overflow,
     /// Storage could not be reserved.
     Allocation,
+    /// Ordered access was requested for an extent whose appends are not yet
+    /// prepared.
+    Order,
     /// An inclusive ceiling was exceeded.
     Limit {
         /// Exhausted resource.
@@ -131,6 +136,7 @@ impl fmt::Display for Failure {
             Self::Dictionary => f.write_str("relation dictionary does not contain a source value"),
             Self::Overflow => f.write_str("relation shape or capacity is not representable"),
             Self::Allocation => f.write_str("relation storage could not be reserved"),
+            Self::Order => f.write_str("relation ordered access requires preparation after append"),
             Self::Limit {
                 resource,
                 observed,

@@ -9,7 +9,7 @@ use crate::{
 
 mod plan;
 mod ordered;
-pub use ordered::OrderedRows;
+pub use ordered::Runs;
 
 use super::{
     Cell, DictionaryIndex, Failure, Layout, LayoutOwner, Limits, Relation, Resource, Source,
@@ -36,21 +36,25 @@ use super::{
 /// `a` newly distinct values keeps O(a log d) tentative node patches; checked
 /// overlay scans can
 /// cost O(a² log² d) metadata work. No historical sorted ID sequence is shifted.
-/// Ordered access requires an explicitly prepared view, reusable until append.
-/// Preparation after appends merges the appended rows into the previous view
-/// by search and one linear copy; it does not traverse the index again.
+/// Ordered access requires an explicitly prepared view, reusable until append,
+/// held as sorted runs: preparation after appends sorts the appended rows into
+/// a new run and merges older runs only when two are within a factor of two,
+/// so each row is merged O(log n) times over a derivation and no preparation
+/// traverses or copies the whole extent.
 /// Column/vector growth and ordered preparation have separate admitted costs.
 pub struct Catalog {
     predicate: Predicate,
     atoms: Vec<Atom>,
     rows: Index,
-    /// Canonical row IDs of the last prepared extent; prepared exactly when
-    /// its length is the atom count, since row IDs are assigned in order.
-    ordered: Vec<usize>,
-    /// The view the last merging preparation started from.
-    previous: Vec<usize>,
-    /// The IDs that preparation merged in, in canonical order.
-    run: Vec<usize>,
+    /// Sorted runs of row IDs, oldest first, each less than half its
+    /// predecessor's length, holding every row below `prepared` that is not
+    /// in `tail`.
+    levels: Vec<Vec<usize>>,
+    /// The sorted run the last appending preparation added.
+    tail: Vec<usize>,
+    /// Rows covered by the runs; prepared exactly when it is the atom count,
+    /// since row IDs are assigned in order.
+    prepared: usize,
     layout: Layout,
     payload: u128,
     construction: Storage,
@@ -141,9 +145,9 @@ impl Catalog {
                 predicate,
                 atoms: Vec::new(),
                 rows: Index::default(),
-                ordered: Vec::new(),
-                previous: Vec::new(),
-                run: Vec::new(),
+                levels: Vec::new(),
+                tail: Vec::new(),
+                prepared: 0,
                 layout: Layout {
                     dictionary: Vec::new(),
                     index: DictionaryIndex::Append(Index::default()),
@@ -227,9 +231,9 @@ impl Catalog {
         for column in &mut self.layout.columns {
             column.clear();
         }
-        self.ordered.clear();
-        self.previous.clear();
-        self.run.clear();
+        self.levels.clear();
+        self.tail.clear();
+        self.prepared = 0;
         self.payload = 0;
         Ok(ExtractedAtoms {
             atoms,
@@ -463,7 +467,8 @@ impl Catalog {
         size_of::<Self>()
             + self.atoms.capacity() * size_of::<Atom>()
             + index_bytes(&self.rows)
-            + (self.ordered.capacity() + self.previous.capacity() + self.run.capacity())
+            + (self.levels.capacity() * size_of::<Vec<usize>>())
+            + (self.levels.iter().map(Vec::capacity).sum::<usize>() + self.tail.capacity())
                 * size_of::<usize>()
             + self.layout.dictionary.capacity() * size_of::<Cell>()
             + match &self.layout.index {

@@ -6,8 +6,9 @@ use super::{RowSet, Rows, Work};
 use crate::Stop;
 
 /// The round cutoff over one catalog: rows with an insertion ID below it are
-/// Old, the rest New. The catalog's last merging preparation keeps exactly
-/// these two runs in canonical order, so no derived ID buffer is needed here.
+/// Old, the rest New. The catalog's last appending preparation keeps the Old
+/// rows as its levels and the New rows as its tail, so no derived ID buffer
+/// is needed here.
 #[derive(Default)]
 pub(super) struct Partition {
     old_end: usize,
@@ -30,44 +31,44 @@ impl Partition {
         self.old_end < length
     }
 
-    /// Check that the catalog's runs fall at this cutoff. The catalog merges
+    /// Check that the catalog's runs fall at this cutoff. The catalog prepares
     /// once per round, after the cutoff advanced and the round's heads were
-    /// appended, so the run it merged from is exactly the Old extent.
+    /// appended, so its levels hold exactly the Old extent.
     pub(super) fn prepare(&self, catalog: &Catalog, work: &mut Work<'_>) -> Result<(), Stop> {
         charge(work, 1)?;
-        let rows = catalog.ordered().ok_or(Stop::InvalidProgram)?;
-        if self.old_end > rows.len() {
+        let runs = catalog.ordered().ok_or(Stop::InvalidProgram)?;
+        let length = runs.len();
+        if self.old_end > length {
             return Err(Stop::InvalidProgram);
         }
-        if self.old_end != 0 && self.old_end != rows.len() {
-            let (before, _) = catalog.ordered_runs().ok_or(Stop::InvalidProgram)?;
-            if before.len() != self.old_end {
-                return Err(Stop::InvalidProgram);
-            }
+        if self.old_end != 0 && self.old_end != length && self.old_end != length - runs.tail().len()
+        {
+            return Err(Stop::InvalidProgram);
         }
         Ok(())
     }
 
     pub(super) fn rows<'a>(&'a self, catalog: &'a Catalog, set: RowSet) -> Result<Rows<'a>, Stop> {
-        let rows = catalog.ordered().ok_or(Stop::InvalidProgram)?;
-        let (first, last) = (self.old_end == 0, self.old_end == rows.len());
+        let runs = catalog.ordered().ok_or(Stop::InvalidProgram)?;
+        let length = runs.len();
+        let (first, last) = (self.old_end == 0, self.old_end == length);
+        let atoms = catalog.atoms();
         // An all-old or all-new extent is the whole view or nothing.
-        match (set, first, last) {
+        let (levels, tail) = match (set, first, last) {
             (RowSet::Current, _, _) | (RowSet::Old, _, true) | (RowSet::New, true, _) => {
-                return Ok(Rows::Catalog(rows));
+                (runs.levels(), runs.tail())
             }
-            (RowSet::Old, true, _) | (RowSet::New, _, true) => {
-                return Ok(Rows::Borrowed(&[]));
-            }
-            (RowSet::Old | RowSet::New, false, false) => {}
-        }
-        let (before, appended) = catalog.ordered_runs().ok_or(Stop::InvalidProgram)?;
-        if before.len() != self.old_end {
+            (RowSet::Old, true, _) | (RowSet::New, _, true) => (&[][..], &[][..]),
+            (RowSet::Old, false, false) => (runs.levels(), &[][..]),
+            (RowSet::New, false, false) => (&[][..], runs.tail()),
+        };
+        if !(first || last) && length - runs.tail().len() != self.old_end {
             return Err(Stop::InvalidProgram);
         }
-        Ok(Rows::Selected {
-            atoms: catalog.atoms(),
-            ids: if set == RowSet::Old { before } else { appended },
+        Ok(Rows::Runs {
+            atoms,
+            levels,
+            tail,
         })
     }
 }

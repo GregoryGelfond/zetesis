@@ -1,7 +1,7 @@
 //! Immutable query dimensions and reference-free candidate workspaces.
 
 use std::collections::BTreeMap;
-use std::{mem::size_of, ops::Range};
+use std::mem::size_of;
 
 use zetesis_core::{Predicate, Program, SeedView, Value};
 
@@ -336,7 +336,7 @@ impl ClosureWorkspace {
 
 #[derive(Default)]
 pub(super) struct Buffers {
-    pub(super) cursors: Vec<Option<Range<usize>>>,
+    pub(super) cursors: Vec<Option<super::window::Window>>,
     pub(super) undo: Vec<Vec<usize>>,
     /// The templates one incremental round visits, in template order.
     pub(super) rules: Vec<usize>,
@@ -352,7 +352,8 @@ impl Buffers {
     }
 
     fn bytes(&self) -> Result<u128, Stop> {
-        let headers = self.cursors.capacity() as u128 * size_of::<Option<Range<usize>>>() as u128
+        let headers = self.cursors.capacity() as u128
+            * size_of::<Option<super::window::Window>>() as u128
             + self.undo.capacity() as u128 * size_of::<Vec<usize>>() as u128
             + self.rules.capacity() as u128 * size_of::<usize>() as u128;
         self.undo.iter().try_fold(headers, |bytes, row| {

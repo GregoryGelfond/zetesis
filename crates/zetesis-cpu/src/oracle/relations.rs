@@ -17,37 +17,65 @@ pub(super) use storage::atom_bytes;
 
 use zetesis_core::{
     Atom, AtomKey, Model, Predicate,
-    relation::{
-        Catalog, CatalogFailure, Failure, Insertion, Limits, OrderedRows, Resource, Storage,
-    },
+    relation::{Catalog, CatalogFailure, Failure, Insertion, Limits, Resource, Runs, Storage},
 };
 
 use super::{Relations, Work};
 use crate::Stop;
 
-/// All views use complete tuple storage order. Their positions are access
-/// positions, not persistent equality IDs or global source occurrence IDs.
+/// A view is one or more runs, each in complete tuple storage order. A row is
+/// addressed by its run and its position within the run; positions are access
+/// positions, not persistent equality IDs or global source occurrence IDs. A
+/// borrowed snapshot is one run; a catalog view is its levels and its tail,
+/// any of which a selection may leave out.
 #[derive(Clone, Copy)]
 pub(super) enum Rows<'a> {
     Borrowed(&'a [&'a Atom]),
-    Catalog(OrderedRows<'a>),
-    Selected { atoms: &'a [Atom], ids: &'a [usize] },
+    Runs {
+        atoms: &'a [Atom],
+        levels: &'a [Vec<usize>],
+        tail: &'a [usize],
+    },
 }
 
 impl<'a> Rows<'a> {
-    pub(super) fn len(self) -> usize {
+    /// Number of runs, counting an empty tail as none.
+    pub(super) fn runs(self) -> usize {
         match self {
-            Self::Borrowed(rows) => rows.len(),
-            Self::Catalog(rows) => rows.len(),
-            Self::Selected { ids, .. } => ids.len(),
+            Self::Borrowed(_) => 1,
+            Self::Runs { levels, tail, .. } => levels.len() + usize::from(!tail.is_empty()),
         }
     }
 
-    pub(super) fn get(self, position: usize) -> Option<&'a Atom> {
+    pub(super) fn run_len(self, run: usize) -> usize {
+        match self {
+            Self::Borrowed(rows) => rows.len(),
+            Self::Runs { levels, tail, .. } => levels.get(run).map_or(tail.len(), Vec::len),
+        }
+    }
+
+    /// Every row of every run, run by run. Runs are each in canonical order;
+    /// the sequence across runs is not.
+    #[cfg(test)]
+    pub(super) fn all(self) -> Vec<&'a Atom> {
+        (0..self.runs())
+            .flat_map(|run| (0..self.run_len(run)).map(move |position| (run, position)))
+            .map(|(run, position)| self.get(run, position).expect("in range"))
+            .collect()
+    }
+
+    pub(super) fn get(self, run: usize, position: usize) -> Option<&'a Atom> {
         match self {
             Self::Borrowed(rows) => rows.get(position).copied(),
-            Self::Catalog(rows) => rows.get(position),
-            Self::Selected { atoms, ids } => ids.get(position).and_then(|&id| atoms.get(id)),
+            Self::Runs {
+                atoms,
+                levels,
+                tail,
+            } => levels
+                .get(run)
+                .map_or(tail, Vec::as_slice)
+                .get(position)
+                .and_then(|&id| atoms.get(id)),
         }
     }
 }
@@ -107,12 +135,15 @@ impl Relational for Catalogs {
         self.relations
             .get(predicate)
             .map_or(Rows::Borrowed(&[]), |relation| {
-                Rows::Catalog(
-                    relation
-                        .catalog
-                        .ordered()
-                        .expect("round prepared its published extent"),
-                )
+                let runs = relation
+                    .catalog
+                    .ordered()
+                    .expect("round prepared its published extent");
+                Rows::Runs {
+                    atoms: relation.catalog.atoms(),
+                    levels: runs.levels(),
+                    tail: runs.tail(),
+                }
             })
     }
 
@@ -140,7 +171,7 @@ impl Catalogs {
             let other = self.bytes.checked_sub(old).ok_or(Stop::InvalidProgram)?;
             let result = catalog
                 .prepare_ordered(limits(work, other)?)
-                .map(OrderedRows::storage);
+                .map(Runs::storage);
             self.bytes = other
                 .checked_add(catalog.retained_bytes() as u128)
                 .ok_or(Stop::StorageLimit)?;
@@ -491,11 +522,11 @@ mod tests {
         }
         catalogs.prepare(&mut work).unwrap();
         expected.sort();
+        // The first preparation is one run, in canonical order.
         let rows = catalogs.rows(&predicate);
-        for (index, expected) in expected.iter().enumerate() {
-            assert_eq!(rows.get(index), Some(expected));
-        }
-        assert!(rows.get(expected.len()).is_none());
+        assert_eq!(rows.runs(), 1);
+        assert_eq!(rows.all(), expected.iter().collect::<Vec<_>>());
+        assert!(rows.get(0, expected.len()).is_none());
     }
 
     #[test]
@@ -510,7 +541,7 @@ mod tests {
             .unwrap();
         catalogs.prepare(&mut work).unwrap();
         let original = &catalogs.relations[&predicate].catalog.atoms()[0];
-        let row = catalogs.rows(&predicate).get(0).unwrap();
+        let row = catalogs.rows(&predicate).get(0, 0).unwrap();
         assert!(std::ptr::eq(original, row));
     }
 

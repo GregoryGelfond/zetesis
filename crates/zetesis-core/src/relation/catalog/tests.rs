@@ -16,6 +16,11 @@ fn owner() -> Catalog {
     Catalog::new(Predicate::new("pair", 2).unwrap(), Limits::default()).unwrap()
 }
 
+/// Row IDs of a prepared catalog in canonical order, merged from its runs.
+fn ids(catalog: &Catalog) -> Vec<usize> {
+    catalog.canonical(Limits::default()).expect("prepared")
+}
+
 #[test]
 fn insertion_preserves_existing_equality_ids() {
     let mut catalog = owner();
@@ -235,14 +240,8 @@ fn sorted_positions_borrow_the_original_atoms() {
         catalog.insert(atom(value, 0), Limits::default()).unwrap();
     }
     catalog.prepare_ordered(Limits::default()).unwrap();
-    let rows = catalog.ordered().unwrap();
-    for (position, original) in [1, 2, 0].into_iter().enumerate() {
-        assert!(std::ptr::eq(
-            rows.get(position).unwrap(),
-            &raw const catalog.atoms()[original]
-        ));
-    }
-    assert!(rows.get(3).is_none());
+    assert_eq!(ids(&catalog), [1, 2, 0]);
+    assert_eq!(catalog.ordered().unwrap().len(), 3);
 }
 
 #[test]
@@ -411,8 +410,9 @@ fn prepared_order_reuses_the_published_extent() {
         .unwrap();
     assert_eq!(reused.storage().construction_work, 0);
     assert_eq!(reused.storage().retained_bytes, preparation.retained_bytes);
+    assert_eq!(reused.len(), 3);
     for (position, value) in [2, 5, 9].into_iter().enumerate() {
-        assert_eq!(reused.get(position), Some(&atom(value, 0)));
+        assert_eq!(catalog.atoms()[ids(&catalog)[position]], atom(value, 0));
     }
 }
 
@@ -427,8 +427,7 @@ fn duplicate_insert_preserves_prepared_order() {
             .unwrap()
             .inserted
     );
-    assert_eq!(catalog.ordered().unwrap().get(0), Some(&atom(2, 9)));
-    assert_eq!(catalog.ordered().unwrap().row_id(0), Some(0));
+    assert_eq!(ids(&catalog), [0]);
     assert_eq!(
         catalog
             .prepare_ordered(Limits {
@@ -503,8 +502,7 @@ fn refused_rotation_preserves_the_published_extent() {
             .ordered()
             .expect("refusal preserves prior preparation");
         assert_eq!(rows.len(), 1);
-        assert_eq!(rows.get(0), Some(&original[0]));
-        assert_eq!(rows.row_id(0), Some(0));
+        assert_eq!(ids(&catalog), [0]);
         assert_eq!(
             catalog
                 .lookup(&rotating_tuple(), Limits::default())
@@ -566,9 +564,9 @@ fn refused_preparation_publishes_no_partial_order() {
         ));
         assert!(catalog.ordered().is_none());
         assert_eq!(catalog.atoms(), [atom(9, 0), atom(2, 0), atom(5, 0)]);
-        let complete = catalog.prepare_ordered(Limits::default()).unwrap();
+        assert_eq!(catalog.prepare_ordered(Limits::default()).unwrap().len(), 3);
         for (position, value) in [2, 5, 9].into_iter().enumerate() {
-            assert_eq!(complete.get(position), Some(&atom(value, 0)));
+            assert_eq!(catalog.atoms()[ids(&catalog)[position]], atom(value, 0));
         }
     }
 }
@@ -639,7 +637,7 @@ fn refused_extraction_preserves_the_prepared_extent() {
         }
     );
     assert_eq!(catalog.atoms(), [atom(9, 3)]);
-    assert_eq!(catalog.ordered().unwrap().get(0), Some(&atom(9, 3)));
+    assert_eq!(ids(&catalog), [0]);
     assert_eq!(catalog.view().column(0), Some([0].as_slice()));
     assert_eq!(catalog.view().column(1), Some([1].as_slice()));
     assert_eq!(
@@ -657,7 +655,7 @@ fn refused_extraction_preserves_the_prepared_extent() {
 #[test]
 fn ordered_ids_preserve_rows_when_ranks_move() {
     let mut catalog = owner();
-    assert_eq!(catalog.ordered().unwrap().row_id(0), None);
+    assert!(catalog.ordered().unwrap().is_empty());
     for (id, value) in [9, 2, 5].into_iter().enumerate() {
         assert_eq!(
             catalog
@@ -668,29 +666,21 @@ fn ordered_ids_preserve_rows_when_ranks_move() {
         );
     }
     catalog.prepare_ordered(Limits::default()).unwrap();
-    let before = catalog.ordered().unwrap();
-    assert_eq!(
-        (0..before.len())
-            .map(|rank| before.row_id(rank).unwrap())
-            .collect::<Vec<_>>(),
-        [1, 2, 0]
-    );
+    assert_eq!(ids(&catalog), [1, 2, 0]);
     assert_eq!(
         catalog.insert(atom(0, 0), Limits::default()).unwrap().row,
         3
     );
     catalog.prepare_ordered(Limits::default()).unwrap();
-    let rows = catalog.ordered().unwrap();
+    let canonical = ids(&catalog);
     for (rank, (id, value)) in [(3, 0), (1, 2), (2, 5), (0, 9)].into_iter().enumerate() {
-        assert_eq!(rows.row_id(rank), Some(id));
-        assert_eq!(rows.get(rank), Some(&atom(value, 0)));
-        assert!(std::ptr::eq(
-            rows.get(rank).unwrap(),
-            &raw const catalog.atoms()[id]
-        ));
+        assert_eq!(canonical[rank], id);
+        assert_eq!(catalog.atoms()[id], atom(value, 0));
     }
-    assert_eq!(rows.row_id(rows.len()), None);
-    assert_eq!(rows.row_id(usize::MAX), None);
+    // The appended smaller tuple is its own run; the older rows kept theirs.
+    let runs = catalog.ordered().unwrap();
+    assert_eq!(runs.levels(), [vec![1, 2, 0]]);
+    assert_eq!(runs.tail(), [3]);
 }
 
 #[test]
@@ -727,24 +717,15 @@ fn ordered_ids_preserve_complete_typed_identity() {
                 .unwrap();
         }
         catalog.prepare_ordered(Limits::default()).unwrap();
-        let rows = catalog.ordered().unwrap();
         // Storage order: infimum, integer, string, symbol, constructor, supremum.
         // It is independent of printed spelling and differs from ASP term order.
-        for (rank, id) in [4, 1, 0, 3, 2, 5].into_iter().enumerate() {
-            assert_eq!(rows.row_id(rank), Some(id));
-            let atom = rows.get(rank).unwrap();
+        assert_eq!(ids(&catalog), [4, 1, 0, 3, 2, 5]);
+        for id in [4, 1, 0, 3, 2, 5] {
+            let atom = &catalog.atoms()[id];
             assert_eq!(atom.predicate(), &predicate);
             assert_eq!(atom.values(), &[values[id].clone()]);
-            assert!(std::ptr::eq(atom, &raw const catalog.atoms()[id]));
         }
     }
-}
-
-fn ids(catalog: &Catalog) -> Vec<usize> {
-    let rows = catalog.ordered().expect("prepared");
-    (0..rows.len())
-        .map(|position| rows.row_id(position).unwrap())
-        .collect()
 }
 
 #[test]
@@ -759,12 +740,11 @@ fn preparation_keeps_the_view_it_merged_from_and_the_run_it_merged_in() {
         catalog.insert(atom(value, 0), Limits::default()).unwrap();
     }
     assert!(catalog.ordered().is_none());
-    assert!(catalog.ordered_runs().is_none());
     catalog.prepare_ordered(Limits::default()).unwrap();
     assert_eq!(ids(&catalog), [3, 1, 2, 0]);
-    let (before, appended) = catalog.ordered_runs().unwrap();
-    assert_eq!(before, [1, 0]);
-    assert_eq!(appended, [3, 2]);
+    let runs = catalog.ordered().unwrap();
+    assert_eq!(runs.levels(), [vec![1, 0]]);
+    assert_eq!(runs.tail(), [3, 2]);
     // A preparation with nothing appended reuses the view and keeps the runs.
     catalog
         .prepare_ordered(Limits {
@@ -772,7 +752,11 @@ fn preparation_keeps_the_view_it_merged_from_and_the_run_it_merged_in() {
             ..Limits::default()
         })
         .unwrap();
-    assert_eq!(catalog.ordered_runs().unwrap(), (&[1, 0][..], &[3, 2][..]));
+    let runs = catalog.ordered().unwrap();
+    assert_eq!(
+        (runs.levels(), runs.tail()),
+        (&[vec![1, 0]][..], &[3, 2][..])
+    );
 }
 
 #[test]
@@ -782,13 +766,13 @@ fn the_first_preparation_is_one_run_over_nothing() {
         catalog.insert(atom(value, 0), Limits::default()).unwrap();
     }
     catalog.prepare_ordered(Limits::default()).unwrap();
-    let (before, appended) = catalog.ordered_runs().unwrap();
-    assert!(before.is_empty());
-    assert_eq!(appended, [1, 2, 0]);
+    let runs = catalog.ordered().unwrap();
+    assert!(runs.levels().is_empty());
+    assert_eq!(runs.tail(), [1, 2, 0]);
 }
 
 #[test]
-fn one_append_to_a_large_extent_costs_a_search_and_a_copy_not_a_traversal() {
+fn one_append_to_a_large_extent_costs_its_own_run_not_a_copy_of_the_extent() {
     let mut catalog = owner();
     for value in 0..2048 {
         catalog
@@ -802,12 +786,48 @@ fn one_append_to_a_large_extent_costs_a_search_and_a_copy_not_a_traversal() {
         .unwrap()
         .storage()
         .construction_work;
-    // The merged copy writes 2,049 ids; locating the new row compares against
-    // about eleven of them. Traversing the index again would cost twice that.
-    assert!(work > 2048, "{work}");
-    assert!(work < 2048 + 256, "{work}");
+    // The previous run becomes a level unchanged and the new row is a run of
+    // one; nothing of the 2,048 older rows is compared or copied.
+    assert!(work < 64, "{work}");
     assert_eq!(ids(&catalog)[..3], [0, 2048, 1]);
-    assert_eq!(catalog.ordered_runs().unwrap().1, [2048]);
+    let runs = catalog.ordered().unwrap();
+    assert_eq!(runs.levels().len(), 1);
+    assert_eq!(runs.tail(), [2048]);
+}
+
+#[test]
+fn levels_shrink_geometrically_and_rows_are_merged_logarithmically() {
+    // Appending one row at a time and preparing after each: the level
+    // lengths must fall by more than half at every step, and the charged
+    // work over n appends must grow like n log n, not n squared.
+    let total = |count: i32| {
+        let mut catalog = owner();
+        let mut work = 0;
+        for value in 0..count {
+            catalog
+                .insert(atom(value * 7 % count, value), Limits::default())
+                .unwrap();
+            work += catalog
+                .prepare_ordered(Limits::default())
+                .unwrap()
+                .storage()
+                .construction_work;
+            let runs = catalog.ordered().unwrap();
+            for pair in runs.levels().windows(2) {
+                assert!(
+                    pair[1].len() * 2 < pair[0].len(),
+                    "{:?}",
+                    runs.levels().iter().map(Vec::len).collect::<Vec<_>>()
+                );
+            }
+            assert!(runs.levels().len() <= 13);
+        }
+        assert_eq!(ids(&catalog).len(), usize::try_from(count).unwrap());
+        work
+    };
+    let (half, whole) = (total(2048), total(4096));
+    // n log n doubles to 2.18 times; n squared to 4 times.
+    assert!(whole < half * 5 / 2, "{half} then {whole}");
 }
 
 proptest! {
@@ -820,7 +840,7 @@ proptest! {
         // The view at the last preparation that merged, and its runs; a
         // preparation with nothing appended keeps both.
         let mut merged_from: Vec<usize> = Vec::new();
-        let mut runs: Option<(Vec<usize>, Vec<usize>)> = None;
+        let mut runs: Option<(Vec<Vec<usize>>, Vec<usize>)> = None;
         for (index, (left, right)) in rows.iter().enumerate() {
             incremental.insert(atom(*left, *right), Limits::default()).unwrap();
             if prepare[index] {
@@ -832,21 +852,37 @@ proptest! {
                 }
                 rebuilt.prepare_ordered(Limits::default()).unwrap();
                 prop_assert_eq!(ids(&incremental), ids(&rebuilt));
-                let (before, appended) = incremental.ordered_runs().unwrap();
+                let canonical = ids(&incremental);
+                let mut rank = vec![usize::MAX; canonical.len()];
+                for (position, &id) in canonical.iter().enumerate() {
+                    rank[id] = position;
+                }
+                let view = incremental.ordered().unwrap();
+                let levels: Vec<Vec<usize>> = view.levels().to_vec();
+                let tail = view.tail().to_vec();
+                // Every run is in canonical order and the runs partition the rows.
+                let mut union = Vec::new();
+                for run in view.runs() {
+                    prop_assert!(run.windows(2).all(|pair| rank[pair[0]] < rank[pair[1]]));
+                    union.extend_from_slice(run);
+                }
+                union.sort_unstable();
+                let mut all = canonical.clone();
+                all.sort_unstable();
+                prop_assert_eq!(union, all);
+                prop_assert!(levels.windows(2).all(|pair| pair[1].len() * 2 < pair[0].len()));
                 if grew {
-                    if !before.is_empty() {
-                        prop_assert_eq!(before.to_vec(), merged_from.clone());
-                    }
-                    let mut union: Vec<usize> = before.iter().chain(appended).copied().collect();
-                    union.sort_unstable();
-                    let mut all = ids(&incremental);
-                    all.sort_unstable();
-                    prop_assert_eq!(union, all);
-                    merged_from = ids(&incremental);
-                    runs = Some((before.to_vec(), appended.to_vec()));
-                } else if let Some((kept_before, kept_appended)) = &runs {
-                    prop_assert_eq!(before, &kept_before[..]);
-                    prop_assert_eq!(appended, &kept_appended[..]);
+                    // The rows before this preparation are exactly the levels.
+                    let mut before: Vec<usize> = levels.iter().flatten().copied().collect();
+                    before.sort_unstable();
+                    let mut expected = merged_from.clone();
+                    expected.sort_unstable();
+                    prop_assert_eq!(before, expected);
+                    merged_from = canonical.clone();
+                    runs = Some((levels, tail));
+                } else if let Some((kept_levels, kept_tail)) = &runs {
+                    prop_assert_eq!(&levels, kept_levels);
+                    prop_assert_eq!(&tail, kept_tail);
                 }
             }
         }

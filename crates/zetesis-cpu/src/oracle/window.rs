@@ -23,35 +23,81 @@ use crate::Stop;
 pub(super) fn matching_prefix(
     pattern: &AtomPattern,
     rows: Rows<'_>,
+    run: usize,
     assignment: &[Option<&Value>],
     work: &mut Work<'_>,
 ) -> Result<Range<usize>, Stop> {
-    if rows.len() == 0 {
+    let length = rows.run_len(run);
+    if length == 0 {
         return Ok(0..0);
     }
-    let mut length = 0;
+    let mut bound = 0;
     for term in pattern.terms() {
         work.tick()?;
         if resolve(term, assignment).is_none() {
             break;
         }
-        length += 1;
+        bound += 1;
     }
-    if length == 0 {
-        return Ok(0..rows.len());
+    if bound == 0 {
+        return Ok(0..length);
     }
     let compare = |index, work: &mut Work<'_>| {
         compare_prefix(
             pattern,
-            rows.get(index).ok_or(Stop::InvalidProgram)?,
+            rows.get(run, index).ok_or(Stop::InvalidProgram)?,
             assignment,
-            length,
+            bound,
             work,
         )
     };
-    let start = boundary(0..rows.len(), compare, Ordering::is_lt, work)?;
-    let end = boundary(start..rows.len(), compare, Ordering::is_le, work)?;
+    let start = boundary(0..length, compare, Ordering::is_lt, work)?;
+    let end = boundary(start..length, compare, Ordering::is_le, work)?;
     Ok(start..end)
+}
+
+/// The rows of a view matching one bound prefix, visited run by run. Each
+/// run's window is one binary search, taken when the cursor enters the run,
+/// so an unentered run costs nothing.
+#[derive(Clone, Debug)]
+pub(super) struct Window {
+    run: usize,
+    range: Range<usize>,
+}
+
+impl Window {
+    pub(super) fn open(
+        pattern: &AtomPattern,
+        rows: Rows<'_>,
+        assignment: &[Option<&Value>],
+        work: &mut Work<'_>,
+    ) -> Result<Self, Stop> {
+        Ok(Self {
+            run: 0,
+            range: matching_prefix(pattern, rows, 0, assignment, work)?,
+        })
+    }
+
+    /// The next matching row as its run and position, or `None` once every
+    /// run's window is exhausted.
+    pub(super) fn next(
+        &mut self,
+        pattern: &AtomPattern,
+        rows: Rows<'_>,
+        assignment: &[Option<&Value>],
+        work: &mut Work<'_>,
+    ) -> Result<Option<(usize, usize)>, Stop> {
+        loop {
+            if let Some(position) = self.range.next() {
+                return Ok(Some((self.run, position)));
+            }
+            self.run += 1;
+            if self.run >= rows.runs() {
+                return Ok(None);
+            }
+            self.range = matching_prefix(pattern, rows, self.run, assignment, work)?;
+        }
+    }
 }
 
 /// The predicate is true on the initial segment of the supplied interval.

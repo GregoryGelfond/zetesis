@@ -425,18 +425,21 @@ without revisiting their rows.
 
 Scalar reduct closure uses the same per-predicate catalog. Before each round it
 prepares a complete ordered ID view for each changed extent and reuses that view
-for the round's joins. The first preparation of a relation traverses its O(n)
-row IDs. A later preparation merges the `d` rows appended since the previous
-one: it sorts them by typed comparison, locates each among the previous view by
-binary search, O(d log n) comparisons, and writes the merged view in one linear
-copy of n + d IDs without a comparison. The view it started from and the sorted
-run it merged in remain borrowable until the next merge. Subsequent indexed row
-access is constant time and borrows the authoritative tuple. A duplicate or
-refused insertion preserves an existing prepared extent; a successful append
-invalidates it. Over a derivation of depth R in which one relation grows to n
-rows, the views therefore cost O(n log n) charged comparisons plus O(n R) ID
-copies at memory-copy speed, where each round previously traversed the whole
-extent twice.
+for the round's joins. The view is a stack of sorted runs of row
+IDs. The first preparation of a relation traverses its O(n) row IDs into one
+run. A later preparation promotes the previous run to a level, merges the top
+two levels while the newer is at least half the older, so the levels shrink
+geometrically and number O(log n), and sorts the `d` rows appended since into
+a new run. A merge of two runs costs their combined length in charged
+comparisons and copies, and each row is merged O(log n) times over a whole
+derivation, so the views cost O(n log n) charged work in all and no
+preparation copies the extent; a bound-prefix window is one binary search per
+run. The levels are the rows present before the last appending preparation and
+the run is what it added, both borrowable until the next one. Row access
+within a run is constant time and borrows the authoritative tuple. A duplicate
+or refused insertion preserves an existing prepared extent; a successful
+append invalidates it. Each round previously traversed the whole extent twice,
+which made a derivation of depth R cost O(n R).
 
 Scalar closure first visits every template against empty derived truth, including
 facts, zero-positive rules and constraints under the frozen candidate. In each
@@ -450,13 +453,12 @@ rows are visited at all, from an index prepared once per program; a round
 therefore costs the new rows times their joins, never a scan of an unchanged
 relation or a visit to a rule that cannot bind. Newness uses stable per-predicate insertion
 IDs, never canonical ranks, which can move when a smaller tuple is appended.
-For mixed extents, the Old and New slices are the catalog's two runs: the view
-it merged from and the run it merged in, each in canonical order and each
-sharing the sole tuple payload owner. The round cutoff advances after the
-round's joins and before its heads are appended, so the run the next
-preparation starts from is exactly the Old extent; the partition keeps only that
-cutoff and checks it against the runs. All-old and all-new extents reuse the
-complete ordered view or an empty slice.
+For mixed extents, the Old rows are the catalog's levels and the New rows its
+newest run, each run in canonical order and each sharing the sole tuple payload
+owner. The round cutoff advances after the round's joins and before its heads
+are appended, so the levels of the next preparation hold exactly the Old
+extent; the partition keeps only that cutoff and checks it against the runs.
+All-old and all-new extents reuse every run or none.
 
 A round completes every selected binding and constraint before advancing its
 frontier and publishing pending heads. Frozen gates and pure equality filters

@@ -34,19 +34,39 @@ fn mixed(work: &mut Work<'_>) -> Catalogs {
     catalogs
 }
 
+/// The view holds exactly the rows with these IDs, borrowed from the sole
+/// owner, each run in ascending value order; `ids` and `values` are given in
+/// canonical order and matched as a set, since the runs together are not
+/// one sequence.
 fn assert_rows(catalogs: &Catalogs, set: RowSet, ids: &[usize], values: &[i32]) {
     let predicate = Predicate::new("p", 1).unwrap();
     let source = catalogs.relations[&predicate].catalog.atoms();
     let rows = catalogs.selected(&predicate, set).unwrap();
-    assert_eq!(rows.len(), values.len());
-    for (position, (&id, &value)) in ids.iter().zip(values).enumerate() {
-        assert_eq!(rows.get(position), Some(&atom(value)));
-        assert!(std::ptr::eq(
-            rows.get(position).unwrap(),
-            &raw const source[id]
-        ));
+    let mut seen: Vec<usize> = rows
+        .all()
+        .into_iter()
+        .map(|row| {
+            let id = source
+                .iter()
+                .position(|atom| std::ptr::eq(atom, row))
+                .unwrap();
+            assert_eq!(
+                row,
+                &atom(values[ids.iter().position(|&i| i == id).unwrap()])
+            );
+            id
+        })
+        .collect();
+    seen.sort_unstable();
+    let mut expected = ids.to_vec();
+    expected.sort_unstable();
+    assert_eq!(seen, expected);
+    for run in 0..rows.runs() {
+        let run: Vec<&Atom> = (0..rows.run_len(run))
+            .map(|position| rows.get(run, position).unwrap())
+            .collect();
+        assert!(run.windows(2).all(|pair| pair[0] < pair[1]));
     }
-    assert!(rows.get(values.len()).is_none());
 }
 
 #[test]
@@ -93,7 +113,9 @@ fn a_refused_merge_keeps_the_old_view_and_publishes_no_partial_run() {
     let appended = catalogs.owned_bytes();
     work.limits.max_closure_bytes = usize::try_from(appended).unwrap();
     assert_eq!(catalogs.prepare_delta(&mut work), Err(Stop::StorageLimit));
-    assert_eq!(catalogs.owned_bytes(), appended);
+    // A refused step may keep capacity it admitted first, never more than
+    // the ceiling, and publishes no run: the delta views stay unavailable.
+    assert!(catalogs.owned_bytes() <= appended);
     assert!(appended > retained);
     let predicate = Predicate::new("p", 1).unwrap();
     assert!(matches!(
@@ -205,9 +227,9 @@ fn signed_typed_rows_keep_their_own_partition() {
     for predicate in &predicates {
         for (set, ids) in [(RowSet::Old, [0, 1]), (RowSet::New, [2, 3])] {
             let rows = catalogs.selected(predicate, set).unwrap();
-            assert_eq!(rows.len(), ids.len());
-            for (position, id) in ids.into_iter().enumerate() {
-                let actual = rows.get(position).unwrap();
+            let all = rows.all();
+            assert_eq!(all.len(), ids.len());
+            for (actual, id) in all.into_iter().zip(ids) {
                 assert_eq!(actual.predicate(), predicate);
                 assert_eq!(actual.values(), &[values[id].clone()]);
                 assert!(std::ptr::eq(

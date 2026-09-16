@@ -664,10 +664,11 @@ fn visit_with<'source, E: From<Stop>>(
         let pattern = &template.positive()[occurrence];
         let tuples = relations.selected(pattern.predicate(), selection.rows(occurrence))?;
         let cursor = &mut cursors[depth];
-        if cursor.is_none() {
-            *cursor = Some(window::matching_prefix(pattern, tuples, assignment, work)?);
-        }
-        let Some(index) = cursor.as_mut().and_then(Iterator::next) else {
+        let window = match cursor {
+            Some(window) => window,
+            None => cursor.insert(window::Window::open(pattern, tuples, assignment, work)?),
+        };
+        let Some((run, index)) = window.next(pattern, tuples, assignment, work)? else {
             *cursor = None;
             if depth == 0 {
                 return Ok(());
@@ -676,7 +677,7 @@ fn visit_with<'source, E: From<Stop>>(
             clear(assignment, &mut undo[depth]);
             continue;
         };
-        let atom = tuples.get(index).ok_or(Stop::InvalidProgram)?;
+        let atom = tuples.get(run, index).ok_or(Stop::InvalidProgram)?;
         // This iteration already charged one join step and offers at most one
         // row. The cumulative probe count therefore cannot exceed charged work.
         work.statistics.tuple_probes += 1;
