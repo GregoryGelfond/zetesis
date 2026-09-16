@@ -30,12 +30,7 @@ pub(super) fn campaign(
     let cases = prepare(&corpus, request, workloads)?;
     let sources: BTreeSet<_> = cases
         .iter()
-        .flat_map(|case| {
-            case.original
-                .transitive_source_paths()
-                .iter()
-                .map(String::as_str)
-        })
+        .flat_map(|case| case.input.corpus_source_paths())
         .collect();
     let before = super::super::run::seals(
         &corpus,
@@ -61,7 +56,7 @@ pub(super) fn campaign(
         native_normalization_limits: normalization_limits(request),
         cases: cases
             .iter()
-            .map(|case| case.original.path().to_owned())
+            .map(|case| case.input.path().to_owned())
             .collect(),
         workloads: workloads.map(<[Workload]>::to_vec),
         started_unix_ns: started,
@@ -100,9 +95,32 @@ pub(super) fn campaign(
 }
 
 struct Prepared<'a> {
-    original: &'a examples::Case,
+    input: Input<'a>,
     workload: Option<&'a Workload>,
     directory: PathBuf,
+}
+
+/// Where a cell's program comes from: a sealed corpus entry, possibly with
+/// constant amendments, or a generated program with no corpus source at all.
+enum Input<'a> {
+    Corpus(&'a examples::Case),
+    Generated(&'a Workload),
+}
+impl Input<'_> {
+    fn path(&self) -> &str {
+        match self {
+            Self::Corpus(case) => case.path(),
+            Self::Generated(workload) => workload.entry(),
+        }
+    }
+    /// Corpus files this input reads; a generated program reads none.
+    fn corpus_source_paths(&self) -> impl Iterator<Item = &str> {
+        match self {
+            Self::Corpus(case) => case.transitive_source_paths().iter(),
+            Self::Generated(_) => [].iter(),
+        }
+        .map(String::as_str)
+    }
 }
 
 fn prepare<'a>(
@@ -115,7 +133,7 @@ fn prepare<'a>(
         return Ok(allowed
             .into_iter()
             .map(|original| Prepared {
-                original,
+                input: Input::Corpus(original),
                 workload: None,
                 directory: PathBuf::new(),
             })
@@ -159,14 +177,20 @@ fn prepare<'a>(
         .try_reserve_exact(workloads.len())
         .map_err(|_| Error::Configuration("workload population allocation failed"))?;
     for (position, workload) in workloads.iter().enumerate() {
-        let original = allowed
-            .iter()
-            .find(|case| case.path() == workload.entry())
-            .ok_or(Error::Configuration(
-                "workload is outside the plan's allowed suite",
-            ))?;
+        let input = if workload.is_generated() {
+            Input::Generated(workload)
+        } else {
+            Input::Corpus(
+                allowed
+                    .iter()
+                    .find(|case| case.path() == workload.entry())
+                    .ok_or(Error::Configuration(
+                        "workload is outside the plan's allowed suite",
+                    ))?,
+            )
+        };
         prepared.push(Prepared {
-            original,
+            input,
             workload: Some(workload),
             directory: format!("workload-{position:02}").into(),
         });
@@ -319,7 +343,7 @@ fn execute(
         let (executable, arguments) = arguments(
             request,
             &case_directory,
-            selected.original.path(),
+            selected.input.path(),
             slot.producer,
         );
         let Some(capture) = invoke(executable, arguments, &case_directory, deadline, report) else {
@@ -341,10 +365,14 @@ fn execute(
             cost: None,
             observation: None,
         };
+        let contract = match (&selected.input, selected.workload) {
+            (_, Some(workload)) => workload.contract(),
+            (Input::Corpus(case), None) => Some(case.contract()),
+            (Input::Generated(_), None) => None,
+        };
         let result = qualify(
             &mut sample,
-            (!selected.workload.is_some_and(Workload::is_amended))
-                .then(|| selected.original.contract()),
+            contract,
             references[slot.case].as_ref(),
             request,
         );

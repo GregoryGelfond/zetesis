@@ -198,6 +198,85 @@ fn derived_cells_use_their_own_sealed_source_bytes() {
 }
 
 #[test]
+fn generated_cells_launch_their_exact_bytes_under_their_own_contract() {
+    use zetesis_validation::performance::families::Family;
+    let fixture = Fixture::new();
+    let prior = fs::read_to_string(&fixture.native).unwrap();
+    let metadata_end = prior.find('\n').unwrap() + 1;
+    let branch_end = prior[metadata_end..].find('\n').unwrap() + metadata_end + 1;
+    fs::write(
+        &fixture.native,
+        format!(
+            "{}for source do :; done\ncat \"$source\" >&2\n{}",
+            &prior[..branch_end],
+            &prior[branch_end..]
+        ),
+    )
+    .unwrap();
+    let chain =
+        matrix::Workload::generated(Family::Chain, 3, matrix::WorkloadLimits::default()).unwrap();
+    let workloads = [chain, variant(&fixture, 10)];
+    let report = matrix::run_workloads(&fixture.request(Suite::Queens), &workloads).unwrap();
+    assert!(report.accounted());
+    assert_eq!(
+        report.cases(),
+        ["generated/chain-3.lp", "standalone/n-queens/variant-01.lp"]
+    );
+    let native = report
+        .samples()
+        .iter()
+        .find(|sample| {
+            sample.slot().case == 0
+                && sample.slot().phase == Phase::Qualification
+                && matches!(sample.slot().producer, Producer::Native { .. })
+        })
+        .unwrap();
+    let source = std::str::from_utf8(native.capture().unwrap().stderr()).unwrap();
+    assert_eq!(source, Family::Chain.source(3).unwrap());
+    assert!(
+        native
+            .capture()
+            .unwrap()
+            .directory()
+            .ends_with("workload-00")
+    );
+    // The fixture reference reports no answers; a generated workload carries
+    // its closed-form contract, so that reference fails parity, while the
+    // amended queens workload has no default contract and passes.
+    let reference = |case: usize| {
+        report
+            .samples()
+            .iter()
+            .find(|sample| {
+                sample.slot().case == case
+                    && sample.slot().phase == Phase::Qualification
+                    && sample.slot().producer == Producer::Reference
+            })
+            .unwrap()
+            .decision()
+    };
+    assert_eq!(reference(0), Decision::ParityMismatch);
+    assert_eq!(reference(1), Decision::Pass);
+    report.publish().unwrap();
+    let encoded: serde_json::Value =
+        serde_json::from_slice(&fs::read(&fixture.report).unwrap()).unwrap();
+    assert_eq!(
+        encoded["report"]["workloads"][0]["generated"]["family"],
+        "chain"
+    );
+    assert_eq!(encoded["report"]["workloads"][0]["generated"]["size"], 3);
+    assert!(
+        encoded["report"]["before"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|seal| seal["requested"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("workload-00/generated/chain-3.lp")))
+    );
+}
+
+#[test]
 fn original_workloads_keep_the_default_contract() {
     let fixture = Fixture::new();
     let corpus = zetesis_validation::examples::load(

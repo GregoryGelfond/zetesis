@@ -213,3 +213,54 @@ fn amendment_names_are_resolved_as_declarations() {
     };
     assert!(Workload::amended(&corpus, path, &[requested], WorkloadLimits::default()).is_err());
 }
+
+#[test]
+fn generated_workloads_are_identified_by_family_size_and_bytes() {
+    use zetesis_validation::performance::families::Family;
+    let chain = Workload::generated(Family::Chain, 4, WorkloadLimits::default()).unwrap();
+    assert_eq!(chain.entry(), "generated/chain-4.lp");
+    assert!(!chain.is_amended());
+    assert_eq!(
+        chain.identity(),
+        Workload::generated(Family::Chain, 4, WorkloadLimits::default())
+            .unwrap()
+            .identity()
+    );
+    assert_ne!(
+        chain.identity(),
+        Workload::generated(Family::Chain, 5, WorkloadLimits::default())
+            .unwrap()
+            .identity()
+    );
+    assert_ne!(
+        chain.identity(),
+        Workload::generated(Family::TransitivePath, 4, WorkloadLimits::default())
+            .unwrap()
+            .identity()
+    );
+    let encoded = serde_json::to_value(&chain).unwrap();
+    let source = Family::Chain.source(4).unwrap();
+    assert_eq!(encoded["generated"]["family"], "chain");
+    assert_eq!(encoded["generated"]["size"], 4);
+    assert_eq!(encoded["generated"]["bytes"], source.len());
+    assert_eq!(
+        encoded["generated"]["sha256"],
+        format!("{:x}", Sha256::digest(source.as_bytes()))
+    );
+    assert_eq!(encoded["default_contract"]["model_count"], 1);
+    assert!(encoded["sources"].as_array().unwrap().is_empty());
+    assert!(encoded.get("manifest_sha256").is_none());
+}
+
+#[test]
+fn generated_workloads_are_bounded_by_family_and_byte_ceilings() {
+    use zetesis_validation::performance::families::Family;
+    assert!(Workload::generated(Family::Disjunction, 64, WorkloadLimits::default()).is_err());
+    // The depth-one chain is 36 bytes; the ceiling admits it and nothing deeper.
+    let tiny = WorkloadLimits {
+        source_bytes: 36,
+        ..WorkloadLimits::default()
+    };
+    assert!(Workload::generated(Family::Chain, 2, tiny).is_err());
+    assert!(Workload::generated(Family::Chain, 1, tiny).is_ok());
+}
