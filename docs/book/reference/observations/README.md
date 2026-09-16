@@ -224,6 +224,58 @@ sixteen workers coincides with the step from eight cores to their
 hyperthreads on this host, so these campaigns do not separate the batch
 barrier from the hardware; a per-worker busy-time receipt would.
 
+## Item 3: incremental views, new rows first, and the rule index
+
+Two campaigns on 16 September 2026 between 23:05:14 and 23:12:23 UTC, same
+machine, profile and clingo as above, four workers. `main` is the 896a5f73
+executable rerun as the control; `after` is built from
+`cf051cf7e1ba7423b2a3f9e39fc695848086ae5d` (SHA-256
+`f91b48f2007e372ea64d177c2c77c530b139eea475559f54ea086197441184c0`), which
+merges the rows a round appends into the previous ordered view instead of
+traversing the index and partitioning it again, joins a round's new rows
+first so unchanged relations are entered by bound-prefix window, and visits
+only the rules whose body names a predicate with new rows.
+[series-cf051cf7-cpu-auto.json](series-cf051cf7-cpu-auto.json) and its
+[table view](series-cf051cf7-cpu-auto-tables.md) are the derived comparison;
+raw report SHA-256
+`e38488e9599dcaefd8217c59201ff2c10387a1ed4ed24eda6e596cb2d9c5bc1b` (main) and
+`e12c3bbc5285910dd2a057834fdc8e039a1634401169e0c3e99146031a6d4bde` (after).
+
+In the problem's words: on a program that builds a long chain of
+consequences, the solver used to make two complete passes over every grown
+relation each time it derived one more fact, then scan an unchanged relation
+from end to end, then visit every rule of the program, facts included. It
+now merges the new facts into the view it already had, starts each step from
+the new facts, and visits only the rules that could use them. Native
+medians, ms, with clingo on the same cell:
+
+| Cell | before | after | after/before | clingo | after/clingo |
+|---|---:|---:|---:|---:|---:|
+| chain-1000 | 101.6 | 19.9 | 0.20 | 6.7 | 3.0 |
+| chain-2000 | 372.3 | 34.5 | 0.09 | 10.9 | 3.2 |
+| transitive-path-100 | 31.4 | 15.9 | 0.51 | 8.9 | 1.8 |
+| transitive-path-200 | 186.4 | 48.2 | 0.26 | 21.8 | 2.2 |
+| transitive-dense-40 | 39.7 | 39.1 | 0.99 | 6.7 | 5.9 |
+
+The other fourteen passing cells lie between 0.88 and 1.01 of the control:
+they derive few consequences per candidate, or run on the formula route,
+which this change does not touch. The stratified cell still reaches its
+deadline on both executables. Memory did not change: the chain of depth
+4,000 holds 33.7 MB resident after against 32.7 MB before, and the peak
+closure envelope is the same buffers under a different ownership.
+
+The receipts state what remains. On the new executable a chain of depth
+4,000, which the control could not finish under the default work ceiling,
+completes in 70 ms with 10.1 M charged units, and the charged closure work
+of the chain family grows 129 k, 339 k, 962 k, 2.99 M and 36.5 M at depths
+250, 500, 1,000, 2,000 and 8,000 while the wall time grows 4.0, 8.8, 15.2,
+29.0 and 126.5 ms. Catalog work is now over 90 percent of those units: the
+one linear copy of each changed extent per round, charged one unit per row
+id, so the charged total is still quadratic in depth while the time is
+close to linear until the copies themselves dominate. At depth 16,000 the
+default ceiling of 100 M units stops the check after 266 ms of work that
+would complete. That copy is the one remaining O(n)-per-round term.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
