@@ -99,7 +99,7 @@ fn stops_never_return_a_partially_accepted_result() {
             &program,
             &seed,
             Limits::default(),
-            &Control::with_deadline(Instant::now())
+            &Control::with_deadline(Instant::now()).unwrap()
         ),
         Err(Stop::Deadline)
     ));

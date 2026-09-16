@@ -157,7 +157,7 @@ fn failed_decision_reserves_work_first_and_cancellation_precedes_either_quota() 
 
 #[test]
 fn cancellation_precedes_an_expired_deadline_and_exhausted_quotas() {
-    let control = Control::with_deadline(std::time::Instant::now());
+    let control = Control::with_deadline(std::time::Instant::now()).unwrap();
     let limits = SearchLimits {
         max_work: 0,
         max_decisions: 0,

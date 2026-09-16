@@ -51,7 +51,7 @@ fn controlled_calls(backend: GpuBackendPreference) {
     ];
     for control in [
         cancelled(),
-        Control::with_deadline(std::time::Instant::now()),
+        Control::with_deadline(std::time::Instant::now()).unwrap(),
     ] {
         let expected = control.poll().unwrap_err();
         for empty in [true, false] {

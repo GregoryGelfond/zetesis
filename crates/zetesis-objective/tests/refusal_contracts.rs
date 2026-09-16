@@ -238,7 +238,7 @@ fn cancelled_and_expired_scores_have_control_causes_and_zero_work() {
     for (control, reason, phrase) in [
         (cancelled, Stop::Cancelled, "cancelled"),
         (
-            Control::with_deadline(Instant::now()),
+            Control::with_deadline(Instant::now()).unwrap(),
             Stop::Deadline,
             "deadline expired",
         ),

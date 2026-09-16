@@ -898,7 +898,7 @@ fn stopped_requests_publish_no_models() {
     for oracle in ["closure", "countermodel", "auto"] {
         for expired in [false, true] {
             let control = if expired {
-                Control::with_deadline(std::time::Instant::now())
+                Control::with_deadline(std::time::Instant::now()).unwrap()
             } else {
                 let control = Control::default();
                 control.cancel();

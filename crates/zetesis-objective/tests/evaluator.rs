@@ -580,7 +580,8 @@ fn cancellation_and_deadlines_precede_evaluation_even_without_templates() {
     for (control, expected) in [
         (control, Stop::Cancelled),
         (
-            Control::with_deadline(Instant::now().checked_sub(Duration::from_secs(1)).unwrap()),
+            Control::with_deadline(Instant::now().checked_sub(Duration::from_secs(1)).unwrap())
+                .unwrap(),
             Stop::Deadline,
         ),
     ] {

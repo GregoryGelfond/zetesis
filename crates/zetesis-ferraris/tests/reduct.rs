@@ -259,7 +259,7 @@ fn work_and_subset_limits_do_not_certify_partial_search() {
             &program,
             &model,
             exact,
-            &Control::with_deadline(Instant::now())
+            &Control::with_deadline(Instant::now()).unwrap()
         )
         .unwrap_err(),
         Stop::Deadline

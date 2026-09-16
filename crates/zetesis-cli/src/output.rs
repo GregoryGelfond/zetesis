@@ -295,6 +295,7 @@ fn error_kind(error: &RunError) -> &'static str {
     match error {
         RunError::Input(_) => "input",
         RunError::TimeLimitRange { .. } => "time_limit_range",
+        RunError::DeadlineTimer(_) => "deadline_timer",
         RunError::Observation(_) => "observation",
         RunError::Projection(_) => "answer_projection",
         RunError::JsonRecord(_) => "json_record",

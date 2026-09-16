@@ -242,7 +242,10 @@ fn work_decision_and_control_stops_remain_inconclusive_with_exact_accounting() {
         cancelled.cancel();
         for (control, expected) in [
             (cancelled, Incomplete::Cancelled),
-            (Control::with_deadline(Instant::now()), Incomplete::Deadline),
+            (
+                Control::with_deadline(Instant::now()).unwrap(),
+                Incomplete::Deadline,
+            ),
         ] {
             let (limited, accounting) = solve_with_statistics(&cnf, exact, &control);
             assert!(matches!(limited, Solve::Inconclusive(reason) if reason == expected));

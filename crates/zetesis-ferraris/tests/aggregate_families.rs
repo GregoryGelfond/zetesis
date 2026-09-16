@@ -573,7 +573,10 @@ fn cancellation_and_deadlines_do_not_produce_empty_success() {
     cancelled.cancel();
     for (control, expected) in [
         (cancelled, Stop::Cancelled),
-        (Control::with_deadline(Instant::now()), Stop::Deadline),
+        (
+            Control::with_deadline(Instant::now()).unwrap(),
+            Stop::Deadline,
+        ),
     ] {
         let mut nodes = Vec::new();
         let error = append_aggregate_family(

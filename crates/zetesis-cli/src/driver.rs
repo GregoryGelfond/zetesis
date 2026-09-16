@@ -76,6 +76,8 @@ pub enum RunError {
         /// Requested whole seconds, retained without an I/O attribution.
         seconds: u64,
     },
+    /// The host refused the thread that would observe the process deadline.
+    DeadlineTimer(io::Error),
     /// A complete observation could not be evaluated or rendered.
     Observation(zetesis_themelios::observation::Error),
     /// A bounded JSON model or terminal record could not be constructed.
@@ -189,6 +191,7 @@ impl fmt::Display for RunError {
             Self::Projection(error) => error.fmt(f),
             Self::Input(error) => write!(f, "standard input ('-'): {error}"),
             Self::TimeLimitRange { seconds } => write!(f, "--time-limit {seconds}: time limit exceeds the platform clock range"),
+            Self::DeadlineTimer(error) => write!(f, "--time-limit: the deadline timer could not be started: {error}"),
             Self::MixedStandardInput => f.write_str(
                 "standard input ('-') must be the only input; mixed or repeated stdin roots are unsupported",
             ),
@@ -296,6 +299,7 @@ impl std::error::Error for RunError {
             Self::QueryObservation(error) => Some(error.as_ref()),
             Self::CompletionPool(error) => Some(error),
             Self::Output(error) => Some(error),
+            Self::DeadlineTimer(error) => Some(error),
             Self::ExecutionObservation(error) => Some(error.as_ref()),
             Self::PublicationStopped(error) => Some(error),
             Self::Observation(error) => Some(error),

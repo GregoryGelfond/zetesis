@@ -433,7 +433,10 @@ fn cancelled_and_expired_empty_extrema_are_refusals_before_work() {
     cancelled.cancel();
     for (control, expected) in [
         (cancelled, Stop::Cancelled),
-        (Control::with_deadline(Instant::now()), Stop::Deadline),
+        (
+            Control::with_deadline(Instant::now()).unwrap(),
+            Stop::Deadline,
+        ),
     ] {
         let mut nodes = Vec::new();
         let error = append_extremum(

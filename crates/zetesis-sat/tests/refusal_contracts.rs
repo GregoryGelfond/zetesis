@@ -132,7 +132,7 @@ fn independent_verification_and_foreign_candidate_failures_are_not_rejections() 
         &original,
         &candidate,
         Limits::default(),
-        &Control::with_deadline(Instant::now()),
+        &Control::with_deadline(Instant::now()).unwrap(),
     ) else {
         panic!("deadline must be incomplete")
     };

@@ -127,7 +127,7 @@ fn waiting_for_permits_observes_cancellation_and_deadline() {
         let owner = shared.lease(&owner_control);
         owner.tick().unwrap();
         let control = if deadline {
-            Control::with_deadline(Instant::now() + Duration::from_millis(20))
+            Control::with_deadline(Instant::now() + Duration::from_millis(20)).unwrap()
         } else {
             Control::default()
         };

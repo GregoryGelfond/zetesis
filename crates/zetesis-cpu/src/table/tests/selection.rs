@@ -493,7 +493,7 @@ fn cancelled_selection_precedes_zero_limits() {
     let predicate = Predicate::new("table", 0).unwrap();
     let relation = Relation::from_atoms(&predicate, &[], RelationLimits::default()).unwrap();
     let table = Table::prepare(&relation, &[], Limits::default(), &Control::default()).unwrap();
-    let control = Control::with_deadline(Instant::now());
+    let control = Control::with_deadline(Instant::now()).unwrap();
     control.cancel();
     let failure = table
         .select(

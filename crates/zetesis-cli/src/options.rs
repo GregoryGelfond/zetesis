@@ -84,7 +84,9 @@ pub struct Options {
     /// Cooperative process deadline after input loading, in whole seconds.
     ///
     /// Zero requests an immediate stop. No deadline is imposed when omitted.
-    /// Checked work boundaries observe the deadline; blocking source I/O,
+    /// A timer thread marks the deadline and checked work boundaries observe
+    /// the mark as they observe cancellation, without reading the clock, so
+    /// an unreached deadline costs nothing measurable. Blocking source I/O,
     /// frontend operations and a running GPU kernel cannot be preempted.
     /// Library callers supply their own Control instead of this process option.
     #[arg(long, value_name = "SECONDS")]

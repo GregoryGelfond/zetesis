@@ -155,7 +155,10 @@ fn shared_cancellation_deadline_and_work_stops_never_return_partial_results() {
     cancelled.cancel();
     for (control, expected) in [
         (cancelled, Incomplete::Cancelled),
-        (Control::with_deadline(Instant::now()), Incomplete::Deadline),
+        (
+            Control::with_deadline(Instant::now()).unwrap(),
+            Incomplete::Deadline,
+        ),
     ] {
         for batch in [&candidates[..], &[]] {
             assert!(matches!(

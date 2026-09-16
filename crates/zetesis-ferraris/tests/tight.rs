@@ -411,7 +411,8 @@ fn cancellation_and_deadlines_refuse_certification_and_evaluation() {
             Stop::Cancelled,
         ),
         (
-            Control::with_deadline(Instant::now().checked_sub(Duration::from_secs(1)).unwrap()),
+            Control::with_deadline(Instant::now().checked_sub(Duration::from_secs(1)).unwrap())
+                .unwrap(),
             Stop::Deadline,
         ),
     ] {

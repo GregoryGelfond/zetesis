@@ -121,7 +121,7 @@ fn process_control(seconds: Option<u64>, start: Instant) -> Result<zetesis_cpu::
     let deadline = start
         .checked_add(Duration::from_secs(seconds))
         .ok_or(RunError::TimeLimitRange { seconds })?;
-    Ok(zetesis_cpu::Control::with_deadline(deadline))
+    zetesis_cpu::Control::with_deadline(deadline).map_err(RunError::DeadlineTimer)
 }
 
 enum Input {

@@ -297,7 +297,10 @@ fn stopped_queries_leave_the_reduct_reusable() {
     cancelled.cancel();
     for (stopped, expected) in [
         (cancelled, Stop::Cancelled),
-        (Control::with_deadline(Instant::now()), Stop::Deadline),
+        (
+            Control::with_deadline(Instant::now()).unwrap(),
+            Stop::Deadline,
+        ),
     ] {
         assert_eq!(
             frozen
@@ -321,7 +324,10 @@ fn empty_freezes_still_poll_control() {
     cancelled.cancel();
     for (control, expected) in [
         (cancelled, Stop::Cancelled),
-        (Control::with_deadline(Instant::now()), Stop::Deadline),
+        (
+            Control::with_deadline(Instant::now()).unwrap(),
+            Stop::Deadline,
+        ),
     ] {
         assert_eq!(
             FrozenReduct::new(&candidate, work_limit(0), &control).unwrap_err(),
@@ -339,7 +345,10 @@ fn empty_satisfaction_still_polls_control() {
     cancelled.cancel();
     for (control, expected) in [
         (cancelled, Stop::Cancelled),
-        (Control::with_deadline(Instant::now()), Stop::Deadline),
+        (
+            Control::with_deadline(Instant::now()).unwrap(),
+            Stop::Deadline,
+        ),
     ] {
         assert_eq!(
             frozen

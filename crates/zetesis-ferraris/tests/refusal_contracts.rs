@@ -206,7 +206,10 @@ fn aggregate_control_causes_remain_downcastable_and_do_not_poison_retry() {
     cancelled.cancel();
     for (control, expected) in [
         (cancelled, Stop::Cancelled),
-        (Control::with_deadline(Instant::now()), Stop::Deadline),
+        (
+            Control::with_deadline(Instant::now()).unwrap(),
+            Stop::Deadline,
+        ),
     ] {
         let mut nodes = vec![Node::Atom(0), Node::Atom(1)];
         let original = nodes.clone();

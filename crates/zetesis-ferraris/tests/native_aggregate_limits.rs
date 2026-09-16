@@ -522,7 +522,7 @@ fn an_expired_deadline_prevents_eligibility_acquisition() {
             &candidate,
             None,
             native::EligibilityLimits::default(),
-            &Control::with_deadline(Instant::now()),
+            &Control::with_deadline(Instant::now()).unwrap(),
         )
         .unwrap_err();
     assert_eq!(error.kind(), ErrorKind::Stopped(Stop::Deadline));

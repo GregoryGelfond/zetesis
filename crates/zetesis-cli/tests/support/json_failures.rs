@@ -216,6 +216,10 @@ fn failure_envelopes_never_invent_search_coverage() {
         ),
         (RunError::LazyStatisticsOverflow, "lazy_statistics_overflow"),
         (
+            RunError::DeadlineTimer(io::Error::other("no thread")),
+            "deadline_timer",
+        ),
+        (
             RunError::ClosureStatisticsOverflow,
             "closure_statistics_overflow",
         ),

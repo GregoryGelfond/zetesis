@@ -43,7 +43,8 @@ full answer sets.
 `--time-limit SECONDS` requests a cooperative deadline after input loading.
 Whole nonnegative seconds are accepted; zero requests an immediate stop and
 omission imposes no deadline. Search polls the same `Control` used by library
-consumers. A deadline during search leaves coverage incomplete. A later deadline
+consumers; a timer thread marks the deadline and each poll reads that mark
+beside the cancellation flag, so an unreached deadline does not slow the run. A deadline during search leaves coverage incomplete. A later deadline
 during publication preserves the already established search coverage. Either
 stop returns exit 3; the deadline is not a hard process timeout for source I/O,
 frontend work or a running device kernel.

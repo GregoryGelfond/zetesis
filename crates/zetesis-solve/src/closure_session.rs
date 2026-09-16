@@ -274,7 +274,7 @@ mod storage_tests {
             batch_storage(usize::MAX, &cancelled),
             Err(Stop::Cancelled)
         ));
-        let expired = Control::with_deadline(std::time::Instant::now());
+        let expired = Control::with_deadline(std::time::Instant::now()).unwrap();
         assert!(matches!(
             batch_storage(usize::MAX, &expired),
             Err(Stop::Deadline)

@@ -42,7 +42,7 @@ fn batched_charges_preserve_scalar_quota_transitions() {
 
 #[test]
 fn zero_charge_does_not_poll_cancelled_control() {
-    let control = Control::with_deadline(Instant::now());
+    let control = Control::with_deadline(Instant::now()).unwrap();
     control.cancel();
     let mut work = Work::source(&control, 0);
     assert_eq!(work.charge(0), Ok(()));
@@ -51,7 +51,7 @@ fn zero_charge_does_not_poll_cancelled_control() {
 
 #[test]
 fn cancellation_has_first_refusal_priority() {
-    let control = Control::with_deadline(Instant::now());
+    let control = Control::with_deadline(Instant::now()).unwrap();
     let mut work = Work::source(&control, 3);
     work.statistics.work = 3;
     control.cancel();
@@ -61,7 +61,7 @@ fn cancellation_has_first_refusal_priority() {
 
 #[test]
 fn deadline_precedes_exhausted_quota() {
-    let control = Control::with_deadline(Instant::now());
+    let control = Control::with_deadline(Instant::now()).unwrap();
     let mut work = Work::source(&control, 3);
     work.statistics.work = 3;
     assert_eq!(work.charge(1), Err(Stop::Deadline));
