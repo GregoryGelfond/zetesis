@@ -440,6 +440,12 @@ fn arguments<'a>(
                             OsString::from(joins.label()),
                         ]
                     }))
+                    .chain(profile.time_limit_seconds.into_iter().flat_map(|seconds| {
+                        [
+                            OsString::from("--time-limit"),
+                            OsString::from(seconds.to_string()),
+                        ]
+                    }))
                     .chain(["--json".into(), "--stats".into()])
                     .collect(),
             )

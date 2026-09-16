@@ -130,6 +130,11 @@ pub struct NativeExecution {
     pub batch_size: NonZeroUsize,
     /// Logical completion scratch allowance; zero is a valid requested ceiling.
     pub max_completion_scratch_bytes: u64,
+    /// Cooperative deadline passed as `--time-limit`, in whole seconds. Absent
+    /// means no deadline; a deadline changes what the solver polls at every
+    /// charged unit, so it is part of the profile's identity.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub time_limit_seconds: Option<std::num::NonZeroU64>,
 }
 impl Default for NativeExecution {
     fn default() -> Self {
@@ -142,6 +147,7 @@ impl Default for NativeExecution {
             completion_workers: NonZeroUsize::new(1).expect("one is nonzero"),
             batch_size: NonZeroUsize::new(64).expect("64 is nonzero"),
             max_completion_scratch_bytes: 268_435_456,
+            time_limit_seconds: None,
         }
     }
 }

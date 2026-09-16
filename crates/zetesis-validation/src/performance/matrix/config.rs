@@ -5,7 +5,7 @@ use std::path::Path;
 use serde::Serialize;
 
 use super::super::{Error, Phase};
-use crate::selected::{Grounder, NativeExecution};
+use crate::selected::NativeExecution;
 
 pub(super) const MAX_CASES: usize = 94;
 
@@ -31,13 +31,14 @@ pub struct Plan {
     pub(super) repetitions: usize,
 }
 impl Plan {
-    /// Construct up to eight explicit CPU/Metal eager/lazy profiles. Each worker
-    /// count is bounded by 256; every profile retains its batch/scratch ceilings.
-    /// Zero through five warmups and one through 41 timed rounds are admitted.
+    /// Construct up to eight CPU/Metal profiles. Each worker count is bounded
+    /// by 256; every profile retains its batch/scratch ceilings. Zero through
+    /// five warmups and one through 41 timed rounds are admitted. An automatic
+    /// grounding request is admitted; its observations retain the mode taken.
     ///
     /// # Errors
-    /// Refuses empty/oversized profile families, automatic grounding or counts
-    /// outside these bounds. Repeated profiles are permitted as authored controls.
+    /// Refuses empty/oversized profile families or counts outside these bounds.
+    /// Repeated profiles are permitted as authored controls.
     pub fn new(
         suite: Suite,
         profiles: Vec<NativeExecution>,
@@ -49,14 +50,12 @@ impl Plan {
         if profiles.is_empty()
             || profiles.len() > 8
             || reference_workers.get() > 256
-            || profiles.iter().any(|p| {
-                p.grounder == Grounder::Auto
-                    || p.workers.get() > 256
-                    || p.completion_workers.get() > 256
-            })
+            || profiles
+                .iter()
+                .any(|p| p.workers.get() > 256 || p.completion_workers.get() > 256)
         {
             return Err(Error::Configuration(
-                "matrix requires 1..=8 explicit profiles and workers 1..=256",
+                "matrix requires 1..=8 profiles and workers 1..=256",
             ));
         }
         Ok(Self {

@@ -71,21 +71,22 @@ fn reference_census_precedes_native_census() {
     assert_eq!(slots.len(), 6 * 5 * 5);
 }
 #[test]
-fn automatic_grounding_cannot_impersonate_an_explicit_cell() {
+fn automatic_grounding_is_an_admitted_profile() {
+    // The request records `auto`; the observation retains the mode taken, so
+    // an automatic cell cannot be read as an explicit eager or lazy one.
     let profile = NativeExecution {
         grounder: Grounder::Auto,
         ..Default::default()
     };
-    assert!(
-        Plan::new(
-            Suite::Corpus,
-            vec![profile],
-            NonZeroUsize::new(1).unwrap(),
-            0,
-            1
-        )
-        .is_err()
-    );
+    let plan = Plan::new(
+        Suite::Corpus,
+        vec![profile],
+        NonZeroUsize::new(1).unwrap(),
+        0,
+        1,
+    )
+    .unwrap();
+    assert_eq!(plan.profiles()[0].grounder, Grounder::Auto);
 }
 #[test]
 fn matrix_population_has_finite_construction_bounds() {

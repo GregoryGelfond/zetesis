@@ -9,16 +9,20 @@ pub(super) fn observe(
     request: NativeExecution,
 ) -> Result<Observation, String> {
     let timing = super::super::timing::parse_any(stderr)?;
-    let expected = match request.grounder {
-        Grounder::Eager => "eager",
-        Grounder::Lazy => "lazy_interleaved",
-        Grounder::Auto => return Err("automatic grounding is outside this protocol".into()),
+    // An explicit request names the mode the cell must have taken; an
+    // automatic request accepts either mode and retains the one observed.
+    let taken = match timing.grounding_mode.as_str() {
+        "eager" => Grounder::Eager,
+        "lazy_interleaved" => Grounder::Lazy,
+        _ => return Err("unsupported reported grounding mode".into()),
     };
-    if timing.grounding_mode != expected {
+    if request.grounder != Grounder::Auto && taken != request.grounder {
         return Err("reported grounding differs from requested matrix cell".into());
     }
     let statistics = &document["statistics"];
-    if !statistics.is_object() || statistics["stage_timings"]["grounding_mode"] != expected {
+    if !statistics.is_object()
+        || statistics["stage_timings"]["grounding_mode"] != timing.grounding_mode.as_str()
+    {
         return Err("typed statistics and authored stage view disagree".into());
     }
     consistent_timings(statistics, &timing)?;
@@ -54,7 +58,7 @@ pub(super) fn observe(
         "effective execution",
     )?;
     let effective_backend = field(effective, "backend")?;
-    if field(effective, "grounder")? != request.grounder.label() {
+    if field(effective, "grounder")? != taken.label() {
         return Err("effective execution and measured grounding disagree".into());
     }
     let procedure = match field(effective, "oracle")? {
@@ -73,7 +77,7 @@ pub(super) fn observe(
         return Err("actual oracle differs from explicit requested procedure".into());
     }
     if procedure == Procedure::PositiveConsequences
-        && (backend != Backend::Cpu || request.grounder != Grounder::Eager)
+        && (backend != Backend::Cpu || taken != Grounder::Eager)
     {
         return Err("positive consequences require the eager CPU formula route".into());
     }
@@ -81,7 +85,7 @@ pub(super) fn observe(
         statistics,
         route,
         effective_backend,
-        request.grounder,
+        taken,
         backend,
         procedure,
         adapter.as_deref(),

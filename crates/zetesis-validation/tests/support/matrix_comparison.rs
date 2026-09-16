@@ -282,3 +282,37 @@ fn complete_capture_cannot_hide_a_capture_stop() {
         Decision::CaptureLimit
     );
 }
+
+#[test]
+fn deadline_profiles_pass_their_time_limit_to_the_native_solver() {
+    let mut request = request();
+    let flags = |request: &Request<'_>, producer| {
+        let (_, arguments) = arguments(request, Path::new("/unused"), "case.lp", producer);
+        arguments
+            .iter()
+            .map(|argument| argument.to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+    };
+    let native = flags(&request, Producer::Native { profile: 0 });
+    assert!(!native.iter().any(|flag| flag == "--time-limit"));
+    request.plan = Plan::new(
+        Suite::Baseline,
+        vec![crate::selected::NativeExecution {
+            time_limit_seconds: std::num::NonZeroU64::new(3600),
+            ..Default::default()
+        }],
+        NonZeroUsize::new(1).unwrap(),
+        0,
+        1,
+    )
+    .unwrap();
+    let native = flags(&request, Producer::Native { profile: 0 });
+    let position = native
+        .iter()
+        .position(|flag| flag == "--time-limit")
+        .unwrap();
+    assert_eq!(native[position + 1], "3600");
+    assert_eq!(native.last().unwrap(), "/unused/case.lp");
+    let reference = flags(&request, Producer::Reference);
+    assert!(!reference.iter().any(|flag| flag.contains("time")));
+}
