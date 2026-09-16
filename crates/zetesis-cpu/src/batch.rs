@@ -26,7 +26,9 @@ pub struct BatchOracle {
 
 impl BatchOracle {
     /// Default named storage reservation across simultaneously active closures.
-    /// Four workers can each use the default 128 MiB independent closure limit.
+    /// Every assigned worker is admitted at the full per-closure allowance, so
+    /// the workers share this ceiling: four at the default 128 MiB, or a
+    /// smaller allowance each for more workers.
     pub const DEFAULT_CLOSURE_BYTES: usize = 536_870_912;
 
     /// Build an owned worker pool; zero worker or queue sizes are unrepresentable.
@@ -49,10 +51,12 @@ impl BatchOracle {
 
     /// Set the collective storage allowance for independent lazy closures.
     ///
-    /// Admission counts shared preparation/cache headers, idle retained
-    /// workspaces and the assigned active workspace allowances, without counting
-    /// a shared preparation header twice. Retained capacity under tighter
-    /// candidate limits remains counted until a refused check discards it.
+    /// Admission counts idle retained workspaces and the assigned active
+    /// workspace allowances, each reduced by the shared preparation's retained
+    /// bytes; the cache's own header is bookkeeping outside this ceiling, so
+    /// `workers * max_closure_bytes` is what the ceiling must hold. Retained
+    /// capacity under tighter candidate limits remains counted until a refused
+    /// check discards it.
     /// Static and shared-round execution retain
     /// their separate storage limits. Input seeds, completed returned models,
     /// allocator overhead and worker stacks are excluded; this is not RSS.

@@ -342,3 +342,45 @@ fn statistics_print_expansion_usage_beside_its_ceilings() {
     assert!(formula.expansion.is_none());
     assert!(!text.contains("expansion used:"), "{text}");
 }
+
+#[test]
+fn an_inconsistent_closure_reservation_is_refused_before_any_work() {
+    let mut configured = options(&["--stats"]);
+    configured.workers = std::num::NonZeroUsize::new(5).unwrap();
+    configured.max_closure_bytes = Some(134_217_728);
+    let mut output = Vec::new();
+    let mut diagnostics = Vec::new();
+    let error = run_with_diagnostics(
+        "{a}.".into(),
+        &configured,
+        &mut output,
+        &mut diagnostics,
+        &Control::default(),
+    )
+    .unwrap_err();
+    let text = error.to_string();
+    assert!(text.contains("--workers 5"), "{text}");
+    assert!(text.contains("--max-closure-bytes 134217728"), "{text}");
+    assert!(
+        text.contains("--max-closure-batch-bytes 536870912"),
+        "{text}"
+    );
+    assert!(text.contains("671088640"), "{text}");
+    assert!(output.is_empty());
+}
+
+#[test]
+fn the_closure_limits_line_states_the_derived_allowance() {
+    let mut eight = options(&["--stats"]);
+    eight.workers = std::num::NonZeroUsize::new(8).unwrap();
+    let (_, _, text) = solve("{a}.", &eight);
+    assert!(
+        text.contains("independent CPU closure limits: named bytes/owner=67108864 (collective share of 8 workers)"),
+        "{text}"
+    );
+    let (_, _, explicit) = solve(
+        "{a}.",
+        &options(&["--stats", "--max-closure-bytes", "4096"]),
+    );
+    assert!(explicit.contains("named bytes/owner=4096;"), "{explicit}");
+}

@@ -72,11 +72,21 @@ fn options(extra: &[&str]) -> Options {
 #[test]
 fn configuration_defaults_preserve_legacy_limits() {
     // A separate plain configuration must not silently change CLI defaults.
-    let legacy = SolveConfig::from(&Options::try_parse_from(["zetesis"]).unwrap());
+    // The command alone follows the host: its worker count is the host's
+    // parallelism and each closure's allowance is that count's share of the
+    // collective ceiling. Every other default is the library's.
+    let command = SolveConfig::from(&Options::try_parse_from(["zetesis"]).unwrap());
+    let library = SolveConfig::default();
     assert_eq!(
-        format!("{legacy:?}"),
-        format!("{:?}", SolveConfig::default())
+        command.max_closure_bytes,
+        library.max_closure_batch_bytes / command.workers.get()
     );
+    let aligned = SolveConfig {
+        workers: library.workers,
+        max_closure_bytes: library.max_closure_bytes,
+        ..command
+    };
+    assert_eq!(format!("{aligned:?}"), format!("{library:?}"));
 }
 
 #[test]

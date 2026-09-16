@@ -117,7 +117,7 @@ fn candidate_storage_refusal_follows_admitted_preparation() {
     let mut bounded = options(&[]);
     // Admit exactly the immutable preparation. Mutable candidate storage has
     // no remaining allowance; this is a later boundary than a zero-byte setup.
-    bounded.max_closure_bytes = prepared.statistics().retained_bytes;
+    bounded.max_closure_bytes = Some(prepared.statistics().retained_bytes);
     let (report, json, _) = solve_source("a.", &bounded);
     assert_eq!(report.models, 0);
     assert_eq!(report.completion, Completion::Interrupted);

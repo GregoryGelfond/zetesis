@@ -45,10 +45,14 @@ impl Cache {
         };
     }
 
+    /// Spare slot capacity, zero once every reserved slot holds a workspace.
+    /// The cache's own header, including the inline prepared-query owner, is
+    /// bookkeeping outside the collective ceiling, like allocator metadata:
+    /// the ceiling then holds exactly `workers * max_closure_bytes`, the
+    /// product a caller can validate before any batch.
     fn overhead(&self) -> u128 {
-        size_of::<Self>() as u128
-            + (self.workspaces.capacity() - self.workspaces.len()) as u128
-                * size_of::<ClosureWorkspace>() as u128
+        (self.workspaces.capacity() - self.workspaces.len()) as u128
+            * size_of::<ClosureWorkspace>() as u128
     }
 
     fn retained(&self) -> Result<u128, BatchError> {
@@ -129,10 +133,6 @@ impl Cache {
         } else {
             // The cache header contains the prepared owner; no second payload
             // or preparation header is added after this publication.
-            ceiling(
-                (size_of::<Self>() + size_of::<PreparedQueries>()) as u128,
-                collective,
-            )?;
             let builds = self
                 .builds
                 .checked_add(1)

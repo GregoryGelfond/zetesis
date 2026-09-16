@@ -123,6 +123,15 @@ pub enum RunError {
     },
     /// The requested shared source policy needs relational lazy CPU execution.
     UnsupportedSourceBatching,
+    /// The workers' closure allowances together exceed the collective ceiling.
+    ClosureReservation {
+        /// Requested closure workers.
+        workers: usize,
+        /// Per-closure allowance, given or derived.
+        max_closure_bytes: usize,
+        /// Collective ceiling.
+        max_closure_batch_bytes: usize,
+    },
     /// An already prepared representation cannot honor the requested strategy.
     PreparedInput {
         /// Representation supplied by the caller.
@@ -220,6 +229,15 @@ impl fmt::Display for RunError {
             Self::PreparedInput { profile, oracle, grounder } => write!(f,
                 "prepared {profile:?} cannot honor oracle {} with grounder {}", oracle.label(), grounder.label()),
             Self::UnsupportedSourceBatching => f.write_str("shared source batching requires the relational closure route with lazy/auto grounding and cpu/auto backend"),
+            Self::ClosureReservation {
+                workers,
+                max_closure_bytes,
+                max_closure_batch_bytes,
+            } => write!(
+                f,
+                "--workers {workers} at --max-closure-bytes {max_closure_bytes} need {} bytes, above --max-closure-batch-bytes {max_closure_batch_bytes}; use fewer workers, a smaller allowance, or a larger collective ceiling",
+                (*workers as u128) * (*max_closure_bytes as u128)
+            ),
             Self::SharedCpu(cause) => cause.fmt(f),
             Self::Formula(error) => error.fmt(f),
             Self::FormulaAdmission(error) => error.fmt(f),
@@ -310,6 +328,7 @@ impl std::error::Error for RunError {
             | Self::UnsupportedCombination { .. }
             | Self::UnsupportedOracle { .. }
             | Self::UnsupportedSourceBatching
+            | Self::ClosureReservation { .. }
             | Self::LazyStatisticsOverflow
             | Self::ClosureStatisticsOverflow
             | Self::CompletionUnavailable
@@ -733,6 +752,15 @@ impl From<zetesis_solve::SolveError> for RunError {
             SolveError::CompletionPool(error) => Self::CompletionPool(error),
             SolveError::BackendUnavailable => Self::BackendUnavailable,
             SolveError::UnsupportedSourceBatching => Self::UnsupportedSourceBatching,
+            SolveError::ClosureReservation {
+                workers,
+                max_closure_bytes,
+                max_closure_batch_bytes,
+            } => Self::ClosureReservation {
+                workers,
+                max_closure_bytes,
+                max_closure_batch_bytes,
+            },
             SolveError::Static(error) => Self::Static(error),
             SolveError::LazyStatisticsOverflow => Self::LazyStatisticsOverflow,
             SolveError::ClosureStatisticsOverflow => Self::ClosureStatisticsOverflow,

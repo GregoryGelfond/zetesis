@@ -164,3 +164,29 @@ fn preparation_refusals_clear_submission_activity() {
     assert_eq!(after.reserved_bytes, 0);
     assert!(first[0].as_ref().unwrap().accepted());
 }
+
+#[test]
+fn the_worker_product_is_the_collective_ceiling_a_batch_needs() {
+    // Three workers at the per-closure allowance need exactly three
+    // allowances: the cache's own header is bookkeeping outside the ceiling,
+    // so the product is what a caller validates before any batch.
+    let program = program();
+    let seeds: Vec<_> = (0..6).map(|_| Seed::new(&program, []).unwrap()).collect();
+    let limits = Limits::default();
+    let pool = BatchOracle::new(NonZeroUsize::new(3).unwrap(), NonZeroUsize::new(6).unwrap())
+        .unwrap()
+        .with_closure_storage_limit(3 * limits.max_closure_bytes);
+    for _ in 0..2 {
+        let results = pool
+            .check_batch(&program, &seeds, limits, &Control::default())
+            .unwrap();
+        assert!(
+            results
+                .iter()
+                .all(|result| result.as_ref().unwrap().accepted())
+        );
+    }
+    let statistics = pool.query_statistics().unwrap();
+    assert_eq!(statistics.active_workspaces, 3);
+    assert!(statistics.reserved_bytes <= 3 * limits.max_closure_bytes as u128);
+}

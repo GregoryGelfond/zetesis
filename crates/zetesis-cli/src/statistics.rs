@@ -126,6 +126,21 @@ pub(crate) fn write_detailed(
     }
 }
 
+fn closure_limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
+    let share = if o.max_closure_bytes.is_none() {
+        format!(" (collective share of {} workers)", o.workers)
+    } else {
+        String::new()
+    };
+    writeln!(
+        sink,
+        "  independent CPU closure limits: named bytes/owner={}{share}; preparation/cache/collective reservation bytes={}; query preparation work={}; returned models and allocator overhead excluded",
+        o.closure_allowance(),
+        o.max_closure_batch_bytes,
+        o.max_source_work
+    )
+}
+
 fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
     if let Some(seconds) = o.time_limit {
         writeln!(
@@ -160,11 +175,7 @@ fn limits(sink: &mut impl Write, o: &Options) -> io::Result<()> {
         "  prepared reduct limits: cold preparation/each query bytes={}; collective owner/worker/result bytes={}; theory and allocator metadata excluded",
         o.max_reduct_bytes, o.max_completion_scratch_bytes
     )?;
-    writeln!(
-        sink,
-        "  independent CPU closure limits: named bytes/owner={}; preparation/cache/collective reservation bytes={}; query preparation work={}; returned models and allocator overhead excluded",
-        o.max_closure_bytes, o.max_closure_batch_bytes, o.max_source_work
-    )?;
+    closure_limits(sink, o)?;
     writeln!(
         sink,
         "  requested grounding limits: atoms={}; carrier atoms={}; substitutions={}; ground rules={}; GPU batch bytes={}",

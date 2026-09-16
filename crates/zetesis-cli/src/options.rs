@@ -190,8 +190,11 @@ pub struct Options {
     /// Maximum batched formula candidates; closure batches follow its first seed.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.batch_size, hide_short_help = true)]
     pub batch_size: NonZeroUsize,
-    /// Closure CPU worker count. Formula completion has a separate worker setting.
-    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.workers, hide_short_help = true)]
+    /// Closure CPU worker count; the default is the host's available parallelism,
+    /// or one when the host does not report it. Each worker is admitted at the
+    /// per-closure allowance, so workers × max-closure-bytes must not exceed
+    /// max-closure-batch-bytes. Formula completion has a separate worker setting.
+    #[arg(long, default_value_t = host_workers(), hide_short_help = true)]
     pub workers: NonZeroUsize,
     /// Exact formula completion workers; one retains the scalar CPU cursor.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.completion_workers, hide_short_help = true)]
@@ -225,11 +228,14 @@ pub struct Options {
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_work, hide_short_help = true)]
     pub max_work: u64,
     /// Maximum reserved named capacity per independent lazy CPU closure, including
-    /// spare capacity and replacement overlap; not resident bytes.
-    #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_closure_bytes, hide_short_help = true)]
-    pub max_closure_bytes: usize,
+    /// spare capacity and replacement overlap; not resident bytes. Omitted, it is
+    /// max-closure-batch-bytes divided by the worker count; given, workers × this
+    /// value must not exceed max-closure-batch-bytes.
+    #[arg(long, hide_short_help = true)]
+    pub max_closure_bytes: Option<usize>,
     /// Collective reserved capacity for independent CPU preparation, the idle cache
-    /// and assigned closure allowances. Also bounds immutable query preparation bytes.
+    /// and assigned closure allowances; every worker's per-closure allowance is
+    /// admitted against it. Also bounds immutable query preparation bytes.
     #[arg(long, default_value_t = crate::SolveConfig::DEFAULT.max_closure_batch_bytes, hide_short_help = true)]
     pub max_closure_batch_bytes: usize,
     /// Device propagation work per formula candidate, independent of CPU work.
@@ -278,6 +284,21 @@ pub struct Options {
     pub max_batch_bytes: u64,
 }
 
+/// The host's available parallelism, or one worker when it cannot be reported.
+fn host_workers() -> NonZeroUsize {
+    std::thread::available_parallelism().unwrap_or(NonZeroUsize::MIN)
+}
+
+impl Options {
+    /// The per-closure allowance: the given value, or each worker's share of
+    /// the collective ceiling.
+    #[must_use]
+    pub fn closure_allowance(&self) -> usize {
+        self.max_closure_bytes
+            .unwrap_or(self.max_closure_batch_bytes / self.workers.get())
+    }
+}
+
 impl From<&Options> for crate::SolveConfig {
     fn from(options: &Options) -> Self {
         Self {
@@ -309,7 +330,7 @@ impl From<&Options> for crate::SolveConfig {
             max_candidate_bytes: options.max_candidate_bytes,
             max_carrier_atoms: options.max_carrier_atoms,
             max_work: options.max_work,
-            max_closure_bytes: options.max_closure_bytes,
+            max_closure_bytes: options.closure_allowance(),
             max_closure_batch_bytes: options.max_closure_batch_bytes,
             gpu_formula_work: options.gpu_formula_work,
             gpu_formula_rounds: options.gpu_formula_rounds,

@@ -182,8 +182,10 @@ batches/candidates and successfully decoded batches/candidates separately.
 Propagation work and sweeps count decoded results; an interrupted unreturned
 submission does not establish how much shader work completed.
 
-`--workers` controls closure workers. `--completion-workers` separately controls
-independent exact formula checks, with a scalar CPU default of one.
+`--workers` controls closure workers and defaults to the host's available
+parallelism, or one when the host does not report it. `--completion-workers`
+separately controls independent exact formula checks, with a scalar CPU
+default of one.
 `--batch-size`, `--max-batch-bytes` and
 `--max-completion-scratch-bytes` bound batches and concurrent query storage.
 General checking retains one candidate-parametric reduct encoding. The scratch
@@ -208,8 +210,12 @@ and retains empty workspace capacities across batches. `--max-source-work` bound
 that preparation separately from candidate `--max-work`.
 `--max-closure-bytes` bounds one candidate's reserved named capacity;
 `--max-closure-batch-bytes` admits preparation, idle retained workspaces and
-assigned candidate allowances together. Preparation refusal and individual
-candidate refusal retain different interruption kinds. See the
+assigned candidate allowances together. Every worker is admitted at the
+per-closure allowance, so `--workers` times `--max-closure-bytes` must not
+exceed `--max-closure-batch-bytes`; the command refuses a larger product
+before any work, naming all three, and when `--max-closure-bytes` is omitted
+it is each worker's share of the collective ceiling. Preparation refusal and
+individual candidate refusal retain different interruption kinds. See the
 [ownership contract](../../docs/book/architecture/ownership.md#memory-contracts).
 
 Every byte ceiling in `--help-all` says which quantity it bounds: reserved

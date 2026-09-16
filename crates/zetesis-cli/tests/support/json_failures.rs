@@ -216,6 +216,14 @@ fn failure_envelopes_never_invent_search_coverage() {
         ),
         (RunError::LazyStatisticsOverflow, "lazy_statistics_overflow"),
         (
+            RunError::ClosureReservation {
+                workers: 5,
+                max_closure_bytes: 3,
+                max_closure_batch_bytes: 4,
+            },
+            "closure_reservation",
+        ),
+        (
             RunError::DeadlineTimer(io::Error::other("no thread")),
             "deadline_timer",
         ),

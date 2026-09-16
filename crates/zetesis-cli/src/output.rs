@@ -313,6 +313,7 @@ fn error_kind(error: &RunError) -> &'static str {
         RunError::UnsupportedCombination { .. } => "unsupported_combination",
         RunError::UnsupportedOracle { .. } => "unsupported_oracle",
         RunError::UnsupportedSourceBatching => "unsupported_source_batching",
+        RunError::ClosureReservation { .. } => "closure_reservation",
         RunError::SharedCpu(_) => "shared_cpu",
         RunError::PreparedInput { .. } => "prepared_input",
         RunError::Formula(_) => "formula",

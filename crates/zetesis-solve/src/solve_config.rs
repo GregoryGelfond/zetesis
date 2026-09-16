@@ -85,6 +85,9 @@ pub struct SolveConfig {
     pub max_work: u64,
     /// Named storage for one independent lazy CPU closure construction.
     /// Input seeds and completed model retention belong to separate owners.
+    /// Every assigned worker is admitted at this allowance, so
+    /// `workers * max_closure_bytes` must not exceed `max_closure_batch_bytes`;
+    /// [`Self::validate`] refuses the product before a session starts.
     pub max_closure_bytes: usize,
     /// Collective independent CPU preparation, cached workspace and active
     /// closure allowance. Also bounds immutable query preparation bytes.

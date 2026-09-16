@@ -121,6 +121,41 @@ fn nondefault_options_preserve_each_solver_field() {
 }
 
 #[test]
+fn an_omitted_closure_allowance_is_the_collective_share_per_worker() {
+    let derived =
+        SolveConfig::from(&Options::try_parse_from(["zetesis", "--workers", "8"]).unwrap());
+    assert_eq!(
+        derived.max_closure_bytes,
+        SolveConfig::DEFAULT.max_closure_batch_bytes / 8
+    );
+    assert!(derived.validate().is_ok());
+    let explicit = SolveConfig::from(
+        &Options::try_parse_from(["zetesis", "--workers", "8", "--max-closure-bytes", "5"])
+            .unwrap(),
+    );
+    assert_eq!(explicit.max_closure_bytes, 5);
+    let collective = SolveConfig::from(
+        &Options::try_parse_from([
+            "zetesis",
+            "--workers",
+            "3",
+            "--max-closure-batch-bytes",
+            "300",
+        ])
+        .unwrap(),
+    );
+    assert_eq!(collective.max_closure_bytes, 100);
+}
+
+#[test]
+fn workers_default_to_the_host_parallelism() {
+    let options = Options::try_parse_from(["zetesis"]).unwrap();
+    let host = std::thread::available_parallelism().unwrap_or(std::num::NonZeroUsize::MIN);
+    assert_eq!(options.workers, host);
+    assert_eq!(options.completion_workers.get(), 1);
+}
+
+#[test]
 fn backend_spellings_select_typed_policies() {
     for (spelling, expected) in [
         ("auto", Backend::Auto),

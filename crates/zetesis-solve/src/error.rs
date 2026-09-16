@@ -26,6 +26,15 @@ pub enum SolveError {
     },
     /// Shared source traversal requires relational lazy CPU execution.
     UnsupportedSourceBatching,
+    /// The workers' closure allowances together exceed the collective ceiling.
+    ClosureReservation {
+        /// Closure workers, each admitted at the full per-closure allowance.
+        workers: usize,
+        /// Per-closure allowance, `max_closure_bytes`.
+        max_closure_bytes: usize,
+        /// Collective ceiling, `max_closure_batch_bytes`.
+        max_closure_batch_bytes: usize,
+    },
     /// The supplied representation cannot honor the requested policy.
     PreparedInput {
         /// Representation supplied by the caller.
@@ -77,6 +86,15 @@ impl fmt::Display for SolveError {
             Self::UnsupportedOracle { backend, grounder } => write!(formatter,
                 "the countermodel oracle requires eager or automatic grounding; requested {} with {}", backend.label(), grounder.label()),
             Self::UnsupportedSourceBatching => formatter.write_str("shared source batching requires the relational closure route with lazy/auto grounding and cpu/auto backend"),
+            Self::ClosureReservation {
+                workers,
+                max_closure_bytes,
+                max_closure_batch_bytes,
+            } => write!(
+                formatter,
+                "closure reservation: {workers} workers at {max_closure_bytes} bytes each need {} bytes, above the collective ceiling of {max_closure_batch_bytes}",
+                (*workers as u128) * (*max_closure_bytes as u128)
+            ),
             Self::PreparedInput { profile, oracle, grounder } => write!(formatter,
                 "prepared {profile:?} cannot honor oracle {} with grounder {}", oracle.label(), grounder.label()),
             Self::ExecutionObservation(error) => write!(formatter, "execution observer: {error}"),
@@ -118,6 +136,7 @@ impl std::error::Error for SolveError {
             Self::BackendUnavailable
             | Self::UnsupportedOracle { .. }
             | Self::UnsupportedSourceBatching
+            | Self::ClosureReservation { .. }
             | Self::PreparedInput { .. }
             | Self::LazyStatisticsOverflow
             | Self::ClosureStatisticsOverflow

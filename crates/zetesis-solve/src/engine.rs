@@ -25,6 +25,20 @@ pub(crate) fn validate_combination(options: &SolveConfig) -> Result<(), SolveErr
     if options.oracle == Oracle::Countermodel {
         validate_countermodel(options)?;
     }
+    // Each assigned worker is admitted at the full per-closure allowance, so
+    // the product is what the collective ceiling must hold; a session would
+    // otherwise learn this from its first batch.
+    let workers = options.workers.get();
+    if workers
+        .checked_mul(options.max_closure_bytes)
+        .is_none_or(|product| product > options.max_closure_batch_bytes)
+    {
+        return Err(SolveError::ClosureReservation {
+            workers,
+            max_closure_bytes: options.max_closure_bytes,
+            max_closure_batch_bytes: options.max_closure_batch_bytes,
+        });
+    }
     Ok(())
 }
 

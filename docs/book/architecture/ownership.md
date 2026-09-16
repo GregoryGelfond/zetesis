@@ -231,16 +231,21 @@ owner. Their live and spare capacities, headers and conservative replacement
 overlap enter the same per-candidate allowance. Cutoffs, cache keys and logical
 ID lengths are reset before reuse; stable insertion IDs belong to one candidate's
 catalog lifetime and do not become persistent truth across candidates.
-Before executing a batch it admits the shared cache, idle retained workspaces,
-and the allowance for each assigned workspace against its collective limit.
-If `C` is the cache and spare slot capacity, `P` the prepared header already
-included in `C`, `R_i` a workspace's retained capacity, and `L` the per-candidate
-allowance, the required envelope is
-`C + sum(idle R_i) + sum(assigned max(R_i, L - P))`. Every assigned workspace
-requires `L >= P`. At most `min(submitted candidates, worker count)` workspaces
-are assigned, each to a contiguous candidate range; candidates inside one range
-run sequentially. An empty batch admits only retained collective capacity and
-does not prepare a program. Returned models, input seeds, worker stacks and
+Before executing a batch it admits idle retained workspaces and the allowance
+for each assigned workspace against its collective limit. If `S` is spare slot
+capacity (zero once every reserved slot holds a workspace), `P` the prepared
+queries' retained bytes, `R_i` a workspace's retained capacity, and `L` the
+per-candidate allowance, the required envelope is
+`S + sum(idle R_i) + sum(assigned max(R_i, L - P))`. Every assigned workspace
+requires `L >= P`. The cache's own header, including the inline prepared-query
+owner, is bookkeeping outside the ceiling, like allocator metadata, so the
+envelope never exceeds `workers * L`: that product is what
+`SolveConfig::validate` checks before a session starts, and the command derives
+`L` as each worker's share of the collective ceiling when `--max-closure-bytes`
+is not given. At most `min(submitted candidates, worker count)` workspaces are
+assigned, each to a contiguous candidate range; candidates inside one range run
+sequentially. An empty batch admits only retained collective capacity and does
+not prepare a program. Returned models, input seeds, worker stacks and
 allocator overhead are separate owners.
 
 Ordinary sessions map `SolveConfig::max_source_work` to immutable preparation
