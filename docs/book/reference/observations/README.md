@@ -171,6 +171,59 @@ measurable when it is idle. The audit's description of a "strided" poll in
 the shared completion budget was inaccurate: that budget polls on each
 refill of a 64-permit grant to amortise its lock, and it is unchanged.
 
+## Item 5: the worker product
+
+Five campaigns on 16 September 2026 between 21:22:40 and 21:46:33 UTC, same
+machine (eight cores, sixteen hardware threads) and clingo as above. `main`
+is the 896a5f73 executable; `after` is built from
+`c6ebce2ed80e8fb5a21bfa19a924b36557fa82ed` (SHA-256
+`ec3b59e3709dde7d0dd36d8a8292e36ea730237b3d128663c6509f680c6260a1`), where
+`SolveConfig::validate` refuses `workers × max_closure_bytes` above the
+collective ceiling before a session starts and the command derives the
+per-closure allowance as each worker's share of that ceiling.
+[series-c6ebce2e-cpu-auto.json](series-c6ebce2e-cpu-auto.json)
+([tables](series-c6ebce2e-cpu-auto-tables.md)) compares both at four
+workers;
+[series-c6ebce2e-cpu-auto-8-workers.json](series-c6ebce2e-cpu-auto-8-workers.json)
+([tables](series-c6ebce2e-cpu-auto-8-workers-tables.md)) at eight; and
+[series-c6ebce2e-cpu-auto-16-workers.json](series-c6ebce2e-cpu-auto-16-workers.json)
+([tables](series-c6ebce2e-cpu-auto-16-workers-tables.md)) records the new
+executable alone at sixteen. Raw report SHA-256:
+`1c3d42e4422e3b7c8a2a6d5397934b6999c3bb56e6fcdcbd1d60d72c036ff63f` (main,
+4), `2df3fc12ede37548673e0a9989e8b34d23e4d69638dce367ffa45dab0edf3107`
+(after, 4), `58b21ac998153b27b49627430c942b65d7b255f0b3ec125956da44f1f6ec87a7`
+(main, 8), `c399a3f0b1af3b896c39a2ad568a0de644f558e5df63d794e317be0ca6e5ba91`
+(after, 8) and
+`5f2ded556a29ce2f1e3b0ada39c9171efe0476798dd6edc585f2b179739d7f20` (after,
+16).
+
+At four workers the two executables agree (after/main 0.94 to 1.11 on
+eighteen cells; the 10 ms arithmetic chain reads 1.25 from a 2 ms
+difference). At eight workers the control refuses every closure-route cell
+that submits a batch of five or more candidates, recorded as
+`invocation_failure` after the first batch; its formula-route cells, which
+do not use the closure pool, pass unchanged. The new executable passes every
+cell at eight and at sixteen workers. Native medians, ms, of the new
+executable on the closure-route enumeration cells:
+
+| Cell | 4 workers | 8 | 16 | 8/4 | 16/8 |
+|---|---:|---:|---:|---:|---:|
+| independent-choice-12 | 26.5 | 21.0 | 21.0 | 0.79 | 1.00 |
+| independent-choice-16 | 194.3 | 180.0 | 177.0 | 0.93 | 0.98 |
+| independent-negation-8 | 106.7 | 73.3 | 74.0 | 0.69 | 1.01 |
+| independent-negation-10 | 1385.6 | 955.2 | 889.5 | 0.69 | 0.93 |
+
+Every other cell is a single candidate or runs on the formula route, whose
+completion pool the option does not size, and is unchanged across the three
+counts. The phase receipts attribute the remainder: on
+independent-negation-10 the closure-membership phase takes 1,262, 835 and
+763 ms at four, eight and sixteen workers while candidate generation stays
+serial at about 109 ms; on independent-choice-16 the output phase, 116 to
+126 ms of the 177 to 194, dominates at every count. The step from eight to
+sixteen workers coincides with the step from eight cores to their
+hyperthreads on this host, so these campaigns do not separate the batch
+barrier from the hardware; a per-worker busy-time receipt would.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
