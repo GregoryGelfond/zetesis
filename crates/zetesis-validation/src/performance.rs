@@ -17,6 +17,7 @@ mod capture;
 mod config;
 pub mod families;
 pub mod matrix;
+pub mod series;
 mod record;
 mod run;
 mod timing;

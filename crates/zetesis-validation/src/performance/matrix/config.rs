@@ -19,6 +19,10 @@ pub enum Suite {
     Baseline,
     /// All six curated queens encodings at their default N=8.
     Queens,
+    /// The fixed cell set of [`super::super::series`]: generated families,
+    /// amended queens boards and two unchanged entries. Its corpus entries
+    /// are the queens, SEND and task-allocation cases.
+    Series,
 }
 
 /// Validated finite campaign configuration; requested profiles never imply execution.

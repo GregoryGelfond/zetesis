@@ -528,7 +528,7 @@ fn legacy_mode_refuses_silently_ignored_matrix_controls() {
     assert!(
         String::from_utf8(output.stderr)
             .unwrap()
-            .contains("require --profile or --suite corpus")
+            .contains("require --profile, --suite corpus or --suite series")
     );
 }
 

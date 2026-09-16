@@ -227,13 +227,18 @@ fn materialize(
     Ok(sealed)
 }
 fn cases<'a>(corpus: &'a examples::Corpus, plan: &Plan) -> Result<Vec<&'a examples::Case>, Error> {
-    let suite = match plan.suite {
+    let cases: &[super::super::Case] = match plan.suite {
         Suite::Corpus => return Ok(corpus.cases().iter().collect()),
-        Suite::Baseline => super::super::Suite::Baseline,
-        Suite::Queens => super::super::Suite::Queens,
+        Suite::Baseline => super::super::Suite::Baseline.cases(),
+        Suite::Queens => super::super::Suite::Queens.cases(),
+        Suite::Series => &[
+            super::super::Case::Queens01,
+            super::super::Case::Queens04,
+            super::super::Case::Send,
+            super::super::Case::TaskAllocation,
+        ],
     };
-    suite
-        .cases()
+    cases
         .iter()
         .map(|selected| {
             corpus

@@ -11,6 +11,7 @@ enum SuiteArgument {
     Baseline,
     Queens,
     Corpus,
+    Series,
 }
 
 #[derive(Parser)]
@@ -43,6 +44,10 @@ struct Options {
     /// Candidate batch ceiling for matrix native profiles (default 64).
     #[arg(long)]
     batch_size: Option<std::num::NonZeroUsize>,
+    /// Cooperative native deadline in whole seconds for every matrix profile;
+    /// omission imposes none.
+    #[arg(long)]
+    time_limit: Option<std::num::NonZeroU64>,
     /// Per-invocation stdout/stderr ceiling (default retains the established protocol bound).
     #[arg(long)]
     sample_bytes: Option<usize>,
@@ -57,7 +62,8 @@ struct Options {
     report_bytes: usize,
     /// Self-contained clean examples/kr-domains directory.
     root: PathBuf,
-    /// Established CPU baseline, all six curated queens encodings, or instrumented full corpus.
+    /// Established CPU baseline, all six curated queens encodings, the
+    /// instrumented full corpus, or the fixed instrumented series cells.
     #[arg(long, value_enum, default_value = "baseline")]
     suite: SuiteArgument,
     /// Native zetesis executable path.
@@ -83,7 +89,9 @@ struct Options {
     campaign_seconds: u64,
 }
 fn execute(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
-    if matches!(options.suite, SuiteArgument::Corpus) || !options.profile.is_empty() {
+    if matches!(options.suite, SuiteArgument::Corpus | SuiteArgument::Series)
+        || !options.profile.is_empty()
+    {
         if !options.cases.is_empty() || options.memory_runs > 0 {
             return Err("--case and --memory-runs require the ordinary CPU campaign".into());
         }
@@ -94,8 +102,9 @@ fn execute(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
         || options.clingo_workers.is_some()
         || options.batch_size.is_some()
         || options.native_report_bytes.is_some()
+        || options.time_limit.is_some()
     {
-        return Err("matrix controls require --profile or --suite corpus".into());
+        return Err("matrix controls require --profile, --suite corpus or --suite series".into());
     }
     let native = std::path::absolute(options.zetesis)?;
     let reference = std::path::absolute(options.clingo)?;
@@ -112,7 +121,9 @@ fn execute(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
             match options.suite {
                 SuiteArgument::Baseline => Suite::Baseline,
                 SuiteArgument::Queens => Suite::Queens,
-                SuiteArgument::Corpus => return Err("corpus requires matrix dispatch".into()),
+                SuiteArgument::Corpus | SuiteArgument::Series => {
+                    return Err("corpus and series suites require matrix dispatch".into());
+                }
             },
             options.warmups,
             options.repetitions.unwrap_or(21),
@@ -210,6 +221,8 @@ fn child_record(options: ChildOptions) -> Result<(), Box<dyn std::error::Error>>
 
 #[derive(Clone, Copy, ValueEnum)]
 enum ProfileArgument {
+    /// The shipped defaults: automatic grounding and oracle on the CPU.
+    CpuAuto,
     CpuEager,
     CpuLazy,
     MetalEager,
@@ -248,6 +261,7 @@ fn execution_profiles(options: &Options) -> Vec<zetesis_validation::selected::Na
         .iter()
         .map(|profile| {
             let (backend, grounder) = match profile {
+                ProfileArgument::CpuAuto => (Backend::Cpu, Grounder::Auto),
                 ProfileArgument::CpuEager => (Backend::Cpu, Grounder::Eager),
                 ProfileArgument::CpuLazy => (Backend::Cpu, Grounder::Lazy),
                 ProfileArgument::MetalEager => (Backend::Metal, Grounder::Eager),
@@ -266,6 +280,7 @@ fn execution_profiles(options: &Options) -> Vec<zetesis_validation::selected::Na
                 batch_size: options
                     .batch_size
                     .unwrap_or(std::num::NonZeroUsize::new(64).expect("64 is nonzero")),
+                time_limit_seconds: options.time_limit,
                 ..NativeExecution::default()
             }
         })
@@ -279,6 +294,7 @@ fn matrix(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
         SuiteArgument::Baseline => matrix::Suite::Baseline,
         SuiteArgument::Queens => matrix::Suite::Queens,
         SuiteArgument::Corpus => matrix::Suite::Corpus,
+        SuiteArgument::Series => matrix::Suite::Series,
     };
     let native = std::path::absolute(options.zetesis)?;
     let reference = std::path::absolute(options.clingo)?;
@@ -308,7 +324,7 @@ fn matrix(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
         "Recording instrumented solver matrix; evidence will be written to {}",
         options.report.display()
     )?;
-    let report = matrix::run(&matrix::Request {
+    let request = matrix::Request {
         corpus: &options.root,
         native: &native,
         reference: &reference,
@@ -317,7 +333,17 @@ fn matrix(options: Options) -> Result<ExitCode, Box<dyn std::error::Error>> {
         limits,
         native_answers,
         max_spelling_bytes: limits.answers.max_input_bytes,
-    })?;
+    };
+    let report = if matches!(options.suite, SuiteArgument::Series) {
+        let corpus = zetesis_validation::examples::load(&options.root, limits.corpus)?;
+        let cells = zetesis_validation::performance::series::workloads(
+            &corpus,
+            matrix::WorkloadLimits::default(),
+        )?;
+        matrix::run_workloads(&request, &cells)?
+    } else {
+        matrix::run(&request)?
+    };
     report.publish()?;
     writeln!(
         io::stdout().lock(),

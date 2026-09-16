@@ -1,0 +1,86 @@
+//! The audit series measures a fixed, distinct, capture-bounded cell set.
+use std::collections::BTreeSet;
+use std::path::Path;
+use zetesis_validation::{
+    examples,
+    performance::{
+        matrix::{Workload, WorkloadLimits},
+        series,
+    },
+};
+
+fn corpus() -> examples::Corpus {
+    examples::load(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/kr-domains"),
+        examples::Limits::default(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn the_series_names_its_cells_in_a_fixed_order() {
+    let workloads = series::workloads(&corpus(), WorkloadLimits::default()).unwrap();
+    let entries: Vec<_> = workloads.iter().map(Workload::entry).collect();
+    assert_eq!(
+        entries,
+        [
+            "generated/independent-choice-12.lp",
+            "generated/independent-choice-16.lp",
+            "generated/independent-negation-8.lp",
+            "generated/independent-negation-10.lp",
+            "generated/independent-negation-aggregate-16.lp",
+            "generated/disjunction-12.lp",
+            "generated/ties-50.lp",
+            "generated/transitive-path-100.lp",
+            "generated/transitive-path-200.lp",
+            "generated/transitive-dense-40.lp",
+            "generated/chain-1000.lp",
+            "generated/chain-2000.lp",
+            "generated/chain-arithmetic-1000.lp",
+            "generated/stratified-16.lp",
+            "generated/producer-chain-700.lp",
+            "standalone/n-queens/variant-01.lp",
+            "standalone/n-queens/variant-01.lp",
+            "standalone/n-queens/variant-04.lp",
+            "standalone/send-money/send-money.lp",
+            "scenarios/task-allocation/variant-04/05-larger-mix.lp",
+        ]
+    );
+    assert_eq!(series::CELLS, workloads.len());
+}
+
+#[test]
+fn series_cells_have_distinct_identities_and_the_expected_provenance() {
+    let workloads = series::workloads(&corpus(), WorkloadLimits::default()).unwrap();
+    let identities: BTreeSet<_> = workloads.iter().map(Workload::identity).collect();
+    assert_eq!(identities.len(), workloads.len());
+    let generated = workloads.iter().filter(|w| w.is_generated()).count();
+    let amended = workloads.iter().filter(|w| w.is_amended()).count();
+    assert_eq!((generated, amended), (15, 3));
+    // Unchanged corpus entries and generated programs carry a contract; an
+    // amended queens board is established by its reference family alone.
+    assert!(
+        workloads
+            .iter()
+            .all(|w| w.contract().is_some() != w.is_amended())
+    );
+    let queens: Vec<_> = workloads
+        .iter()
+        .filter(|w| w.is_amended())
+        .map(|w| serde_json::to_value(w).unwrap()["sources"][0]["edits"][0]["after"].clone())
+        .collect();
+    assert_eq!(queens, ["10", "11", "11"]);
+}
+
+#[test]
+fn series_cells_respect_the_per_invocation_capture_ceiling() {
+    // Every cell's complete native JSON output was measured below 16 MiB at
+    // 896a5f73 (the largest, queens 01 at N = 11, near 10 MiB); the workload
+    // source ceiling is the smaller bound the library itself enforces here.
+    let limits = WorkloadLimits {
+        source_bytes: 65_536,
+        ..WorkloadLimits::default()
+    };
+    assert!(series::workloads(&corpus(), limits).is_ok());
+    assert_eq!(series::CAPTURE_BYTES, 16 * 1024 * 1024);
+}
