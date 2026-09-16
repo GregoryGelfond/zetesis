@@ -1,0 +1,625 @@
+//! Derived comparison of published matrix reports over the same cells.
+//!
+//! The view reads the retained records and computes exact integer medians of
+//! the timed native and reference intervals per cell and profile, ratios of
+//! those medians between reports in the order given, and the counters the
+//! native records carry. It never pools reports, never averages a cell that
+//! did not pass, and retains each report's native executable seal so that a
+//! published comparison names what it compared.
+
+use std::collections::BTreeMap;
+use std::fmt;
+
+use serde::Serialize;
+use serde_json::Value;
+
+/// A published report under the name it will carry in the comparison.
+#[derive(Clone, Copy, Debug)]
+pub struct Labelled<'a> {
+    /// Column name, for example `main`, `before` or `after`.
+    pub label: &'a str,
+    /// The published matrix report document (`{"passed", "accounted", "report"}`).
+    pub report: &'a Value,
+}
+
+/// A refused comparison.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ViewError {
+    /// No report was given.
+    Empty,
+    /// Two reports carry the same label.
+    Label {
+        /// The repeated label.
+        label: String,
+    },
+    /// The reports do not measure the same cells in the same order.
+    Cells {
+        /// The label whose cells differ from the first report's.
+        label: String,
+    },
+    /// The reports do not request the same profiles in the same order.
+    Profiles {
+        /// The label whose profiles differ from the first report's.
+        label: String,
+    },
+    /// A report lacks a field the view reads.
+    Malformed {
+        /// The label of the report.
+        label: String,
+        /// The missing or ill-typed field.
+        field: &'static str,
+    },
+}
+impl fmt::Display for ViewError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Empty => write!(f, "no reports to compare"),
+            Self::Label { label } => write!(f, "report label {label:?} is repeated"),
+            Self::Cells { label } => write!(f, "report {label:?} measures different cells"),
+            Self::Profiles { label } => {
+                write!(f, "report {label:?} requests different profiles")
+            }
+            Self::Malformed { label, field } => {
+                write!(f, "report {label:?} lacks a readable {field}")
+            }
+        }
+    }
+}
+impl std::error::Error for ViewError {}
+
+/// Exact summary of one population of timed intervals, in nanoseconds.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct Timing {
+    /// Number of timed intervals.
+    pub samples: usize,
+    /// Smallest interval.
+    pub minimum_ns: u64,
+    /// Exact median: the middle interval, or the mean of the two middle ones
+    /// rounded down.
+    pub median_ns: u64,
+    /// Largest interval.
+    pub maximum_ns: u64,
+}
+
+/// One native profile's record for one cell in one report.
+#[derive(Clone, Debug, Serialize)]
+#[serde(untagged)]
+pub enum Native {
+    /// Every timed position passed.
+    Passed(Passed),
+    /// At least one timed position did not pass: the decisions and their counts.
+    NotPassed {
+        /// Decision name to number of positions.
+        decisions: BTreeMap<String, usize>,
+    },
+}
+
+/// A passed cell's timing and the counters its retained records carry.
+#[derive(Clone, Debug, Serialize)]
+pub struct Passed {
+    /// Timed wall intervals.
+    #[serde(flatten)]
+    pub timing: Timing,
+    /// Median of the native driver interval, when the record carries it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub driver_median_ns: Option<u64>,
+    /// Models the solver published, from the first timed record.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub published_models: Option<u64>,
+    /// Candidates the solver examined, from the first timed record's text
+    /// statistics; absent when the route does not report them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub candidates_examined: Option<u64>,
+    /// Charged search work, from the first timed record's typed statistics.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub search_work: Option<u64>,
+    /// Median of each measured phase's interval.
+    pub phases: BTreeMap<String, PhaseTiming>,
+}
+
+/// Median interval of one named phase.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct PhaseTiming {
+    /// Exact median over the timed records that measured the phase.
+    pub median_ns: u64,
+}
+
+/// One profile's records across the reports, and the ratios between them.
+#[derive(Clone, Debug, Serialize)]
+pub struct ProfileRow {
+    /// The requested profile, as the reports serialize it.
+    pub profile: Value,
+    /// Records by report label.
+    pub reports: BTreeMap<String, Native>,
+    /// `later/earlier` median ratios between consecutive reports and between
+    /// the last and the first, present only where both cells passed.
+    pub ratios: BTreeMap<String, f64>,
+}
+
+/// One cell across the reports.
+#[derive(Clone, Debug, Serialize)]
+pub struct Cell {
+    /// The workload's entry path.
+    pub entry: String,
+    /// One row per requested native profile.
+    pub profiles: Vec<ProfileRow>,
+    /// The reference solver's timing by report label, where it passed.
+    pub reference: BTreeMap<String, Timing>,
+}
+
+/// What a report is: its native seal and its own verdicts.
+#[derive(Clone, Debug, Serialize)]
+pub struct Provenance {
+    /// SHA-256 of the native executable the report sealed.
+    pub native_sha256: String,
+    /// The report's own `passed` verdict.
+    pub passed: bool,
+    /// The report's own `accounted` verdict.
+    pub accounted: bool,
+}
+
+/// The derived comparison, serializable as a retained observation.
+#[derive(Clone, Debug, Serialize)]
+pub struct Comparison {
+    /// Report labels in the order given.
+    pub labels: Vec<String>,
+    /// Cells in schedule order.
+    pub cells: Vec<Cell>,
+    /// Per-report provenance.
+    pub provenance: BTreeMap<String, Provenance>,
+}
+
+/// Compare published reports over the same cells and profiles.
+///
+/// # Errors
+/// Refuses an empty list, repeated labels, reports whose cells or profiles
+/// differ, and reports lacking the fields the view reads.
+pub fn compare(reports: &[Labelled<'_>]) -> Result<Comparison, ViewError> {
+    let first = reports.first().ok_or(ViewError::Empty)?;
+    let entries = cases(first)?;
+    let requested = profiles(first)?;
+    let mut labels = Vec::with_capacity(reports.len());
+    let mut provenance = BTreeMap::new();
+    for labelled in reports {
+        if labels.contains(&labelled.label.to_owned()) {
+            return Err(ViewError::Label {
+                label: labelled.label.into(),
+            });
+        }
+        if cases(labelled)? != entries {
+            return Err(ViewError::Cells {
+                label: labelled.label.into(),
+            });
+        }
+        if profiles(labelled)? != requested {
+            return Err(ViewError::Profiles {
+                label: labelled.label.into(),
+            });
+        }
+        labels.push(labelled.label.to_owned());
+        provenance.insert(labelled.label.to_owned(), self::provenance(labelled)?);
+    }
+    let mut cells = Vec::with_capacity(entries.len());
+    for (index, entry) in entries.iter().enumerate() {
+        let mut rows = Vec::with_capacity(requested.len());
+        for (profile, request) in requested.iter().enumerate() {
+            let mut records = BTreeMap::new();
+            for labelled in reports {
+                records.insert(labelled.label.to_owned(), native(labelled, index, profile)?);
+            }
+            let ratios = ratios(&labels, &records);
+            rows.push(ProfileRow {
+                profile: request.clone(),
+                reports: records,
+                ratios,
+            });
+        }
+        let mut reference = BTreeMap::new();
+        for labelled in reports {
+            if let Some(timing) = self::reference(labelled, index)? {
+                reference.insert(labelled.label.to_owned(), timing);
+            }
+        }
+        cells.push(Cell {
+            entry: entry.clone(),
+            profiles: rows,
+            reference,
+        });
+    }
+    Ok(Comparison {
+        labels,
+        cells,
+        provenance,
+    })
+}
+
+impl Comparison {
+    /// Markdown tables: per profile, the median [minimum, maximum] in
+    /// milliseconds of every cell in every report with the ratios; then the
+    /// reference solver; then the counters of the last report.
+    #[must_use]
+    pub fn markdown(&self) -> String {
+        Markdown(self).to_string()
+    }
+}
+
+struct Markdown<'a>(&'a Comparison);
+
+impl fmt::Display for Markdown<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let comparison = self.0;
+        let last = comparison
+            .labels
+            .last()
+            .map(String::as_str)
+            .unwrap_or_default();
+        let profile_count = comparison
+            .cells
+            .first()
+            .map_or(0, |cell| cell.profiles.len());
+        for profile in 0..profile_count {
+            let first = &comparison.cells[0].profiles[profile];
+            writeln!(
+                f,
+                "Native wall time, ms: median [minimum, maximum] of the timed intervals; profile {}.\n",
+                Profile(&first.profile)
+            )?;
+            let ratio_names: Vec<&String> = first.ratios.keys().collect();
+            write!(f, "| Cell |")?;
+            for label in &comparison.labels {
+                write!(f, " {label} |")?;
+            }
+            for name in &ratio_names {
+                write!(f, " {name} |")?;
+            }
+            write!(f, "\n|---|")?;
+            for _ in 0..comparison.labels.len() + ratio_names.len() {
+                write!(f, "---:|")?;
+            }
+            writeln!(f)?;
+            for cell in &comparison.cells {
+                let row = &cell.profiles[profile];
+                write!(f, "| {} |", stem(&cell.entry))?;
+                for label in &comparison.labels {
+                    write!(f, " {} |", native_cell(row.reports.get(label)))?;
+                }
+                for name in &ratio_names {
+                    match row.ratios.get(*name) {
+                        Some(ratio) => write!(f, " {ratio:.3} |")?,
+                        None => write!(f, " n/a |")?,
+                    }
+                }
+                writeln!(f)?;
+            }
+            writeln!(f)?;
+        }
+        write!(f, "Reference wall time, ms, same notation.\n\n| Cell |")?;
+        for label in &comparison.labels {
+            write!(f, " {label} |")?;
+        }
+        write!(f, "\n|---|")?;
+        for _ in &comparison.labels {
+            write!(f, "---:|")?;
+        }
+        writeln!(f)?;
+        for cell in &comparison.cells {
+            write!(f, "| {} |", stem(&cell.entry))?;
+            for label in &comparison.labels {
+                match cell.reference.get(label) {
+                    Some(timing) => write!(f, " {} |", timing_cell(timing))?,
+                    None => write!(f, " not passed |")?,
+                }
+            }
+            writeln!(f)?;
+        }
+        writeln!(
+            f,
+            "\nCounters of report {last}: published models, candidates examined, charged search work, driver median ms.\n\n| Cell | profile | models | candidates | work | driver ms |\n|---|---|---:|---:|---:|---:|"
+        )?;
+        for cell in &comparison.cells {
+            for (index, row) in cell.profiles.iter().enumerate() {
+                write!(f, "| {} | {index} |", stem(&cell.entry))?;
+                match row.reports.get(last) {
+                    Some(Native::Passed(passed)) => writeln!(
+                        f,
+                        " {} | {} | {} | {} |",
+                        optional(passed.published_models),
+                        optional(passed.candidates_examined),
+                        optional(passed.search_work),
+                        passed
+                            .driver_median_ns
+                            .map_or_else(|| "n/a".to_owned(), milliseconds)
+                    )?,
+                    Some(Native::NotPassed { decisions }) => {
+                        writeln!(f, " {} | | | |", decisions_text(decisions))?;
+                    }
+                    None => writeln!(f, " n/a | | | |")?,
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// A requested profile in one line.
+struct Profile<'a>(&'a Value);
+
+impl fmt::Display for Profile<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let field = |name: &str| match self.0[name].as_str() {
+            Some(text) => text.to_owned(),
+            None => self.0[name].to_string(),
+        };
+        write!(
+            f,
+            "backend={}, grounder={}, oracle={}, workers={}, completion workers={}, batch={}",
+            field("backend"),
+            field("grounder"),
+            field("oracle"),
+            field("workers"),
+            field("completion_workers"),
+            field("batch_size")
+        )?;
+        if let Some(seconds) = self.0["time_limit_seconds"].as_u64() {
+            write!(f, ", time limit={seconds} s")?;
+        }
+        Ok(())
+    }
+}
+
+fn stem(entry: &str) -> &str {
+    entry
+        .rsplit('/')
+        .next()
+        .unwrap_or(entry)
+        .strip_suffix(".lp")
+        .unwrap_or(entry)
+}
+
+fn native_cell(record: Option<&Native>) -> String {
+    match record {
+        Some(Native::Passed(passed)) => timing_cell(&passed.timing),
+        Some(Native::NotPassed { decisions }) => decisions_text(decisions),
+        None => "n/a".to_owned(),
+    }
+}
+
+fn decisions_text(decisions: &BTreeMap<String, usize>) -> String {
+    decisions
+        .iter()
+        .map(|(decision, count)| format!("{decision} ×{count}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn timing_cell(timing: &Timing) -> String {
+    format!(
+        "{} [{}, {}]",
+        milliseconds(timing.median_ns),
+        milliseconds(timing.minimum_ns),
+        milliseconds(timing.maximum_ns)
+    )
+}
+
+fn optional(value: Option<u64>) -> String {
+    value.map_or_else(|| "n/a".to_owned(), |value| value.to_string())
+}
+
+// Nanoseconds to milliseconds with three decimals, rounded half up at the
+// microsecond, by integer arithmetic.
+fn milliseconds(nanoseconds: u64) -> String {
+    let microseconds = (nanoseconds + 500) / 1_000;
+    format!("{}.{:03}", microseconds / 1_000, microseconds % 1_000)
+}
+
+fn ratios(labels: &[String], records: &BTreeMap<String, Native>) -> BTreeMap<String, f64> {
+    let median = |label: &String| match records.get(label) {
+        Some(Native::Passed(passed)) => Some(passed.timing.median_ns),
+        _ => None,
+    };
+    let mut ratios = BTreeMap::new();
+    let mut pairs: Vec<(&String, &String)> = labels.windows(2).map(|w| (&w[0], &w[1])).collect();
+    if labels.len() > 2 {
+        pairs.push((&labels[0], &labels[labels.len() - 1]));
+    }
+    for (earlier, later) in pairs {
+        if let (Some(before), Some(after)) = (median(earlier), median(later))
+            && before > 0
+        {
+            // Precision loss beyond 2^53 nanoseconds (over a hundred days) is
+            // irrelevant to a solver interval.
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "a ratio of intervals is reported to three decimals"
+            )]
+            let ratio = after as f64 / before as f64;
+            ratios.insert(format!("{later}/{earlier}"), ratio);
+        }
+    }
+    ratios
+}
+
+fn cases(labelled: &Labelled<'_>) -> Result<Vec<String>, ViewError> {
+    labelled.report["report"]["cases"]
+        .as_array()
+        .and_then(|cases| {
+            cases
+                .iter()
+                .map(|case| case.as_str().map(str::to_owned))
+                .collect::<Option<Vec<_>>>()
+        })
+        .ok_or(ViewError::Malformed {
+            label: labelled.label.into(),
+            field: "report.cases",
+        })
+}
+
+fn profiles(labelled: &Labelled<'_>) -> Result<Vec<Value>, ViewError> {
+    labelled.report["report"]["plan"]["profiles"]
+        .as_array()
+        .cloned()
+        .ok_or(ViewError::Malformed {
+            label: labelled.label.into(),
+            field: "report.plan.profiles",
+        })
+}
+
+fn provenance(labelled: &Labelled<'_>) -> Result<Provenance, ViewError> {
+    let malformed = |field| ViewError::Malformed {
+        label: labelled.label.into(),
+        field,
+    };
+    let native_sha256 = labelled.report["report"]["before"]
+        .as_array()
+        .and_then(|seals| seals.first())
+        .and_then(|seal| seal["sha256"].as_str())
+        .ok_or(malformed("report.before[0].sha256"))?
+        .to_owned();
+    Ok(Provenance {
+        native_sha256,
+        passed: labelled.report["passed"]
+            .as_bool()
+            .ok_or(malformed("passed"))?,
+        accounted: labelled.report["accounted"]
+            .as_bool()
+            .ok_or(malformed("accounted"))?,
+    })
+}
+
+fn samples<'a>(labelled: &Labelled<'a>) -> Result<&'a [Value], ViewError> {
+    labelled.report["report"]["samples"]
+        .as_array()
+        .map(Vec::as_slice)
+        .ok_or(ViewError::Malformed {
+            label: labelled.label.into(),
+            field: "report.samples",
+        })
+}
+
+fn timed<'a>(
+    labelled: &Labelled<'a>,
+    case: usize,
+    producer: impl Fn(&Value) -> bool,
+) -> Result<Vec<&'a Value>, ViewError> {
+    Ok(samples(labelled)?
+        .iter()
+        .filter(|sample| {
+            sample["slot"]["case"].as_u64() == Some(case as u64)
+                && sample["slot"]["phase"] == "timed"
+                && producer(&sample["slot"]["producer"])
+        })
+        .collect())
+}
+
+fn timing(labelled: &Labelled<'_>, samples: &[&Value]) -> Result<Timing, ViewError> {
+    let mut intervals = samples
+        .iter()
+        .map(|sample| {
+            sample["capture"]["elapsed_ns"]
+                .as_u64()
+                .ok_or(ViewError::Malformed {
+                    label: labelled.label.into(),
+                    field: "capture.elapsed_ns",
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    intervals.sort_unstable();
+    let count = intervals.len();
+    let median = if count.is_multiple_of(2) {
+        u64::midpoint(intervals[count / 2 - 1], intervals[count / 2])
+    } else {
+        intervals[count / 2]
+    };
+    Ok(Timing {
+        samples: count,
+        minimum_ns: intervals[0],
+        median_ns: median,
+        maximum_ns: intervals[count - 1],
+    })
+}
+
+fn native(labelled: &Labelled<'_>, case: usize, profile: usize) -> Result<Native, ViewError> {
+    let records = timed(labelled, case, |producer| {
+        producer["solver"] == "native" && producer["profile"].as_u64() == Some(profile as u64)
+    })?;
+    let mut decisions = BTreeMap::new();
+    for record in &records {
+        let decision = record["decision"].as_str().unwrap_or("unknown");
+        if decision != "pass" {
+            *decisions.entry(decision.to_owned()).or_insert(0) += 1;
+        }
+    }
+    if records.is_empty() {
+        return Err(ViewError::Malformed {
+            label: labelled.label.into(),
+            field: "timed native samples for the cell",
+        });
+    }
+    if !decisions.is_empty() {
+        return Ok(Native::NotPassed { decisions });
+    }
+    let timing = timing(labelled, &records)?;
+    let first = records[0];
+    let stdout: Option<Value> = first["capture"]["stdout"]["data"]
+        .as_str()
+        .and_then(|text| serde_json::from_str(text).ok());
+    let stderr = first["capture"]["stderr"]["data"].as_str().unwrap_or("");
+    let mut drivers: Vec<u64> = records
+        .iter()
+        .filter_map(|record| record["observation"]["timing"]["driver_elapsed_ns"].as_u64())
+        .collect();
+    drivers.sort_unstable();
+    let driver_median_ns = (!drivers.is_empty()).then(|| drivers[drivers.len() / 2]);
+    let mut phases: BTreeMap<String, Vec<u64>> = BTreeMap::new();
+    for record in &records {
+        if let Some(measured) = record["observation"]["timing"]["phases"].as_object() {
+            for (name, value) in measured {
+                if let Some(elapsed) = value["elapsed_ns"].as_u64() {
+                    phases.entry(name.clone()).or_default().push(elapsed);
+                }
+            }
+        }
+    }
+    let phases = phases
+        .into_iter()
+        .map(|(name, mut values)| {
+            values.sort_unstable();
+            let median_ns = values[values.len() / 2];
+            (name, PhaseTiming { median_ns })
+        })
+        .collect();
+    Ok(Native::Passed(Passed {
+        timing,
+        driver_median_ns,
+        published_models: stdout
+            .as_ref()
+            .and_then(|document| document["outcome"]["published_models"].as_u64()),
+        candidates_examined: candidates_examined(stderr).or_else(|| {
+            stdout
+                .as_ref()
+                .and_then(|document| document["statistics"]["search"]["candidates"].as_u64())
+        }),
+        search_work: stdout
+            .as_ref()
+            .and_then(|document| document["statistics"]["search"]["work"].as_u64()),
+        phases,
+    }))
+}
+
+// The human statistics line `results: displayed models=…; candidates examined=…`.
+fn candidates_examined(stderr: &str) -> Option<u64> {
+    stderr
+        .lines()
+        .filter_map(|line| line.trim_start().strip_prefix("results: "))
+        .flat_map(|line| line.split("; "))
+        .find_map(|field| field.strip_prefix("candidates examined="))
+        .and_then(|value| value.trim().parse().ok())
+}
+
+fn reference(labelled: &Labelled<'_>, case: usize) -> Result<Option<Timing>, ViewError> {
+    let records = timed(labelled, case, |producer| producer["solver"] == "reference")?;
+    if records.is_empty() || records.iter().any(|record| record["decision"] != "pass") {
+        return Ok(None);
+    }
+    timing(labelled, &records).map(Some)
+}

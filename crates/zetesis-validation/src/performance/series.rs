@@ -8,6 +8,13 @@
 //! change is meant to move (a refusal, a timeout) are kept as evidence rather
 //! than dropped: their typed decisions are the observation.
 
+mod view;
+
+pub use view::{
+    Cell, Comparison, Labelled, Native, Passed, PhaseTiming, ProfileRow, Provenance, Timing,
+    ViewError, compare,
+};
+
 use super::Error;
 use super::families::Family;
 use super::matrix::{ConstantAmendment, Workload, WorkloadLimits};
