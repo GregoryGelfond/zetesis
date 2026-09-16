@@ -71,9 +71,7 @@ impl PatternAtom {
         if self.atom.predicate() != atom.predicate() {
             return Ok(None);
         }
-        for _ in 0..self.node_count() {
-            context.work()?;
-        }
+        context.charge(self.node_count() as u128)?;
         let slots = self.slots().count();
         let mut delta = Vec::new();
         reserve(&mut delta, slots, context.budget, context.location)?;
@@ -162,12 +160,13 @@ impl MatchContext<'_> {
     fn work(&mut self) -> Result<(), FormulaFailure> {
         self.counters.work(self.limits, self.location)
     }
+    /// Charge `amount` units at once, so a refusal states that requirement.
+    fn charge(&mut self, amount: u128) -> Result<(), FormulaFailure> {
+        self.counters
+            .charge_work(amount, self.limits, self.location)
+    }
     fn value_work(&mut self, value: &Value) -> Result<(), FormulaFailure> {
-        self.work()?;
-        for _ in 0..crate::formula_ir::value_bytes(value) {
-            self.work()?;
-        }
-        Ok(())
+        self.charge(1 + crate::formula_ir::value_bytes(value))
     }
 }
 
@@ -227,11 +226,8 @@ fn subtree_end(
     let mut remaining = 1;
     let mut end = start;
     while remaining != 0 {
-        context.work()?;
         let node = &nodes[end];
-        for _ in 0..text_bytes(node) {
-            context.work()?;
-        }
+        context.charge(1 + text_bytes(node) as u128)?;
         remaining -= 1;
         remaining += match node {
             ValueNode::Function { arity, .. } | ValueNode::Tuple { arity } => *arity,
@@ -374,6 +370,47 @@ mod tests {
             Atom::new(predicate, vec![value]).unwrap(),
             vec![None, None],
         )
+    }
+    #[test]
+    fn a_refused_charge_states_the_whole_requirement() {
+        // Matching charges one unit on entry and then the pattern's node count
+        // at once. A ceiling of one refuses the second charge, and the refusal
+        // names what that charge required, not the ceiling plus one.
+        let (pattern, atom, incoming) = fixture();
+        let relation = zetesis_core::relation::Relation::from_atoms(
+            atom.predicate(),
+            std::slice::from_ref(&atom),
+            zetesis_core::relation::Limits::default(),
+        )
+        .unwrap();
+        let mut budget = Budget::new(ExpansionLimits::default(), 100);
+        let mut counters = Counters::default();
+        let error = pattern
+            .matches(
+                relation.row(0).unwrap(),
+                &incoming,
+                &mut MatchContext {
+                    limits: &FormulaLimits {
+                        max_work: 1,
+                        ..FormulaLimits::default()
+                    },
+                    budget: &mut budget,
+                    counters: &mut counters,
+                    location: location(),
+                },
+            )
+            .unwrap_err();
+        let required = 1 + pattern.node_count() as u128;
+        assert!(required > 2);
+        assert!(matches!(
+            error,
+            FormulaFailure::Limit {
+                resource: FormulaResource::Work,
+                observed,
+                limit: 1,
+                ..
+            } if observed == required
+        ));
     }
     #[test]
     fn work_refusals_discard_the_entire_delta() {

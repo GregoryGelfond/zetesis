@@ -1044,12 +1044,11 @@ impl<'a, 'source> Join<'a, 'source> {
         } else {
             for (column, term) in pattern.atom().terms().iter().enumerate() {
                 let value = atom.value(column).expect("checked pattern arity");
-                counters.work(limits, location)?;
-                if let Value::Structured(value) = value {
-                    for _ in 0..value.payload_bytes() {
-                        counters.work(limits, location)?;
-                    }
-                }
+                let payload = match value {
+                    Value::Structured(value) => value.payload_bytes(),
+                    _ => 0,
+                };
+                counters.charge_work(1 + payload as u128, limits, location)?;
                 match term {
                     zetesis_core::Term::Constant(constant) => matches &= constant == value,
                     zetesis_core::Term::Variable(variable) => {
