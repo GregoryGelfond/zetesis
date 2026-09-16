@@ -277,7 +277,9 @@ pub struct QueryStatistics {
     /// Assigned slots retained from an earlier submission. Zero when no slots
     /// were assigned by the latest independent submission acquiring admission.
     pub reused_workspaces: usize,
-    /// Actual named cache envelope, excluding returned results and source payload.
+    /// Actual named cache envelope: retained workspaces and spare slot
+    /// capacity, excluding the cache's own header, returned results and
+    /// source payload.
     pub retained_bytes: u128,
     /// Collective active/idle/preparation envelope of the latest independent
     /// submission acquiring admission. Capacity and busy refusals cannot update
