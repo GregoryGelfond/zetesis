@@ -89,6 +89,28 @@ counters the native records carry, the decisions of cells that did not pass,
 and each report's native, reference and manifest seals. It is a derived
 observation view, not an archive of the report.
 
+## Item 10: counters and receipts
+
+[series-6a43c71b-cpu-auto.json](series-6a43c71b-cpu-auto.json) and its
+[table view](series-6a43c71b-cpu-auto-tables.md) compare two campaigns run
+in one session on 16 September 2026 from 19:57:26 to 20:04:35 UTC on the
+same machine: `main`, the 896a5f73 executable above rerun as the control, and
+`after`, the executable built from
+`6a43c71be799b6c5d5dae054cdbaf625be6afeb9`
+(SHA-256 `55866ff58f55517ef6303cb3a25e56ebbea4fb7c50d10b2d66a5f12ca448559d`),
+the head of the counters-and-receipts change. Raw reports of 481 MB each are
+not published; their SHA-256 are
+`47426d207c6001d42e2b4fdf3befee18dd501deecea92f5cdd8fb2a439b52f79` (main) and
+`0d568421f1a697c4690630e005885657d14482c776c87fee1baeb3997e13b8c3` (after).
+The change sums counters the oracle already computed, so no speedup was
+expected and none is claimed: the after/main ratios of the nineteen passing
+cells lie between 0.93 and 1.07, inside the spread of the three timed
+rounds. What the observation establishes is the receipt itself: the `work`
+column, which the baseline view left empty for every closure-route cell, now
+carries the charged closure work summed over completed checks, from 88,672
+units for the producer chain to 470,272,422 for the independent-negation
+cell at size 10.
+
 ## What the views preserve
 
 These are derived observation views, not byte-identical archives of the original
