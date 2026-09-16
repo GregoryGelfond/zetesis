@@ -169,6 +169,15 @@ impl Catalogs {
         Ok(())
     }
 
+    /// Predicates whose relation gained rows since the cutoff advanced, in
+    /// canonical predicate order.
+    pub(super) fn predicates_with_new(&self) -> impl Iterator<Item = &Predicate> {
+        self.relations
+            .iter()
+            .filter(|(_, relation)| relation.partition.has_new(relation.catalog.atoms().len()))
+            .map(|(predicate, _)| predicate)
+    }
+
     pub(super) fn has_new(&self, predicate: &Predicate, work: &mut Work<'_>) -> Result<bool, Stop> {
         work.tick()?;
         Ok(self

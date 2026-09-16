@@ -1,8 +1,9 @@
 //! Immutable query dimensions and reference-free candidate workspaces.
 
+use std::collections::BTreeMap;
 use std::{mem::size_of, ops::Range};
 
-use zetesis_core::{Program, SeedView, Value};
+use zetesis_core::{Predicate, Program, SeedView, Value};
 
 use super::{
     Check, Limits, Work,
@@ -49,6 +50,7 @@ pub struct PreparationStatistics {
 pub struct PreparedQueries {
     program: Program,
     dimensions: Dimensions,
+    rules: Rules,
     statistics: PreparationStatistics,
 }
 
@@ -57,6 +59,35 @@ pub(super) struct Dimensions {
     variables: usize,
     depth: usize,
     width: usize,
+    /// Templates with a positive body: the most an incremental round visits.
+    rules: usize,
+}
+
+/// Which templates a round must revisit when a predicate gains rows: those
+/// whose positive body names it. A template whose body names no predicate
+/// with new rows cannot bind anew, so a round visits only this selection.
+#[derive(Default)]
+pub(super) struct Rules {
+    by_predicate: BTreeMap<Predicate, Vec<usize>>,
+}
+
+impl Rules {
+    /// Template indices whose positive body names `predicate`, ascending and
+    /// without repetition.
+    pub(super) fn naming(&self, predicate: &Predicate) -> &[usize] {
+        self.by_predicate.get(predicate).map_or(&[], Vec::as_slice)
+    }
+
+    fn bytes(&self) -> usize {
+        self.by_predicate
+            .iter()
+            .map(|(predicate, indices)| {
+                size_of::<Predicate>()
+                    + predicate.name().len()
+                    + indices.capacity() * size_of::<usize>()
+            })
+            .sum()
+    }
 }
 
 impl PreparedQueries {
@@ -81,21 +112,34 @@ impl PreparedQueries {
         storage::record(work, size_of::<Self>() as u128)?;
         let before = work.statistics.work;
         let mut dimensions = Dimensions::default();
-        for template in program.templates() {
+        let mut rules = Rules::default();
+        for (index, template) in program.templates().iter().enumerate() {
             work.tick()?;
             dimensions.variables = dimensions.variables.max(template.variable_count());
             dimensions.depth = dimensions.depth.max(template.positive().len());
+            dimensions.rules += usize::from(!template.positive().is_empty());
             for pattern in template.positive() {
                 work.tick()?;
                 dimensions.width = dimensions.width.max(pattern.terms().len());
+                let naming = rules
+                    .by_predicate
+                    .entry(pattern.predicate().clone())
+                    .or_default();
+                if naming.last() != Some(&index) {
+                    naming.push(index);
+                }
             }
         }
+        let retained_bytes = size_of::<Self>() + rules.bytes();
+        storage::admit(work, retained_bytes as u128)?;
+        storage::record(work, retained_bytes as u128)?;
         Ok(Self {
             program: program.clone(),
             dimensions,
+            rules,
             statistics: PreparationStatistics {
                 work: work.statistics.work - before,
-                retained_bytes: size_of::<Self>(),
+                retained_bytes,
             },
         })
     }
@@ -234,6 +278,7 @@ impl PreparedQueries {
             super::RoundWorkspace {
                 buffers: &mut workspace.buffers,
                 dimensions: &self.dimensions,
+                rules: &self.rules,
                 overhead,
             },
             schedule,
@@ -293,6 +338,8 @@ impl ClosureWorkspace {
 pub(super) struct Buffers {
     pub(super) cursors: Vec<Option<Range<usize>>>,
     pub(super) undo: Vec<Vec<usize>>,
+    /// The templates one incremental round visits, in template order.
+    pub(super) rules: Vec<usize>,
 }
 
 impl Buffers {
@@ -300,12 +347,14 @@ impl Buffers {
         Self {
             cursors: vec![None; depth],
             undo: vec![Vec::new(); depth],
+            rules: Vec::new(),
         }
     }
 
     fn bytes(&self) -> Result<u128, Stop> {
         let headers = self.cursors.capacity() as u128 * size_of::<Option<Range<usize>>>() as u128
-            + self.undo.capacity() as u128 * size_of::<Vec<usize>>() as u128;
+            + self.undo.capacity() as u128 * size_of::<Vec<usize>>() as u128
+            + self.rules.capacity() as u128 * size_of::<usize>() as u128;
         self.undo.iter().try_fold(headers, |bytes, row| {
             bytes
                 .checked_add(row.capacity() as u128 * size_of::<usize>() as u128)
@@ -325,6 +374,7 @@ impl Buffers {
         storage::record(work, live)?;
         reserve(&mut self.cursors, dimensions.depth, &mut live, work)?;
         reserve(&mut self.undo, dimensions.depth, &mut live, work)?;
+        reserve(&mut self.rules, dimensions.rules, &mut live, work)?;
         work.charge(dimensions.depth.saturating_sub(self.cursors.len()))?;
         self.cursors.resize_with(dimensions.depth, || None);
         work.charge(dimensions.depth.saturating_sub(self.undo.len()))?;

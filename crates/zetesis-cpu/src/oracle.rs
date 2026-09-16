@@ -351,6 +351,7 @@ impl Selection {
 struct RoundWorkspace<'a> {
     buffers: &'a mut prepared::Buffers,
     dimensions: &'a prepared::Dimensions,
+    rules: &'a prepared::Rules,
     overhead: u128,
 }
 
@@ -365,6 +366,7 @@ fn least_closure_with(
     let RoundWorkspace {
         buffers,
         dimensions,
+        rules,
         overhead,
     } = workspace;
     let mut constraint_violated = false;
@@ -392,7 +394,7 @@ fn least_closure_with(
                 program,
                 seed,
                 closure,
-                incremental,
+                incremental.then_some(rules),
                 Frame {
                     assignment: &mut assignment,
                     buffers: &mut *buffers,
@@ -437,11 +439,14 @@ struct RoundConsequences {
 
 // Complete the disjoint source family before publishing either its history or
 // its consequences. A constraint latch never skips another source occurrence.
+/// Visit every template in the bootstrap round, or, given the rule index of
+/// an incremental round, only the templates whose body names a predicate
+/// with new rows: no other template can bind anew.
 fn visit_round<'source>(
     program: &Program,
     seed: SeedView<'_>,
     closure: &'source Catalogs,
-    incremental: bool,
+    incremental: Option<&prepared::Rules>,
     frame: Frame<'_, 'source>,
     work: &mut Work<'_>,
 ) -> Result<RoundConsequences, Stop> {
@@ -455,7 +460,28 @@ fn visit_round<'source>(
         bytes: 0,
         constraint_violated: false,
     };
-    for template in program.templates() {
+    let visited = match incremental {
+        None => program.templates().len(),
+        Some(rules) => {
+            buffers.rules.clear();
+            for predicate in closure.predicates_with_new() {
+                work.tick()?;
+                for &index in rules.naming(predicate) {
+                    work.tick()?;
+                    buffers.rules.push(index);
+                }
+            }
+            work.charge(buffers.rules.len())?;
+            buffers.rules.sort_unstable();
+            buffers.rules.dedup();
+            buffers.rules.len()
+        }
+    };
+    for position in 0..visited {
+        let template = match incremental {
+            None => &program.templates()[position],
+            Some(_) => &program.templates()[buffers.rules[position]],
+        };
         work.tick()?;
         let mut emit = |assignment: &[Option<&Value>], work: &mut Work<'_>| -> Result<(), Stop> {
             work.tick()?;
@@ -481,7 +507,7 @@ fn visit_round<'source>(
             }
             Ok(())
         };
-        if incremental {
+        if incremental.is_some() {
             // Repeated predicates retain distinct occurrences. Earlier Old,
             // this New and later Current rows select the unique first new row.
             for (pivot, pattern) in template.positive().iter().enumerate() {

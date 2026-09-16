@@ -445,8 +445,10 @@ row: earlier occurrences select Old rows, that occurrence selects New rows, and
 later occurrences select Current rows. These disjoint choices preserve repeated
 predicates and source occurrences. The new occurrence is joined first, so its
 few rows bind the variables and every other occurrence is entered through a
-bound-prefix window; a round therefore costs the new rows times their joins,
-never a scan of an unchanged relation. Newness uses stable per-predicate insertion
+bound-prefix window, and only templates whose body names a predicate with new
+rows are visited at all, from an index prepared once per program; a round
+therefore costs the new rows times their joins, never a scan of an unchanged
+relation or a visit to a rule that cannot bind. Newness uses stable per-predicate insertion
 IDs, never canonical ranks, which can move when a smaller tuple is appended.
 For mixed extents, the Old and New slices are the catalog's two runs: the view
 it merged from and the run it merged in, each in canonical order and each
