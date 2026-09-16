@@ -6,8 +6,8 @@ use zetesis_themelios::observation::ViewError;
 
 use crate::failure::Progress;
 use crate::{
-    Completion, Interruption, Options, PhaseTimings, PublicationFailure, PublicationOutcome,
-    RunError, RunFailure, SolvePhase,
+    Completion, Grounder, Interruption, Options, PhaseTimings, PublicationFailure,
+    PublicationOutcome, RunError, RunFailure, SolvePhase,
 };
 
 pub(crate) struct Document<'a, W> {
@@ -330,6 +330,7 @@ fn error_kind(error: &RunError) -> &'static str {
         #[cfg(feature = "gpu")]
         RunError::LazyGpu(_) => "lazy_gpu",
         RunError::LazyStatisticsOverflow => "lazy_statistics_overflow",
+        RunError::ClosureStatisticsOverflow => "closure_statistics_overflow",
     }
 }
 
@@ -530,8 +531,12 @@ fn statistics(out: &mut Buffer, view: &SummaryView<'_>) -> Result<(), RunError> 
         lazy_statistics(out, view.lazy_execution)?;
         out.text(",\"shared_execution\":")?;
         shared_statistics(out, view.shared_execution)?;
+        out.text(",\"closure_execution\":")?;
+        closure_statistics(out, view.closure_execution)?;
         out.text(",\"query_execution\":")?;
         query_statistics(out, view.query_execution)?;
+        out.text(",\"expansion\":")?;
+        expansion_usage(out, view.expansion)?;
         out.text(",\"phase_timings\":")?;
         phases(out, view.timings)?;
         out.text(",\"stage_timings\":")?;
@@ -651,7 +656,9 @@ struct SummaryView<'a> {
     execution: Option<&'a crate::FormulaExecutionStatistics>,
     lazy_execution: Option<&'a crate::LazyExecutionStatistics>,
     shared_execution: Option<&'a crate::SharedExecutionStatistics>,
+    closure_execution: Option<&'a crate::ClosureExecutionStatistics>,
     query_execution: Option<&'a crate::QueryExecutionObservation>,
+    expansion: Option<zetesis_themelios::ExpansionUsage>,
     timings: Option<&'a PhaseTimings>,
 }
 impl<'a> SummaryView<'a> {
@@ -673,7 +680,9 @@ impl<'a> SummaryView<'a> {
                     execution: semantic.and_then(crate::SemanticOutcome::formula_execution),
                     lazy_execution: semantic.and_then(crate::SemanticOutcome::lazy_execution),
                     shared_execution: semantic.and_then(crate::SemanticOutcome::shared_execution),
+                    closure_execution: semantic.and_then(crate::SemanticOutcome::closure_execution),
                     query_execution: semantic.and_then(crate::SemanticOutcome::query_execution),
+                    expansion: progress.expansion,
                     timings: progress.phase_timings.as_ref(),
                 }
             }
@@ -697,7 +706,9 @@ impl<'a> SummaryView<'a> {
                     execution: partial.and_then(|p| p.formula_execution.as_ref()),
                     lazy_execution: partial.and_then(|p| p.lazy_execution.as_ref()),
                     shared_execution: partial.and_then(|p| p.shared_execution.as_ref()),
+                    closure_execution: partial.and_then(|p| p.closure_execution.as_ref()),
                     query_execution: partial.and_then(|p| p.query_execution.as_ref()),
+                    expansion: partial.and_then(|p| p.expansion),
                     timings: failure.phase_timings.as_deref(),
                 }
             }
@@ -812,6 +823,54 @@ fn execution_statistics(
     out.text(",\"complete\":")?;
     out.text(if stats.overflowed { "false" } else { "true" })?;
     out.text("}}")
+}
+
+fn expansion_usage(
+    out: &mut Buffer,
+    usage: Option<zetesis_themelios::ExpansionUsage>,
+) -> Result<(), RunError> {
+    let Some(usage) = usage else {
+        return out.text("null");
+    };
+    out.text("{\"term_work\":")?;
+    out.text(&usage.term_work.to_string())?;
+    out.number_field("templates", usage.templates)?;
+    out.number_field("values", usage.values)?;
+    out.number_field("scalar_bytes", usage.scalar_bytes)?;
+    out.number_field("origin_locations", usage.origin_locations)?;
+    out.text("}")
+}
+
+fn closure_statistics(
+    out: &mut Buffer,
+    statistics: Option<&crate::ClosureExecutionStatistics>,
+) -> Result<(), RunError> {
+    let Some(stats) = statistics else {
+        return out.text("null");
+    };
+    out.text("{\"backend\":\"cpu\",\"grounder\":")?;
+    out.string(match stats.grounder {
+        Grounder::Eager => "eager",
+        Grounder::Lazy | Grounder::Auto => "lazy",
+    })?;
+    out.number_field("completed_checks", stats.completed_checks)?;
+    out.number_field("stopped_checks", stats.stopped_checks)?;
+    out.number_field("rounds", stats.rounds)?;
+    out.number_field("work", stats.work)?;
+    out.number_field("derived_atoms", stats.derived_atoms)?;
+    out.text(",\"joins\":")?;
+    match stats.joins {
+        None => out.text("null")?,
+        Some(joins) => {
+            out.text("{\"catalog_work\":")?;
+            out.text(&joins.catalog_work.to_string())?;
+            out.number_field("bindings", joins.bindings)?;
+            out.number_field("tuple_probes", joins.tuple_probes)?;
+            out.number_field("peak_closure_bytes", joins.peak_closure_bytes)?;
+            out.text("}")?;
+        }
+    }
+    out.text("}")
 }
 
 fn query_statistics(

@@ -215,6 +215,11 @@ impl<'a> ClosureSession<'a> {
                 .ok()
                 .and_then(Engine::query_observation)
                 .cloned(),
+            closure_execution: self
+                .engine
+                .as_ref()
+                .ok()
+                .and_then(Engine::closure_statistics),
             shared_execution: self
                 .engine
                 .as_ref()

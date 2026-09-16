@@ -81,11 +81,13 @@ pub(crate) fn write_progress(
             optimum_proved: semantic.optimum_proved(),
             interruption: semantic.interruption(),
             discovered_gate_atoms: semantic.discovered_gate_atoms(),
+            expansion: progress.expansion,
             candidate_statistics: semantic.candidate_statistics(),
             countermodel_statistics: semantic.countermodel_statistics(),
             formula_execution: semantic.formula_execution(),
             lazy_execution: semantic.lazy_execution(),
             shared_execution: semantic.shared_execution(),
+            closure_execution: semantic.closure_execution(),
             query_execution: semantic.query_execution(),
             optimization: semantic.incumbent(),
         },
@@ -244,11 +246,13 @@ struct Details<'a> {
     optimum_proved: bool,
     interruption: Option<crate::Interruption>,
     discovered_gate_atoms: usize,
+    expansion: Option<zetesis_themelios::ExpansionUsage>,
     candidate_statistics: Option<zetesis_cpu::CandidateStatistics>,
     countermodel_statistics: Option<&'a zetesis_sat::Statistics>,
     formula_execution: Option<&'a crate::FormulaExecutionStatistics>,
     lazy_execution: Option<&'a crate::LazyExecutionStatistics>,
     shared_execution: Option<&'a crate::SharedExecutionStatistics>,
+    closure_execution: Option<&'a crate::ClosureExecutionStatistics>,
     query_execution: Option<&'a crate::QueryExecutionObservation>,
     optimization: Option<&'a crate::Optimization>,
 }
@@ -261,11 +265,13 @@ impl<'a> From<&'a Report> for Details<'a> {
             optimum_proved: report.optimum_proved,
             interruption: report.interruption,
             discovered_gate_atoms: report.discovered_gate_atoms,
+            expansion: report.expansion,
             candidate_statistics: report.candidate_statistics,
             countermodel_statistics: report.countermodel_statistics.as_ref(),
             formula_execution: report.formula_execution.as_ref(),
             lazy_execution: report.lazy_execution.as_ref(),
             shared_execution: report.shared_execution.as_ref(),
+            closure_execution: report.closure_execution.as_ref(),
             query_execution: report.query_execution.as_ref(),
             optimization: report.optimization.as_ref(),
         }
@@ -280,11 +286,13 @@ impl<'a> From<&'a crate::PartialReport> for Details<'a> {
             optimum_proved: report.optimum_proved,
             interruption: report.interruption,
             discovered_gate_atoms: report.discovered_gate_atoms,
+            expansion: report.expansion,
             candidate_statistics: report.candidate_statistics,
             countermodel_statistics: report.countermodel_statistics.as_ref(),
             formula_execution: report.formula_execution.as_ref(),
             lazy_execution: report.lazy_execution.as_ref(),
             shared_execution: report.shared_execution.as_ref(),
+            closure_execution: report.closure_execution.as_ref(),
             query_execution: report.query_execution.as_ref(),
             optimization: report.optimization.as_ref(),
         }
@@ -292,6 +300,23 @@ impl<'a> From<&'a crate::PartialReport> for Details<'a> {
 }
 
 fn details(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io::Result<()> {
+    if let Some(usage) = report.expansion {
+        let limits = crate::admission::expansion_limits(options);
+        writeln!(
+            sink,
+            "  expansion used: term work={} of {}; templates={} of {}; values={} of {}; scalar bytes={} of {}; origins={} of {}",
+            usage.term_work,
+            limits.max_term_work,
+            usage.templates,
+            limits.max_templates,
+            usage.values,
+            limits.max_values,
+            usage.scalar_bytes,
+            limits.max_scalar_bytes,
+            usage.origin_locations,
+            limits.max_origin_locations
+        )?;
+    }
     if let Some(stats) = report.candidate_statistics {
         writeln!(
             sink,
@@ -776,6 +801,13 @@ fn closure(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
             "  discovered gate tuples: {}; source and world work reported separately above",
             report.discovered_gate_atoms
         )
+    } else if let Some(closure) = report.closure_execution {
+        writeln!(
+            sink,
+            "  discovered gate tuples: {}",
+            report.discovered_gate_atoms
+        )?;
+        independent_closure(sink, closure)
     } else {
         writeln!(
             sink,
@@ -783,6 +815,33 @@ fn closure(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io
             report.discovered_gate_atoms
         )
     }
+}
+
+fn independent_closure(
+    sink: &mut impl Write,
+    closure: &crate::ClosureExecutionStatistics,
+) -> io::Result<()> {
+    let (rounds, units) = match closure.grounder {
+        Grounder::Eager => ("rule passes", "eager scan units"),
+        Grounder::Lazy | Grounder::Auto => ("source rounds", "join/copy units"),
+    };
+    writeln!(
+        sink,
+        "  independent closure: checks completed={}; stopped={}; {rounds}={}; work={} ({units}); derived atoms={}; stopped checks return no counters",
+        closure.completed_checks,
+        closure.stopped_checks,
+        closure.rounds,
+        closure.work,
+        closure.derived_atoms
+    )?;
+    if let Some(joins) = closure.joins {
+        writeln!(
+            sink,
+            "  closure joins: catalog work={} (within work); bindings={}; tuple probes={}; peak named closure bytes={} (admitted or reserved capacity, not RSS)",
+            joins.catalog_work, joins.bindings, joins.tuple_probes, joins.peak_closure_bytes
+        )?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

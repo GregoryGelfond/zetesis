@@ -78,6 +78,7 @@ mod solve_config;
 mod semantic_outcome;
 mod lazy_execution;
 mod shared_execution;
+mod closure_execution;
 mod query_observation;
 pub use query_observation::QueryExecutionObservation;
 mod closure_session;
@@ -92,6 +93,7 @@ mod phase_timing;
 mod stage_timing;
 mod grounding_timing;
 
+pub use closure_execution::{ClosureExecutionStatistics, ClosureJoinStatistics};
 pub use completion::{Completion, Interruption, SearchState};
 pub use error::{FailureParts, SolveError, SolveFailure};
 pub use execution_observation::{ExecutionObservation, ExecutionObserver};

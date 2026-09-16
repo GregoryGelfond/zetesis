@@ -102,7 +102,7 @@ pub use bundle_admission::{
     admit_bundle_extended,
 };
 pub use diagnostic::{AdmissionFailure, InputLimit, ProfileFeature, SyntaxFailure};
-pub use expansion::{ExpansionFailure, ExpansionLimits, ExpansionResource};
+pub use expansion::{ExpansionFailure, ExpansionLimits, ExpansionResource, ExpansionUsage};
 pub use extended::admit_extended;
 pub use formula::{
     AdmittedFormula, AdmittedFormulaBundle, AnalysisBasis, FormulaBundleFailure, FormulaFailure,
@@ -166,6 +166,7 @@ pub struct Admitted {
     source: Source,
     template_origins: Vec<Vec<Location>>,
     metadata: SourceMetadata,
+    expansion: ExpansionUsage,
 }
 
 impl Admitted {
@@ -193,6 +194,12 @@ impl Admitted {
     #[must_use]
     pub fn metadata(&self) -> &SourceMetadata {
         &self.metadata
+    }
+
+    /// Expansion charges this admission accepted, each under its ceiling.
+    #[must_use]
+    pub fn expansion_usage(&self) -> &ExpansionUsage {
+        &self.expansion
     }
 
     /// Consume the boundary value when source evidence is no longer required.
@@ -244,6 +251,7 @@ pub fn admit(text: String, options: AdmissionOptions) -> Result<Admitted, Admiss
         source: source.into_source(),
         template_origins,
         metadata: SourceMetadata::default(),
+        expansion: ExpansionUsage::default(),
     })
 }
 

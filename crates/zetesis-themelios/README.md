@@ -22,7 +22,7 @@ cargo doc --locked -p zetesis-themelios --no-deps --open
 |---|---|
 | `ParsedSource` | One owned parse with consuming admission attempts; eligible retries retain the original source and parse. |
 | `admit` | Relational templates for the strict normal-rule profile. |
-| `admit_extended`, `admit_bundle_extended` | Relational templates with bounded scalar expansion and source metadata. Suitable input for lazy relational solving. |
+| `admit_extended`, `admit_bundle_extended` | Relational templates with bounded scalar expansion and source metadata, with the expansion charges each admission accepted under its `ExpansionLimits`. Suitable input for lazy relational solving. |
 | `prepare_formula`, `prepare_bundle_formula` | An owned preparation that separates source preparation from eager formula grounding. |
 | `admit_formula`, `admit_bundle_formula` | A complete finite Ferraris theory, dense original-atom mapping, lifted objectives and source metadata. Composes preparation and grounding. |
 

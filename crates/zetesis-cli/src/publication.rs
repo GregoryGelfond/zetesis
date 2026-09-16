@@ -13,6 +13,7 @@ use crate::{Options, PreparedInput, PublicationFailure, Session};
 
 pub(crate) fn solve(
     input: PreparedInput<'_>,
+    expansion: Option<zetesis_themelios::ExpansionUsage>,
     options: &Options,
     output: &mut impl Write,
     diagnostics: &mut Diagnostics<impl Write>,
@@ -40,6 +41,7 @@ pub(crate) fn solve(
     }
     let mut session = request.start_observed(diagnostics)?;
     let mut progress = Progress::new();
+    progress.expansion = expansion;
     loop {
         let next = session.next_observed(diagnostics);
         progress.apply(session.progress());

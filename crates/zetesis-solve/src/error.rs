@@ -47,6 +47,8 @@ pub enum SolveError {
     LazyGpu(zetesis_cpu::lazy::Failure<zetesis_wgpu::GpuError>),
     /// Cumulative lazy counters cannot represent another batch.
     LazyStatisticsOverflow,
+    /// Cumulative independent closure counters cannot represent another check.
+    ClosureStatisticsOverflow,
     /// Shared CPU evaluation violated its round protocol.
     SharedCpu(zetesis_cpu::lazy::shared::Cause),
     /// Static closure decoding refused its words or selected-position storage.
@@ -84,6 +86,9 @@ impl fmt::Display for SolveError {
             #[cfg(feature = "gpu")]
             Self::LazyGpu(error) => error.fmt(formatter),
             Self::LazyStatisticsOverflow => formatter.write_str("lazy execution statistics overflow"),
+            Self::ClosureStatisticsOverflow => {
+                formatter.write_str("closure execution statistics overflow")
+            }
             Self::SharedCpu(error) => error.fmt(formatter),
             Self::Words(error) => error.fmt(formatter),
             Self::Model(error) => error.fmt(formatter),
@@ -115,6 +120,7 @@ impl std::error::Error for SolveError {
             | Self::UnsupportedSourceBatching
             | Self::PreparedInput { .. }
             | Self::LazyStatisticsOverflow
+            | Self::ClosureStatisticsOverflow
             | Self::FormulaBatchShape { .. }
             | Self::CandidateStreamNotExhausted => None,
         }

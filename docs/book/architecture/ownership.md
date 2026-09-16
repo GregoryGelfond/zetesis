@@ -260,8 +260,15 @@ are the latest attempt's admitted envelope, or zero if it admitted none.
 Text statistics, JSON and failure
 reports use this same observation. If reading the snapshot fails, the original
 typed fault and any earlier successful snapshot remain distinguishable; checked
-models are retained without a coverage claim. Shared CPU, static and device
-routes expose their own execution receipts instead.
+models are retained without a coverage claim. Shared and device routes expose
+their own execution receipts instead.
+
+`SemanticOutcome::closure_execution()` is the other receipt of the independent
+routes, lazy and eager: the per-check counters of `Statistics` and
+`StaticStatistics`, summed over completed checks, with the number of stopped
+checks whose partial work no counter reports. Its peak closure envelope is the
+largest capacity a completed check admitted or reserved, in the same terms as
+`max_closure_bytes`; it is not an allocation peak.
 
 [`StorageOwners`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StorageOwners.lean)
 proves the natural-number bound obtained by summing independently bounded

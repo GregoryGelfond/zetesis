@@ -4,7 +4,8 @@ use std::io::{self, Write};
 
 use clap::Parser;
 use zetesis_cli::{
-    Completion, Interruption, Options, run_detailed_with_diagnostics, run_with_diagnostics,
+    Completion, Grounder, Interruption, Options, run_detailed_with_diagnostics,
+    run_with_diagnostics,
 };
 use zetesis_cpu::{Control, Stop};
 
@@ -187,4 +188,59 @@ fn publication_failure_retains_query_ownership_evidence() {
         json["statistics"]["query_execution"]["snapshot"]["preparation_builds"],
         1
     );
+}
+
+#[test]
+fn closure_receipts_sum_every_completed_check() {
+    // Eight candidates, each an answer set; every atom lies in four closures.
+    let (report, json, diagnostics) = solve(&[]);
+    let closure = report.closure_execution.unwrap();
+    assert_eq!(closure.grounder, Grounder::Lazy);
+    assert_eq!(closure.completed_checks, 8);
+    assert_eq!(closure.stopped_checks, 0);
+    assert_eq!(closure.derived_atoms, 12);
+    assert!(closure.work > 0);
+    let joins = closure.joins.unwrap();
+    assert!(joins.peak_closure_bytes > 0);
+    let encoded = &json["statistics"]["closure_execution"];
+    assert_eq!(encoded["grounder"], "lazy");
+    assert_eq!(encoded["completed_checks"], 8);
+    assert_eq!(encoded["stopped_checks"], 0);
+    assert_eq!(encoded["derived_atoms"], 12);
+    assert_eq!(encoded["work"], closure.work);
+    assert_eq!(encoded["joins"]["bindings"], joins.bindings);
+    assert_eq!(
+        encoded["joins"]["peak_closure_bytes"],
+        joins.peak_closure_bytes
+    );
+    assert!(
+        diagnostics.contains("independent closure: checks completed=8; stopped=0;"),
+        "{diagnostics}"
+    );
+    assert!(
+        diagnostics.contains("closure joins: catalog work="),
+        "{diagnostics}"
+    );
+    assert!(
+        !diagnostics.contains("oracle work=unavailable"),
+        "{diagnostics}"
+    );
+}
+
+#[test]
+fn eager_closure_receipts_carry_no_join_counters() {
+    let (report, json, diagnostics) = solve(&["--grounder", "eager"]);
+    let closure = report.closure_execution.unwrap();
+    assert_eq!(closure.grounder, Grounder::Eager);
+    assert_eq!(closure.completed_checks, 8);
+    assert_eq!(closure.derived_atoms, 12);
+    assert!(closure.joins.is_none());
+    assert_eq!(json["statistics"]["closure_execution"]["grounder"], "eager");
+    assert!(json["statistics"]["closure_execution"]["joins"].is_null());
+    assert!(report.query_execution.is_none());
+    assert!(
+        diagnostics.contains("independent closure: checks completed=8; stopped=0;"),
+        "{diagnostics}"
+    );
+    assert!(!diagnostics.contains("closure joins:"), "{diagnostics}");
 }

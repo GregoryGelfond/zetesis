@@ -224,6 +224,20 @@ completed candidate counts or RSS. Reports retain a typed snapshot fault
 separately from any earlier successful snapshot and any checked answers. Other
 execution routes leave this observation absent.
 
+For the independent CPU closure routes, lazy and eager, `closure_execution`
+sums the counters every completed check returns: completed and stopped checks,
+source rounds or rule passes, charged work in the route's `--max-work` units,
+derived atoms and, for the lazy route, catalog work, bindings, tuple probes and
+the largest admitted closure envelope. A stopped check returns no counters, so
+its partial work is absent from the sums and counted only as a stop. The text
+form is the `independent closure` and `closure joins` lines.
+
+When relational admission expanded the source, the `expansion used` line and
+the JSON `expansion` object state each accepted charge beside the ceiling it
+was checked against: term work, templates, values, scalar bytes and origin
+locations. The formula route admits through its own budgets and reports no
+expansion usage.
+
 Stage timings separate source preparation, eager grounding, solving and output.
 Lazy joins are interleaved with solving, so a separate lazy grounding duration
 is unavailable. Detailed phases distinguish candidate generation, membership,

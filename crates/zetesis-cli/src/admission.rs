@@ -54,6 +54,7 @@ pub(crate) fn source(
                 diagnostics.metadata(Label::Oracle, format_args!("reduct closure"))?;
                 return crate::publication::solve(
                     crate::PreparedInput::admitted(&admitted),
+                    Some(*admitted.expansion_usage()),
                     options,
                     output,
                     diagnostics,
@@ -96,6 +97,7 @@ pub(crate) fn source(
         .map_err(RunError::FormulaAdmission)?;
     crate::publication::solve(
         crate::PreparedInput::formula(&admitted),
+        None,
         options,
         output,
         diagnostics,
@@ -143,6 +145,7 @@ pub(crate) fn bundle(
                 diagnostics.metadata(Label::Oracle, format_args!("reduct closure"))?;
                 return crate::publication::solve(
                     crate::PreparedInput::bundle(&admitted),
+                    Some(*admitted.expansion_usage()),
                     options,
                     output,
                     diagnostics,
@@ -186,6 +189,7 @@ pub(crate) fn bundle(
         .map_err(RunError::FormulaBundleAdmission)?;
     crate::publication::solve(
         crate::PreparedInput::formula_bundle(&admitted),
+        None,
         options,
         output,
         diagnostics,

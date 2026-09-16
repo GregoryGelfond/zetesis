@@ -33,6 +33,9 @@ pub struct Report {
     pub interruption: Option<Interruption>,
     /// Gate tuples discovered by the candidate generator.
     pub discovered_gate_atoms: usize,
+    /// Expansion charges relational admission accepted, each under its
+    /// ceiling; absent for the formula route.
+    pub expansion: Option<zetesis_themelios::ExpansionUsage>,
     /// Necessary closure-candidate restrictions, including interrupted work.
     pub candidate_statistics: Option<zetesis_cpu::CandidateStatistics>,
     /// Cumulative countermodel accounting when available; absent for closure
@@ -46,6 +49,9 @@ pub struct Report {
     pub lazy_execution: Option<crate::LazyExecutionStatistics>,
     /// Shared CPU source and per-world work, including failed-batch prefixes.
     pub shared_execution: Option<crate::SharedExecutionStatistics>,
+    /// Independent CPU closure counters summed over completed checks; absent
+    /// for the shared, device and formula routes.
+    pub closure_execution: Option<crate::ClosureExecutionStatistics>,
     /// Prepared independent CPU ownership receipts and any snapshot fault.
     pub query_execution: Option<crate::QueryExecutionObservation>,
     /// Whether semantic search established an optimum, independently of delivery.
@@ -146,6 +152,8 @@ pub enum RunError {
     LazyGpu(zetesis_cpu::lazy::Failure<zetesis_wgpu::GpuError>),
     /// Cumulative lazy execution counters could not represent another batch.
     LazyStatisticsOverflow,
+    /// Cumulative independent closure counters could not represent another check.
+    ClosureStatisticsOverflow,
     /// Concrete shared CPU evaluation violated its round protocol.
     SharedCpu(zetesis_cpu::lazy::shared::Cause),
     /// Static closure decoding refused its words or selected-position storage.
@@ -225,6 +233,9 @@ impl fmt::Display for RunError {
             #[cfg(feature = "gpu")]
             Self::LazyGpu(error) => error.fmt(f),
             Self::LazyStatisticsOverflow => f.write_str("lazy execution statistics overflow"),
+            Self::ClosureStatisticsOverflow => {
+                f.write_str("closure execution statistics overflow")
+            }
             Self::CompletionUnavailable => f.write_str("driver report requires established search completion"),
             Self::Words(error) => error.fmt(f),
             Self::Model(error) => error.fmt(f),
@@ -296,6 +307,7 @@ impl std::error::Error for RunError {
             | Self::UnsupportedOracle { .. }
             | Self::UnsupportedSourceBatching
             | Self::LazyStatisticsOverflow
+            | Self::ClosureStatisticsOverflow
             | Self::CompletionUnavailable
             | Self::FormulaBatchShape { .. }
             | Self::CandidateStreamNotExhausted => None,
@@ -719,6 +731,7 @@ impl From<zetesis_solve::SolveError> for RunError {
             SolveError::UnsupportedSourceBatching => Self::UnsupportedSourceBatching,
             SolveError::Static(error) => Self::Static(error),
             SolveError::LazyStatisticsOverflow => Self::LazyStatisticsOverflow,
+            SolveError::ClosureStatisticsOverflow => Self::ClosureStatisticsOverflow,
             SolveError::SharedCpu(error) => Self::SharedCpu(error),
             SolveError::Words(error) => Self::Words(error),
             SolveError::Model(error) => Self::Model(error),

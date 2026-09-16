@@ -82,6 +82,13 @@ completion result. The ordinary CLI's `--stats`, JSON `query_execution` object
 and failure reports view this same receipt. These named capacity observations
 are not process RSS or evidence of a speedup.
 
+`SemanticOutcome::closure_execution()` sums, over the independent CPU closure
+route's completed checks, the counters each check returns: rounds, charged
+work, derived atoms and the lazy route's join counters, with the largest
+admitted closure envelope. Stopped checks are counted but contribute no work,
+because a stopped check returns no counters. The shared, device and formula
+routes leave it absent and expose their own receipts.
+
 ## Formula membership plans
 
 An ordinary CPU formula session with `Oracle::Auto` attempts an applicable class

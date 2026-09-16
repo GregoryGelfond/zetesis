@@ -64,6 +64,24 @@ impl Default for ExpansionLimits {
     }
 }
 
+/// Charges accumulated by one admission under [`ExpansionLimits`], in the
+/// units of the ceiling each names. Every count is at most its ceiling; a
+/// refused admission returns no receipt. Plain S0 admission expands nothing
+/// and reports zero throughout.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ExpansionUsage {
+    /// Charged term work, under `max_term_work`.
+    pub term_work: usize,
+    /// Templates charged before core canonicalization, under `max_templates`.
+    pub templates: usize,
+    /// Charged values, under `max_values`.
+    pub values: usize,
+    /// Charged scalar payload bytes, under `max_scalar_bytes`.
+    pub scalar_bytes: usize,
+    /// Charged origin locations, under `max_origin_locations`.
+    pub origin_locations: usize,
+}
+
 /// A resource consumed by source expansion, never a semantic UNSAT verdict.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExpansionResource {
@@ -268,6 +286,21 @@ impl Budget {
         check(resource, observed, ceiling, location)?;
         *used = observed;
         Ok(())
+    }
+
+    /// The charges accepted so far. Each is at most its ceiling, so the
+    /// narrowing cannot fail.
+    pub(crate) fn usage(&self) -> ExpansionUsage {
+        let narrow = |charged: u128| {
+            usize::try_from(charged).expect("an accepted charge is at most its usize ceiling")
+        };
+        ExpansionUsage {
+            term_work: narrow(self.work),
+            templates: narrow(self.templates),
+            values: narrow(self.values),
+            scalar_bytes: narrow(self.scalar_bytes),
+            origin_locations: narrow(self.origins),
+        }
     }
 }
 

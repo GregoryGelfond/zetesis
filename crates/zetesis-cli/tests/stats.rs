@@ -188,7 +188,10 @@ fn statistics_flag_is_opt_in_and_preserves_each_supported_cpu_answer_path() {
             assert!(diagnostics.contains("objective: optimal; costs(priority,value)=[(0, -3)]"));
             assert!(diagnostics.contains("candidate restrictions="));
         } else if report.countermodel_statistics.is_none() {
-            assert!(diagnostics.contains("oracle work=unavailable"));
+            assert!(
+                diagnostics.contains("independent closure: checks completed="),
+                "{diagnostics}"
+            );
         }
     }
 }
@@ -323,4 +326,19 @@ fn statistics_writer_failure_is_a_typed_error_with_the_exact_written_prefix() {
             "completed answers remain byte-identical even if later statistics cannot be written"
         );
     }
+}
+
+#[test]
+fn statistics_print_expansion_usage_beside_its_ceilings() {
+    let (report, _, text) = solve("p(1..3). q(X) :- p(X).", &options(&["--stats"]));
+    let usage = report.expansion.unwrap();
+    assert!(usage.term_work > 0);
+    assert!(text.contains(&format!(
+        "expansion used: term work={} of 1048576; templates={} of 100000; values={} of 1000000;",
+        usage.term_work, usage.templates, usage.values
+    )), "{text}");
+    // The formula route admits through its own budgets and reports no usage.
+    let (formula, _, text) = solve("a | b.", &options(&["--stats"]));
+    assert!(formula.expansion.is_none());
+    assert!(!text.contains("expansion used:"), "{text}");
 }

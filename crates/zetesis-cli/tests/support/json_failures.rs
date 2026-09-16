@@ -215,6 +215,10 @@ fn failure_envelopes_never_invent_search_coverage() {
             "formula_batch_shape",
         ),
         (RunError::LazyStatisticsOverflow, "lazy_statistics_overflow"),
+        (
+            RunError::ClosureStatisticsOverflow,
+            "closure_statistics_overflow",
+        ),
     ];
     for (error, kind) in errors {
         let original = error.to_string();

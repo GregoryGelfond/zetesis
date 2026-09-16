@@ -18,8 +18,8 @@ use crate::diagnostic::unsupported;
 use crate::expansion::{Budget, check};
 use crate::{
     AdmissionFailure, AdmissionOptions, Admitted, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, ParsedSource, ProfileFeature, SourceFailure, SourceMetadata, compile,
-    fact_expansion, metadata, profile,
+    ExpansionResource, ExpansionUsage, ParsedSource, ProfileFeature, SourceFailure, SourceMetadata,
+    compile, fact_expansion, metadata, profile,
 };
 
 /// Admit a bounded extension of S0: unannotated acyclic scalar `#const`
@@ -52,10 +52,12 @@ pub fn admit_extended(
         .map_err(SourceFailure::into_error)
 }
 
-struct Compilation {
-    program: Program,
-    template_origins: Vec<Vec<Location>>,
-    metadata: SourceMetadata,
+/// One admission's compiled program with the evidence its boundary retains.
+pub(crate) struct Compilation {
+    pub(crate) program: Program,
+    pub(crate) template_origins: Vec<Vec<Location>>,
+    pub(crate) metadata: SourceMetadata,
+    pub(crate) expansion: ExpansionUsage,
 }
 
 pub(crate) fn admit_parsed(
@@ -68,6 +70,7 @@ pub(crate) fn admit_parsed(
             source: source.into_source(),
             template_origins: compiled.template_origins,
             metadata: compiled.metadata,
+            expansion: compiled.expansion,
         }),
         Err(error) => Err(SourceFailure::new(source, error)),
     }
@@ -92,12 +95,13 @@ fn compile_parsed(
         source: source.source().id(),
         span: source.source().span(),
     };
-    let (program, template_origins) =
+    let (program, template_origins, expansion) =
         compile_owned(raised.program(), options.core_limits, limits, location)?;
     Ok(Compilation {
         program,
         template_origins,
         metadata: source_metadata.finish(),
+        expansion,
     })
 }
 
@@ -106,7 +110,7 @@ pub(crate) fn compile_owned(
     core_limits: AdmissionLimits,
     limits: ExpansionLimits,
     location: Location,
-) -> Result<(Program, Vec<Vec<Location>>), ExpansionFailure> {
+) -> Result<(Program, Vec<Vec<Location>>, ExpansionUsage), ExpansionFailure> {
     let mut budget = Budget::new(limits, core_limits.max_templates);
     let constants = resolve(source, &mut budget, location)?;
     let (mut templates, mut template_origins) =
@@ -127,7 +131,7 @@ pub(crate) fn compile_owned(
             .unwrap_or(location);
         AdmissionFailure::Core { error, location }
     })?;
-    Ok((program, template_origins))
+    Ok((program, template_origins, budget.usage()))
 }
 
 fn check_definitions(

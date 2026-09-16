@@ -18,6 +18,7 @@ fn stopped_formula_adapter_retains_admitted_subject() {
     let options = crate::Options::try_parse_from(["zetesis", "--backend", "cpu"]).unwrap();
     let progress = super::solve(
         crate::PreparedInput::formula(&admitted),
+        None,
         &options,
         &mut std::io::sink(),
         &mut crate::presentation::Diagnostics::new(std::io::sink(), crate::ColorMode::Never),
